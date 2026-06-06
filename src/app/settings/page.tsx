@@ -1,0 +1,287 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+
+const SOURCE_COLORS: Record<string, string> = { steam: "#1b9af7", rawg: "#4ade80", trakt: "#ed1c24" };
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [user, setUser] = useState<any>(null);
+  const [identities, setIdentities] = useState<any[]>([]);
+  const [syncLogs, setSyncLogs] = useState<any[]>([]);
+  const [itemCount, setItemCount] = useState(0);
+  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [showRawgForm, setShowRawgForm] = useState(false);
+  const [rawgEmail, setRawgEmail] = useState("");
+  const [rawgPassword, setRawgPassword] = useState("");
+  const [rawgLoading, setRawgLoading] = useState(false);
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (connected) setNotice({ msg: `${connected} connected successfully.`, ok: true });
+    if (error) setNotice({ msg: `Connection failed: ${error}`, ok: false });
+    fetchMe();
+  }, []);
+
+  async function fetchMe() {
+    const res = await fetch("/api/auth/me");
+    const data = await res.json();
+    if (!data.user) { router.push("/"); return; }
+    setUser(data.user);
+    setIdentities(data.identities ?? []);
+    setSyncLogs(data.syncLogs ?? []);
+    setItemCount(data.itemCount ?? 0);
+  }
+
+  function getIdentity(provider: string) {
+    return identities.find((i) => i.provider === provider);
+  }
+
+  function getSyncLog(provider: string) {
+    return syncLogs.find((l) => l.provider === provider);
+  }
+
+  async function syncProvider(provider: string) {
+    setSyncing(provider);
+    await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    });
+    await fetchMe();
+    setSyncing(null);
+    setNotice({ msg: `${provider} synced.`, ok: true });
+  }
+
+  async function disconnect(provider: string) {
+    if (!confirm(`Disconnect ${provider}? Items from this source will be removed from your watchlist.`)) return;
+    setDisconnecting(provider);
+    const res = await fetch("/api/auth/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    });
+    const data = await res.json();
+    setDisconnecting(null);
+    if (!res.ok) {
+      setNotice({ msg: data.error || `Failed to disconnect ${provider}`, ok: false });
+    } else {
+      setNotice({ msg: `${provider} disconnected.`, ok: true });
+      fetchMe();
+    }
+  }
+
+  async function connectRawg(e: React.FormEvent) {
+    e.preventDefault();
+    setRawgLoading(true);
+    const res = await fetch("/api/auth/rawg", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: rawgEmail, password: rawgPassword }),
+    });
+    const data = await res.json();
+    setRawgLoading(false);
+    if (!res.ok) {
+      setNotice({ msg: data.error || "RAWG login failed", ok: false });
+    } else {
+      setNotice({ msg: "RAWG connected successfully.", ok: true });
+      setShowRawgForm(false);
+      setRawgEmail(""); setRawgPassword("");
+      fetchMe();
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/");
+  }
+
+  const providers = [
+    { key: "trakt", label: "Trakt.tv", description: "Movies & TV shows", connectUrl: "/api/auth/trakt", canWrite: true },
+    { key: "steam", label: "Steam", description: "Games from your wishlist", connectUrl: "/api/auth/steam", canWrite: false },
+    { key: "rawg", label: "RAWG", description: "Games from your Want to Play list", connectUrl: "rawg-form", canWrite: true },
+  ];
+
+  return (
+    <div className="min-h-screen">
+      {/* RAWG connect modal */}
+      {showRawgForm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowRawgForm(false)}>
+          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold">Connect RAWG</h3>
+            <form onSubmit={connectRawg} className="space-y-3">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">RAWG email</label>
+                <input type="email" required
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+                  value={rawgEmail} onChange={(e) => setRawgEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">RAWG password</label>
+                <input type="password" required
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+                  value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
+              </div>
+              <p className="text-xs text-neutral-600">Your password is encrypted before storage.</p>
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={rawgLoading}
+                  className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{ background: "#4ade80", color: "#000" }}>
+                  {rawgLoading ? "Connecting..." : "Connect"}
+                </button>
+                <button type="button" onClick={() => setShowRawgForm(false)}
+                  className="px-4 py-2 rounded-lg text-sm text-neutral-500 hover:text-white border border-neutral-700 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <nav className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
+        <Link href="/dashboard" className="font-bold text-lg">ReleaseRadar</Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="text-neutral-400 hover:text-white text-sm">Calendar</Link>
+          <span className="text-sm text-neutral-400">{user?.displayName}</span>
+          <button onClick={logout} className="text-sm text-neutral-500 hover:text-white">Log out</button>
+        </div>
+      </nav>
+
+      <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Settings</h1>
+          <span className="text-sm text-neutral-500">{itemCount} items in watchlist</span>
+        </div>
+
+        {notice && (
+          <div className={`border rounded-lg px-4 py-3 text-sm ${notice.ok ? "bg-green-900/30 border-green-700 text-green-300" : "bg-red-900/30 border-red-700 text-red-300"}`}>
+            {notice.msg}
+          </div>
+        )}
+
+        {/* Connected accounts */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Connected accounts</h2>
+          <p className="text-sm text-neutral-500">Any connected account can be used to log in.</p>
+
+          {providers.map((p) => {
+            const identity = getIdentity(p.key);
+            const log = getSyncLog(p.key);
+            const color = SOURCE_COLORS[p.key] ?? "#888";
+
+            return (
+              <div key={p.key} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                      style={{ background: `${color}20`, color }}>
+                      {p.label[0]}
+                    </div>
+                    <div>
+                      <p className="font-medium">{p.label}</p>
+                      <p className="text-sm text-neutral-400">
+                        {identity ? `@${identity.display_name ?? identity.provider_user_id}` : p.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {identity ? (
+                      <>
+                        <span className="text-xs bg-green-900/30 text-green-400 px-2.5 py-1 rounded-full border border-green-800">
+                          Connected
+                        </span>
+                        <button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}
+                          className="text-xs px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-40">
+                          {syncing === p.key ? "Syncing..." : "Sync"}
+                        </button>
+                        <button onClick={() => disconnect(p.key)} disabled={disconnecting === p.key}
+                          className="text-xs px-3 py-1.5 text-red-400 hover:bg-red-950/30 border border-red-900/30 rounded-lg transition-colors disabled:opacity-40">
+                          {disconnecting === p.key ? "..." : "Disconnect"}
+                        </button>
+                      </>
+                    ) : (
+                      p.connectUrl === "rawg-form" ? (
+                        <button onClick={() => setShowRawgForm(true)}
+                          className="text-xs px-4 py-2 rounded-lg font-medium transition-colors"
+                          style={{ background: `${color}20`, border: `1px solid ${color}44`, color }}>
+                          Connect
+                        </button>
+                      ) : p.connectUrl ? (
+                        <a href={p.connectUrl}
+                          className="text-xs px-4 py-2 rounded-lg font-medium transition-colors"
+                          style={{ background: `${color}20`, border: `1px solid ${color}44`, color }}>
+                          Connect
+                        </a>
+                      ) : null
+                    )}
+                  </div>
+                </div>
+
+                {log && (
+                  <p className="text-xs text-neutral-600">
+                    Last synced {new Date(log.last_sync * 1000).toLocaleString()} · {log.item_count} items · {log.status}
+                  </p>
+                )}
+                {!p.canWrite && identity && (
+                  <p className="text-xs text-neutral-600 mt-1">
+                    Read-only – {p.label} doesn't support adding to wishlist via API
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
+        {/* Add login method */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Add login method</h2>
+          <p className="text-sm text-neutral-500">Connect another account to log in with it in the future.</p>
+          <div className="flex gap-3 flex-wrap">
+            {!getIdentity("trakt") && (
+              <a href="/api/auth/trakt" className="text-sm px-4 py-2 rounded-lg transition-colors"
+                style={{ background: "#ed1c2415", border: "1px solid #ed1c2430", color: "#ed1c24" }}>
+                Connect Trakt
+              </a>
+            )}
+            {!getIdentity("steam") && (
+              <a href="/api/auth/steam" className="text-sm px-4 py-2 rounded-lg transition-colors"
+                style={{ background: "#1b9af715", border: "1px solid #1b9af730", color: "#1b9af7" }}>
+                Connect Steam
+              </a>
+            )}
+            {!getIdentity("rawg") && (
+              <button onClick={() => setShowRawgForm(true)} className="text-sm px-4 py-2 rounded-lg transition-colors"
+                style={{ background: "#4ade8015", border: "1px solid #4ade8030", color: "#4ade80" }}>
+                Connect RAWG
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* Account info */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Account</h2>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-neutral-400">Logged in as</span>
+              <span>{user?.displayName} via {user?.provider}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-neutral-400">Watchlist items</span>
+              <span>{itemCount}</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}

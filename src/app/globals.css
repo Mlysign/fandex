@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --color-game: #4ade80;
+  --color-movie: #f59e0b;
+  --color-show: #a78bfa;
+  --color-steam: #1b9af7;
+  --color-rawg: #4ade80;
+  --color-trakt: #ed1c24;
+  --color-tmdb: #01b4e4;
+}
+
+* { box-sizing: border-box; }
+body { font-family: inherit; }
