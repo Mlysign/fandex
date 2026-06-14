@@ -1,18 +1,27 @@
 import path from "path";
 import fs from "fs";
 import Database from "better-sqlite3";
+import { normalizeName } from "./normalize";
+import { runMigrations } from "./migrations";
+
+// Bump whenever normalizeName()'s rule changes — forces a one-time norm_title
+// re-backfill (guarded by SQLite's user_version) so existing rows match the new
+// rule. A later migration runner (D4) can adopt this same user_version baseline.
+const NORM_VERSION = 1;
 
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "rr.db");
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 let _db: Database.Database | null = null;
+let _initialized = false;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
   _db = new Database(DB_PATH);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
+  ensureSchema(_db);
   return _db;
 }
 
@@ -32,8 +41,12 @@ export function transaction<T>(fn: () => T): T {
   return getDb().transaction(fn)();
 }
 
-export function initDb() {
-  const db = getDb();
+// Schema setup runs implicitly the first time getDb() opens the connection, so
+// callers never have to remember to call it. Kept idempotent and guarded by
+// _initialized; takes the db handle directly to avoid recursing through getDb().
+function ensureSchema(db: Database.Database) {
+  // Only run schema setup once per process
+  if (_initialized) return;
 
   db.exec(`
     -- Users: identity-less, just a container
@@ -65,6 +78,7 @@ export function initDb() {
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,             -- game | movie | show
       title TEXT NOT NULL,            -- merged title (priority order)
+      norm_title TEXT,                -- normalized title for fast matching
       release_date TEXT,              -- merged date (priority order)
       poster_url TEXT,                -- best poster URL
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
@@ -100,6 +114,23 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_watchlist_user ON user_watchlist(user_id);
 
+    -- User library: items the user has already watched / played / owns,
+    -- with an optional personal review score and the date it was logged.
+    CREATE TABLE IF NOT EXISTS user_library (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+      platform_sources TEXT NOT NULL DEFAULT '[]', -- JSON: ["trakt","letterboxd"]
+      status TEXT,                                  -- watched | played | owned
+      rating REAL,                                  -- personal score, 0-10 scale
+      review TEXT,                                  -- review text, if any
+      reviewed_at INTEGER,                          -- unix: when watched/rated
+      metadata TEXT,                                -- JSON: per-source detail
+      added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+      UNIQUE(user_id, media_item_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_library_user ON user_library(user_id);
+
     -- Sync log
     CREATE TABLE IF NOT EXISTS sync_log (
       id TEXT PRIMARY KEY,
@@ -112,4 +143,48 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_sync_log_user ON sync_log(user_id, provider);
   `);
+
+  // ── Lightweight migrations for existing databases ──────────────
+  // The composite index on norm_title is created HERE (not in the schema block
+  // above) because an existing media_items table won't have the norm_title
+  // column until the ALTER below runs. Creating the index in the schema block
+  // would fail with "no such column: norm_title" on older databases.
+  const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "norm_title")) {
+    db.exec("ALTER TABLE media_items ADD COLUMN norm_title TEXT");
+  }
+  // Safe to run every time – IF NOT EXISTS guards it, and the column now exists.
+  db.exec("CREATE INDEX IF NOT EXISTS idx_media_type_norm ON media_items(type, norm_title)");
+
+  // norm_title is derived from title via normalizeName() (the single source of
+  // truth in normalize.ts). When that rule changes — or a row is missing it — every
+  // row must be recomputed, or the matcher's indexed lookup (WHERE type = ? AND
+  // norm_title = ?) misses pre-existing rows and creates duplicate canonical items.
+  // Guarded by user_version so this full re-backfill runs once per rule version.
+  const normVersion = db.pragma("user_version", { simple: true }) as number;
+  if (normVersion < NORM_VERSION) {
+    const rows = db.prepare("SELECT id, title FROM media_items").all() as { id: string; title: string }[];
+    const upd = db.prepare("UPDATE media_items SET norm_title = ? WHERE id = ?");
+    const tx = db.transaction((rs: { id: string; title: string }[]) => {
+      for (const r of rs) upd.run(normalizeName(r.title ?? ""), r.id);
+    });
+    tx(rows);
+    db.pragma(`user_version = ${NORM_VERSION}`);
+  }
+
+  // ── Versioned migrations (D4) ───────────────────────────────────
+  // Everything beyond the norm_title baseline (user_version >= 2) is applied by
+  // the ordered runner in migrations.ts. Runs in-process here; the same list can
+  // be applied standalone to the live DB via scripts/migrate.mjs.
+  runMigrations(db);
+
+  _initialized = true;
+}
+
+/**
+ * @deprecated Schema setup is now implicit in getDb(); this is a no-op-safe
+ * alias kept only for standalone scripts/tests that import it directly.
+ */
+export function initDb() {
+  getDb();
 }

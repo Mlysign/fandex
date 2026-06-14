@@ -1,0 +1,236 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/session";
+import { query, get } from "@/lib/db";
+import { mergeLinks } from "@/lib/merge";
+import { getUserStateMap } from "@/lib/userState";
+import { MediaLink, EnrichedItem, MediaType } from "@/types";
+import { sourcesForType } from "@/lib/sources/registry";
+import { upsertMediaItem, recordLibraryRating } from "@/lib/matcher";
+import { persistItemFromIds } from "@/lib/persistItem";
+import { parseRatings, averageRating } from "@/lib/ratings";
+
+// Unix seconds → YYYY-MM-DD (local-agnostic, UTC date part)
+function unixToDate(ts: number | null): string | null {
+  if (!ts) return null;
+  return new Date(ts * 1000).toISOString().split("T")[0];
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    const { searchParams } = req.nextUrl;
+    const typeFilter = searchParams.get("type") as MediaType | null;
+
+    let sql = `
+      SELECT
+        mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
+        ul.platform_sources, ul.status, ul.rating, ul.review, ul.reviewed_at, ul.metadata,
+        ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+      FROM user_library ul
+      JOIN media_items mi ON mi.id = ul.media_item_id
+      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
+      WHERE ul.user_id = ?
+    `;
+    const params: any[] = [session.userId];
+    if (typeFilter) { sql += " AND mi.type = ?"; params.push(typeFilter); }
+
+    const rows = query<any>(sql, params);
+
+    // Group rows by media_item id
+    const itemMap = new Map<string, { item: any; links: MediaLink[] }>();
+    for (const row of rows) {
+      if (!itemMap.has(row.id)) {
+        itemMap.set(row.id, {
+          item: {
+            id: row.id,
+            type: row.type,
+            title: row.title,
+            releaseDate: row.release_date,
+            posterUrl: row.poster_url,
+            platformSources: JSON.parse(row.platform_sources ?? "[]"),
+            status: row.status,
+            rating: row.rating,
+            ratings: parseRatings(row.metadata),
+            review: row.review,
+            reviewedAt: row.reviewed_at,
+          },
+          links: [],
+        });
+      }
+      if (row.source) {
+        itemMap.get(row.id)!.links.push({
+          id: "",
+          mediaItemId: row.id,
+          source: row.source,
+          sourceId: row.source_id,
+          title: null,
+          releaseDate: row.link_release_date,
+          rawData: JSON.parse(row.raw_data ?? "{}"),
+          lastSynced: 0,
+        });
+      }
+    }
+
+    const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
+    for (const { item, links } of itemMap.values()) {
+      const merged = mergeLinks(links, item.type);
+      // The Library timeline groups by *when it was watched/played*; fall back
+      // to the real release date when a platform gives no watched date.
+      const watchedDate = unixToDate(item.reviewedAt) ?? merged.releaseDate;
+      enriched.push({
+        id: item.id,
+        type: item.type,
+        platformSources: item.platformSources,
+        ...merged,
+        releaseDate: watchedDate,
+        rating: averageRating(item.ratings) ?? item.rating,
+        ratings: item.ratings,
+        review: item.review,
+        reviewedAt: item.reviewedAt,
+        libraryStatus: item.status,
+      });
+    }
+
+    // Canonical user-state: `platformSources` means WISHLIST providers
+    // everywhere, so a library item also shows whether it's wishlisted (the
+    // library's own source list stays reflected via libraryStatus/rating).
+    const stateMap = getUserStateMap(session.userId, enriched.map((e) => e.id));
+    for (const e of enriched) {
+      e.platformSources = stateMap.get(e.id)?.platformSources ?? [];
+    }
+
+    // Newest watched first; items with no date sink to the bottom.
+    enriched.sort((a, b) => {
+      const da = a.reviewedAt ?? 0;
+      const db = b.reviewedAt ?? 0;
+      if (da !== db) return db - da;
+      if (!a.releaseDate && !b.releaseDate) return 0;
+      if (!a.releaseDate) return 1;
+      if (!b.releaseDate) return -1;
+      return b.releaseDate.localeCompare(a.releaseDate);
+    });
+
+    return NextResponse.json({ items: enriched });
+  } catch (e: any) {
+    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.error(e);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+// POST /api/library — rate an item and/or mark it as watched/played.
+// Body: { mediaItemId, rating?, status? }                      — for items already in the DB
+//   OR: { type, title?, releaseDate?, posterUrl?, ids, rating?, status? } — for a
+//       discover/search item not yet persisted; it is created on the fly so it
+//       can be rated without first adding it to a wishlist.
+export async function POST(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    const body = await req.json() as {
+      mediaItemId?: string;
+      rating?: number | null;
+      status?: string | null;
+      type?: MediaType;
+      title?: string | null;
+      releaseDate?: string | null;
+      posterUrl?: string | null;
+      ids?: Record<string, any>;
+    };
+    const { rating, status } = body;
+
+    // Resolve the media_item: use the given id, else create it from identity.
+    let mediaItemId = body.mediaItemId ?? null;
+    if (!mediaItemId) {
+      if (!body.ids || !body.type) {
+        return NextResponse.json({ error: "mediaItemId or item identity (type + ids) required" }, { status: 400 });
+      }
+      mediaItemId = await persistItemFromIds({
+        type: body.type, title: body.title, releaseDate: body.releaseDate, posterUrl: body.posterUrl, ids: body.ids,
+      });
+      if (!mediaItemId) return NextResponse.json({ error: "Could not resolve item" }, { status: 400 });
+    }
+
+    const mediaItem = get<{ type: string; title: string; release_date: string | null }>(
+      "SELECT type, title, release_date FROM media_items WHERE id = ?",
+      [mediaItemId]
+    );
+    if (!mediaItem) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+
+    const itemType = mediaItem.type;
+
+    const inferredStatus: string | null =
+      status !== undefined ? (status ?? null)
+      : rating != null ? (itemType === "game" ? "played" : "watched")
+      : null;
+
+    const platformErrors: string[] = [];
+    const links = query<{ source: string; source_id: string }>(
+      "SELECT source, source_id FROM media_links WHERE media_item_id = ?",
+      [mediaItemId]
+    );
+
+    // ── Write-back to EVERY connected, writable provider ─────────────
+    // Rating/marking-watched should propagate to all connected platforms, not
+    // just the ones already linked. So we iterate every writable provider for
+    // this type and resolve its own id from the item's cross-reference links
+    // (e.g. a TMDB-sourced movie resolves its Trakt id via TMDB), persist the
+    // resolved link, then push. pushRating also marks the item consumed.
+    const crossIds: Record<string, string> = {};
+    for (const l of links) crossIds[l.source] = l.source_id;
+    const year = mediaItem.release_date ? parseInt(String(mediaItem.release_date).slice(0, 4)) : undefined;
+    // Platforms a rating was actually pushed to — used to record the per-platform value.
+    const ratedSources: string[] = [];
+
+    for (const src of sourcesForType(itemType)) {
+      if (!src.capabilities.rating.write && !src.capabilities.status.write) continue;
+      try {
+        const ctx = await src.context(session.userId);
+        if (!ctx?.token) continue;
+        const sourceId = src.resolveSourceId
+          ? await src.resolveSourceId(ctx, itemType as MediaType, crossIds, { title: mediaItem.title, year })
+          : (crossIds[src.id] != null ? String(crossIds[src.id]) : null);
+        if (!sourceId) continue;
+        // Persist a newly-resolved cross-ref link (e.g. Trakt id found via TMDB)
+        // so subsequent reads/writes find it directly.
+        if (crossIds[src.id] == null) {
+          upsertMediaItem({
+            source: src.id, sourceId, type: itemType as MediaType,
+            title: mediaItem.title, releaseDate: mediaItem.release_date ?? null,
+            rawData: { title: mediaItem.title, ids: { ...crossIds, [src.id]: sourceId } },
+          });
+        }
+        if (rating != null && src.capabilities.rating.write && src.pushRating) {
+          await src.pushRating(ctx, sourceId, itemType as MediaType, rating);
+          ratedSources.push(src.id);
+        } else if (inferredStatus && src.capabilities.status.write && src.pushStatus) {
+          await src.pushStatus(ctx, sourceId, itemType as MediaType, inferredStatus);
+        }
+      } catch (e: any) {
+        platformErrors.push(`${src.id}: ${e.message}`);
+      }
+    }
+
+    // ── Record into user_item_state (truth); caches rebuilt by the helper ──────
+    // Per-source rating lives in user_item_state keyed by the platforms it was
+    // pushed to; the canonical user_library.rating is the AVERAGE across them.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const { rating: canonicalRating, metadata } = recordLibraryRating(session.userId, mediaItemId, {
+      rating,                       // undefined = status-only · null = clear · number = set
+      status: inferredStatus,
+      sources: ratedSources,
+      reviewedAt: nowSec,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      mediaItemId,
+      rating: canonicalRating,
+      ratings: parseRatings(JSON.stringify(metadata)),
+      ...(platformErrors.length > 0 && { warnings: platformErrors }),
+    });
+  } catch (e: any) {
+    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.error(e);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}

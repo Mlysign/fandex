@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { initDb, get, run } from "@/lib/db";
+import { get, run } from "@/lib/db";
 import { rawgLogin } from "@/lib/sources/rawg";
 import { createSession, setSessionCookie, getSession } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
-    initDb();
     const { email, password } = await req.json();
 
     if (!email || !password) {

@@ -1,290 +1,126 @@
-import { Source, MediaLink, EnrichedItem, MediaType } from "@/types";
+import { Source, MediaLink, EnrichedItem, MediaType, CommunityRating } from "@/types";
+import { SourceNormalized, normalizeSource } from "./sources/normalize";
 
-// ── Priority orders ────────────────────────────────────────────────
+// merge.ts is now pure POLICY: it merges the per-source SourceNormalized partials
+// (built by src/lib/sources/normalize.ts) by priority (single-value) or union
+// (multi-value). Per-source extraction lives with the normalizers — adding a
+// source touches only that registry, never this file.
 
-const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt"];
-const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam"];
-const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt"];
-const POSTER_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "trakt"];
+// ── Priority orders (single-value fields) ─────────────────────────
+const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd"];
+const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb"];
+const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd"];
+const POSTER_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb", "trakt", "letterboxd"];
+const TAGLINE_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
+const RUNTIME_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
+const STATUS_PRIORITY: Source[] = ["tmdb", "trakt", "igdb"];
+const COLLECTION_PRIORITY: Source[] = ["tmdb", "igdb"];
+const LANGUAGE_PRIORITY: Source[] = ["tmdb", "trakt"];
+const COUNTRY_PRIORITY: Source[] = ["tmdb", "trakt"];
+const NETWORK_PRIORITY: Source[] = ["tmdb", "trakt"];
+const DEVELOPER_PRIORITY: Source[] = ["rawg", "steam", "igdb"];
 
-// ── Extractors per source ─────────────────────────────────────────
+// Union-field source lists — shared by mergeLinks and explainMerge so the
+// debug matrix can never drift from the real merge.
+const IMAGE_SOURCES: Source[] = ["steam", "tmdb", "rawg", "igdb", "letterboxd"];
+const TAG_SOURCES: Source[] = ["rawg", "steam", "tmdb", "trakt", "letterboxd", "igdb"];
+const PLATFORM_SOURCES: Source[] = ["steam", "rawg", "igdb"];
+const STORE_LINK_SOURCES: Source[] = ["steam", "rawg", "tmdb", "trakt", "letterboxd", "igdb"];
+const TRAILER_SOURCES: Source[] = ["tmdb", "trakt", "igdb", "steam"];
+const RATING_SOURCES: Source[] = ["tmdb", "trakt", "letterboxd", "igdb", "rawg", "steam"];
+const DLC_SOURCES: Source[] = ["igdb", "steam"];
+const GAME_MODE_SOURCES: Source[] = ["igdb"];
+// Each source reports its own regional rating system (FSK / PG / USK / ESRB) —
+// unioned so the detail page can show all of them, not just one.
+const CERTIFICATION_SOURCES: Source[] = ["tmdb", "trakt", "steam", "rawg"];
 
-function extractTitle(source: Source, data: any): string | null {
-  switch (source) {
-    case "steam": return data.name ?? null;
-    case "rawg": return data.name ?? null;
-    case "tmdb": return data.title ?? data.name ?? null;
-    case "trakt": return data.title ?? data.show?.title ?? null;
-    case "igdb": return data.name ?? null;
-    default: return null;
-  }
-}
-
-function extractDescription(source: Source, data: any): string | null {
-  switch (source) {
-    case "rawg": return data.description_raw ?? data.description ?? null;
-    case "tmdb": return data.overview ?? null;
-    case "steam": return data.basic_info?.short_description ?? data.short_description ?? null;
-    case "trakt": return data.overview ?? null;
-    default: return null;
-  }
-}
-
-function extractReleaseDate(source: Source, data: any): string | null {
-  switch (source) {
-    case "steam": {
-      const r = data.release;
-      if (!r) return null;
-      if (r.steam_release_date) return new Date(r.steam_release_date * 1000).toISOString().split("T")[0];
-      if (r.custom_release_date?.date) {
-        const p = Date.parse(r.custom_release_date.date);
-        if (!isNaN(p)) return new Date(p).toISOString().split("T")[0];
-      }
-      return null;
-    }
-    case "rawg": return data.released ?? null;
-    case "tmdb": return data.release_date ?? data.first_air_date ?? null;
-    case "trakt": return data.released ?? data.first_aired?.split("T")[0] ?? null;
-    default: return null;
-  }
-}
-
-function extractPoster(source: Source, data: any): string | null {
-  switch (source) {
-    case "tmdb":
-      return data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null;
-    case "rawg": return data.background_image ?? null;
-    case "steam": {
-      const appId = data.appid;
-      return appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg` : null;
-    }
-    case "trakt": return null; // Trakt doesn't provide images directly
-    default: return null;
-  }
-}
-
-function extractImages(source: Source, data: any): string[] {
-  const imgs: string[] = [];
-  switch (source) {
-    case "steam": {
-      const appId = data.appid;
-      if (appId) imgs.push(`https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`);
-      if (data.assets?.asset_url_format && data.assets?.hero_capsule) {
-        const path = data.assets.asset_url_format.replace("${FILENAME}", data.assets.hero_capsule);
-        imgs.push(`https://shared.fastly.steamstatic.com/store_item_assets/${path}`);
-      }
-      for (const s of (data.screenshots?.all_ages_screenshots ?? []).slice(0, 5)) {
-        if (s.filename) imgs.push(`https://shared.fastly.steamstatic.com/store_item_assets/${s.filename}`);
-      }
-      break;
-    }
-    case "rawg": {
-      if (data.background_image) imgs.push(data.background_image);
-      for (const s of (data.short_screenshots ?? []).slice(0, 4)) {
-        if (s.image) imgs.push(s.image);
-      }
-      break;
-    }
-    case "tmdb": {
-      if (data.poster_path) imgs.push(`https://image.tmdb.org/t/p/w500${data.poster_path}`);
-      if (data.backdrop_path) imgs.push(`https://image.tmdb.org/t/p/w780${data.backdrop_path}`);
-      break;
-    }
-  }
-  return imgs;
-}
-
-function extractTags(source: Source, data: any): string[] {
-  switch (source) {
-    case "steam": return data.resolvedTags ?? [];
-    case "rawg": return (data.genres ?? []).map((g: any) => g.name).filter(Boolean);
-    case "tmdb": return (data.genres ?? []).map((g: any) => g.name).filter(Boolean);
-    default: return [];
-  }
-}
-
-function extractPlatforms(source: Source, data: any): string[] {
-  switch (source) {
-    case "steam":
-      return Object.entries(data.platforms ?? {})
-        .filter(([k, v]) => ["windows", "mac", "linux"].includes(k) && v === true)
-        .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
-    case "rawg":
-      return (data.platforms ?? []).map((p: any) => p.platform?.name).filter(Boolean);
-    default: return [];
-  }
-}
-
-function extractMetacritic(source: Source, data: any): number | null {
-  switch (source) {
-    case "rawg": return typeof data.metacritic === "number" ? data.metacritic : null;
-    default: return null;
-  }
-}
-
-function extractSteamReviewLabel(source: Source, data: any): string | null {
-  if (source !== "steam") return null;
-  return data.reviews?.summary_filtered?.review_score_label ?? null;
-}
-
-function extractDeveloper(source: Source, data: any): string | null {
-  switch (source) {
-    case "rawg": return data.developers?.[0]?.name ?? null;
-    case "steam": return data.basic_info?.developers?.[0]?.name ?? null;
-    default: return null;
-  }
-}
-
-function extractPublisher(source: Source, data: any): string | null {
-  switch (source) {
-    case "rawg": return data.publishers?.[0]?.name ?? null;
-    case "steam": return data.basic_info?.publishers?.[0]?.name ?? null;
-    default: return null;
-  }
-}
-
-function extractTrailer(source: Source, data: any): { youtubeKey: string | null; steamUrl: string | null } {
-  if (source === "tmdb") {
-    const t = (data.videos?.results ?? []).find(
-      (v: any) => v.site === "YouTube" && v.type === "Trailer" && v.official
-    ) ?? (data.videos?.results ?? []).find(
-      (v: any) => v.site === "YouTube" && v.type === "Trailer"
-    ) ?? (data.videos?.results ?? []).find((v: any) => v.site === "YouTube");
-    return { youtubeKey: t?.key ?? null, steamUrl: null };
-  }
-  if (source === "steam" && (data.trailers?.highlights?.length ?? 0) > 0) {
-    return { youtubeKey: null, steamUrl: `https://store.steampowered.com/app/${data.appid}` };
-  }
-  return { youtubeKey: null, steamUrl: null };
-}
-
-function extractStoreLinks(source: Source, data: any, mediaType: MediaType): { name: string; url: string; source: Source }[] {
-  const links: { name: string; url: string; source: Source }[] = [];
-  switch (source) {
-    case "steam":
-      if (data.appid) links.push({ name: "Steam", url: `https://store.steampowered.com/app/${data.appid}`, source: "steam" });
-      break;
-    case "rawg":
-      if (data.slug) links.push({ name: "RAWG", url: `https://rawg.io/games/${data.slug}`, source: "rawg" });
-      for (const s of data.stores ?? []) {
-        if (s.url) links.push({ name: s.store.name, url: s.url, source: "rawg" });
-      }
-      if (data.website) links.push({ name: "Official site", url: data.website, source: "rawg" });
-      break;
-    case "tmdb":
-      if (data.id && mediaType === "movie") links.push({ name: "TMDB", url: `https://www.themoviedb.org/movie/${data.id}`, source: "tmdb" });
-      if (data.id && mediaType === "show") links.push({ name: "TMDB", url: `https://www.themoviedb.org/tv/${data.id}`, source: "tmdb" });
-      if (data.homepage) links.push({ name: "Official site", url: data.homepage, source: "tmdb" });
-      break;
-  }
-  return links;
-}
-
-function extractStreamingProviders(source: Source, data: any): { name: string; logoPath: string | null; providerId: number }[] {
-  if (source !== "tmdb") return [];
-  const de = data["watch/providers"]?.results?.DE;
-  const providers = de?.flatrate ?? de?.buy ?? de?.rent ?? [];
-  return providers.map((p: any) => ({
-    name: p.provider_name,
-    logoPath: p.logo_path ?? null,
-    providerId: p.provider_id,
-  }));
+// Build the per-source normalized view once; everything below is policy over it.
+function normalizeAll(mediaLinks: { source: Source; data: any }[], type: MediaType): Map<Source, SourceNormalized> {
+  const norm = new Map<Source, SourceNormalized>();
+  for (const l of mediaLinks) norm.set(l.source, normalizeSource(l.source, l.data, type));
+  return norm;
 }
 
 // ── Main merge function ───────────────────────────────────────────
 
 export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<EnrichedItem, "id" | "type" | "platformSources"> {
-  const bySource = new Map<Source, any>();
-  for (const link of mediaLinks) {
-    bySource.set(link.source, link.rawData);
-  }
+  const norm = normalizeAll(mediaLinks.map((l) => ({ source: l.source, data: l.rawData })), type);
 
   // ── Single-value fields (priority order) ──────────────────────
+  const title = pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown";
+  const description = pickLongestField(DESCRIPTION_PRIORITY, norm, "description");
+  const releaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
+  const metacritic = pickField(["rawg"], norm, "metacritic");
+  const steamReviewLabel = pickField(["steam"], norm, "steamReviewLabel");
+  const letterboxdRating = pickField(["letterboxd"], norm, "letterboxdRating");
+  const developer = pickField(DEVELOPER_PRIORITY, norm, "developer");
+  const publisher = pickField(DEVELOPER_PRIORITY, norm, "publisher");
 
-  const title = pickFirst(TITLE_PRIORITY, bySource, extractTitle) ?? "Unknown";
-  const description = pickLongest(DESCRIPTION_PRIORITY, bySource, extractDescription);
-  const releaseDate = pickFirst(RELEASE_DATE_PRIORITY, bySource, extractReleaseDate);
-  const posterUrl = pickFirst(POSTER_PRIORITY, bySource, extractPoster);
-  const metacritic = pickFirstValue(["rawg"] as Source[], bySource, extractMetacritic);
-  const steamReviewLabel = pickFirstValue(["steam"] as Source[], bySource, extractSteamReviewLabel);
-  const developer = pickFirst(["rawg", "steam", "igdb"] as Source[], bySource, extractDeveloper);
-  const publisher = pickFirst(["rawg", "steam", "igdb"] as Source[], bySource, extractPublisher);
+  // ── Facts (single-value, priority order) ──────────────────────
+  const tagline = pickField(TAGLINE_PRIORITY, norm, "tagline");
+  const runtimeMinutes = pickField(RUNTIME_PRIORITY, norm, "runtimeMinutes");
+  const certification = dedup(unionValues(CERTIFICATION_SOURCES, norm, "certification")).slice(0, 6);
+  const status = pickField(STATUS_PRIORITY, norm, "status");
+  const collection = pickField(COLLECTION_PRIORITY, norm, "collection");
+  const originalLanguage = pickField(LANGUAGE_PRIORITY, norm, "originalLanguage");
+  const country = pickField(COUNTRY_PRIORITY, norm, "country");
+  const network = type === "show" ? pickField(NETWORK_PRIORITY, norm, "network") : null;
+  const playtimeHours = pickField(["rawg"], norm, "playtimeHours");
+  const timeToBeat = pickField(["igdb"], norm, "timeToBeat");
+
+  // TMDB-only facts.
+  const tmdb = norm.get("tmdb");
+  const budget = tmdb?.budget ?? null;
+  const revenue = tmdb?.revenue ?? null;
+  const seasonCount = tmdb?.seasonCount ?? null;
+  const episodeCount = tmdb?.episodeCount ?? null;
+  const nextEpisode = tmdb?.nextEpisode ?? null;
+
+  // ── Community ratings (union across sources) ──────────────────
+  const communityRatings = unionValues(RATING_SOURCES, norm, "communityRatings") as CommunityRating[];
+
+  // ── Game-specific union fields ────────────────────────────────
+  const gameModes = dedup(unionValues(GAME_MODE_SOURCES, norm, "gameModes")).slice(0, 8);
+  const dlc = dedup(unionValues(DLC_SOURCES, norm, "dlc")).slice(0, 12);
 
   // ── Multi-value fields (union) ────────────────────────────────
-
-  const images = dedup(
-    ["steam", "tmdb", "rawg"].flatMap((s) => {
-      const d = bySource.get(s as Source);
-      return d ? extractImages(s as Source, d) : [];
-    })
-  );
-
-  const tags = dedup(
-    ["rawg", "steam", "tmdb"].flatMap((s) => {
-      const d = bySource.get(s as Source);
-      return d ? extractTags(s as Source, d) : [];
-    })
-  );
-
-  const platforms = dedup(
-    ["steam", "rawg", "igdb"].flatMap((s) => {
-      const d = bySource.get(s as Source);
-      return d ? extractPlatforms(s as Source, d) : [];
-    })
-  );
+  const images = dedup(unionValues(IMAGE_SOURCES, norm, "images"));
+  const tags = dedup(unionValues(TAG_SOURCES, norm, "tags"));
+  const platforms = dedup(unionValues(PLATFORM_SOURCES, norm, "platforms"));
 
   // ── Per-source dates ──────────────────────────────────────────
-
   const dates: { source: Source; date: string }[] = [];
   for (const s of RELEASE_DATE_PRIORITY) {
-    const d = bySource.get(s);
-    if (!d) continue;
-    const date = extractReleaseDate(s, d);
+    const date = norm.get(s)?.releaseDate;
     if (date) dates.push({ source: s, date });
   }
-  // Deduplicate dates that are the same value
   const uniqueDates = dates.filter((d, i) => dates.findIndex((x) => x.date === d.date) === i);
 
   // ── Trailer ───────────────────────────────────────────────────
+  const trailerYoutubeKey = pickField(TRAILER_SOURCES, norm, "trailerYoutubeKey");
+  const steamTrailerUrl = pickField(TRAILER_SOURCES, norm, "steamTrailerUrl");
 
-  let trailerYoutubeKey: string | null = null;
-  let steamTrailerUrl: string | null = null;
-  for (const s of ["tmdb", "steam"] as Source[]) {
-    const d = bySource.get(s);
-    if (!d) continue;
-    const t = extractTrailer(s, d);
-    if (t.youtubeKey && !trailerYoutubeKey) trailerYoutubeKey = t.youtubeKey;
-    if (t.steamUrl && !steamTrailerUrl) steamTrailerUrl = t.steamUrl;
-  }
-
-  // ── Store links ───────────────────────────────────────────────
-
-  const allStoreLinks = ["steam", "rawg", "tmdb"].flatMap((s) => {
-    const d = bySource.get(s as Source);
-    return d ? extractStoreLinks(s as Source, d, type) : [];
-  });
-  // Deduplicate by name
+  // ── Store links (union, dedup by name) ────────────────────────
+  const allStoreLinks = unionValues(STORE_LINK_SOURCES, norm, "storeLinks") as { name: string; url: string; source: Source }[];
   const storeLinks = allStoreLinks.filter((l, i) => allStoreLinks.findIndex((x) => x.name === l.name) === i);
 
-  // ── Streaming providers ───────────────────────────────────────
+  // ── Streaming providers (TMDB) ────────────────────────────────
+  const streamingProviders = tmdb?.streamingProviders ?? [];
 
-  const streamingProviders = extractStreamingProviders("tmdb", bySource.get("tmdb") ?? {});
+  // ── TMDB credits + keywords (with letterboxd director fallback) ──
+  const director = pickField(["tmdb", "letterboxd"], norm, "director");
+  const cast = tmdb?.cast ?? [];
+  const keywords = dedup(tmdb?.keywords ?? []).slice(0, 12);
+
+  // IMDb id — from TMDB external_ids/imdb_id or Trakt ids.
+  const imdbId = pickField(["tmdb", "trakt"], norm, "imdbId");
 
   // ── External links ────────────────────────────────────────────
-
-  const links: { label: string; url: string }[] = [];
-  for (const sl of storeLinks) {
-    links.push({ label: sl.name, url: sl.url });
-  }
-
-  // ── Sources summary ───────────────────────────────────────────
+  const links: { label: string; url: string }[] = storeLinks.map((sl) => ({ label: sl.name, url: sl.url }));
 
   // sources: use the actual mediaLinks array passed in for correct sourceIds
-  const sources = mediaLinks.map((l) => ({
-    source: l.source,
-    sourceId: l.sourceId,
-    data: l.rawData,
-  }));
+  const sources = mediaLinks.map((l) => ({ source: l.source, sourceId: l.sourceId, data: l.rawData }));
 
   return {
     title,
@@ -295,10 +131,35 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<Enric
     tags: tags.slice(0, 12),
     platforms: platforms.slice(0, 10),
     description,
+    tagline,
     metacritic,
     steamReviewLabel,
+    rtScore: null,
+    imdbRating: null,
+    imdbId,
+    letterboxdRating,
+    communityRatings,
+    runtimeMinutes,
+    certification,
+    status,
+    collection,
+    originalLanguage,
+    country,
+    budget,
+    revenue,
+    network,
+    seasonCount,
+    episodeCount,
+    nextEpisode,
+    gameModes,
+    playtimeHours,
+    timeToBeat,
+    dlc,
     developer,
     publisher,
+    director,
+    cast,
+    keywords,
     trailerYoutubeKey,
     steamTrailerUrl,
     storeLinks,
@@ -308,6 +169,149 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<Enric
   };
 }
 
+// ── Merge explainer (debug detail panel) ─────────────────────────
+// Mirrors mergeLinks field-by-field: for every merged field, what each present
+// source reports, the final merged value, and which source(s) won.
+
+export interface MergeFieldDebug {
+  field: string;
+  strategy: "first-by-priority" | "longest" | "union" | "tmdb-only" | "single-source";
+  priority: Source[];
+  perSource: Partial<Record<Source, any>>;
+  final: any;
+  winners: Source[];
+}
+
+export function explainMerge(mediaLinks: MediaLink[], type: MediaType): MergeFieldDebug[] {
+  const norm = normalizeAll(mediaLinks.map((l) => ({ source: l.source, data: l.rawData })), type);
+  const rows: MergeFieldDebug[] = [];
+  const empty = (v: any) => v === null || v === undefined;
+
+  // What each PRESENT source reports for a field (null/[] kept — shows "has nothing").
+  const collect = (sources: Source[], field: keyof SourceNormalized, arr = false): Partial<Record<Source, any>> => {
+    const out: Partial<Record<Source, any>> = {};
+    for (const s of sources) if (norm.has(s)) out[s] = norm.get(s)?.[field] ?? (arr ? [] : null);
+    return out;
+  };
+
+  const priorityRow = (
+    field: keyof SourceNormalized,
+    strategy: "first-by-priority" | "longest" | "single-source",
+    priority: Source[],
+    label: string = field
+  ) => {
+    const perSource = collect(priority, field);
+    const final = strategy === "longest" ? pickLongestField(priority, norm, field) : pickField(priority, norm, field);
+    let winners: Source[] = [];
+    if (!empty(final)) {
+      const winner = strategy === "longest"
+        ? priority.find((s) => perSource[s] === final)
+        : priority.find((s) => !empty(perSource[s]));
+      if (winner) winners = [winner];
+    }
+    rows.push({ field: label, strategy, priority, perSource, final, winners });
+  };
+
+  const unionRow = (field: keyof SourceNormalized, sources: Source[], final: any[], key: (x: any) => string) => {
+    const perSource = collect(sources, field, true);
+    const finalKeys = new Set(final.map(key));
+    const winners = sources.filter((s) => (perSource[s] ?? []).some((v: any) => finalKeys.has(key(v))));
+    rows.push({ field, strategy: "union", priority: sources, perSource, final, winners });
+  };
+
+  // ── Single-value fields ───────────────────────────────────────
+  priorityRow("title", "first-by-priority", TITLE_PRIORITY);
+  priorityRow("description", "longest", DESCRIPTION_PRIORITY);
+  priorityRow("releaseDate", "first-by-priority", RELEASE_DATE_PRIORITY);
+  priorityRow("poster", "first-by-priority", POSTER_PRIORITY, "posterUrl");
+  priorityRow("developer", "first-by-priority", DEVELOPER_PRIORITY);
+  priorityRow("publisher", "first-by-priority", DEVELOPER_PRIORITY);
+  priorityRow("metacritic", "single-source", ["rawg"]);
+  priorityRow("steamReviewLabel", "single-source", ["steam"]);
+  priorityRow("letterboxdRating", "single-source", ["letterboxd"]);
+
+  // ── Facts (single-value, priority order) ──────────────────────
+  priorityRow("tagline", "first-by-priority", TAGLINE_PRIORITY);
+  priorityRow("runtimeMinutes", "first-by-priority", RUNTIME_PRIORITY);
+  priorityRow("status", "first-by-priority", STATUS_PRIORITY);
+  priorityRow("collection", "first-by-priority", COLLECTION_PRIORITY);
+  priorityRow("originalLanguage", "first-by-priority", LANGUAGE_PRIORITY);
+  priorityRow("country", "first-by-priority", COUNTRY_PRIORITY);
+  if (type === "show") priorityRow("network", "first-by-priority", NETWORK_PRIORITY);
+  priorityRow("playtimeHours", "single-source", ["rawg"]);
+  priorityRow("timeToBeat", "single-source", ["igdb"]);
+
+  // ── Per-source dates (all kept, deduped by value) ─────────────
+  {
+    const perSource = collect(RELEASE_DATE_PRIORITY, "releaseDate");
+    const dates: { source: Source; date: string }[] = [];
+    for (const s of RELEASE_DATE_PRIORITY) {
+      const date = perSource[s];
+      if (date) dates.push({ source: s, date });
+    }
+    const uniqueDates = dates.filter((d, i) => dates.findIndex((x) => x.date === d.date) === i);
+    rows.push({ field: "dates", strategy: "union", priority: RELEASE_DATE_PRIORITY, perSource, final: uniqueDates, winners: uniqueDates.map((d) => d.source) });
+  }
+
+  // ── Union fields (same source lists + slices as mergeLinks) ───
+  unionRow("images", IMAGE_SOURCES, dedup(unionValues(IMAGE_SOURCES, norm, "images")).slice(0, 12), (x) => x);
+  unionRow("tags", TAG_SOURCES, dedup(unionValues(TAG_SOURCES, norm, "tags")).slice(0, 12), (x) => x);
+  unionRow("platforms", PLATFORM_SOURCES, dedup(unionValues(PLATFORM_SOURCES, norm, "platforms")).slice(0, 10), (x) => x);
+  unionRow("communityRatings", RATING_SOURCES, unionValues(RATING_SOURCES, norm, "communityRatings"), (x) => x.source);
+  unionRow("gameModes", GAME_MODE_SOURCES, dedup(unionValues(GAME_MODE_SOURCES, norm, "gameModes")).slice(0, 8), (x) => x);
+  unionRow("dlc", DLC_SOURCES, dedup(unionValues(DLC_SOURCES, norm, "dlc")).slice(0, 12), (x) => x);
+  unionRow("certification", CERTIFICATION_SOURCES, dedup(unionValues(CERTIFICATION_SOURCES, norm, "certification")).slice(0, 6), (x) => x);
+
+  {
+    const all = unionValues(STORE_LINK_SOURCES, norm, "storeLinks") as { name: string; url: string; source: Source }[];
+    const storeFinal = all.filter((l, i) => all.findIndex((x) => x.name === l.name) === i);
+    rows.push({
+      field: "storeLinks",
+      strategy: "union",
+      priority: STORE_LINK_SOURCES,
+      perSource: collect(STORE_LINK_SOURCES, "storeLinks", true),
+      final: storeFinal,
+      winners: Array.from(new Set(storeFinal.map((l) => l.source))),
+    });
+  }
+
+  // ── Trailer (first YouTube key by TRAILER_SOURCES, Steam store fallback) ──
+  {
+    priorityRow("trailerYoutubeKey", "first-by-priority", TRAILER_SOURCES.filter((s) => s !== "steam"));
+    const steamUrl = norm.get("steam")?.steamTrailerUrl ?? null;
+    rows.push({
+      field: "steamTrailerUrl",
+      strategy: "single-source",
+      priority: ["steam"],
+      perSource: norm.has("steam") ? { steam: steamUrl } : {},
+      final: steamUrl,
+      winners: steamUrl ? ["steam"] : [],
+    });
+  }
+
+  // ── TMDB-only fields ──────────────────────────────────────────
+  {
+    const tmdb = norm.get("tmdb");
+    const tmdbRow = (field: string, value: any) => {
+      const nonEmpty = !empty(value) && !(Array.isArray(value) && value.length === 0);
+      rows.push({
+        field,
+        strategy: "tmdb-only",
+        priority: ["tmdb"],
+        perSource: tmdb !== undefined ? { tmdb: value } : {},
+        final: value,
+        winners: nonEmpty ? ["tmdb"] : [],
+      });
+    };
+    tmdbRow("director", tmdb?.director ?? null);
+    tmdbRow("cast", tmdb?.cast ?? []);
+    tmdbRow("keywords", dedup(tmdb?.keywords ?? []).slice(0, 12));
+    tmdbRow("streamingProviders", tmdb?.streamingProviders ?? []);
+  }
+
+  return rows;
+}
+
 // ── Merge for canonical record (used when upserting media_items) ──
 
 export function mergeForCanonical(links: { source: Source; data: any }[]): {
@@ -315,19 +319,25 @@ export function mergeForCanonical(links: { source: Source; data: any }[]): {
   releaseDate: string | null;
   posterUrl: string | null;
 } {
-  const bySource = new Map(links.map((l) => [l.source, l.data]));
+  // Only the canonical fields are needed; normalize the few sources involved and
+  // pick by the same priority orders mergeLinks uses.
+  const norm = new Map<Source, SourceNormalized>();
+  for (const l of links) {
+    // Type is unknown here; canonical fields (title/date/poster) don't depend on it.
+    norm.set(l.source, normalizeSource(l.source, l.data, "movie"));
+  }
   return {
-    title: pickFirst(TITLE_PRIORITY, bySource, extractTitle) ?? "Unknown",
-    releaseDate: pickFirst(RELEASE_DATE_PRIORITY, bySource, extractReleaseDate),
-    posterUrl: pickFirst(POSTER_PRIORITY, bySource, extractPoster),
+    title: pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown",
+    releaseDate: pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate"),
+    posterUrl: pickField(POSTER_PRIORITY, norm, "poster"),
   };
 }
 
 // ── Normalization for matching ────────────────────────────────────
 
-export function normalizeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-}
+// Re-exported from the dependency-free module so existing `@/lib/merge` importers
+// keep working while db.ts imports the same rule directly (no duplicated logic).
+export { normalizeName } from "./normalize";
 
 export function extractYear(date: string | null): number | null {
   if (!date) return null;
@@ -335,44 +345,35 @@ export function extractYear(date: string | null): number | null {
   return m ? parseInt(m[1]) : null;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
+// ── Policy helpers ─────────────────────────────────────────────────
 
-function pickFirst<T>(
-  priority: Source[],
-  bySource: Map<Source, any>,
-  extractor: (s: Source, d: any) => T | null
-): T | null {
+// First non-null value for a field across sources in priority order.
+function pickField(priority: Source[], norm: Map<Source, SourceNormalized>, field: keyof SourceNormalized): any {
   for (const s of priority) {
-    const d = bySource.get(s);
-    if (!d) continue;
-    const val = extractor(s, d);
-    if (val !== null && val !== undefined) return val;
+    const v = norm.get(s)?.[field];
+    if (v !== null && v !== undefined) return v;
   }
   return null;
 }
 
-function pickFirstValue<T>(
-  priority: Source[],
-  bySource: Map<Source, any>,
-  extractor: (s: Source, d: any) => T | null
-): T | null {
-  return pickFirst(priority, bySource, extractor);
-}
-
-function pickLongest(
-  priority: Source[],
-  bySource: Map<Source, any>,
-  extractor: (s: Source, d: any) => string | null
-): string | null {
-  // Among sources at the same or adjacent priority, pick the longest non-empty string
+// Longest non-empty string for a field across sources (descriptions).
+function pickLongestField(priority: Source[], norm: Map<Source, SourceNormalized>, field: keyof SourceNormalized): string | null {
   let best: string | null = null;
   for (const s of priority) {
-    const d = bySource.get(s);
-    if (!d) continue;
-    const val = extractor(s, d);
-    if (val && (!best || val.length > best.length)) best = val;
+    const v = norm.get(s)?.[field] as string | null | undefined;
+    if (v && (!best || v.length > best.length)) best = v;
   }
   return best;
+}
+
+// Concatenate an array-valued field across sources (in list order), before dedup.
+function unionValues(sources: Source[], norm: Map<Source, SourceNormalized>, field: keyof SourceNormalized): any[] {
+  const out: any[] = [];
+  for (const s of sources) {
+    const v = norm.get(s)?.[field] as any[] | undefined;
+    if (v) out.push(...v);
+  }
+  return out;
 }
 
 function dedup(arr: string[]): string[] {

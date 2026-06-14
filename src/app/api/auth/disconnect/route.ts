@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
-import { initDb, get, run, query } from "@/lib/db";
+import { get, run, query } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    initDb();
     const session = await requireSession();
     const { provider } = await req.json();
 

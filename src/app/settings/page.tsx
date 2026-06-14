@@ -1,11 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { SOURCE_COLORS } from "@/lib/constants";
+import NavBar from "@/components/NavBar";
 
-const SOURCE_COLORS: Record<string, string> = { steam: "#1b9af7", rawg: "#4ade80", trakt: "#ed1c24" };
-
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<any>(null);
@@ -102,9 +101,11 @@ export default function SettingsPage() {
   }
 
   const providers = [
-    { key: "trakt", label: "Trakt.tv", description: "Movies & TV shows", connectUrl: "/api/auth/trakt", canWrite: true },
-    { key: "steam", label: "Steam", description: "Games from your wishlist", connectUrl: "/api/auth/steam", canWrite: false },
-    { key: "rawg", label: "RAWG", description: "Games from your Want to Play list", connectUrl: "rawg-form", canWrite: true },
+    { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true  },
+    { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true  },
+    { key: "letterboxd", label: "Letterboxd",  description: "Film watchlist",                   connectUrl: "/api/auth/letterboxd",  canWrite: true  },
+    { key: "steam",      label: "Steam",        description: "Games from your wishlist",         connectUrl: "/api/auth/steam",       canWrite: false },
+    { key: "rawg",       label: "RAWG",         description: "Games from your Want to Play list", connectUrl: "rawg-form",           canWrite: true  },
   ];
 
   return (
@@ -146,14 +147,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <nav className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
-        <Link href="/dashboard" className="font-bold text-lg">ReleaseRadar</Link>
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="text-neutral-400 hover:text-white text-sm">Calendar</Link>
-          <span className="text-sm text-neutral-400">{user?.displayName}</span>
-          <button onClick={logout} className="text-sm text-neutral-500 hover:text-white">Log out</button>
-        </div>
-      </nav>
+      <NavBar />
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         <div className="flex items-center justify-between">
@@ -252,6 +246,12 @@ export default function SettingsPage() {
                 Connect Trakt
               </a>
             )}
+            {!getIdentity("letterboxd") && (
+              <a href="/api/auth/letterboxd" className="text-sm px-4 py-2 rounded-lg transition-colors"
+                style={{ background: "#00c03015", border: "1px solid #00c03030", color: "#00c030" }}>
+                Connect Letterboxd
+              </a>
+            )}
             {!getIdentity("steam") && (
               <a href="/api/auth/steam" className="text-sm px-4 py-2 rounded-lg transition-colors"
                 style={{ background: "#1b9af715", border: "1px solid #1b9af730", color: "#1b9af7" }}>
@@ -283,5 +283,13 @@ export default function SettingsPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <SettingsContent />
+    </Suspense>
   );
 }

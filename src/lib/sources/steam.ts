@@ -59,6 +59,33 @@ export async function getSteamWishlistIds(steamId: string): Promise<number[]> {
   return items.map((i: any) => i.appid);
 }
 
+// ── Owned games (for the Library page) ────────────────────────────
+
+export interface SteamOwnedGame {
+  appid: number;
+  name: string;
+  playtime_forever: number;   // minutes
+  rtime_last_played: number;  // unix seconds, 0 if never
+  img_icon_url?: string;
+}
+
+export async function getSteamOwnedGames(steamId: string): Promise<SteamOwnedGame[]> {
+  const params = new URLSearchParams({
+    key: API_KEY,
+    steamid: steamId,
+    include_appinfo: "1",
+    include_played_free_games: "1",
+    format: "json",
+  });
+  const res = await fetch(`${STEAM_API}/IPlayerService/GetOwnedGames/v1/?${params}`);
+  if (!res.ok) throw new Error(`Steam owned games fetch failed: ${res.status}`);
+  const data = await res.json();
+  const games: SteamOwnedGame[] = data.response?.games ?? [];
+  // Most-recently-played first; never-played fall to the end.
+  games.sort((a, b) => (b.rtime_last_played || 0) - (a.rtime_last_played || 0));
+  return games;
+}
+
 export async function getSteamAppDetails(appIds: number[]): Promise<Record<number, any>> {
   const results: Record<number, any> = {};
   const BATCH = 50;
@@ -68,7 +95,9 @@ export async function getSteamAppDetails(appIds: number[]): Promise<Record<numbe
     try {
       const inputJson = JSON.stringify({
         ids: batch.map((appid) => ({ appid })),
-        context: { language: "english", country_code: "US", steam_realm: 1 },
+        // DE country code → euro prices; matches the DE-first region preference
+        // used for TMDB streaming providers.
+        context: { language: "english", country_code: "DE", steam_realm: 1 },
         data_request: {
           include_release: true,
           include_basic_info: true,
@@ -76,10 +105,12 @@ export async function getSteamAppDetails(appIds: number[]): Promise<Record<numbe
           include_platforms: true,
           include_screenshots: true,
           include_trailers: true,
-          include_ratings: true,
+          include_ratings: true,         // game_rating: USK/PEGI/ESRB age rating
           include_tag_count: 20,
           include_reviews: true,
           include_assets: true,
+          include_supported_languages: true,
+          include_included_items: true,  // DLC / bundled apps
         },
       });
       const res = await fetch(
@@ -116,6 +147,20 @@ export async function getSteamTagMap(): Promise<Record<number, string>> {
 
 export function resolveTagNames(tagIds: number[], tagMap: Record<number, string>): string[] {
   return tagIds.map((id) => tagMap[id]).filter(Boolean).slice(0, 8);
+}
+
+// Extract a YYYY-MM-DD release date from a Steam store item, if available.
+export function extractSteamDate(data: any): string | null {
+  const r = data?.release;
+  if (!r) return null;
+  if (r.steam_release_date) {
+    return new Date(r.steam_release_date * 1000).toISOString().split("T")[0];
+  }
+  if (r.custom_release_date?.date) {
+    const p = Date.parse(r.custom_release_date.date);
+    if (!isNaN(p)) return new Date(p).toISOString().split("T")[0];
+  }
+  return null;
 }
 
 // ── Search (for detail panel lookups) ────────────────────────────

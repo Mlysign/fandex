@@ -1,5 +1,5 @@
 export type MediaType = "game" | "movie" | "show";
-export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb";
+export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd";
 
 export interface MediaItem {
   id: string;
@@ -44,6 +44,17 @@ export interface WatchlistEntry {
   notes: string | null;
 }
 
+// One external/community score, normalized for display.
+// score is on the scale given by outOf (10, 5 or 100); votes when known.
+export interface CommunityRating {
+  source: string;          // "tmdb" | "trakt" | "imdb" | "rt" | "metacritic" | "rawg" | "igdb" | "igdb-critics" | "steam" | "letterboxd"
+  label: string;           // display name, e.g. "IMDb"
+  score: number;
+  outOf: number;
+  votes?: number | null;
+  url?: string | null;
+}
+
 // Enriched item returned to the client
 export interface EnrichedItem {
   id: string;
@@ -59,10 +70,48 @@ export interface EnrichedItem {
   tags: string[];
   platforms: string[];
   description: string | null;
+  tagline: string | null;
   metacritic: number | null;
   steamReviewLabel: string | null;
+  rtScore?: number | null;
+  imdbRating?: number | null;
+  imdbId?: string | null;
+  letterboxdRating?: number | null;
+  // Unified per-source community scores (TMDB, Trakt, IGDB, RAWG, Steam, …)
+  communityRatings: CommunityRating[];
+  // Facts (movies/shows + some game equivalents)
+  runtimeMinutes: number | null;     // movie runtime / show per-episode runtime
+  certification: string[];           // age ratings across regions: ["FSK 16", "PG-13", …]
+  status: string | null;             // Released / Ended / Returning Series…
+  collection: string | null;         // TMDB collection or IGDB franchise
+  originalLanguage: string | null;
+  country: string | null;
+  budget: number | null;             // USD (TMDB)
+  revenue: number | null;            // USD (TMDB)
+  boxOffice?: string | null;         // formatted (OMDB)
+  awards?: string | null;            // OMDB awards summary
+  // Shows
+  network: string | null;
+  seasonCount: number | null;
+  episodeCount: number | null;
+  nextEpisode: { name: string | null; airDate: string | null; season: number | null; episode: number | null } | null;
+  // Games
+  gameModes: string[];               // IGDB game modes + player perspectives
+  playtimeHours: number | null;      // RAWG average playtime
+  timeToBeat: { hastily: number | null; normally: number | null; completely: number | null } | null; // hours (IGDB)
+  dlc: string[];                     // IGDB dlcs/expansions + Steam included apps
+  // Library (watched / played / owned) — present on /api/library items
+  rating?: number | null;        // personal score, 0-10 scale — AVERAGE across platforms
+  ratings?: { source: Source; rating: number }[]; // per-platform breakdown
+  review?: string | null;
+  reviewedAt?: number | null;    // unix seconds
+  libraryStatus?: string | null; // watched | played | owned
   developer: string | null;
   publisher: string | null;
+  // Movie/show credits + keywords (from TMDB)
+  director?: string | null;        // movie director, or show creator
+  cast?: { name: string; character: string | null }[];
+  keywords?: string[];
   trailerYoutubeKey: string | null;
   steamTrailerUrl: string | null;
   storeLinks: { name: string; url: string; source: Source }[];

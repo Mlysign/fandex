@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
-import { initDb, query } from "@/lib/db";
+import { query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
+import { getUserStateMap } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
 
 export async function GET(req: NextRequest) {
   try {
-    initDb();
     const session = await requireSession();
     const { searchParams } = req.nextUrl;
     const typeFilter = searchParams.get("type") as MediaType | null;
@@ -73,6 +73,15 @@ export async function GET(req: NextRequest) {
         platformSources: item.platformSources,
         ...merged,
       });
+    }
+
+    // Canonical user-state: these are wishlist items, but also surface the
+    // library state (watched/played + rating) so the same item looks identical
+    // here and on the Library page.
+    const stateMap = getUserStateMap(session.userId, enriched.map((e) => e.id));
+    for (const e of enriched) {
+      const st = stateMap.get(e.id);
+      if (st) { e.libraryStatus = st.libraryStatus; e.rating = st.rating; e.reviewedAt = st.reviewedAt; }
     }
 
     // Sort by release date, TBA last

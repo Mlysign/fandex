@@ -1,0 +1,89 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+
+// Minimal item shape needed to rate / wishlist from a card or row. Both
+// EnrichedItem and the discover/facet item shapes satisfy it.
+export interface QuickActionItem {
+  id: string;
+  type: string;
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  rating?: number | null;
+  onWatchlist?: boolean;
+  platformSources?: string[];
+  libraryStatus?: string | null;
+  sources?: { source: string; sourceId: string }[];
+  ids?: Record<string, string | number>;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Build the { tmdb: id, … } identity the library / watchlist endpoints accept,
+// so a quick action works even on a discovered title not yet in the local DB.
+function idsFromItem(item: QuickActionItem): Record<string, string> {
+  const ids: Record<string, string> = {};
+  for (const s of item.sources ?? []) if (s?.sourceId) ids[s.source] = String(s.sourceId);
+  if (item.ids) for (const [k, v] of Object.entries(item.ids)) if (v != null) ids[k] = String(v);
+  return ids;
+}
+
+// Shared quick-action state + optimistic writes for rate / wishlist. Used by
+// PosterCard (card view) and ListCard (list view) so behaviour stays identical.
+export function useQuickActions(item: QuickActionItem) {
+  const [rating, setRating] = useState<number | null>(item.rating ?? null);
+  const [wishlisted, setWishlisted] = useState<boolean>(item.onWatchlist ?? (item.platformSources?.length ?? 0) > 0);
+  const [status, setStatus] = useState<string | null>(item.libraryStatus ?? null);
+  const [busy, setBusy] = useState(false);
+  const mediaIdRef = useRef<string | null>(UUID_RE.test(item.id) ? item.id : null);
+
+  // Resync when the parent supplies a different item / fresh data.
+  useEffect(() => {
+    setRating(item.rating ?? null);
+    setWishlisted(item.onWatchlist ?? (item.platformSources?.length ?? 0) > 0);
+    setStatus(item.libraryStatus ?? null);
+    mediaIdRef.current = UUID_RE.test(item.id) ? item.id : null;
+  }, [item.id, item.rating, item.onWatchlist, item.libraryStatus, item.platformSources?.length]);
+
+  const identity = () => ({ type: item.type, title: item.title, releaseDate: item.releaseDate, posterUrl: item.posterUrl, ids: idsFromItem(item) });
+
+  async function rate(n: number) {
+    const prev = rating;
+    setRating(n);
+    setStatus((s) => s ?? (item.type === "game" ? "played" : "watched"));
+    setBusy(true);
+    try {
+      const res = await fetch("/api/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...identity(), rating: n }) });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      if (d.mediaItemId) mediaIdRef.current = d.mediaItemId;
+      if (typeof d.rating === "number") setRating(d.rating);
+    } catch {
+      setRating(prev); // revert on failure
+    }
+    setBusy(false);
+  }
+
+  async function toggleWishlist() {
+    const next = !wishlisted;
+    setWishlisted(next);
+    setBusy(true);
+    try {
+      if (next) {
+        const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(identity()) });
+        if (!res.ok) throw new Error();
+        const d = await res.json();
+        if (d.mediaItemId) mediaIdRef.current = d.mediaItemId;
+      } else {
+        if (!mediaIdRef.current) throw new Error("no id");
+        const res = await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current }) });
+        if (!res.ok) throw new Error();
+      }
+    } catch {
+      setWishlisted(!next); // revert on failure
+    }
+    setBusy(false);
+  }
+
+  return { rating, wishlisted, status, busy, rate, toggleWishlist };
+}

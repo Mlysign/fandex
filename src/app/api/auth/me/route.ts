@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { initDb, query, get } from "@/lib/db";
+import { query, get } from "@/lib/db";
 
 export async function GET() {
   try {
-    initDb();
     const session = await getSession();
     if (!session) return NextResponse.json({ user: null });
 

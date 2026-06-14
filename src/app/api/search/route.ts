@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
 import { searchRawg } from "@/lib/sources/rawg";
-import { initDb, get } from "@/lib/db";
+import { get } from "@/lib/db";
 import { normalizeName } from "@/lib/merge";
 
 interface SearchResult {
@@ -23,7 +23,6 @@ interface SearchResult {
 
 export async function GET(req: NextRequest) {
   try {
-    initDb();
     const session = await requireSession();
     const q = req.nextUrl.searchParams.get("q")?.trim();
     const type = req.nextUrl.searchParams.get("type");

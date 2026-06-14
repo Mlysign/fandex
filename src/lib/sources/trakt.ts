@@ -43,6 +43,37 @@ async function traktGet(endpoint: string, accessToken: string) {
   return res.json();
 }
 
+// ── Public (catalog) API — client-id auth only, no user token ─────
+// Summary/search endpoints are public; extended=full carries runtime,
+// certification, rating+votes, tagline, status, country, network, trailer.
+
+export function traktConfigured(): boolean {
+  return !!CLIENT_ID;
+}
+
+async function traktGetPublic(endpoint: string) {
+  const res = await fetch(`${BASE}${endpoint}`, { headers: HEADERS });
+  if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
+  return res.json();
+}
+
+// idOrSlug accepts a numeric trakt id or a slug.
+export async function getTraktMovieSummary(idOrSlug: string): Promise<any | null> {
+  try { return await traktGetPublic(`/movies/${idOrSlug}?extended=full`); }
+  catch { return null; }
+}
+
+export async function getTraktShowSummary(idOrSlug: string): Promise<any | null> {
+  try { return await traktGetPublic(`/shows/${idOrSlug}?extended=full`); }
+  catch { return null; }
+}
+
+export async function searchTraktPublic(query: string, type: "movie" | "show", limit = 5): Promise<any[]> {
+  try {
+    return (await traktGetPublic(`/search/${type}?query=${encodeURIComponent(query)}&limit=${limit}&extended=full`)) ?? [];
+  } catch { return []; }
+}
+
 export async function getTraktUserInfo(accessToken: string) {
   return traktGet("/users/me", accessToken);
 }
@@ -66,6 +97,30 @@ export async function getTraktWatchlistShows(accessToken: string) {
     const results = await traktGet("/sync/watchlist/shows?extended=full", accessToken);
     return results ?? [];
   } catch { return []; }
+}
+
+// ── Watched + ratings (for the Library / history page) ────────────
+
+// extended=full so stored raw_data carries overview/released/genres/trailer —
+// without it Trakt returns bare {title, year, ids} and the merge gets nothing.
+export async function getTraktWatchedMovies(accessToken: string) {
+  try { return (await traktGet("/sync/watched/movies?extended=full", accessToken)) ?? []; }
+  catch { return []; }
+}
+
+export async function getTraktWatchedShows(accessToken: string) {
+  try { return (await traktGet("/sync/watched/shows?extended=full", accessToken)) ?? []; }
+  catch { return []; }
+}
+
+export async function getTraktRatingsMovies(accessToken: string) {
+  try { return (await traktGet("/sync/ratings/movies?extended=full", accessToken)) ?? []; }
+  catch { return []; }
+}
+
+export async function getTraktRatingsShows(accessToken: string) {
+  try { return (await traktGet("/sync/ratings/shows?extended=full", accessToken)) ?? []; }
+  catch { return []; }
 }
 
 // Calendar endpoint – used separately for episode-level data
@@ -154,5 +209,47 @@ export async function searchTrakt(query: string, type: "movie" | "show", accessT
     return results ?? [];
   } catch {
     return [];
+  }
+}
+
+// ── Write-back: rate + mark watched ───────────────────────────────
+
+// POST rating (1-10) to Trakt /sync/ratings
+export async function rateTraktItem(
+  accessToken: string,
+  type: "movie" | "show",
+  traktId: number,
+  rating: number  // 1-10 integer
+): Promise<void> {
+  const key = type === "movie" ? "movies" : "shows";
+  const res = await fetch(`${BASE}/sync/ratings`, {
+    method: "POST",
+    headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ [key]: [{ rating, ids: { trakt: traktId } }] }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Trakt rate failed: ${res.status} ${body}`);
+  }
+}
+
+// POST to Trakt /sync/history to mark a movie/show as watched
+export async function markTraktWatched(
+  accessToken: string,
+  type: "movie" | "show",
+  traktId: number,
+  watchedAt?: string  // ISO timestamp; defaults to now
+): Promise<void> {
+  const key = type === "movie" ? "movies" : "shows";
+  const item: Record<string, any> = { ids: { trakt: traktId } };
+  if (watchedAt) item.watched_at = watchedAt;
+  const res = await fetch(`${BASE}/sync/history`, {
+    method: "POST",
+    headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ [key]: [item] }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error("Trakt mark watched failed: " + res.status + " " + body);
   }
 }

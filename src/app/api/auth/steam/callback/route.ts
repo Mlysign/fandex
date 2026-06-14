@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { initDb, get, run } from "@/lib/db";
+import { get, run } from "@/lib/db";
 import { verifySteamOpenId, extractSteamId, getSteamPlayerSummary } from "@/lib/sources/steam";
 import { createSession, setSessionCookie } from "@/lib/session";
 
@@ -8,8 +8,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
 
   try {
-    initDb();
-
     // Verify with Steam
     const valid = await verifySteamOpenId(searchParams);
     if (!valid) return NextResponse.redirect(new URL("/login?error=steam_failed", req.url));

@@ -1,0 +1,144 @@
+// ── D4: versioned migration runner ──────────────────────────────────────────
+// Single source of truth for incremental schema changes, keyed on SQLite's
+// PRAGMA user_version. Each migration runs once, in order, inside a transaction;
+// after it succeeds user_version is bumped to its version number.
+//
+// Baseline: user_version 1 is the "norm_title backfill" baseline established by
+// db.ts's inline NORM_VERSION step (it uses normalizeName(), app-only logic, so
+// it stays inline). Every migration here is >= 2 and written as pure SQL so the
+// SAME list can be applied either in-process (via getDb()) or standalone against
+// the live data/rr.db by scripts/migrate.mjs — no app-logic duplication.
+//
+// Rules:
+//  - Pure SQL only (no imports of app modules) so it runs under both paths.
+//  - Idempotent where practical (IF NOT EXISTS / INSERT OR IGNORE) so a partial
+//    apply can be safely retried.
+//  - Expand-then-contract: add + backfill + switch reads → verify → (later) drop.
+//    Never drop a column/table in the same migration that adds its replacement.
+
+import type DatabaseT from "better-sqlite3";
+type DB = DatabaseT.Database;
+
+export interface Migration {
+  version: number;
+  name: string;
+  up: (db: DB) => void;
+}
+
+export const MIGRATIONS: Migration[] = [
+  {
+    version: 2,
+    name: "media_external_ids (D5)",
+    up: (db) => {
+      // Indexed cross-id table so the matcher does an indexed lookup instead of
+      // JSON.parse-ing every candidate link's raw_data on the hot sync path.
+      // `source` is the id NAMESPACE (a single link can contribute several, e.g.
+      // a Trakt link carries both its trakt id and a tmdb id).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS media_external_ids (
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,        -- trakt | tmdb | rawg | steam | igdb | letterboxd
+          external_id TEXT NOT NULL,
+          UNIQUE(media_item_id, source, external_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ext_lookup ON media_external_ids(source, external_id);
+        CREATE INDEX IF NOT EXISTS idx_ext_item ON media_external_ids(media_item_id);
+      `);
+
+      // Backfill from existing links via json_extract. Mirrors extractCrossIds()
+      // in matcher.ts (which remains the write-time source of truth). CAST to TEXT
+      // so numeric ids compare equal to the String()-ified ids written at runtime.
+      const insertNamespace = (linkSource: string, namespace: string, jsonPath: string) => {
+        db.prepare(
+          `INSERT OR IGNORE INTO media_external_ids (media_item_id, source, external_id)
+           SELECT media_item_id, ?, CAST(json_extract(raw_data, ?) AS TEXT)
+           FROM media_links
+           WHERE source = ? AND json_extract(raw_data, ?) IS NOT NULL`
+        ).run(namespace, jsonPath, linkSource, jsonPath);
+      };
+      insertNamespace("trakt", "trakt", "$.ids.trakt");
+      insertNamespace("trakt", "tmdb", "$.ids.tmdb");
+      insertNamespace("tmdb", "tmdb", "$.id");
+      insertNamespace("rawg", "rawg", "$.id");
+      insertNamespace("steam", "steam", "$.appid");
+      insertNamespace("igdb", "igdb", "$.id");
+      insertNamespace("letterboxd", "letterboxd", "$.id");
+      // Letterboxd's embedded tmdb id lives in a links[] array; rare (provider
+      // usually unconfigured) and captured at write time by extractCrossIds, so
+      // it's intentionally not backfilled in pure SQL here.
+    },
+  },
+  {
+    version: 3,
+    name: "user_item_state (D1 + D2)",
+    up: (db) => {
+      // Normalized, queryable per-source user state — one row per
+      // (user, item, source, relation). Replaces JSON-in-a-column: wishlist
+      // providers were a JSON array in user_watchlist.platform_sources, and
+      // library per-source detail was a JSON blob in user_library.metadata.
+      // This single table unifies wishlist + library (D2) and makes per-source
+      // ratings/status SQL-queryable (D1). The user_watchlist / user_library
+      // rows become caches REBUILT from this table on every write (matcher.ts),
+      // so the canonical rating can no longer drift and "clear a rating"
+      // propagates. Expand-then-contract: the cache tables are kept (reads still
+      // hit them); a later migration may drop their JSON columns.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_item_state (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,            -- trakt | tmdb | steam | rawg | ... | local
+          relation TEXT NOT NULL,          -- wishlist | library
+          status TEXT,                     -- library: watched | played | owned
+          rating REAL,                     -- library: per-source 0-10 score
+          review TEXT,
+          reviewed_at INTEGER,
+          added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          UNIQUE(user_id, media_item_id, source, relation)
+        );
+        CREATE INDEX IF NOT EXISTS idx_uis_user_item ON user_item_state(user_id, media_item_id);
+        CREATE INDEX IF NOT EXISTS idx_uis_user_rel ON user_item_state(user_id, relation);
+        CREATE INDEX IF NOT EXISTS idx_uis_item ON user_item_state(media_item_id);
+      `);
+
+      // Backfill wishlist rows by expanding the platform_sources JSON array.
+      db.prepare(`
+        INSERT OR IGNORE INTO user_item_state (id, user_id, media_item_id, source, relation, added_at)
+        SELECT lower(hex(randomblob(16))), w.user_id, w.media_item_id, je.value, 'wishlist', w.added_at
+        FROM user_watchlist w, json_each(w.platform_sources) je
+        WHERE w.platform_sources IS NOT NULL AND json_valid(w.platform_sources)
+      `).run();
+
+      // Backfill library rows by expanding the metadata JSON object (key = source).
+      db.prepare(`
+        INSERT OR IGNORE INTO user_item_state
+          (id, user_id, media_item_id, source, relation, status, rating, review, reviewed_at, added_at)
+        SELECT lower(hex(randomblob(16))), l.user_id, l.media_item_id, je.key, 'library',
+               json_extract(je.value, '$.status'),
+               json_extract(je.value, '$.rating'),
+               json_extract(je.value, '$.review'),
+               json_extract(je.value, '$.reviewedAt'),
+               l.added_at
+        FROM user_library l, json_each(l.metadata) je
+        WHERE l.metadata IS NOT NULL AND json_valid(l.metadata)
+      `).run();
+    },
+  },
+];
+
+// Apply all pending migrations (version > current user_version), each in its own
+// transaction, bumping user_version as it goes. Returns the versions applied.
+export function runMigrations(db: DB): number[] {
+  const current = db.pragma("user_version", { simple: true }) as number;
+  const applied: number[] = [];
+  for (const m of MIGRATIONS) {
+    if (m.version <= current) continue;
+    const tx = db.transaction(() => {
+      m.up(db);
+      db.pragma(`user_version = ${m.version}`);
+    });
+    tx();
+    applied.push(m.version);
+  }
+  return applied;
+}

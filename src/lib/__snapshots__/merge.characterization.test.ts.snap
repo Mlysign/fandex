@@ -1,0 +1,2415 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`explainMerge characterization > game debug matrix 1`] = `
+[
+  {
+    "field": "title",
+    "final": "Cyberpunk 2077",
+    "perSource": {
+      "igdb": "Cyberpunk 2077",
+      "rawg": "Cyberpunk 2077",
+      "steam": "Cyberpunk 2077",
+    },
+    "priority": [
+      "tmdb",
+      "igdb",
+      "steam",
+      "rawg",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "igdb",
+    ],
+  },
+  {
+    "field": "description",
+    "final": "Cyberpunk 2077 is an open-world, action-adventure story set in Night City.",
+    "perSource": {
+      "igdb": "Cyberpunk 2077 is an RPG set in Night City.",
+      "rawg": "Cyberpunk 2077 is an open-world, action-adventure story set in Night City.",
+      "steam": "An open-world action-adventure RPG.",
+    },
+    "priority": [
+      "rawg",
+      "tmdb",
+      "steam",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "longest",
+    "winners": [
+      "rawg",
+    ],
+  },
+  {
+    "field": "releaseDate",
+    "final": "2020-12-10",
+    "perSource": {
+      "igdb": "2020-12-10",
+      "rawg": "2020-12-10",
+      "steam": "2020-12-10",
+    },
+    "priority": [
+      "steam",
+      "igdb",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "posterUrl",
+    "final": "https://rawg.io/cp2077.jpg",
+    "perSource": {
+      "igdb": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2mjs.jpg",
+      "rawg": "https://rawg.io/cp2077.jpg",
+      "steam": "https://cdn.akamai.steamstatic.com/steam/apps/1091500/header.jpg",
+    },
+    "priority": [
+      "tmdb",
+      "rawg",
+      "steam",
+      "igdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "rawg",
+    ],
+  },
+  {
+    "field": "developer",
+    "final": "CD Projekt Red",
+    "perSource": {
+      "igdb": "CD Projekt Red",
+      "rawg": null,
+      "steam": "CD Projekt Red",
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "publisher",
+    "final": "CD Projekt",
+    "perSource": {
+      "igdb": "CD Projekt",
+      "rawg": null,
+      "steam": "CD Projekt",
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "metacritic",
+    "final": 86,
+    "perSource": {
+      "rawg": 86,
+    },
+    "priority": [
+      "rawg",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "rawg",
+    ],
+  },
+  {
+    "field": "steamReviewLabel",
+    "final": "Very Positive",
+    "perSource": {
+      "steam": "Very Positive",
+    },
+    "priority": [
+      "steam",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "letterboxdRating",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "letterboxd",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "tagline",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "runtimeMinutes",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "status",
+    "final": null,
+    "perSource": {
+      "igdb": null,
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "collection",
+    "final": "Cyberpunk",
+    "perSource": {
+      "igdb": "Cyberpunk",
+    },
+    "priority": [
+      "tmdb",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "igdb",
+    ],
+  },
+  {
+    "field": "originalLanguage",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "tmdb",
+      "trakt",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "country",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "tmdb",
+      "trakt",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "playtimeHours",
+    "final": 25,
+    "perSource": {
+      "rawg": 25,
+    },
+    "priority": [
+      "rawg",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "rawg",
+    ],
+  },
+  {
+    "field": "timeToBeat",
+    "final": {
+      "completely": 100,
+      "hastily": 24,
+      "normally": 40,
+    },
+    "perSource": {
+      "igdb": {
+        "completely": 100,
+        "hastily": 24,
+        "normally": 40,
+      },
+    },
+    "priority": [
+      "igdb",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "igdb",
+    ],
+  },
+  {
+    "field": "dates",
+    "final": [
+      {
+        "date": "2020-12-10",
+        "source": "steam",
+      },
+    ],
+    "perSource": {
+      "igdb": "2020-12-10",
+      "rawg": "2020-12-10",
+      "steam": "2020-12-10",
+    },
+    "priority": [
+      "steam",
+      "igdb",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "union",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "images",
+    "final": [
+      "https://cdn.akamai.steamstatic.com/steam/apps/1091500/header.jpg",
+      "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/hero.jpg",
+      "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/ss1.jpg",
+      "https://rawg.io/cp2077.jpg",
+      "https://rawg.io/cp2077_2.jpg",
+      "https://rawg.io/cp2077_ss.jpg",
+      "https://images.igdb.com/igdb/image/upload/t_cover_big/co2mjs.jpg",
+      "https://images.igdb.com/igdb/image/upload/t_screenshot_huge/sc1.jpg",
+      "https://images.igdb.com/igdb/image/upload/t_1080p/ar1.jpg",
+    ],
+    "perSource": {
+      "igdb": [
+        "https://images.igdb.com/igdb/image/upload/t_cover_big/co2mjs.jpg",
+        "https://images.igdb.com/igdb/image/upload/t_screenshot_huge/sc1.jpg",
+        "https://images.igdb.com/igdb/image/upload/t_1080p/ar1.jpg",
+      ],
+      "rawg": [
+        "https://rawg.io/cp2077.jpg",
+        "https://rawg.io/cp2077_2.jpg",
+        "https://rawg.io/cp2077_ss.jpg",
+      ],
+      "steam": [
+        "https://cdn.akamai.steamstatic.com/steam/apps/1091500/header.jpg",
+        "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/hero.jpg",
+        "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/ss1.jpg",
+      ],
+    },
+    "priority": [
+      "steam",
+      "tmdb",
+      "rawg",
+      "igdb",
+      "letterboxd",
+    ],
+    "strategy": "union",
+    "winners": [
+      "steam",
+      "rawg",
+      "igdb",
+    ],
+  },
+  {
+    "field": "tags",
+    "final": [
+      "RPG",
+      "Action",
+      "Open World",
+      "Cyberpunk",
+      "Role-playing (RPG)",
+      "Science fiction",
+    ],
+    "perSource": {
+      "igdb": [
+        "Role-playing (RPG)",
+        "Science fiction",
+      ],
+      "rawg": [
+        "RPG",
+        "Action",
+      ],
+      "steam": [
+        "RPG",
+        "Open World",
+        "Cyberpunk",
+      ],
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "rawg",
+      "steam",
+      "igdb",
+    ],
+  },
+  {
+    "field": "platforms",
+    "final": [
+      "Windows",
+      "PC",
+      "PlayStation 5",
+      "PC (Microsoft Windows)",
+    ],
+    "perSource": {
+      "igdb": [
+        "PC (Microsoft Windows)",
+      ],
+      "rawg": [
+        "PC",
+        "PlayStation 5",
+      ],
+      "steam": [
+        "Windows",
+      ],
+    },
+    "priority": [
+      "steam",
+      "rawg",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "steam",
+      "rawg",
+      "igdb",
+    ],
+  },
+  {
+    "field": "communityRatings",
+    "final": [
+      {
+        "label": "IGDB",
+        "outOf": 100,
+        "score": 84,
+        "source": "igdb",
+        "votes": 2000,
+      },
+      {
+        "label": "IGDB Critics",
+        "outOf": 100,
+        "score": 87,
+        "source": "igdb-critics",
+        "votes": 50,
+      },
+      {
+        "label": "RAWG",
+        "outOf": 5,
+        "score": 4.1,
+        "source": "rawg",
+        "votes": 5000,
+      },
+      {
+        "label": "Metacritic",
+        "outOf": 100,
+        "score": 86,
+        "source": "metacritic",
+        "url": "https://metacritic.com/cyberpunk",
+      },
+      {
+        "label": "Steam",
+        "outOf": 100,
+        "score": 85,
+        "source": "steam",
+        "votes": 600000,
+      },
+    ],
+    "perSource": {
+      "igdb": [
+        {
+          "label": "IGDB",
+          "outOf": 100,
+          "score": 84,
+          "source": "igdb",
+          "votes": 2000,
+        },
+        {
+          "label": "IGDB Critics",
+          "outOf": 100,
+          "score": 87,
+          "source": "igdb-critics",
+          "votes": 50,
+        },
+      ],
+      "rawg": [
+        {
+          "label": "RAWG",
+          "outOf": 5,
+          "score": 4.1,
+          "source": "rawg",
+          "votes": 5000,
+        },
+        {
+          "label": "Metacritic",
+          "outOf": 100,
+          "score": 86,
+          "source": "metacritic",
+          "url": "https://metacritic.com/cyberpunk",
+        },
+      ],
+      "steam": [
+        {
+          "label": "Steam",
+          "outOf": 100,
+          "score": 85,
+          "source": "steam",
+          "votes": 600000,
+        },
+      ],
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+      "rawg",
+      "steam",
+    ],
+    "strategy": "union",
+    "winners": [
+      "igdb",
+      "rawg",
+      "steam",
+    ],
+  },
+  {
+    "field": "gameModes",
+    "final": [
+      "Single player",
+      "First person",
+    ],
+    "perSource": {
+      "igdb": [
+        "Single player",
+        "First person",
+      ],
+    },
+    "priority": [
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "igdb",
+    ],
+  },
+  {
+    "field": "dlc",
+    "final": [
+      "Phantom Liberty",
+    ],
+    "perSource": {
+      "igdb": [
+        "Phantom Liberty",
+      ],
+      "steam": [
+        "Phantom Liberty",
+      ],
+    },
+    "priority": [
+      "igdb",
+      "steam",
+    ],
+    "strategy": "union",
+    "winners": [
+      "igdb",
+      "steam",
+    ],
+  },
+  {
+    "field": "certification",
+    "final": [
+      "USK 18",
+      "ESRB Mature",
+    ],
+    "perSource": {
+      "rawg": [
+        "ESRB Mature",
+      ],
+      "steam": [
+        "USK 18",
+      ],
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "steam",
+      "rawg",
+    ],
+    "strategy": "union",
+    "winners": [
+      "steam",
+      "rawg",
+    ],
+  },
+  {
+    "field": "storeLinks",
+    "final": [
+      {
+        "name": "Steam",
+        "source": "steam",
+        "url": "https://store.steampowered.com/app/1091500",
+      },
+      {
+        "name": "RAWG",
+        "source": "rawg",
+        "url": "https://rawg.io/games/cyberpunk-2077",
+      },
+      {
+        "name": "Official site",
+        "source": "rawg",
+        "url": "https://cyberpunk.net",
+      },
+      {
+        "name": "Reddit",
+        "source": "rawg",
+        "url": "https://reddit.com/r/cyberpunkgame",
+      },
+      {
+        "name": "Metacritic",
+        "source": "rawg",
+        "url": "https://metacritic.com/cyberpunk",
+      },
+      {
+        "name": "IGDB",
+        "source": "igdb",
+        "url": "https://igdb.com/games/cyberpunk-2077",
+      },
+    ],
+    "perSource": {
+      "igdb": [
+        {
+          "name": "IGDB",
+          "source": "igdb",
+          "url": "https://igdb.com/games/cyberpunk-2077",
+        },
+        {
+          "name": "Steam",
+          "source": "igdb",
+          "url": "https://store.steampowered.com/app/1091500",
+        },
+        {
+          "name": "Official site",
+          "source": "igdb",
+          "url": "https://cyberpunk.net",
+        },
+      ],
+      "rawg": [
+        {
+          "name": "RAWG",
+          "source": "rawg",
+          "url": "https://rawg.io/games/cyberpunk-2077",
+        },
+        {
+          "name": "Steam",
+          "source": "rawg",
+          "url": "https://store.steampowered.com/app/1091500",
+        },
+        {
+          "name": "Official site",
+          "source": "rawg",
+          "url": "https://cyberpunk.net",
+        },
+        {
+          "name": "Reddit",
+          "source": "rawg",
+          "url": "https://reddit.com/r/cyberpunkgame",
+        },
+        {
+          "name": "Metacritic",
+          "source": "rawg",
+          "url": "https://metacritic.com/cyberpunk",
+        },
+      ],
+      "steam": [
+        {
+          "name": "Steam",
+          "source": "steam",
+          "url": "https://store.steampowered.com/app/1091500",
+        },
+      ],
+    },
+    "priority": [
+      "steam",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "steam",
+      "rawg",
+      "igdb",
+    ],
+  },
+  {
+    "field": "trailerYoutubeKey",
+    "final": "8X2kIfS6fb8",
+    "perSource": {
+      "igdb": "8X2kIfS6fb8",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "igdb",
+    ],
+  },
+  {
+    "field": "steamTrailerUrl",
+    "final": "https://store.steampowered.com/app/1091500",
+    "perSource": {
+      "steam": "https://store.steampowered.com/app/1091500",
+    },
+    "priority": [
+      "steam",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "steam",
+    ],
+  },
+  {
+    "field": "director",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [],
+  },
+  {
+    "field": "cast",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [],
+  },
+  {
+    "field": "keywords",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [],
+  },
+  {
+    "field": "streamingProviders",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [],
+  },
+]
+`;
+
+exports[`explainMerge characterization > movie debug matrix 1`] = `
+[
+  {
+    "field": "title",
+    "final": "Inception",
+    "perSource": {
+      "letterboxd": "Inception",
+      "tmdb": "Inception",
+      "trakt": "Inception",
+    },
+    "priority": [
+      "tmdb",
+      "igdb",
+      "steam",
+      "rawg",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "description",
+    "final": "A thief who steals corporate secrets through dream-sharing technology.",
+    "perSource": {
+      "letterboxd": "Dom Cobb is a skilled thief.",
+      "tmdb": "A thief who steals corporate secrets through dream-sharing technology.",
+      "trakt": "A thief steals secrets via dreams.",
+    },
+    "priority": [
+      "rawg",
+      "tmdb",
+      "steam",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "longest",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "releaseDate",
+    "final": "2010-07-16",
+    "perSource": {
+      "letterboxd": "2010-01-01",
+      "tmdb": "2010-07-16",
+      "trakt": "2010-07-15",
+    },
+    "priority": [
+      "steam",
+      "igdb",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "posterUrl",
+    "final": "https://image.tmdb.org/t/p/w500/inception.jpg",
+    "perSource": {
+      "letterboxd": "https://letterboxd.com/inception.jpg",
+      "tmdb": "https://image.tmdb.org/t/p/w500/inception.jpg",
+      "trakt": null,
+    },
+    "priority": [
+      "tmdb",
+      "rawg",
+      "steam",
+      "igdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "developer",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "rawg",
+      "steam",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "publisher",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "rawg",
+      "steam",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [],
+  },
+  {
+    "field": "metacritic",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "rawg",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "steamReviewLabel",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "steam",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "letterboxdRating",
+    "final": 4.2,
+    "perSource": {
+      "letterboxd": 4.2,
+    },
+    "priority": [
+      "letterboxd",
+    ],
+    "strategy": "single-source",
+    "winners": [
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "tagline",
+    "final": "Your mind is the scene of the crime.",
+    "perSource": {
+      "letterboxd": "Your mind is the scene of the crime.",
+      "tmdb": "Your mind is the scene of the crime.",
+      "trakt": "The dream is real.",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "runtimeMinutes",
+    "final": 148,
+    "perSource": {
+      "letterboxd": 148,
+      "tmdb": 148,
+      "trakt": 148,
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "status",
+    "final": "Released",
+    "perSource": {
+      "tmdb": "Released",
+      "trakt": "Released",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "collection",
+    "final": "Inception Collection",
+    "perSource": {
+      "tmdb": "Inception Collection",
+    },
+    "priority": [
+      "tmdb",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "originalLanguage",
+    "final": "English",
+    "perSource": {
+      "tmdb": "English",
+      "trakt": "EN",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "country",
+    "final": "United States of America",
+    "perSource": {
+      "tmdb": "United States of America",
+      "trakt": "US",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "playtimeHours",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "rawg",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "timeToBeat",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "igdb",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "dates",
+    "final": [
+      {
+        "date": "2010-07-16",
+        "source": "tmdb",
+      },
+      {
+        "date": "2010-07-15",
+        "source": "trakt",
+      },
+      {
+        "date": "2010-01-01",
+        "source": "letterboxd",
+      },
+    ],
+    "perSource": {
+      "letterboxd": "2010-01-01",
+      "tmdb": "2010-07-16",
+      "trakt": "2010-07-15",
+    },
+    "priority": [
+      "steam",
+      "igdb",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "images",
+    "final": [
+      "https://image.tmdb.org/t/p/w500/inception.jpg",
+      "https://image.tmdb.org/t/p/w780/inception_bd.jpg",
+      "https://letterboxd.com/inception.jpg",
+    ],
+    "perSource": {
+      "letterboxd": [
+        "https://letterboxd.com/inception.jpg",
+      ],
+      "tmdb": [
+        "https://image.tmdb.org/t/p/w500/inception.jpg",
+        "https://image.tmdb.org/t/p/w780/inception_bd.jpg",
+      ],
+    },
+    "priority": [
+      "steam",
+      "tmdb",
+      "rawg",
+      "igdb",
+      "letterboxd",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "tags",
+    "final": [
+      "Action",
+      "Science Fiction",
+      "Thriller",
+    ],
+    "perSource": {
+      "letterboxd": [
+        "Thriller",
+      ],
+      "tmdb": [
+        "Action",
+        "Science Fiction",
+      ],
+      "trakt": [
+        "Science Fiction",
+        "Action",
+      ],
+    },
+    "priority": [
+      "rawg",
+      "steam",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "platforms",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "steam",
+      "rawg",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [],
+  },
+  {
+    "field": "communityRatings",
+    "final": [
+      {
+        "label": "TMDB",
+        "outOf": 10,
+        "score": 8.4,
+        "source": "tmdb",
+        "votes": 34000,
+      },
+      {
+        "label": "Trakt",
+        "outOf": 10,
+        "score": 8.1,
+        "source": "trakt",
+        "votes": 50000,
+      },
+      {
+        "label": "Letterboxd",
+        "outOf": 5,
+        "score": 4.2,
+        "source": "letterboxd",
+      },
+    ],
+    "perSource": {
+      "letterboxd": [
+        {
+          "label": "Letterboxd",
+          "outOf": 5,
+          "score": 4.2,
+          "source": "letterboxd",
+        },
+      ],
+      "tmdb": [
+        {
+          "label": "TMDB",
+          "outOf": 10,
+          "score": 8.4,
+          "source": "tmdb",
+          "votes": 34000,
+        },
+      ],
+      "trakt": [
+        {
+          "label": "Trakt",
+          "outOf": 10,
+          "score": 8.1,
+          "source": "trakt",
+          "votes": 50000,
+        },
+      ],
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+      "rawg",
+      "steam",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "gameModes",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [],
+  },
+  {
+    "field": "dlc",
+    "final": [],
+    "perSource": {},
+    "priority": [
+      "igdb",
+      "steam",
+    ],
+    "strategy": "union",
+    "winners": [],
+  },
+  {
+    "field": "certification",
+    "final": [
+      "FSK 12",
+      "PG-13",
+    ],
+    "perSource": {
+      "tmdb": [
+        "FSK 12",
+        "PG-13",
+      ],
+      "trakt": [
+        "PG-13",
+      ],
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "steam",
+      "rawg",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "trakt",
+    ],
+  },
+  {
+    "field": "storeLinks",
+    "final": [
+      {
+        "name": "TMDB",
+        "source": "tmdb",
+        "url": "https://www.themoviedb.org/movie/27205",
+      },
+      {
+        "name": "Official site",
+        "source": "tmdb",
+        "url": "https://inception.movie",
+      },
+      {
+        "name": "IMDb",
+        "source": "tmdb",
+        "url": "https://www.imdb.com/title/tt1375666/",
+      },
+      {
+        "name": "Trakt",
+        "source": "trakt",
+        "url": "https://trakt.tv/movies/inception-2010",
+      },
+      {
+        "name": "Wikipedia",
+        "source": "trakt",
+        "url": "https://en.wikipedia.org/wiki/Inception",
+      },
+      {
+        "name": "Letterboxd",
+        "source": "letterboxd",
+        "url": "https://letterboxd.com/film/inception/",
+      },
+    ],
+    "perSource": {
+      "letterboxd": [
+        {
+          "name": "Letterboxd",
+          "source": "letterboxd",
+          "url": "https://letterboxd.com/film/inception/",
+        },
+        {
+          "name": "IMDb",
+          "source": "letterboxd",
+          "url": "https://imdb.com/title/tt1375666",
+        },
+      ],
+      "tmdb": [
+        {
+          "name": "TMDB",
+          "source": "tmdb",
+          "url": "https://www.themoviedb.org/movie/27205",
+        },
+        {
+          "name": "Official site",
+          "source": "tmdb",
+          "url": "https://inception.movie",
+        },
+        {
+          "name": "IMDb",
+          "source": "tmdb",
+          "url": "https://www.imdb.com/title/tt1375666/",
+        },
+      ],
+      "trakt": [
+        {
+          "name": "Trakt",
+          "source": "trakt",
+          "url": "https://trakt.tv/movies/inception-2010",
+        },
+        {
+          "name": "Official site",
+          "source": "trakt",
+          "url": "https://trakt.tv/inception",
+        },
+        {
+          "name": "IMDb",
+          "source": "trakt",
+          "url": "https://www.imdb.com/title/tt1375666/",
+        },
+        {
+          "name": "Wikipedia",
+          "source": "trakt",
+          "url": "https://en.wikipedia.org/wiki/Inception",
+        },
+      ],
+    },
+    "priority": [
+      "steam",
+      "rawg",
+      "tmdb",
+      "trakt",
+      "letterboxd",
+      "igdb",
+    ],
+    "strategy": "union",
+    "winners": [
+      "tmdb",
+      "trakt",
+      "letterboxd",
+    ],
+  },
+  {
+    "field": "trailerYoutubeKey",
+    "final": "YoHD9XEInc0",
+    "perSource": {
+      "tmdb": "YoHD9XEInc0",
+      "trakt": "YoHD9XEInc0",
+    },
+    "priority": [
+      "tmdb",
+      "trakt",
+      "igdb",
+    ],
+    "strategy": "first-by-priority",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "steamTrailerUrl",
+    "final": null,
+    "perSource": {},
+    "priority": [
+      "steam",
+    ],
+    "strategy": "single-source",
+    "winners": [],
+  },
+  {
+    "field": "director",
+    "final": "Christopher Nolan",
+    "perSource": {
+      "tmdb": "Christopher Nolan",
+    },
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "cast",
+    "final": [
+      {
+        "character": "Cobb",
+        "name": "Leonardo DiCaprio",
+      },
+      {
+        "character": "Ariadne",
+        "name": "Elliot Page",
+      },
+    ],
+    "perSource": {
+      "tmdb": [
+        {
+          "character": "Cobb",
+          "name": "Leonardo DiCaprio",
+        },
+        {
+          "character": "Ariadne",
+          "name": "Elliot Page",
+        },
+      ],
+    },
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "keywords",
+    "final": [
+      "dream",
+      "heist",
+    ],
+    "perSource": {
+      "tmdb": [
+        "dream",
+        "heist",
+      ],
+    },
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [
+      "tmdb",
+    ],
+  },
+  {
+    "field": "streamingProviders",
+    "final": [
+      {
+        "logoPath": "/nf.jpg",
+        "name": "Netflix",
+        "providerId": 8,
+      },
+    ],
+    "perSource": {
+      "tmdb": [
+        {
+          "logoPath": "/nf.jpg",
+          "name": "Netflix",
+          "providerId": 8,
+        },
+      ],
+    },
+    "priority": [
+      "tmdb",
+    ],
+    "strategy": "tmdb-only",
+    "winners": [
+      "tmdb",
+    ],
+  },
+]
+`;
+
+exports[`mergeForCanonical characterization > game canonical 1`] = `
+{
+  "posterUrl": "https://rawg.io/cp2077.jpg",
+  "releaseDate": "2020-12-10",
+  "title": "Cyberpunk 2077",
+}
+`;
+
+exports[`mergeForCanonical characterization > movie canonical 1`] = `
+{
+  "posterUrl": "https://image.tmdb.org/t/p/w500/inception.jpg",
+  "releaseDate": "2010-07-16",
+  "title": "Inception",
+}
+`;
+
+exports[`mergeLinks characterization > game: steam + rawg + igdb 1`] = `
+{
+  "budget": null,
+  "cast": [],
+  "certification": [
+    "USK 18",
+    "ESRB Mature",
+  ],
+  "collection": "Cyberpunk",
+  "communityRatings": [
+    {
+      "label": "IGDB",
+      "outOf": 100,
+      "score": 84,
+      "source": "igdb",
+      "votes": 2000,
+    },
+    {
+      "label": "IGDB Critics",
+      "outOf": 100,
+      "score": 87,
+      "source": "igdb-critics",
+      "votes": 50,
+    },
+    {
+      "label": "RAWG",
+      "outOf": 5,
+      "score": 4.1,
+      "source": "rawg",
+      "votes": 5000,
+    },
+    {
+      "label": "Metacritic",
+      "outOf": 100,
+      "score": 86,
+      "source": "metacritic",
+      "url": "https://metacritic.com/cyberpunk",
+    },
+    {
+      "label": "Steam",
+      "outOf": 100,
+      "score": 85,
+      "source": "steam",
+      "votes": 600000,
+    },
+  ],
+  "country": null,
+  "dates": [
+    {
+      "date": "2020-12-10",
+      "source": "steam",
+    },
+  ],
+  "description": "Cyberpunk 2077 is an open-world, action-adventure story set in Night City.",
+  "developer": "CD Projekt Red",
+  "director": null,
+  "dlc": [
+    "Phantom Liberty",
+  ],
+  "episodeCount": null,
+  "gameModes": [
+    "Single player",
+    "First person",
+  ],
+  "images": [
+    "https://cdn.akamai.steamstatic.com/steam/apps/1091500/header.jpg",
+    "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/hero.jpg",
+    "https://shared.fastly.steamstatic.com/store_item_assets/apps/1091500/ss1.jpg",
+    "https://rawg.io/cp2077.jpg",
+    "https://rawg.io/cp2077_2.jpg",
+    "https://rawg.io/cp2077_ss.jpg",
+    "https://images.igdb.com/igdb/image/upload/t_cover_big/co2mjs.jpg",
+    "https://images.igdb.com/igdb/image/upload/t_screenshot_huge/sc1.jpg",
+    "https://images.igdb.com/igdb/image/upload/t_1080p/ar1.jpg",
+  ],
+  "imdbId": null,
+  "imdbRating": null,
+  "keywords": [],
+  "letterboxdRating": null,
+  "links": [
+    {
+      "label": "Steam",
+      "url": "https://store.steampowered.com/app/1091500",
+    },
+    {
+      "label": "RAWG",
+      "url": "https://rawg.io/games/cyberpunk-2077",
+    },
+    {
+      "label": "Official site",
+      "url": "https://cyberpunk.net",
+    },
+    {
+      "label": "Reddit",
+      "url": "https://reddit.com/r/cyberpunkgame",
+    },
+    {
+      "label": "Metacritic",
+      "url": "https://metacritic.com/cyberpunk",
+    },
+    {
+      "label": "IGDB",
+      "url": "https://igdb.com/games/cyberpunk-2077",
+    },
+  ],
+  "metacritic": 86,
+  "network": null,
+  "nextEpisode": null,
+  "originalLanguage": null,
+  "platforms": [
+    "Windows",
+    "PC",
+    "PlayStation 5",
+    "PC (Microsoft Windows)",
+  ],
+  "playtimeHours": 25,
+  "posterUrl": "https://rawg.io/cp2077.jpg",
+  "publisher": "CD Projekt",
+  "releaseDate": "2020-12-10",
+  "revenue": null,
+  "rtScore": null,
+  "runtimeMinutes": null,
+  "seasonCount": null,
+  "sources": [
+    {
+      "data": {
+        "appid": 1091500,
+        "assets": {
+          "asset_url_format": "apps/1091500/\${FILENAME}",
+          "hero_capsule": "hero.jpg",
+        },
+        "basic_info": {
+          "developers": [
+            {
+              "name": "CD Projekt Red",
+            },
+          ],
+          "publishers": [
+            {
+              "name": "CD Projekt",
+            },
+          ],
+          "short_description": "An open-world action-adventure RPG.",
+        },
+        "game_rating": {
+          "rating": "18",
+          "type": "usk",
+        },
+        "included_items": {
+          "included_apps": [
+            {
+              "name": "Phantom Liberty",
+            },
+          ],
+        },
+        "name": "Cyberpunk 2077",
+        "platforms": {
+          "linux": false,
+          "mac": false,
+          "windows": true,
+        },
+        "release": {
+          "steam_release_date": 1607558400,
+        },
+        "resolvedTags": [
+          "RPG",
+          "Open World",
+          "Cyberpunk",
+        ],
+        "reviews": {
+          "summary_filtered": {
+            "percent_positive": 85,
+            "review_count": 600000,
+            "review_score_label": "Very Positive",
+          },
+        },
+        "screenshots": {
+          "all_ages_screenshots": [
+            {
+              "filename": "apps/1091500/ss1.jpg",
+            },
+          ],
+        },
+        "trailers": {
+          "highlights": [
+            {
+              "id": 1,
+            },
+          ],
+        },
+      },
+      "source": "steam",
+      "sourceId": "1091500",
+    },
+    {
+      "data": {
+        "background_image": "https://rawg.io/cp2077.jpg",
+        "background_image_additional": "https://rawg.io/cp2077_2.jpg",
+        "description_raw": "Cyberpunk 2077 is an open-world, action-adventure story set in Night City.",
+        "esrb_rating": {
+          "name": "Mature",
+        },
+        "genres": [
+          {
+            "name": "RPG",
+          },
+          {
+            "name": "Action",
+          },
+        ],
+        "id": 41494,
+        "metacritic": 86,
+        "metacritic_url": "https://metacritic.com/cyberpunk",
+        "name": "Cyberpunk 2077",
+        "platforms": [
+          {
+            "platform": {
+              "name": "PC",
+            },
+          },
+          {
+            "platform": {
+              "name": "PlayStation 5",
+            },
+          },
+        ],
+        "playtime": 25,
+        "rating": 4.1,
+        "ratings_count": 5000,
+        "reddit_url": "https://reddit.com/r/cyberpunkgame",
+        "released": "2020-12-10",
+        "short_screenshots": [
+          {
+            "image": "https://rawg.io/cp2077_ss.jpg",
+          },
+        ],
+        "slug": "cyberpunk-2077",
+        "stores": [
+          {
+            "store": {
+              "name": "Steam",
+            },
+            "url": "https://store.steampowered.com/app/1091500",
+          },
+        ],
+        "website": "https://cyberpunk.net",
+      },
+      "source": "rawg",
+      "sourceId": "41494",
+    },
+    {
+      "data": {
+        "aggregated_rating": 87,
+        "aggregated_rating_count": 50,
+        "artworks": [
+          {
+            "image_id": "ar1",
+          },
+        ],
+        "cover": {
+          "image_id": "co2mjs",
+        },
+        "dlcs": [
+          {
+            "name": "Phantom Liberty",
+          },
+        ],
+        "expansions": [],
+        "first_release_date": 1607558400,
+        "franchises": [
+          {
+            "name": "Cyberpunk",
+          },
+        ],
+        "game_modes": [
+          {
+            "name": "Single player",
+          },
+        ],
+        "genres": [
+          {
+            "name": "Role-playing (RPG)",
+          },
+        ],
+        "id": 1877,
+        "involved_companies": [
+          {
+            "company": {
+              "name": "CD Projekt Red",
+            },
+            "developer": true,
+          },
+          {
+            "company": {
+              "name": "CD Projekt",
+            },
+            "publisher": true,
+          },
+        ],
+        "name": "Cyberpunk 2077",
+        "platforms": [
+          {
+            "name": "PC (Microsoft Windows)",
+          },
+        ],
+        "player_perspectives": [
+          {
+            "name": "First person",
+          },
+        ],
+        "rating": 84,
+        "rating_count": 2000,
+        "screenshots": [
+          {
+            "image_id": "sc1",
+          },
+        ],
+        "summary": "Cyberpunk 2077 is an RPG set in Night City.",
+        "themes": [
+          {
+            "name": "Science fiction",
+          },
+        ],
+        "time_to_beat": {
+          "completely": 360000,
+          "hastily": 86400,
+          "normally": 144000,
+        },
+        "url": "https://igdb.com/games/cyberpunk-2077",
+        "videos": [
+          {
+            "name": "Trailer",
+            "video_id": "8X2kIfS6fb8",
+          },
+        ],
+        "websites": [
+          {
+            "type": 13,
+            "url": "https://store.steampowered.com/app/1091500",
+          },
+          {
+            "type": 1,
+            "url": "https://cyberpunk.net",
+          },
+        ],
+      },
+      "source": "igdb",
+      "sourceId": "1877",
+    },
+  ],
+  "status": null,
+  "steamReviewLabel": "Very Positive",
+  "steamTrailerUrl": "https://store.steampowered.com/app/1091500",
+  "storeLinks": [
+    {
+      "name": "Steam",
+      "source": "steam",
+      "url": "https://store.steampowered.com/app/1091500",
+    },
+    {
+      "name": "RAWG",
+      "source": "rawg",
+      "url": "https://rawg.io/games/cyberpunk-2077",
+    },
+    {
+      "name": "Official site",
+      "source": "rawg",
+      "url": "https://cyberpunk.net",
+    },
+    {
+      "name": "Reddit",
+      "source": "rawg",
+      "url": "https://reddit.com/r/cyberpunkgame",
+    },
+    {
+      "name": "Metacritic",
+      "source": "rawg",
+      "url": "https://metacritic.com/cyberpunk",
+    },
+    {
+      "name": "IGDB",
+      "source": "igdb",
+      "url": "https://igdb.com/games/cyberpunk-2077",
+    },
+  ],
+  "streamingProviders": [],
+  "tagline": null,
+  "tags": [
+    "RPG",
+    "Action",
+    "Open World",
+    "Cyberpunk",
+    "Role-playing (RPG)",
+    "Science fiction",
+  ],
+  "timeToBeat": {
+    "completely": 100,
+    "hastily": 24,
+    "normally": 40,
+  },
+  "title": "Cyberpunk 2077",
+  "trailerYoutubeKey": "8X2kIfS6fb8",
+}
+`;
+
+exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
+{
+  "budget": 160000000,
+  "cast": [
+    {
+      "character": "Cobb",
+      "name": "Leonardo DiCaprio",
+    },
+    {
+      "character": "Ariadne",
+      "name": "Elliot Page",
+    },
+  ],
+  "certification": [
+    "FSK 12",
+    "PG-13",
+  ],
+  "collection": "Inception Collection",
+  "communityRatings": [
+    {
+      "label": "TMDB",
+      "outOf": 10,
+      "score": 8.4,
+      "source": "tmdb",
+      "votes": 34000,
+    },
+    {
+      "label": "Trakt",
+      "outOf": 10,
+      "score": 8.1,
+      "source": "trakt",
+      "votes": 50000,
+    },
+    {
+      "label": "Letterboxd",
+      "outOf": 5,
+      "score": 4.2,
+      "source": "letterboxd",
+    },
+  ],
+  "country": "United States of America",
+  "dates": [
+    {
+      "date": "2010-07-16",
+      "source": "tmdb",
+    },
+    {
+      "date": "2010-07-15",
+      "source": "trakt",
+    },
+    {
+      "date": "2010-01-01",
+      "source": "letterboxd",
+    },
+  ],
+  "description": "A thief who steals corporate secrets through dream-sharing technology.",
+  "developer": null,
+  "director": "Christopher Nolan",
+  "dlc": [],
+  "episodeCount": null,
+  "gameModes": [],
+  "images": [
+    "https://image.tmdb.org/t/p/w500/inception.jpg",
+    "https://image.tmdb.org/t/p/w780/inception_bd.jpg",
+    "https://letterboxd.com/inception.jpg",
+  ],
+  "imdbId": "tt1375666",
+  "imdbRating": null,
+  "keywords": [
+    "dream",
+    "heist",
+  ],
+  "letterboxdRating": 4.2,
+  "links": [
+    {
+      "label": "TMDB",
+      "url": "https://www.themoviedb.org/movie/27205",
+    },
+    {
+      "label": "Official site",
+      "url": "https://inception.movie",
+    },
+    {
+      "label": "IMDb",
+      "url": "https://www.imdb.com/title/tt1375666/",
+    },
+    {
+      "label": "Trakt",
+      "url": "https://trakt.tv/movies/inception-2010",
+    },
+    {
+      "label": "Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Inception",
+    },
+    {
+      "label": "Letterboxd",
+      "url": "https://letterboxd.com/film/inception/",
+    },
+  ],
+  "metacritic": null,
+  "network": null,
+  "nextEpisode": null,
+  "originalLanguage": "English",
+  "platforms": [],
+  "playtimeHours": null,
+  "posterUrl": "https://image.tmdb.org/t/p/w500/inception.jpg",
+  "publisher": null,
+  "releaseDate": "2010-07-16",
+  "revenue": 829895144,
+  "rtScore": null,
+  "runtimeMinutes": 148,
+  "seasonCount": null,
+  "sources": [
+    {
+      "data": {
+        "backdrop_path": "/inception_bd.jpg",
+        "belongs_to_collection": {
+          "name": "Inception Collection",
+        },
+        "budget": 160000000,
+        "credits": {
+          "cast": [
+            {
+              "character": "Cobb",
+              "name": "Leonardo DiCaprio",
+            },
+            {
+              "character": "Ariadne",
+              "name": "Elliot Page",
+            },
+          ],
+          "crew": [
+            {
+              "job": "Director",
+              "name": "Christopher Nolan",
+            },
+          ],
+        },
+        "external_ids": {
+          "imdb_id": "tt1375666",
+        },
+        "genres": [
+          {
+            "name": "Action",
+          },
+          {
+            "name": "Science Fiction",
+          },
+        ],
+        "homepage": "https://inception.movie",
+        "id": 27205,
+        "keywords": {
+          "keywords": [
+            {
+              "name": "dream",
+            },
+            {
+              "name": "heist",
+            },
+          ],
+        },
+        "original_language": "en",
+        "overview": "A thief who steals corporate secrets through dream-sharing technology.",
+        "poster_path": "/inception.jpg",
+        "production_countries": [
+          {
+            "name": "United States of America",
+          },
+        ],
+        "release_date": "2010-07-16",
+        "release_dates": {
+          "results": [
+            {
+              "iso_3166_1": "DE",
+              "release_dates": [
+                {
+                  "certification": "12",
+                },
+              ],
+            },
+            {
+              "iso_3166_1": "US",
+              "release_dates": [
+                {
+                  "certification": "PG-13",
+                },
+              ],
+            },
+          ],
+        },
+        "revenue": 829895144,
+        "runtime": 148,
+        "spoken_languages": [
+          {
+            "english_name": "English",
+            "iso_639_1": "en",
+          },
+        ],
+        "status": "Released",
+        "tagline": "Your mind is the scene of the crime.",
+        "title": "Inception",
+        "videos": {
+          "results": [
+            {
+              "key": "YoHD9XEInc0",
+              "official": true,
+              "site": "YouTube",
+              "type": "Trailer",
+            },
+          ],
+        },
+        "vote_average": 8.4,
+        "vote_count": 34000,
+        "watch/providers": {
+          "results": {
+            "DE": {
+              "flatrate": [
+                {
+                  "logo_path": "/nf.jpg",
+                  "provider_id": 8,
+                  "provider_name": "Netflix",
+                },
+              ],
+            },
+          },
+        },
+      },
+      "source": "tmdb",
+      "sourceId": "27205",
+    },
+    {
+      "data": {
+        "certification": "PG-13",
+        "country": "us",
+        "genres": [
+          "science-fiction",
+          "action",
+        ],
+        "homepage": "https://trakt.tv/inception",
+        "ids": {
+          "imdb": "tt1375666",
+          "slug": "inception-2010",
+          "tmdb": 27205,
+          "trakt": 16662,
+        },
+        "language": "en",
+        "overview": "A thief steals secrets via dreams.",
+        "rating": 8.1,
+        "released": "2010-07-15",
+        "runtime": 148,
+        "social_ids": {
+          "wikipedia": "Inception",
+        },
+        "status": "released",
+        "tagline": "The dream is real.",
+        "title": "Inception",
+        "trailer": "https://youtube.com/watch?v=YoHD9XEInc0",
+        "votes": 50000,
+      },
+      "source": "trakt",
+      "sourceId": "16662",
+    },
+    {
+      "data": {
+        "averageRating": 4.2,
+        "description": "Dom Cobb is a skilled thief.",
+        "directors": [
+          {
+            "name": "Christopher Nolan",
+          },
+        ],
+        "genres": [
+          {
+            "name": "Thriller",
+          },
+        ],
+        "id": "inception",
+        "links": [
+          {
+            "type": "imdb",
+            "url": "https://imdb.com/title/tt1375666",
+          },
+          {
+            "id": 27205,
+            "type": "tmdb",
+          },
+        ],
+        "name": "Inception",
+        "posterUrl": "https://letterboxd.com/inception.jpg",
+        "releaseYear": 2010,
+        "runTime": 148,
+        "tagline": "Your mind is the scene of the crime.",
+      },
+      "source": "letterboxd",
+      "sourceId": "inception",
+    },
+  ],
+  "status": "Released",
+  "steamReviewLabel": null,
+  "steamTrailerUrl": null,
+  "storeLinks": [
+    {
+      "name": "TMDB",
+      "source": "tmdb",
+      "url": "https://www.themoviedb.org/movie/27205",
+    },
+    {
+      "name": "Official site",
+      "source": "tmdb",
+      "url": "https://inception.movie",
+    },
+    {
+      "name": "IMDb",
+      "source": "tmdb",
+      "url": "https://www.imdb.com/title/tt1375666/",
+    },
+    {
+      "name": "Trakt",
+      "source": "trakt",
+      "url": "https://trakt.tv/movies/inception-2010",
+    },
+    {
+      "name": "Wikipedia",
+      "source": "trakt",
+      "url": "https://en.wikipedia.org/wiki/Inception",
+    },
+    {
+      "name": "Letterboxd",
+      "source": "letterboxd",
+      "url": "https://letterboxd.com/film/inception/",
+    },
+  ],
+  "streamingProviders": [
+    {
+      "logoPath": "/nf.jpg",
+      "name": "Netflix",
+      "providerId": 8,
+    },
+  ],
+  "tagline": "Your mind is the scene of the crime.",
+  "tags": [
+    "Action",
+    "Science Fiction",
+    "Thriller",
+  ],
+  "timeToBeat": null,
+  "title": "Inception",
+  "trailerYoutubeKey": "YoHD9XEInc0",
+}
+`;
+
+exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
+{
+  "budget": null,
+  "cast": [],
+  "certification": [
+    "TV-MA",
+  ],
+  "collection": null,
+  "communityRatings": [
+    {
+      "label": "TMDB",
+      "outOf": 10,
+      "score": 8.9,
+      "source": "tmdb",
+      "votes": 12000,
+    },
+    {
+      "label": "Trakt",
+      "outOf": 10,
+      "score": 9,
+      "source": "trakt",
+      "votes": 30000,
+    },
+  ],
+  "country": "US",
+  "dates": [
+    {
+      "date": "2008-01-20",
+      "source": "tmdb",
+    },
+  ],
+  "description": "A chemistry teacher turns to making meth.",
+  "developer": null,
+  "director": "Vince Gilligan",
+  "dlc": [],
+  "episodeCount": 62,
+  "gameModes": [],
+  "images": [
+    "https://image.tmdb.org/t/p/w500/bb.jpg",
+  ],
+  "imdbId": "tt0903747",
+  "imdbRating": null,
+  "keywords": [],
+  "letterboxdRating": null,
+  "links": [
+    {
+      "label": "TMDB",
+      "url": "https://www.themoviedb.org/tv/1396",
+    },
+    {
+      "label": "Trakt",
+      "url": "https://trakt.tv/shows/breaking-bad",
+    },
+    {
+      "label": "IMDb",
+      "url": "https://www.imdb.com/title/tt0903747/",
+    },
+  ],
+  "metacritic": null,
+  "network": "AMC",
+  "nextEpisode": null,
+  "originalLanguage": "EN",
+  "platforms": [],
+  "playtimeHours": null,
+  "posterUrl": "https://image.tmdb.org/t/p/w500/bb.jpg",
+  "publisher": null,
+  "releaseDate": "2008-01-20",
+  "revenue": null,
+  "rtScore": null,
+  "runtimeMinutes": 47,
+  "seasonCount": 5,
+  "sources": [
+    {
+      "data": {
+        "content_ratings": {
+          "results": [
+            {
+              "iso_3166_1": "US",
+              "rating": "TV-MA",
+            },
+          ],
+        },
+        "created_by": [
+          {
+            "name": "Vince Gilligan",
+          },
+        ],
+        "episode_run_time": [
+          47,
+        ],
+        "first_air_date": "2008-01-20",
+        "genres": [
+          {
+            "name": "Drama",
+          },
+        ],
+        "id": 1396,
+        "name": "Breaking Bad",
+        "networks": [
+          {
+            "name": "AMC",
+          },
+        ],
+        "next_episode_to_air": null,
+        "number_of_episodes": 62,
+        "number_of_seasons": 5,
+        "original_language": "en",
+        "overview": "A chemistry teacher turns to making meth.",
+        "poster_path": "/bb.jpg",
+        "status": "Ended",
+        "vote_average": 8.9,
+        "vote_count": 12000,
+      },
+      "source": "tmdb",
+      "sourceId": "1396",
+    },
+    {
+      "data": {
+        "country": "us",
+        "first_aired": "2008-01-20T02:00:00Z",
+        "genres": [
+          "drama",
+        ],
+        "ids": {
+          "imdb": "tt0903747",
+          "slug": "breaking-bad",
+          "tmdb": 1396,
+          "trakt": 1,
+        },
+        "language": "en",
+        "network": "AMC",
+        "overview": "A teacher cooks meth.",
+        "rating": 9,
+        "runtime": 47,
+        "status": "ended",
+        "title": "Breaking Bad",
+        "votes": 30000,
+      },
+      "source": "trakt",
+      "sourceId": "1",
+    },
+  ],
+  "status": "Ended",
+  "steamReviewLabel": null,
+  "steamTrailerUrl": null,
+  "storeLinks": [
+    {
+      "name": "TMDB",
+      "source": "tmdb",
+      "url": "https://www.themoviedb.org/tv/1396",
+    },
+    {
+      "name": "Trakt",
+      "source": "trakt",
+      "url": "https://trakt.tv/shows/breaking-bad",
+    },
+    {
+      "name": "IMDb",
+      "source": "trakt",
+      "url": "https://www.imdb.com/title/tt0903747/",
+    },
+  ],
+  "streamingProviders": [],
+  "tagline": null,
+  "tags": [
+    "Drama",
+  ],
+  "timeToBeat": null,
+  "title": "Breaking Bad",
+  "trailerYoutubeKey": null,
+}
+`;
