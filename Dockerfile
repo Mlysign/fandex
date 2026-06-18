@@ -33,21 +33,18 @@ ENV HOSTNAME=0.0.0.0
 # SQLite lives on the mounted volume, NOT in the image (else it resets each deploy).
 ENV DB_PATH=/app/data/rr.db
 
-# Run as an unprivileged user.
-RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 nextjs
-
 # Standalone server bundle + static assets. `output: "standalone"` does not copy
 # public/ or .next/static, so we add them next to the generated server.js.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
-# Persistent SQLite data dir — mount a volume here (Railway: mount path /app/data).
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
-VOLUME ["/app/data"]
-
-USER nextjs
+# SQLite lives on a Railway Volume mounted at /app/data (configured in the Railway
+# dashboard — NOT a Docker `VOLUME`, which Railway's builder rejects). Just ensure
+# the mount point exists. We run as root so the process can always write to the
+# Railway-mounted volume (Railway mounts volumes owned by root, so a non-root user
+# couldn't create rr.db). Fine for a single-tenant app; non-root is a hardening follow-up.
+RUN mkdir -p /app/data
 EXPOSE 3000
 
 # Next's minimal standalone server (honors PORT/HOSTNAME set above).
