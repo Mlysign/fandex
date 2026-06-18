@@ -22,9 +22,9 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const [imgErr, setImgErr] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Games carry LANDSCAPE header art (Steam/RAWG); letterbox it over a blurred
-  // fill so the title isn't sliced by the 2:3 portrait frame (U15).
-  const isGame = item.type === "game";
+  // Use the portrait poster when present; otherwise fall back to the landscape
+  // art (backdrop) — many games have hero/artwork but no box-art cover.
+  const imageSrc = item.posterUrl ?? item.backdropUrl ?? null;
   const typeColor = TYPE_COLORS[item.type] ?? "#888";
 
   return (
@@ -50,17 +50,10 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           <span className="text-black/75"><TypeIcon type={item.type} size={13} /></span>
         </div>
 
-        {/* Poster image — 2:3 portrait ratio */}
+        {/* Poster image — 2:3 portrait ratio; the image fills the frame (cropped). */}
         <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "150%" }}>
-          {item.posterUrl && !imgErr ? (
-            isGame ? (
-              <>
-                <img src={item.posterUrl} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40" />
-                <img src={item.posterUrl} alt={item.title} className="absolute inset-0 w-full h-full object-contain" onError={() => setImgErr(true)} />
-              </>
-            ) : (
-              <img src={item.posterUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
-            )
+          {imageSrc && !imgErr ? (
+            <img src={imageSrc} alt={item.title} className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
               <TypeIcon type={item.type} size={28} />

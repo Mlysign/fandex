@@ -6,7 +6,7 @@
 import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
-import { extractFacets, FacetKind, FacetRole } from "@/lib/facets";
+import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
 import { MediaLink, MediaType } from "@/types";
 
 // One aggregated facet (tag / person / company) across the rated library.
@@ -186,5 +186,116 @@ export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {
   if (cached && cached.sig === sig) return cached.data;
   const data = analyzeLibraryFacets(userId);
   _cache.set(userId, { sig, data });
+  return data;
+}
+
+// ── Membership signal (for the personalized live discover feed) ────
+// Unlike analyzeLibraryFacets (which only weighs RATED items), this counts every
+// facet carried by the user's library + wishlist regardless of rating — so a
+// stuffed wishlist with zero ratings still yields a taste signal (cold-start),
+// and an unrated-but-owned genre still nudges recommendations. Also collects an
+// original-language histogram (the most direct lever against an irrelevant
+// foreign-language flood) without making language a hard filter.
+
+export interface MembershipFacet {
+  kind: FacetKind; role?: FacetRole; key: string; label: string; category?: string;
+  libCount: number;  // # library items carrying this facet (rated or not)
+  wishCount: number; // # wishlist items carrying this facet
+}
+
+export interface MembershipSignal {
+  facets: Map<string, MembershipFacet>;  // keyed by facetId
+  languages: Map<string, number>;        // original_language → weighted count (wishlist counts double)
+  libCount: number;                      // total library items seen
+  wishCount: number;                     // total wishlist items seen
+}
+
+interface MemberRow {
+  id: string; type: MediaType;
+  source: string | null; raw_data: string | null;
+  link_release_date: string | null; source_id: string | null;
+}
+
+// One (item ⋈ links) load for a membership table, grouped per media item.
+function loadMembershipGroups(userId: string, table: "user_library" | "user_watchlist") {
+  const rows = query<MemberRow>(
+    `SELECT mi.id, mi.type, ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+       FROM ${table} ut
+       JOIN media_items mi ON mi.id = ut.media_item_id
+       LEFT JOIN media_links ml ON ml.media_item_id = mi.id
+      WHERE ut.user_id = ?`,
+    [userId]
+  );
+  const groups = new Map<string, { type: MediaType; links: MediaLink[] }>();
+  for (const r of rows) {
+    if (!groups.has(r.id)) groups.set(r.id, { type: r.type, links: [] });
+    if (r.source) {
+      groups.get(r.id)!.links.push({
+        id: "", mediaItemId: r.id, source: r.source as MediaLink["source"],
+        sourceId: r.source_id!, title: null, releaseDate: r.link_release_date,
+        rawData: JSON.parse(r.raw_data ?? "{}"), lastSynced: 0,
+      });
+    }
+  }
+  return groups;
+}
+
+function membershipSignature(userId: string): string {
+  const lib = get<{ n: number }>(`SELECT COUNT(*) n FROM user_library WHERE user_id = ?`, [userId]);
+  const wl = get<{ n: number }>(`SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?`, [userId]);
+  // Fold in the membership items' link freshness so an enrich/re-sync (which
+  // rewrites raw_data without touching membership rows) invalidates the cache —
+  // same rationale as librarySignature's D9 term.
+  const l = get<{ lmx: number }>(
+    `SELECT COALESCE(MAX(ml.last_synced),0) lmx FROM media_links ml
+      WHERE ml.media_item_id IN (
+        SELECT media_item_id FROM user_library  WHERE user_id = ?
+        UNION
+        SELECT media_item_id FROM user_watchlist WHERE user_id = ?
+      )`,
+    [userId, userId]
+  );
+  return `${lib?.n ?? 0}:${wl?.n ?? 0}:${l?.lmx ?? 0}`;
+}
+
+const _memberCache = new Map<string, { sig: string; data: MembershipSignal }>();
+
+export function getMembershipSignal(userId: string): MembershipSignal {
+  const sig = membershipSignature(userId);
+  const cached = _memberCache.get(userId);
+  if (cached && cached.sig === sig) return cached.data;
+
+  const facets = new Map<string, MembershipFacet>();
+  const languages = new Map<string, number>();
+
+  const tally = (
+    groups: Map<string, { type: MediaType; links: MediaLink[] }>,
+    bucket: "libCount" | "wishCount",
+    langWeight: number
+  ): number => {
+    let count = 0;
+    for (const { type, links } of groups.values()) {
+      count++;
+      const merged = mergeLinks(links, type);
+      for (const f of extractFacets(links, type, merged)) {
+        const id = facetId(f);
+        const ex = facets.get(id);
+        if (ex) ex[bucket]++;
+        else facets.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, libCount: 0, wishCount: 0, [bucket]: 1 } as MembershipFacet);
+      }
+      // Original language (movies/shows only) from the TMDB blob.
+      const tmdb = links.find((l) => l.source === "tmdb")?.rawData;
+      const lang = tmdb?.original_language;
+      if (typeof lang === "string" && lang) languages.set(lang, (languages.get(lang) ?? 0) + langWeight);
+    }
+    return count;
+  };
+
+  const libCount = tally(loadMembershipGroups(userId, "user_library"), "libCount", 1);
+  // Wishlist = forward-looking intent → its language preference counts double.
+  const wishCount = tally(loadMembershipGroups(userId, "user_watchlist"), "wishCount", 2);
+
+  const data: MembershipSignal = { facets, languages, libCount, wishCount };
+  _memberCache.set(userId, { sig, data });
   return data;
 }

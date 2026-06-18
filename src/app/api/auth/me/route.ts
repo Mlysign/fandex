@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query, get } from "@/lib/db";
+import { getStoredCountry } from "@/lib/userCountry";
 
 export async function GET() {
   try {
@@ -28,6 +29,7 @@ export async function GET() {
         userId: session.userId,
         displayName: session.displayName,
         provider: session.provider,
+        country: getStoredCountry(session.userId), // null = not set → client auto-detects
       },
       identities,
       syncLogs,

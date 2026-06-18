@@ -9,7 +9,7 @@ import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
 import { usePersistedState } from "@/lib/usePersistedState";
-import ErrorBoundary, { CardSkeleton, ListSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -20,14 +20,15 @@ import {
 
 const LIMIT = 60;
 
-// True when any filter is active → switches Timeline browse into search results.
-// Type chips count as search filters (T23); source/community/runtime were removed (T24).
-function hasActiveFilters(f: UiFilters): boolean {
+// Filters that REQUIRE the local-catalog search (find): facet include/exclude and
+// a narrowed year range. Type + membership are deliberately NOT here — they're
+// applied to the live UPCOMING browse instead (client-side), so "hide what I own"
+// or picking a medium keeps Discover anchored on upcoming releases rather than
+// flipping to a whole-catalog date sort that lands on decades-old library titles.
+function needsCatalogSearch(f: UiFilters): boolean {
   return (
-    f.types.length > 0 ||
     f.includeFacets.length > 0 || f.excludeFacets.length > 0 ||
-    f.yearRange[0] > YEAR_MIN || f.yearRange[1] < YEAR_MAX ||
-    !!f.membership.library || !!f.membership.wishlist
+    f.yearRange[0] > YEAR_MIN || f.yearRange[1] < YEAR_MAX
   );
 }
 
@@ -116,7 +117,7 @@ export default function DiscoverPage() {
 
   // Browse = the live infinite timeline; shown for either date sort when no query
   // /filter is active. Non-date sorts (rating / best-match) use the find() search.
-  const searchActive = q.trim().length >= 2 || hasActiveFilters(filters) || !DATE_SORTS.includes(sort);
+  const searchActive = q.trim().length >= 2 || needsCatalogSearch(filters) || !DATE_SORTS.includes(sort);
 
   // ── Browse loaders ──
   // Declared before the mount effect that calls it (react-hooks: no use-before-declaration).
@@ -291,10 +292,17 @@ export default function DiscoverPage() {
     bottomLoadRef.current = newestFirst ? loadPrevious : loadMore;
   });
 
-  const browseFiltered = useMemo(
-    () => (filters.types.length ? items.filter((i) => filters.types.includes(i.type)) : items),
-    [items, filters.types]
-  );
+  // Browse filters applied client-side to the live upcoming feed (keeps Discover
+  // today-anchored): media type + membership (hide/only library & wishlist).
+  const browseFiltered = useMemo(() => {
+    let r = filters.types.length ? items.filter((i) => filters.types.includes(i.type)) : items;
+    const m = filters.membership;
+    if (m.library === "exclude") r = r.filter((i) => !i.libraryStatus);
+    else if (m.library === "only") r = r.filter((i) => !!i.libraryStatus);
+    if (m.wishlist === "exclude") r = r.filter((i) => !i.onWatchlist);
+    else if (m.wishlist === "only") r = r.filter((i) => !!i.onWatchlist);
+    return r;
+  }, [items, filters.types, filters.membership]);
 
   useEffect(() => {
     if (searchActive) return;
@@ -404,7 +412,7 @@ export default function DiscoverPage() {
         {/* ── Search results ── */}
         {searchActive ? (
           <ErrorBoundary label="discover search">
-            {searchLoading && effView === "card" && <CardSkeleton />}
+            {searchLoading && effView === "card" && <Spinner label="Searching…" />}
             {searchLoading && effView === "list" && <ListSkeleton />}
             {searchLoading && effView === "calendar" && <Spinner label="Searching…" />}
 
@@ -440,7 +448,7 @@ export default function DiscoverPage() {
         ) : (
           /* ── Browse (Timeline) ── */
           <ErrorBoundary label="discover browse">
-            {loading && view === "card" && <CardSkeleton />}
+            {loading && view === "card" && <Spinner label="Loading…" />}
             {loading && view === "list" && <ListSkeleton />}
             {loading && view === "calendar" && <Spinner label="Loading…" />}
 

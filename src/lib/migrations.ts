@@ -136,6 +136,20 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "users.country (T22)",
+    up: (db) => {
+      // Profile country (ISO 3166-1 alpha-2) driving region-aware release dates +
+      // streaming availability. NULL = not set → app falls back to US (the client
+      // auto-detects from the browser and persists on first visit). SQLite has no
+      // ADD COLUMN IF NOT EXISTS, so guard on the current columns for idempotency.
+      const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "country")) {
+        db.exec("ALTER TABLE users ADD COLUMN country TEXT");
+      }
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

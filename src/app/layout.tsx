@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-neutral-950 text-neutral-100 min-h-screen`}>
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) inject
+          data-* attributes on <body> before hydration, causing a benign mismatch. */}
+      <body suppressHydrationWarning className={`${inter.className} bg-neutral-950 text-neutral-100 min-h-screen`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

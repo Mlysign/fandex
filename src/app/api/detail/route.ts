@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks, explainMerge, extractYear } from "@/lib/merge";
+import { getUserCountry } from "@/lib/userCountry";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { fetchOmdbScores, fetchOmdbByImdbId, OmdbResult } from "@/lib/sources/omdb";
 import { METADATA, metadataForType } from "@/lib/metadata/registry";
@@ -56,8 +57,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
     if (links.length === 0 && !item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // 4. Merge canonical metadata.
-    const merged = mergeLinks(links, itemType);
+    // 4. Merge canonical metadata (region-aware release date + streaming, T22).
+    const merged = mergeLinks(links, itemType, getUserCountry(session.userId));
 
     // 5. Attach the user's wishlist + library state (empty when not in DB).
     const watchlistRow = mediaItemId

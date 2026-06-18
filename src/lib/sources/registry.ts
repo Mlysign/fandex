@@ -1,5 +1,6 @@
 import { MediaType, Source } from "@/types";
 import { MediaSource } from "./types";
+import { HIDDEN_PROVIDERS } from "./catalog";
 import { rawgSource } from "./adapters/rawg";
 import { traktSource } from "./adapters/trakt";
 import { letterboxdSource } from "./adapters/letterboxd";
@@ -26,6 +27,6 @@ export function getSource(id: Source | string): MediaSource | undefined {
 // truth for "which platforms can hold a wishlist for a movie/show/game".
 export function sourcesForType(type: MediaType | string): MediaSource[] {
   return Object.values(SOURCES).filter(
-    (s): s is MediaSource => !!s && s.mediaTypes.includes(type as MediaType)
+    (s): s is MediaSource => !!s && s.mediaTypes.includes(type as MediaType) && !HIDDEN_PROVIDERS.has(s.id)
   );
 }

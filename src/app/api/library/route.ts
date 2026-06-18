@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
+import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
@@ -63,9 +64,10 @@ export const GET = withUser(async (req: NextRequest, session) => {
       }
     }
 
+    const country = getUserCountry(session.userId);
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const { item, links } of itemMap.values()) {
-      const merged = mergeLinks(links, item.type);
+      const merged = mergeLinks(links, item.type, country);
       // `releaseDate` is the real release date (from the merged links) so the
       // "release" sort actually sorts by release. When the user watched/played it
       // is carried separately as `reviewedAt`.

@@ -44,6 +44,10 @@ export interface SourceNormalized {
   storeLinks?: { name: string; url: string; source: Source }[];
   cast?: { name: string; character: string | null; profileUrl?: string | null }[];
   streamingProviders?: { name: string; logoPath: string | null; providerId: number }[];
+  // T22: full per-region maps so merge can pick the user's country. Streaming for
+  // every region TMDB returns; release dates per region (movies).
+  streamingByRegion?: Record<string, { name: string; logoPath: string | null; providerId: number }[]>;
+  releaseDatesByRegion?: Record<string, string>;
   // tmdb-only facts
   budget?: number | null;
   revenue?: number | null;
@@ -138,12 +142,41 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
     return t?.key ?? null;
   })();
 
-  out.streamingProviders = (() => {
+  // Full per-region streaming map (merge picks the user's country — T22). The
+  // legacy DE-first `streamingProviders` is kept for the debug explainer.
+  out.streamingByRegion = (() => {
     const results = d["watch/providers"]?.results;
-    if (!results) return [];
-    const region = results.DE ?? results.US ?? results[Object.keys(results)[0]];
-    const providers = region?.flatrate ?? region?.free ?? region?.ads ?? region?.rent ?? region?.buy ?? [];
-    return providers.map((p: any) => ({ name: p.provider_name, logoPath: p.logo_path ?? null, providerId: p.provider_id }));
+    if (!results) return undefined;
+    const map: Record<string, { name: string; logoPath: string | null; providerId: number }[]> = {};
+    for (const [iso, region] of Object.entries<any>(results)) {
+      const providers = region?.flatrate ?? region?.free ?? region?.ads ?? region?.rent ?? region?.buy ?? [];
+      if (providers.length) {
+        map[iso] = providers.map((p: any) => ({ name: p.provider_name, logoPath: p.logo_path ?? null, providerId: p.provider_id }));
+      }
+    }
+    return Object.keys(map).length ? map : undefined;
+  })();
+  out.streamingProviders = (() => {
+    const m = out.streamingByRegion;
+    return m ? (m.DE ?? m.US ?? m[Object.keys(m)[0]]) : [];
+  })();
+
+  // Per-region release dates (movies) — TMDB carries different theatrical/digital
+  // dates per country; merge picks the user's region (T22). Prefer a real
+  // theatrical/digital/premiere date, else the earliest of any type.
+  out.releaseDatesByRegion = (() => {
+    if (type !== "movie") return undefined;
+    const results: any[] = d.release_dates?.results ?? [];
+    const map: Record<string, string> = {};
+    for (const r of results) {
+      const iso = r.iso_3166_1;
+      const dates = (r.release_dates ?? []).filter((x: any) => x.release_date);
+      if (!iso || !dates.length) continue;
+      const ranked = [...dates].sort((a: any, b: any) => (a.release_date < b.release_date ? -1 : 1));
+      const preferred = ranked.find((x: any) => [3, 4, 2, 1].includes(x.type)) ?? ranked[0];
+      map[iso] = String(preferred.release_date).slice(0, 10);
+    }
+    return Object.keys(map).length ? map : undefined;
   })();
 
   out.director = type === "show"

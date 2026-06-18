@@ -2,9 +2,23 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { SessionUser } from "@/types";
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "change-this-in-production-rr2"
-);
+// Sessions are signed with JWT_SECRET. Refuse to start in production without it
+// rather than silently falling back to a source-controlled default (which would
+// make every session forgeable — anyone could mint a JWT for any userId). A
+// clearly-insecure fallback is kept ONLY for local dev/test so `npm run dev` and
+// the test suite work without a configured secret.
+function loadSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return new TextEncoder().encode(secret);
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET is required in production. Generate one with `openssl rand -hex 32` and set it in the environment."
+    );
+  }
+  return new TextEncoder().encode("dev-only-insecure-secret-rr2");
+}
+
+const SECRET = loadSecret();
 export const SESSION_COOKIE = "rr2_session";
 
 export async function createSession(user: SessionUser): Promise<string> {

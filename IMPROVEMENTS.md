@@ -298,3 +298,281 @@ breakpoint, so U4's mobile claims remain code-based; worth a real device/devtool
 
 > Open question for review: want me to do a **live visual pass** (drive the running dev server +
 > screenshots of each page, desktop + mobile widths) to validate/extend these before executing T11?
+
+---
+
+## Part IV — Productionization readiness review (T19)
+
+Target (confirmed 2026-06-18): **public website first, Android as a PWA/TWA wrapper** of that
+same site. Findings are id'd `P#`; nothing here is applied. Same severity/effort legend as above.
+
+**Overall verdict:** the app is a **single-node, single-disk, always-on-Node** application today,
+and that's the *only* shape the current code supports. It's a clean fit for one small VPS/container
+with a persistent volume — but it is **not** serverless- or multi-instance-ready, and the README's
+"Deploy on Vercel" is actively misleading (`better-sqlite3` + a local file won't run there). The
+single biggest decision (P1) is *which hosting model you commit to*, because most other findings
+branch on it. Nothing here is a code-quality problem — the app runs — it's the gap between "runs on
+my machine" and "survives a public, multi-user internet."
+
+### Section A — Website launch
+
+#### P1 🔴 L — SQLite local-file DB is single-node only; pick the hosting model first
+`better-sqlite3` is a **synchronous native module** writing to `data/rr.db` on local disk (WAL).
+Consequences: (1) **no serverless / edge** (Vercel/Netlify functions can't keep a file handle or a
+warm process — rules out the README's suggestion); (2) **no horizontal scaling** — one writer lock,
+one disk, so you cannot run two instances against the same data; (3) a **persistent volume** is
+mandatory (the file must survive restarts/redeploys). For the expected scale (you + a handful of
+users) this is *fine* on one always-on host. Two paths:
+- **(a) Commit to single-instance hosting** (Fly.io / Railway / a VPS) with a mounted volume +
+  backups (P5). Lowest effort, matches the code as-is. **Recommended for launch.**
+- **(b) Migrate to Postgres** for real multi-instance scale. Large: rewrites `db.ts`, every
+  `query/get/run` call site, the migration runner, and the in-memory caches (P2). Only worth it if
+  you expect real traffic. **Decide P1 before P2/P4/P5/P6** — they all depend on the answer.
+
+#### P2 🔴 M — In-memory module caches assume one long-lived process
+~10 module-level `new Map()` caches: per-user **feed cache** (`liveDiscover.ts`, 45-min TTL), taste
+**profiles** (`discovery.ts`), TMDB **person/company id** lookups (`discovery.ts`, `facetDetail.ts`),
+facet/keyword caches (`tagDiscover.ts`). On one instance these are a *feature*. Problems for prod:
+(1) **multi-instance → inconsistent per node** (P1b); (2) **serverless → cold every invocation**, so
+the feed re-pays all its TMDB/RAWG detail fetches each time → latency + blows third-party rate
+limits; (3) several are **unbounded with no eviction** (`_personIdCache`, `_tmdbCompanyCache`,
+`_keywordCache` grow forever) → slow memory creep on a long-lived process. If you stay single-instance
+(P1a), just add **bounded eviction/TTL**. If you scale (P1b), move them to **Redis** or drop them.
+
+#### P3 🔴 M — `JWT_SECRET` silently falls back to a hardcoded, source-controlled default
+`session.ts`: `process.env.JWT_SECRET || "change-this-in-production-rr2"`. If the env var is missing
+in production, **every session is signed with a public secret** → anyone can forge a JWT for any
+`userId` and impersonate any account. Must **fail-fast at boot** when unset in production rather than
+degrade silently. (Cross-listed to T21 security.)
+
+#### P4 🔴 M — No deployment artifact or documented process model
+No Dockerfile, no `output: "standalone"` in `next.config.ts`, no Procfile/CI, and the README is
+untouched create-next-app boilerplate. `npm start` (`next start`) needs a **persistent Node process**;
+nothing documents the host, how the `data/` volume is mounted, how env is injected, or how the native
+`better-sqlite3` binary is rebuilt for the runtime image. Need: a multi-stage **Dockerfile**
+(`output: "standalone"`, rebuild better-sqlite3 for the target), a documented host (ties to P1), env
+injection, and a real README/runbook replacing the boilerplate.
+
+#### P5 🔴 M — No backup / restore story
+All user data is one `data/rr.db` file. The only snapshots are manual `.bak-*` files from migrations
+(good discipline — Phase 1.5) but there's **no automated backup, no off-host copy, no tested restore**.
+Lost disk = total data loss. Need scheduled backups (e.g. **litestream** streaming to object storage,
+or cron `sqlite3 .backup`) + a documented, *tested* restore procedure. Hard dependency on P1's volume.
+
+#### P6 🟡 M — Synchronous in-request sync can exceed platform timeouts
+`POST /api/sync` `await`s `syncProviders` (pulls **every** connected provider's full wishlist +
+library, ingests + merges) inside the request, and the dashboard auto-fires it when sync is stale.
+For large accounts (the D9 backfill saw **700+ game items**) this is many sequential external calls →
+the request can blow past proxy/PaaS timeouts (typically 30–60s; serverless far less). Need a
+**background job/queue** (or at least a server-side time budget + streamed progress) before public use.
+
+#### P7 🟡 M — No rate limiting / abuse protection
+No middleware, no per-IP/per-user throttle. Data routes are `withUser`-gated, but: account creation is
+open (any OAuth connect), and the gated routes **proxy third-party APIs with *your* keys**
+(`/api/discover?q=`, `/api/search`, `/api/detail/*` all hit TMDB/RAWG/Trakt/IGDB). An abusive client
+can **exhaust your third-party quotas and run up cost**. Add rate limiting (middleware or a platform
+WAF/edge limit) before exposing it publicly. (Cross-listed to T21.)
+
+#### P8 🟡 M — Third-party fetches have no timeout / retry / circuit-breaker
+Adapters call `fetch()` directly — no `AbortSignal.timeout`, no retry/backoff. A slow or hung upstream
+blocks the request indefinitely (and via P6, the whole sync). One flaky provider degrades everything.
+The discover *feed* tolerates an empty source, but **detail and sync are not isolated** against a
+stalled provider. Add per-fetch timeouts + bounded retries + per-source failure isolation.
+
+#### P9 🟡 S — Observability is `console.log` only; no health check, no error tracking
+~20 `console.log/error` statements, nothing structured, no Sentry/aggregation, and **no `/api/health`**
+(liveness/readiness probe for the host or uptime monitor). A production 500 (the `withUser` catch)
+just vanishes into stdout. Add: a health endpoint, an error tracker, and structured request logging.
+
+#### P10 🟡 S — Config read ad-hoc, no boot-time validation
+`process.env.X!` / `|| fallback` scattered across modules (`TMDB_API_KEY!`, `RAWG_API_KEY!`, …). A
+missing key fails deep inside a request rather than at startup. `.env.example` is solid, but add a
+**single validated config module** that throws at boot listing every missing required var (and folds
+in P3's fail-fast).
+
+#### P11 🟡 S — Posters are native `<img>` from third-party CDNs (also U7)
+`next.config` declares `images.remotePatterns` but **no code uses `next/image`** — every poster is a
+raw `<img>` hotlinked to tmdb/rawg/steam CDNs. No optimization/resizing/bandwidth control; a CDN
+policy change or outage = broken images app-wide; and it complicates the PWA offline story (P14).
+Functional today, so lower priority — but relevant to cost, perf, and the Android wrapper.
+
+#### P12 🟡 S — No SEO / discoverability primitives (website-specific)
+No `robots.txt`, no sitemap, no `metadata`/Open Graph (pages are `"use client"` with minimal server
+metadata), no canonical URLs. A public website wanting organic traffic / shareable links needs these.
+
+#### P13 🟢 M — Client-only pages + query-param item URLs hurt shareability & first paint
+Every page is `"use client"` and fetches on mount; `/item` identity is built into **query params**
+client-side. For a public site: no SSR for shareable/crawlable links, weaker SEO, and a loading
+spinner on every cold visit. Consider server components + clean route params (`/item/[id]`) for at
+least the detail page.
+
+### Section B — Android (PWA / TWA) — depends on the website being live
+
+#### P14 🟡 M — No PWA manifest or service worker → can't wrap as a TWA yet
+The standard "website → Play Store" path is a **Trusted Web Activity**, which requires an installable
+PWA: a valid web manifest (name, icons 192/512, `theme_color`, `display: standalone`, `start_url`) and
+a service worker over HTTPS. **None exist.** This is the entry ticket for the Android target and
+confirms the **website-first** sequencing — it's built on top of a live site (P1–P13).
+
+#### P15 🟡 S — Digital Asset Links + stable HTTPS origin required for TWA
+Play Store TWA needs `/.well-known/assetlinks.json` binding the Android signing key to the web origin,
+plus the site on a fixed HTTPS domain. Trivial to add once the **production domain + signing key**
+exist — but a hard dependency on P4's finalized host decision.
+
+#### P16 🟢 M — Verify the OAuth + cookie flow inside the wrapped app
+Auth is OAuth redirects + an httpOnly `sameSite=lax` cookie. In a TWA (Chrome Custom Tab) the cookie
+usually carries, but: redirect URIs in `.env.example` are hardcoded to `localhost` and must be
+re-registered per provider for the production origin; some providers misbehave in webviews; and the
+deep-link return / `sameSite` may need attention. Test each provider end-to-end inside a TWA before
+shipping.
+
+### Forward-flags to T21 (security)
+Surfaced during this review, deferred to the security pass: **P3** (JWT default secret), **P7**
+(rate limiting / quota abuse), plus **OAuth `access_token`/`refresh_token` stored apparently
+plaintext** in `user_identities`, and the **RAWG password** path (`bcrypt`-hashed at
+`api/auth/rawg` — one-way, so worth confirming how RAWG is actually authenticated downstream).
+
+### Recommended execution order (T19)
+1. **P1** — decide the hosting model (single-instance vs Postgres). Everything below branches on it.
+2. **P3** — JWT fail-fast (tiny, security-critical, do immediately regardless of P1).
+3. **P4 + P5** — Dockerfile/`standalone` + documented host + automated backups & tested restore.
+4. **P10 + P9** — config validation at boot; health endpoint + error tracking.
+5. **P6 + P7 + P8** — background sync, rate limiting, fetch timeouts (operability/cost/abuse).
+6. **P2** — cache eviction (single-instance) or shared cache (if P1b).
+7. **P11 + P12 + P13** — image strategy, SEO, SSR/clean URLs (website polish).
+8. **P14 → P16** — PWA manifest/SW → asset links → TWA auth verification (Android, last).
+
+> This is a review doc — nothing applied. Next Phase-5 task is **T21 (security analysis)**; this
+> review's forward-flags feed into it. Suggest reviewing Part IV together before executing any P#.
+
+---
+
+## Part V — Security analysis (T21)
+
+Threat model: **public launch** as a website + Android (PWA/TWA) wrapper, multi-user, internet-exposed,
+attacker can hit any endpoint and craft any request. Findings id'd `S#`. Nothing here is applied
+(except **P3**, the JWT-secret fail-fast, which was fixed during execution on 2026-06-18). Same
+severity/effort legend.
+
+**Overall verdict:** the **fundamentals are sound** — every SQL query is parameterized
+(`better-sqlite3`, no string-built SQL → no SQL injection found); no `dangerouslySetInnerHTML`/`eval`
+and React auto-escaping keep the XSS surface minimal; Steam OpenID is **properly verified** (a
+`check_authentication` round-trip to Steam, not the naive "trust the claimed id" variant);
+`/api/auth/me` does **not** leak tokens to the client; the session cookie is `httpOnly` + `sameSite=lax`
++ `secure`-in-prod (lax gives reasonable CSRF protection for the JSON POST routes). The real risks are
+**credential handling at rest** (S2/S5), **account-linking not bound to the session** (S1), and the
+**missing public-internet hardening** (rate limiting S3, security headers S6, session revocation S4)
+that a single-user local app never needed.
+
+### 🔴 High
+
+#### S1 — OAuth/OpenID account-linking is not bound to the session (CSRF / forced linking)
+The link target is taken from **attacker-controllable, unauthenticated input**, not the server session:
+- Trakt/TMDB/Letterboxd: `state` is base64 **JSON `{userId, ts}`** — *unsigned*, no integrity, and the
+  callback (`oauthConnect.ts`) trusts `state.userId` as the account to link the resolved identity to.
+  `ts` is never checked (no expiry/replay protection).
+- Steam: the callback reads `?link=<userId>` straight from the query string.
+
+There is **no random state nonce tied to a cookie/session**, so the OAuth round-trip can't detect a
+forged or replayed callback. Consequences: login-CSRF / **forced account linking** — an identity can be
+attached to a `userId` the initiator doesn't own, and the connect flow can be CSRF-triggered against a
+logged-in victim. (Mitigating factor: `userId`s are random UUIDs, not enumerable — but the design
+should never trust a client-supplied userId for an authz decision.) **Fix:** derive the link target
+**only from the server session**, and protect the round-trip with a random `state` nonce stored in a
+short-lived httpOnly cookie and verified on callback (drop `userId`/`link` from the URL entirely).
+
+#### S2 — OAuth access/refresh tokens stored plaintext at rest
+`user_identities.access_token` / `refresh_token` are written and read in the clear (`oauthConnect.ts`,
+`rawg/route.ts`). Combined with the single-file SQLite DB and **no backup encryption** (Part IV P5), any
+read of `data/rr.db` (host compromise, leaked backup, stray copy) hands an attacker **full read+write
+access to every user's connected Trakt/TMDB/RAWG account**. **Fix:** encrypt tokens at rest with an
+app-level AEAD (key from env/KMS, separate from `JWT_SECRET`); decrypt only in memory at use. At minimum,
+lock down DB-file perms + encrypt backups.
+
+#### S3 — No rate limiting on auth + API-key-proxying endpoints (= P7)
+No throttle anywhere. `/api/auth/rawg` takes **email + password** → unthrottled **credential brute-force /
+stuffing**. The `withUser` data routes proxy TMDB/RAWG/Trakt/IGDB with **your** keys
+(`/api/discover?q=`, `/api/search`, `/api/detail/*`) → an authenticated abuser can exhaust your
+third-party quotas and run up cost. **Fix:** per-IP + per-account rate limits (middleware / platform
+WAF), strictest on the password endpoint. Shared with Part IV P7.
+
+### 🟡 Medium
+
+#### S4 — JWT sessions are stateless and unrevocable
+30-day expiry; `logout` only clears the cookie; `disconnect` doesn't invalidate sessions. A **stolen
+token stays valid for 30 days** with no server-side kill switch. **Fix:** shorter access-token lifetime
++ refresh, or a server-side session/revocation store (a `sessions` table, or a per-user token-version
+claim checked on each request).
+
+#### S5 — RAWG stores a bcrypt hash of the user's password — pointless and harmful
+`rawg/route.ts` stores `bcrypt(password)` in `metadata`, but it's **never used** — auth uses the `token`
+returned by `rawgLogin` (which is itself stored as `access_token`). So the hash is dead weight *and* an
+**offline-crackable hash of the user's RAWG password** (commonly reused elsewhere) sitting in the DB.
+The UI's "Your password is encrypted before storage" is misleading (the *real* credential, the token, is
+plaintext — see S2). **Fix:** **don't store the password or its hash at all**; keep only the token
+(encrypted per S2).
+
+#### S6 — No security headers
+No middleware / `headers()` config → missing **CSP, HSTS, X-Content-Type-Options,
+X-Frame-Options/`frame-ancestors`, Referrer-Policy**. Public-website clickjacking, MIME-sniffing, and
+transport-downgrade gaps. **Fix:** set them via `next.config` `headers()` or middleware; CSP must allow
+the poster CDN hosts (ties to Part IV P11's `next/image` work).
+
+#### S7 — Missing ownership check on `watchlist` DELETE (authz invariant)
+`DELETE /api/watchlist` accepts an arbitrary `mediaItemId` and issues platform-removal calls
+(`media_links` for that id) **without verifying the item is on the caller's watchlist** — the local
+delete is correctly scoped to `session.userId`, but the provider-side write-back loop runs first on a
+caller-supplied id. Impact is bounded to the caller's own linked accounts/tokens, so it's not a
+cross-user breach, but it's a missing authz invariant + lets a user act on arbitrary media-item ids.
+**Fix:** assert the `mediaItemId` belongs to `session.userId` before any action, and do a quick
+**systematic authz pass** confirming every read/write route scopes by `session.userId` (spot-checks so
+far — me/library/disconnect/watchlist-local — all do).
+
+#### S8 — No schema validation at the API boundary
+Routes use `await req.json()` with ad-hoc presence checks; malformed/wrong-type input becomes a 500 or
+type-confusion deep in a handler. **Fix:** validate each route body with a schema (e.g. zod) at the
+boundary; reject with 400 + a generic message.
+
+#### S9 — Error-message leakage on `/api/auth/rawg`
+Returns the upstream `e.message` (`rawgLogin` failure) verbatim to the client — can expose internal /
+third-party detail. (The shared `withUser` path is already generic — this route predates it.) **Fix:**
+generic client message, log detail server-side.
+
+### 🟢 Low
+
+#### S10 — Dependency posture
+`npm audit` (prod deps): **2 moderate** — PostCSS "XSS via unescaped `</style>` in stringify output",
+pulled in transitively by Next's bundled toolchain. Build-time, low runtime risk for this app; the
+suggested fix is a **Next downgrade — do NOT apply**. **Fix:** add `npm audit` to CI + Dependabot/Renovate
+and adopt a clean Next patch when available.
+
+#### S11 — JWT payload is signed, not encrypted
+The session token is readable (base64) by anyone holding it and includes `displayName`. Not currently
+sensitive, but **keep the payload minimal** — never add emails/tokens/PII to it.
+
+#### S12 — Stored `posterUrl` is unvalidated and reflected as `<img src>`
+`watchlist` POST accepts a client `posterUrl`, stores it, and it's later rendered as an image source.
+Browsers don't execute `javascript:` in `img src` and the server never fetches it (no SSRF), so impact
+is low — but **validate it's an `https://` URL on an allowed CDN host** (pairs with the S6 CSP `img-src`).
+
+#### S13 — IGDB query built by string interpolation (light escaping)
+`searchIgdbGames` builds an Apicalypse query with `search "${title.replace(/["\\]/g," ")}"`; numeric
+args are `Math.floor`'d. Low risk, but prefer stricter input sanitization / a query builder for the
+non-parameterized IGDB API.
+
+### Confirmed-good (don't re-litigate)
+Parameterized SQL throughout (no SQLi); no `dangerouslySetInnerHTML`/`eval` (minimal XSS surface);
+Steam OpenID verified via `check_authentication`; `/api/auth/me` returns no tokens; session cookie is
+`httpOnly`+`sameSite=lax`+`secure`-in-prod; `disconnect` is `session.userId`-scoped and blocks removing
+the last login; **P3 JWT-secret fail-fast fixed 2026-06-18**.
+
+### Recommended execution order (T21)
+1. **S2 + S5** — encrypt tokens at rest; stop storing the RAWG password hash. (Credentials first.)
+2. **S1** — bind account-linking to the session + add a state nonce. (Auth integrity.)
+3. **S3** — rate limiting, strictest on the password endpoint. (= Part IV P7.)
+4. **S6 + S4** — security headers; session revocation/short expiry.
+5. **S7 + S8** — ownership check + boundary schema validation.
+6. **S9 / S10 / S11 / S12 / S13** — polish + dependency hygiene.
+
+> Review doc — nothing applied beyond P3. Suggest reviewing Parts IV + V together, then executing the
+> combined go-live work (Phase 6 in [TASKS.md](TASKS.md)) in the recommended order.

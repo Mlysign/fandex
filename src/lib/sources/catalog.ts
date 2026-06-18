@@ -44,6 +44,14 @@ export const CATALOG: Record<string, SourceMeta> = {
   },
 };
 
+// Providers hidden from the UI (connect cards + per-item wishlist lists) while
+// their integration is dormant. Backend code (adapters, merge, OAuth routes) is
+// left intact — empty this set to surface a provider again. Letterboxd is hidden
+// until a working API key exists.
+export const HIDDEN_PROVIDERS = new Set<string>(["letterboxd"]);
+
 export function catalogForType(type: MediaType | string): SourceMeta[] {
-  return Object.values(CATALOG).filter((m) => m.mediaTypes.includes(type as MediaType));
+  return Object.values(CATALOG).filter(
+    (m) => m.mediaTypes.includes(type as MediaType) && !HIDDEN_PROVIDERS.has(m.id)
+  );
 }

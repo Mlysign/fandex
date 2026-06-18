@@ -20,7 +20,7 @@ const SEED_BOOST = 1.25;     // example title you like → amplify its (positive
 const SEED_PENALTY = 1.25;   // example title you dislike → amplify its (negative) facets
 const MANUAL_LIKE = 2.0;     // like pill bump
 const MANUAL_DISLIKE = -2.0; // dislike pill bump
-const ROLE_WEIGHT: Record<string, number> = {
+export const ROLE_WEIGHT: Record<string, number> = {
   director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6,
   developer: 1.2, publisher: 0.8, studio: 0.7, network: 0.6, tag: 1.0,
 };
@@ -164,8 +164,13 @@ function getCache() {
 // Public: invalidate after a fetch-more ingest so new items appear immediately.
 export function invalidateDiscoveryCache() { _cache = null; }
 
+// The catalog-wide IDF map (facetId → rarity weight). Exposed so the live
+// discover feed can score off-catalog (upcoming) items with the same rarity
+// signal; facets unseen in the catalog fall back to idf 1 at the call site.
+export function getCatalogIdf(): Map<string, number> { return getCache().idf; }
+
 // ── Preference profile ────────────────────────────────────────────
-interface Profile {
+export interface Profile {
   w: Map<string, number>;
   meta: Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string }>;
   baseline: number;
@@ -174,7 +179,7 @@ interface Profile {
 
 const _profileCache = new Map<string, { sig: string; profile: Profile }>();
 
-function buildProfile(userId: string): Profile {
+export function buildProfile(userId: string): Profile {
   const sig = librarySignature(userId);
   const cached = _profileCache.get(userId);
   if (cached && cached.sig === sig) return cached.profile;
@@ -242,10 +247,11 @@ function applyRefinements(profile: Profile, refine: DiscoverRefine | undefined, 
 
 // ── Scoring ────────────────────────────────────────────────────────
 // Each matched facet contributes (user taste weight) × (catalog rarity / idf),
-// so a shared distinctive facet outweighs several generic ones.
-function scoreCandidate(v: DiscoveryVector, w: Map<string, number>, idf: Map<string, number>): { score: number; reasons: Reason[] } | null {
+// so a shared distinctive facet outweighs several generic ones. Works off a bare
+// facet list so it scores both catalog vectors and live (upcoming) candidates.
+export function scoreFacets(facets: Facet[], w: Map<string, number>, idf: Map<string, number>): { score: number; reasons: Reason[] } | null {
   const contribs: { f: Facet; w: number }[] = [];
-  for (const f of v.facets) {
+  for (const f of facets) {
     const id = facetId(f);
     const weight = w.get(id);
     if (weight == null) continue;
@@ -363,7 +369,7 @@ export function find(userId: string, req: FindRequest): FindResult {
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
-    const s = scoreCandidate(v, profile.w, idf);
+    const s = scoreFacets(v.facets, profile.w, idf);
     scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [] });
   }
 

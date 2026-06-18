@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
+import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
 
@@ -58,13 +59,14 @@ export const GET = withUser(async (req: NextRequest, session) => {
       }
     }
 
-    // Build enriched items
+    // Build enriched items (region-aware release date + streaming, T22)
+    const country = getUserCountry(session.userId);
     const enriched: EnrichedItem[] = [];
     for (const { item, links } of itemMap.values()) {
       // Source filter
       if (sourceFilter && !item.platformSources.includes(sourceFilter)) continue;
 
-      const merged = mergeLinks(links, item.type);
+      const merged = mergeLinks(links, item.type, country);
       enriched.push({
         id: item.id,
         type: item.type,

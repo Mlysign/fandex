@@ -105,6 +105,7 @@ function MonthNav({
 }) {
   const now     = new Date();
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const navRef  = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Section key for each button index — the scrubber highlights whichever
@@ -134,6 +135,17 @@ function MonthNav({
         btn.style.transformOrigin = "right center";
         btn.style.opacity         = i === activeIdx || btn.dataset.current === "1" ? "1" : String(opacity);
       });
+
+      // When the nav is taller than the viewport it scrolls internally — keep the
+      // active month button in view so the scrubber follows the timeline.
+      const activeBtn = btnRefs.current[activeIdx];
+      const nav = navRef.current;
+      if (activeBtn && nav && nav.scrollHeight > nav.clientHeight) {
+        const top = activeBtn.offsetTop;
+        const bottom = top + activeBtn.offsetHeight;
+        if (top < nav.scrollTop) nav.scrollTop = top - 8;
+        else if (bottom > nav.scrollTop + nav.clientHeight) nav.scrollTop = bottom - nav.clientHeight + 8;
+      }
     }
 
     const raf = requestAnimationFrame(applyStyles);
@@ -157,7 +169,10 @@ function MonthNav({
   }, [months.length, noDate.length]);
 
   return (
-    <div className="hidden lg:flex flex-col gap-0.5 sticky top-44 self-start pl-4 min-w-[96px]">
+    <div
+      ref={navRef}
+      className="hidden lg:flex flex-col gap-0.5 sticky top-44 self-start pl-4 min-w-[96px] max-h-[calc(100vh-12rem)] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {months.map(([monthKey, dates], i) => {
         const firstDate = parseISO(dates[0]);
         const current   = isSameMonth(firstDate, now);
@@ -271,18 +286,43 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
     // Card view keys sections by the month's first date, not every day, so the
     // exact target date often isn't a section key — fall back to its month.
     const monthFirst = months.find(([, dates]) => dates.includes(target))?.[1][0];
-    const timer = setTimeout(() => {
+
+    // Re-apply an INSTANT scroll across a short window rather than a single
+    // smooth scroll: the feed loads async and lazy poster images keep growing the
+    // page after the first paint, so a one-shot smooth scroll lands at the wrong
+    // spot (often an extreme). Retrying instant scroll re-anchors as layout
+    // settles. Bail the moment the user scrolls so we never fight them.
+    let tries = 0;
+    let done = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const onUser = () => { done = true; };
+    window.addEventListener("wheel", onUser, { passive: true });
+    window.addEventListener("touchmove", onUser, { passive: true });
+    window.addEventListener("keydown", onUser);
+    const stop = () => {
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener("wheel", onUser);
+      window.removeEventListener("touchmove", onUser);
+      window.removeEventListener("keydown", onUser);
+    };
+    const tick = () => {
+      if (done) return;
+      tries++;
+      if (tries > 14) { stop(); return; }
       const el =
         sectionRefs.current.get(target) ??
         (monthFirst ? sectionRefs.current.get(monthFirst) : undefined);
-      // Only commit if the node is actually in the document — guards against
-      // scrolling a stale/detached ref and then never retrying.
       if (el && el.isConnected) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        el.scrollIntoView({ behavior: "auto", block: "start" });
         todayScrolled.current = true;
+        // Keep correcting for ~0.5s more to absorb image-load drift, then stop.
+        if (tries > 5) { stop(); return; }
       }
-    }, 80);
-    return () => clearTimeout(timer);
+      timer = setTimeout(tick, 90);
+    };
+    timer = setTimeout(tick, 90);
+    return stop;
   }, [items, view, descending]);
 
   // Only show the month nav when there are enough months to be useful

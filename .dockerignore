@@ -1,0 +1,17 @@
+# Keep the build context small and never copy local state/secrets into the image.
+node_modules
+.next
+.git
+.github
+coverage
+data
+*.db
+*.db-*
+.env
+.env.*
+.claude
+npm-debug.log*
+*.tsbuildinfo
+README.md
+IMPROVEMENTS.md
+TASKS.md

@@ -5,6 +5,8 @@ import { SOURCE_COLORS } from "@/lib/constants";
 import NavBar from "@/components/NavBar";
 import Button from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { COUNTRIES } from "@/lib/countries";
+import { detectCountry } from "@/lib/detectCountry";
 
 function SettingsContent() {
   const router = useRouter();
@@ -25,17 +27,20 @@ function SettingsContent() {
   });
   const [syncing, setSyncing] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  // T22 — region that drives release dates + streaming availability.
+  const [country, setCountry] = useState<string>("");
+  const [savingCountry, setSavingCountry] = useState(false);
   const [showRawgForm, setShowRawgForm] = useState(false);
   const [rawgEmail, setRawgEmail] = useState("");
   const [rawgPassword, setRawgPassword] = useState("");
   const [rawgLoading, setRawgLoading] = useState(false);
 
   useEffect(() => {
-    fetchMe();
+    fetchMe(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function fetchMe() {
+  async function fetchMe(initial = false) {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
     if (!data.user) { router.push("/"); return; }
@@ -43,6 +48,28 @@ function SettingsContent() {
     setIdentities(data.identities ?? []);
     setSyncLogs(data.syncLogs ?? []);
     setItemCount(data.itemCount ?? 0);
+    // Country: use the stored value; on first visit (none stored) auto-detect
+    // from the browser and persist it once so region-aware data is correct.
+    const stored = data.user.country as string | null;
+    if (stored) setCountry(stored);
+    else if (initial) { const d = detectCountry(); setCountry(d); saveCountry(d); }
+  }
+
+  async function saveCountry(code: string) {
+    setSavingCountry(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ country: code }),
+      });
+      if (res.ok) {
+        setCountry(code);
+        setNotice({ msg: "Region updated.", ok: true });
+      }
+    } finally {
+      setSavingCountry(false);
+    }
   }
 
   function getIdentity(provider: string) {
@@ -117,7 +144,7 @@ function SettingsContent() {
   const providers = [
     { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true  },
     { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true  },
-    { key: "letterboxd", label: "Letterboxd",  description: "Film watchlist",                   connectUrl: "/api/auth/letterboxd",  canWrite: true  },
+    // Letterboxd hidden until an API key is available — re-add when ready.
     { key: "steam",      label: "Steam",        description: "Games from your wishlist",         connectUrl: "/api/auth/steam",       canWrite: false },
     { key: "rawg",       label: "RAWG",         description: "Games from your Want to Play list", connectUrl: "rawg-form",           canWrite: true  },
   ];
@@ -258,12 +285,7 @@ function SettingsContent() {
                 Connect Trakt
               </a>
             )}
-            {!getIdentity("letterboxd") && (
-              <a href="/api/auth/letterboxd" className="text-sm px-4 py-2 rounded-lg transition-colors"
-                style={{ background: "#00c03015", border: "1px solid #00c03030", color: "#00c030" }}>
-                Connect Letterboxd
-              </a>
-            )}
+            {/* Letterboxd hidden until an API key is available — re-add when ready. */}
             {!getIdentity("steam") && (
               <a href="/api/auth/steam" className="text-sm px-4 py-2 rounded-lg transition-colors"
                 style={{ background: "#1b9af715", border: "1px solid #1b9af730", color: "#1b9af7" }}>
@@ -276,6 +298,29 @@ function SettingsContent() {
                 Connect RAWG
               </button>
             )}
+          </div>
+        </section>
+
+        {/* Region (T22) */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Region</h2>
+          <p className="text-sm text-neutral-500">Controls which release dates and streaming availability you see.</p>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium text-sm">Country</p>
+              <p className="text-xs text-neutral-500">Release dates and &ldquo;where to watch&rdquo; use this region.</p>
+            </div>
+            <select
+              aria-label="Country"
+              value={country}
+              disabled={savingCountry || !country}
+              onChange={(e) => saveCountry(e.target.value)}
+              className="flex-shrink-0 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-500 disabled:opacity-50"
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </select>
           </div>
         </section>
 

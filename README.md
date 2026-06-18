@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReleaseRadar
 
-## Getting Started
+Track upcoming **games, movies, and shows** in one release calendar, synced from your
+connected accounts (Trakt, TMDB, Steam, RAWG) with a personalized discover feed, taste-based
+recommendations, and an insights view.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router) + **React 19**, TypeScript, Tailwind CSS v4
+- **SQLite** via `better-sqlite3` (single-file DB, WAL) — see *Hosting model* below
+- Auth: JWT sessions (`jose`) over an httpOnly cookie; OAuth/OpenID per provider
+- Tests: Vitest (`npm test`)
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env   # then fill in the values (see table below)
+npm run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm test` runs the suite. `npm run build` produces the production build.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Required | Purpose |
+|---|:--:|---|
+| `JWT_SECRET` | ✅ (prod) | Session signing. Generate: `openssl rand -hex 32`. **The server refuses to start in production without it.** |
+| `TMDB_API_KEY` | ✅ | Movies & TV (core data source) |
+| `RAWG_API_KEY` | ✅ | Games (core data source) |
+| `NEXT_PUBLIC_BASE_URL` | ✅ | Public origin, no trailing slash (e.g. `https://app.example.com`) — used for OAuth redirects |
+| `DB_PATH` | — | SQLite file path. Defaults to `./data/rr.db`; **set to the mounted volume in production** (e.g. `/app/data/rr.db`) |
+| `STEAM_API_KEY` | ⬚ | Steam integration |
+| `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
+| `OMDB_API_KEY` | ⬚ | Rotten Tomatoes / IMDb scores |
 
-## Learn More
+Required vars are validated once at boot ([`src/lib/config.ts`](src/lib/config.ts) via
+[`src/instrumentation.ts`](src/instrumentation.ts)) — a missing one fails fast in production with a
+list of what's missing.
 
-To learn more about Next.js, take a look at the following resources:
+## Hosting model
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`better-sqlite3` is a synchronous, in-process, single-file database. The app therefore runs as
+**one always-on Node process with a persistent disk** — *not* serverless and *not* multi-instance.
+The chosen target is a **single-instance container on [Railway](https://railway.app)** with a mounted
+volume for the DB. (See `TASKS.md` Phase 6 / `IMPROVEMENTS.md` Part IV for the full rationale.)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy to Railway
 
-## Deploy on Vercel
+The repo ships a multi-stage [`Dockerfile`](Dockerfile) that builds Next's `standalone` output and
+runs it as a non-root user. Railway auto-detects and builds it.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Push to GitHub** (Railway deploys from the repo).
+2. **New Project → Deploy from GitHub repo** → select this repo. Railway detects the `Dockerfile`.
+3. **Add a Volume** and mount it at **`/app/data`**. ⚠️ Without this, the DB resets on every deploy.
+4. **Set environment variables** (table above). At minimum: `JWT_SECRET`, `TMDB_API_KEY`,
+   `RAWG_API_KEY`, `NEXT_PUBLIC_BASE_URL`, and `DB_PATH=/app/data/rr.db`. Plus any provider keys you use.
+5. Pick the **EU (Amsterdam)** region if available (data residency / latency).
+6. Deploy. The container serves on `$PORT` (Railway sets it; the standalone server honors it).
+7. **Custom domain:** add it in Railway, then create the shown **CNAME** at your domain's DNS.
+   Railway provisions HTTPS automatically.
+8. **OAuth redirect URIs:** in each provider's app settings, register the **production** callback URLs
+   (Trakt callback, TMDB, Steam return/realm, Letterboxd). Set `TRAKT_REDIRECT_URI` +
+   `NEXT_PUBLIC_BASE_URL` to the production origin. (The `localhost` defaults won't work in prod.)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Migrating existing data
+
+To carry over an existing local `data/rr.db` (library, wishlist, ratings), copy it into the Railway
+volume once via the Railway CLI (`railway run` / volume upload). Otherwise the instance starts empty
+and rebuilds from your connected accounts on first sync.
+
+### Backups (recommended before relying on it)
+
+The Railway volume is a single copy. Set up **[Litestream](https://litestream.io)** to continuously
+replicate `rr.db` to S3-compatible object storage (Cloudflare R2 / Backblaze B2) with auto-restore on a
+fresh container, and test a restore. Tracked as **P5** in `TASKS.md`.
+
+## Project docs
+
+- `TASKS.md` — execution tracker (source of truth)
+- `IMPROVEMENTS.md` — audit/review findings (data, architecture, UI, productionization, security)
+- `AGENTS.md` — contributor notes (this Next.js version has breaking changes; read the bundled docs)

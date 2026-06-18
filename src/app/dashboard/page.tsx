@@ -15,7 +15,7 @@ import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
-import ErrorBoundary, { ListSkeleton, CardSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -224,7 +224,7 @@ export default function DashboardPage() {
 
       <main className="max-w-6xl mx-auto px-6 py-6">
         {loading && effView === "list"     && <ListSkeleton />}
-        {loading && effView === "card"     && <CardSkeleton />}
+        {loading && effView === "card"     && <Spinner label="Loading…" />}
         {loading && effView === "calendar" && <Spinner label="Loading…" />}
 
         {!loading && items.length === 0 && <OnboardingState identities={identities} />}

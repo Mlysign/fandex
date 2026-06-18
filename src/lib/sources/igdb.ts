@@ -76,6 +76,24 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
   return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} limit ${limit};`);
 }
 
+// Upcoming games whose first release falls in a unix-second window, most
+// anticipated first. `hypes` is IGDB's pre-release follow count — the strongest
+// "how excited are people" signal for unreleased titles (better than RAWG's
+// popularity for upcoming). Excludes ports/remasters/editions (parent/version)
+// so the canonical base game surfaces. No-ops when IGDB isn't configured.
+export async function discoverIgdbUpcoming(gte: number, lte: number, limit = 40, offset = 0): Promise<any[]> {
+  if (!igdbConfigured()) return [];
+  try {
+    return await igdbQuery(
+      "games",
+      `${GAME_FIELDS} ` +
+        `where first_release_date >= ${gte} & first_release_date <= ${lte} ` +
+        `& version_parent = null & parent_game = null; ` +
+        `sort hypes desc; limit ${limit}; offset ${offset};`
+    );
+  } catch { return []; }
+}
+
 // IGDB images are referenced by image_id → build a sized CDN URL.
 export function igdbImageUrl(imageId: string | undefined | null, size = "t_cover_big"): string | null {
   return imageId ? `https://images.igdb.com/igdb/image/upload/${size}/${imageId}.jpg` : null;

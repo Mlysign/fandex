@@ -74,6 +74,21 @@ export async function searchTraktPublic(query: string, type: "movie" | "show", l
   } catch { return []; }
 }
 
+// Most-anticipated unreleased titles (public; client-id only). Each entry is
+// `{ list_count, movie|show: {...} }`; extended=full carries genres, language,
+// rating/votes, overview, released/first_aired and ids (including tmdb — which
+// the discover feed needs to render + dedupe against TMDB). This is Trakt's
+// unique contribution: a crowd-anticipation ranking TMDB's popularity sort lacks.
+export async function getTraktAnticipatedMovies(limit = 60, page = 1): Promise<any[]> {
+  try { return (await traktGetPublic(`/movies/anticipated?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  catch { return []; }
+}
+
+export async function getTraktAnticipatedShows(limit = 60, page = 1): Promise<any[]> {
+  try { return (await traktGetPublic(`/shows/anticipated?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  catch { return []; }
+}
+
 export async function getTraktUserInfo(accessToken: string) {
   return traktGet("/users/me", accessToken);
 }

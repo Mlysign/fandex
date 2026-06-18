@@ -1,81 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
+import { getUserCountry } from "@/lib/userCountry";
+import { DEFAULT_COUNTRY } from "@/lib/countries";
 
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
+import { personalizedFeed, filterSectionPage } from "@/lib/liveDiscover";
+import { fetchGamePage, fetchMoviePage, fetchShowPage, Direction } from "@/lib/discoverFeed";
+import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
+import { normalizeName } from "@/lib/merge";
 
 const TMDB_KEY = process.env.TMDB_API_KEY!;
 const RAWG_KEY = process.env.RAWG_API_KEY!;
-
-// Browse window: ~18 months forward for upcoming, ~18 months back for past.
-const DAYS_WINDOW = 550;
-const todayISO  = () => new Date().toISOString().split("T")[0];
-const offsetISO = (days: number) => new Date(Date.now() + days * 86400000).toISOString().split("T")[0];
-
-type Direction = "future" | "past";
-
-// Date range for a direction. Past = [today-window, today]; future = [today, today+window].
-function dateWindow(direction: Direction): { gte: string; lte: string } {
-  return direction === "past"
-    ? { gte: offsetISO(-DAYS_WINDOW), lte: todayISO() }
-    : { gte: todayISO(), lte: offsetISO(DAYS_WINDOW) };
-}
-
-async function getUpcomingGames(page = 1, direction: Direction = "future") {
-  // Order by popularity (`-added`) within the window so notable games surface
-  // first; the client date-sorts the merged feed afterwards.
-  const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
-    `https://api.rawg.io/api/games?key=${RAWG_KEY}` +
-      `&dates=${gte},${lte}&ordering=-added&page_size=20&page=${page}`
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.results ?? []).map((g: any) => ({
-    id: `rawg-${g.id}`, rawId: g.id, source: "rawg", type: "game",
-    title: g.name, releaseDate: g.released ?? null,
-    posterUrl: g.background_image ?? null,
-    platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
-    ids: { rawg: g.id },
-  }));
-}
-
-async function getUpcomingMovies(page = 1, direction: Direction = "future") {
-  // `discover` with a release-date window sorted by popularity gives notable
-  // releases across the whole window (the client date-sorts for display).
-  const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
-    `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
-      `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3` +
-      `&primary_release_date.gte=${gte}&primary_release_date.lte=${lte}&page=${page}`
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.results ?? []).map((m: any) => ({
-    id: `tmdb-movie-${m.id}`, rawId: m.id, source: "tmdb", type: "movie",
-    title: m.title, releaseDate: m.release_date ?? null,
-    posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
-    overview: m.overview, ids: { tmdb: m.id },
-  }));
-}
-
-async function getUpcomingShows(page = 1, direction: Direction = "future") {
-  // `discover/tv` over a date window, popularity-sorted, for real coverage.
-  const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
-    `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_KEY}` +
-      `&sort_by=popularity.desc&first_air_date.gte=${gte}` +
-      `&first_air_date.lte=${lte}&page=${page}`
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.results ?? []).map((s: any) => ({
-    id: `tmdb-show-${s.id}`, rawId: s.id, source: "tmdb", type: "show",
-    title: s.name, releaseDate: s.first_air_date ?? null,
-    posterUrl: s.poster_path ? `https://image.tmdb.org/t/p/w342${s.poster_path}` : null,
-    overview: s.overview, ids: { tmdb: s.id },
-  }));
-}
 
 async function searchAll(q: string, type: string | null) {
   const results: any[] = [];
@@ -93,6 +29,27 @@ async function searchAll(q: string, type: string | null) {
           posterUrl: g.background_image ?? null,
           platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
           ids: { rawg: g.id },
+        });
+      }
+    } catch { /* continue */ }
+
+    // IGDB game search — adds titles RAWG's index misses (deduped by title+year
+    // against the RAWG hits above). No-ops when IGDB isn't configured.
+    try {
+      const existing = new Set(
+        results.filter((r) => r.type === "game").map((r) => `${normalizeName(r.title)}|${(r.releaseDate ?? "").slice(0, 4)}`)
+      );
+      for (const g of await searchIgdbGames(q, 12)) {
+        const date = igdbReleaseDate(g);
+        const key = `${normalizeName(g.name ?? "")}|${(date ?? "").slice(0, 4)}`;
+        if (existing.has(key)) continue;
+        existing.add(key);
+        results.push({
+          id: `igdb-${g.id}`, rawId: g.id, source: "igdb", type: "game",
+          title: g.name, releaseDate: date,
+          posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
+          platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
+          ids: { igdb: g.id },
         });
       }
     } catch { /* continue */ }
@@ -181,6 +138,8 @@ export async function GET(req: NextRequest) {
     try {
       userId = (await getSession())?.userId ?? null;
     } catch { /* continue unauthenticated */ }
+    // Region for TMDB release-date filtering (T22): the user's country, else US.
+    const region = userId ? getUserCountry(userId) : DEFAULT_COUNTRY;
 
     // Attach canonical user-state (wishlist providers + watched/played + rating)
     // to a batch of live discover items, resolved against the local DB. DB-only
@@ -222,20 +181,33 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Load-more for a single section (pagination, either direction) ───
+    // Cheap personalization: drop crowd-floor failures + actively-mismatched
+    // items so deeper scrolling doesn't revert to a global-popularity flood
+    // (no hydration → stays fast). Falls through unfiltered when no signal.
     if (section) {
       const direction: Direction = searchParams.get("direction") === "past" ? "past" : "future";
       let results: any[] = [];
-      if (section === "games")  results = await getUpcomingGames(page, direction);
-      if (section === "movies") results = await getUpcomingMovies(page, direction);
-      if (section === "shows")  results = await getUpcomingShows(page, direction);
+      if (section === "games")  results = await fetchGamePage(page, direction);
+      if (section === "movies") results = await fetchMoviePage(page, direction, region);
+      if (section === "shows")  results = await fetchShowPage(page, direction);
+      if (userId) results = filterSectionPage(userId, results);
       return NextResponse.json({ items: annotate(results), section });
     }
 
-    // ── Default browse: all three sources merged and date-sorted ──
+    // ── Default browse ──
+    // Signed-in users with any taste signal get a personalized, taste-ranked
+    // selection of upcoming releases (date-sorted for the timeline). Cold-start
+    // (no ratings/library/wishlist) or signed-out falls back to global
+    // popularity — the original behavior.
+    const personalized = userId ? await personalizedFeed(userId, region) : null;
+    if (personalized) {
+      return NextResponse.json({ items: annotate(sortByDate(personalized)) });
+    }
+
     const [games, movies, shows] = await Promise.all([
-      getUpcomingGames(),
-      getUpcomingMovies(),
-      getUpcomingShows(),
+      fetchGamePage(1, "future"),
+      fetchMoviePage(1, "future", region),
+      fetchShowPage(1, "future"),
     ]);
     const all = sortByDate([...games, ...movies, ...shows]);
     return NextResponse.json({ items: annotate(all) });

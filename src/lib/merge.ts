@@ -1,5 +1,6 @@
 import { Source, MediaLink, EnrichedItem, MediaType, CommunityRating } from "@/types";
 import { SourceNormalized, normalizeSource } from "./sources/normalize";
+import { DEFAULT_COUNTRY } from "./countries";
 
 // merge.ts is now pure POLICY: it merges the per-source SourceNormalized partials
 // (built by src/lib/sources/normalize.ts) by priority (single-value) or union
@@ -48,13 +49,26 @@ function normalizeAll(mediaLinks: { source: Source; data: any }[], type: MediaTy
 
 // ── Main merge function ───────────────────────────────────────────
 
-export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<EnrichedItem, "id" | "type" | "platformSources"> {
+export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: string = DEFAULT_COUNTRY): Omit<EnrichedItem, "id" | "type" | "platformSources"> {
   const norm = normalizeAll(mediaLinks.map((l) => ({ source: l.source, data: l.rawData })), type);
 
   // ── Single-value fields (priority order) ──────────────────────
   const title = pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown";
   const description = pickLongestField(DESCRIPTION_PRIORITY, norm, "description");
-  const releaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  // Region-aware release date (T22): show WHEN it releases in the user's country
+  // (TMDB per-region) — e.g. "out in the US, coming to your country later". But
+  // only when that regional date belongs to the SAME release cycle as the primary
+  // (within ~3 years). TMDB's per-region dates for older films are dominated by
+  // re-releases/restorations decades later, so an unbounded override turns a 1985
+  // classic into its 2026 restoration date (the "Angel's Egg" bug). The 3-year
+  // window covers genuine staggered international releases while excluding those.
+  const primaryReleaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  const regionDate = norm.get("tmdb")?.releaseDatesByRegion?.[region] ?? null;
+  const sameReleaseCycle = !!regionDate && (
+    !primaryReleaseDate ||
+    Math.abs(Date.parse(regionDate) - Date.parse(primaryReleaseDate)) <= 3 * 365 * 86400000
+  );
+  const releaseDate = sameReleaseCycle ? regionDate : primaryReleaseDate;
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
   const backdropUrl = pickField(BACKDROP_PRIORITY, norm, "backdrop");
   const metacritic = pickField(["rawg"], norm, "metacritic");
@@ -112,7 +126,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<Enric
   const storeLinks = allStoreLinks.filter((l, i) => allStoreLinks.findIndex((x) => x.name === l.name) === i);
 
   // ── Streaming providers (TMDB) ────────────────────────────────
-  const streamingProviders = tmdb?.streamingProviders ?? [];
+  const streamingProviders = pickRegion(tmdb?.streamingByRegion, region) ?? [];
 
   // ── TMDB credits + keywords (with letterboxd director fallback) ──
   const director = pickField(["tmdb", "letterboxd"], norm, "director");
@@ -353,6 +367,15 @@ export function extractYear(date: string | null): number | null {
 }
 
 // ── Policy helpers ─────────────────────────────────────────────────
+
+// Pick a per-region value for the user's country, with a best-effort fallback
+// (US → GB → any) so "where to watch" still shows something when the exact
+// region is absent. Used for streaming; release dates use a STRICT country match
+// (see mergeLinks) since a wrong region's date would mislead. T22.
+function pickRegion<T>(map: Record<string, T> | undefined, country: string): T | undefined {
+  if (!map) return undefined;
+  return map[country] ?? map.US ?? map.GB ?? map[Object.keys(map)[0]];
+}
 
 // First non-null value for a field across sources in priority order.
 function pickField(priority: Source[], norm: Map<Source, SourceNormalized>, field: keyof SourceNormalized): any {

@@ -14,7 +14,7 @@ import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
-import ErrorBoundary, { ListSkeleton, CardSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -142,14 +142,14 @@ export default function LibraryPage() {
 
       <main className="max-w-6xl mx-auto px-6 py-6">
         {loading && effView === "list"     && <ListSkeleton />}
-        {loading && effView === "card"     && <CardSkeleton />}
+        {loading && effView === "card"     && <Spinner label="Loading…" />}
         {loading && effView === "calendar" && <Spinner label="Loading…" />}
 
         {!loading && items.length === 0 && (
           <EmptyState
             className="mt-20"
             title="Your library is empty"
-            hint="Connect Trakt, Letterboxd, Steam, or RAWG and sync to bring in everything you've watched, played, or own — with your personal scores."
+            hint="Connect Trakt, Steam, or RAWG and sync to bring in everything you've watched, played, or own — with your personal scores."
             actions={
               <>
                 <Link href="/settings" className={buttonClasses("secondary", "md")}>Go to Profile →</Link>
