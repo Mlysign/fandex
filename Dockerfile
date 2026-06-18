@@ -46,6 +46,12 @@ COPY --from=builder /app/public ./public
 # couldn't create rr.db). Fine for a single-tenant app; non-root is a hardening follow-up.
 RUN mkdir -p /app/data
 
+# CA certificates so the Litestream Go binary can verify TLS to R2/S3 at runtime.
+# (Node bundles its own CAs, but the litestream binary uses the OS trust store,
+# which the slim base image lacks → "certificate signed by unknown authority".)
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # Litestream for continuous SQLite backups (P5). Static Go binary from the release
 # .deb. Backups are OPT-IN: the entrypoint only activates Litestream when
 # LITESTREAM_BUCKET is set, otherwise it runs `node server.js` directly.
