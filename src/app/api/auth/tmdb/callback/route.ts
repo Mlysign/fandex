@@ -11,9 +11,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const requestToken = searchParams.get("request_token");
   const approved = searchParams.get("approved");
+  // Public origin, not req.url (internal 0.0.0.0:8080 behind Railway's proxy).
+  const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
 
   if (!requestToken || approved !== "true") {
-    return NextResponse.redirect(new URL("/settings?error=tmdb_denied", req.url));
+    return NextResponse.redirect(new URL("/settings?error=tmdb_denied", base));
   }
 
   try {
@@ -54,11 +56,11 @@ export async function GET(req: NextRequest) {
     });
 
     const redirect = existing ? "/settings?connected=TMDB" : "/dashboard";
-    const res = NextResponse.redirect(new URL(redirect, req.url));
+    const res = NextResponse.redirect(new URL(redirect, base));
     if (!existing) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
     console.error("[TMDB callback]", e);
-    return NextResponse.redirect(new URL("/settings?error=tmdb_failed", req.url));
+    return NextResponse.redirect(new URL("/settings?error=tmdb_failed", base));
   }
 }

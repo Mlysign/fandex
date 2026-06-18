@@ -33,7 +33,12 @@ export async function handleOAuthCallback(
   const code = searchParams.get("code");
   const state = searchParams.get("state");
 
-  if (!code) return NextResponse.redirect(new URL(opts.errorRedirect, req.url));
+  // Build redirects from the configured public origin, NOT req.url: behind a
+  // proxy (Railway) req.url resolves to the internal bind host (0.0.0.0:8080),
+  // which would bounce the user to a dead address after login.
+  const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
+
+  if (!code) return NextResponse.redirect(new URL(opts.errorRedirect, base));
 
   try {
     const { userId: existingUserId } = state
@@ -73,13 +78,13 @@ export async function handleOAuthCallback(
     });
 
     const redirect = existingUserId ? `/settings?connected=${opts.connectedLabel ?? opts.provider}` : "/dashboard";
-    const res = NextResponse.redirect(new URL(redirect, req.url));
+    const res = NextResponse.redirect(new URL(redirect, base));
     // Only set the session cookie for a fresh login, not when linking to an
     // already-authenticated account.
     if (!existingUserId) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
     console.error(`[${opts.provider} callback]`, e);
-    return NextResponse.redirect(new URL(opts.errorRedirect, req.url));
+    return NextResponse.redirect(new URL(opts.errorRedirect, base));
   }
 }

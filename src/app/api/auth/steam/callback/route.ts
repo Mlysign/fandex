@@ -6,14 +6,16 @@ import { createSession, setSessionCookie } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
+  // Public origin, not req.url (which is the internal 0.0.0.0:8080 behind Railway's proxy).
+  const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
 
   try {
     // Verify with Steam
     const valid = await verifySteamOpenId(searchParams);
-    if (!valid) return NextResponse.redirect(new URL("/login?error=steam_failed", req.url));
+    if (!valid) return NextResponse.redirect(new URL("/login?error=steam_failed", base));
 
     const steamId = extractSteamId(searchParams);
-    if (!steamId) return NextResponse.redirect(new URL("/login?error=steam_no_id", req.url));
+    if (!steamId) return NextResponse.redirect(new URL("/login?error=steam_no_id", base));
 
     const existingUserId = searchParams.get("link") ?? null;
     const profile = await getSteamPlayerSummary(steamId);
@@ -53,7 +55,7 @@ export async function GET(req: NextRequest) {
     });
 
     const redirect = existingUserId ? "/settings?connected=steam" : "/dashboard";
-    const res = NextResponse.redirect(new URL(redirect, req.url));
+    const res = NextResponse.redirect(new URL(redirect, base));
     // Only set session cookie if this is a fresh login (not linking to existing account)
     if (!existingUserId) {
       res.cookies.set(setSessionCookie(token));
@@ -61,6 +63,6 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (e: any) {
     console.error("[Steam callback]", e);
-    return NextResponse.redirect(new URL("/login?error=steam_failed", req.url));
+    return NextResponse.redirect(new URL("/login?error=steam_failed", base));
   }
 }
