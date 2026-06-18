@@ -1,19 +1,20 @@
-# Litestream config (P5) — continuous replication of the SQLite DB to S3-compatible
-# object storage (Cloudflare R2 / Backblaze B2 / AWS S3). Copied to /etc/litestream.yml
-# (Litestream's default path) in the Dockerfile. Values come from env vars set in
-# Railway and are expanded by Litestream at startup. Replication only runs when
-# LITESTREAM_BUCKET is set (see docker-entrypoint.sh).
+# Litestream config (P5) — continuous replication of the SQLite DB to an
+# S3-compatible bucket. Points at the **Railway bucket** connected to this service,
+# which auto-injects AWS_* credentials. Copied to /etc/litestream.yml in the
+# Dockerfile; values are expanded by Litestream at startup. Replication only runs
+# when AWS_S3_BUCKET_NAME is set (see docker-entrypoint.sh).
 #
-# For R2/B2 you MUST set LITESTREAM_ENDPOINT (their S3 API endpoint); region can be
-# "auto" for R2. force-path-style is required for non-AWS S3-compatible stores.
+# (Was Cloudflare R2 via LITESTREAM_* vars — switched to the Railway bucket to keep
+# everything on one platform. NOTE: a same-platform backup does NOT survive a total
+# Railway loss; it does cover volume corruption / bad deploys / accidental wipes.)
 dbs:
   - path: ${DB_PATH}
     replicas:
       - type: s3
-        bucket: ${LITESTREAM_BUCKET}
+        bucket: ${AWS_S3_BUCKET_NAME}
         path: rr.db
-        endpoint: ${LITESTREAM_ENDPOINT}
-        region: ${LITESTREAM_REGION}
-        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
-        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        endpoint: ${AWS_ENDPOINT_URL}
+        region: ${AWS_DEFAULT_REGION}
+        access-key-id: ${AWS_ACCESS_KEY_ID}
+        secret-access-key: ${AWS_SECRET_ACCESS_KEY}
         force-path-style: true
