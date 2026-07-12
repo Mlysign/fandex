@@ -2,6 +2,8 @@
 // Auth is Twitch OAuth client-credentials (an APP token, no per-user data — IGDB
 // exposes only metadata via its public API). Used by the MetadataProvider layer.
 
+import { httpFetch } from "@/lib/http";
+
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const IGDB_BASE = "https://api.igdb.com/v4";
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
@@ -21,7 +23,7 @@ async function getToken(): Promise<string> {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.token;
   const p = new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: "client_credentials" });
-  const res = await fetch(`${TWITCH_TOKEN_URL}?${p}`, { method: "POST" });
+  const res = await httpFetch(`${TWITCH_TOKEN_URL}?${p}`, { method: "POST" });
   if (!res.ok) throw new Error(`Twitch token failed: ${res.status}`);
   const data = await res.json();
   cachedToken = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) * 1000 };
@@ -31,7 +33,7 @@ async function getToken(): Promise<string> {
 // POST an Apicalypse query body to an IGDB endpoint.
 async function igdbQuery(endpoint: string, body: string): Promise<any[]> {
   const token = await getToken();
-  const res = await fetch(`${IGDB_BASE}/${endpoint}`, {
+  const res = await httpFetch(`${IGDB_BASE}/${endpoint}`, {
     method: "POST",
     headers: {
       "Client-ID": CLIENT_ID!,

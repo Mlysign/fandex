@@ -8,6 +8,7 @@
 // `liveDiscover.ts` (wide multi-page pull → re-rank).
 
 import { MediaType } from "@/types";
+import { httpFetch } from "@/lib/http";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -55,7 +56,7 @@ export async function fetchGamePage(page = 1, direction: Direction = "future"): 
   // Order by popularity (`-added`) within the window so notable games surface
   // first; the personalized feed re-ranks, the client date-sorts for display.
   const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
+  const res = await httpFetch(
     `https://api.rawg.io/api/games?key=${RAWG_KEY}` +
       `&dates=${gte},${lte}&ordering=-added&page_size=40&page=${page}`
   );
@@ -81,7 +82,7 @@ export async function fetchMoviePage(page = 1, direction: Direction = "future", 
   // `discover` with a release-date window sorted by popularity. With `region` set,
   // TMDB filters by + returns that country's release date (T22).
   const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
+  const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${region}` +
       `&release_date.gte=${gte}&release_date.lte=${lte}&page=${page}`
@@ -102,7 +103,7 @@ export async function fetchMoviePage(page = 1, direction: Direction = "future", 
 
 export async function fetchShowPage(page = 1, direction: Direction = "future"): Promise<FeedCandidate[]> {
   const { gte, lte } = dateWindow(direction);
-  const res = await fetch(
+  const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&first_air_date.gte=${gte}` +
       `&first_air_date.lte=${lte}&page=${page}`

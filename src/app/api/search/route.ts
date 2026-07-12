@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
+import { httpFetch } from "@/lib/http";
 import { searchRawg } from "@/lib/sources/rawg";
 import { get } from "@/lib/db";
 import { normalizeName } from "@/lib/merge";
@@ -56,7 +57,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       // Search TMDB
       const tmdbMovies: any[] = [];
       try {
-        const res = await fetch(
+        const res = await httpFetch(
           `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`
         );
         const data = await res.json();
@@ -67,7 +68,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       const traktMovies: any[] = [];
       if (traktIdentity?.access_token) {
         try {
-          const res = await fetch(
+          const res = await httpFetch(
             `https://api.trakt.tv/search/movie?query=${encodeURIComponent(q)}&limit=8`,
             { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktIdentity.access_token}`, "User-Agent": "ReleaseRadar/2.0" } }
           );
@@ -117,7 +118,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     if (!type || type === "show") {
       const tmdbShows: any[] = [];
       try {
-        const res = await fetch(
+        const res = await httpFetch(
           `https://api.themoviedb.org/3/search/tv?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`
         );
         const data = await res.json();
@@ -127,7 +128,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       const traktShows: any[] = [];
       if (traktIdentity?.access_token) {
         try {
-          const res = await fetch(
+          const res = await httpFetch(
             `https://api.trakt.tv/search/show?query=${encodeURIComponent(q)}&limit=8`,
             { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktIdentity.access_token}`, "User-Agent": "ReleaseRadar/2.0" } }
           );

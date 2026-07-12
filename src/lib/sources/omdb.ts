@@ -1,3 +1,5 @@
+import { httpFetch } from "@/lib/http";
+
 const API_KEY = process.env.OMDB_API_KEY!;
 
 export interface OmdbResult {
@@ -42,7 +44,7 @@ async function omdbGet(params: Record<string, string>): Promise<OmdbResult> {
   if (!API_KEY) return EMPTY;
   try {
     const p = new URLSearchParams({ apikey: API_KEY, ...params });
-    const res = await fetch(`https://www.omdbapi.com/?${p}`);
+    const res = await httpFetch(`https://www.omdbapi.com/?${p}`);
     if (!res.ok) return EMPTY;
     const data = await res.json();
     if (data.Response === "False") return EMPTY;

@@ -15,6 +15,7 @@
 // represents hits and inflates the crowd average.
 
 import { BoundedCache } from "@/lib/boundedCache";
+import { httpFetch } from "@/lib/http";
 import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId, DiscoveryVector } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
@@ -106,14 +107,14 @@ function ageFrom(birthday: string | null, deathday: string | null): number | nul
 async function tmdbJson(path: string): Promise<any | null> {
   if (!TMDB) return null;
   try {
-    const r = await fetch(`https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`);
+    const r = await httpFetch(`https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`);
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
 async function rawgJson(path: string): Promise<any | null> {
   if (!RAWG) return null;
   try {
-    const r = await fetch(`https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`);
+    const r = await httpFetch(`https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`);
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
