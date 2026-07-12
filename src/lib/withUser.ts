@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { SessionUser } from "@/types";
+
+// Per-user cap across all authed routes (S3/P7). These routes proxy third-party
+// APIs with our keys, so this blunts a single account draining TMDB/RAWG quota.
+// Generous enough not to bother normal infinite-scroll/facet bursts (~5/s).
+const USER_LIMIT = 300;
+const USER_WINDOW_MS = 60_000;
 
 // Uniform auth + error handling for API routes (A6). Wrap a handler so every
 // route gets the same behavior in one place instead of the copy-pasted
@@ -18,6 +25,8 @@ export function withUser<A extends unknown[]>(
     } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = enforceRateLimit(`user:${session.userId}`, USER_LIMIT, USER_WINDOW_MS);
+    if (limited) return limited;
     try {
       return await handler(req, session, ...rest);
     } catch (e) {

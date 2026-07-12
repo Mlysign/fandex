@@ -3,9 +3,15 @@ import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { rawgLogin } from "@/lib/sources/rawg";
 import { createSession, setSessionCookie, getSession } from "@/lib/session";
+import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
   try {
+    // S3: strict per-IP limit — this is the password-authentication surface, so
+    // cap brute-force attempts hard (5 / minute / IP).
+    const limited = enforceRateLimit(`rawg-login:${clientIp(req)}`, 5, 60_000);
+    if (limited) return limited;
+
     const { email, password } = await req.json();
 
     if (!email || !password) {
