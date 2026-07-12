@@ -1,11 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSteamLoginUrl } from "@/lib/sources/steam";
-import { getSession } from "@/lib/session";
+import { createOAuthNonce, setOAuthStateCookie } from "@/lib/oauthState";
 
-export async function GET(req: NextRequest) {
-  const session = await getSession();
+export async function GET() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:3000`;
-  // Encode existing userId in the return URL so we can link accounts
-  const returnTo = `${baseUrl}/api/auth/steam/callback${session?.userId ? `?link=${session.userId}` : ""}`;
-  return NextResponse.redirect(getSteamLoginUrl(returnTo));
+  // CSRF (S1): carry a nonce (not the userId) in the return URL and verify it
+  // against an httpOnly cookie on callback. The link target is derived from the
+  // session there — the old `?link=<userId>` trusted a client-supplied id and
+  // let anyone force-link a Steam account onto an arbitrary user.
+  const nonce = createOAuthNonce();
+  const returnTo = `${baseUrl}/api/auth/steam/callback?state=${nonce}`;
+  const res = NextResponse.redirect(getSteamLoginUrl(returnTo));
+  setOAuthStateCookie(res, nonce);
+  return res;
 }

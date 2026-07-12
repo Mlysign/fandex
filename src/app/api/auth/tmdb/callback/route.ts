@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createTmdbSession, getTmdbAccount } from "@/lib/sources/tmdb";
 import { getSession, createSession, setSessionCookie } from "@/lib/session";
+import { verifyOAuthState, clearOAuthState } from "@/lib/oauthState";
 import { encryptSecret } from "@/lib/crypto";
 
 // TMDB returns ?request_token=...&approved=true. We exchange it for a session_id,
@@ -15,8 +16,19 @@ export async function GET(req: NextRequest) {
   // Public origin, not req.url (internal 0.0.0.0:8080 behind Railway's proxy).
   const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
 
+  const fail = (path: string) => {
+    const res = NextResponse.redirect(new URL(path, base));
+    clearOAuthState(res);
+    return res;
+  };
+
   if (!requestToken || approved !== "true") {
-    return NextResponse.redirect(new URL("/settings?error=tmdb_denied", base));
+    return fail("/settings?error=tmdb_denied");
+  }
+  // CSRF (S1): the approved request_token must be the one this browser started
+  // the flow with (bound via the state cookie), not one an attacker approved.
+  if (!verifyOAuthState(req, requestToken)) {
+    return fail("/settings?error=tmdb_denied");
   }
 
   try {
@@ -58,10 +70,11 @@ export async function GET(req: NextRequest) {
 
     const redirect = existing ? "/settings?connected=TMDB" : "/dashboard";
     const res = NextResponse.redirect(new URL(redirect, base));
+    clearOAuthState(res);
     if (!existing) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
     console.error("[TMDB callback]", e);
-    return NextResponse.redirect(new URL("/settings?error=tmdb_failed", base));
+    return fail("/settings?error=tmdb_failed");
   }
 }

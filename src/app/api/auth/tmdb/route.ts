@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createTmdbRequestToken } from "@/lib/sources/tmdb";
+import { setOAuthStateCookie } from "@/lib/oauthState";
 
 // Start the TMDB connect flow: create a request token and send the user to TMDB
 // to approve, with redirect_to pointing back at our callback. The user's existing
@@ -12,7 +13,13 @@ export async function GET(req: NextRequest) {
     const token = await createTmdbRequestToken();
     const callback = `${base}/api/auth/tmdb/callback`;
     const url = `https://www.themoviedb.org/authenticate/${token}?redirect_to=${encodeURIComponent(callback)}`;
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    // CSRF (S1): TMDB has no `state` param, and it appends its own query to
+    // redirect_to, so we can't round-trip a nonce there. Instead bind THIS
+    // browser to this single-use request_token — the callback rejects any
+    // request_token that doesn't match this cookie.
+    setOAuthStateCookie(res, token);
+    return res;
   } catch (e) {
     console.error("[TMDB auth]", e);
     return NextResponse.redirect(new URL("/settings?error=tmdb_failed", base));

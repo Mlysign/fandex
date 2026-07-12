@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
-import { createSession, setSessionCookie } from "@/lib/session";
+import { createSession, getSession, setSessionCookie } from "@/lib/session";
+import { verifyOAuthState, clearOAuthState } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
 import { Source } from "@/types";
 
@@ -39,12 +40,25 @@ export async function handleOAuthCallback(
   // which would bounce the user to a dead address after login.
   const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
 
-  if (!code) return NextResponse.redirect(new URL(opts.errorRedirect, base));
+  // Every exit clears the single-use CSRF cookie so a nonce is never replayable.
+  const fail = (path: string) => {
+    const res = NextResponse.redirect(new URL(path, base));
+    clearOAuthState(res);
+    return res;
+  };
+
+  if (!code) return fail(opts.errorRedirect);
+  // CSRF (S1): the redirect must carry the nonce we planted in THIS browser at
+  // the start of the flow. Blocks an attacker forcing a link/login via a forged
+  // callback URL.
+  if (!verifyOAuthState(req, state)) return fail(opts.errorRedirect);
 
   try {
-    const { userId: existingUserId } = state
-      ? JSON.parse(Buffer.from(state, "base64url").toString())
-      : { userId: null };
+    // Link target is derived from the SESSION, never from client-supplied state:
+    // trusting `state.userId` let anyone attach their provider identity to (or
+    // hijack) an arbitrary account by crafting the state blob.
+    const session = await getSession();
+    const existingUserId = session?.userId ?? null;
 
     const profile = await opts.resolve(code);
 
@@ -80,12 +94,13 @@ export async function handleOAuthCallback(
 
     const redirect = existingUserId ? `/settings?connected=${opts.connectedLabel ?? opts.provider}` : "/dashboard";
     const res = NextResponse.redirect(new URL(redirect, base));
+    clearOAuthState(res);
     // Only set the session cookie for a fresh login, not when linking to an
     // already-authenticated account.
     if (!existingUserId) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
     console.error(`[${opts.provider} callback]`, e);
-    return NextResponse.redirect(new URL(opts.errorRedirect, base));
+    return fail(opts.errorRedirect);
   }
 }

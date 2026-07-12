@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getTraktAuthUrl } from "@/lib/sources/trakt";
-import { getSession } from "@/lib/session";
+import { createOAuthNonce, setOAuthStateCookie } from "@/lib/oauthState";
 
 export async function GET() {
-  const session = await getSession();
-  const state = Buffer.from(JSON.stringify({
-    userId: session?.userId ?? null,
-    ts: Date.now(),
-  })).toString("base64url");
-  return NextResponse.redirect(getTraktAuthUrl(state));
+  // `state` is a pure CSRF nonce (verified against an httpOnly cookie on
+  // callback). The link target is derived from the session at callback time, so
+  // it is deliberately NOT encoded here — a client-supplied userId can't be trusted.
+  const nonce = createOAuthNonce();
+  const res = NextResponse.redirect(getTraktAuthUrl(nonce));
+  setOAuthStateCookie(res, nonce);
+  return res;
 }
