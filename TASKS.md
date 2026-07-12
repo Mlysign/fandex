@@ -249,7 +249,7 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 - **Phase 3:** ✅ done (was ~895k)
 - **Phase 4:** ✅ done (was ~160k)
 - **Phase 5:** ✅ done — T19 + T21 reviews complete (IMPROVEMENTS.md Parts IV + V)
-- **Phase 6 (go-live execution):** P1 ✅ decided (single-instance + SQLite on Railway); P3, P4 (deployed), P10, **P2** ✅ done. Remaining: **P5–P9, P11–P16** (single-instance path) + **S1–S13** (S3=P7 overlaps). Roughly **~1.6M** remaining.
+- **Phase 6 (go-live execution):** P1 ✅ decided; ✅ done: P2, P3, P4 (deployed), P8, P9 (health), P10, **S3/P7**, S5, S6 (partial), S7, S9, S11, S12, S13. **Remaining:** 🔴 **S2** (encrypt tokens), **S1** (session-bound linking), **P6** (background sync/OOM root cause); 🟡 **S4** (session revocation), **S8** (zod validation), **P11** (next/image), full **S6** CSP, P12 (SEO), S10 (dep hygiene); Android P14–P16. All remaining 🔴 need your input or live verification (new env var / OAuth flow / live sync).
 - **Total remaining:** ~1.7M tokens (Phase 6 execution; reviews done, P1 decided)
 
 ## Open decisions
