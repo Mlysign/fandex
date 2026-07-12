@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { httpFetch } from "@/lib/http";
+import { decryptNullable } from "@/lib/crypto";
 import { searchRawg } from "@/lib/sources/rawg";
 import { get } from "@/lib/db";
 import { normalizeName } from "@/lib/merge";
@@ -32,6 +33,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       "SELECT access_token FROM user_identities WHERE user_id = ? AND provider = 'trakt'",
       [session.userId]
     );
+    const traktToken = decryptNullable(traktIdentity?.access_token);
 
     const results: SearchResult[] = [];
 
@@ -66,11 +68,11 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
       // Search Trakt (if connected)
       const traktMovies: any[] = [];
-      if (traktIdentity?.access_token) {
+      if (traktToken) {
         try {
           const res = await httpFetch(
             `https://api.trakt.tv/search/movie?query=${encodeURIComponent(q)}&limit=8`,
-            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktIdentity.access_token}`, "User-Agent": "ReleaseRadar/2.0" } }
+            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "ReleaseRadar/2.0" } }
           );
           if (res.ok) traktMovies.push(...await res.json());
         } catch { /* continue */ }
@@ -126,11 +128,11 @@ export const GET = withUser(async (req: NextRequest, session) => {
       } catch { /* continue */ }
 
       const traktShows: any[] = [];
-      if (traktIdentity?.access_token) {
+      if (traktToken) {
         try {
           const res = await httpFetch(
             `https://api.trakt.tv/search/show?query=${encodeURIComponent(q)}&limit=8`,
-            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktIdentity.access_token}`, "User-Agent": "ReleaseRadar/2.0" } }
+            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "ReleaseRadar/2.0" } }
           );
           if (res.ok) traktShows.push(...await res.json());
         } catch { /* continue */ }

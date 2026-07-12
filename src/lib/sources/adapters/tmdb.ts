@@ -1,6 +1,7 @@
 import { get } from "@/lib/db";
 import { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
+import { decryptNullable } from "@/lib/crypto";
 import {
   getTmdbWatchlistMovies, getTmdbWatchlistShows, getTmdbRatedMovies, getTmdbRatedShows,
   setTmdbWatchlist, setTmdbRating, deleteTmdbRating,
@@ -41,7 +42,7 @@ export const tmdbSource: MediaSource = {
     return {
       userId,
       identity,
-      token: identity.access_token ?? null,
+      token: decryptNullable(identity.access_token),
       slug: meta.accountId != null ? String(meta.accountId) : null,
     };
   },

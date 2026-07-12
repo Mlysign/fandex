@@ -4,6 +4,7 @@ import { get, run } from "@/lib/db";
 import { rawgLogin } from "@/lib/sources/rawg";
 import { createSession, setSessionCookie, getSession } from "@/lib/session";
 import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
+import { encryptSecret } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       finalUserId = existing.user_id;
       run(
         "UPDATE user_identities SET access_token = ?, metadata = ?, display_name = ? WHERE id = ?",
-        [token, metadata, slug, identityId]
+        [encryptSecret(token), metadata, slug, identityId]
       );
     } else {
       identityId = randomUUID();
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
       run(
         `INSERT INTO user_identities (id, user_id, provider, provider_user_id, display_name, access_token, metadata)
          VALUES (?, ?, 'rawg', ?, ?, ?, ?)`,
-        [identityId, finalUserId, email.toLowerCase(), slug, token, metadata]
+        [identityId, finalUserId, email.toLowerCase(), slug, encryptSecret(token), metadata]
       );
     }
 

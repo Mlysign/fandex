@@ -7,6 +7,7 @@ import {
   addToRawgToPlay, removeFromRawgToPlay, markRawgBeaten, rateRawgGame,
 } from "../rawg";
 import { METADATA } from "@/lib/metadata/registry";
+import { decryptNullable } from "@/lib/crypto";
 
 function safeParse(s: string): any {
   try { return JSON.parse(s); } catch { return {}; }
@@ -32,7 +33,7 @@ export const rawgSource: MediaSource = {
     const metadata = identity.metadata ? safeParse(identity.metadata) : {};
     const slug = metadata.slug ?? identity.display_name ?? identity.provider_user_id;
     // RAWG tokens are long-lived — no refresh step needed.
-    return { userId, identity, token: identity.access_token ?? null, slug };
+    return { userId, identity, token: decryptNullable(identity.access_token), slug };
   },
 
   async pullWishlist(ctx) {

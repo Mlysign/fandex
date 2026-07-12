@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createSession, setSessionCookie } from "@/lib/session";
+import { encryptSecret, encryptNullable } from "@/lib/crypto";
 import { Source } from "@/types";
 
 // Normalized profile every OAuth provider resolves to after exchanging its code.
@@ -55,7 +56,7 @@ export async function handleOAuthCallback(
     if (identity) {
       run(
         "UPDATE user_identities SET access_token = ?, refresh_token = ?, token_expires_at = ?, display_name = ?, avatar_url = ? WHERE id = ?",
-        [profile.accessToken, profile.refreshToken, profile.tokenExpiresAt, profile.displayName, profile.avatarUrl, identity.id]
+        [encryptSecret(profile.accessToken), encryptNullable(profile.refreshToken), profile.tokenExpiresAt, profile.displayName, profile.avatarUrl, identity.id]
       );
     } else {
       const userId = existingUserId ?? randomUUID();
@@ -65,7 +66,7 @@ export async function handleOAuthCallback(
       run(
         `INSERT INTO user_identities (id, user_id, provider, provider_user_id, display_name, avatar_url, access_token, refresh_token, token_expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [identityId, userId, opts.provider, profile.providerUserId, profile.displayName, profile.avatarUrl, profile.accessToken, profile.refreshToken, profile.tokenExpiresAt]
+        [identityId, userId, opts.provider, profile.providerUserId, profile.displayName, profile.avatarUrl, encryptSecret(profile.accessToken), encryptNullable(profile.refreshToken), profile.tokenExpiresAt]
       );
       identity = { id: identityId, user_id: userId, display_name: profile.displayName };
     }

@@ -8,6 +8,7 @@ import {
   getLetterboxdWatchlist, getLetterboxdLogEntries, posterFromFilm, releaseDateFromFilm,
 } from "../letterboxd";
 import { METADATA } from "@/lib/metadata/registry";
+import { decryptSecret, decryptNullable, encryptSecret, encryptNullable } from "@/lib/crypto";
 
 function toUnix(s: any): number | null {
   if (!s) return null;
@@ -30,14 +31,14 @@ export const letterboxdSource: MediaSource = {
       [userId]
     );
     if (!identity) return null;
-    let token: string | null = identity.access_token ?? null;
+    let token: string | null = decryptNullable(identity.access_token);
     if (identity.refresh_token) {
       try {
-        const t = await refreshLetterboxdToken(identity.refresh_token);
+        const t = await refreshLetterboxdToken(decryptSecret(identity.refresh_token));
         token = t.access_token;
         run(
           "UPDATE user_identities SET access_token = ?, refresh_token = ? WHERE id = ?",
-          [t.access_token, t.refresh_token, identity.id]
+          [encryptSecret(t.access_token), encryptNullable(t.refresh_token), identity.id]
         );
       } catch { /* fall back to the existing token */ }
     }

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createTmdbSession, getTmdbAccount } from "@/lib/sources/tmdb";
 import { getSession, createSession, setSessionCookie } from "@/lib/session";
+import { encryptSecret } from "@/lib/crypto";
 
 // TMDB returns ?request_token=...&approved=true. We exchange it for a session_id,
 // fetch the account, and upsert the identity — linking to the logged-in user when
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     if (identity) {
       run(
         "UPDATE user_identities SET access_token = ?, metadata = ?, display_name = ? WHERE id = ?",
-        [sessionId, metadata, displayName, identity.id]
+        [encryptSecret(sessionId), metadata, displayName, identity.id]
       );
     } else {
       const userId = existing?.userId ?? randomUUID();
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
       run(
         `INSERT INTO user_identities (id, user_id, provider, provider_user_id, display_name, access_token, metadata)
          VALUES (?, ?, 'tmdb', ?, ?, ?, ?)`,
-        [identityId, userId, String(account.id), displayName, sessionId, metadata]
+        [identityId, userId, String(account.id), displayName, encryptSecret(sessionId), metadata]
       );
       identity = { id: identityId, user_id: userId, display_name: displayName };
     }

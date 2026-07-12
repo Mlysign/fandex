@@ -2,6 +2,7 @@ import { get, run } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
 import { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
+import { decryptSecret, decryptNullable, encryptSecret, encryptNullable } from "@/lib/crypto";
 import {
   refreshTraktToken, getTraktIdByTmdb,
   addMovieToTraktWatchlist, addShowToTraktWatchlist,
@@ -37,14 +38,14 @@ export const traktSource: MediaSource = {
       [userId]
     );
     if (!identity) return null;
-    let token: string | null = identity.access_token ?? null;
+    let token: string | null = decryptNullable(identity.access_token);
     if (identity.token_expires_at && identity.token_expires_at < nowSec() + 300) {
       try {
-        const t = await refreshTraktToken(identity.refresh_token);
+        const t = await refreshTraktToken(decryptSecret(identity.refresh_token));
         token = t.access_token;
         run(
           "UPDATE user_identities SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?",
-          [t.access_token, t.refresh_token, nowSec() + t.expires_in, identity.id]
+          [encryptSecret(t.access_token), encryptNullable(t.refresh_token), nowSec() + t.expires_in, identity.id]
         );
       } catch { /* fall back to the existing token */ }
     }

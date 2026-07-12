@@ -15,6 +15,7 @@ interface EnvSpec {
 
 const ENV: EnvSpec[] = [
   { name: "JWT_SECRET", required: true, note: "session signing — generate with `openssl rand -hex 32`" },
+  { name: "TOKEN_ENCRYPTION_KEY", required: true, note: "OAuth-token encryption at rest (S2) — generate with `openssl rand -hex 32`; MUST differ from JWT_SECRET" },
   { name: "TMDB_API_KEY", required: true, note: "movies & TV (core)" },
   { name: "RAWG_API_KEY", required: true, note: "games (core)" },
   { name: "NEXT_PUBLIC_BASE_URL", required: true, note: "public origin for OAuth redirects" },
