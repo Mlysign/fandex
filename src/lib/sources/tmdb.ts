@@ -1,9 +1,11 @@
+import { httpFetch } from "@/lib/http";
+
 const BASE = "https://api.themoviedb.org/3";
 const KEY = process.env.TMDB_API_KEY!;
 
 async function tmdbGet(endpoint: string, params: Record<string, string> = {}) {
   const p = new URLSearchParams({ api_key: KEY, ...params });
-  const res = await fetch(`${BASE}${endpoint}?${p}`);
+  const res = await httpFetch(`${BASE}${endpoint}?${p}`);
   if (!res.ok) throw new Error(`TMDB error: ${res.status} ${endpoint}`);
   return res.json();
 }
@@ -37,14 +39,14 @@ export function tmdbPosterUrl(path: string | null, size = "w500"): string | null
 // session_id (obtained via the OAuth-like approval flow), stored on the identity.
 
 export async function createTmdbRequestToken(): Promise<string> {
-  const res = await fetch(`${BASE}/authentication/token/new?api_key=${KEY}`);
+  const res = await httpFetch(`${BASE}/authentication/token/new?api_key=${KEY}`);
   const data = await res.json();
   if (!data.request_token) throw new Error("TMDB request token failed");
   return data.request_token;
 }
 
 export async function createTmdbSession(requestToken: string): Promise<string> {
-  const res = await fetch(`${BASE}/authentication/session/new?api_key=${KEY}`, {
+  const res = await httpFetch(`${BASE}/authentication/session/new?api_key=${KEY}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ request_token: requestToken }),
@@ -55,7 +57,7 @@ export async function createTmdbSession(requestToken: string): Promise<string> {
 }
 
 export async function getTmdbAccount(sessionId: string): Promise<{ id: number; username: string; name: string }> {
-  const res = await fetch(`${BASE}/account?api_key=${KEY}&session_id=${sessionId}`);
+  const res = await httpFetch(`${BASE}/account?api_key=${KEY}&session_id=${sessionId}`);
   if (!res.ok) throw new Error(`TMDB account: ${res.status}`);
   return res.json();
 }
@@ -66,7 +68,7 @@ async function accountList(accountId: string | number, sessionId: string, path: 
   let page = 1;
   let totalPages = 1;
   do {
-    const res = await fetch(
+    const res = await httpFetch(
       `${BASE}/account/${accountId}/${path}?api_key=${KEY}&session_id=${sessionId}&page=${page}&sort_by=created_at.desc`
     );
     if (!res.ok) break;
@@ -86,7 +88,7 @@ export function getTmdbRatedShows(accountId: string | number, sessionId: string)
 export async function setTmdbWatchlist(
   accountId: string | number, sessionId: string, mediaType: "movie" | "tv", mediaId: number, add: boolean
 ): Promise<void> {
-  const res = await fetch(`${BASE}/account/${accountId}/watchlist?api_key=${KEY}&session_id=${sessionId}`, {
+  const res = await httpFetch(`${BASE}/account/${accountId}/watchlist?api_key=${KEY}&session_id=${sessionId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ media_type: mediaType, media_id: mediaId, watchlist: add }),
@@ -96,7 +98,7 @@ export async function setTmdbWatchlist(
 
 // TMDB accepts a rating value of 0.5–10.0.
 export async function setTmdbRating(sessionId: string, mediaType: "movie" | "tv", mediaId: number, value: number): Promise<void> {
-  const res = await fetch(`${BASE}/${mediaType}/${mediaId}/rating?api_key=${KEY}&session_id=${sessionId}`, {
+  const res = await httpFetch(`${BASE}/${mediaType}/${mediaId}/rating?api_key=${KEY}&session_id=${sessionId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value }),
@@ -105,7 +107,7 @@ export async function setTmdbRating(sessionId: string, mediaType: "movie" | "tv"
 }
 
 export async function deleteTmdbRating(sessionId: string, mediaType: "movie" | "tv", mediaId: number): Promise<void> {
-  const res = await fetch(`${BASE}/${mediaType}/${mediaId}/rating?api_key=${KEY}&session_id=${sessionId}`, {
+  const res = await httpFetch(`${BASE}/${mediaType}/${mediaId}/rating?api_key=${KEY}&session_id=${sessionId}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
   });

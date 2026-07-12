@@ -1,9 +1,11 @@
+import { httpFetch } from "@/lib/http";
+
 const BASE = "https://api.rawg.io/api";
 const KEY = process.env.RAWG_API_KEY!;
 
 async function rawgGet(endpoint: string, params: Record<string, string> = {}) {
   const p = new URLSearchParams({ key: KEY, ...params });
-  const res = await fetch(`${BASE}${endpoint}?${p}`);
+  const res = await httpFetch(`${BASE}${endpoint}?${p}`);
   if (!res.ok) throw new Error(`RAWG error: ${res.status} ${endpoint}`);
   return res.json();
 }
@@ -42,7 +44,7 @@ export async function getRawgGame(id: number) {
 // Login – returns { key: token, slug: userSlug }
 export async function rawgLogin(email: string, password: string): Promise<{ token: string; slug: string }> {
   // Step 1: authenticate to get token
-  const loginRes = await fetch(`${BASE}/auth/login`, {
+  const loginRes = await httpFetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -56,7 +58,7 @@ export async function rawgLogin(email: string, password: string): Promise<{ toke
   if (!token) throw new Error("RAWG login did not return a token");
 
   // Step 2: fetch user profile to get slug
-  const profileRes = await fetch(`${BASE}/users/current`, {
+  const profileRes = await httpFetch(`${BASE}/users/current`, {
     headers: {
       "Content-Type": "application/json",
       "Token": `Token ${token}`,
@@ -77,7 +79,7 @@ export async function getRawgUserToPlay(slug: string): Promise<any[]> {
   let url: string | null = `${BASE}/users/${encodeURIComponent(slug)}/games?key=${KEY}&statuses=toplay&page_size=40`;
 
   while (url) {
-    const fetchRes: Response = await fetch(url);
+    const fetchRes: Response = await httpFetch(url);
     if (!fetchRes.ok) {
       if (fetchRes.status === 404) throw new Error(`RAWG user "${slug}" not found`);
       throw new Error(`RAWG API error: ${fetchRes.status}`);
@@ -95,7 +97,7 @@ export async function getRawgUserToPlayAuth(token: string, slug: string): Promis
   let url: string | null = `${BASE}/users/${encodeURIComponent(slug)}/games?key=${KEY}&statuses=toplay&page_size=40`;
 
   while (url) {
-    const fetchRes: Response = await fetch(url, {
+    const fetchRes: Response = await httpFetch(url, {
       headers: { "Token": `Token ${token}` },
     });
     if (!fetchRes.ok) {
@@ -120,7 +122,7 @@ export async function getRawgUserPlayed(slug: string, token?: string): Promise<a
     `${BASE}/users/${encodeURIComponent(slug)}/games?key=${KEY}&statuses=${PLAYED_STATUSES}&page_size=40`;
 
   while (url) {
-    const res: Response = await fetch(url, token ? { headers: { Token: `Token ${token}` } } : undefined);
+    const res: Response = await httpFetch(url, token ? { headers: { Token: `Token ${token}` } } : undefined);
     if (!res.ok) {
       if (res.status === 404) throw new Error(`RAWG user "${slug}" not found`);
       if (res.status === 401) throw new Error("RAWG token invalid – please reconnect");
@@ -135,7 +137,7 @@ export async function getRawgUserPlayed(slug: string, token?: string): Promise<a
 
 // Write-back: add game to RAWG "Want to Play"
 export async function addToRawgToPlay(token: string, gameId: number) {
-  const res = await fetch(`${BASE}/users/current/games`, {
+  const res = await httpFetch(`${BASE}/users/current/games`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Token": `Token ${token}` },
     body: JSON.stringify({ game: gameId, status: "toplay" }),
@@ -152,7 +154,7 @@ export async function addToRawgToPlay(token: string, gameId: number) {
 }
 
 export async function removeFromRawgToPlay(token: string, gameId: number) {
-  const res = await fetch(`${BASE}/users/current/games/${gameId}`, {
+  const res = await httpFetch(`${BASE}/users/current/games/${gameId}`, {
     method: "DELETE",
     headers: { "Token": `Token ${token}` },
   });
@@ -162,7 +164,7 @@ export async function removeFromRawgToPlay(token: string, gameId: number) {
 // Write-back: mark as beaten (played)
 // Tries POST first; if the game is already in the profile, PATCHes to update status.
 export async function markRawgBeaten(token: string, gameId: number): Promise<void> {
-  const postRes = await fetch(BASE + "/users/current/games", {
+  const postRes = await httpFetch(BASE + "/users/current/games", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Token": "Token " + token },
     body: JSON.stringify({ game: gameId, status: "beaten" }),
@@ -170,7 +172,7 @@ export async function markRawgBeaten(token: string, gameId: number): Promise<voi
   if (postRes.ok) return;
   const text = await postRes.text();
   if (postRes.status === 400 && text.includes("already")) {
-    const patchRes = await fetch(BASE + "/users/current/games/" + gameId, {
+    const patchRes = await httpFetch(BASE + "/users/current/games/" + gameId, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", "Token": "Token " + token },
       body: JSON.stringify({ status: "beaten" }),
@@ -205,7 +207,7 @@ export async function rateRawgGame(token: string, gameId: number, appRating: num
   // 1. Best-effort: make sure the game is in the user's library. A 400 "already
   //    in this profile" is fine; any other failure here shouldn't block the rating.
   try {
-    await fetch(BASE + "/users/current/games", {
+    await httpFetch(BASE + "/users/current/games", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Token": "Token " + token },
       body: JSON.stringify({ game: gameId, status: "beaten" }),
@@ -213,7 +215,7 @@ export async function rateRawgGame(token: string, gameId: number, appRating: num
   } catch { /* non-fatal — the review below is what actually records the rating */ }
 
   // 2. Record the rating via the reviews endpoint (the mechanism RAWG honors).
-  const res = await fetch(BASE + "/reviews", {
+  const res = await httpFetch(BASE + "/reviews", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Token": "Token " + token },
     body: JSON.stringify({ game: gameId, rating: rawgRating, is_text: false }),

@@ -1,3 +1,5 @@
+import { httpFetch } from "@/lib/http";
+
 const BASE = "https://api.trakt.tv";
 const CLIENT_ID = process.env.TRAKT_CLIENT_ID!;
 const CLIENT_SECRET = process.env.TRAKT_CLIENT_SECRET!;
@@ -16,7 +18,7 @@ export function getTraktAuthUrl(state: string): string {
 }
 
 export async function exchangeTraktCode(code: string) {
-  const res = await fetch(`${BASE}/oauth/token`, {
+  const res = await httpFetch(`${BASE}/oauth/token`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({ code, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }),
@@ -26,7 +28,7 @@ export async function exchangeTraktCode(code: string) {
 }
 
 export async function refreshTraktToken(refreshToken: string) {
-  const res = await fetch(`${BASE}/oauth/token`, {
+  const res = await httpFetch(`${BASE}/oauth/token`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({ refresh_token: refreshToken, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "refresh_token" }),
@@ -36,7 +38,7 @@ export async function refreshTraktToken(refreshToken: string) {
 }
 
 async function traktGet(endpoint: string, accessToken: string) {
-  const res = await fetch(`${BASE}${endpoint}`, {
+  const res = await httpFetch(`${BASE}${endpoint}`, {
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
@@ -52,7 +54,7 @@ export function traktConfigured(): boolean {
 }
 
 async function traktGetPublic(endpoint: string) {
-  const res = await fetch(`${BASE}${endpoint}`, { headers: HEADERS });
+  const res = await httpFetch(`${BASE}${endpoint}`, { headers: HEADERS });
   if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
   return res.json();
 }
@@ -157,7 +159,7 @@ export async function getTraktCalendarShows(accessToken: string, daysPast = 365,
 
 // Write-back: add movie to Trakt watchlist
 export async function addMovieToTraktWatchlist(accessToken: string, traktId: number) {
-  const res = await fetch(`${BASE}/sync/watchlist`, {
+  const res = await httpFetch(`${BASE}/sync/watchlist`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ movies: [{ ids: { trakt: traktId } }] }),
@@ -169,7 +171,7 @@ export async function addMovieToTraktWatchlist(accessToken: string, traktId: num
 }
 
 export async function removeMovieFromTraktWatchlist(accessToken: string, traktId: number) {
-  const res = await fetch(`${BASE}/sync/watchlist/remove`, {
+  const res = await httpFetch(`${BASE}/sync/watchlist/remove`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ movies: [{ ids: { trakt: traktId } }] }),
@@ -181,7 +183,7 @@ export async function removeMovieFromTraktWatchlist(accessToken: string, traktId
 }
 
 export async function removeShowFromTraktWatchlist(accessToken: string, traktId: number) {
-  const res = await fetch(`${BASE}/sync/watchlist/remove`, {
+  const res = await httpFetch(`${BASE}/sync/watchlist/remove`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ shows: [{ ids: { trakt: traktId } }] }),
@@ -193,7 +195,7 @@ export async function removeShowFromTraktWatchlist(accessToken: string, traktId:
 }
 
 export async function addShowToTraktWatchlist(accessToken: string, traktId: number) {
-  const res = await fetch(`${BASE}/sync/watchlist`, {
+  const res = await httpFetch(`${BASE}/sync/watchlist`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ shows: [{ ids: { trakt: traktId } }] }),
@@ -237,7 +239,7 @@ export async function rateTraktItem(
   rating: number  // 1-10 integer
 ): Promise<void> {
   const key = type === "movie" ? "movies" : "shows";
-  const res = await fetch(`${BASE}/sync/ratings`, {
+  const res = await httpFetch(`${BASE}/sync/ratings`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [{ rating, ids: { trakt: traktId } }] }),
@@ -258,7 +260,7 @@ export async function markTraktWatched(
   const key = type === "movie" ? "movies" : "shows";
   const item: Record<string, any> = { ids: { trakt: traktId } };
   if (watchedAt) item.watched_at = watchedAt;
-  const res = await fetch(`${BASE}/sync/history`, {
+  const res = await httpFetch(`${BASE}/sync/history`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [item] }),
@@ -278,7 +280,7 @@ export async function removeTraktRating(
   traktId: number
 ): Promise<void> {
   const key = type === "movie" ? "movies" : "shows";
-  const res = await fetch(`${BASE}/sync/ratings/remove`, {
+  const res = await httpFetch(`${BASE}/sync/ratings/remove`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [{ ids: { trakt: traktId } }] }),
@@ -297,7 +299,7 @@ export async function removeTraktFromHistory(
   traktId: number
 ): Promise<void> {
   const key = type === "movie" ? "movies" : "shows";
-  const res = await fetch(`${BASE}/sync/history/remove`, {
+  const res = await httpFetch(`${BASE}/sync/history/remove`, {
     method: "POST",
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [{ ids: { trakt: traktId } }] }),

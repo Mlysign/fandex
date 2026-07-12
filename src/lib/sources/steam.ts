@@ -1,3 +1,5 @@
+import { httpFetch } from "@/lib/http";
+
 const STEAM_API = "https://api.steampowered.com";
 const API_KEY = process.env.STEAM_API_KEY!;
 
@@ -25,7 +27,7 @@ export function extractSteamId(searchParams: URLSearchParams): string | null {
 export async function verifySteamOpenId(searchParams: URLSearchParams): Promise<boolean> {
   const params = new URLSearchParams(searchParams);
   params.set("openid.mode", "check_authentication");
-  const res = await fetch("https://steamcommunity.com/openid/login", {
+  const res = await httpFetch("https://steamcommunity.com/openid/login", {
     method: "POST",
     body: params,
   });
@@ -36,13 +38,13 @@ export async function verifySteamOpenId(searchParams: URLSearchParams): Promise<
 // ── Player info ───────────────────────────────────────────────────
 
 export async function getSteamPlayerSummary(steamId: string) {
-  const res = await fetch(`${STEAM_API}/ISteamUser/GetPlayerSummaries/v2/?key=${API_KEY}&steamids=${steamId}`);
+  const res = await httpFetch(`${STEAM_API}/ISteamUser/GetPlayerSummaries/v2/?key=${API_KEY}&steamids=${steamId}`);
   const data = await res.json();
   return data.response?.players?.[0] ?? null;
 }
 
 export async function resolveVanityUrl(vanity: string): Promise<string> {
-  const res = await fetch(`${STEAM_API}/ISteamUser/ResolveVanityURL/v1/?key=${API_KEY}&vanityurl=${encodeURIComponent(vanity)}`);
+  const res = await httpFetch(`${STEAM_API}/ISteamUser/ResolveVanityURL/v1/?key=${API_KEY}&vanityurl=${encodeURIComponent(vanity)}`);
   const data = await res.json();
   if (data.response?.success === 1) return data.response.steamid;
   throw new Error(`Could not resolve Steam vanity URL: ${vanity}`);
@@ -51,7 +53,7 @@ export async function resolveVanityUrl(vanity: string): Promise<string> {
 // ── Wishlist ──────────────────────────────────────────────────────
 
 export async function getSteamWishlistIds(steamId: string): Promise<number[]> {
-  const res = await fetch(`${STEAM_API}/IWishlistService/GetWishlist/v1?steamid=${steamId}&key=${API_KEY}`);
+  const res = await httpFetch(`${STEAM_API}/IWishlistService/GetWishlist/v1?steamid=${steamId}&key=${API_KEY}`);
   if (!res.ok) throw new Error(`Steam wishlist fetch failed: ${res.status}`);
   const data = await res.json();
   const items = data.response?.items ?? [];
@@ -77,7 +79,7 @@ export async function getSteamOwnedGames(steamId: string): Promise<SteamOwnedGam
     include_played_free_games: "1",
     format: "json",
   });
-  const res = await fetch(`${STEAM_API}/IPlayerService/GetOwnedGames/v1/?${params}`);
+  const res = await httpFetch(`${STEAM_API}/IPlayerService/GetOwnedGames/v1/?${params}`);
   if (!res.ok) throw new Error(`Steam owned games fetch failed: ${res.status}`);
   const data = await res.json();
   const games: SteamOwnedGame[] = data.response?.games ?? [];
@@ -113,7 +115,7 @@ export async function getSteamAppDetails(appIds: number[]): Promise<Record<numbe
           include_included_items: true,  // DLC / bundled apps
         },
       });
-      const res = await fetch(
+      const res = await httpFetch(
         `${STEAM_API}/IStoreBrowseService/GetItems/v1?key=${API_KEY}&input_json=${encodeURIComponent(inputJson)}`
       );
       if (!res.ok) continue;
@@ -136,7 +138,7 @@ let tagCache: Record<number, string> = {};
 export async function getSteamTagMap(): Promise<Record<number, string>> {
   if (Object.keys(tagCache).length > 0) return tagCache;
   try {
-    const res = await fetch(`${STEAM_API}/IStoreService/GetTagList/v1/?key=${API_KEY}&language=english`);
+    const res = await httpFetch(`${STEAM_API}/IStoreService/GetTagList/v1/?key=${API_KEY}&language=english`);
     if (!res.ok) return tagCache;
     const data = await res.json();
     tagCache = {};
@@ -168,7 +170,7 @@ export function extractSteamDate(data: any): string | null {
 export async function searchSteamByName(name: string): Promise<{ appid: number; data: any } | null> {
   try {
     const normalized = name.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-    const res = await fetch(
+    const res = await httpFetch(
       `https://store.steampowered.com/search/suggest?term=${encodeURIComponent(name)}&f=games&cc=US&realm=1&l=english&use_store_query=1`,
       { headers: { "User-Agent": "Mozilla/5.0", "Accept": "text/html" } }
     );
