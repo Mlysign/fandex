@@ -20,6 +20,29 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.steamstatic.com" },
     ],
   },
+  // S6 (partial): the security headers that can't break rendering — sniffing,
+  // clickjacking, referrer leakage, transport security, and powerful-feature
+  // gating. Deliberately NOT shipping the resource-restricting CSP directives
+  // (script-src/style-src/img-src) yet: a slightly-wrong value blank-screens the
+  // app, and that needs live browser verification. The CSP here carries only
+  // `frame-ancestors` (clickjacking) which restricts no resource loads.
+  // Permissions-Policy restricts only features the app never uses — autoplay/
+  // encrypted-media are left permitted so the YouTube trailer embed keeps working.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

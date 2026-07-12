@@ -90,7 +90,7 @@ export default function LoginPage() {
                 </div>
               </form>
               <p className="text-xs text-neutral-600">
-                Your password is encrypted before storage and only used to refresh your RAWG session.
+                Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.
               </p>
             </div>
           )}

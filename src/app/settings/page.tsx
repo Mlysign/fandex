@@ -171,7 +171,7 @@ function SettingsContent() {
                   className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
                   value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
               </div>
-              <p className="text-xs text-neutral-600">Your password is encrypted before storage.</p>
+              <p className="text-xs text-neutral-600">Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.</p>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={rawgLoading}
                   className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"

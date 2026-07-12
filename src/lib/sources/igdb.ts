@@ -66,14 +66,38 @@ async function withTimeToBeat(game: any | null): Promise<any | null> {
   return game;
 }
 
+// Coerce an interpolated numeric field to a safe non-negative integer. IGDB
+// queries are built by string interpolation (Apicalypse, not SQL — no bound
+// params), so a non-numeric value reaching an `id`/`limit`/`offset` slot could
+// inject clauses. TS types these as `number`, but runtime values can arrive from
+// JSON; this is the runtime backstop.
+function safeInt(n: number, fallback: number): number {
+  const v = Math.trunc(Number(n));
+  return Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+
+// Apicalypse `search` terms are interpolated into a quoted string. Strip every
+// character that could break out of the quotes or inject a clause (quotes,
+// backslashes, statement/brace/paren/glob chars) plus control chars, collapse
+// whitespace, and cap length. Defense-in-depth even though the value is quoted.
+export function sanitizeApicalypseSearch(raw: string): string {
+  return String(raw ?? "")
+    .replace(/["\\;{}()*[\]]/g, " ")
+    .replace(/[\x00-\x1f\x7f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+}
+
 export async function getIgdbGame(id: number): Promise<any | null> {
-  const rows = await igdbQuery("games", `${GAME_FIELDS} where id = ${id};`);
+  const rows = await igdbQuery("games", `${GAME_FIELDS} where id = ${safeInt(id, 0)};`);
   return withTimeToBeat(rows[0] ?? null);
 }
 
 export async function searchIgdbGames(title: string, limit = 10): Promise<any[]> {
-  const safe = title.replace(/["\\]/g, " ");
-  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} limit ${limit};`);
+  const safe = sanitizeApicalypseSearch(title);
+  if (!safe) return []; // nothing meaningful to search → don't run a malformed query
+  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} limit ${safeInt(limit, 10)};`);
 }
 
 // Upcoming games whose first release falls in a unix-second window, most
@@ -87,9 +111,9 @@ export async function discoverIgdbUpcoming(gte: number, lte: number, limit = 40,
     return await igdbQuery(
       "games",
       `${GAME_FIELDS} ` +
-        `where first_release_date >= ${gte} & first_release_date <= ${lte} ` +
+        `where first_release_date >= ${safeInt(gte, 0)} & first_release_date <= ${safeInt(lte, 0)} ` +
         `& version_parent = null & parent_game = null; ` +
-        `sort hypes desc; limit ${limit}; offset ${offset};`
+        `sort hypes desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`
     );
   } catch { return []; }
 }

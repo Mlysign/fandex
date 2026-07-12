@@ -122,6 +122,10 @@ export interface EnrichedItem {
   sources: { source: Source; sourceId: string; data: Record<string, any> }[];
 }
 
+// This is the JWT session payload (see session.ts). The JWT is SIGNED, not
+// ENCRYPTED — anyone holding the cookie can decode and read every field. S11:
+// keep it minimal. NEVER add email, OAuth/access tokens, password material, or
+// any other PII/secret here — those stay server-side (DB), keyed by userId.
 export interface SessionUser {
   userId: string;
   identityId: string;

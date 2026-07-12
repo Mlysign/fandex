@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
 import { get, run } from "@/lib/db";
 import { rawgLogin } from "@/lib/sources/rawg";
 import { createSession, setSessionCookie, getSession } from "@/lib/session";
@@ -18,13 +17,17 @@ export async function POST(req: NextRequest) {
     let slug: string;
     try {
       ({ token, slug } = await rawgLogin(email, password));
-    } catch (e: any) {
-      return NextResponse.json({ error: e.message || "Invalid RAWG credentials" }, { status: 401 });
+    } catch (e) {
+      // S9: don't reflect the upstream RAWG error to the client (it can leak
+      // provider internals / enable enumeration). Log it, return a generic 401.
+      console.error("[RAWG auth] login failed:", e);
+      return NextResponse.json({ error: "Invalid RAWG credentials" }, { status: 401 });
     }
 
-    // Encrypt password before storing
-    const passwordHash = await bcrypt.hash(password, 12);
-    const metadata = JSON.stringify({ passwordHash, slug });
+    // S5: the password is NOT stored — only the RAWG session token is kept. The
+    // former `bcrypt(password)` here was unused and offline-crackable if the DB
+    // leaked, so it's gone. `password` is used once for rawgLogin() above.
+    const metadata = JSON.stringify({ slug });
 
     // Get existing session to link accounts, or create new user
     const existingSession = await getSession();

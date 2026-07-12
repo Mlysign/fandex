@@ -3,6 +3,7 @@ import { withUser } from "@/lib/withUser";
 import { get, run, query } from "@/lib/db";
 import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
+import { sanitizePosterUrl } from "@/lib/posterUrl";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
 import { MediaType, Source } from "@/types";
 
@@ -12,8 +13,11 @@ export const POST = withUser(async (req: NextRequest, session) => {
 
     if (!ids || !type) return NextResponse.json({ error: "ids and type required" }, { status: 400 });
 
+    // S12: only persist/reflect a poster URL from a trusted media-CDN host.
+    const safePosterUrl = sanitizePosterUrl(posterUrl);
+
     // Fetch + store the canonical media_item from the provided source ids.
-    const mediaItemId = await persistItemFromIds({ type, title, releaseDate, posterUrl, ids });
+    const mediaItemId = await persistItemFromIds({ type, title, releaseDate, posterUrl: safePosterUrl, ids });
     if (!mediaItemId) return NextResponse.json({ error: "Could not resolve item" }, { status: 400 });
 
     // Mark all found sources in watchlist
@@ -59,6 +63,21 @@ export const POST = withUser(async (req: NextRequest, session) => {
 
 export const DELETE = withUser(async (req: NextRequest, session) => {
     const { mediaItemId, source } = await req.json();
+
+    if (!mediaItemId || typeof mediaItemId !== "string") {
+      return NextResponse.json({ error: "mediaItemId required" }, { status: 400 });
+    }
+
+    // S7: scope the whole operation to the caller's own data. The platform
+    // write-back loop below acts on every link of `mediaItemId` using the
+    // caller's tokens — only proceed if this item is actually on THIS user's
+    // watchlist. Otherwise a caller could drive removals for items they never
+    // added. Not-on-your-watchlist → no-op (idempotent success).
+    const owned = get<{ n: number }>(
+      "SELECT 1 AS n FROM user_watchlist WHERE user_id = ? AND media_item_id = ? LIMIT 1",
+      [session.userId, mediaItemId]
+    );
+    if (!owned) return NextResponse.json({ ok: true });
 
     const mediaItem = get<{ type: string }>("SELECT type FROM media_items WHERE id = ?", [mediaItemId]);
     const itemType = (mediaItem?.type ?? null) as MediaType | null;
