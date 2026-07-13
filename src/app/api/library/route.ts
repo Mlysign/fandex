@@ -233,6 +233,17 @@ export const DELETE = withUser(async (req: NextRequest, session) => {
   const mediaItemId: string | null = body.mediaItemId ?? resolveMediaItemFromIds(body.ids);
   if (!mediaItemId) return NextResponse.json({ ok: true });
 
+  // S7 (authz sweep): the platform removeFromLibrary loop below acts on every
+  // link of `mediaItemId` with the caller's own tokens. Only proceed if this item
+  // is actually in THIS user's library — otherwise a caller could drive platform
+  // removals for items they never had. Not-owned → idempotent no-op. Mirrors the
+  // watchlist DELETE guard.
+  const owned = get<{ n: number }>(
+    "SELECT 1 AS n FROM user_library WHERE user_id = ? AND media_item_id = ? LIMIT 1",
+    [session.userId, mediaItemId]
+  );
+  if (!owned) return NextResponse.json({ ok: true });
+
   // Propagate the removal to every connected platform BEFORE clearing locally.
   // Otherwise the rating/watched state lingers on Trakt/TMDB and the next sync
   // re-pulls it (the reported bug). Mirrors the POST write-back's id resolution:
