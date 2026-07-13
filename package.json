@@ -11,8 +11,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.10.0",
     "date-fns": "^4.4.0",
     "jose": "^6.2.3",
