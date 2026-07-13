@@ -57,7 +57,7 @@ function OnboardingState({ identities }: { identities: any[] }) {
   return (
     <div className="max-w-md mx-auto mt-16 px-4">
       <div className="text-center mb-10">
-        <p className="text-2xl font-bold mb-2">Welcome to ReleaseRadar</p>
+        <p className="text-2xl font-bold mb-2">Welcome to Fandex</p>
         <p className="text-neutral-400 text-sm">Track every game, movie, and show you&apos;re waiting for — in one place.</p>
       </div>
       <div className="space-y-3">

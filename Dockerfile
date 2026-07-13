@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Production image for ReleaseRadar (P4). Multi-stage: compile + build in a fat
+# Production image for Fandex (P4). Multi-stage: compile + build in a fat
 # builder, then ship only Next's `standalone` output in a slim runner.
 # Runs on Railway (or any container host) with a persistent volume at /app/data.
 

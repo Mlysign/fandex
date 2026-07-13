@@ -29,7 +29,7 @@ export default function NavBar() {
 
   return (
     <nav className="border-b border-neutral-800 px-6 flex items-center justify-between sticky top-0 bg-neutral-950 z-30 h-14">
-      <span className="font-bold text-base tracking-tight">ReleaseRadar</span>
+      <span className="font-bold text-base tracking-tight">Fandex</span>
 
       {/* Desktop links (md+) */}
       <div className="hidden md:flex items-center gap-1">

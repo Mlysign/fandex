@@ -82,7 +82,7 @@ async function trakt() {
     "Content-Type": "application/json",
     "trakt-api-version": "2",
     "trakt-api-key": env.TRAKT_CLIENT_ID,
-    "User-Agent": "ReleaseRadar/2.0",
+    "User-Agent": "Fandex/2.0",
   };
   const get = async (path) => {
     const r = await fetch(`https://api.trakt.tv${path}`, { headers: HEADERS });

@@ -7,24 +7,25 @@ import { BASE_URL } from "@/lib/baseUrl";
 
 const inter = Inter({ subsets: ["latin"] });
 
-const TITLE = "ReleaseRadar — one calendar for every game, movie & show";
+const TITLE = "Fandex — your index of every game, movie & show";
 const DESCRIPTION =
-  "One calendar for every game, movie, and show you're waiting for. Track upcoming releases across Trakt, Steam, TMDB and more.";
+  "Your personal index of games, movies, and shows. Manage your wishlists, discover new favorites from your own taste, and see what's coming on a release calendar. Connects Trakt, Steam, TMDB and more.";
 
 // P12 — SEO metadata. metadataBase makes OG/sitemap URLs absolute; the title
-// template lets authed pages set just their name (e.g. "Library · ReleaseRadar").
+// template lets authed pages set just their name (e.g. "Library · Fandex").
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
-  title: { default: TITLE, template: "%s · ReleaseRadar" },
+  title: { default: TITLE, template: "%s · Fandex" },
   description: DESCRIPTION,
-  applicationName: "ReleaseRadar",
+  applicationName: "Fandex",
   keywords: [
-    "release calendar", "game releases", "movie releases", "TV show releases",
-    "upcoming games", "upcoming movies", "watchlist", "Trakt", "Steam", "TMDB",
+    "media tracker", "wishlist", "backlog", "watchlist", "release calendar",
+    "game releases", "movie releases", "TV show releases", "recommendations",
+    "Trakt", "Steam", "TMDB",
   ],
   openGraph: {
     type: "website",
-    siteName: "ReleaseRadar",
+    siteName: "Fandex",
     title: TITLE,
     description: DESCRIPTION,
     url: "/",

@@ -9,7 +9,7 @@ const HEADERS = {
   "Content-Type": "application/json",
   "trakt-api-version": "2",
   "trakt-api-key": CLIENT_ID,
-  "User-Agent": "ReleaseRadar/2.0",
+  "User-Agent": "Fandex/2.0",
 };
 
 export function getTraktAuthUrl(state: string): string {

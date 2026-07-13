@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 //
 // Values come from the SIGNED Android app — set these on the host once the TWA is
 // built/signed (see the P14/P15 notes):
-//   TWA_PACKAGE_NAME     e.g. app.releaseradar.twa
+//   TWA_PACKAGE_NAME     e.g. org.fandex.twa
 //   TWA_CERT_FINGERPRINT the signing cert's SHA-256, colon-separated hex
 //                        (comma-separate multiple, e.g. upload + Play App Signing keys)
 // Until both are set, this serves an empty list — valid JSON, no verification yet.

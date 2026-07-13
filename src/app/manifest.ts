@@ -6,9 +6,9 @@ import type { MetadataRoute } from "next";
 // brand art anytime and re-run the script).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "ReleaseRadar",
-    short_name: "ReleaseRadar",
-    description: "One calendar for every game, movie, and show you're waiting for.",
+    name: "Fandex",
+    short_name: "Fandex",
+    description: "Your personal index of games, movies, and shows — wishlists, taste-based discovery, and a release calendar.",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0a0a",

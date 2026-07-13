@@ -1,4 +1,4 @@
-# ReleaseRadar
+# Fandex
 
 Track upcoming **games, movies, and shows** in one release calendar, synced from your
 connected accounts (Trakt, TMDB, Steam, RAWG) with a personalized discover feed, taste-based

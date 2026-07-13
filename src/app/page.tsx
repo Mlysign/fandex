@@ -39,7 +39,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="max-w-sm w-full space-y-8 text-center">
         <div>
-          <h1 className="text-4xl font-bold mb-2">ReleaseRadar</h1>
+          <h1 className="text-4xl font-bold mb-2">Fandex</h1>
           <p className="text-neutral-400">One calendar for every game, movie, and show you&apos;re waiting for.</p>
         </div>
 

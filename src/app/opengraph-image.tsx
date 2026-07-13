@@ -4,11 +4,11 @@ import { ImageResponse } from "next/og";
 // convention into both openGraph.images and twitter.images automatically.
 // Deliberately simple (satori supports flexbox + a CSS subset only).
 
-export const alt = "ReleaseRadar — one calendar for every game, movie & show";
+export const alt = "Fandex — your index of every game, movie & show";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const TAGLINE = "One calendar for every game, movie, and show you're waiting for.";
+const TAGLINE = "Your index of every game, movie & show.";
 
 export default function Image() {
   return new ImageResponse(
@@ -27,8 +27,8 @@ export default function Image() {
           padding: "0 100px",
         }}
       >
-        <div style={{ display: "flex", fontSize: 100, fontWeight: 800, letterSpacing: "-3px" }}>
-          ReleaseRadar
+        <div style={{ display: "flex", fontSize: 108, fontWeight: 800, letterSpacing: "-3px" }}>
+          Fandex
         </div>
         <div
           style={{

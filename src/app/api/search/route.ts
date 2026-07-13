@@ -72,7 +72,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         try {
           const res = await httpFetch(
             `https://api.trakt.tv/search/movie?query=${encodeURIComponent(q)}&limit=8`,
-            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "ReleaseRadar/2.0" } }
+            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "Fandex/2.0" } }
           );
           if (res.ok) traktMovies.push(...await res.json());
         } catch { /* continue */ }
@@ -132,7 +132,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         try {
           const res = await httpFetch(
             `https://api.trakt.tv/search/show?query=${encodeURIComponent(q)}&limit=8`,
-            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "ReleaseRadar/2.0" } }
+            { headers: { "Content-Type": "application/json", "trakt-api-version": "2", "trakt-api-key": process.env.TRAKT_CLIENT_ID!, "Authorization": `Bearer ${traktToken}`, "User-Agent": "Fandex/2.0" } }
           );
           if (res.ok) traktShows.push(...await res.json());
         } catch { /* continue */ }
