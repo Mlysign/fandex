@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AppProviders from "@/components/ui/AppProviders";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { BASE_URL } from "@/lib/baseUrl";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -36,12 +37,18 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// P14 — theme-color for the browser/PWA chrome (Next moved this out of metadata).
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) inject
           data-* attributes on <body> before hydration, causing a benign mismatch. */}
       <body suppressHydrationWarning className={`${inter.className} bg-neutral-950 text-neutral-100 min-h-screen`}>
+        <ServiceWorkerRegister />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
