@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 const TITLE = "Fandex — your index of every game, movie & show";
 const DESCRIPTION =
-  "Your personal index of games, movies, and shows. Manage your wishlists, discover new favorites from your own taste, and see what's coming on a release calendar. Connects Trakt, Steam, TMDB and more.";
+  "Fandex is your personal index of games, movies, and shows — manage wishlists, get recommendations from your own taste, and track upcoming releases on a calendar. Connects Trakt, Steam, TMDB and more.";
 
 // P12 — SEO metadata. metadataBase makes OG/sitemap URLs absolute; the title
 // template lets authed pages set just their name (e.g. "Library · Fandex").

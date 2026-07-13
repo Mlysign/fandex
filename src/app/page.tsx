@@ -40,7 +40,7 @@ export default function LoginPage() {
       <div className="max-w-sm w-full space-y-8 text-center">
         <div>
           <h1 className="text-4xl font-bold mb-2">Fandex</h1>
-          <p className="text-neutral-400">One calendar for every game, movie, and show you&apos;re waiting for.</p>
+          <p className="text-neutral-400">Track your wishlists, discover what you&apos;ll love, and see what&apos;s coming — games, movies &amp; shows, all in one place.</p>
         </div>
 
         <div className="space-y-3">

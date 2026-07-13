@@ -21,8 +21,8 @@ export default function Image() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #0a0a0a 0%, #1e1b4b 100%)",
-          color: "#fafafa",
+          background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+          color: "#ffffff",
           fontFamily: "sans-serif",
           padding: "0 100px",
         }}
@@ -34,7 +34,7 @@ export default function Image() {
           style={{
             display: "flex",
             fontSize: 38,
-            color: "#a5b4fc",
+            color: "#e0e7ff",
             marginTop: 28,
             textAlign: "center",
             lineHeight: 1.3,

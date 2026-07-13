@@ -5,21 +5,21 @@
 import sharp from "sharp";
 
 // Full-bleed square (works as both a normal and a maskable icon): the gradient
-// reaches every edge and the mark sits inside the maskable safe zone (center
-// ~60%). A fanned deck of cards — a nod to Fandex (fan + dex): your collection of
-// games/movies/shows. 512 viewBox; sharp scales to each target.
+// reaches every edge and the "F" monogram sits inside the maskable safe zone
+// (center ~60%). Vibrant indigo→violet brand gradient with a white geometric F
+// (drawn as rects — no font dependency). 512 viewBox; sharp scales to each target.
 const SVG = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0a0a0a"/>
-      <stop offset="1" stop-color="#312e81"/>
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <g stroke="#1e1b4b" stroke-width="4">
-    <rect x="198" y="175" width="116" height="176" rx="16" fill="#4f46e5" transform="rotate(-24 256 375)"/>
-    <rect x="198" y="175" width="116" height="176" rx="16" fill="#818cf8" transform="rotate(0 256 375)"/>
-    <rect x="198" y="175" width="116" height="176" rx="16" fill="#c7d2fe" transform="rotate(24 256 375)"/>
+  <g fill="#ffffff">
+    <rect x="182" y="150" width="56" height="212" rx="14"/>
+    <rect x="182" y="150" width="160" height="56" rx="14"/>
+    <rect x="182" y="240" width="126" height="52" rx="14"/>
   </g>
 </svg>`;
 
