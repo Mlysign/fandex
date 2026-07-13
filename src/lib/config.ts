@@ -27,6 +27,9 @@ const ENV: EnvSpec[] = [
   { name: "TWITCH_CLIENT_ID", required: false, note: "IGDB game metadata" },
   { name: "TWITCH_CLIENT_SECRET", required: false, note: "IGDB game metadata" },
   { name: "OMDB_API_KEY", required: false, note: "Rotten Tomatoes / IMDb scores" },
+  // P15 — Android TWA Digital Asset Links (only needed once you ship the Android app).
+  { name: "TWA_PACKAGE_NAME", required: false, note: "Android TWA package name for /.well-known/assetlinks.json (P15)" },
+  { name: "TWA_CERT_FINGERPRINT", required: false, note: "Android signing-cert SHA-256(s) for assetlinks.json (P15); comma-separate multiple" },
 ];
 
 function fmt(specs: EnvSpec[]): string {
