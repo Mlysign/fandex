@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Typecheck · Lint · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # matches the Dockerfile (node:22-bookworm-slim)
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        # Dummy values only satisfy boot-time config validation (P10); they are
+        # never used at runtime here. Real secrets live on Railway.
+        env:
+          JWT_SECRET: ci-placeholder-not-used-at-runtime
+          TOKEN_ENCRYPTION_KEY: ci-placeholder-not-used-at-runtime
+          TMDB_API_KEY: ci-placeholder
+          RAWG_API_KEY: ci-placeholder
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+        run: npm run build
+
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Known-accepted (S10): 2 *moderate*, build-time-only advisories via Next's
+      # bundled postcss (GHSA-qx2v-qp2m-jg93). npm's only "fix" is downgrading Next,
+      # which we refuse — Dependabot will open a PR once Next ships a patched
+      # postcss. Fail only on HIGH+ so a genuinely new/serious advisory blocks merge.
+      - name: Audit (high or above)
+        run: npm audit --audit-level=high
