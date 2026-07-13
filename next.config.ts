@@ -23,6 +23,9 @@ const CSP_RESOURCE_POLICY = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
+  // Violations POST here → logged server-side (see /api/csp-report) so the
+  // rollout can be validated from the Railway logs, not just the browser console.
+  "report-uri /api/csp-report",
 ].join("; ");
 
 const nextConfig: NextConfig = {
