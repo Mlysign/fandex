@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import Tooltip, { TooltipItem } from "@/components/Tooltip";
@@ -58,7 +59,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
             crop (vs. the portrait poster the card uses). */}
         <div className="relative w-28 flex-shrink-0 bg-neutral-800 overflow-hidden">
           {thumb && !imgErr ? (
-            <img src={thumb} alt={item.title} className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
+            <Image src={thumb} alt={item.title} fill sizes="112px" className="object-cover" onError={() => setImgErr(true)} />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center"><TypeIcon type={item.type} size={16} className="text-neutral-600" /></div>
           )}

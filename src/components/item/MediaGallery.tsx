@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { Dispatch, SetStateAction } from "react";
 
 // Hero media column for the item detail page: the main image with a hover
@@ -15,6 +16,13 @@ export default function MediaGallery({
     <div className="flex-shrink-0">
       {images.length > 0 ? (
         <div className="relative group rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800">
+          {/* Hero art: kept as a plain <img>. Remote gallery images have no known
+              intrinsic size, and this element sizes to the image's natural aspect
+              (capped at 460px) — pinning it to a fixed next/image aspect would shift
+              the layout. The repeated poster/thumbnail images (the real bandwidth
+              cost) are optimized via next/image; this single hero isn't worth the
+              layout risk. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={images[idx]}
             alt={title}
@@ -52,10 +60,10 @@ export default function MediaGallery({
               onClick={() => setIdx(i)}
               aria-label={`Show image ${i + 1}`}
               aria-pressed={i === idx}
-              className="w-16 h-10 rounded-lg overflow-hidden border transition-colors flex-shrink-0"
+              className="relative w-16 h-10 rounded-lg overflow-hidden border transition-colors flex-shrink-0"
               style={{ borderColor: i === idx ? "#fff" : "rgba(255,255,255,0.12)" }}
             >
-              <img src={src} alt="" className="w-full h-full object-cover" />
+              <Image src={src} alt="" fill sizes="64px" className="object-cover" />
             </button>
           ))}
         </div>

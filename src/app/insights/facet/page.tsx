@@ -2,6 +2,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import NavBar from "@/components/NavBar";
 import PosterCard, { PosterCardItem } from "@/components/PosterCard";
 import { buildItemHref } from "@/lib/itemUrl";
@@ -107,8 +108,7 @@ function FacetDetail() {
       {/* Header / person bio */}
       <div className="mt-3 mb-6 flex gap-5">
         {data.person?.profileUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.person.profileUrl} alt={label} className="w-28 h-40 rounded-xl object-cover border border-neutral-800 shrink-0" />
+          <Image src={data.person.profileUrl} alt={label} width={112} height={160} className="w-28 h-40 rounded-xl object-cover border border-neutral-800 shrink-0" />
         )}
         <div className="min-w-0">
           <span className="text-[11px] uppercase tracking-wide text-neutral-500">{roleLabel}</span>

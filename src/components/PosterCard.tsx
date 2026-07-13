@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
@@ -53,7 +54,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
         {/* Poster image — 2:3 portrait ratio; the image fills the frame (cropped). */}
         <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "150%" }}>
           {imageSrc && !imgErr ? (
-            <img src={imageSrc} alt={item.title} className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
+            <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover" onError={() => setImgErr(true)} />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
               <TypeIcon type={item.type} size={28} />

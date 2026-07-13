@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, isToday, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
@@ -66,7 +67,7 @@ function OverflowDrawer({
               onClick={() => { onClose(); onSelect(item); }}
             >
               {item.posterUrl && (
-                <img src={item.posterUrl} alt={item.title} className="w-8 h-6 rounded object-cover flex-shrink-0" />
+                <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded object-cover flex-shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-white truncate">{item.title}</p>
@@ -136,10 +137,12 @@ function CalendarCell({
     >
       {single && single.posterUrl && (
         <>
-          <img
+          <Image
             src={single.posterUrl}
             alt={single.title}
-            className="absolute inset-0 w-full h-full object-cover opacity-40 rounded-xl"
+            fill
+            sizes="(max-width: 768px) 14vw, 120px"
+            className="object-cover opacity-40 rounded-xl"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent rounded-xl" />

@@ -12,11 +12,15 @@ const nextConfig: NextConfig = {
   },
   turbopack: { root: __dirname },
   images: {
+    // Must cover every host sanitizePosterUrl() (S12) admits — an un-listed host
+    // makes next/image throw at render, not just fail to load. Kept in sync with
+    // that allowlist: tmdb / rawg / igdb / steamstatic (+ the two steam CDNs).
     remotePatterns: [
       { protocol: "https", hostname: "cdn.akamai.steamstatic.com" },
       { protocol: "https", hostname: "shared.fastly.steamstatic.com" },
       { protocol: "https", hostname: "image.tmdb.org" },
       { protocol: "https", hostname: "media.rawg.io" },
+      { protocol: "https", hostname: "images.igdb.com" },
       { protocol: "https", hostname: "*.steamstatic.com" },
     ],
   },

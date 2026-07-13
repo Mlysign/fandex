@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink from "@/components/FacetLink";
@@ -47,9 +48,9 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
             {cast.map((c, i) => (
               <div key={`${c.name}-${i}`} className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
                   {c.profileUrl ? (
-                    <img src={c.profileUrl} alt={c.name} className="w-full h-full object-cover" />
+                    <Image src={c.profileUrl} alt={c.name} fill sizes="40px" className="object-cover" />
                   ) : (
                     <span className="text-sm text-neutral-500 font-medium">{c.name?.[0] ?? "?"}</span>
                   )}
@@ -71,7 +72,7 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
           <div className="flex flex-wrap gap-2">
             {streamingProviders.map((p) => (
               <div key={p.providerId} className="flex items-center gap-1.5 bg-neutral-800 rounded-lg px-2.5 py-1.5">
-                {p.logoPath && <img src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} className="w-5 h-5 rounded" alt={p.name} />}
+                {p.logoPath && <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={20} height={20} className="w-5 h-5 rounded" alt={p.name} />}
                 <span className="text-xs">{p.name}</span>
               </div>
             ))}

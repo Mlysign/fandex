@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { VocabMatch, TitleMatch } from "./types";
 import { ROLE_LABELS } from "@/lib/constants";
@@ -68,8 +69,8 @@ export default function FacetAutocomplete({
           {mode === "title"
             ? (matches as TitleMatch[]).map((m) => (
                 <button key={m.id} onClick={() => pick(m)} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-neutral-800 text-left">
-                  <div className="w-6 h-9 shrink-0 rounded bg-neutral-800 overflow-hidden">
-                    {m.posterUrl && /* eslint-disable-next-line @next/next/no-img-element */ <img src={m.posterUrl} alt="" className="w-full h-full object-cover" />}
+                  <div className="relative w-6 h-9 shrink-0 rounded bg-neutral-800 overflow-hidden">
+                    {m.posterUrl && <Image src={m.posterUrl} alt="" fill sizes="24px" className="object-cover" />}
                   </div>
                   <span className="flex-1 text-xs truncate text-neutral-200">{m.title}</span>
                   <span className="text-[10px] text-neutral-500">{m.year ?? ""} · {m.type}</span>

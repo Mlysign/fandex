@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { TYPE_COLORS, SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
@@ -101,9 +102,9 @@ export default function SearchModal({ onClose, onAdded }: SearchModalProps) {
                 key={`${r.type}-${r.id}`}
                 className="flex items-center gap-3 p-3 hover:bg-neutral-800 transition-colors border-b border-neutral-800/50"
               >
-                <div className="w-12 h-8 rounded overflow-hidden flex-shrink-0 bg-neutral-800">
+                <div className="relative w-12 h-8 rounded overflow-hidden flex-shrink-0 bg-neutral-800">
                   {r.posterUrl && (
-                    <img src={r.posterUrl} alt={r.title} className="w-full h-full object-cover" />
+                    <Image src={r.posterUrl} alt={r.title} fill sizes="48px" className="object-cover" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

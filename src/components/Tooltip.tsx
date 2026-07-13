@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
@@ -59,7 +60,9 @@ export default function Tooltip({ item, anchorRef }: TooltipProps) {
       style={{ top: pos.top, left: pos.left, width: w }}
     >
       {item.posterUrl && (
-        <img src={item.posterUrl} alt={item.title} className="w-full h-32 object-cover" />
+        <div className="relative w-full h-32">
+          <Image src={item.posterUrl} alt={item.title} fill sizes="260px" className="object-cover" />
+        </div>
       )}
       <div className="p-3 space-y-1.5">
         <p className="font-semibold text-sm">{item.title}</p>
