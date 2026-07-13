@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 
-// S6 — the resource-restricting CSP, shipped in Report-Only first: the browser
-// logs violations to the console but blocks nothing, so a wrong value can't
-// blank-screen the app (the memory's warning). Once the deployed app is confirmed
-// violation-free, promote this value to the enforcing `Content-Security-Policy`
-// header (replacing the frame-ancestors-only policy below) and drop this one.
+// S6 — the resource-restricting CSP. Validated in Report-Only against the live
+// app (no violations across landing/discover/detail-with-trailer/library/insights),
+// now ENFORCED in production. `report-uri` is kept so any resource a future change
+// adds that this policy blocks is logged (via /api/csp-report) rather than
+// silently breaking. Dev keeps only frame-ancestors (see headers()) — the full
+// policy would block Next's HMR websocket + eval.
 const CSP_RESOURCE_POLICY = [
   "default-src 'self'",
   // Next injects inline bootstrap/hydration scripts (no nonce by default).
@@ -52,30 +53,23 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.steamstatic.com" },
     ],
   },
-  // S6 (partial): the security headers that can't break rendering — sniffing,
-  // clickjacking, referrer leakage, transport security, and powerful-feature
-  // gating. Deliberately NOT shipping the resource-restricting CSP directives
-  // (script-src/style-src/img-src) yet: a slightly-wrong value blank-screens the
-  // app, and that needs live browser verification. The CSP here carries only
-  // `frame-ancestors` (clickjacking) which restricts no resource loads.
+  // S6: security headers. nosniff, clickjacking (X-Frame-Options +
+  // frame-ancestors), referrer leakage, HSTS, and powerful-feature gating.
   // Permissions-Policy restricts only features the app never uses — autoplay/
-  // encrypted-media are left permitted so the YouTube trailer embed keeps working.
+  // encrypted-media stay permitted so the YouTube trailer embed keeps working.
   async headers() {
+    const isProd = process.env.NODE_ENV === "production";
     const securityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
-      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+      // Enforce the full resource-restricting CSP in production (validated in
+      // Report-Only). Dev keeps only frame-ancestors — the full policy would block
+      // Next's HMR websocket + eval.
+      { key: "Content-Security-Policy", value: isProd ? CSP_RESOURCE_POLICY : "frame-ancestors 'none'" },
     ];
-    // Observe (don't enforce) the full resource policy, and only in production:
-    // dev's HMR websocket + eval would spam violations and isn't what we're
-    // validating. Promote CSP_RESOURCE_POLICY to the enforcing header once the
-    // deployed app reports no violations.
-    if (process.env.NODE_ENV === "production") {
-      securityHeaders.push({ key: "Content-Security-Policy-Report-Only", value: CSP_RESOURCE_POLICY });
-    }
     return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
