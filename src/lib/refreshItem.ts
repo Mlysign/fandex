@@ -1,4 +1,5 @@
 import { get } from "@/lib/db";
+import { log, errorFields } from "@/lib/logger";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
 import { sourcesForType } from "@/lib/sources/registry";
 import { MediaSource, CrossIds } from "@/lib/sources/types";
@@ -50,7 +51,7 @@ export async function refreshItemFromProviders(
     try {
       mediaItemId = await refreshSource(userId, src, ids as CrossIds, mediaItemId);
     } catch (e) {
-      console.error("[refreshItem]", src.id, e);
+      log.error("refresh_item_failed", { source: src.id, ...errorFields(e) });
     }
   }
   return mediaItemId;

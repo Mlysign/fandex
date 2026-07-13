@@ -1,4 +1,5 @@
 import { httpFetch } from "@/lib/http";
+import { log, errorFields } from "@/lib/logger";
 
 const STEAM_API = "https://api.steampowered.com";
 const API_KEY = process.env.STEAM_API_KEY!;
@@ -124,7 +125,7 @@ export async function getSteamAppDetails(appIds: number[]): Promise<Record<numbe
         if (item.appid) results[item.appid] = item;
       }
     } catch (e) {
-      console.error("[Steam] getAppDetails batch error:", e);
+      log.error("steam_appdetails_failed", { ...errorFields(e) });
     }
     if (i + BATCH < appIds.length) await new Promise((r) => setTimeout(r, 200));
   }

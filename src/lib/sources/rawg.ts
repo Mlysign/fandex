@@ -1,4 +1,5 @@
 import { httpFetch } from "@/lib/http";
+import { log } from "@/lib/logger";
 
 const BASE = "https://api.rawg.io/api";
 const KEY = process.env.RAWG_API_KEY!;
@@ -146,7 +147,7 @@ export async function addToRawgToPlay(token: string, gameId: number) {
     const body = await res.text();
     // 400 "already in profile" is not a real error – game is already there
     if (res.status === 400 && body.includes("already in this profile")) {
-      console.log(`[RAWG] Game ${gameId} already in Want to Play list`);
+      log.info("rawg_already_wishlisted", { gameId });
       return;
     }
     throw new Error(`Failed to add to RAWG: ${res.status} ${body}`);

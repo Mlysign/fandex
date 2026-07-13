@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { httpFetch } from "@/lib/http";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: annotate(all) });
 
   } catch (e: any) {
-    console.error("[discover]", e);
+    log.error("discover_error", { ...errorFields(e) });
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

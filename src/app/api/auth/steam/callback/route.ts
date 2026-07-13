@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { verifySteamOpenId, extractSteamId, getSteamPlayerSummary } from "@/lib/sources/steam";
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     }
     return res;
   } catch (e: any) {
-    console.error("[Steam callback]", e);
+    log.error("steam_callback_error", { ...errorFields(e) });
     return fail("/login?error=steam_failed");
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createTmdbSession, getTmdbAccount } from "@/lib/sources/tmdb";
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
     if (!existing) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
-    console.error("[TMDB callback]", e);
+    log.error("tmdb_callback_error", { ...errorFields(e) });
     return fail("/settings?error=tmdb_failed");
   }
 }

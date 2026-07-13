@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
@@ -100,7 +101,7 @@ export async function handleOAuthCallback(
     if (!existingUserId) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
-    console.error(`[${opts.provider} callback]`, e);
+    log.error("oauth_callback_failed", { provider: opts.provider, ...errorFields(e) });
     return fail(opts.errorRedirect);
   }
 }

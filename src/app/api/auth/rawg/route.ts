@@ -7,6 +7,7 @@ import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
 import { encryptSecret } from "@/lib/crypto";
 import { parseJsonBody, BadRequestError } from "@/lib/validate";
 import { RawgLoginSchema } from "@/lib/schemas";
+import { log, errorFields } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       // S9: don't reflect the upstream RAWG error to the client (it can leak
       // provider internals / enable enumeration). Log it, return a generic 401.
-      console.error("[RAWG auth] login failed:", e);
+      log.error("rawg_login_failed", { ...errorFields(e) });
       return NextResponse.json({ error: "Invalid RAWG credentials" }, { status: 401 });
     }
 
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     if (e instanceof BadRequestError) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
-    console.error("[RAWG auth]", e);
+    log.error("rawg_auth_error", { ...errorFields(e) });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

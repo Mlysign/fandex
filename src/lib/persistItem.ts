@@ -1,4 +1,5 @@
 import { upsertMediaItem } from "@/lib/matcher";
+import { log, errorFields } from "@/lib/logger";
 import { MediaType, Source } from "@/types";
 import { METADATA } from "@/lib/metadata/registry";
 import { MetaLink } from "@/lib/metadata/types";
@@ -43,7 +44,7 @@ export async function persistItemFromIds(input: PersistItemInput): Promise<strin
     const provider = METADATA[source];
     if (provider?.fetchById) {
       try { link = await provider.fetchById(String(rawId), type); }
-      catch (e) { console.error(`[persistItem] ${source} fetch failed:`, e); }
+      catch (e) { log.error("persist_item_fetch_failed", { source, ...errorFields(e) }); }
     }
     if (!link) link = minimalLink(source, String(rawId), input);
 

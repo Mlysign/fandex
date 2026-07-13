@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { log, errorFields } from "@/lib/logger";
 import { createTmdbRequestToken } from "@/lib/sources/tmdb";
 import { setOAuthStateCookie } from "@/lib/oauthState";
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     setOAuthStateCookie(res, token);
     return res;
   } catch (e) {
-    console.error("[TMDB auth]", e);
+    log.error("tmdb_auth_error", { ...errorFields(e) });
     return NextResponse.redirect(new URL("/settings?error=tmdb_failed", base));
   }
 }
