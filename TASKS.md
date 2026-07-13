@@ -187,10 +187,13 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 - [ ] *(optional)* EU region — currently **US West**.
 - [x] Deployed; build compiles `better-sqlite3`, migrations run, app boots `✓ Ready`.
 
-**Stage 3 — Domain + OAuth**
-- [ ] Custom domain (currently on the `*.up.railway.app` URL). → optional
-- [x] `NEXT_PUBLIC_BASE_URL` + `TRAKT_REDIRECT_URI` set to the Railway URL.
-- [x] **Login working** — Trakt redirect URI registered; redirect-host bug fixed (use `NEXT_PUBLIC_BASE_URL`, not `req.url`). [ ] TMDB/Steam provider-side registration still to confirm. → **P16/S1**
+**Stage 3 — Domain + OAuth (Fandex → fandex.org)** ← ⏳ NEXT ACTION
+> **DOMAIN BOUGHT 2026-07-13** on **domainssaubillig.de** — DNS available **~12h after purchase (≈2026-07-14 morning)**. Wait for it to activate before connecting. (Rebrand to Fandex is already deployed; see [[rebrand-fandex]].)
+- [ ] **Connect `fandex.org` to Railway** — app service → Settings → Networking → Custom Domain → add the domain → create the CNAME Railway gives you in domainssaubillig.de's DNS panel → Railway auto-issues HTTPS.
+- [ ] Set **`NEXT_PUBLIC_BASE_URL=https://fandex.org`** + update **`TRAKT_REDIRECT_URI`** to the fandex.org callback → redeploy. (metadata / sitemap / robots / OG / manifest all auto-switch to the new origin from this one var.)
+- [ ] ⚠️ **Re-register OAuth redirect URIs at Trakt + TMDB + Steam** to the fandex.org callbacks — **CRITICAL**: login breaks until every provider knows the new URL (prior redirect-host bug history). → **P16/S1**
+- [ ] **Verify:** load `https://fandex.org`, confirm Fandex branding, do a login round-trip on each provider.
+- [x] _(superseded by the above)_ `NEXT_PUBLIC_BASE_URL`/`TRAKT_REDIRECT_URI` + Trakt login previously set against the `*.up.railway.app` URL.
 
 **Stage 4 — Data + backups** → P5
 - [x] Data loaded via **Sync** from connected providers (~1,700 items). (Local `rr.db` migration not needed — synced fresh.)
