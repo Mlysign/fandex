@@ -45,6 +45,31 @@ async function traktGet(endpoint: string, accessToken: string) {
   return res.json();
 }
 
+// Trakt paginates its /sync list endpoints (watched / ratings / watchlist) at
+// 100 items per page and returns ONLY the first page unless you follow the
+// `X-Pagination-Page-Count` header — so a user with >100 watched/rated titles
+// silently lost everything past the first 100 (the whole library appeared capped
+// at 100). This walks every page and concatenates the results. Endpoints that
+// aren't paginated report no page-count header → treated as a single page, so
+// this is a safe drop-in for any list GET. Pages are fetched sequentially to
+// avoid bursting Trakt's rate limit on very large libraries.
+async function traktGetAllPages(endpoint: string, accessToken: string, limit = 100): Promise<any[]> {
+  const headers = { ...HEADERS, Authorization: `Bearer ${accessToken}` };
+  const sep = endpoint.includes("?") ? "&" : "?";
+  const out: any[] = [];
+  let page = 1;
+  let pageCount = 1;
+  do {
+    const res = await httpFetch(`${BASE}${endpoint}${sep}page=${page}&limit=${limit}`, { headers });
+    if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
+    pageCount = Number(res.headers.get("x-pagination-page-count")) || 1;
+    const data = await res.json();
+    if (Array.isArray(data)) out.push(...data);
+    page++;
+  } while (page <= pageCount);
+  return out;
+}
+
 // ── Public (catalog) API — client-id auth only, no user token ─────
 // Summary/search endpoints are public; extended=full carries runtime,
 // certification, rating+votes, tagline, status, country, network, trailer.
@@ -104,15 +129,13 @@ function getStartDate(daysPast: number): string {
 export async function getTraktWatchlistMovies(accessToken: string) {
   try {
     // Use /sync/watchlist/movies – returns the actual watchlist, not the calendar
-    const results = await traktGet("/sync/watchlist/movies?extended=full", accessToken);
-    return results ?? [];
+    return await traktGetAllPages("/sync/watchlist/movies?extended=full", accessToken);
   } catch { return []; }
 }
 
 export async function getTraktWatchlistShows(accessToken: string) {
   try {
-    const results = await traktGet("/sync/watchlist/shows?extended=full", accessToken);
-    return results ?? [];
+    return await traktGetAllPages("/sync/watchlist/shows?extended=full", accessToken);
   } catch { return []; }
 }
 
@@ -121,22 +144,22 @@ export async function getTraktWatchlistShows(accessToken: string) {
 // extended=full so stored raw_data carries overview/released/genres/trailer —
 // without it Trakt returns bare {title, year, ids} and the merge gets nothing.
 export async function getTraktWatchedMovies(accessToken: string) {
-  try { return (await traktGet("/sync/watched/movies?extended=full", accessToken)) ?? []; }
+  try { return await traktGetAllPages("/sync/watched/movies?extended=full", accessToken); }
   catch { return []; }
 }
 
 export async function getTraktWatchedShows(accessToken: string) {
-  try { return (await traktGet("/sync/watched/shows?extended=full", accessToken)) ?? []; }
+  try { return await traktGetAllPages("/sync/watched/shows?extended=full", accessToken); }
   catch { return []; }
 }
 
 export async function getTraktRatingsMovies(accessToken: string) {
-  try { return (await traktGet("/sync/ratings/movies?extended=full", accessToken)) ?? []; }
+  try { return await traktGetAllPages("/sync/ratings/movies?extended=full", accessToken); }
   catch { return []; }
 }
 
 export async function getTraktRatingsShows(accessToken: string) {
-  try { return (await traktGet("/sync/ratings/shows?extended=full", accessToken)) ?? []; }
+  try { return await traktGetAllPages("/sync/ratings/shows?extended=full", accessToken); }
   catch { return []; }
 }
 
