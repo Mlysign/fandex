@@ -13,6 +13,21 @@ import { MediaType } from "@/types";
 // Only 3-segment paths match this route, so it cannot collide with the 1-segment
 // app routes (/dashboard, /library, …) or 2-segment ones (/insights/facet).
 
+// ── The index switch ────────────────────────────────────────────────────────
+// FALSE = soft launch: item pages are publicly READABLE and unfurl correctly
+// when shared (WhatsApp/Discord/Slack read the OG tags), but they are NOT
+// indexed — every page sends `noindex`, and sitemap.xml lists only "/". So the
+// catalog is reachable by link without handing Google an enumeration of the
+// owner's library.
+//
+// Flipping this to TRUE is the whole "turn on SEO" step (TASKS.md P13b): it
+// drops the noindex and puts all ~2,500 items back in the sitemap. Nothing else
+// needs to change — robots.txt already allows /movie/ /show/ /game/, which it
+// MUST even while this is false, because a crawler has to be able to FETCH a
+// page to see its noindex (a robots.txt Disallow would hide the tag and could
+// leave URL-only entries indexed from external links).
+export const PUBLIC_ITEMS_INDEXABLE = false;
+
 export const PUBLIC_TYPES: MediaType[] = ["movie", "show", "game"];
 
 export function isPublicType(t: string): t is MediaType {

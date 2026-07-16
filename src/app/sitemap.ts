@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { BASE_URL } from "@/lib/baseUrl";
 import { listPublicItems } from "@/lib/detail/publicDetail";
-import { publicItemHref } from "@/lib/publicUrl";
+import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 
 // P13 — sitemap: the landing page plus one entry per public item page.
 //
@@ -22,15 +22,25 @@ import { publicItemHref } from "@/lib/publicUrl";
 export const dynamic = "force-dynamic";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const items = listPublicItems();
-
-  return [
+  const landing: MetadataRoute.Sitemap = [
     {
       url: `${BASE_URL}/`,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1,
     },
+  ];
+
+  // Soft launch (PUBLIC_ITEMS_INDEXABLE=false): pages stay readable + unfurlable,
+  // but listing them here would be handing Google an enumeration of the owner's
+  // library — the exact thing the soft launch defers. Pages also send `noindex`.
+  // Flip the flag to enumerate all ~2,500 (TASKS.md P13b).
+  if (!PUBLIC_ITEMS_INDEXABLE) return landing;
+
+  const items = listPublicItems();
+
+  return [
+    ...landing,
     ...items.map((i) => ({
       url: `${BASE_URL}${publicItemHref(i)}`,
       // last_synced is when we last refreshed this item — the closest honest

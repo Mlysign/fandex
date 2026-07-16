@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import { BASE_URL } from "@/lib/baseUrl";
-import { isPublicType, isUuid, slugify } from "@/lib/publicUrl";
+import { isPublicType, isUuid, slugify, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { loadPublicDetail, PublicItem } from "@/lib/detail/publicDetail";
 import { ScoreBadge, Fact } from "@/components/item/primitives";
 import { fmtDate } from "@/components/item/format";
@@ -57,6 +57,10 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   return {
     title,
     description,
+    // Soft launch: readable + unfurlable, but not indexed. The OG/twitter tags
+    // below still work — unfurlers read those and ignore `robots`. Flip
+    // PUBLIC_ITEMS_INDEXABLE to drop this (TASKS.md P13b).
+    ...(PUBLIC_ITEMS_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
     alternates: { canonical },
     openGraph: {
       title,
