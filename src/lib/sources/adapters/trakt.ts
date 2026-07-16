@@ -13,6 +13,7 @@ import {
   getTraktRatingsMovies, getTraktRatingsShows,
 } from "../trakt";
 import { METADATA } from "@/lib/metadata/registry";
+import { log, errorFields } from "@/lib/logger";
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -195,6 +196,11 @@ export const traktSource: MediaSource = {
           rawData: link.rawData,
         });
       }
-    } catch { /* enrichment optional */ }
+    } catch (e) {
+      // Enrichment is best-effort (the item still syncs with its Trakt link), but
+      // log it so a rate-limit/outage that strips TMDB credits from a batch is
+      // VISIBLE in the Railway logs instead of silently gutting the Insights facets.
+      log.warn("enrich_failed", { source: "trakt", type: kind, tmdbId: node?.ids?.tmdb ?? null, ...errorFields(e) });
+    }
   },
 };

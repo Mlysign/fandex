@@ -36,12 +36,36 @@ describe("httpFetch", () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT retry a 429", async () => {
+  it("retries a GET on 429 (wait-then-retry), then succeeds", async () => {
+    const f = vi.fn().mockResolvedValueOnce(resp(429)).mockResolvedValueOnce(resp(200));
+    vi.stubGlobal("fetch", f);
+    const res = await httpFetch("https://x");
+    expect(res.status).toBe(200);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT retry a 429 on a POST (writes must not double-submit)", async () => {
+    const f = vi.fn().mockResolvedValue(resp(429));
+    vi.stubGlobal("fetch", f);
+    const res = await httpFetch("https://x", { method: "POST" });
+    expect(res.status).toBe(429);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up and returns the 429 after exhausting retries", async () => {
     const f = vi.fn().mockResolvedValue(resp(429));
     vi.stubGlobal("fetch", f);
     const res = await httpFetch("https://x");
     expect(res.status).toBe(429);
-    expect(f).toHaveBeenCalledTimes(1);
+    expect(f).toHaveBeenCalledTimes(3); // initial + 2 retries
+  });
+
+  it("does NOT wait on a Retry-After longer than the cap (best-effort skip)", async () => {
+    const f = vi.fn().mockResolvedValue(new Response("body", { status: 429, headers: { "Retry-After": "3600" } }));
+    vi.stubGlobal("fetch", f);
+    const res = await httpFetch("https://x");
+    expect(res.status).toBe(429);
+    expect(f).toHaveBeenCalledTimes(1); // 3600s > cap → returned immediately, no retry
   });
 
   it("retries a GET on network error, then throws after exhausting retries", async () => {

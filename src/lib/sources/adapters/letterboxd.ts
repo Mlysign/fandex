@@ -9,6 +9,7 @@ import {
 } from "../letterboxd";
 import { METADATA } from "@/lib/metadata/registry";
 import { decryptSecret, decryptNullable, encryptSecret, encryptNullable } from "@/lib/crypto";
+import { log, errorFields } from "@/lib/logger";
 
 function toUnix(s: any): number | null {
   if (!s) return null;
@@ -124,6 +125,8 @@ export const letterboxdSource: MediaSource = {
           rawData: link.rawData,
         });
       }
-    } catch { /* enrichment optional */ }
+    } catch (e) {
+      log.warn("enrich_failed", { source: "letterboxd", type: "movie", tmdbId: tmdbLink.id ?? null, ...errorFields(e) });
+    }
   },
 };

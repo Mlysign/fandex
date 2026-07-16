@@ -22,11 +22,16 @@ export const tmdbMetadata: MetadataProvider = {
   },
 
   async searchByTitle(title, type, opts) {
-    if (type === "movie") {
-      const data = await searchTmdbMovie(title, opts?.year ?? undefined);
-      return data ? movieLink(data) : null;
-    }
-    const data = await searchTmdbShow(title);
-    return data ? showLink(data) : null;
+    // Search returns a bare list result (no credits/keywords), so resolve the id
+    // then fetch the FULL detail — otherwise a title matched by name (a Trakt item
+    // with no tmdb id) would be stored without director/cast and vanish from the
+    // Insights people/studio facets. Mirrors fetchById once the id is known.
+    const hit = type === "movie"
+      ? await searchTmdbMovie(title, opts?.year ?? undefined)
+      : await searchTmdbShow(title);
+    if (!hit?.id) return null;
+    const data = type === "movie" ? await getTmdbMovie(hit.id) : await getTmdbShow(hit.id);
+    if (!data) return null;
+    return type === "movie" ? movieLink(data) : showLink(data);
   },
 };
