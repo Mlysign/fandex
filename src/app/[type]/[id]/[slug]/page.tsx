@@ -1,22 +1,24 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
-import { isPublicType, isUuid, slugify, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
-import { loadPublicDetail } from "@/lib/detail/publicDetail";
-import { PublicEnrichedItem } from "@/lib/detail/enrich";
-import PublicItemView from "@/components/item/PublicItemView";
+import { isPublicType, isUuid, slugify, parseItemId, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { resolvePublicDetail, ResolvedPublic } from "@/lib/detail/publicDetail";
+import { getSession } from "@/lib/session";
+import { getUserCountry } from "@/lib/userCountry";
+import { DEFAULT_COUNTRY } from "@/lib/countries";
+import ItemView from "@/components/item/ItemView";
 
-// P13 — the public, server-rendered detail page: `/{type}/{uuid}/{slug}`.
+// P13 — THE item page: `/{type}/{id}/{slug}`. One url for everyone.
 //
-// Server-rendered so the HTML carries the real content: crawlers and link
-// unfurlers (WhatsApp/Discord/Slack/iMessage) do NOT run our JavaScript, so the
-// client-rendered /item page shows them an empty shell. Here the title,
-// description and poster are in the markup on first byte.
+// The server renders the CATALOG half only — no user data — so crawlers and
+// link unfurlers (which don't run our JS) get the real content on first byte,
+// and the HTML never varies per viewer. The per-user half (rating, wishlist) is
+// a client island inside ItemView that checks the session itself.
 //
-// Content-wise this is the SAME page as authed /item — same enrichment pipeline
-// (lib/detail/enrich.ts), same sections — minus the per-user blocks, which
-// PublicItemView swaps for a sign-in hook.
+// The id segment is a uuid (stored item) or a source id (`tmdb-693134`, a live
+// /discover result with no row yet). The uuid form is canonical: as soon as the
+// item has a row we 308 to it, so an item always has exactly one indexable url.
 
 interface Params {
   type: string;
@@ -24,45 +26,60 @@ interface Params {
   slug: string;
 }
 
-// cache() dedupes this across generateMetadata + the page render, which both
-// need the item. Without it every request would run the whole enrichment
-// pipeline TWICE — including the live provider searches and the OMDB fetch.
-const resolve = cache(async (type: string, id: string): Promise<PublicEnrichedItem | null> => {
-  if (!isPublicType(type) || !isUuid(id)) return null;
-  const item = await loadPublicDetail(id);
-  // The type segment must match the item's real type, so /game/<movie-uuid>/x
-  // 404s instead of serving one item under two URLs (duplicate content).
-  if (!item || item.type !== type) return null;
-  return item;
+// The one place a session is read, and ONLY to decide whether we may persist a
+// live item — never to change what is rendered.
+async function mayPersist(): Promise<{ persist: boolean; region: string }> {
+  try {
+    const session = await getSession();
+    if (!session) return { persist: false, region: DEFAULT_COUNTRY };
+    return { persist: true, region: getUserCountry(session.userId) };
+  } catch {
+    return { persist: false, region: DEFAULT_COUNTRY };
+  }
+}
+
+// cache() dedupes across generateMetadata + the render, which both need the
+// item. The pipeline does live provider calls, so without this every request
+// would run the whole thing twice.
+const resolve = cache(async (type: string, id: string): Promise<ResolvedPublic | null> => {
+  if (!isPublicType(type)) return null;
+  const parsed = parseItemId(id);
+  if (!parsed) return null;
+  const { persist, region } = await mayPersist();
+  const found = await resolvePublicDetail(parsed, type, region, { persist });
+  if (!found || found.item.type !== type) return null;
+  return found;
 });
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
-  // `slug` is deliberately ignored — the canonical below always rebuilds it from
-  // the current title, so every slug variant reports one canonical URL.
+  // `slug` is ignored — the canonical below always rebuilds it from the current
+  // title, so every slug variant reports one canonical url.
   const { type, id } = await params;
-  const item = await resolve(type, id);
-  if (!item) return { title: "Not found", robots: { index: false, follow: false } };
+  const found = await resolve(type, id);
+  if (!found) return { title: "Not found", robots: { index: false, follow: false } };
+  const item = found.item;
 
   const year = item.releaseDate ? item.releaseDate.slice(0, 4) : null;
   const title = year ? `${item.title} (${year})` : item.title;
   const description =
     item.description?.slice(0, 200) ??
     `${item.title} — release date, ratings and where to watch, on Fandex.`;
-  const canonical = `${BASE_URL}/${type}/${id}/${slugify(item.title)}`;
   const image = item.posterUrl ?? item.backdropUrl;
+  // Canonical is always the uuid url; a live item has no canonical form yet, so
+  // it stays noindex regardless of the flag (nothing stable to index).
+  const canonical = found.canonicalId
+    ? `${BASE_URL}/${type}/${found.canonicalId}/${slugify(item.title)}`
+    : null;
 
   return {
     title,
     description,
-    // Soft launch: readable + unfurlable, but not indexed. The OG/twitter tags
-    // below still work — unfurlers read those and ignore `robots`. Flip
-    // PUBLIC_ITEMS_INDEXABLE to drop this (TASKS.md P13b).
-    ...(PUBLIC_ITEMS_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
-    alternates: { canonical },
+    ...(PUBLIC_ITEMS_INDEXABLE && canonical ? {} : { robots: { index: false, follow: false } }),
+    ...(canonical ? { alternates: { canonical } } : {}),
     openGraph: {
       title,
       description,
-      url: canonical,
+      ...(canonical ? { url: canonical } : {}),
       type: "website",
       images: image ? [{ url: image, alt: item.title }] : undefined,
     },
@@ -75,23 +92,27 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   };
 }
 
-export default async function PublicItemPage({ params }: { params: Promise<Params> }) {
+export default async function ItemPage({ params }: { params: Promise<Params> }) {
   const { type, id, slug } = await params;
-  const item = await resolve(type, id);
-  if (!item) notFound();
+  const found = await resolve(type, id);
+  if (!found) notFound();
+  const { item, canonicalId } = found;
 
-  // The slug is cosmetic — the UUID already resolved the item — but a wrong or
-  // outdated one redirects to the canonical form, so a retitled item's old links
-  // keep working AND search engines see a single URL per item.
-  //
-  // PERMANENT (308), not redirect()'s default 307: a temporary redirect tells
-  // Google to keep indexing both URLs, splitting link equity.
   const canonicalSlug = slugify(item.title);
-  if (slug !== canonicalSlug) permanentRedirect(`/${type}/${id}/${canonicalSlug}`);
+
+  // Addressed by a source id but the item HAS a row (either it already did, or a
+  // logged-in view just created it) → send it to its canonical uuid url. Not
+  // permanent: for an anonymous viewer the same source-id url is still the only
+  // address, so this mapping isn't stable enough to cache forever.
+  if (canonicalId && !isUuid(id)) redirect(`/${type}/${canonicalId}/${canonicalSlug}`);
+
+  // Cosmetic slug drift → canonical. Permanent (308), since the uuid→slug
+  // mapping IS stable: 307 would tell Google to keep indexing both urls.
+  if (slug !== canonicalSlug) permanentRedirect(`/${type}/${canonicalId ?? id}/${canonicalSlug}`);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
-      <PublicItemView item={item} />
+      <ItemView item={item} />
     </div>
   );
 }

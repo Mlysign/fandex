@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
 import { EnrichedItem } from "@/types";
 import { PublicEnrichedItem } from "@/lib/detail/enrich";
 import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
@@ -10,29 +9,26 @@ import MediaGallery from "./MediaGallery";
 import RatingsSection from "./RatingsSection";
 import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
+import PersonalSection from "./PersonalSection";
 
-// P13 — the PUBLIC item view. Deliberately the SAME sections as the authed
-// /item page (MediaGallery · RatingsSection · FactsSection · LowerSections), so
-// a logged-out visitor sees the same trailer, cast, facts, where-to-watch, DLC,
-// tags and community scores. All of that is public catalog data; withholding it
-// only made the page look broken.
+// P13 — THE item view. One page, one url, for everyone.
 //
-// The ONLY difference vs /item: the two per-user blocks — "your rating" and the
-// wishlist panel — are replaced by a sign-in hook. Everything else is identical.
+// Everything here renders from `item`, which the SERVER built with no user data:
+// gallery, title, dates, community scores, facts, credits, trailer, cast,
+// where-to-watch, tags. That's why a logged-out visitor (and a crawler, and a
+// link unfurler) sees the full page.
 //
-// `item` is a PublicEnrichedItem, so it has no rating/review/libraryStatus to
-// render even by accident. The sections take an EnrichedItem, so we widen it
-// here with the per-user fields explicitly empty — this is the one boundary
-// where that happens, and it is where the personal data ISN'T.
-export default function PublicItemView({ item }: { item: PublicEnrichedItem }) {
+// The single per-user block — your rating + wishlist — is <PersonalSection>, a
+// client island that checks the session itself and swaps between a sign-in hook
+// and the real interactive controls. Nothing above it may depend on a session,
+// or the server HTML would vary per viewer and the SSR guarantee would break.
+export default function ItemView({ item }: { item: PublicEnrichedItem }) {
   const [idx, setIdx] = useState(0);
 
-  const enriched: EnrichedItem = {
-    ...item,
-    platformSources: [], // per-user; a logged-out reader has none
-  };
+  // The sections take an EnrichedItem. This is the ONE place that widens the
+  // public type, and it's where the per-user fields are explicitly empty.
+  const enriched: EnrichedItem = { ...item, platformSources: [] };
 
-  // Poster first, then any additional artwork — matches /item's gallery order.
   const imgs: string[] = [];
   if (item.posterUrl) imgs.push(item.posterUrl);
   for (const u of item.images ?? []) if (u && !imgs.includes(u)) imgs.push(u);
@@ -40,6 +36,10 @@ export default function PublicItemView({ item }: { item: PublicEnrichedItem }) {
   const dates = item.dates ?? [];
   const communityRatings = item.communityRatings ?? [];
   const hasScores = communityRatings.length > 0 || !!item.steamReviewLabel;
+
+  const ids: Record<string, string> = {};
+  for (const s of item.sources ?? []) ids[s.source] = s.sourceId;
+  const steamAppId = ids.steam;
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-6">
@@ -71,9 +71,9 @@ export default function PublicItemView({ item }: { item: PublicEnrichedItem }) {
 
           {item.tagline && <p className="text-base text-neutral-400 italic">{item.tagline}</p>}
 
-          {/* Community/critic scores only. canRate=false + the personal props
-              nulled means this renders the scores row and nothing else — the
-              "your rating" half is what the sign-in hook below replaces. */}
+          {/* Community/critic scores — public, so server-rendered. canRate=false
+              + nulled personals means this renders the scores row only; the
+              per-user half lives in <PersonalSection> below. */}
           <RatingsSection
             type={item.type}
             hasScores={hasScores}
@@ -92,8 +92,15 @@ export default function PublicItemView({ item }: { item: PublicEnrichedItem }) {
             onMarkWatched={() => {}}
           />
 
-          {/* ── Stands in for "your rating" + the wishlist panel ── */}
-          <SignInHook type={item.type} />
+          <PersonalSection
+            itemId={item.id}
+            type={item.type}
+            ids={ids}
+            title={item.title}
+            releaseDate={item.releaseDate}
+            posterUrl={item.posterUrl}
+            steamStoreUrl={steamAppId ? `https://store.steampowered.com/app/${steamAppId}` : null}
+          />
 
           <FactsSection enriched={enriched} type={item.type} />
 
@@ -103,30 +110,5 @@ export default function PublicItemView({ item }: { item: PublicEnrichedItem }) {
 
       <LowerSections enriched={enriched} type={item.type} />
     </main>
-  );
-}
-
-function SignInHook({ type }: { type: EnrichedItem["type"] }) {
-  const verb = type === "game" ? "played" : "watched";
-  return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
-      <div>
-        <p className="text-sm font-medium text-neutral-200">Rate it, track it, don&apos;t lose it</p>
-        <p className="text-xs text-neutral-500 mt-0.5">
-          Sign in to rate this, mark it {verb}, and sync your wishlist across Trakt, Steam &amp; more.
-        </p>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link
-          href="/"
-          className="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
-        >
-          Sign in
-        </Link>
-        <Link href="/" className="text-sm px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors">
-          Create an account
-        </Link>
-      </div>
-    </div>
   );
 }

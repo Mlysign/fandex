@@ -65,6 +65,58 @@ export function slugify(title: string): string {
   return s || "untitled";
 }
 
+// ── The id segment: a UUID, or a source id for an item not in the DB yet ─────
+//
+// `/discover` renders LIVE provider results that have no media_items row (and so
+// no UUID) — the row is only created when the item is wishlisted/rated/viewed by
+// a logged-in user. For every page to link to the SAME url, the id slot must
+// also accept `{source}-{sourceId}` (e.g. `tmdb-693134`).
+//
+// The UUID form stays canonical: once the item exists in the DB, the source-id
+// url 308s to it, so an item still has exactly one indexable url.
+
+export type ParsedItemId =
+  | { kind: "uuid"; id: string }
+  | { kind: "source"; source: string; sourceId: string };
+
+// Sources an id can be addressed by. `igdb` is metadata-only (no MediaSource
+// adapter) but discover surfaces igdb-keyed games, so it must resolve here.
+const ID_SOURCES = ["tmdb", "rawg", "igdb", "trakt", "steam", "letterboxd"] as const;
+
+export function parseItemId(seg: string): ParsedItemId | null {
+  if (isUuid(seg)) return { kind: "uuid", id: seg };
+  // `tmdb-693134`, `rawg-12345`, `igdb-99`. Discover also emits type-qualified
+  // ids (`tmdb-movie-693134`); the type is already the first path segment, so
+  // the middle part is dropped rather than trusted.
+  const m = /^([a-z]+)-(?:movie-|show-|game-)?(\d+)$/.exec(seg);
+  if (!m) return null;
+  const [, source, sourceId] = m;
+  if (!(ID_SOURCES as readonly string[]).includes(source)) return null;
+  return { kind: "source", source, sourceId };
+}
+
+// The canonical href for an item that IS in the DB (has a UUID).
 export function publicItemHref(item: { id: string; type: string; title?: string | null }): string {
   return `/${item.type}/${item.id}/${slugify(item.title ?? "untitled")}`;
+}
+
+// Href for anything linkable — a DB item (UUID) or a live discover result. Given
+// a discover item, prefers its strongest source id. Falls back to the item's own
+// id when it already parses (discover ids like `tmdb-movie-693134` do).
+export function anyItemHref(item: {
+  id: string;
+  type: string;
+  title?: string | null;
+  ids?: Record<string, number | string | null | undefined>;
+}): string {
+  const slug = slugify(item.title ?? "untitled");
+  if (isUuid(item.id)) return `/${item.type}/${item.id}/${slug}`;
+
+  // Prefer a canonical, id-resolvable source over a title-searched one.
+  for (const s of ID_SOURCES) {
+    const v = item.ids?.[s];
+    if (v != null && String(v).length) return `/${item.type}/${s}-${v}/${slug}`;
+  }
+  // Discover's own composite id (`tmdb-movie-693134`) already parses.
+  return `/${item.type}/${item.id}/${slug}`;
 }
