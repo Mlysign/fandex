@@ -16,8 +16,9 @@ The "before public" hardening is **done** — CSP enforced (verified live), HSTS
 ## ▶ What's left (optional / your call)
 1. **S2 token backfill** — re-encrypt any pre-encryption token rows (likely already moot since you reconnected every provider during the domain move — worth a 2-min confirm).
 2. **Android TWA (P15/P16)** — needs *you* to build the TWA (Bubblewrap/PWABuilder) → gives the package name + cert fingerprint → set 2 env vars. Serving infra is ready.
-3. **Housekeeping** — decommission the old Cloudflare R2 bucket; rename the GitHub repo `releaseradar → fandex`.
-4. **P13** — SSR detail pages for shareable/crawlable URLs (nice-to-have).
+3. **P13** — SSR detail pages for shareable/crawlable URLs (nice-to-have).
+
+_Recently done: **Housekeeping** ✅ (2026-07-15) — old R2 bucket deleted; GitHub repo renamed `releaseradar → fandex` (Railway source re-linked, auto-deploy confirmed); local git remote updated._
 
 _Recently done: **429 enrichment hardening** ✅ (2026-07-15) — 429 Retry-After honored, search-fallback fetches full detail, enrich failures now logged._
 

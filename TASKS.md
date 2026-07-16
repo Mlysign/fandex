@@ -175,7 +175,7 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 
 > **✅ UNBLOCKED (2026-07-12): app back online.** Both blockers cleared: (1) the 512 MB **OOM crash-loop** → fixed by upgrading Railway **Trial → Hobby** (~8 GB); (2) a **stale-commit build failure** → Railway kept rebuilding the old `5caf4bc` (pre-lazy-JWT commit) via manual *Redeploy* (Redeploy rebuilds that row's commit, not `main`'s tip; its AI Diagnosis panel pattern-matched the old bug and is misleading) → fixed by deploying the current `cce0183`. Current `main` builds clean under Turbopack with no `JWT_SECRET`. **Longer-term:** the OOM root cause is now addressed in code — **P6** (time-budgeted, resumable sync; done 2026-07-12) + **P2** (bounded caches; done). The RAM upgrade remains as headroom, no longer the only thing keeping the box alive.
 
-**Prereqs:** [x] repo pushed to GitHub (`Mlysign/releaseradar`) · [x] Railway account.
+**Prereqs:** [x] repo pushed to GitHub (`Mlysign/fandex` — renamed from `releaseradar` 2026-07-15; GitHub redirects the old URL, Railway source re-linked) · [x] Railway account.
 
 **Stage 1 — Code prep (in repo)** → P4/P10/P3 ✅ done
 - [x] `start` = `next start` (binds Railway's `$PORT`).
