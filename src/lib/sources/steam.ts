@@ -1,5 +1,5 @@
 import { httpFetch } from "@/lib/http";
-import { log, errorFields } from "@/lib/logger";
+import { log } from "@/lib/logger";
 
 const STEAM_API = "https://api.steampowered.com";
 const API_KEY = process.env.STEAM_API_KEY!;
@@ -89,43 +89,52 @@ export async function getSteamOwnedGames(steamId: string): Promise<SteamOwnedGam
   return games;
 }
 
+// Resolve store details for a set of appids, 50 at a time.
+//
+// A FAILED BATCH THROWS — it must not resolve to a partial map. The wishlist
+// pull drops any appid with no details ("skip non-games"), and syncProvider
+// prunes whatever a pull omits, so swallowing a batch error silently deleted
+// those ~50 games from the user's wishlist. "The request failed" and "Steam has
+// no such item" must stay distinguishable: an appid MISSING from a SUCCESSFUL
+// batch is a real absence (delisted/region-locked) and is still dropped
+// silently — only the failure case throws. Single-appid metadata callers all
+// wrap this in try/catch, so a throw degrades to "no link" there as before.
 export async function getSteamAppDetails(appIds: number[]): Promise<Record<number, any>> {
   const results: Record<number, any> = {};
   const BATCH = 50;
 
   for (let i = 0; i < appIds.length; i += BATCH) {
     const batch = appIds.slice(i, i + BATCH);
-    try {
-      const inputJson = JSON.stringify({
-        ids: batch.map((appid) => ({ appid })),
-        // DE country code → euro prices; matches the DE-first region preference
-        // used for TMDB streaming providers.
-        context: { language: "english", country_code: "DE", steam_realm: 1 },
-        data_request: {
-          include_release: true,
-          include_basic_info: true,
-          include_short_description: true,
-          include_platforms: true,
-          include_screenshots: true,
-          include_trailers: true,
-          include_ratings: true,         // game_rating: USK/PEGI/ESRB age rating
-          include_tag_count: 20,
-          include_reviews: true,
-          include_assets: true,
-          include_supported_languages: true,
-          include_included_items: true,  // DLC / bundled apps
-        },
-      });
-      const res = await httpFetch(
-        `${STEAM_API}/IStoreBrowseService/GetItems/v1?key=${API_KEY}&input_json=${encodeURIComponent(inputJson)}`
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      for (const item of data.response?.store_items ?? []) {
-        if (item.appid) results[item.appid] = item;
-      }
-    } catch (e) {
-      log.error("steam_appdetails_failed", { ...errorFields(e) });
+    const inputJson = JSON.stringify({
+      ids: batch.map((appid) => ({ appid })),
+      // DE country code → euro prices; matches the DE-first region preference
+      // used for TMDB streaming providers.
+      context: { language: "english", country_code: "DE", steam_realm: 1 },
+      data_request: {
+        include_release: true,
+        include_basic_info: true,
+        include_short_description: true,
+        include_platforms: true,
+        include_screenshots: true,
+        include_trailers: true,
+        include_ratings: true,         // game_rating: USK/PEGI/ESRB age rating
+        include_tag_count: 20,
+        include_reviews: true,
+        include_assets: true,
+        include_supported_languages: true,
+        include_included_items: true,  // DLC / bundled apps
+      },
+    });
+    const res = await httpFetch(
+      `${STEAM_API}/IStoreBrowseService/GetItems/v1?key=${API_KEY}&input_json=${encodeURIComponent(inputJson)}`
+    );
+    if (!res.ok) {
+      log.error("steam_appdetails_failed", { status: res.status, batchStart: i, batchSize: batch.length });
+      throw new Error(`Steam app details fetch failed: ${res.status}`);
+    }
+    const data = await res.json();
+    for (const item of data.response?.store_items ?? []) {
+      if (item.appid) results[item.appid] = item;
     }
     if (i + BATCH < appIds.length) await new Promise((r) => setTimeout(r, 200));
   }

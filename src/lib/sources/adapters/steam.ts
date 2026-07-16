@@ -35,6 +35,11 @@ export const steamSource: MediaSource = {
     const items: PulledItem[] = [];
     for (const appId of appIds) {
       const data = details[appId];
+      // Safe to drop silently: getSteamAppDetails THROWS on a failed batch, so a
+      // missing appid here means Steam genuinely has no store item for it
+      // (delisted / region-locked) — a real absence the prune should act on, not
+      // a fetch we failed to make. Don't soften that throw without revisiting
+      // this: it would turn an outage back into a silent wishlist deletion.
       if (!data || data.item_type !== 0) continue; // skip non-games
       if (data.tagids && Object.keys(tagMap).length > 0) data.resolvedTags = resolveTagNames(data.tagids, tagMap);
       items.push({
