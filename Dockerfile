@@ -54,7 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 # Litestream for continuous SQLite backups (P5). Static Go binary from the release
 # .deb. Backups are OPT-IN: the entrypoint only activates Litestream when
-# LITESTREAM_BUCKET is set, otherwise it runs `node server.js` directly.
+# AWS_S3_BUCKET_NAME is set (the Railway bucket injects the AWS_* creds), otherwise
+# it runs `node server.js` directly.
 ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.deb /tmp/litestream.deb
 RUN dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb
 COPY litestream.yml /etc/litestream.yml
