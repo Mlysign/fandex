@@ -26,6 +26,10 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | Sync completeness + TMDB enrichment | ✅ |
 | Android TWA | 🔵 needs TWA build |
 | SEO SSR detail pages (P13) | 🟢 later |
+| **Post-launch (future):** | |
+| UI/UX overhaul — mobile-first polish (H1) | 🔭 planned |
+| Data-model hardening (H2) | 🔭 planned |
+| Monetization strategy (H3) | 🔭 planned |
 
 ---
-_✅ done · 🔵 in progress / needs input · 🟢 later · 🔒 security · 🔧 config_
+_✅ done · 🔵 in progress / needs input · 🟢 later · 🔭 future / not yet scoped · 🔒 security · 🔧 config_

@@ -250,6 +250,24 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 
 ---
 
+## Phase 7 — Post-launch roadmap (future, not yet scoped)
+
+Big post-launch initiatives added _2026-07-15_. Not yet broken into concrete tasks/estimates — the scope notes are starting points to refine when picked up. Epic **H = Post-launch / growth**.
+
+### H1 — UI/UX overhaul (mobile-first polish) 🔭
+**Goal:** the mobile experience is smooth, intuitive, and looks slick + polished.
+**Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].)
+
+### H2 — Data-model hardening 🔭
+**Goal:** media data is consistent, persistent, and accurately reflects the user's real data + recommendations.
+**Scope to explore:** reconcile `media_items` / `media_links` / `user_*` for correctness (dedup + merge edge cases — cf. the Spirited-Away / enrichment investigation); ratings / library / watchlist as a single source of truth that survives re-syncs without drift; **enrichment completeness + a backfill/repair job** for gaps (the TMDB-429 hardening was step 1); recommendation inputs (facets / Taste Match) reflecting the full, correct library; integrity checks + guarded migrations. See [[trakt-sync-completeness]], [[testing-and-migrations]], [[discovery-insights-rebuild]], [[platform-integration-architecture]].
+
+### H3 — Monetization strategy 🔭
+**Goal:** Fandex is self-sufficient — revenue covers upkeep (Railway hosting, domain, third-party API costs) and ideally turns a profit.
+**Scope to explore:** first establish the **upkeep baseline** (current monthly cost). Then pick a model — **affiliate links** on the existing streaming/store CTAs (detail pages already link JustWatch + stores — natural, low-friction fit); **freemium / subscription** for power features (unlimited sync, advanced Insights, more platforms); one-time unlock; or donations. Ads only as a last resort. Needs payment infra (e.g. Stripe) + a clear free-vs-paid line. A product/business decision first, then implementation.
+
+---
+
 ## Rough budget by phase (remaining ⬜ work)
 - **Phase 1.5:** ✅ done (was ~1.32M)
 - **Phase 2:** ✅ done (was ~700k+)
