@@ -63,6 +63,9 @@ export async function getTmdbAccount(sessionId: string): Promise<{ id: number; u
 }
 
 // Paginate an account list endpoint (watchlist/rated/favorite, movies or tv).
+// Throws on a bad page rather than returning what it has so far: these lists
+// drive `syncProvider`'s prune, so a truncated pull would delete every item on
+// the pages we never fetched. Failing loudly keeps the prune from running.
 async function accountList(accountId: string | number, sessionId: string, path: string): Promise<any[]> {
   const items: any[] = [];
   let page = 1;
@@ -71,7 +74,7 @@ async function accountList(accountId: string | number, sessionId: string, path: 
     const res = await httpFetch(
       `${BASE}/account/${accountId}/${path}?api_key=${KEY}&session_id=${sessionId}&page=${page}&sort_by=created_at.desc`
     );
-    if (!res.ok) break;
+    if (!res.ok) throw new Error(`TMDB error: ${res.status} account/${path} page ${page}`);
     const data = await res.json();
     items.push(...(data.results ?? []));
     totalPages = data.total_pages ?? 1;

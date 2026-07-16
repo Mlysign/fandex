@@ -54,12 +54,26 @@ describe("Trakt /sync pagination", () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("returns [] on error instead of throwing (sync stays resilient)", async () => {
+  // This previously asserted the opposite ("returns [] on error instead of
+  // throwing — sync stays resilient"). That was backwards, and destructive:
+  // syncProvider prunes every local entry missing from a pull, so returning []
+  // on a Trakt outage wiped the user's whole Trakt library and logged status=ok.
+  // An empty pull must only ever mean "upstream is empty".
+  it("throws on error instead of returning [] (an empty pull would trigger the prune)", async () => {
     const f = vi.fn().mockResolvedValue(new Response("nope", { status: 500 }));
     vi.stubGlobal("fetch", f);
 
-    const all = await getTraktWatchlistMovies("tok");
+    await expect(getTraktWatchlistMovies("tok")).rejects.toThrow(/500/);
+  });
 
-    expect(all).toEqual([]);
+  it("throws when a LATER page fails (partial pull must not look complete)", async () => {
+    // httpFetch retries a 429 (bounded), so page 2 must fail on every attempt.
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(page(items(100), 3))
+      .mockResolvedValue(new Response("nope", { status: 429 }));
+    vi.stubGlobal("fetch", f);
+
+    await expect(getTraktWatchedMovies("tok")).rejects.toThrow(/429/);
   });
 });

@@ -41,6 +41,15 @@ function logSync(userId: string, provider: string, count: number, status: string
 }
 
 // Remove watchlist/library links for a source whose ids are no longer present.
+//
+// INVARIANT — a pull that FAILED must throw, never resolve to a partial/empty
+// list. These prunes treat "absent from the pull" as "the user removed it
+// upstream", so a swallowed error silently deletes everything the failed pull
+// didn't return. (This is a real bug we shipped: Trakt's pulls used to
+// `catch { return [] }`, which turned any transient 500/429/401 into a full
+// wipe of the user's Trakt library — logged as status=ok.) The prunes below run
+// only after a pull resolves, and the `catch` in syncProvider returns before
+// them, so throwing is what makes an outage a no-op instead of a deletion.
 function pruneWatchlist(userId: string, source: string, syncedIds: Set<string>) {
   const existing = query<{ media_item_id: string; source_id: string }>(
     `SELECT ml.media_item_id, ml.source_id FROM media_links ml

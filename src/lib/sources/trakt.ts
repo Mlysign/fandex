@@ -126,17 +126,22 @@ function getStartDate(daysPast: number): string {
   return d.toISOString().split("T")[0];
 }
 
+// ── /sync pulls (drive the prune) ─────────────────────────────────
+// These MUST throw on failure rather than return []. `syncProvider` prunes any
+// local entry whose id is absent from the pull, so a swallowed error becomes an
+// empty pull becomes "the user deleted their whole library" — a transient Trakt
+// 500/429/401 would wipe every Trakt row and log it as status=ok. Throwing lets
+// syncProvider's catch log a real error and return BEFORE the prune runs.
+// An empty pull must therefore mean "upstream really is empty", never "the call
+// failed". Non-pruning readers below (calendar/public) may still catch → [].
+
 export async function getTraktWatchlistMovies(accessToken: string) {
-  try {
-    // Use /sync/watchlist/movies – returns the actual watchlist, not the calendar
-    return await traktGetAllPages("/sync/watchlist/movies?extended=full", accessToken);
-  } catch { return []; }
+  // Use /sync/watchlist/movies – returns the actual watchlist, not the calendar
+  return traktGetAllPages("/sync/watchlist/movies?extended=full", accessToken);
 }
 
 export async function getTraktWatchlistShows(accessToken: string) {
-  try {
-    return await traktGetAllPages("/sync/watchlist/shows?extended=full", accessToken);
-  } catch { return []; }
+  return traktGetAllPages("/sync/watchlist/shows?extended=full", accessToken);
 }
 
 // ── Watched + ratings (for the Library / history page) ────────────
@@ -144,23 +149,19 @@ export async function getTraktWatchlistShows(accessToken: string) {
 // extended=full so stored raw_data carries overview/released/genres/trailer —
 // without it Trakt returns bare {title, year, ids} and the merge gets nothing.
 export async function getTraktWatchedMovies(accessToken: string) {
-  try { return await traktGetAllPages("/sync/watched/movies?extended=full", accessToken); }
-  catch { return []; }
+  return traktGetAllPages("/sync/watched/movies?extended=full", accessToken);
 }
 
 export async function getTraktWatchedShows(accessToken: string) {
-  try { return await traktGetAllPages("/sync/watched/shows?extended=full", accessToken); }
-  catch { return []; }
+  return traktGetAllPages("/sync/watched/shows?extended=full", accessToken);
 }
 
 export async function getTraktRatingsMovies(accessToken: string) {
-  try { return await traktGetAllPages("/sync/ratings/movies?extended=full", accessToken); }
-  catch { return []; }
+  return traktGetAllPages("/sync/ratings/movies?extended=full", accessToken);
 }
 
 export async function getTraktRatingsShows(accessToken: string) {
-  try { return await traktGetAllPages("/sync/ratings/shows?extended=full", accessToken); }
-  catch { return []; }
+  return traktGetAllPages("/sync/ratings/shows?extended=full", accessToken);
 }
 
 // Calendar endpoint – used separately for episode-level data
