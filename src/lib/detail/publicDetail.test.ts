@@ -48,9 +48,9 @@ function seedRatedMovie() {
 }
 
 describe("loadPublicDetail — catalog only", () => {
-  it("returns the public catalog for a stored item", () => {
+  it("returns the public catalog for a stored item", async () => {
     const id = seedRatedMovie();
-    const pub = loadPublicDetail(id);
+    const pub = await loadPublicDetail(id);
 
     expect(pub).not.toBeNull();
     expect(pub!.id).toBe(id);
@@ -59,9 +59,9 @@ describe("loadPublicDetail — catalog only", () => {
     expect(pub!.description).toContain("Fremen");
   });
 
-  it("leaks NO personal fields, even though the user rated and reviewed it", () => {
+  it("leaks NO personal fields, even though the user rated and reviewed it", async () => {
     const id = seedRatedMovie();
-    const pub = loadPublicDetail(id)!;
+    const pub = (await loadPublicDetail(id))!;
 
     // The owner's own take must never reach an anonymous reader.
     for (const key of ["rating", "ratings", "review", "reviewedAt", "libraryStatus", "platformSources"]) {
@@ -72,21 +72,21 @@ describe("loadPublicDetail — catalog only", () => {
     expect(JSON.stringify(pub)).not.toContain("sandworm");
   });
 
-  it("still exposes COMMUNITY scores (those are public catalog data)", () => {
+  it("still exposes COMMUNITY scores (those are public catalog data)", async () => {
     const id = seedRatedMovie();
-    const pub = loadPublicDetail(id)!;
+    const pub = (await loadPublicDetail(id))!;
     // The user's 9.5 is private; TMDB's 8.1 community score is not.
     expect(JSON.stringify(pub)).not.toContain("9.5");
     expect(pub.communityRatings.some((r) => r.source === "tmdb")).toBe(true);
   });
 
-  it("returns null for an unknown id", () => {
-    expect(loadPublicDetail("00000000-0000-4000-8000-000000000000")).toBeNull();
+  it("returns null for an unknown id", async () => {
+    expect(await loadPublicDetail("00000000-0000-4000-8000-000000000000")).toBeNull();
   });
 
-  it("returns null for an item with no links to merge", () => {
+  it("returns null for an item with no links to merge", async () => {
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES ('bare', 'movie', 'Bare', 'bare')");
-    expect(loadPublicDetail("bare")).toBeNull();
+    expect(await loadPublicDetail("bare")).toBeNull();
   });
 });
 
@@ -98,14 +98,14 @@ describe("loadPublicItemRow — type guard input", () => {
 });
 
 describe("listPublicItems — sitemap source", () => {
-  it("lists items that have links", () => {
+  it("lists items that have links", async () => {
     const id = seedRatedMovie();
     const all = listPublicItems();
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ id, type: "movie", title: "Dune: Part Two" });
   });
 
-  it("omits items with no links (they would 404)", () => {
+  it("omits items with no links (they would 404)", async () => {
     seedRatedMovie();
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES ('bare', 'movie', 'Bare', 'bare')");
     expect(listPublicItems().map((i) => i.id)).not.toContain("bare");

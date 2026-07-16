@@ -1,30 +1,29 @@
 import { get, query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
-import { MediaLink, MediaType, Source } from "@/types";
+import { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
+import {
+  PublicEnrichedItem, loadLinks, ensureTmdbDetail, ensureGameDetail,
+  enrichMissingSources, applyOmdbScores,
+} from "./enrich";
 
-// P13 — the PUBLIC read path for an item, used by the server-rendered
-// `/{type}/{uuid}/{slug}` page. This is the security boundary for making detail
-// pages public, so two rules hold here and are worth stating plainly:
+// P13 — the PUBLIC read path for an item, behind `/{type}/{uuid}/{slug}`.
 //
-// 1. NO PERSONAL DATA, BY CONSTRUCTION. A PublicItem is `{id, type}` plus
-//    exactly what `mergeLinks` returns, and mergeLinks only ever derives catalog
-//    metadata from media_links (the third-party payloads). It cannot see
-//    user_library / user_watchlist / user_item_state, so a rating, review,
-//    libraryStatus or platformSources CANNOT leak through this type — the
-//    compiler rejects them rather than us remembering to strip them. Anything
-//    personal belongs in the authed overlay, never here.
+// This runs the SAME enrichment pipeline as /api/detail (lib/detail/enrich.ts):
+// refresh stale stored blobs, live-search the metadata providers that aren't
+// linked yet, merge, then attach OMDB scores. An earlier version read stored
+// data only — it rendered a fraction of the page (no cast, trailers,
+// where-to-watch, RT/IMDb) even though every one of those is public data. The
+// public page and the authed page now differ ONLY in the per-user overlay.
 //
-// 2. NO LIVE PROVIDER CALLS. Unlike /api/detail (which title-searches every
-//    provider and refreshes stale blobs on each request), this reads stored data
-//    only. These pages are crawlable: a bot walking ~2,500 of them would
-//    otherwise fire thousands of TMDB/IGDB/OMDB requests, blow the rate limits,
-//    and make every page slow. Stored-only keeps a render a few local SQLite
-//    reads — fast and safely cacheable. Freshness stays the sync's job.
+// THE BOUNDARY: this returns PublicEnrichedItem, which omits rating / ratings /
+// review / reviewedAt / libraryStatus / platformSources. Nothing here reads
+// user_library / user_watchlist / user_item_state, and the type makes a leak a
+// compile error rather than a thing we must remember not to do. The per-user
+// overlay belongs in /api/detail; it must never move down into here.
 //
-// Region: anonymous visitors have no `users.country`, so the merge runs at
-// DEFAULT_COUNTRY. Region-aware release dates/streaming are a logged-in feature
-// (T22); a shared link shows the neutral default.
+// Region: anonymous visitors have no users.country, so the merge runs at
+// DEFAULT_COUNTRY. Region-aware dates/streaming (T22) stay a logged-in feature.
 
 export interface PublicItemRow {
   id: string;
@@ -32,25 +31,8 @@ export interface PublicItemRow {
   title: string;
 }
 
-// `{id, type}` + the merge's catalog output. Deliberately NOT EnrichedItem:
-// that carries platformSources/rating/review, which are per-user.
-export type PublicItem = { id: string; type: MediaType } & ReturnType<typeof mergeLinks>;
-
-export function loadLinks(mediaItemId: string): MediaLink[] {
-  return query<any>("SELECT * FROM media_links WHERE media_item_id = ?", [mediaItemId]).map((r: any) => ({
-    id: r.id,
-    mediaItemId: r.media_item_id,
-    source: r.source as Source,
-    sourceId: r.source_id,
-    title: r.title,
-    releaseDate: r.release_date,
-    rawData: JSON.parse(r.raw_data),
-    lastSynced: r.last_synced,
-  }));
-}
-
-// The item's stored row, or null. `type` is checked by the caller against the
-// URL's type segment so /movie/<a-game-uuid>/x 404s instead of rendering.
+// The item's stored row, or null. The caller checks `type` against the URL's
+// type segment so /movie/<a-game-uuid>/x 404s instead of rendering.
 export function loadPublicItemRow(id: string): PublicItemRow | null {
   const row = get<{ id: string; type: string; title: string }>(
     "SELECT id, type, title FROM media_items WHERE id = ?",
@@ -61,14 +43,31 @@ export function loadPublicItemRow(id: string): PublicItemRow | null {
 
 // Full public detail for a stored item. Returns null when the item doesn't
 // exist or has no links to merge (nothing to show → the page 404s).
-export function loadPublicDetail(id: string, region: string = DEFAULT_COUNTRY): PublicItem | null {
+export async function loadPublicDetail(
+  id: string,
+  region: string = DEFAULT_COUNTRY
+): Promise<PublicEnrichedItem | null> {
   const row = loadPublicItemRow(id);
   if (!row) return null;
 
   const links = loadLinks(id);
   if (links.length === 0) return null;
 
-  return { id: row.id, type: row.type, ...mergeLinks(links, row.type, region) };
+  // Same steps as /api/detail: refresh stale blobs, then fill in the providers
+  // this item isn't linked to yet (IGDB/Metacritic/Steam…).
+  await ensureTmdbDetail(links, row.type);
+  await ensureGameDetail(links, row.type);
+  const hasSources = new Set(links.map((l) => l.source));
+  await enrichMissingSources(row.type, row.title, id, links, hasSources);
+
+  const enriched: PublicEnrichedItem = {
+    id: row.id,
+    type: row.type,
+    ...mergeLinks(links, row.type, region),
+  };
+  await applyOmdbScores(enriched);
+
+  return enriched;
 }
 
 // Every item eligible for a public page — drives sitemap.xml.

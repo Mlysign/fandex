@@ -1,0 +1,248 @@
+import { query, get } from "@/lib/db";
+import { extractYear } from "@/lib/merge";
+import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
+import { fetchOmdbScores, fetchOmdbByImdbId, OmdbResult } from "@/lib/sources/omdb";
+import { METADATA, metadataForType } from "@/lib/metadata/registry";
+import { MetaLink } from "@/lib/metadata/types";
+
+// ── Shared detail-enrichment pipeline ────────────────────────────────────────
+//
+// Extracted from /api/detail so the AUTHED endpoint and the PUBLIC page render
+// from ONE pipeline. They previously diverged: the public page was built on a
+// stored-data-only path and rendered a fraction of the data (no cast, trailers,
+// where-to-watch or RT/IMDb scores) even though all of it is public. One code
+// path means the public page can never silently fall behind again.
+//
+// Everything here is CATALOG data — third-party metadata about the item itself.
+// Nothing in this module reads user_library / user_watchlist / user_item_state.
+// The per-user overlay (rating, review, wishlist status) is layered on top by
+// /api/detail and must never move down into here.
+
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// EnrichedItem minus EVERY per-user field. The public page builds THIS, so
+// putting a rating/review/libraryStatus on it is a compile error rather than
+// something we have to remember to strip.
+//
+// `platformSources` (which of the viewer's accounts hold the item) is per-user
+// too, so it's omitted as well — the display components never read it; the view
+// supplies `platformSources: []` at the boundary where it hands off to them.
+export type PublicEnrichedItem = Omit<
+  EnrichedItem,
+  "rating" | "ratings" | "review" | "reviewedAt" | "libraryStatus" | "platformSources"
+>;
+
+export interface SourceIds {
+  rawg: string | null;
+  tmdb: string | null;
+  trakt: string | null;
+  steam: string | null;
+  letterboxd: string | null;
+}
+
+export function readSourceIds(sp: URLSearchParams): SourceIds {
+  return {
+    rawg: sp.get("rawgId"),
+    tmdb: sp.get("tmdbId"),
+    trakt: sp.get("traktId"),
+    steam: sp.get("steamId"),
+    letterboxd: sp.get("letterboxdId"),
+  };
+}
+
+// Resolve an existing media_item from any provided source id via media_links.
+export function resolveBySourceIds(type: MediaType | null, ids: SourceIds): string | null {
+  const candidates: { source: string; id: string }[] = [];
+  if (ids.rawg) candidates.push({ source: "rawg", id: ids.rawg });
+  if (ids.tmdb) candidates.push({ source: "tmdb", id: ids.tmdb });
+  if (ids.trakt) candidates.push({ source: "trakt", id: ids.trakt });
+  if (ids.steam) candidates.push({ source: "steam", id: ids.steam });
+  if (ids.letterboxd) candidates.push({ source: "letterboxd", id: ids.letterboxd });
+
+  for (const { source, id } of candidates) {
+    const link = get<{ media_item_id: string }>(
+      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
+      [source, id]
+    );
+    if (link) return link.media_item_id;
+  }
+  return null;
+}
+
+export function loadLinks(mediaItemId: string): MediaLink[] {
+  const linkRows = query<any>("SELECT * FROM media_links WHERE media_item_id = ?", [mediaItemId]);
+  return linkRows.map((r: any) => ({
+    id: r.id,
+    mediaItemId: r.media_item_id,
+    source: r.source as Source,
+    sourceId: r.source_id,
+    title: r.title,
+    releaseDate: r.release_date,
+    rawData: JSON.parse(r.raw_data),
+    lastSynced: r.last_synced,
+  }));
+}
+
+// Wrap a normalized MetaLink as an in-memory MediaLink for merging.
+export function toMediaLink(link: MetaLink, mediaItemId: string): MediaLink {
+  return {
+    id: `live-${link.source}`,
+    mediaItemId,
+    source: link.source,
+    sourceId: link.sourceId,
+    title: link.title,
+    releaseDate: link.releaseDate,
+    rawData: link.rawData,
+    lastSynced: 0,
+  };
+}
+
+// Build links live from the provided source ids (item not in DB), by fetching
+// each known id through its MetadataProvider. The remaining sources are filled
+// in by enrichMissingSources().
+export async function buildLiveLinks(
+  id: string,
+  type: MediaType,
+  title: string | null,
+  ids: SourceIds
+): Promise<MediaLink[]> {
+  const links: MediaLink[] = [];
+  for (const provider of metadataForType(type)) {
+    const rawId = ids[provider.id as keyof SourceIds];
+    if (rawId == null || !provider.fetchById) continue;
+    try {
+      const link = await provider.fetchById(String(rawId), type);
+      if (link) links.push(toMediaLink(link, id));
+    } catch { /* continue */ }
+  }
+  return links;
+}
+
+// Refresh a stored movie/show's TMDB link in-memory when it lacks the newer
+// appended blocks (keywords, then external_ids/release_dates/content_ratings).
+// Returns whether the stored data was replaced with a fresh fetch.
+export async function ensureTmdbDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
+  if (type !== "movie" && type !== "show") return false;
+  const tmdb = links.find((l) => l.source === "tmdb");
+  // external_ids is the most recent append — its absence means the stored blob
+  // predates the richer fetch even if keywords are present.
+  if (!tmdb || (tmdb.rawData?.keywords && tmdb.rawData?.external_ids)) return false;
+  try {
+    const fresh = await METADATA.tmdb?.fetchById?.(tmdb.sourceId, type);
+    if (fresh) {
+      tmdb.rawData = fresh.rawData;
+      return true;
+    }
+  } catch { /* keep stored data */ }
+  return false;
+}
+
+// Refresh stored game links (igdb/rawg) in-memory when they predate the richer
+// field set. IGDB without `time_to_beat` and RAWG without `screenshots` are the
+// markers that a stored blob was fetched before this change.
+export async function ensureGameDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
+  if (type !== "game") return false;
+  let refreshed = false;
+  const stale: { link: MediaLink; provider: "igdb" | "rawg" }[] = [];
+  const igdb = links.find((l) => l.source === "igdb");
+  if (igdb && igdb.rawData && !("time_to_beat" in igdb.rawData) && !igdb.rawData.themes) {
+    stale.push({ link: igdb, provider: "igdb" });
+  }
+  const rawg = links.find((l) => l.source === "rawg");
+  if (rawg && rawg.rawData && !rawg.rawData.screenshots) {
+    stale.push({ link: rawg, provider: "rawg" });
+  }
+  for (const { link, provider } of stale) {
+    try {
+      const fresh = await METADATA[provider]?.fetchById?.(link.sourceId, type);
+      if (fresh) { link.rawData = fresh.rawData; refreshed = true; }
+    } catch { /* keep stored data */ }
+  }
+  return refreshed;
+}
+
+export interface EnrichmentOutcome {
+  source: Source;
+  outcome: "already-linked" | "linked" | "no-match" | "not-configured" | "error" | "skipped-primary";
+}
+
+// Title-search every non-primary metadata provider for this type that isn't
+// already linked, and add what matches. (TMDB is `primary` — resolved by id, not
+// guessed by name — so it's skipped here.) Returns one outcome per consulted
+// provider so the debug view can show why a source is absent.
+export async function enrichMissingSources(
+  itemType: string,
+  itemTitle: string,
+  mediaItemId: string,
+  links: MediaLink[],
+  hasSources: Set<string>
+): Promise<EnrichmentOutcome[]> {
+  const outcomes: EnrichmentOutcome[] = [];
+  // The earliest year among the already-linked sources is the best proxy for
+  // the *original* release — ports/remasters/re-releases come later. Passing it
+  // lets a provider disambiguate same-titled entries (e.g. IGDB returning a
+  // BioShock port instead of the 2007 original).
+  const knownYear = links
+    .map((l) => extractYear(l.releaseDate))
+    .filter((y): y is number => y != null)
+    .reduce<number | null>((min, y) => (min == null || y < min ? y : min), null);
+  for (const provider of metadataForType(itemType)) {
+    if (hasSources.has(provider.id)) { outcomes.push({ source: provider.id, outcome: "already-linked" }); continue; }
+    if (provider.primary || !provider.searchByTitle) { outcomes.push({ source: provider.id, outcome: "skipped-primary" }); continue; }
+    if (provider.configured && !provider.configured()) { outcomes.push({ source: provider.id, outcome: "not-configured" }); continue; }
+    try {
+      const link = await provider.searchByTitle(itemTitle, itemType as MediaType, { year: knownYear });
+      if (link) {
+        links.push(toMediaLink(link, mediaItemId));
+        outcomes.push({ source: provider.id, outcome: "linked" });
+      } else {
+        outcomes.push({ source: provider.id, outcome: "no-match" });
+      }
+    } catch {
+      outcomes.push({ source: provider.id, outcome: "error" });
+    }
+  }
+  return outcomes;
+}
+
+// Fetch OMDB scores (RT + IMDb + Metacritic + certification + awards + box
+// office) and attach them to an enriched item in-place. Prefers an exact lookup
+// by the IMDb id the merge already resolved (from TMDB/Trakt); falls back to a
+// title+year search. Only applies to movies and shows.
+//
+// Takes PublicEnrichedItem: every field it touches is catalog data, and
+// EnrichedItem is structurally assignable, so /api/detail passes its own item.
+export async function applyOmdbScores(item: PublicEnrichedItem): Promise<void> {
+  if (item.type === "game") return;
+  try {
+    let scores: OmdbResult;
+    if (item.imdbId) {
+      scores = await fetchOmdbByImdbId(item.imdbId);
+    } else {
+      const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4)) : undefined;
+      scores = await fetchOmdbScores(item.title, year, item.type === "show" ? "series" : "movie");
+    }
+    item.rtScore = scores.rtScore;
+    item.imdbRating = scores.imdbRating;
+    item.imdbId = scores.imdbID ?? item.imdbId;
+    item.awards = scores.awards;
+    item.boxOffice = scores.boxOffice;
+    // OMDB metascore for movies/shows fills the gap left by RAWG (games-only).
+    if (item.metacritic == null && scores.metascore != null) item.metacritic = scores.metascore;
+    // OMDB certification (US rating) — add it to the union if not already there.
+    if (scores.rated && !item.certification.includes(scores.rated)) item.certification.push(scores.rated);
+    // Surface the IMDb score in the unified ratings row too.
+    if (scores.imdbRating != null) {
+      item.communityRatings = [
+        ...item.communityRatings.filter((r) => r.source !== "imdb"),
+        { source: "imdb", label: "IMDb", score: scores.imdbRating, outOf: 10, votes: scores.imdbVotes, url: scores.imdbID ? `https://www.imdb.com/title/${scores.imdbID}/` : null },
+      ];
+    }
+    if (scores.rtScore != null) {
+      item.communityRatings = [
+        ...item.communityRatings.filter((r) => r.source !== "rt"),
+        { source: "rt", label: "Rotten Tomatoes", score: scores.rtScore, outOf: 100 },
+      ];
+    }
+  } catch { /* silently skip */ }
+}
