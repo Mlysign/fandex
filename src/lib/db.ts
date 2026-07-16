@@ -176,7 +176,25 @@ function ensureSchema(db: Database.Database) {
   // Everything beyond the norm_title baseline (user_version >= 2) is applied by
   // the ordered runner in migrations.ts. Runs in-process here; the same list can
   // be applied standalone to the live DB via scripts/migrate.mjs.
-  runMigrations(db);
+  const applied = runMigrations(db);
+
+  // H2a: reclaim the freed pages. A migration that rewrites raw_data (the
+  // projection backfill) frees a LOT — measured 29,116 pages / ~117MB — but
+  // SQLite keeps them on the freelist and the FILE never shrinks (159.5MB after
+  // the backfill vs 42.4MB once vacuumed). Only worth the cost when a migration
+  // actually ran, and it MUST be outside the runner: VACUUM cannot execute
+  // inside a transaction, and runMigrations wraps each migration in one.
+  //
+  // Measured at 0.4s for a 160MB DB. Note for the live volume: VACUUM rewrites
+  // the whole file, so Litestream will re-replicate it once.
+  if (applied.length) {
+    try {
+      db.exec("VACUUM");
+    } catch {
+      // Non-fatal: the data is already correct and the freelist gets reused by
+      // later writes, so a failed VACUUM only means the file stays large.
+    }
+  }
 
   _initialized = true;
 }

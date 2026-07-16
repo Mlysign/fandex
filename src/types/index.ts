@@ -20,6 +20,8 @@ export interface MediaLink {
   releaseDate: string | null;
   rawData: Record<string, any>;
   lastSynced: number;
+  /** H2a: raw_data shape stamp. 0 = written before the projection existed. */
+  projectionVersion?: number;
 }
 
 export interface UserIdentity {

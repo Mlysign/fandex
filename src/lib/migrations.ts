@@ -17,6 +17,8 @@
 //    Never drop a column/table in the same migration that adds its replacement.
 
 import type DatabaseT from "better-sqlite3";
+import { projectRawData, PROJECTION_VERSION } from "@/lib/sources/project";
+import type { Source } from "@/types";
 type DB = DatabaseT.Database;
 
 export interface Migration {
@@ -162,6 +164,51 @@ export const MIGRATIONS: Migration[] = [
       const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
       if (!cols.some((c) => c.name === "session_epoch")) {
         db.exec("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0");
+      }
+    },
+  },
+  {
+    version: 7,
+    name: "media_links.projection_version + backfill (H2a)",
+    up: (db) => {
+      // H2a: raw_data stored the ENTIRE provider payload (~92KB/TMDB link,
+      // ~94% of the DB) while the app reads a small fixed subset.
+      // projectRawData() now trims at write time; this adds the version stamp
+      // and re-projects what's already stored.
+      //
+      // 0 = "written before the projection existed" (a fat, unstamped blob).
+      const cols = db.prepare("PRAGMA table_info(media_links)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "projection_version")) {
+        db.exec("ALTER TABLE media_links ADD COLUMN projection_version INTEGER NOT NULL DEFAULT 0");
+      }
+
+      // Backfill by projecting the STORED blob in place — NO network. The fat
+      // rows already contain everything the projection keeps, so this is a pure
+      // local transform. That's what makes the migration safe to run against the
+      // live volume: no provider calls, no rate limits, no partial-fetch risk.
+      const rows = db
+        .prepare(
+          `SELECT ml.id, ml.source, ml.raw_data
+             FROM media_links ml
+            WHERE ml.projection_version < ?`
+        )
+        .all(PROJECTION_VERSION) as { id: string; source: string; raw_data: string }[];
+
+      const upd = db.prepare(
+        "UPDATE media_links SET raw_data = ?, projection_version = ? WHERE id = ?"
+      );
+      for (const r of rows) {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(r.raw_data);
+        } catch {
+          // Unparseable blob: stamp it so it isn't retried forever, but leave
+          // the bytes alone rather than destroying data we can't read.
+          upd.run(r.raw_data, PROJECTION_VERSION, r.id);
+          continue;
+        }
+        const projected = JSON.stringify(projectRawData(r.source as Source, raw));
+        upd.run(projected, PROJECTION_VERSION, r.id);
       }
     },
   },

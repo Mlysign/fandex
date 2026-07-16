@@ -1,4 +1,5 @@
 import { query, get } from "@/lib/db";
+import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { extractYear } from "@/lib/merge";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { fetchOmdbScores, fetchOmdbByImdbId, OmdbResult } from "@/lib/sources/omdb";
@@ -80,6 +81,7 @@ export function loadLinks(mediaItemId: string): MediaLink[] {
     releaseDate: r.release_date,
     rawData: JSON.parse(r.raw_data),
     lastSynced: r.last_synced,
+    projectionVersion: r.projection_version ?? 0,
   }));
 }
 
@@ -118,15 +120,19 @@ export async function buildLiveLinks(
   return links;
 }
 
-// Refresh a stored movie/show's TMDB link in-memory when it lacks the newer
-// appended blocks (keywords, then external_ids/release_dates/content_ratings).
-// Returns whether the stored data was replaced with a fresh fetch.
+// Refresh a stored movie/show's TMDB link in-memory when it predates the
+// current fetch shape. Returns whether the stored data was replaced.
+//
+// H2a — this USED to sniff fields ("no external_ids/keywords → old blob →
+// refetch"). Sniffing is fundamentally incompatible with the raw_data
+// projection: a projected row is legitimately missing fields, so every row would
+// read as stale and stampede TMDB with ~1,472 refetches. Staleness is now the
+// EXPLICIT `projection_version` stamp — the only honest signal, since it says
+// what shape a row was written in rather than guessing from its contents.
 export async function ensureTmdbDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
   if (type !== "movie" && type !== "show") return false;
   const tmdb = links.find((l) => l.source === "tmdb");
-  // external_ids is the most recent append — its absence means the stored blob
-  // predates the richer fetch even if keywords are present.
-  if (!tmdb || (tmdb.rawData?.keywords && tmdb.rawData?.external_ids)) return false;
+  if (!tmdb || (tmdb.projectionVersion ?? 0) >= PROJECTION_VERSION) return false;
   try {
     const fresh = await METADATA.tmdb?.fetchById?.(tmdb.sourceId, type);
     if (fresh) {
@@ -137,20 +143,19 @@ export async function ensureTmdbDetail(links: MediaLink[], type: MediaType): Pro
   return false;
 }
 
-// Refresh stored game links (igdb/rawg) in-memory when they predate the richer
-// field set. IGDB without `time_to_beat` and RAWG without `screenshots` are the
-// markers that a stored blob was fetched before this change.
+// Refresh stored game links (igdb/rawg) in-memory when they predate the current
+// fetch shape. Same H2a change as ensureTmdbDetail: this used to sniff for
+// `time_to_beat`/`screenshots`, which the projection would make look
+// permanently stale. Now keyed on the explicit projection_version stamp.
 export async function ensureGameDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
   if (type !== "game") return false;
   let refreshed = false;
   const stale: { link: MediaLink; provider: "igdb" | "rawg" }[] = [];
-  const igdb = links.find((l) => l.source === "igdb");
-  if (igdb && igdb.rawData && !("time_to_beat" in igdb.rawData) && !igdb.rawData.themes) {
-    stale.push({ link: igdb, provider: "igdb" });
-  }
-  const rawg = links.find((l) => l.source === "rawg");
-  if (rawg && rawg.rawData && !rawg.rawData.screenshots) {
-    stale.push({ link: rawg, provider: "rawg" });
+  for (const provider of ["igdb", "rawg"] as const) {
+    const link = links.find((l) => l.source === provider);
+    if (link && link.rawData && (link.projectionVersion ?? 0) < PROJECTION_VERSION) {
+      stale.push({ link, provider });
+    }
   }
   for (const { link, provider } of stale) {
     try {

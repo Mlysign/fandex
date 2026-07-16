@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { projectRawData, PROJECTION_VERSION } from "./sources/project";
 import { query, run, get, transaction } from "./db";
 import { normalizeName, extractYear, mergeForCanonical } from "./merge";
 import { averageFromMetadata } from "./ratings";
@@ -37,8 +38,11 @@ export function upsertMediaItem(item: SourceItem): string {
     );
     if (existing) {
       run(
-        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now') WHERE source = ? AND source_id = ?",
-        [JSON.stringify(mergeRawData(existing.raw_data, item.rawData)), item.title, item.releaseDate, item.source, item.sourceId]
+        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ?",
+        // H2a: project AFTER merging, so the merge still sees the stored blob
+        // (possibly a fat pre-projection one) and the result is stamped current.
+        [JSON.stringify(projectRawData(item.source, mergeRawData(existing.raw_data, item.rawData))),
+         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
@@ -48,9 +52,9 @@ export function upsertMediaItem(item: SourceItem): string {
     const mediaItemId = findMatchingItem(item);
     if (mediaItemId) {
       run(
-        `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(item.rawData)]
+        `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
       );
       remergeItem(mediaItemId);
       return mediaItemId;
@@ -64,9 +68,9 @@ export function upsertMediaItem(item: SourceItem): string {
       [newId, item.type, item.title, normalizeName(item.title), item.releaseDate, null]
     );
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(item.rawData)]
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
     );
     remergeItem(newId);
     return newId;
@@ -161,16 +165,19 @@ export function linkSourceToItem(mediaItemId: string, item: SourceItem): string 
     );
     if (existing) {
       run(
-        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now') WHERE source = ? AND source_id = ?",
-        [JSON.stringify(mergeRawData(existing.raw_data, item.rawData)), item.title, item.releaseDate, item.source, item.sourceId]
+        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ?",
+        // H2a: project AFTER merging, so the merge still sees the stored blob
+        // (possibly a fat pre-projection one) and the result is stamped current.
+        [JSON.stringify(projectRawData(item.source, mergeRawData(existing.raw_data, item.rawData))),
+         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
     }
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(item.rawData)]
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
     );
     remergeItem(mediaItemId);
     return mediaItemId;

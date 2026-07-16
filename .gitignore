@@ -46,3 +46,7 @@ data/
 .env
 # Claude Code local config
 .claude/
+
+# H2a verification artifacts (see migration7.dryrun.test.ts)
+migration7-out.txt
+probe-out.txt
