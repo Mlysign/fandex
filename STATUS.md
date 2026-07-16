@@ -30,6 +30,7 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | UI/UX overhaul — mobile-first polish (H1) | 🔭 planned |
 | Data-model hardening (H2) | 🔭 planned |
 | Monetization strategy (H3) | 🔭 planned |
+| Legal & compliance — imprint, privacy, cookies, account deletion, support (H4) | 🔭 planned · gate before public/EU |
 
 ---
 _✅ done · 🔵 in progress / needs input · 🟢 later · 🔭 future / not yet scoped · 🔒 security · 🔧 config_

@@ -266,6 +266,10 @@ Big post-launch initiatives added _2026-07-15_. Not yet broken into concrete tas
 **Goal:** Fandex is self-sufficient — revenue covers upkeep (Railway hosting, domain, third-party API costs) and ideally turns a profit.
 **Scope to explore:** first establish the **upkeep baseline** (current monthly cost). Then pick a model — **affiliate links** on the existing streaming/store CTAs (detail pages already link JustWatch + stores — natural, low-friction fit); **freemium / subscription** for power features (unlimited sync, advanced Insights, more platforms); one-time unlock; or donations. Ads only as a last resort. Needs payment infra (e.g. Stripe) + a clear free-vs-paid line. A product/business decision first, then implementation.
 
+### H4 — Legal & compliance 🔭
+**Goal:** the app meets all legal requirements to operate publicly — **especially EU / Germany** (operator is DE-based). This is effectively a **gate before promoting or monetizing publicly**, not purely optional (an Impressum is legally mandated in DE; GDPR governs the personal data already stored).
+**Scope to explore:** **Impressum** (imprint — required by DE §5 DDG/TMG); **privacy policy** (GDPR Datenschutzerklärung — what's collected [OAuth tokens (encrypted per S2), ratings/library, the Cloudflare-routed contact email], the third parties data flows to [TMDB / Trakt / Steam / RAWG / Cloudflare / Railway], legal basis + retention); **cookie / consent** (today only an *essential* session cookie — assess whether a banner is needed or the essential-only exemption applies); **Terms of Service**; **account deletion + data export** (GDPR erasure + portability — a self-serve "delete my account" that purges `user_*` / identities / tokens, going beyond today's disconnect + library-DELETE); a **support / contact** page (`hello@fandex.org` routing is the start). Confirm against current rules — a product + legal task. Overlaps H3 (monetization needs ToS + payment/tax handling).
+
 ---
 
 ## Rough budget by phase (remaining ⬜ work)
