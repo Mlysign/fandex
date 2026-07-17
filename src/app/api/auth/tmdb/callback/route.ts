@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createTmdbSession, getTmdbAccount } from "@/lib/sources/tmdb";
 import { getSession, createSession, setSessionCookie } from "@/lib/session";
-import { verifyOAuthState, clearOAuthState } from "@/lib/oauthState";
+import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret } from "@/lib/crypto";
 
 // TMDB returns ?request_token=...&approved=true. We exchange it for a session_id,
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const fail = (path: string) => {
     const res = NextResponse.redirect(new URL(path, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     return res;
   };
 
@@ -69,9 +70,11 @@ export async function GET(req: NextRequest) {
       displayName: identity.display_name,
     });
 
-    const redirect = existing ? "/settings?connected=TMDB" : "/dashboard";
+    // Fresh login → the H2c return path (login-with-intent), else /dashboard.
+    const redirect = existing ? "/settings?connected=TMDB" : (readOAuthReturn(req) ?? "/dashboard");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     if (!existing) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {

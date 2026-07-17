@@ -3,7 +3,7 @@ import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
-import { verifyOAuthState, clearOAuthState } from "@/lib/oauthState";
+import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
 import { Source } from "@/types";
 
@@ -41,10 +41,11 @@ export async function handleOAuthCallback(
   // which would bounce the user to a dead address after login.
   const base = process.env.NEXT_PUBLIC_BASE_URL || req.url;
 
-  // Every exit clears the single-use CSRF cookie so a nonce is never replayable.
+  // Every exit clears the single-use CSRF + return cookies so neither is replayable.
   const fail = (path: string) => {
     const res = NextResponse.redirect(new URL(path, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     return res;
   };
 
@@ -93,9 +94,15 @@ export async function handleOAuthCallback(
       displayName: identity.display_name,
     });
 
-    const redirect = existingUserId ? `/settings?connected=${opts.connectedLabel ?? opts.provider}` : "/dashboard";
+    // Fresh login → the return path from the connect route (login-with-intent,
+    // H2c), falling back to /dashboard. Linking an extra provider to an existing
+    // account keeps returning to settings.
+    const redirect = existingUserId
+      ? `/settings?connected=${opts.connectedLabel ?? opts.provider}`
+      : (readOAuthReturn(req) ?? "/dashboard");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     // Only set the session cookie for a fresh login, not when linking to an
     // already-authenticated account.
     if (!existingUserId) res.cookies.set(setSessionCookie(token));

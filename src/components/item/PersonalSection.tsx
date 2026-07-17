@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
-import { EnrichedItem, MediaType, Source } from "@/types";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { EnrichedItem, MediaType } from "@/types";
+import type { PlatformStatus } from "@/lib/watchlistStatus";
+import { IntentAction, stashIntent, takeIntent } from "@/lib/pendingIntent";
+import SignInDialog from "@/components/auth/SignInDialog";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
 
@@ -11,14 +13,13 @@ import WishlistPanel from "./WishlistPanel";
 // The page around this is server-rendered WITHOUT user data (so it's fast,
 // cacheable, crawlable and unfurls), and this island fills in the per-user half
 // on the client:
-//   401 → the sign-in hook
+//   401 → the REAL controls, but every interaction opens the sign-in dialog and
+//         remembers what you were doing (H2c login-with-intent)
 //   200 → the real rating stars, watched/played state and wishlist panel
 //
 // It deliberately owns ALL the per-user state. The server render must never
 // depend on a session, or the public HTML would vary per user and the SSR
 // guarantee (and any future caching) breaks.
-
-interface PlatformStatus { source: Source; onList: boolean; supported: boolean }
 
 interface DetailResponse {
   item?: Partial<EnrichedItem>;
@@ -35,10 +36,10 @@ export default function PersonalSection({
   posterUrl,
   steamStoreUrl,
 }: {
-  /** uuid when the item is stored; a source id (`tmdb-693134`) when it's live. */
+  /** Always a uuid since H2b (discover persists → every item has one). */
   itemId: string;
   type: MediaType;
-  /** Source ids, so a live item can be persisted on first rate/wishlist. */
+  /** Source ids, forwarded on writes so the server can attach cross-ids. */
   ids: Record<string, string | number>;
   title: string;
   releaseDate: string | null;
@@ -51,6 +52,7 @@ export default function PersonalSection({
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [ratingAction, setRatingAction] = useState(false);
   const [platformAction, setPlatformAction] = useState<string | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
 
   // `ids` is an object literal rebuilt by the parent on EVERY render, so
   // depending on it directly would give `load` a new identity each render → the
@@ -64,9 +66,8 @@ export default function PersonalSection({
       if (v != null) p.set(`${k}Id`, String(v));
     }
     const res = await fetch(`/api/detail?${p}`);
-    // 401 = logged out. Any other failure also degrades to the sign-in hook:
-    // showing rating controls we can't persist would be worse than not showing
-    // them at all.
+    // 401 = logged out → show the real controls in "anon" mode (interactions
+    // open the sign-in dialog). Any other failure also degrades to anon.
     if (!res.ok) { setState("anon"); return; }
     const data: DetailResponse = await res.json();
     setDetail(data);
@@ -82,8 +83,6 @@ export default function PersonalSection({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
-  // Target an existing row by id, else send the identity so the server creates
-  // it on write (this is what lets a live /discover item be rated directly).
   const body = (extra: Record<string, unknown>) =>
     mediaItemId ? { mediaItemId, ...extra } : { type, title, releaseDate, posterUrl, ids, ...extra };
 
@@ -141,15 +140,53 @@ export default function PersonalSection({
     }
   }
 
+  // ── H2c login-with-intent ───────────────────────────────────────────────────
+  // Anon interaction: stash what they wanted (keyed to THIS item's path) and open
+  // the sign-in dialog. The redirect providers leave the page; RAWG stays.
+  const requestAuth = (action: IntentAction) => {
+    stashIntent({ path: window.location.pathname, action });
+    setShowSignIn(true);
+  };
+
+  // Drain the stashed intent exactly once, the first time we resolve to a signed-
+  // in viewer. Covers BOTH resume paths: the redirect providers (fresh page load
+  // lands back here via the return cookie) and RAWG (onAuthenticated re-runs
+  // load(), flipping state to "user"). By the time state === "user", `detail` and
+  // `mediaItemId` are set, so the normal handlers apply.
+  const drained = useRef(false);
+  useEffect(() => {
+    if (state !== "user" || drained.current) return;
+    drained.current = true;
+    const intent = takeIntent(window.location.pathname);
+    if (!intent) return;
+    // Defer the dispatch out of the effect body: the handlers setState
+    // synchronously (a loading flag), and firing that inside the effect trips the
+    // cascading-render rule. A microtask runs right after commit — same tick, no
+    // synchronous re-render.
+    queueMicrotask(() => {
+      if (intent.action.kind === "rate") void handleRate(intent.action.value);
+      else if (intent.action.kind === "watched") void handleMarkWatched();
+      else if (intent.action.kind === "wishlist") {
+        // The anon control is provider-less; resolve the concrete provider now
+        // from real data — first writable, connected, not-yet-listed one.
+        const p = (detail?.platforms ?? []).find((x) => x.canWrite && !x.notConnected && !x.onList);
+        if (p) void togglePlatform(p.provider, false);
+      }
+    });
+    // handlers/detail are intentionally omitted: this must fire once, on the
+    // state transition, with the values current at that point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
   // Reserve the height while loading so the server-rendered content above
   // doesn't jump once this resolves.
   if (state === "loading") {
     return <div className="h-24 rounded-xl border border-neutral-800 bg-neutral-900/40 animate-pulse" />;
   }
 
-  if (state === "anon") return <SignInHook type={type} />;
-
   const item = detail?.item ?? {};
+  const anon = state === "anon";
+
   return (
     <div className="space-y-4">
       <RatingsSection
@@ -158,45 +195,63 @@ export default function PersonalSection({
         communityRatings={[]}
         steamReview={null}
         canRate
-        personalRating={item.rating ?? null}
-        personalRatings={item.ratings ?? []}
-        libraryStatus={item.libraryStatus ?? null}
-        reviewedAt={item.reviewedAt ?? null}
-        review={item.review ?? null}
+        personalRating={anon ? null : (item.rating ?? null)}
+        personalRatings={anon ? [] : (item.ratings ?? [])}
+        libraryStatus={anon ? null : (item.libraryStatus ?? null)}
+        reviewedAt={anon ? null : (item.reviewedAt ?? null)}
+        review={anon ? null : (item.review ?? null)}
         hoverRating={hoverRating}
         setHoverRating={setHoverRating}
         ratingAction={ratingAction}
-        onRate={handleRate}
-        onMarkWatched={handleMarkWatched}
+        onRate={anon ? (n) => requestAuth({ kind: "rate", value: n }) : handleRate}
+        onMarkWatched={anon ? () => requestAuth({ kind: "watched" }) : handleMarkWatched}
       />
-      <WishlistPanel
-        platforms={detail?.platforms ?? []}
-        loading={false}
-        platformAction={platformAction}
-        onToggle={togglePlatform}
-        steamStoreUrl={steamStoreUrl}
-      />
+      {anon ? (
+        <AnonWishlist steamStoreUrl={steamStoreUrl} onAdd={() => requestAuth({ kind: "wishlist" })} />
+      ) : (
+        <WishlistPanel
+          platforms={detail?.platforms ?? []}
+          loading={false}
+          platformAction={platformAction}
+          onToggle={togglePlatform}
+          steamStoreUrl={steamStoreUrl}
+        />
+      )}
+
+      {showSignIn && (
+        <SignInDialog
+          type={type}
+          returnTo={typeof window !== "undefined" ? window.location.pathname : "/"}
+          onClose={() => setShowSignIn(false)}
+          // RAWG login sets the session in-place (no redirect): close + reload the
+          // island; the drain effect then resumes the stashed intent.
+          onAuthenticated={() => { setShowSignIn(false); void load(); }}
+        />
+      )}
     </div>
   );
 }
 
-function SignInHook({ type }: { type: MediaType }) {
-  const verb = type === "game" ? "played" : "watched";
+// The wishlist affordance for a logged-out viewer. Deliberately provider-less: it
+// only signals "you'd add this" and opens sign-in; the concrete provider is
+// resolved after login (see the drain effect). The Steam store link stays useful
+// even signed out.
+function AnonWishlist({ steamStoreUrl, onAdd }: { steamStoreUrl: string | null; onAdd: () => void }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
-      <div>
-        <p className="text-sm font-medium text-neutral-200">Rate it, track it, don&apos;t lose it</p>
-        <p className="text-xs text-neutral-500 mt-0.5">
-          Sign in to rate this, mark it {verb}, and sync your wishlist across Trakt, Steam &amp; more.
-        </p>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link href="/" className="text-sm px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors">
-          Sign in
-        </Link>
-        <Link href="/" className="text-sm px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors">
-          Create an account
-        </Link>
+    <div className="pt-4 border-t border-neutral-800/60">
+      <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Your wishlists</p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={onAdd}
+          className="text-xs px-2.5 py-1 rounded-full border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200 transition-colors"
+        >
+          + Add to wishlist
+        </button>
+        {steamStoreUrl && (
+          <a href={steamStoreUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+            View on Steam →
+          </a>
+        )}
       </div>
     </div>
   );

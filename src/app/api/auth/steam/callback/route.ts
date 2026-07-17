@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { verifySteamOpenId, extractSteamId, getSteamPlayerSummary } from "@/lib/sources/steam";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
-import { verifyOAuthState, clearOAuthState } from "@/lib/oauthState";
+import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const fail = (path: string) => {
     const res = NextResponse.redirect(new URL(path, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     return res;
   };
 
@@ -69,9 +70,11 @@ export async function GET(req: NextRequest) {
       displayName: identity.display_name,
     });
 
-    const redirect = existingUserId ? "/settings?connected=steam" : "/dashboard";
+    // Fresh login → the H2c return path (login-with-intent), else /dashboard.
+    const redirect = existingUserId ? "/settings?connected=steam" : (readOAuthReturn(req) ?? "/dashboard");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
+    clearOAuthReturn(res);
     // Only set session cookie if this is a fresh login (not linking to existing account)
     if (!existingUserId) {
       res.cookies.set(setSessionCookie(token));

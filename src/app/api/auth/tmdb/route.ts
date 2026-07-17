@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { createTmdbRequestToken } from "@/lib/sources/tmdb";
-import { setOAuthStateCookie } from "@/lib/oauthState";
+import { setOAuthStateCookie, setOAuthReturnCookie } from "@/lib/oauthState";
 
 // Start the TMDB connect flow: create a request token and send the user to TMDB
 // to approve, with redirect_to pointing back at our callback. The user's existing
@@ -20,6 +20,8 @@ export async function GET(req: NextRequest) {
     // browser to this single-use request_token — the callback rejects any
     // request_token that doesn't match this cookie.
     setOAuthStateCookie(res, token);
+    // H2c: post-login app path (login-with-intent), same-origin paths only.
+    setOAuthReturnCookie(res, req.nextUrl.searchParams.get("returnTo"));
     return res;
   } catch (e) {
     log.error("tmdb_auth_error", { ...errorFields(e) });

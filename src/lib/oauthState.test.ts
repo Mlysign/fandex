@@ -5,6 +5,10 @@ import {
   setOAuthStateCookie,
   verifyOAuthState,
   clearOAuthState,
+  isSafeReturnPath,
+  setOAuthReturnCookie,
+  readOAuthReturn,
+  clearOAuthReturn,
 } from "./oauthState";
 
 // Minimal fakes: the module only touches req.cookies.get and res.cookies.set.
@@ -72,5 +76,85 @@ describe("clearOAuthState", () => {
     const { res, sets } = fakeRes();
     clearOAuthState(res);
     expect(sets[0]).toMatchObject({ name: "rr2_oauth_state", value: "", maxAge: 0, path: "/" });
+  });
+});
+
+// ── H2c return-path cookie ───────────────────────────────────────────────────
+
+// The open-redirect guard is the one security-sensitive addition; exercise every
+// bypass shape we care about.
+describe("isSafeReturnPath", () => {
+  it("accepts a same-origin absolute path", () => {
+    expect(isSafeReturnPath("/movie/uuid/slug")).toBe(true);
+    expect(isSafeReturnPath("/")).toBe(true);
+  });
+  it("rejects protocol-relative (open redirect to another host)", () => {
+    expect(isSafeReturnPath("//evil.com")).toBe(false);
+  });
+  it("rejects absolute URLs with a scheme", () => {
+    expect(isSafeReturnPath("https://evil.com")).toBe(false);
+    expect(isSafeReturnPath("javascript:alert(1)")).toBe(false);
+  });
+  it("rejects the backslash trick some browsers normalize toward //", () => {
+    expect(isSafeReturnPath("/\\evil.com")).toBe(false);
+  });
+  it("rejects a relative path, empty string, and nullish", () => {
+    expect(isSafeReturnPath("dashboard")).toBe(false);
+    expect(isSafeReturnPath("")).toBe(false);
+    expect(isSafeReturnPath(null)).toBe(false);
+    expect(isSafeReturnPath(undefined)).toBe(false);
+  });
+});
+
+// Return-cookie reader needs a req keyed on the return cookie name.
+function fakeReturnReq(cookieValue: string | null): NextRequest {
+  return {
+    cookies: {
+      get: (name: string) =>
+        name === "rr2_oauth_return" && cookieValue !== null ? { value: cookieValue } : undefined,
+    },
+  } as unknown as NextRequest;
+}
+
+describe("setOAuthReturnCookie", () => {
+  it("sets a short-lived httpOnly lax cookie for a safe path", () => {
+    const { res, sets } = fakeRes();
+    setOAuthReturnCookie(res, "/movie/uuid/slug");
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).toMatchObject({
+      name: "rr2_oauth_return",
+      value: "/movie/uuid/slug",
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 600,
+    });
+  });
+  it("sets NOTHING for an unsafe or absent path", () => {
+    for (const bad of ["//evil.com", "https://evil.com", "", null, undefined]) {
+      const { res, sets } = fakeRes();
+      setOAuthReturnCookie(res, bad);
+      expect(sets).toHaveLength(0);
+    }
+  });
+});
+
+describe("readOAuthReturn", () => {
+  it("returns a safe stored path", () => {
+    expect(readOAuthReturn(fakeReturnReq("/show/uuid/slug"))).toBe("/show/uuid/slug");
+  });
+  it("returns null when absent", () => {
+    expect(readOAuthReturn(fakeReturnReq(null))).toBeNull();
+  });
+  it("re-validates on the way out (defense in depth) and rejects an unsafe value", () => {
+    expect(readOAuthReturn(fakeReturnReq("//evil.com"))).toBeNull();
+  });
+});
+
+describe("clearOAuthReturn", () => {
+  it("expires the cookie", () => {
+    const { res, sets } = fakeRes();
+    clearOAuthReturn(res);
+    expect(sets[0]).toMatchObject({ name: "rr2_oauth_return", value: "", maxAge: 0, path: "/" });
   });
 });
