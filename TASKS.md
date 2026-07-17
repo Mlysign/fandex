@@ -258,6 +258,27 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 
 Big post-launch initiatives added _2026-07-15_. Not yet broken into concrete tasks/estimates — the scope notes are starting points to refine when picked up. Epic **H = Post-launch / growth**.
 
+### QA sweep — 2026-07-17 (browser poke, logged-in + logged-out) 🔎
+Full click-through of the running app (Claude, in-app browser, both auth states) after P17 shipped. **No crashes, no console errors anywhere, no broken functionality.** Everything below is polish — concrete inputs for **H1**. Severity: 🟠 = user-facing wart worth fixing soon · 🟡 = minor · 🔵 = nice-to-have. ID = `Q#`.
+
+| ID | Sev | Type | Area | Finding |
+|----|:--:|:--:|------|---------|
+| Q1 | 🟠 | UI | NavBar | **Nav is not session-aware.** A LOGGED-OUT visitor on a public page (facet / item) sees the full authed nav — Wishlist / Library / Insights / Profile **+ "Log out"** — on both desktop AND mobile. Clicking any bounces to login. Pre-existing (shared with the already-shipped public item pages), but P17 makes it much more visible since facet pages are a public entry point. Fix: session-aware NavBar (public links + "Log in" for anon). |
+| Q2 | 🟠 | UX | Landing | **No "browse without an account" path.** Logged-out `/` offers only Trakt/Steam/RAWG login — nothing links to the now-public `/discover` or facet pages. Anonymous visitors who land on `/` can't reach the public catalog. Add a "Browse" / "Explore without signing in" entry. |
+| Q3 | 🟡 | UX | Wishlist / Library | Both open **scrolled to the middle** (auto-scroll-to-today over a release-date sort), so you land mid-list — e.g. Library drops you into a pile of "TBA" games. Disorienting; reconsider default sort + initial scroll for these two pages. |
+| Q4 | 🟡 | UI | Insights → Taste by Era | **Ambiguous decade labels.** The x-axis shows two "90s" and two "20s" columns (1890s vs 1990s, 1920s vs 2020s) with no century — indistinguishable. Use 4-digit ('1990s') or century-qualified labels. |
+| Q5 | 🟡 | UI | Settings | **"Add login method" section is empty** — heading + description ("Connect another account…") render with no buttons beneath when all providers are already connected (+ Letterboxd hidden). Show an "all connected" message or hide the section. |
+| Q6 | 🟡 | UX | Landing / Settings | Login offers Trakt/Steam/RAWG but **not TMDB**, although TMDB is a connected provider shown in Settings. Intentional (link-only)? If so fine; if not, inconsistent. Confirm. |
+| Q7 | 🔵 | UI | Settings | Watchlist count shown **twice** (top-right header "102 items in watchlist" + Account section "Watchlist items 102"). Redundant. |
+| Q8 | 🔵 | SEO/UI | Authed pages | Wishlist / Library / Insights / Settings all use the **generic default `<title>`** ("Fandex — your index of every game, movie & show") instead of a page-specific title. |
+| Q9 | 🔵 | UI | Mobile nav | The mobile hamburger menu overlay **isn't full-height/opaque** — page content bleeds through beneath the menu items. Looks unfinished. |
+| Q10 | 🟡 | Data | P17 facet — person | Combined credits include **trivial roles** — Nolan's page lists "Sinners (2025) — Thanks" and "Inception: The Cobol Job — Characters". Consider filtering low-signal crew jobs (Thanks / Characters / etc.) from the role badges. |
+| Q11 | 🟡 | UI | P17 facet — tag | **Tag label capitalization**: `/tag/sci-fi` renders "**Sci Fi**" (title-cased from the key, hyphen collapsed to a space). Reads oddly vs "Sci-Fi". Consider a nicer display-label (e.g. recover original casing/hyphenation, or a small known-tag map). |
+| Q12 | 🔵 | UX | P17 facet — person | **Name-collision → most-popular** (documented/accepted): `/person/tom` resolves to whichever "Tom" TMDB ranks first. Fine for canonical names; consider surfacing the resolved full name prominently so a wrong-guess is obvious. |
+| Q13 | 🔵 | UI | 404 | Unmatched facets (and any 404) render Next's **default unbranded 404**. A branded 404 with a link home/discover would be nicer. General, not P17-specific. |
+
+**What held up well (positives):** all P17 facet interactions verified live — Load more (60→120), sort (re-queries + resets page), personal overlay (rating badges match by uuid, you-vs-crowd stats), 308 redirect, item link-through with thin-row heal. Discover / Library / Insights / Settings all render cleanly with real data; mobile facet layout is responsive; zero console errors across every page visited.
+
 ### H1 — UI/UX overhaul (mobile-first polish) 🔭
 **Goal:** the mobile experience is smooth, intuitive, and looks slick + polished.
 **Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].)
