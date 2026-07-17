@@ -2,6 +2,8 @@
 // wishlist · dashboard · discover · insights) routes through here.
 import { CATALOG } from "@/lib/sources/catalog";
 import { publicItemHref } from "@/lib/publicUrl";
+import { publicFacetHref } from "@/lib/facetUrl";
+import { FacetKind, FacetRole } from "@/lib/facets";
 
 export interface InspectableItem {
   id: string;
@@ -39,12 +41,10 @@ export function buildItemHref(item: InspectableItem): string {
   return publicItemHref(item);
 }
 
-// Link to the insights facet detail page for a tag / person / company.
+// P17 — link to the PUBLIC facet page (`/person|tag|studio/{slug}`), not the old
+// authed `/insights/facet?…` query-param page (now a 308 redirect to this). role
+// is dropped from the url on purpose: the public page shows the person's whole
+// body of work, role-badged per title. See facetUrl.ts.
 export function buildFacetHref(f: { kind: string; role?: string; key: string; label: string }): string {
-  const p = new URLSearchParams();
-  p.set("kind", f.kind);
-  if (f.role) p.set("role", f.role);
-  p.set("key", f.key);
-  p.set("label", f.label);
-  return `/insights/facet?${p.toString()}`;
+  return publicFacetHref({ kind: f.kind as FacetKind, role: f.role as FacetRole | undefined, key: f.key, label: f.label });
 }

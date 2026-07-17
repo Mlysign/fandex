@@ -1,0 +1,355 @@
+// P17 — the PUBLIC facet data layer, the crowd half of a facet page.
+//
+// This is to facetDetail.ts what publicDetail.ts is to enrich.ts: same subject,
+// NO per-user data. `buildPublicFacetDetail` takes only a facet ref (kind + key)
+// — never a userId — and returns `PublicFacetPayload`, which by construction has
+// no rating / library / you-vs-crowd field. A logged-in viewer's personal
+// overlay is layered on top client-side (see the facet route's island), exactly
+// like the item page.
+//
+// TWO deliberate differences from facetDetail.ts's authed builder:
+//   1. The item list is PROVIDER-SOURCED, not `itemsWithFacet` (the Fandex DB).
+//      A public page must show a person's FULL filmography / a studio's real
+//      catalog / a genre's actual titles, not just what happens to be ingested.
+//      So ids resolve by NAME SEARCH against TMDB/RAWG, not by reading a catalog
+//      item that carries the facet.
+//   2. Every rendered provider title is PERSISTED thin (browsed=1) via
+//      persistDiscoverItems, so it gets a uuid and links to its item page — the
+//      same H2b path /discover uses. Titles we can't persist stay non-linkable.
+
+import { MediaType } from "@/types";
+import { FacetKind, personKey } from "@/lib/facets";
+import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId, PersonMeta, FacetScope } from "@/lib/facetDetail";
+import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
+import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
+import { BoundedCache } from "@/lib/boundedCache";
+import { log, errorFields } from "@/lib/logger";
+
+export type FacetSort = "popular" | "newest" | "rating";
+export const FACET_SORTS: FacetSort[] = ["popular", "newest", "rating"];
+export function isFacetSort(s: string | null | undefined): s is FacetSort {
+  return !!s && (FACET_SORTS as string[]).includes(s);
+}
+
+export const FACET_PAGE_SIZE = 60;
+
+// One title on a public facet page. NO per-user field exists on this type — that
+// is the leak boundary (asserted in publicFacetDetail.test.ts). `id` is a media
+// uuid when the title was persisted (then `linkable` is true and it links to
+// /{type}/{id}/{slug}); otherwise a synthetic provider key that renders but does
+// not link.
+export interface PublicFacetItem {
+  id: string;
+  linkable: boolean;
+  type: MediaType;
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  communityScore: number | null; // 0-100
+  roles: string[];               // person only: ["Director","Writer"] / ["Actor"]
+}
+
+export interface PublicFacetPayload {
+  kind: FacetKind;
+  key: string;
+  label: string;                 // display label recovered from the provider
+  person: PersonMeta | null;     // people only — public bio/age/photo
+  scope: FacetScope;
+  community: { avg: number | null; count: number }; // crowd avg on a 0-10 scale
+  items: PublicFacetItem[];
+  total: number;                 // size of the resolved pool (for "N titles")
+  page: number;                  // 0-based
+  hasMore: boolean;
+  sort: FacetSort;
+}
+
+// Internal pooled title (carries raw for persistence + votes for the crowd avg).
+// Exported for unit tests of the pure pool logic (role-merge / sort / crowd avg).
+export interface PoolTitle {
+  source: "tmdb" | "rawg";
+  sourceId: string;
+  type: MediaType;
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  vote: number | null;  // 0-10
+  votes: number;
+  roles: string[];
+  raw: any;             // provider payload, stored thin
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const mean = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+// Title-case a normalized key for a fallback display label ("naughty dog" →
+// "Naughty Dog"). The provider name overrides this whenever we resolve one.
+function titleCase(key: string): string {
+  return key.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function tmdbTitle(c: any, mediaHint?: "movie" | "tv", roles: string[] = []): PoolTitle {
+  const media = (c.media_type ?? mediaHint) === "tv" ? "show" : "movie";
+  return {
+    source: "tmdb", sourceId: String(c.id), type: media as MediaType,
+    title: c.title || c.name || "Untitled",
+    releaseDate: c.release_date || c.first_air_date || null,
+    posterUrl: c.poster_path ? `https://image.tmdb.org/t/p/w500${c.poster_path}` : null,
+    vote: typeof c.vote_average === "number" && c.vote_average > 0 ? c.vote_average : null,
+    votes: c.vote_count ?? 0,
+    roles,
+    raw: c,
+  };
+}
+
+function rawgTitle(g: any, roles: string[] = []): PoolTitle {
+  return {
+    source: "rawg", sourceId: String(g.id), type: "game",
+    title: g.name || "Untitled",
+    releaseDate: g.released || null,
+    posterUrl: g.background_image || null,
+    vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0-5 → 0-10
+    votes: g.ratings_count ?? 0,
+    roles,
+    raw: g,
+  };
+}
+
+// ── PERSON ────────────────────────────────────────────────────────────────────
+const CAST_SELF_RE = /^(self|himself|herself|narrator)\b/i;
+
+// Resolve a person key to a TMDB id by SEARCH (not by reading a catalog item, so
+// it works for people not in the Fandex DB). Name collisions resolve to the most
+// popular exact-key match, else the most popular result overall.
+const _personSearchCache = new BoundedCache<string, number | null>({ max: 5000 });
+async function searchPersonId(key: string): Promise<number | null> {
+  if (_personSearchCache.has(key)) return _personSearchCache.get(key)!;
+  const d = await tmdbJson(`/search/person?query=${encodeURIComponent(key)}&include_adult=false`);
+  const results: any[] = d?.results ?? [];
+  const byPop = (a: any, b: any) => (b.popularity ?? 0) - (a.popularity ?? 0);
+  const exact = results.filter((r) => personKey(r.name ?? "") === key).sort(byPop);
+  const id: number | null = (exact[0] ?? [...results].sort(byPop)[0])?.id ?? null;
+  _personSearchCache.set(key, id);
+  return id;
+}
+
+// Merge a person's whole body of work from combined_credits, deduped by title,
+// each carrying every role they held on it ("Director", "Writer", "Actor", …).
+export function personPool(credits: any): PoolTitle[] {
+  const byKey = new Map<string, PoolTitle>();
+  const add = (c: any, role: string) => {
+    if (!(c.media_type === "movie" || c.media_type === "tv") || c.id == null) return;
+    if ((c.vote_count ?? 0) === 0 && !c.poster_path) return; // cut noise
+    const t = tmdbTitle(c);
+    const k = `${t.type}:${t.sourceId}`;
+    const existing = byKey.get(k);
+    if (existing) {
+      if (!existing.roles.includes(role)) existing.roles.push(role);
+    } else {
+      t.roles = [role];
+      byKey.set(k, t);
+    }
+  };
+  for (const c of credits?.cast ?? []) {
+    if (CAST_SELF_RE.test(String(c.character ?? ""))) continue;
+    add(c, "Actor");
+  }
+  for (const c of credits?.crew ?? []) add(c, c.job || c.department || "Crew");
+  // Present Director/Writer first in each title's role list.
+  const RANK = ["Director", "Writer", "Screenplay", "Story", "Creator", "Producer", "Actor"];
+  for (const t of byKey.values()) {
+    t.roles.sort((a, b) => {
+      const ia = RANK.indexOf(a), ib = RANK.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }
+  return [...byKey.values()];
+}
+
+// ── STUDIO (all company roles fold here) ────────────────────────────────────────
+const COMPANY_TMDB_PAGES = [1, 2];
+async function tmdbCompanyPool(companyId: number): Promise<PoolTitle[]> {
+  const reqs: { media: "movie" | "tv"; path: string }[] = [];
+  for (const [media, recency] of [["movie", "primary_release_date.desc"], ["tv", "first_air_date.desc"]] as const) {
+    for (const sort of ["popularity.desc", recency]) {
+      for (const page of COMPANY_TMDB_PAGES) {
+        reqs.push({ media, path: `/discover/${media}?with_companies=${companyId}&sort_by=${sort}&vote_count.gte=10&include_adult=false&page=${page}` });
+      }
+    }
+  }
+  const batches = await Promise.all(reqs.map(async (r) => ({ media: r.media, d: await tmdbJson(r.path) })));
+  const seen = new Set<string>();
+  const out: PoolTitle[] = [];
+  for (const { media, d } of batches) {
+    for (const m of d?.results ?? []) {
+      const t = tmdbTitle({ ...m, media_type: media });
+      const k = `${t.type}:${t.sourceId}`;
+      if (!seen.has(k)) { seen.add(k); out.push(t); }
+    }
+  }
+  return out;
+}
+
+// NEW — RAWG dev/publisher search by name, then their catalog (blended
+// added+recent). A studio may be both a developer and a publisher, so we search
+// and union both.
+const _rawgEntityCache = new BoundedCache<string, { developers: number[]; publishers: number[] }>({ max: 5000 });
+async function searchRawgEntityIds(key: string): Promise<{ developers: number[]; publishers: number[] }> {
+  if (_rawgEntityCache.has(key)) return _rawgEntityCache.get(key)!;
+  const [dev, pub] = await Promise.all([
+    rawgJson(`/developers?search=${encodeURIComponent(key)}&page_size=1`),
+    rawgJson(`/publishers?search=${encodeURIComponent(key)}&page_size=1`),
+  ]);
+  const ids = {
+    developers: (dev?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
+    publishers: (pub?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
+  };
+  _rawgEntityCache.set(key, ids);
+  return ids;
+}
+async function rawgEntityPool(key: string): Promise<PoolTitle[]> {
+  const { developers, publishers } = await searchRawgEntityIds(key);
+  const reqs: Promise<any>[] = [];
+  for (const [param, list] of [["developers", developers], ["publishers", publishers]] as const) {
+    for (const id of list) for (const ordering of ["-added", "-released"]) {
+      reqs.push(rawgJson(`/games?${param}=${id}&ordering=${ordering}&page_size=40&page=1`));
+    }
+  }
+  const seen = new Set<string>();
+  const out: PoolTitle[] = [];
+  for (const d of await Promise.all(reqs)) {
+    for (const g of d?.results ?? []) {
+      if (!seen.has(String(g.id))) { seen.add(String(g.id)); out.push(rawgTitle(g)); }
+    }
+  }
+  return out;
+}
+
+// ── TAG ─────────────────────────────────────────────────────────────────────
+// A genre/keyword is effectively unbounded, so we build a bounded, sorted pool
+// (a few provider pages blended across popularity + recency) and paginate within
+// it. Deeper-than-the-pool pagination is a documented follow-up.
+const TAG_POOL_PAGES = [1, 2];
+async function tagPool(key: string): Promise<PoolTitle[]> {
+  const seen = new Set<string>();
+  const out: PoolTitle[] = [];
+  const pushTmdb = (media: "movie" | "tv", results: any[] | undefined) => {
+    for (const m of results ?? []) { const t = tmdbTitle({ ...m, media_type: media }); const k = `${t.type}:${t.sourceId}`; if (!seen.has(k)) { seen.add(k); out.push(t); } }
+  };
+  const pushRawg = (results: any[] | undefined) => {
+    for (const g of results ?? []) { const k = `game:${g.id}`; if (!seen.has(k)) { seen.add(k); out.push(rawgTitle(g)); } }
+  };
+  const reqs: Promise<void>[] = [];
+  const movieGid = tmdbGenreId(key, "movie");
+  const tvGid = tmdbGenreId(key, "show");
+  if (movieGid != null || tvGid != null) {
+    if (movieGid != null) for (const sort of ["popularity.desc", "primary_release_date.desc"]) for (const page of TAG_POOL_PAGES)
+      reqs.push(tmdbJson(`/discover/movie?with_genres=${movieGid}&sort_by=${sort}&vote_count.gte=10&include_adult=false&page=${page}`).then((d) => pushTmdb("movie", d?.results)));
+    if (tvGid != null) for (const sort of ["popularity.desc", "first_air_date.desc"]) for (const page of TAG_POOL_PAGES)
+      reqs.push(tmdbJson(`/discover/tv?with_genres=${tvGid}&sort_by=${sort}&vote_count.gte=10&page=${page}`).then((d) => pushTmdb("tv", d?.results)));
+  } else {
+    const kwId = await resolveTmdbKeywordId(key);
+    if (kwId) for (const [media, recency] of [["movie", "primary_release_date.desc"], ["tv", "first_air_date.desc"]] as const)
+      for (const sort of ["popularity.desc", recency]) for (const page of TAG_POOL_PAGES)
+        reqs.push(tmdbJson(`/discover/${media}?with_keywords=${kwId}&sort_by=${sort}&vote_count.gte=10&page=${page}`).then((d) => pushTmdb(media, d?.results)));
+  }
+  const gslug = rawgGenreSlug(key);
+  const rawgParam = gslug ? `genres=${gslug}` : `tags=${rawgTagSlug(key)}`;
+  for (const ordering of ["-added", "-released"]) for (const page of TAG_POOL_PAGES)
+    reqs.push(rawgJson(`/games?${rawgParam}&ordering=${ordering}&page_size=40&page=${page}`).then((d) => pushRawg(d?.results)));
+  await Promise.all(reqs);
+  return out;
+}
+
+// ── Sort + assemble ───────────────────────────────────────────────────────────
+export function sortPool(pool: PoolTitle[], sort: FacetSort): PoolTitle[] {
+  const cmp: Record<FacetSort, (a: PoolTitle, b: PoolTitle) => number> = {
+    popular: (a, b) => b.votes - a.votes || (b.vote ?? 0) - (a.vote ?? 0),
+    newest: (a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""),
+    rating: (a, b) => (b.vote ?? -1) - (a.vote ?? -1) || b.votes - a.votes,
+  };
+  return [...pool].sort(cmp[sort]);
+}
+
+// Crowd average (0-10) over the well-voted titles in the pool.
+export function crowdAvg(pool: PoolTitle[]): { avg: number | null; count: number } {
+  const minVotes = (t: PoolTitle) => (t.source === "rawg" ? 5 : 10);
+  let voted = pool.filter((t) => t.vote != null && t.votes >= minVotes(t));
+  if (voted.length < 3) voted = pool.filter((t) => t.vote != null && t.votes > 0);
+  return { avg: mean(voted.map((t) => t.vote as number)) != null ? round1(mean(voted.map((t) => t.vote as number))!) : null, count: voted.length };
+}
+
+export interface PublicFacetRef { kind: FacetKind; key: string; label?: string | null }
+
+// Build the public payload for one facet page. Provider-sourced, persisted thin
+// for linkability, no user data. Returns null only when the kind is unknown.
+export async function buildPublicFacetDetail(
+  ref: PublicFacetRef,
+  opts: { page?: number; sort?: FacetSort } = {}
+): Promise<PublicFacetPayload | null> {
+  const page = Math.max(0, opts.page ?? 0);
+  const sort = opts.sort ?? "popular";
+  const key = ref.key;
+  let pool: PoolTitle[] = [];
+  let person: PersonMeta | null = null;
+  let label = ref.label || titleCase(key);
+  let scope: FacetScope = "catalog";
+
+  try {
+    if (ref.kind === "person") {
+      const id = await searchPersonId(key);
+      if (id != null) {
+        const [meta, credits] = await Promise.all([fetchPersonMeta(id), tmdbJson(`/person/${id}/combined_credits`)]);
+        person = meta;
+        if (meta?.name) label = meta.name;
+        if (credits) { pool = personPool(credits); scope = "filmography"; }
+      }
+    } else if (ref.kind === "company") {
+      const [tmdbId, rawgPool] = await Promise.all([resolveTmdbCompanyId(key), rawgEntityPool(key)]);
+      const tmdbPool = tmdbId != null ? await tmdbCompanyPool(tmdbId) : [];
+      pool = [...tmdbPool, ...rawgPool];
+      if (pool.length) scope = "sample";
+    } else {
+      pool = await tagPool(key);
+      if (pool.length) scope = "sample";
+    }
+  } catch (e) {
+    log.error("public_facet_build_failed", { kind: ref.kind, key, ...errorFields(e) });
+    // fall through with whatever pool we have (possibly empty)
+  }
+
+  const sorted = sortPool(pool, sort);
+  const community = crowdAvg(sorted);
+
+  // Persist the page's slice thin so each title links to its item page.
+  const start = page * FACET_PAGE_SIZE;
+  const slice = sorted.slice(start, start + FACET_PAGE_SIZE);
+  const persistable: PersistableItem[] = slice
+    .filter((t) => t.raw && t.title)
+    .map((t) => ({
+      id: `${t.source}:${t.sourceId}`,
+      type: t.type, title: t.title, releaseDate: t.releaseDate,
+      raw: { source: t.source as any, sourceId: t.sourceId, data: t.raw },
+    }));
+  const uuidByKey = persistDiscoverItems(persistable);
+
+  const items: PublicFacetItem[] = slice.map((t) => {
+    const uuid = uuidByKey.get(`${t.source}:${t.sourceId}`);
+    return {
+      id: uuid ?? `${t.source}-${t.type}-${t.sourceId}`,
+      linkable: uuid != null,
+      type: t.type,
+      title: t.title,
+      releaseDate: t.releaseDate,
+      posterUrl: t.posterUrl,
+      communityScore: t.vote != null ? Math.round(t.vote * 10) : null,
+      roles: t.roles,
+    };
+  });
+
+  return {
+    kind: ref.kind, key, label, person, scope, community,
+    items, total: sorted.length, page,
+    hasMore: start + FACET_PAGE_SIZE < sorted.length,
+    sort,
+  };
+}

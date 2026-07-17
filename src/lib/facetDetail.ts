@@ -104,14 +104,16 @@ function ageFrom(birthday: string | null, deathday: string | null): number | nul
   return age >= 0 && age < 130 ? age : null;
 }
 
-async function tmdbJson(path: string): Promise<any | null> {
+// Exported so the public facet layer (publicFacetDetail.ts) shares the exact same
+// TMDB/RAWG plumbing (key handling, error swallowing) instead of duplicating it.
+export async function tmdbJson(path: string): Promise<any | null> {
   if (!TMDB) return null;
   try {
     const r = await httpFetch(`https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`);
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
-async function rawgJson(path: string): Promise<any | null> {
+export async function rawgJson(path: string): Promise<any | null> {
   if (!RAWG) return null;
   try {
     const r = await httpFetch(`https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`);
@@ -120,7 +122,7 @@ async function rawgJson(path: string): Promise<any | null> {
 }
 
 const _personCache = new BoundedCache<number, PersonMeta | null>({ max: 2000 });
-async function fetchPersonMeta(id: number): Promise<PersonMeta | null> {
+export async function fetchPersonMeta(id: number): Promise<PersonMeta | null> {
   if (_personCache.has(id)) return _personCache.get(id)!;
   const d = await tmdbJson(`/person/${id}`);
   if (!d) { _personCache.set(id, null); return null; }
@@ -257,7 +259,7 @@ async function tagTitles(key: string): Promise<ExtTitle[]> {
 }
 
 const _tmdbCompanyCache = new BoundedCache<string, number | null>({ max: 5000 });
-async function resolveTmdbCompanyId(label: string): Promise<number | null> {
+export async function resolveTmdbCompanyId(label: string): Promise<number | null> {
   const ck = label.toLowerCase();
   if (_tmdbCompanyCache.has(ck)) return _tmdbCompanyCache.get(ck)!;
   const d = await tmdbJson(`/search/company?query=${encodeURIComponent(label)}`);
