@@ -134,14 +134,19 @@ export default function DiscoverPage() {
   }
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => {
-      if (!d.user) { router.push("/"); return; }
-    });
+    // H2b — no auth gate. /discover was UI-gated only: it bounced anonymous
+    // visitors to "/" even though /api/discover has always supported them
+    // (getSession()?.userId ?? null; annotate() returns empty user-state for
+    // anon and the region falls back to DEFAULT_COUNTRY).
+    //
+    // Ungated only NOW, with discover-persists, and not before: every result
+    // needed a uuid first. An anonymous browse whose every click dead-ended on
+    // an unresolvable url would have been worse than the gate.
+    //
     // Initial browse load sets loading state synchronously — expected for a
     // data-fetch-on-mount effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDefault();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadMore() {

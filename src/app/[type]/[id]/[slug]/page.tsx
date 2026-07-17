@@ -1,8 +1,8 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound, permanentRedirect, redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
-import { isPublicType, isUuid, slugify, parseItemId, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { isPublicType, isUuid, slugify, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { resolvePublicDetail, ResolvedPublic } from "@/lib/detail/publicDetail";
 import { getSession } from "@/lib/session";
 import { getUserCountry } from "@/lib/userCountry";
@@ -16,9 +16,10 @@ import ItemView from "@/components/item/ItemView";
 // and the HTML never varies per viewer. The per-user half (rating, wishlist) is
 // a client island inside ItemView that checks the session itself.
 //
-// The id segment is a uuid (stored item) or a source id (`tmdb-693134`, a live
-// /discover result with no row yet). The uuid form is canonical: as soon as the
-// item has a row we 308 to it, so an item always has exactly one indexable url.
+// The id segment is a uuid, always (H2b): discover persists every item it
+// returns, so there is no such thing as a linkable item without a row. It used
+// to also accept a source id for live discover results, which is what forced the
+// create-on-view write and a second url per item.
 
 interface Params {
   type: string;
@@ -26,15 +27,15 @@ interface Params {
   slug: string;
 }
 
-// The one place a session is read, and ONLY to decide whether we may persist a
-// live item — never to change what is rendered.
-async function mayPersist(): Promise<{ persist: boolean; region: string }> {
+// The session is read for ONE thing: the viewer's region, which localizes
+// release dates + streaming (T22). It never changes WHICH item is rendered or
+// whether it renders, so the cached HTML stays viewer-independent.
+async function viewerRegion(): Promise<string> {
   try {
     const session = await getSession();
-    if (!session) return { persist: false, region: DEFAULT_COUNTRY };
-    return { persist: true, region: getUserCountry(session.userId) };
+    return session ? getUserCountry(session.userId) : DEFAULT_COUNTRY;
   } catch {
-    return { persist: false, region: DEFAULT_COUNTRY };
+    return DEFAULT_COUNTRY;
   }
 }
 
@@ -42,11 +43,8 @@ async function mayPersist(): Promise<{ persist: boolean; region: string }> {
 // item. The pipeline does live provider calls, so without this every request
 // would run the whole thing twice.
 const resolve = cache(async (type: string, id: string): Promise<ResolvedPublic | null> => {
-  if (!isPublicType(type)) return null;
-  const parsed = parseItemId(id);
-  if (!parsed) return null;
-  const { persist, region } = await mayPersist();
-  const found = await resolvePublicDetail(parsed, type, region, { persist });
+  if (!isPublicType(type) || !isUuid(id)) return null;
+  const found = await resolvePublicDetail(id, type, await viewerRegion());
   if (!found || found.item.type !== type) return null;
   return found;
 });
@@ -65,21 +63,19 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
     item.description?.slice(0, 200) ??
     `${item.title} — release date, ratings and where to watch, on Fandex.`;
   const image = item.posterUrl ?? item.backdropUrl;
-  // Canonical is always the uuid url; a live item has no canonical form yet, so
-  // it stays noindex regardless of the flag (nothing stable to index).
-  const canonical = found.canonicalId
-    ? `${BASE_URL}/${type}/${found.canonicalId}/${slugify(item.title)}`
-    : null;
+  // Every item has a uuid now (H2b), so there is always exactly one canonical
+  // url — no more "live item with nothing stable to index" case.
+  const canonical = `${BASE_URL}/${type}/${found.canonicalId}/${slugify(item.title)}`;
 
   return {
     title,
     description,
-    ...(PUBLIC_ITEMS_INDEXABLE && canonical ? {} : { robots: { index: false, follow: false } }),
-    ...(canonical ? { alternates: { canonical } } : {}),
+    ...(PUBLIC_ITEMS_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
+    alternates: { canonical },
     openGraph: {
       title,
       description,
-      ...(canonical ? { url: canonical } : {}),
+      url: canonical,
       type: "website",
       images: image ? [{ url: image, alt: item.title }] : undefined,
     },
@@ -100,15 +96,9 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
 
   const canonicalSlug = slugify(item.title);
 
-  // Addressed by a source id but the item HAS a row (either it already did, or a
-  // logged-in view just created it) → send it to its canonical uuid url. Not
-  // permanent: for an anonymous viewer the same source-id url is still the only
-  // address, so this mapping isn't stable enough to cache forever.
-  if (canonicalId && !isUuid(id)) redirect(`/${type}/${canonicalId}/${canonicalSlug}`);
-
   // Cosmetic slug drift → canonical. Permanent (308), since the uuid→slug
   // mapping IS stable: 307 would tell Google to keep indexing both urls.
-  if (slug !== canonicalSlug) permanentRedirect(`/${type}/${canonicalId ?? id}/${canonicalSlug}`);
+  if (slug !== canonicalSlug) permanentRedirect(`/${type}/${canonicalId}/${canonicalSlug}`);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
