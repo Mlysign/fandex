@@ -1,9 +1,21 @@
 // Standalone migration runner for the live data/rr.db. Reuses the SAME ordered
-// migration list as the app (src/lib/migrations.ts), imported with an explicit
-// .ts extension so Node's native type-stripping can load it (it has no runtime
-// imports of app modules). Usage: node scripts/migrate.mjs <db-path>
+// migration list as the app (src/lib/migrations.ts) rather than restating it, so
+// the two apply paths can't drift. Usage: node scripts/migrate.mjs <db-path>
+//
+// migrations.ts is TypeScript and (since H2a) imports real app modules via the
+// `@/*` alias, which plain Node resolves under neither name. alias-hooks.mjs
+// teaches it both; type-stripping is native (Node >= 22.18).
+//
+// registerHooks(), not the deprecated register() (DEP0205): it runs the hook
+// in-thread and synchronously. Hooks only affect LATER imports and a static
+// import would be hoisted above this call, so migrations.ts is imported
+// dynamically below — that ordering is load-bearing, not style.
+import { registerHooks } from "node:module";
 import Database from "better-sqlite3";
-import { runMigrations } from "../src/lib/migrations.ts";
+import { resolve } from "./alias-hooks.mjs";
+
+registerHooks({ resolve });
+const { runMigrations } = await import("../src/lib/migrations.ts");
 
 const dbPath = process.argv[2];
 if (!dbPath) { console.error("usage: node scripts/migrate.mjs <db-path>"); process.exit(1); }

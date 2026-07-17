@@ -5,12 +5,23 @@
 //
 // Baseline: user_version 1 is the "norm_title backfill" baseline established by
 // db.ts's inline NORM_VERSION step (it uses normalizeName(), app-only logic, so
-// it stays inline). Every migration here is >= 2 and written as pure SQL so the
-// SAME list can be applied either in-process (via getDb()) or standalone against
-// the live data/rr.db by scripts/migrate.mjs — no app-logic duplication.
+// it stays inline). Every migration here is >= 2, and the SAME list is applied
+// either in-process (via getDb()) or standalone against the live data/rr.db by
+// scripts/migrate.mjs — no app-logic duplication.
 //
 // Rules:
-//  - Pure SQL only (no imports of app modules) so it runs under both paths.
+//  - Prefer pure SQL. This file was originally "pure SQL only, no app imports" so
+//    that plain `node` could load it; migration 7 (H2a) broke that rule to reuse
+//    projectRawData(), and the standalone runner silently died on the `@/` alias
+//    until scripts/alias-hooks.mjs taught Node to resolve it.
+//    The rule is now: an app import is allowed ONLY when the alternative is
+//    duplicating real app logic into a migration (projectRawData is ~200 lines
+//    that must track normalize.ts; a frozen copy here would drift and re-project
+//    the live catalog wrongly). Reaching for one means BOTH paths must still run,
+//    so re-verify with `node scripts/migrate.mjs <copy-of-db>` — the in-process
+//    path passing proves nothing about the standalone one. Keep imports leaf-like
+//    and side-effect-free: pulling in a module that opens a DB or reads env at
+//    import time will deadlock or crash the standalone runner.
 //  - Idempotent where practical (IF NOT EXISTS / INSERT OR IGNORE) so a partial
 //    apply can be safely retried.
 //  - Expand-then-contract: add + backfill + switch reads → verify → (later) drop.

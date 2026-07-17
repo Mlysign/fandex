@@ -16,12 +16,13 @@ import { PROJECTION_VERSION } from "./sources/project";
 // thing that wasn't repeatable.
 //
 // NOTE this runs the WHOLE MIGRATIONS list, not just 7 — it is the closest thing
-// to a rehearsal of what happens on the live volume at boot. It matters more than
-// usual because `scripts/migrate.mjs` (the documented standalone apply/verify
-// tool) has been BROKEN since H2a: migration 7 imports `@/lib/sources/project`,
-// which node can't resolve, and which the file's own "pure SQL only, no app
-// imports" rule exists to prevent. Until that's fixed, this test IS the
-// verification step.
+// to a rehearsal of what happens on the live volume at boot.
+//
+// It covers the IN-PROCESS path only (vitest resolves `@`, as Next does). That is
+// NOT the path `scripts/migrate.mjs` takes: this test passing while that runner
+// was dead on an unresolvable `@/` import is exactly how it stayed broken from
+// H2a until the fix. Both paths are real; green here says nothing about the
+// other one, so verify a migration under both.
 
 const SOURCE = "data/rr.db";
 const COPY = `${process.env.TEMP ?? "/tmp"}/mig-dryrun.db`;

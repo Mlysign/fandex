@@ -1,4 +1,7 @@
-import { Source } from "@/types";
+// `import type`, not a value import: scripts/migrate.mjs loads this module under
+// Node's native type-stripping, which erases `export type Source` from the target
+// but would leave a value import of it in place → "does not provide an export".
+import type { Source } from "@/types";
 import { COUNTRIES } from "@/lib/countries";
 
 // ── H2a: raw_data projection ─────────────────────────────────────────────────
