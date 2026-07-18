@@ -78,6 +78,16 @@ export default function AuthOptions({
         Continue with Steam
       </a>
 
+      {/* Q6: TMDB was connect-only although its callback fully supports fresh
+          login (creates the user + session, honors the H2c return cookie). */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a href={`/api/auth/tmdb${q}`}
+        className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
+        style={{ background: "#01b4e420", border: "1px solid #01b4e444", color: "#01b4e4" }}>
+        <span className="text-lg font-bold">T</span>
+        Continue with TMDB
+      </a>
+
       {!showRawg ? (
         <button onClick={() => setShowRawg(true)}
           className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"

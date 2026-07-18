@@ -22,8 +22,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 
-type Filter = { types: MediaType[] };
-
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 
 // ── First-run onboarding checklist (distinct from the shared <EmptyState>) ──
@@ -100,9 +98,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
-  const [view, setView] = useViewMode("list", ["list", "card", "calendar"]);
-  // Persisted across back-nav (T12).
-  const [filter, setFilter] = usePersistedState<Filter>("rr_wishlist_filter", { types: [] });
+  const [view, setView] = useViewMode("rr_view_wishlist", "list", ["list", "card", "calendar"]);
+  // Persisted across back-nav (T12). SM2: the type filter is GLOBAL — one
+  // shared key across Wishlist / Library / Discover.
+  const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
   const [search, setSearch] = usePersistedState("rr_wishlist_search", "");
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_excFacets", []);
@@ -172,7 +171,7 @@ export default function DashboardPage() {
   };
 
   // Year + membership for the shared FilterPanel (rendered in the sticky SubBar).
-  const advFilters: UiFilters = { ...defaultUiFilters(), types: filter.types, includeFacets, excludeFacets, yearRange, membership };
+  const advFilters: UiFilters = { ...defaultUiFilters(), types, includeFacets, excludeFacets, yearRange, membership };
   const patchAdvanced = (patch: Partial<UiFilters>) => {
     if (patch.yearRange) setYearRange(patch.yearRange);
     if (patch.membership) setMembership(patch.membership);
@@ -181,7 +180,7 @@ export default function DashboardPage() {
   const q = search.trim().toLowerCase();
 
   const filtered = items.filter((item) => {
-    if (filter.types.length > 0 && !filter.types.includes(item.type)) return false;
+    if (types.length > 0 && !types.includes(item.type)) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
     if (!matchesFacets(item, includeFacets, excludeFacets)) return false;
     if (!passesYearMembership(item, yearRange, membership)) return false;
@@ -216,8 +215,8 @@ export default function DashboardPage() {
       <NavBar />
 
       <SubBar
-        activeTypes={filter.types}
-        onToggleType={(t) => setFilter((f) => ({ ...f, types: toggleFilter(f.types, t as MediaType) }))}
+        activeTypes={types}
+        onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search your wishlist…"

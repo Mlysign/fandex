@@ -17,6 +17,7 @@ import {
   UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX,
 } from "@/components/discovery/types";
+import { MediaType } from "@/types";
 
 const LIMIT = 60;
 
@@ -86,11 +87,16 @@ export default function DiscoverPage() {
   const router = useRouter();
   // Persisted across back-nav (T12).
   const [q, setQ] = usePersistedState("rr_discover_q", "");
-  const [filters, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
+  // SM2: the type filter is GLOBAL (shared with Wishlist/Library), so it lives
+  // in its own key; `filters` is merged from the rest + the shared types slice.
+  // The types stored inside rr_discover_filters are ignored from now on.
+  const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
+  const [filtersRest, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
+  const filters: UiFilters = { ...filtersRest, types };
   // Default = "releaseOld": the ascending Timeline order. Any other sort (or a
   // query/filter) switches into catalog search results.
   const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "releaseOld");
-  const [view, setView] = useViewMode("card", ["list", "card", "calendar"]);
+  const [view, setView] = useViewMode("rr_view_discover", "card", ["list", "card", "calendar"]);
 
   // ── Browse (Timeline) state ──
   const [items, setItems] = useState<any[]>([]);
@@ -352,10 +358,16 @@ export default function DiscoverPage() {
 
   // ── Filter mutators ──
   function toggleType(t: string) {
-    setFilters((f) => ({ ...f, types: f.types.includes(t) ? f.types.filter((x) => x !== t) : [...f.types, t] }));
+    setTypes((prev) => (prev.includes(t as MediaType) ? prev.filter((x) => x !== t) : [...prev, t as MediaType]));
   }
-  function patchFilters(patch: Partial<UiFilters>) { setFilters((f) => ({ ...f, ...patch })); }
-  function resetFilters() { setFilters(defaultUiFilters()); setQ(""); }
+  // A `types` patch (if a caller ever sends one) goes to the shared key, the
+  // rest to this page's own filters.
+  function patchFilters(patch: Partial<UiFilters>) {
+    const { types: patchTypes, ...rest } = patch;
+    if (patchTypes) setTypes(patchTypes as MediaType[]);
+    if (Object.keys(rest).length) setFilters((f) => ({ ...f, ...rest }));
+  }
+  function resetFilters() { setFilters(defaultUiFilters()); setTypes([]); setQ(""); }
 
   // Must-include / exclude facets for the shared SearchBar.
   const searchFacets: SearchBarFacets = {

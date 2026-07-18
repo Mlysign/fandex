@@ -20,16 +20,16 @@ import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 
-type Filter = { types: MediaType[] };
 
 export default function LibraryPage() {
   const router = useRouter();
   const [items, setItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [view, setView] = useViewMode("list", ["list", "card", "calendar"]);
+  const [view, setView] = useViewMode("rr_view_library", "list", ["list", "card", "calendar"]);
   // Persisted across back-nav (T12).
-  const [filter, setFilter] = usePersistedState<Filter>("rr_library_filter", { types: [] });
+  // SM2: global type filter — one shared key across Wishlist / Library / Discover.
+  const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
   const [search, setSearch] = usePersistedState("rr_library_search", "");
   const [hideRated, setHideRated] = usePersistedState("rr_library_hideRated", false);
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_library_incFacets", []);
@@ -81,7 +81,7 @@ export default function LibraryPage() {
   };
 
   // Year + membership for the shared FilterPanel (rendered in the sticky SubBar).
-  const advFilters: UiFilters = { ...defaultUiFilters(), types: filter.types, includeFacets, excludeFacets, yearRange, membership };
+  const advFilters: UiFilters = { ...defaultUiFilters(), types, includeFacets, excludeFacets, yearRange, membership };
   const patchAdvanced = (patch: Partial<UiFilters>) => {
     if (patch.yearRange) setYearRange(patch.yearRange);
     if (patch.membership) setMembership(patch.membership);
@@ -89,7 +89,7 @@ export default function LibraryPage() {
 
   const q = search.trim().toLowerCase();
   const filtered = items.filter((item) => {
-    if (filter.types.length > 0 && !filter.types.includes(item.type)) return false;
+    if (types.length > 0 && !types.includes(item.type)) return false;
     if (hideRated && item.rating != null) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
     if (!matchesFacets(item, includeFacets, excludeFacets)) return false;
@@ -121,8 +121,8 @@ export default function LibraryPage() {
       <NavBar />
 
       <SubBar
-        activeTypes={filter.types}
-        onToggleType={(t) => setFilter((f) => ({ ...f, types: toggleFilter(f.types, t as MediaType) }))}
+        activeTypes={types}
+        onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search your library…"

@@ -261,11 +261,30 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
 }
 
 // ── Sort + assemble ───────────────────────────────────────────────────────────
+
+// SM3 — "Highest rated" orders by a Bayesian-damped score, not the raw average:
+// an obscure credit with a handful of 9+ votes must not outrank a classic with
+// thousands (IMDb-style). score = (v·R + m·C)/(v + m), where C is this pool's
+// own crowd average (so the prior adapts to the facet) and m is the prior's
+// vote weight. Titles without a rating sort last. The DISPLAYED score stays the
+// raw average — only the ordering is damped.
+const BAYES_PRIOR_VOTES = 50;
+export function bayesScore(t: PoolTitle, prior: number): number {
+  if (t.vote == null) return -1;
+  return (t.votes * t.vote + BAYES_PRIOR_VOTES * prior) / (t.votes + BAYES_PRIOR_VOTES);
+}
+
 export function sortPool(pool: PoolTitle[], sort: FacetSort): PoolTitle[] {
+  // Prior from WELL-VOTED titles only (no crowdAvg small-pool fallback — that
+  // would let the very low-vote outliers we're damping pull the prior toward
+  // themselves). Neutral 6.5 when nothing qualifies.
+  const minVotes = (t: PoolTitle) => (t.source === "rawg" ? 5 : 10);
+  const voted = pool.filter((t) => t.vote != null && t.votes >= minVotes(t));
+  const prior = voted.length ? voted.reduce((s, t) => s + (t.vote as number), 0) / voted.length : 6.5;
   const cmp: Record<FacetSort, (a: PoolTitle, b: PoolTitle) => number> = {
     popular: (a, b) => b.votes - a.votes || (b.vote ?? 0) - (a.vote ?? 0),
     newest: (a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""),
-    rating: (a, b) => (b.vote ?? -1) - (a.vote ?? -1) || b.votes - a.votes,
+    rating: (a, b) => bayesScore(b, prior) - bayesScore(a, prior) || b.votes - a.votes,
   };
   return [...pool].sort(cmp[sort]);
 }

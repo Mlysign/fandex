@@ -48,8 +48,12 @@ describe("sortPool", () => {
   it("newest = by release date desc", () => {
     expect(sortPool(pool, "newest").map((t) => t.sourceId)).toEqual(["new-flop", "mid", "old-hit"]);
   });
-  it("rating = by score desc", () => {
-    expect(sortPool(pool, "rating").map((t) => t.sourceId)).toEqual(["new-flop", "mid", "old-hit"]);
+  it("rating = Bayesian-damped score desc (SM3): a 5-vote 9.5 does NOT outrank a well-voted 7.5", () => {
+    expect(sortPool(pool, "rating").map((t) => t.sourceId)).toEqual(["mid", "new-flop", "old-hit"]);
+  });
+  it("rating still ranks a well-voted high scorer first", () => {
+    const withClassic = [...pool, mk("classic", 5000, 8.7, "1999-01-01")];
+    expect(sortPool(withClassic, "rating")[0].sourceId).toBe("classic");
   });
 });
 
