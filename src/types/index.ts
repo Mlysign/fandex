@@ -109,6 +109,10 @@ export interface EnrichedItem {
   review?: string | null;
   reviewedAt?: number | null;    // unix seconds
   libraryStatus?: string | null; // watched | played | owned
+  // H5.3 — personalized taste-match (0-100), from the rated-library profile.
+  // null when cold-start (too few rated items) or this item matches none of
+  // the user's profile facets. Absent entirely for a logged-out viewer.
+  fandexScore?: number | null;
   developer: string | null;
   publisher: string | null;
   // Movie/show credits + keywords (from TMDB)

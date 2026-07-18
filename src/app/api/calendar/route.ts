@@ -4,6 +4,8 @@ import { query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
+import { extractFacets } from "@/lib/facets";
+import { buildProfile, computeFandexScore } from "@/lib/discovery";
 import { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
 
 export const GET = withUser(async (req: NextRequest, session) => {
@@ -61,6 +63,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
     // Build enriched items (region-aware release date + streaming, T22)
     const country = getUserCountry(session.userId);
+    const profile = buildProfile(session.userId);
     const enriched: EnrichedItem[] = [];
     for (const { item, links } of itemMap.values()) {
       // Source filter
@@ -72,6 +75,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         type: item.type,
         platformSources: item.platformSources,
         ...merged,
+        fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
       });
     }
 

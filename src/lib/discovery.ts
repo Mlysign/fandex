@@ -214,7 +214,16 @@ export interface Profile {
   meta: Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string; classWeight?: number; BA?: number; n?: number }>;
   baseline: number;
   hasSignal: boolean;
+  ratedItemCount: number;
 }
+
+// H5.3 §8 cold-start: below this many rated items, computeFandexScore refuses
+// to show a number at all rather than a misleading one built on 1-2 samples.
+// Deliberately NOT folded into `hasSignal` (which stays "at least one facet",
+// unchanged since before H5) — hasSignal also gates Discover's "match" sort
+// fallback, and raising that bar would change existing ranking behavior for
+// sparse profiles as a side effect of a scoring-display decision.
+export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
 // Per-user; sig-invalidated on read. Capped so many distinct users can't grow it
 // without bound (single-instance, P2).
@@ -261,7 +270,7 @@ export function buildProfile(userId: string): Profile {
     w.set(id, dev * classWeight);
     meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, classWeight, BA, n: f.count });
   }
-  const profile: Profile = { w, meta, baseline: a.baseline, hasSignal: w.size > 0 };
+  const profile: Profile = { w, meta, baseline: a.baseline, hasSignal: w.size > 0, ratedItemCount: a.ratedItemCount };
   _profileCache.set(userId, { sig, profile });
   return profile;
 }
@@ -308,7 +317,7 @@ function applyRefinements(profile: Profile, refine: DiscoverRefine | undefined, 
   }
 
   const hasSignal = [...w.values()].some((x) => x !== 0);
-  return { w, meta, baseline: profile.baseline, hasSignal };
+  return { w, meta, baseline: profile.baseline, hasSignal, ratedItemCount: profile.ratedItemCount };
 }
 
 // ── Scoring ────────────────────────────────────────────────────────
@@ -348,7 +357,7 @@ export interface FandexScoreResult { score: number; reasons: Reason[] }
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
 export function computeFandexScore(facets: Facet[], profile: Profile): FandexScoreResult | null {
-  if (!profile.hasSignal) return null;
+  if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
   const cfg = getScoringConfig();
 
   const matched: FandexContrib[] = [];
@@ -467,6 +476,7 @@ export interface DiscoverResultItem {
   sources: { source: string; sourceId: string }[];
   score: number;
   reasons: Reason[];
+  fandexScore: number | null;
 }
 
 export interface FindResult {
@@ -478,7 +488,12 @@ export interface FindResult {
 
 export function find(userId: string, req: FindRequest): FindResult {
   const { vectors, byId, idf } = getCache();
-  const profile = applyRefinements(buildProfile(userId), req.refine, byId);
+  // H5.3: the visible Fandex Score badge uses the RAW rated-library profile,
+  // never the refined one — a seed/manual-pill nudge changes what ranks well
+  // in THIS search, not your actual taste-match number (D2's "fully
+  // transparent" intent extends to "stable regardless of session refinements").
+  const rawProfile = buildProfile(userId);
+  const profile = applyRefinements(rawProfile, req.refine, byId);
   const filters = req.filters ?? {};
   const sort: SortKey = req.sort ?? "match";
   const limit = Math.min(Math.max(req.limit ?? 60, 1), 120);
@@ -531,6 +546,7 @@ export function find(userId: string, req: FindRequest): FindResult {
       libraryStatus: st?.libraryStatus ?? null,
       rating: st?.rating ?? null,
       sources: v.sources, score, reasons,
+      fandexScore: computeFandexScore(v.facets, rawProfile)?.score ?? null,
     };
   });
 

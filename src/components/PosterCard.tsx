@@ -7,6 +7,7 @@ import Tooltip from "@/components/Tooltip";
 import type { TooltipItem } from "@/components/Tooltip";
 import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
+import FandexScoreBadge from "@/components/FandexScoreBadge";
 import { MediaCardItem } from "@/components/cardItem";
 
 // The shared media-item shape (see cardItem.ts). Re-exported as PosterCardItem
@@ -67,6 +68,11 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
             <span className="opacity-0 group-hover:opacity-100 transition-all text-xs text-white bg-black/60 px-3 py-1.5 rounded-lg">
               View details
             </span>
+          </div>
+
+          {/* Fandex Score — top-right corner overlay; renders nothing if absent */}
+          <div className="absolute top-1.5 right-1.5">
+            <FandexScoreBadge score={item.fandexScore} className="shadow-sm backdrop-blur-sm" />
           </div>
         </div>
 

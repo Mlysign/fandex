@@ -1,6 +1,8 @@
 // Client-side mirror of the Taste Match API shapes (kept free of server imports).
 
-export interface Reason { kind: string; role?: string; label: string; category?: string; contribution: number }
+// BA/n (H5.2 §3.4): the facet's Bayesian average + rated-item count, only
+// populated on Fandex Score reasons (not the older Discover match-score ones).
+export interface Reason { kind: string; role?: string; label: string; category?: string; contribution: number; BA?: number; n?: number }
 
 export interface DiscoverItem {
   id: string;
@@ -18,6 +20,7 @@ export interface DiscoverItem {
   sources: { source: string; sourceId: string }[];
   score: number;
   reasons: Reason[];
+  fandexScore: number | null;
 }
 
 export interface FacetPill { kind: string; role?: string; key: string; label: string }

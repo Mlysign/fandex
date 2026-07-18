@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import Tooltip, { TooltipItem } from "@/components/Tooltip";
 import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
+import FandexScoreBadge from "@/components/FandexScoreBadge";
 import { TYPE_COLORS } from "@/lib/constants";
 import { MediaCardItem } from "@/components/cardItem";
 
@@ -75,6 +76,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
             {item.dates && item.dates.length > 1 && (
               <span className="text-neutral-600">· {item.dates.length} dates</span>
             )}
+            <FandexScoreBadge score={item.fandexScore} />
           </div>
         </div>
         <div className="flex items-center pr-3 flex-shrink-0">

@@ -4,6 +4,8 @@ import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap, resolveMediaItemFromIds } from "@/lib/userState";
+import { extractFacets } from "@/lib/facets";
+import { buildProfile, computeFandexScore } from "@/lib/discovery";
 import { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
@@ -68,6 +70,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     }
 
     const country = getUserCountry(session.userId);
+    const profile = buildProfile(session.userId);
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const { item, links } of itemMap.values()) {
       const merged = mergeLinks(links, item.type, country);
@@ -84,6 +87,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         review: item.review,
         reviewedAt: item.reviewedAt,
         libraryStatus: item.status,
+        fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
       });
     }
 

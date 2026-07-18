@@ -7,6 +7,8 @@ import { probeSession } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
+import FandexScoreSection from "./FandexScoreSection";
+import { Reason } from "@/components/discovery/types";
 
 // P13 — the ONE section that differs between a logged-out and a logged-in
 // viewer, on the ONE shared item url.
@@ -26,6 +28,8 @@ interface DetailResponse {
   item?: Partial<EnrichedItem>;
   platforms?: PlatformStatus[];
   resolvedMediaItemId?: string | null;
+  fandexReasons?: Reason[];
+  fandexColdStart?: boolean;
 }
 
 export default function PersonalSection({
@@ -209,6 +213,15 @@ export default function PersonalSection({
         onRate={anon ? (n) => requestAuth({ kind: "rate", value: n }) : handleRate}
         onMarkWatched={anon ? () => requestAuth({ kind: "watched" }) : handleMarkWatched}
       />
+      {/* H5.3 — anon viewers never fetch /api/detail (no session, no profile), so
+          there's nothing to show them; §8's "no popularity fallback" applies. */}
+      {!anon && (
+        <FandexScoreSection
+          score={item.fandexScore ?? null}
+          reasons={detail?.fandexReasons ?? []}
+          coldStart={!!detail?.fandexColdStart}
+        />
+      )}
       {anon ? (
         <AnonWishlist steamStoreUrl={steamStoreUrl} onAdd={() => requestAuth({ kind: "wishlist" })} />
       ) : (

@@ -99,6 +99,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
       ]),
       baseline: 5,
       hasSignal: true,
+      ratedItemCount: 10,
     };
     const result = computeFandexScore(facets, profile);
     expect(result).not.toBeNull();
@@ -114,7 +115,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     const profile: Profile = {
       w: new Map([["tag||a", 10]]), // dev 10 * K 10 = 100 above 50 → would be 150
       meta: new Map([["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })]]),
-      baseline: 5, hasSignal: true,
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
     };
     expect(computeFandexScore(facets, profile)!.score).toBe(100);
   });
@@ -133,7 +134,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
       metaMap.set(id, meta({ key, label: key, category: "theme", classWeight: 1 }));
       facets.push({ kind: "tag", key, label: key, category: "theme" });
     });
-    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true };
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
 
     const result = computeFandexScore(facets, profile)!;
     const expectedWeightedDev = (5 + 4 + 3) / 3;
@@ -143,13 +144,25 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
   });
 
   it("returns null when no facet on the item matches the profile", () => {
-    const profile: Profile = { w: new Map([["tag||known", 1]]), meta: new Map([["tag||known", meta({ key: "known", label: "Known", classWeight: 1 })]]), baseline: 5, hasSignal: true };
+    const profile: Profile = { w: new Map([["tag||known", 1]]), meta: new Map([["tag||known", meta({ key: "known", label: "Known", classWeight: 1 })]]), baseline: 5, hasSignal: true, ratedItemCount: 10 };
     const facets: Facet[] = [{ kind: "tag", key: "unknown", label: "Unknown", category: "genre" }];
     expect(computeFandexScore(facets, profile)).toBeNull();
   });
 
   it("returns null when the profile has no signal at all (cold start)", () => {
-    const profile: Profile = { w: new Map(), meta: new Map(), baseline: 0, hasSignal: false };
+    const profile: Profile = { w: new Map(), meta: new Map(), baseline: 0, hasSignal: false, ratedItemCount: 0 };
+    expect(computeFandexScore([{ kind: "tag", key: "a", label: "A", category: "genre" }], profile)).toBeNull();
+  });
+
+  it("§8 cold-start threshold: returns null below MIN_RATED_FOR_FANDEX_SCORE even with real facet signal", () => {
+    // hasSignal is true (a real weighted facet exists) but only 1 rated item
+    // backs it — below MIN_RATED_FOR_FANDEX_SCORE (3), so no number is shown
+    // rather than one built on a single sample.
+    const profile: Profile = {
+      w: new Map([["tag||a", 3]]),
+      meta: new Map([["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1, BA: 8, n: 1 })]]),
+      baseline: 5, hasSignal: true, ratedItemCount: 1,
+    };
     expect(computeFandexScore([{ kind: "tag", key: "a", label: "A", category: "genre" }], profile)).toBeNull();
   });
 });
@@ -159,7 +172,7 @@ describe("§4 hard exclusions — community rating, popularity/browsed, release 
     const profile: Profile = {
       w: new Map([["tag||a", 1]]),
       meta: new Map([["tag||a", { kind: "tag", key: "a", label: "A", category: "genre", classWeight: 1, BA: 1, n: 3 }]]),
-      baseline: 5, hasSignal: true,
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
     };
     const facets: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
 

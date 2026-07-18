@@ -15,6 +15,7 @@ export interface MediaCardItem {
   rating?: number | null;        // personal score (0-10)
   ratings?: { source: string; rating: number }[]; // per-platform breakdown
   libraryStatus?: string | null; // watched | played | owned
+  fandexScore?: number | null;   // H5.3 — personalized taste-match (0-100); null/absent → no badge
   // Identity for quick actions (rate / wishlist) without opening the detail page.
   sources?: { source: string; sourceId: string }[];
   ids?: Record<string, string | number>;

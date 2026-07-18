@@ -3,6 +3,8 @@ import { withUser } from "@/lib/withUser";
 import { get } from "@/lib/db";
 import { mergeLinks, explainMerge } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
+import { extractFacets } from "@/lib/facets";
+import { buildProfile, computeFandexScore, MIN_RATED_FOR_FANDEX_SCORE } from "@/lib/discovery";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
@@ -65,6 +67,12 @@ export const GET = withUser(async (req: NextRequest, session) => {
     // 4. Merge canonical metadata (region-aware release date + streaming, T22).
     const merged = mergeLinks(links, itemType, getUserCountry(session.userId));
 
+    // H5.3 — the Fandex Score + its breakdown. Works for a live (not-yet-persisted)
+    // item too: extractFacets only needs links/type/merged, not a mediaItemId.
+    const fandexProfile = buildProfile(session.userId);
+    const fandex = computeFandexScore(extractFacets(links, itemType, merged), fandexProfile);
+    const fandexColdStart = fandexProfile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE;
+
     // 5. Attach the user's wishlist + library state (empty when not in DB).
     const watchlistRow = mediaItemId
       ? get<{ platform_sources: string }>(
@@ -99,6 +107,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
           libraryStatus: libraryRow.status,
         };
       })() : {}),
+      fandexScore: fandex?.score ?? null,
     };
     await applyOmdbScores(enriched);
 
@@ -130,6 +139,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
       platforms,
       resolvedMediaItemId: mediaItemId,
       onAnyList,
+      fandexReasons: fandex?.reasons ?? [],
+      fandexColdStart,
       ...(debug ? { debug } : {}),
     });
 });
