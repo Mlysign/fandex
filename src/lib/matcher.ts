@@ -368,6 +368,17 @@ export function removeWatchlistSource(userId: string, mediaItemId: string, sourc
   rebuildCaches(userId, mediaItemId);
 }
 
+// Remove an item from the wishlist entirely (clears every per-source wishlist
+// row). Mirrors clearLibrary below — used by the "remove whole item" DELETE
+// path so it can't bypass user_item_state the way a raw
+// `DELETE FROM user_watchlist` would (that left the truth table with an
+// orphaned row nothing ever cleaned up: found live 2026-07-19, one row, from
+// exactly this shortcut in the old /api/watchlist DELETE handler).
+export function clearWatchlist(userId: string, mediaItemId: string) {
+  run("DELETE FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'wishlist'", [userId, mediaItemId]);
+  rebuildCaches(userId, mediaItemId);
+}
+
 export function upsertLibraryEntry(userId: string, mediaItemId: string, source: Source, fields: LibraryFields = {}) {
   setSourceState(userId, mediaItemId, source, "library", fields);
   rebuildCaches(userId, mediaItemId);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
-import { get, run, query } from "@/lib/db";
-import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource } from "@/lib/matcher";
+import { get, query } from "@/lib/db";
+import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource, clearWatchlist } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
 import { resolveMediaItemFromIds } from "@/lib/userState";
 import { sanitizePosterUrl } from "@/lib/posterUrl";
@@ -117,10 +117,13 @@ export const DELETE = withUser(async (req: NextRequest, session) => {
     }
 
     // ── Local DB removal ──────────────────────────────────────────
+    // clearWatchlist clears every per-source user_item_state row (the truth)
+    // and rebuilds the cache from it — a raw `DELETE FROM user_watchlist`
+    // here previously deleted only the cache, leaving orphaned truth rows.
     if (source) {
       removeWatchlistSource(session.userId, mediaItemId, source as any);
     } else {
-      run("DELETE FROM user_watchlist WHERE user_id = ? AND media_item_id = ?", [session.userId, mediaItemId]);
+      clearWatchlist(session.userId, mediaItemId);
     }
 
     return NextResponse.json({ ok: true });

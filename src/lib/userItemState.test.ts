@@ -4,6 +4,7 @@ import {
   upsertMediaItem,
   upsertWatchlistEntry,
   removeWatchlistSource,
+  clearWatchlist,
   upsertLibraryEntry,
   removeLibrarySource,
   recordLibraryRating,
@@ -54,6 +55,17 @@ describe("D1/D2 wishlist", () => {
 
     removeWatchlistSource(USER, item, "trakt");
     removeWatchlistSource(USER, item, "tmdb");
+    expect(get("SELECT 1 FROM user_watchlist WHERE media_item_id=?", [item])).toBeNull();
+    expect(query("SELECT 1 FROM user_item_state WHERE relation='wishlist'").length).toBe(0);
+  });
+
+  it("clearWatchlist removes every per-source truth row, not just the cache (regression: a raw DELETE FROM user_watchlist left orphaned user_item_state rows live on prod)", () => {
+    upsertWatchlistEntry(USER, item, "trakt");
+    upsertWatchlistEntry(USER, item, "tmdb");
+    expect(query("SELECT 1 FROM user_item_state WHERE relation='wishlist'").length).toBe(2);
+
+    clearWatchlist(USER, item);
+
     expect(get("SELECT 1 FROM user_watchlist WHERE media_item_id=?", [item])).toBeNull();
     expect(query("SELECT 1 FROM user_item_state WHERE relation='wishlist'").length).toBe(0);
   });
