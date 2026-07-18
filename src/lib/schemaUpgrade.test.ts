@@ -79,8 +79,8 @@ describe("schema upgrade over an existing database", () => {
     }).not.toThrow();
 
     // The migration must have actually landed (through whatever the latest
-    // migration version is — currently 9, H5.1's scoring_config core).
-    expect(db.pragma("user_version", { simple: true })).toBe(9);
+    // migration version is — currently 10, H5.6's tag_alias table).
+    expect(db.pragma("user_version", { simple: true })).toBe(10);
     const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
     expect(cols.some((c) => c.name === "browsed")).toBe(true);
     // The pre-existing row belongs to the pool, not the browsed tail.

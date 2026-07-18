@@ -185,3 +185,9 @@ export const ScoringPreviewSchema = z.object({
   categoryWeights: z.array(z.object({ id: z.string(), weight: z.number().min(0), ignored: z.boolean() })),
   itemId: z.string().optional(),
 });
+
+// POST /api/dev/scoring/aliases — bundle member tag spellings under one canonical.
+export const TagAliasPostSchema = z.object({
+  canonical: z.string().min(1),
+  members: z.array(z.string().min(1)).min(1),
+});

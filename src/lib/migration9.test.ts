@@ -28,10 +28,12 @@ function freshDb(): Database.Database {
 }
 
 describe("migration 9 — scoring_config + tag_category + tag_category_override", () => {
-  it("creates all three tables and lands at user_version 9", () => {
+  it("creates all three tables and lands at user_version >= 9", () => {
     const db = freshDb();
     runMigrations(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(9);
+    // >= 9 so later migrations (10+) don't break this: the point is migration 9's
+    // tables exist after a full run.
+    expect(db.pragma("user_version", { simple: true }) as number).toBeGreaterThanOrEqual(9);
 
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
     const names = new Set(tables.map((t) => t.name));

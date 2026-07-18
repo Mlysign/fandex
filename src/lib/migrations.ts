@@ -311,6 +311,27 @@ export const MIGRATIONS: Migration[] = [
       // taxonomy editor (H5.4) writes overrides here.
     },
   },
+  {
+    version: 10,
+    name: "tag_alias — bundle synonym/misspelled tag spellings (H5.6)",
+    up: (db) => {
+      // Tag bundling: map member spellings (scifi, science fiction) → one
+      // canonical key (sci fi) so scoring, Insights, the facet page and the
+      // catalog vocab treat them as one tag with a combined average. Brand-new
+      // table (like migration 9) — table + index together, no column guard.
+      // Starts empty: canonicalTagKey() falls through to the raw key until the
+      // taxonomy editor writes aliases here. Chains are flattened on write, so
+      // canonical resolution is always a single lookup.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tag_alias (
+          alias_key     TEXT PRIMARY KEY,        -- member spelling, e.g. "scifi"
+          canonical_key TEXT NOT NULL,           -- bundle canonical, e.g. "sci fi"
+          updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tag_alias_canonical ON tag_alias(canonical_key);
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

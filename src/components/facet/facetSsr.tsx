@@ -1,9 +1,10 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
 import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref, FacetPrefix } from "@/lib/facetUrl";
+import { canonicalTagKey } from "@/lib/tagAlias";
 import { buildPublicFacetDetail, isFacetSort, FacetSort, PublicFacetPayload } from "@/lib/detail/publicFacetDetail";
 import PublicFacetView from "@/components/facet/PublicFacetView";
 
@@ -17,8 +18,11 @@ const ROLE_LABEL: Record<FacetPrefix, string> = { person: "Person", tag: "Tag", 
 // pass the SAME sort from searchParams — resolve to one build per request.
 const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Promise<PublicFacetPayload | null> => {
   if (!isFacetPrefix(prefix)) return null;
-  const key = slugToKey(slug);
+  let key = slugToKey(slug);
   if (!key) return null;
+  // H5.6: a tag bundle's member spellings resolve to the canonical key, so the
+  // provider pool + metadata use the canonical (the body separately 308s the URL).
+  if (prefix === "tag") key = canonicalTagKey(key);
   return buildPublicFacetDetail({ kind: prefixToKind(prefix), key }, { page: 0, sort });
 });
 
@@ -57,6 +61,13 @@ export async function buildFacetMetadata(
 export async function FacetPageBody({
   prefix, slug, searchParams,
 }: { prefix: FacetPrefix; slug: string; searchParams?: Record<string, string | string[] | undefined> }) {
+  // H5.6: 308 a bundled member spelling to its canonical url so the whole bundle
+  // lives at one address. Only tags have aliases; person/studio pass through.
+  if (prefix === "tag") {
+    const key = slugToKey(slug);
+    const canonical = canonicalTagKey(key);
+    if (canonical && canonical !== key) permanentRedirect(publicFacetHref({ kind: "tag", key: canonical }));
+  }
   const sort = sortOf(searchParams);
   const found = await resolve(prefix, slug, sort);
   if (!found || (found.total === 0 && !found.person)) notFound();

@@ -102,8 +102,8 @@ describe.skipIf(!hasDb)("migrations on a live-DB copy", () => {
 
     runMigrations(db as any);
 
-    // Through whatever the latest migration version is — currently 9 (H5.1).
-    expect(db.pragma("user_version", { simple: true })).toBe(9);
+    // Through whatever the latest migration version is — currently 10 (H5.6, tag_alias).
+    expect(db.pragma("user_version", { simple: true })).toBe(10);
     const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
     expect(cols.some((c) => c.name === "browsed")).toBe(true);
     // The migration must not add or drop items.

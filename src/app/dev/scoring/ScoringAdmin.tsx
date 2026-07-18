@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { ScoringConfigValues, TagCategoryConfig } from "./types";
+import { ScoringConfigValues, TagCategoryConfig, TagBundle } from "./types";
 import WeightsPanel from "./WeightsPanel";
 import TaxonomyPanel from "./TaxonomyPanel";
 
@@ -15,6 +15,7 @@ export default function ScoringAdmin() {
   const [config, setConfig] = useState<ScoringConfigValues | null>(null);
   const [categories, setCategories] = useState<TagCategoryConfig[]>([]);
   const [overrides, setOverrides] = useState<OverrideEntry[]>([]);
+  const [bundles, setBundles] = useState<TagBundle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,12 +23,16 @@ export default function ScoringAdmin() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/dev/scoring");
+      const [res, bundleRes] = await Promise.all([
+        fetch("/api/dev/scoring"),
+        fetch("/api/dev/scoring/aliases"),
+      ]);
       if (!res.ok) throw new Error(`Failed to load (${res.status})`);
       const data = await res.json();
       setConfig(data.config);
       setCategories(data.categories);
       setOverrides(data.overrides);
+      if (bundleRes.ok) setBundles((await bundleRes.json()).bundles ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -68,7 +73,7 @@ export default function ScoringAdmin() {
         tab === "weights" ? (
           <WeightsPanel config={config} categories={categories} onSaved={load} />
         ) : (
-          <TaxonomyPanel categories={categories} overrides={overrides} onChanged={load} />
+          <TaxonomyPanel categories={categories} overrides={overrides} bundles={bundles} onChanged={load} />
         )
       )}
     </div>

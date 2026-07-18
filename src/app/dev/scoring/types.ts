@@ -16,6 +16,12 @@ export interface TagCategoryConfig {
   sortOrder: number;
 }
 
+// H5.6 — a tag bundle: a canonical key + its member (alias) spellings.
+export interface TagBundle {
+  canonical: string;
+  members: string[];
+}
+
 export interface Reason {
   kind: string;
   role?: string;

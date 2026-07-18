@@ -8,6 +8,7 @@ import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
+import { applyTagAliases, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
 import { MediaLink, MediaType } from "@/types";
 
 // One aggregated facet (tag / person / company) across the rated library.
@@ -101,6 +102,11 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   const ratingValues: number[] = [];
   let ratingSum = 0;
 
+  // H5.6: fetch the tag-bundle map once, then canonicalize each item's tag
+  // facets — so all bundled spellings accumulate into one FacetStat (one merged
+  // count/sum → one Bayesian average across the whole bundle).
+  const aliases = getTagAliases();
+
   for (const { item, links } of groups.values()) {
     libraryIds.push(item.id);
     const rating = personalRating(item.rating, item.metadata);
@@ -123,7 +129,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
     });
 
-    for (const f of extractFacets(links, item.type, merged)) {
+    for (const f of applyTagAliases(extractFacets(links, item.type, merged), aliases)) {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
       const st = statMap.get(id);
       if (st) {
@@ -184,7 +190,10 @@ export function librarySignature(userId: string): string {
 }
 
 export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {
-  const sig = librarySignature(userId);
+  // H5.6: fold the tag-alias signature into the cache key — a bundle edit
+  // changes the aggregated facets but not the library itself, so librarySignature
+  // alone would serve stale (pre-bundle) stats.
+  const sig = `${librarySignature(userId)}|${tagAliasSignature()}`;
   const cached = _cache.get(userId);
   if (cached && cached.sig === sig) return cached.data;
   const data = analyzeLibraryFacets(userId);

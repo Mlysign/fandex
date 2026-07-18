@@ -6,6 +6,7 @@
 
 import { get, query, run } from "@/lib/db";
 import { DEFAULT_SCORING_CONFIG, ScoringConfigValues } from "@/lib/scoringDefaults";
+import { tagAliasSignature } from "@/lib/tagAlias";
 
 export interface TagCategoryConfig {
   id: string;
@@ -167,5 +168,8 @@ export function invalidateScoringConfigCaches(): void {
 // user's library happened to change. Folding this into buildProfile's cache
 // key makes any admin save invalidate every cached profile at once.
 export function scoringConfigSignature(): string {
-  return `${configSignature()}|${categorySignature()}|${overrideSignature()}`;
+  // tagAliasSignature (H5.6) folds in here so buildProfile's cache — keyed on
+  // librarySignature|scoringConfigSignature — busts when a tag bundle changes,
+  // even though the library itself didn't.
+  return `${configSignature()}|${categorySignature()}|${overrideSignature()}|${tagAliasSignature()}`;
 }

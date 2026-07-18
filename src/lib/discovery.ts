@@ -13,6 +13,7 @@ import { getUserStateMap } from "@/lib/userState";
 import { extractFacets, Facet, facetId, FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, TagCategoryConfig } from "@/lib/scoringConfig";
+import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
 import { ScoringConfigValues } from "@/lib/scoringDefaults";
 import { MediaLink, MediaType } from "@/types";
 
@@ -93,7 +94,7 @@ export interface FindRequest {
 
 // ── Candidate cache (whole catalog, user-independent) ──────────────
 const CANDIDATE_TTL_MS = 5 * 60 * 1000;
-let _cache: { sig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number> } | null = null;
+let _cache: { sig: string; aliasSig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number> } | null = null;
 
 // ── The catalog POOL (H2b) ───────────────────────────────────────────────────
 //
@@ -149,11 +150,15 @@ function buildCache() {
     }
   }
 
+  // H5.6: canonicalize tag facets once per build so bundled spellings collapse
+  // into one vocab entry (summed count) and itemsWithFacet(canonical) returns
+  // items carrying any member spelling.
+  const aliases = getTagAliases();
   const vectors: DiscoveryVector[] = [];
   const vocabMap = new Map<string, VocabEntry>();
   for (const { row, links } of groups.values()) {
     const merged = mergeLinks(links, row.type);
-    const facets = extractFacets(links, row.type, merged);
+    const facets = applyTagAliases(extractFacets(links, row.type, merged), aliases);
     vectors.push({
       id: row.id, type: row.type,
       title: row.title ?? merged.title,
@@ -190,9 +195,13 @@ function buildCache() {
 
 function getCache() {
   const sig = catalogSignature();
-  if (_cache && _cache.sig === sig && Date.now() - _cache.at < CANDIDATE_TTL_MS) return _cache;
+  // H5.6: a bundle edit doesn't change the catalog (catalogSignature), so guard
+  // on the alias signature too — otherwise bundled vocab/vectors would stay stale
+  // until the 5-min TTL expired.
+  const aliasSig = tagAliasSignature();
+  if (_cache && _cache.sig === sig && _cache.aliasSig === aliasSig && Date.now() - _cache.at < CANDIDATE_TTL_MS) return _cache;
   const built = buildCache();
-  _cache = { sig, at: Date.now(), ...built };
+  _cache = { sig, aliasSig, at: Date.now(), ...built };
   return _cache;
 }
 
@@ -642,10 +651,13 @@ export function searchTitles(q: string, limit = 12): TitleMatch[] {
 }
 
 // All catalog items carrying a given facet (for the facet detail page).
+// H5.6: the cached vectors carry CANONICAL tag keys, so canonicalize a tag ref
+// key too — a caller passing a member spelling still matches the whole bundle.
 export function itemsWithFacet(ref: { kind: string; role?: FacetRole; key: string }): DiscoveryVector[] {
   const { vectors } = getCache();
+  const key = ref.kind === "tag" ? canonicalTagKey(ref.key) : ref.key;
   return vectors.filter((v) =>
-    v.facets.some((f) => f.kind === ref.kind && f.key === ref.key && (!ref.role || f.role === ref.role))
+    v.facets.some((f) => f.kind === ref.kind && f.key === key && (!ref.role || f.role === ref.role))
   );
 }
 
