@@ -279,6 +279,18 @@ Full click-through of the running app (Claude, in-app browser, both auth states)
 
 **What held up well (positives):** all P17 facet interactions verified live — Load more (60→120), sort (re-queries + resets page), personal overlay (rating badges match by uuid, you-vs-crowd stats), 308 redirect, item link-through with thin-row heal. Discover / Library / Insights / Settings all render cleanly with real data; mobile facet layout is responsive; zero console errors across every page visited.
 
+#### Navigation & back-button deep-dive — 2026-07-17 (logged-in) 🧭
+Focused pass on data persistence + browser Back across page types. ID = `N#`.
+
+| ID | Sev | Type | Area | Finding |
+|----|:--:|:--:|------|---------|
+| N1 | 🟠 | UX | P17 facet | **Facet page loses sort + "Load more" state on Back.** Set Sci-Fi to "Highest rated" + Load more (120 items, Portal 2 first) → open an item → Back ⇒ resets to "Most popular", 60 items, Interstellar. Sort/page are client-only useState, wiped on the re-mount. Discover, by contrast, DOES persist its state (N-note below), so this is an inconsistency in my own code. Fix: persist facet sort/page — reflect sort in a `?sort=` query param (also makes it shareable) and/or usePersistedState. |
+| N2 | 🟠 | UX | Discover / Wishlist / Library | **Browse scroll position lost on Back.** These pages auto-scroll to "today" on every (re)mount (Discover browse lands at scrollY ~9012 of ~14816). So scroll down to a future month → open an item → Back ⇒ you're dumped back at "today", not where you were. (Root of Q3.) Search-results mode is fine (starts at top). Fix: preserve/restore scroll on Back, or only auto-scroll-to-today on first mount, not on history restore. |
+| N3 | 🟡 | UI/a11y | Discover / Wishlist / Library | **Item cards are `role="button"` divs (router.push), not real `<a>` links** — 0 anchor hrefs in the browse grids. So no middle-click / ⌘-click / right-click → "open in new tab", no hover-preview URL, weaker a11y/crawlability. P17 facet grids DO use real `<a>` links → inconsistent. Consider anchor-based cards app-wide. |
+| N4 | 🔵 | Data | Discover | **Verify the browse cache has a sane TTL.** Discover shows an identical list across repeat visits within a session (good — no jarring reshuffle; server-cached/deterministic). Couldn't test cache expiry in one session — confirm new upcoming releases actually appear over time rather than the list being frozen. |
+
+**Back-button positives (work as expected):** the `/insights/facet` → `/person` **308 redirect back-navigates cleanly** (skips the redirect, no loop); **multi-hop item→facet→item unwinds correctly** (Interstellar→Nolan→Inception, Back→Nolan, Back→Interstellar); **Discover list is consistent** across repeat visits; **Discover search/filter state persists** across Back (usePersistedState — value + results intact).
+
 ### H1 — UI/UX overhaul (mobile-first polish) 🔭
 **Goal:** the mobile experience is smooth, intuitive, and looks slick + polished.
 **Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].)
