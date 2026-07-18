@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
@@ -9,6 +10,7 @@ import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
 import { MediaCardItem } from "@/components/cardItem";
+import { buildItemHref } from "@/lib/itemUrl";
 
 // The shared media-item shape (see cardItem.ts). Re-exported as PosterCardItem
 // for the existing call-sites that import it from here.
@@ -22,7 +24,7 @@ interface PosterCardProps {
 export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const [hovered, setHovered] = useState(false);
   const [imgErr, setImgErr] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLAnchorElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Use the portrait poster when present; otherwise fall back to the landscape
   // art (backdrop) — many games have hero/artwork but no box-art cover.
@@ -31,21 +33,18 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
 
   return (
     <>
-      <div
+      {/* N3: a real <a> (via Link), not a role="button" div — gives middle-click/
+          cmd-click "open in new tab", a real hover-preview URL, and native
+          keyboard Enter activation. Nested ActionCells buttons stopPropagation()
+          so they don't also trigger this navigation. */}
+      <Link
         ref={ref}
-        role="button"
-        tabIndex={0}
+        href={buildItemHref(item)}
         aria-label={`${item.title} — view details`}
-        className="group cursor-pointer rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative"
+        className="group cursor-pointer rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative block"
         onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
         onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
         onClick={() => onSelect(item)}
-        // Keyboard activation, but only when focus is on the card itself — not on
-        // a nested action button (which handles its own Enter/Space).
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(item); }
-        }}
       >
         {/* Type accent — color-coded top bar carrying the type icon (T11) */}
         <div className="h-5 rounded-t-xl flex items-center px-2" style={{ background: typeColor }}>
@@ -90,7 +89,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
               : "TBA"}
           </div>
         </div>
-      </div>
+      </Link>
 
       {hovered && (
         <Tooltip item={item as TooltipItem} anchorRef={ref} />

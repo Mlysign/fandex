@@ -20,13 +20,12 @@ import { MediaType } from "@/types";
 // catalog is reachable by link without handing Google an enumeration of the
 // owner's library.
 //
-// Flipping this to TRUE is the whole "turn on SEO" step (TASKS.md P13b): it
-// drops the noindex and puts all ~2,500 items back in the sitemap. Nothing else
-// needs to change — robots.txt already allows /movie/ /show/ /game/, which it
-// MUST even while this is false, because a crawler has to be able to FETCH a
-// page to see its noindex (a robots.txt Disallow would hide the tag and could
-// leave URL-only entries indexed from external links).
-export const PUBLIC_ITEMS_INDEXABLE = false;
+// Flipped to TRUE 2026-07-19 (P13b, decision locked 2026-07-18): drops the
+// noindex and puts the whole library back in the sitemap. robots.txt already
+// allowed /movie/ /show/ /game/ while this was false, because a crawler has to
+// be able to FETCH a page to see its noindex (a robots.txt Disallow would hide
+// the tag and could leave URL-only entries indexed from external links).
+export const PUBLIC_ITEMS_INDEXABLE = true;
 
 export const PUBLIC_TYPES: MediaType[] = ["movie", "show", "game"];
 

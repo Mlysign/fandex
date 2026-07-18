@@ -89,23 +89,30 @@ export default function NavBar() {
             </svg>
           </button>
 
-          {/* Mobile dropdown panel */}
+          {/* Mobile dropdown panel + full-screen scrim so page content below can't bleed through */}
           {menuOpen && (
-            <div className="md:hidden absolute top-full left-0 right-0 bg-neutral-950 border-b border-neutral-800 px-4 py-2 flex flex-col gap-0.5 shadow-xl">
-              {links.map(({ href, label }) => (
-                <Link key={href} href={href} onClick={() => setMenuOpen(false)} className={linkClass(isActive(href))}>{label}</Link>
-              ))}
-              <div className="h-px bg-neutral-800 my-1" />
-              {authed ? (
-                <button onClick={() => { setMenuOpen(false); logout(); }} className="text-left px-3 py-1.5 rounded-lg text-sm text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors">
-                  Log out
-                </button>
-              ) : (
-                <button onClick={() => { setMenuOpen(false); setShowSignIn(true); }} className="text-left px-3 py-1.5 rounded-lg text-sm text-neutral-200 hover:bg-neutral-900 transition-colors">
-                  Log in
-                </button>
-              )}
-            </div>
+            <>
+              <div
+                className="md:hidden fixed inset-0 top-14 bg-black/70"
+                onClick={() => setMenuOpen(false)}
+                aria-hidden
+              />
+              <div className="md:hidden absolute top-full left-0 right-0 bg-neutral-950 border-b border-neutral-800 px-4 py-2 flex flex-col gap-0.5 shadow-xl">
+                {links.map(({ href, label }) => (
+                  <Link key={href} href={href} onClick={() => setMenuOpen(false)} className={linkClass(isActive(href))}>{label}</Link>
+                ))}
+                <div className="h-px bg-neutral-800 my-1" />
+                {authed ? (
+                  <button onClick={() => { setMenuOpen(false); logout(); }} className="text-left px-3 py-1.5 rounded-lg text-sm text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors">
+                    Log out
+                  </button>
+                ) : (
+                  <button onClick={() => { setMenuOpen(false); setShowSignIn(true); }} className="text-left px-3 py-1.5 rounded-lg text-sm text-neutral-200 hover:bg-neutral-900 transition-colors">
+                    Log in
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </>
       )}

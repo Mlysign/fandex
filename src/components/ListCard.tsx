@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import Tooltip, { TooltipItem } from "@/components/Tooltip";
@@ -8,6 +9,7 @@ import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
 import { TYPE_COLORS } from "@/lib/constants";
 import { MediaCardItem } from "@/components/cardItem";
+import { buildItemHref } from "@/lib/itemUrl";
 
 // The list-view analog of PosterCard: one canonical, reusable row used wherever
 // items render as a list (GroupedView list mode, and anywhere else in future).
@@ -22,7 +24,7 @@ interface ListCardProps {
 export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
   const [hovered, setHovered] = useState(false);
   const [imgErr, setImgErr] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLAnchorElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canTooltip = item.dates !== undefined;
   const typeColor = TYPE_COLORS[item.type] ?? "#888";
@@ -32,10 +34,11 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
 
   return (
     <>
-      <div
+      {/* N3: a real <a> (via Link), not a role="button" div — see PosterCard for
+          the same rationale. */}
+      <Link
         ref={ref}
-        role="button"
-        tabIndex={0}
+        href={buildItemHref(item)}
         aria-label={`${item.title} — view details`}
         className={`flex items-stretch bg-neutral-900 hover:bg-neutral-800/80 border rounded-xl overflow-hidden transition-colors cursor-pointer group ${
           highlight ? "border-white/20" : "border-neutral-800"
@@ -43,12 +46,6 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
         onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
         onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
         onClick={() => onSelect(item)}
-        // Keyboard activation, but only when focus is on the row itself — not on
-        // a nested action button (which handles its own Enter/Space).
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(item); }
-        }}
       >
         {/* Type accent — color-coded left bar carrying the type icon (T11) */}
         <div className="w-7 flex-shrink-0 flex items-center justify-center" style={{ background: typeColor }}>
@@ -82,7 +79,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
         <div className="flex items-center pr-3 flex-shrink-0">
           <ActionCells item={item} layout="row" />
         </div>
-      </div>
+      </Link>
       {hovered && canTooltip && (
         <Tooltip item={item as TooltipItem} anchorRef={ref} />
       )}

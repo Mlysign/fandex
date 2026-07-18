@@ -16,7 +16,7 @@
 
 ## Open — carried forward from Phase 6
 
-- **P13b** ⬜ · Med · when ready · ~5k — **Turn on indexing** for the public item pages: flip `PUBLIC_ITEMS_INDEXABLE` → `true` in `src/lib/publicUrl.ts` (one-line change). **Decision locked 2026-07-18: index the whole library** (not a curated/rated-only subset). Not yet executed. **Do NOT** "fix" this via `robots.txt` Disallow — a crawler must be able to fetch a page to see its noindex tag.
+- **P13b** ✅ 2026-07-19 — **Indexing turned on**: `PUBLIC_ITEMS_INDEXABLE` flipped to `true` in `src/lib/publicUrl.ts`. Whole library now sitemapped + indexable, per the 2026-07-18 decision.
 - **P15** 🔵 · Med · later · ~25k — **Digital Asset Links** (`/.well-known/assetlinks.json`) + stable HTTPS origin for the Play Store TWA. Serving infra done (`src/app/.well-known/assetlinks.json/route.ts`, env-driven). **Blocked on you:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway → verify the endpoint.
 - **P16** ⬜ · Low · later · ~60k — Verify **OAuth + cookie flow inside the TWA**: re-register prod redirect URIs per provider; test webview behavior + deep-link return / `sameSite`. Needs P15 unblocked first.
 - **P18** ⬜ · Med · anytime · ~15k — **JustWatch clickable streaming links (UX only, not monetization):** make the "Where to watch" provider badges (`LowerSections.tsx:69-81`) real links via the JustWatch Content Partner API/data-partner token. Reverses the deliberate per-region link-drop in `src/lib/sources/project.ts:68`; also adds the JustWatch attribution TMDB's watch-provider terms require (currently missing). Requires the required branded "JustWatch" backlink next to the section (partner T&C). **Not pursuing a JustWatch revenue-share deal** (2026-07-18, your call) — this is a pure UX/compliance add, no negotiation, independent of H3's monetization gates.
@@ -31,18 +31,18 @@ Big post-launch initiatives added _2026-07-15_. Not yet broken into concrete tas
 Full click-through after P17 shipped found **no crashes, no console errors, no broken functionality** — everything below is polish. (Q1/Q2/Q4/Q5/Q6/Q13 were fixed the same day and live in the archive.)
 
 - **Q3** 🟡 UX · Wishlist/Library — both open **scrolled to the middle** (auto-scroll-to-today over a release-date sort) — e.g. Library drops you into a pile of "TBA" games. Reconsider default sort + initial scroll for these two pages.
-- **Q7** 🔵 UI · Settings — watchlist count shown **twice** (header + Account section). Redundant.
-- **Q8** 🔵 SEO/UI · Authed pages — Wishlist/Library/Insights/Settings all use the generic default `<title>` instead of a page-specific one.
-- **Q9** 🔵 UI · Mobile nav — the hamburger menu overlay isn't full-height/opaque; page content bleeds through beneath it.
-- **Q10** 🟡 Data · P17 facet (person) — combined credits include trivial roles (e.g. "Thanks", "Characters"). Consider filtering low-signal crew jobs from the role badges.
-- **Q11** 🟡 UI · P17 facet (tag) — tag label capitalization reads oddly (`/tag/sci-fi` → "Sci Fi", not "Sci-Fi"). Consider a nicer display-label.
-- **Q12** 🔵 UX · P17 facet (person) — name-collision → most-popular is documented/accepted (`/person/tom` resolves to whichever "Tom" TMDB ranks first); consider surfacing the resolved full name prominently so a wrong guess is obvious.
+- **Q7** ✅ 2026-07-19 — Settings' duplicate watchlist count removed; it now lives only in the "Account" section (`src/app/settings/page.tsx`).
+- **Q8** ✅ 2026-07-19 — Wishlist/Library/Insights/Profile now set a page-specific tab title client-side (new `usePageTitle` hook in `src/lib/usePageTitle.ts`, matching the layout's `"X · Fandex"` template shape) — these are auth-gated client components with no SSR data worth a `generateMetadata` split.
+- **Q9** ✅ 2026-07-19 — Mobile hamburger now has a full-viewport `bg-black/70` scrim behind the panel (`src/components/NavBar.tsx`) so page content can no longer bleed through; tapping the scrim also closes the menu.
+- **Q10** ✅ 2026-07-19 — `personPool()` in `src/lib/detail/publicFacetDetail.ts` now skips low-signal TMDB crew jobs (`Thanks`, `Special Thanks`, `Characters`) instead of surfacing them as role badges.
+- **Q11** ✅ 2026-07-19 — Tag facet labels now prefer the real first-seen catalog casing (`getTagVocab()` lookup in `publicFacetDetail.ts`) over the hyphen-losing `titleCase(key)` fallback, so `/tag/sci-fi` shows "Sci-Fi" when the tag has catalog occurrences. Tags with zero catalog occurrences still fall back to `titleCase` (rare, acceptable).
+- **Q12** ✅ 2026-07-19 — `searchPersonId()` now reports when a key matched >1 distinct TMDB person (`nameCollision`); `PublicFacetView.tsx` shows an amber note under the name ("Multiple people share this name — showing the most well-known match") when true.
 
 ### Navigation / back-button — open findings (2026-07-17 deep-dive, ID `N#`)
 (N1 and N2 were fixed the same day and live in the archive.) **What already works well:** the `/insights/facet` → `/person` 308 redirect back-navigates cleanly; multi-hop item→facet→item unwinds correctly; Discover's list + search/filter state persist across Back.
 
-- **N3** 🟡 UI/a11y · Discover/Wishlist/Library — item cards are `role="button"` divs (`router.push`), not real `<a>` links — no middle-click/⌘-click/"open in new tab", no hover-preview URL. P17's facet grids DO use real `<a>` links → inconsistent. Consider anchor-based cards app-wide.
-- **N4** 🔵 Data · Discover — verify the browse cache has a sane TTL. Discover shows an identical list across repeat visits within a session (good — no jarring reshuffle), but cache expiry wasn't testable in one session; confirm new upcoming releases actually appear over time.
+- **N3** ✅ 2026-07-19 — `PosterCard`/`ListCard` now render as real Next `<Link>` anchors (`href` from `buildItemHref`), matching P17's facet grids — middle-click/⌘-click/"open in new tab" and hover-preview URLs now work app-wide. Nested `ActionCells` buttons already `stopPropagation()`, so quick actions still don't trigger navigation. **Not touched:** `CalendarView`'s day-cell items are a separate, denser interaction surface (day popovers, "+N more") not named in the original finding — still `onClick`-based.
+- **N4** ✅ 2026-07-19 — Verified, no change needed: `FEED_TTL_MS` in `src/lib/liveDiscover.ts` is 45 minutes, keyed by `userId:region` — a sane TTL for a browse feed (short enough that new releases surface same-day, long enough not to hammer providers).
 
 ### Smoke test — 2026-07-18
 All 6 findings from the first `/smoketest` run (SM1–SM6) were fixed the same day — full detail in the archive. Plan lives in [smoketest.md](smoketest.md); findings from future runs land here as a new dated section (id prefix `SM#`).
@@ -141,6 +141,6 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 - **P17 — done (2026-07-18).** Live on fandex.org, already deployed (`aecba6e`), live TMDB/RAWG provider integration verified (person/tag/studio pages all render real data, no console errors). UX/taste pass deferred to H1 (user's call) — not a blocker.
 - **Phase 7** (above): H1 UI/UX overhaul, H3 monetization, H4 legal/compliance — all 🔭 not yet scoped.
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
-- **P13b:** decision locked (whole library) — one-line flip still needs executing.
-- A handful of QA/nav polish items (Q3/Q7–Q12, N3/N4) above.
+- **P13b — done (2026-07-19).** Indexing is on.
+- **QA/nav polish — done (2026-07-19): Q7–Q12, N3, N4.** Only **Q3** (Wishlist/Library default sort/scroll) remains open in that batch — it's a product-taste call (what should the default sort be?), not a mechanical fix, left for you to weigh in on.
 - Everything else (Phases 0–6, H2, all audit findings) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.

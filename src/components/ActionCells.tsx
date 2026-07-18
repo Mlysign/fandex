@@ -10,7 +10,13 @@ import { useQuickActions, QuickActionItem } from "@/lib/useQuickActions";
 
 const ratingColor = (r: number) => (r >= 7 ? "#4ade80" : r >= 5 ? "#f59e0b" : "#ef4444");
 const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
-const stop = (e: React.MouseEvent) => e.stopPropagation();
+// N3 wrapped PosterCard/ListCard's root in a real <a> (for middle-click / open-
+// in-new-tab). stopPropagation() alone doesn't cancel that ancestor <a>'s
+// native "follow the link" default action — that's resolved by walking the DOM
+// for the nearest activatable ancestor, independent of JS propagation — so
+// nested controls need preventDefault() too, or every click here would also
+// navigate to the item page.
+const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
 const IDLE = "rgba(255,255,255,0.06)";
 
 function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number) => void }) {

@@ -5,10 +5,12 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import InsightsView from "@/components/insights/InsightsView";
 import { InsightsPayload } from "@/components/insights/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 type Status = "loading" | "ready" | "empty" | "error";
 
 export default function InsightsPage() {
+  usePageTitle("Insights");
   const router = useRouter();
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<InsightsPayload | null>(null);

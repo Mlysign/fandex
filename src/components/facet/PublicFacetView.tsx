@@ -188,6 +188,11 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           <div className="min-w-0">
             <span className="text-[11px] uppercase tracking-wide text-neutral-500">{roleLabel}</span>
             <h1 className="text-2xl font-bold">{initial.label}</h1>
+            {initial.nameCollision && (
+              <p className="text-xs text-amber-500/90 mt-0.5">
+                Multiple people share this name — showing the most well-known match{person?.knownForDepartment ? ` (${person.knownForDepartment})` : ""}.
+              </p>
+            )}
             {person && (
               <p className="text-sm text-neutral-500 mt-0.5">
                 {[person.knownForDepartment,

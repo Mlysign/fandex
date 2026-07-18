@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · High-level roadmap. **Full detail + completion history live in [TASKS.md](TASKS.md).**
 
-**👉 Currently: P13b — flip `PUBLIC_ITEMS_INDEXABLE` to index the whole library** (decided; just needs executing). Everything else below is either waiting on you (Android TWA, H3.0/H3.1) or not yet scoped (H1). H3 + H4 are now scoped — see TASKS.md.
+**👉 Currently: nothing blocking you.** P13b shipped 2026-07-19 (whole library now indexable) along with a batch of QA polish (Q7–Q12, N3, N4 — see TASKS.md). Everything else below is either waiting on you (Android TWA, H3.0/H3.1, legal advice) or not yet scoped (H1). H3 + H4 are now scoped — see TASKS.md.
 
 ---
 
@@ -13,7 +13,6 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | | Item | |
 |--|------|--|
 | 🔵 | **Android TWA** (P15/P16) | Needs you to build the TWA (Bubblewrap/PWABuilder) → package name + cert → set 2 env vars. Serving infra ready. |
-| 🟡 | **P13b — turn on indexing** | Decided: index the whole library. One-line flip (`PUBLIC_ITEMS_INDEXABLE`) not yet executed. |
 
 ## 🗺️ Roadmap
 | Area | Status |
@@ -25,7 +24,7 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | Security (S1–S13, CSP enforced) | ✅ |
 | Sync completeness + TMDB enrichment | ✅ |
 | Android TWA | 🔵 needs TWA build |
-| SEO SSR detail pages (P13) | ✅ shipped **soft-launched** (`noindex` until P13b) |
+| SEO SSR detail pages (P13) | ✅ **fully live** — indexing turned on 2026-07-19 (P13b) |
 | Public facet pages (P17) | ✅ **done**, live on fandex.org |
 | **Post-launch (future):** | |
 | UI/UX overhaul — mobile-first polish (H1) | 🔭 planned |

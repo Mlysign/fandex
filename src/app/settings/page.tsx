@@ -8,8 +8,10 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COUNTRIES } from "@/lib/countries";
 import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 function SettingsContent() {
+  usePageTitle("Profile");
   const router = useRouter();
   const searchParams = useSearchParams();
   const confirm = useConfirm();
@@ -190,7 +192,6 @@ function SettingsContent() {
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Settings</h1>
-          <span className="text-sm text-neutral-500">{itemCount} items in watchlist</span>
         </div>
 
         {notice && (

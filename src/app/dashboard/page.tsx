@@ -15,6 +15,7 @@ import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePe
 import { WISHLIST_TOGGLED_EVENT, WishlistToggledDetail } from "@/lib/useQuickActions";
 import { syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
+import { usePageTitle } from "@/lib/usePageTitle";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
@@ -92,6 +93,7 @@ function OnboardingState({ identities }: { identities: any[] }) {
 // ── Main page ─────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  usePageTitle("Wishlist");
   const router = useRouter();
   const [identities, setIdentities] = useState<any[]>([]);
   const [items, setItems] = useState<EnrichedItem[]>([]);

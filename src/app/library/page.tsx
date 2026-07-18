@@ -13,6 +13,7 @@ import { sortItems, platformRating10 } from "@/lib/sortItems";
 import { syncToCompletion } from "@/lib/syncClient";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
+import { usePageTitle } from "@/lib/usePageTitle";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
@@ -22,6 +23,7 @@ import Spinner from "@/components/ui/Spinner";
 
 
 export default function LibraryPage() {
+  usePageTitle("Library");
   const router = useRouter();
   const [items, setItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(true);

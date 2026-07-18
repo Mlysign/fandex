@@ -22,6 +22,7 @@ import { FacetKind, personKey } from "@/lib/facets";
 import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId, PersonMeta, FacetScope } from "@/lib/facetDetail";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
+import { getTagVocab } from "@/lib/discovery";
 import { BoundedCache } from "@/lib/boundedCache";
 import { log, errorFields } from "@/lib/logger";
 
@@ -55,6 +56,7 @@ export interface PublicFacetPayload {
   label: string;                 // display label recovered from the provider
   person: PersonMeta | null;     // people only — public bio/age/photo
   scope: FacetScope;
+  nameCollision: boolean;        // Q12: person only — key matched >1 distinct TMDB person
   community: { avg: number | null; count: number }; // crowd avg on a 0-10 scale
   items: PublicFacetItem[];
   total: number;                 // size of the resolved pool (for "N titles")
@@ -119,18 +121,27 @@ const CAST_SELF_RE = /^(self|himself|herself|narrator)\b/i;
 
 // Resolve a person key to a TMDB id by SEARCH (not by reading a catalog item, so
 // it works for people not in the Fandex DB). Name collisions resolve to the most
-// popular exact-key match, else the most popular result overall.
-const _personSearchCache = new BoundedCache<string, number | null>({ max: 5000 });
-async function searchPersonId(key: string): Promise<number | null> {
+// popular exact-key match, else the most popular result overall. `ambiguous` is
+// true when more than one distinct person shares the exact key (Q12) — the
+// caller surfaces this so a wrong guess ("which Tom?") is obvious, not silent.
+interface PersonResolution { id: number | null; ambiguous: boolean }
+const _personSearchCache = new BoundedCache<string, PersonResolution>({ max: 5000 });
+async function searchPersonId(key: string): Promise<PersonResolution> {
   if (_personSearchCache.has(key)) return _personSearchCache.get(key)!;
   const d = await tmdbJson(`/search/person?query=${encodeURIComponent(key)}&include_adult=false`);
   const results: any[] = d?.results ?? [];
   const byPop = (a: any, b: any) => (b.popularity ?? 0) - (a.popularity ?? 0);
   const exact = results.filter((r) => personKey(r.name ?? "") === key).sort(byPop);
   const id: number | null = (exact[0] ?? [...results].sort(byPop)[0])?.id ?? null;
-  _personSearchCache.set(key, id);
-  return id;
+  const resolution: PersonResolution = { id, ambiguous: exact.length > 1 };
+  _personSearchCache.set(key, resolution);
+  return resolution;
 }
+
+// Q10: TMDB crew jobs that name a courtesy/thanks credit, not real creative
+// involvement — they'd otherwise show up as a role badge next to real ones
+// like "Director"/"Writer".
+const LOW_SIGNAL_CREW_JOBS = new Set(["Thanks", "Special Thanks", "Characters"]);
 
 // Merge a person's whole body of work from combined_credits, deduped by title,
 // each carrying every role they held on it ("Director", "Writer", "Actor", …).
@@ -153,7 +164,11 @@ export function personPool(credits: any): PoolTitle[] {
     if (CAST_SELF_RE.test(String(c.character ?? ""))) continue;
     add(c, "Actor");
   }
-  for (const c of credits?.crew ?? []) add(c, c.job || c.department || "Crew");
+  for (const c of credits?.crew ?? []) {
+    const job = c.job || c.department || "Crew";
+    if (LOW_SIGNAL_CREW_JOBS.has(job)) continue;
+    add(c, job);
+  }
   // Present Director/Writer first in each title's role list.
   const RANK = ["Director", "Writer", "Screenplay", "Story", "Creator", "Producer", "Actor"];
   for (const t of byKey.values()) {
@@ -310,12 +325,19 @@ export async function buildPublicFacetDetail(
   const key = ref.key;
   let pool: PoolTitle[] = [];
   let person: PersonMeta | null = null;
-  let label = ref.label || titleCase(key);
+  // Q11: titleCase(key) can't recover a lost hyphen ("sci fi" -> "Sci Fi", not
+  // "Sci-Fi") because tagKey() deliberately collapses hyphens/spaces into one
+  // form. Prefer the real first-seen catalog casing (catalog-wide, no per-user
+  // data) when this tag has appeared in the library; it's the only place the
+  // original spelling survives.
+  let label = ref.label || (ref.kind === "tag" ? getTagVocab().find((v) => v.key === key)?.label : undefined) || titleCase(key);
   let scope: FacetScope = "catalog";
+  let nameCollision = false;
 
   try {
     if (ref.kind === "person") {
-      const id = await searchPersonId(key);
+      const { id, ambiguous } = await searchPersonId(key);
+      nameCollision = ambiguous;
       if (id != null) {
         const [meta, credits] = await Promise.all([fetchPersonMeta(id), tmdbJson(`/person/${id}/combined_credits`)]);
         person = meta;
@@ -366,7 +388,7 @@ export async function buildPublicFacetDetail(
   });
 
   return {
-    kind: ref.kind, key, label, person, scope, community,
+    kind: ref.kind, key, label, person, scope, community, nameCollision,
     items, total: sorted.length, page,
     hasMore: start + FACET_PAGE_SIZE < sorted.length,
     sort,
