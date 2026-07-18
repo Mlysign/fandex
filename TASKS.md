@@ -2,9 +2,6 @@
 
 > 📄 **Two-file setup:** [STATUS.md](STATUS.md) is the short, human-readable digest (live state + next actions — read that first). **This file (TASKS.md) is the detailed working log** — notes, changelog, gotchas, next steps for what's still open. Keep them in sync: when a task's high-level state changes, update the one-liner in STATUS.md too.
 
-Local working copy of the [ToDo List - ReleaseRadar](https://docs.google.com/spreadsheets/d/1dmO238QWVfjoi0quv8v0xaO4fW13GsX_YZadd4WJ2BI/edit) Google Sheet.
-This file is the **source of truth for execution** — Claude reads/writes here instead of the sheet.
-
 - **Status legend:** ⬜ Not started · 🔵 In progress · ✅ Done · ⏸️ Blocked
 - **Epic tags:** A Insights · B Search/Discovery · C Detail/Component/Caching · D Library · E Audits · F Data/Profile · G Foundations/tech-debt · H Post-launch/growth.
 - **Notes convention:** keep an entry to 2–4 sentences + a commit hash once it's done; put the full story (root cause, every file touched, every verification step) in the commit message, not here. This is what let the file grow to 441 lines before the 2026-07-18 archive split — don't repeat that.
