@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · High-level roadmap. **Full detail + completion history live in [TASKS.md](TASKS.md).**
 
-**👉 Currently: P17 (public facet pages) — built, pending your Chrome/UX review + deploy.** Everything below this is either waiting on you (Android TWA, P13b indexing decision) or not yet scoped (H1/H3/H4).
+**👉 Currently: P13b — flip `PUBLIC_ITEMS_INDEXABLE` to index the whole library** (decided; just needs executing). Everything else below is either waiting on you (Android TWA) or not yet scoped (H1/H3/H4).
 
 ---
 
@@ -13,8 +13,7 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | | Item | |
 |--|------|--|
 | 🔵 | **Android TWA** (P15/P16) | Needs you to build the TWA (Bubblewrap/PWABuilder) → package name + cert → set 2 env vars. Serving infra ready. |
-| 🟣 | **P17 — Public facet pages** (reframed "P13b") | Built, all checks green — pending your Chrome/UX review + live provider verification + deploy. Full detail in [TASKS.md](TASKS.md). |
-| 🟡 | **P13b — turn on indexing** | Deferred until P17 lands (index orphan pages = bad). One-line flip (`PUBLIC_ITEMS_INDEXABLE`). Decide first: index the whole library or a subset? |
+| 🟡 | **P13b — turn on indexing** | Decided: index the whole library. One-line flip (`PUBLIC_ITEMS_INDEXABLE`) not yet executed. |
 
 ## 🗺️ Roadmap
 | Area | Status |
@@ -27,6 +26,7 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | Sync completeness + TMDB enrichment | ✅ |
 | Android TWA | 🔵 needs TWA build |
 | SEO SSR detail pages (P13) | ✅ shipped **soft-launched** (`noindex` until P13b) |
+| Public facet pages (P17) | ✅ **done**, live on fandex.org |
 | **Post-launch (future):** | |
 | UI/UX overhaul — mobile-first polish (H1) | 🔭 planned |
 | Data-model hardening (H2) | ✅ **done** |

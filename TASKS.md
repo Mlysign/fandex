@@ -16,10 +16,9 @@
 
 ## Open — carried forward from Phase 6
 
-- **P13b** ⬜ · Med · when ready · ~5k — **Turn on indexing** for the public item pages: flip `PUBLIC_ITEMS_INDEXABLE` → `true` in `src/lib/publicUrl.ts` (one-line change). P13 shipped soft-launched on purpose: pages are publicly readable/unfurlable but every page sends `noindex` and `sitemap.xml` lists only `/` — indexing the owner's library publishes *what they watch/play* (titles, never ratings). **Do NOT** "fix" this via `robots.txt` Disallow — a crawler must be able to fetch a page to see its noindex tag. Decide first: index the whole library, or a curated (e.g. rated-only) subset.
+- **P13b** ⬜ · Med · when ready · ~5k — **Turn on indexing** for the public item pages: flip `PUBLIC_ITEMS_INDEXABLE` → `true` in `src/lib/publicUrl.ts` (one-line change). **Decision locked 2026-07-18: index the whole library** (not a curated/rated-only subset). Not yet executed. **Do NOT** "fix" this via `robots.txt` Disallow — a crawler must be able to fetch a page to see its noindex tag.
 - **P15** 🔵 · Med · later · ~25k — **Digital Asset Links** (`/.well-known/assetlinks.json`) + stable HTTPS origin for the Play Store TWA. Serving infra done (`src/app/.well-known/assetlinks.json/route.ts`, env-driven). **Blocked on you:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway → verify the endpoint.
 - **P16** ⬜ · Low · later · ~60k — Verify **OAuth + cookie flow inside the TWA**: re-register prod redirect URIs per provider; test webview behavior + deep-link return / `sameSite`. Needs P15 unblocked first.
-- **P17** 🔵 · High · now · ~400k+ — **Public facet pages** (provider-sourced, session-aware) at `/person/{slug}` · `/tag/{slug}` · `/studio/{slug}` — built in the working tree (`tsc` clean, 195 tests, 0 lint errors, `next build` green). **Pending: your Chrome/UX review + live provider verification + deploy.** Replaces the authed `/insights/facet?…` (now a 308 redirect). Full design/locked decisions in memory `p17-public-facet-pages.md`; execution history in the archive.
 
 ---
 
@@ -49,7 +48,7 @@ All 6 findings from the first `/smoketest` run (SM1–SM6) were fixed the same d
 
 ### H1 — UI/UX overhaul (mobile-first polish) 🔭
 **Goal:** the mobile experience is smooth, intuitive, and looks slick + polished.
-**Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].)
+**Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].) **Includes the P17 facet pages' UX/taste pass** — deferred here on purpose (user's call, 2026-07-18); P17 itself is done (see below), this is just polish scope for later.
 
 *(H2 — data-model hardening — is done; full history in the archive.)*
 
@@ -67,8 +66,9 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 
 ## Remaining work (current)
 
+- **P17 — done (2026-07-18).** Live on fandex.org, already deployed (`aecba6e`), live TMDB/RAWG provider integration verified (person/tag/studio pages all render real data, no console errors). UX/taste pass deferred to H1 (user's call) — not a blocker.
 - **Phase 7** (above): H1 UI/UX overhaul, H3 monetization, H4 legal/compliance — all 🔭 not yet scoped.
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
-- **P13b:** one-line flip once you decide whole-library vs curated-subset indexing.
+- **P13b:** decision locked (whole library) — one-line flip still needs executing.
 - A handful of QA/nav polish items (Q3/Q7–Q12, N3/N4) above.
 - Everything else (Phases 0–6, H2, all audit findings) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.
