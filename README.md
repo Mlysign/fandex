@@ -78,6 +78,8 @@ fresh container, and test a restore. Tracked as **P5** in `TASKS.md`.
 
 ## Project docs
 
-- `TASKS.md` — execution tracker (source of truth)
-- `IMPROVEMENTS.md` — audit/review findings (data, architecture, UI, productionization, security)
+- `STATUS.md` — short human-readable digest of live state + next actions (read this first)
+- `TASKS.md` — execution tracker (source of truth) for what's still open
+- `IMPROVEMENTS.md` — one-paragraph summary of the audit/review findings (data, architecture, UI, productionization, security) — all resolved
+- `docs/archive/` — full history: completed phases, the resolved audit findings, and the closed bug tracker (moved out of the working set 2026-07-18 to keep the active docs short)
 - `AGENTS.md` — contributor notes (this Next.js version has breaking changes; read the bundled docs)

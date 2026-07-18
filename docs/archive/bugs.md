@@ -1,3 +1,12 @@
+# Bug tracker — archive (fully resolved)
+
+Moved out of the root BUGS.md 2026-07-18. Both logged bugs were triaged and
+closed 2026-06-14 (see the changelog entry below and
+[completed-phases.md](completed-phases.md)). Bugs are now tracked as tasks
+directly in TASKS.md instead of a separate file.
+
+---
+
 # ReleaseRadar — Bug Tracker
 
 This file is the **bug collection** — Claude reads/writes here.
