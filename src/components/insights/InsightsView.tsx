@@ -104,7 +104,8 @@ function DecadeChart({ data, baseline, selected, onSelect }: {
                 }}
                 title={`${d.decade}s — avg ${d.avg.toFixed(1)} over ${d.count}`}
               />
-              <span className="text-[10px] leading-none text-neutral-500 mt-1">{`${String(d.decade).slice(2)}s`}</span>
+              {/* Q4: full year — a library spanning 1890s→2020s repeats "90s"/"20s" otherwise. */}
+              <span className="text-[10px] leading-none text-neutral-500 mt-1">{`${d.decade}s`}</span>
               <span className="text-[9px] leading-none text-neutral-600">×{d.count}</span>
             </div>
           );

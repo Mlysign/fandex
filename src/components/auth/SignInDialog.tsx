@@ -20,7 +20,8 @@ export default function SignInDialog({
   onClose,
   onAuthenticated,
 }: {
-  type: MediaType;
+  /** Item context for the copy; omitted = generic sign-in (e.g. the nav's "Log in"). */
+  type?: MediaType;
   returnTo: string;
   onClose: () => void;
   onAuthenticated: () => void;
@@ -46,9 +47,13 @@ export default function SignInDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <h3 className="font-semibold text-base text-neutral-100">Rate it, track it, don&apos;t lose it</h3>
+          <h3 className="font-semibold text-base text-neutral-100">
+            {type ? "Rate it, track it, don’t lose it" : "Sign in to Fandex"}
+          </h3>
           <p className="text-sm text-neutral-400 mt-1">
-            Sign in to rate this, mark it {verb}, and sync your wishlist across Trakt, Steam &amp; more. We&apos;ll bring you right back.
+            {type
+              ? `Sign in to rate this, mark it ${verb}, and sync your wishlist across Trakt, Steam & more. We’ll bring you right back.`
+              : "Track your wishlists, ratings and releases across Trakt, Steam & more. We’ll bring you right back."}
           </p>
         </div>
         <AuthOptions returnTo={returnTo} onAuthenticated={onAuthenticated} />

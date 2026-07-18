@@ -33,6 +33,14 @@ export function usePersistedState<T>(key: string, initial: T): [T, (v: T | ((p: 
   return [val, setVal];
 }
 
+// Whether a page has a meaningful saved scroll position to restore (N2): lets
+// list pages suppress their auto-scroll-to-today, which would otherwise fight
+// the restore and dump the viewer back at "today" on every Back. False during
+// SSR (no sessionStorage), which is fine — the consumers gate client effects.
+export function hasSavedScroll(key: string): boolean {
+  try { return (parseInt(sessionStorage.getItem(key) ?? "0", 10) || 0) > 4; } catch { return false; }
+}
+
 // Save + restore window scroll for a page across back-nav. Restores once after
 // `ready` becomes true (i.e. the list has rendered), then tracks scroll to save.
 export function useScrollRestore(key: string, ready: boolean) {
@@ -42,7 +50,16 @@ export function useScrollRestore(key: string, ready: boolean) {
     let raf = 0;
     let userScrolled = false;
     const markUser = () => { userScrolled = true; };
-    const onScroll = () => { try { sessionStorage.setItem(key, String(window.scrollY)); } catch { /* ignore */ } };
+    // Pathname pin (N2): navigating away fires one last scroll event — the
+    // router's scroll-to-top — while this listener is still attached, which
+    // saved `0` over the real position and made every restore a no-op (Back
+    // then landed on the today-scroll instead). Only pathname, not search:
+    // in-page query updates (e.g. the facet ?sort=) must keep saving.
+    const path = window.location.pathname;
+    const onScroll = () => {
+      if (window.location.pathname !== path) return;
+      try { sessionStorage.setItem(key, String(window.scrollY)); } catch { /* ignore */ }
+    };
 
     // Restore once, but (re)attach the scroll listener every time the effect runs.
     // Gating the listener behind the one-time `restored` ref would drop it on

@@ -263,7 +263,9 @@ function SettingsContent() {
                 )}
                 {!p.canWrite && identity && (
                   <p className="text-xs text-neutral-600 mt-1">
-                    Read-only – {p.label} doesn&apos;t support adding to wishlist via API
+                    {/* Template string, not JSX text: the space after {p.label} gets
+                        swallowed in the compiled output (SM5). */}
+                    {`Read-only – ${p.label} doesn’t support adding to wishlist via API`}
                   </p>
                 )}
               </div>
@@ -271,9 +273,15 @@ function SettingsContent() {
           })}
         </section>
 
-        {/* Add login method */}
+        {/* Add login method. Q5: when every connectable provider is already
+            linked the buttons all vanish — say so instead of rendering an
+            empty section. */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Add login method</h2>
+          {getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg") ? (
+            <p className="text-sm text-neutral-500">All available login methods are connected — any of them can sign you in.</p>
+          ) : (
+          <>
           <p className="text-sm text-neutral-500">Connect another account to log in with it in the future.</p>
           {/*
             <a>, not <Link>: these hand off to an OAuth endpoint and Link would
@@ -304,6 +312,8 @@ function SettingsContent() {
               </button>
             )}
           </div>
+          </>
+          )}
         </section>
 
         {/* Region (T22) */}

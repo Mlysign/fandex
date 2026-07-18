@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import AuthOptions from "@/components/auth/AuthOptions";
@@ -24,6 +25,22 @@ export default function LoginPage() {
         </div>
 
         <AuthOptions />
+
+        {/* Q2 — the catalog is public (H2b): give visitors a way in without an
+            account instead of a login-only dead end. */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 text-xs text-neutral-600">
+            <span className="flex-1 h-px bg-neutral-800" />
+            or
+            <span className="flex-1 h-px bg-neutral-800" />
+          </div>
+          <Link
+            href="/discover"
+            className="block w-full py-3 rounded-xl font-medium border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 hover:bg-neutral-900 transition-all"
+          >
+            Browse without an account →
+          </Link>
+        </div>
 
         <div className="flex justify-center gap-6 text-xs text-neutral-600 pt-2">
           <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />Games</span>

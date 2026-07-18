@@ -263,11 +263,14 @@ interface GroupedViewProps {
   descending?: boolean;
   // 0-10 rating accessor for groupBy="rating".
   ratingOf?: (item: MediaItem) => number | null;
+  // N2: pages that restore a saved scroll position (useScrollRestore) pass false
+  // so the today-scroll doesn't fight the restore and win.
+  autoScrollToToday?: boolean;
 }
 
 const cardGrid = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4";
 
-export default function GroupedView({ items, view, onSelect, highlightId, groupBy = "month", descending = false, ratingOf }: GroupedViewProps) {
+export default function GroupedView({ items, view, onSelect, highlightId, groupBy = "month", descending = false, ratingOf, autoScrollToToday = true }: GroupedViewProps) {
   const sectionRefs   = useRef<Map<string, HTMLElement>>(new Map());
   const todayScrolled = useRef(false);
 
@@ -279,6 +282,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
   useEffect(() => { todayScrolled.current = false; }, [view, descending]);
 
   useEffect(() => {
+    if (!autoScrollToToday) return; // N2: the page is restoring a saved position
     if (groupBy !== "month") return; // date-sorted timelines auto-scroll to today (both directions)
     if (todayScrolled.current || items.length === 0) return;
     const target = findTodayOrNextDate(sortedDates);
@@ -323,7 +327,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
     };
     timer = setTimeout(tick, 90);
     return stop;
-  }, [items, view, descending]);
+  }, [items, view, descending, autoScrollToToday]);
 
   // Only show the month nav when there are enough months to be useful
   const showNav = months.length > 1 || noDate.length > 0;

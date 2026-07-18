@@ -20,6 +20,13 @@ export interface QuickActionItem {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// SM1 — fired after a successful wishlist add/remove so list pages can react
+// (the wishlist page drops the row instead of showing it until the next
+// reload). A window event, not a threaded callback: these cards render under
+// GroupedView/CalendarView on many pages and only some parents care.
+export const WISHLIST_TOGGLED_EVENT = "rr2:wishlist-toggled";
+export interface WishlistToggledDetail { id: string; onList: boolean; }
+
 // Build the { tmdb: id, … } identity the library / watchlist endpoints accept,
 // so a quick action works even on a discovered title not yet in the local DB.
 function idsFromItem(item: QuickActionItem): Record<string, string> {
@@ -85,6 +92,9 @@ export function useQuickActions(item: QuickActionItem) {
         const res = await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current ?? undefined, ...identity() }) });
         if (!res.ok) throw new Error();
       }
+      window.dispatchEvent(new CustomEvent<WishlistToggledDetail>(WISHLIST_TOGGLED_EVENT, {
+        detail: { id: mediaIdRef.current ?? item.id, onList: next },
+      }));
     } catch {
       setWishlisted(!next); // revert on failure
       toast(next ? "Couldn't add to wishlist. Please try again." : "Couldn't remove from wishlist. Please try again.", "error");

@@ -299,7 +299,19 @@ function normalizeSteam(d: any): SourceNormalized {
   out.publisher = d.basic_info?.publishers?.[0]?.name ?? null;
   out.certification = (() => {
     const r = d.game_rating;
-    return r?.rating ? [`${String(r.type ?? "").toUpperCase()} ${r.rating}`.trim()] : [];
+    if (!r?.rating) return [];
+    // SM4: `type` is Steam's internal rating-system id, not a display label —
+    // "steam_germany" is the German storefront's USK-aligned age rating and was
+    // rendering raw as "STEAM_GERMANY 6". Map the known systems; unknown ones
+    // fall back to title-cased words instead of UPPER_SNAKE.
+    const SYSTEM_LABEL: Record<string, string> = {
+      esrb: "ESRB", pegi: "PEGI", usk: "USK", steam_germany: "USK",
+      cero: "CERO", bbfc: "BBFC", dejus: "ClassInd", csrr: "CSRR", kgrb: "GRAC",
+    };
+    const type = String(r.type ?? "").toLowerCase();
+    const label = SYSTEM_LABEL[type] ??
+      type.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    return [`${label} ${r.rating}`.trim()];
   })();
   out.communityRatings = (() => {
     const s = d.reviews?.summary_filtered;

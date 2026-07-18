@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import NavBar from "@/components/NavBar";
+import { useScrollRestore } from "@/lib/usePersistedState";
 import { TypeIcon } from "@/components/Badges";
 import { TYPE_COLORS } from "@/lib/constants";
 import { publicItemHref } from "@/lib/publicUrl";
@@ -76,8 +77,41 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   const [sort, setSort] = useState<FacetSort>(initial.sort);
   const [loading, setLoading] = useState(false);
   const [mine, setMine] = useState<Mine | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   const person = initial.person;
+
+  // ── N1: survive Back ─────────────────────────────────────────────────────────
+  // Sort lives in the URL (see onSort) so the SSR re-render after back-nav (or a
+  // shared link) already has the right order; the "Load more" depth is mirrored
+  // to sessionStorage here, same T12 pattern as the list pages. Restore only when
+  // the stored sort matches the SSR'd one — a URL with a different ?sort= means
+  // the server content, not the stash, is what the viewer asked for.
+  const stashKey = `rr_facet_${prefix}_${initial.key}`;
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(stashKey);
+      if (raw != null) {
+        const s = JSON.parse(raw) as { sort: FacetSort; page: number; hasMore: boolean; items: PublicFacetItem[] };
+        if (s.sort === initial.sort && s.page > initial.page && Array.isArray(s.items)) {
+          // sessionStorage is unavailable during SSR, so restoring necessarily
+          // sets state in an effect (same justified disable as usePersistedState).
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setItems(s.items);
+          setPage(s.page);
+          setHasMore(s.hasMore);
+        }
+      }
+    } catch { /* storage unavailable / bad JSON */ }
+    setHydrated(true);
+  }, [stashKey, initial.sort, initial.page]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try { sessionStorage.setItem(stashKey, JSON.stringify({ sort, page, hasMore, items })); } catch { /* quota */ }
+  }, [stashKey, sort, page, hasMore, items, hydrated]);
+
+  useScrollRestore(`rr_facet_scroll_${prefix}_${initial.key}`, hydrated && items.length > 0);
 
   // Personal overlay — silently absent for anonymous viewers (401).
   useEffect(() => {
@@ -103,7 +137,18 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
     }
   }, [prefix, initial.key]);
 
-  const onSort = (s: FacetSort) => { if (s === sort) return; setSort(s); load(0, s, true); };
+  // Sort is reflected into the URL (shareable + Back-safe: the SSR after a
+  // back-nav reads ?sort=). Native replaceState integrates with the Next router;
+  // the default sort keeps a clean param-less canonical URL.
+  const onSort = (s: FacetSort) => {
+    if (s === sort) return;
+    setSort(s);
+    const url = new URL(window.location.href);
+    if (s === "popular") url.searchParams.delete("sort");
+    else url.searchParams.set("sort", s);
+    window.history.replaceState(null, "", url);
+    load(0, s, true);
+  };
 
   const s = mine?.stats;
   const deltaTxt = s && s.delta != null

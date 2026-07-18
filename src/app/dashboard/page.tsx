@@ -11,7 +11,8 @@ import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membershi
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
-import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
+import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
+import { WISHLIST_TOGGLED_EVENT, WishlistToggledDetail } from "@/lib/useQuickActions";
 import { syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
@@ -111,6 +112,18 @@ export default function DashboardPage() {
 
   useEffect(() => { init(); }, []);
 
+  // SM1 — a card's quick-action remove used to leave the row on screen until
+  // the next reload (the shared hook only flips its own icon). Drop the row
+  // the moment the shared hook reports a successful remove.
+  useEffect(() => {
+    const onToggle = (e: Event) => {
+      const { id, onList } = (e as CustomEvent<WishlistToggledDetail>).detail;
+      if (!onList) setItems((prev) => prev.filter((i) => i.id !== id));
+    };
+    window.addEventListener(WISHLIST_TOGGLED_EVENT, onToggle);
+    return () => window.removeEventListener(WISHLIST_TOGGLED_EVENT, onToggle);
+  }, []);
+
   async function init() {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
@@ -194,6 +207,9 @@ export default function DashboardPage() {
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
   useScrollRestore("rr_wishlist_scroll", !loading && sorted.length > 0);
+  // N2: sampled once on mount — if a Back-nav restore is pending, don't let
+  // GroupedView's today-scroll fight it.
+  const [autoToday] = useState(() => !hasSavedScroll("rr_wishlist_scroll"));
 
   return (
     <div className="min-h-screen">
@@ -246,6 +262,7 @@ export default function DashboardPage() {
               ratingOf={ratingOf}
               onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))}
               highlightId={highlightId}
+              autoScrollToToday={autoToday}
             />
           </ErrorBoundary>
         )}
