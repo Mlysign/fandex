@@ -13,6 +13,7 @@ export interface DiscoverItem {
   backdropUrl: string | null;
   communityScore: number | null;
   communityAvg: number | null;
+  communityVotes: number;
   platformSources: string[];
   onWatchlist: boolean;
   libraryStatus: string | null;
@@ -27,19 +28,36 @@ export interface FacetPill { kind: string; role?: string; key: string; label: st
 export interface SeedPill { id: string; title: string; type: string; posterUrl: string | null }
 
 export type Membership = "include" | "exclude" | "only";
-export type SortKey = "releaseNew" | "releaseOld" | "userRating" | "platformRating" | "match";
+export type SortKey = "releaseDate" | "popularity" | "rating" | "fandexScore";
 
-// The single shared sort option set (T8), used by Discover / Wishlist / Library.
+// The single shared sort option set, used by Discover / Wishlist / Library AND
+// mirrored on the facet pages. "Rating" is Bayesian-damped (see ratingsSort.ts);
+// "Fandex Score" is personal (logged-in). Unified 2026-07-19.
 export const SORTS: [SortKey, string][] = [
-  ["releaseNew", "Release (newest)"],
-  ["releaseOld", "Release (oldest)"],
-  ["userRating", "Your rating"],
-  ["platformRating", "Platform rating"],
-  ["match", "Best match"],
+  ["releaseDate", "Release date"],
+  ["popularity", "Popularity"],
+  ["rating", "Rating"],
+  ["fandexScore", "Fandex Score"],
 ];
 
 // Sorts whose result list is grouped/scrolled by date (calendar view allowed).
-export const DATE_SORTS: SortKey[] = ["releaseNew", "releaseOld"];
+export const DATE_SORTS: SortKey[] = ["releaseDate"];
+
+// Map any stored/legacy sort value to a valid SortKey. Old keys (releaseNew,
+// platformRating, match, …) linger in sessionStorage across a deploy; anything
+// unknown falls back to `fallback`.
+export function normalizeSort(v: unknown, fallback: SortKey = "fandexScore"): SortKey {
+  const valid: SortKey[] = ["releaseDate", "popularity", "rating", "fandexScore"];
+  if (typeof v === "string" && (valid as string[]).includes(v)) return v as SortKey;
+  const legacy: Record<string, SortKey> = {
+    releaseNew: "releaseDate",
+    releaseOld: "releaseDate",
+    platformRating: "rating",
+    userRating: "fandexScore",
+    match: "fandexScore",
+  };
+  return (typeof v === "string" && legacy[v]) || fallback;
+}
 
 export interface FindResult {
   baseline: number;

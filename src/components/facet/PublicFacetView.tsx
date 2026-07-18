@@ -27,6 +27,7 @@ interface MineState { rating: number | null; libraryStatus: string | null; onWat
 interface Mine {
   stats: { userAvg: number | null; userCount: number; communityAvg: number | null; delta: number | null; baseline: number } | null;
   states: Record<string, MineState>;
+  fandexById: Record<string, number>;
 }
 
 interface Props {
@@ -76,6 +77,11 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   const [page, setPage] = useState(initial.page);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [sort, setSort] = useState<FacetSort>(initial.sort);
+  // H5.6 — "Fandex Score" is a client-side overlay sort (logged-in only): it
+  // re-orders the LOADED pool by the viewer's per-item score from /api/facet/mine.
+  // The server sort (`sort`) still drives fetching/paging/URL, so paging keeps
+  // working underneath it.
+  const [fandexActive, setFandexActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mine, setMine] = useState<Mine | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -147,6 +153,7 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   // back-nav reads ?sort=). Native replaceState integrates with the Next router;
   // the default sort keeps a clean param-less canonical URL.
   const onSort = (s: FacetSort) => {
+    setFandexActive(false);
     if (s === sort) return;
     setSort(s);
     const url = new URL(window.location.href);
@@ -155,6 +162,12 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
     window.history.replaceState(null, "", url);
     load(0, s, true);
   };
+
+  // Items as displayed: the Fandex overlay re-sorts the loaded pool by the
+  // viewer's per-item score (nulls last); otherwise the server order stands.
+  const shownItems = fandexActive && mine
+    ? [...items].sort((a, b) => (mine.fandexById[b.id] ?? -1) - (mine.fandexById[a.id] ?? -1))
+    : items;
 
   const s = mine?.stats;
   const deltaTxt = s && s.delta != null
@@ -217,19 +230,25 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           <div className="flex gap-1">
             {SORT_LABELS.map((o) => (
               <button key={o.key} onClick={() => onSort(o.key)}
-                className={`text-xs px-2.5 py-1 rounded-md border ${sort === o.key ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"}`}>
+                className={`text-xs px-2.5 py-1 rounded-md border ${!fandexActive && sort === o.key ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"}`}>
                 {o.label}
               </button>
             ))}
+            {mine && (
+              <button onClick={() => setFandexActive(true)}
+                className={`text-xs px-2.5 py-1 rounded-md border ${fandexActive ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"}`}>
+                Fandex Score
+              </button>
+            )}
           </div>
         </div>
 
         {/* Grid */}
-        {items.length === 0 ? (
+        {shownItems.length === 0 ? (
           <p className="text-sm text-neutral-500 py-12 text-center">Nothing found for this {roleLabel.toLowerCase()}.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {items.map((item) => <ItemCard key={item.id} item={item} mine={mine?.states[item.id]} />)}
+            {shownItems.map((item) => <ItemCard key={item.id} item={item} mine={mine?.states[item.id]} />)}
           </div>
         )}
 

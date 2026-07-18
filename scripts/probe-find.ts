@@ -46,8 +46,8 @@ function main() {
   const inLib = ex.items.filter((i) => i.libraryStatus);
   console.log(`  exclude integrity: ${inLib.length === 0 ? "OK ✓" : `LEAKED ${inLib.length} library items`}`);
 
-  // Sort — platform rating.
-  show("SORT platformRating", userId, { sort: "platformRating" }, 5);
+  // Sort — Bayesian community rating.
+  show("SORT rating", userId, { sort: "rating" }, 5);
 }
 
 main();

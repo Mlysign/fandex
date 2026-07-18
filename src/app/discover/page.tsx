@@ -15,8 +15,9 @@ import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 import {
   UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
-  SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX,
+  SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort,
 } from "@/components/discovery/types";
+import { bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import { MediaType } from "@/types";
 import { probeSession } from "@/lib/sessionProbe";
 
@@ -53,16 +54,22 @@ function platformOf(i: any): number | null {
 function cmpDate(a: string | null | undefined, b: string | null | undefined): number {
   if (!a && !b) return 0; if (!a) return 1; if (!b) return -1; return a.localeCompare(b);
 }
-// Sort the merged (local + database) result list by the active sort. Local items
-// carry a taste `score`; external items don't (they sort last under "match").
+// Sort the merged (local + database) result list by the active sort, matching
+// the server's find() order. Local items carry communityVotes + fandexScore;
+// external (web) items don't, so they sort last under popularity/rating/Fandex.
 function sortDiscover(items: any[], sort: SortKey): any[] {
   const arr = [...items];
+  const score10 = (i: any) => { const p = platformOf(i); return p == null ? null : p / 10; };
+  const votesOf = (i: any) => i.communityVotes ?? 0;
   switch (sort) {
-    case "releaseNew": arr.sort((a, b) => cmpDate(b.releaseDate, a.releaseDate)); break;
-    case "releaseOld": arr.sort((a, b) => cmpDate(a.releaseDate, b.releaseDate)); break;
-    case "userRating": arr.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1)); break;
-    case "platformRating": arr.sort((a, b) => (platformOf(b) ?? -1) - (platformOf(a) ?? -1)); break;
-    case "match": arr.sort((a, b) => (b.score ?? -1) - (a.score ?? -1)); break;
+    case "releaseDate": arr.sort((a, b) => cmpDate(b.releaseDate, a.releaseDate)); break;
+    case "popularity": arr.sort((a, b) => votesOf(b) - votesOf(a)); break;
+    case "rating": {
+      const prior = ratingPrior(arr.map((i) => ({ score10: score10(i), votes: votesOf(i) })));
+      arr.sort((a, b) => bayesRating(score10(b), votesOf(b), prior) - bayesRating(score10(a), votesOf(a), prior));
+      break;
+    }
+    case "fandexScore": arr.sort((a, b) => (b.fandexScore ?? -1) - (a.fandexScore ?? -1)); break;
   }
   return arr;
 }
@@ -108,9 +115,10 @@ export default function DiscoverPage() {
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
   const [filtersRest, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
   const filters: UiFilters = { ...filtersRest, types };
-  // Default = "releaseOld": the ascending Timeline order. Any other sort (or a
-  // query/filter) switches into catalog search results.
-  const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "releaseOld");
+  // Default = "releaseDate": the newest-first Timeline (works for anon + logged-in;
+  // a taste/rating sort would leave anon with an empty results view). Popularity /
+  // Rating / Fandex Score (or a query/filter) switch into catalog search results.
+  const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "releaseDate", normalizeSort);
   const [view, setView] = useViewMode("rr_view_discover", "card", ["list", "card", "calendar"]);
 
   // ── Browse (Timeline) state ──
@@ -211,7 +219,7 @@ export default function DiscoverPage() {
     const newItems = fetches.flatMap((d) => d.items ?? []);
     if (newItems.length === 0) { setHasMore(false); setLoadingMore(false); return; }
     // Future items render at the TOP when newest-first → anchor the scroll there.
-    if (sort === "releaseNew") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
+    if (sort === "releaseDate") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
     setItems((prev) => mergeSorted(prev, newItems, false));
     setPages(next);
     setLoadingMore(false);
@@ -229,7 +237,8 @@ export default function DiscoverPage() {
     const newItems = fetches.flatMap((d) => d.items ?? []);
     if (newItems.length === 0) { setHasMoreBack(false); setLoadingPrev(false); return; }
     // Past items render at the TOP only when oldest-first → anchor the scroll there.
-    if (sort !== "releaseNew") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
+    // The single date sort (releaseDate) is newest-first, so past items append.
+    if (sort !== "releaseDate") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
     setItems((prev) => mergeSorted(prev, newItems, true));
     setBackPages(next);
     setLoadingPrev(false);
@@ -339,7 +348,7 @@ export default function DiscoverPage() {
   useEffect(() => {
     loadMoreRef.current = loadMore;
     loadPreviousRef.current = loadPrevious;
-    const newestFirst = sort === "releaseNew";
+    const newestFirst = sort === "releaseDate";
     topLoadRef.current = newestFirst ? loadMore : loadPrevious;
     bottomLoadRef.current = newestFirst ? loadPrevious : loadMore;
   });
@@ -433,11 +442,10 @@ export default function DiscoverPage() {
   // date sorts keep the month timeline; calendar view is only for date sorts.
   const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
-    sort === "userRating" || sort === "platformRating" ? "rating" : sort === "match" ? "none" : "month";
-  const descending = sort === "releaseNew";
+    sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
+  const descending = sort === "releaseDate";
   const ratingOf =
-    sort === "userRating" ? (i: any) => i.rating ?? null
-    : sort === "platformRating" ? (i: any) => { const p = platformOf(i); return p != null ? p / 10 : null; }
+    sort === "rating" ? (i: any) => { const p = platformOf(i); return p != null ? p / 10 : null; }
     : undefined;
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;

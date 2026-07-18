@@ -15,7 +15,7 @@ export const zFacetRole = z.enum([
   "director", "writer", "creator", "cast",       // PersonRole
   "developer", "publisher", "studio", "network", // CompanyRole
 ]);
-export const zSortKey = z.enum(["releaseNew", "releaseOld", "userRating", "platformRating", "match"]);
+export const zSortKey = z.enum(["releaseDate", "popularity", "rating", "fandexScore"]);
 
 // Cross-source id map, e.g. { tmdb: 603, trakt: "the-matrix" }. Flat, string keys.
 export const zIds = z.record(z.string(), z.union([z.string(), z.number()]).nullable());

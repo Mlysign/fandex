@@ -7,7 +7,7 @@ import { SOURCE_LABELS } from "@/lib/constants";
 import { useViewMode } from "@/lib/useViewMode";
 import NavBar from "@/components/NavBar";
 import SubBar, { ViewMode, SearchBarFacets } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membership, defaultUiFilters } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membership, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -105,7 +105,7 @@ export default function DashboardPage() {
   const [search, setSearch] = usePersistedState("rr_wishlist_search", "");
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_excFacets", []);
-  const [sort, setSort] = usePersistedState<SortKey>("rr_wishlist_sort", "releaseOld");
+  const [sort, setSort] = usePersistedState<SortKey>("rr_wishlist_sort", "releaseDate", normalizeSort);
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_wishlist_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<{ library?: Membership; wishlist?: Membership }>("rr_wishlist_membership", {});
 
@@ -197,12 +197,9 @@ export default function DashboardPage() {
   // date sorts keep the month grouping; calendar view only for date sorts.
   const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
-    sort === "userRating" || sort === "platformRating" ? "rating" : sort === "match" ? "none" : "month";
-  const descending = sort === "releaseNew";
-  const ratingOf =
-    sort === "userRating" ? (i: any) => i.rating ?? null
-    : sort === "platformRating" ? (i: any) => platformRating10(i)
-    : undefined;
+    sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
+  const descending = sort === "releaseDate";
+  const ratingOf = sort === "rating" ? (i: any) => platformRating10(i) : undefined;
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
   useScrollRestore("rr_wishlist_scroll", !loading && sorted.length > 0);

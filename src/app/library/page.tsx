@@ -6,7 +6,7 @@ import { EnrichedItem, MediaType } from "@/types";
 import { useViewMode } from "@/lib/useViewMode";
 import NavBar from "@/components/NavBar";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membership, defaultUiFilters } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membership, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -34,7 +34,7 @@ export default function LibraryPage() {
   const [hideRated, setHideRated] = usePersistedState("rr_library_hideRated", false);
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_library_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_library_excFacets", []);
-  const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "releaseOld");
+  const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "releaseDate", normalizeSort);
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_library_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<{ library?: Membership; wishlist?: Membership }>("rr_library_membership", {});
 
@@ -103,12 +103,9 @@ export default function LibraryPage() {
   // Sort-driven layout (T8).
   const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
-    sort === "userRating" || sort === "platformRating" ? "rating" : sort === "match" ? "none" : "month";
-  const descending = sort === "releaseNew";
-  const ratingOf =
-    sort === "userRating" ? (i: any) => i.rating ?? null
-    : sort === "platformRating" ? (i: any) => platformRating10(i)
-    : undefined;
+    sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
+  const descending = sort === "releaseDate";
+  const ratingOf = sort === "rating" ? (i: any) => platformRating10(i) : undefined;
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
   useScrollRestore("rr_library_scroll", !loading && sorted.length > 0);

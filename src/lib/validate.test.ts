@@ -108,7 +108,7 @@ describe("route schemas", () => {
 
   it("FindSchema is lenient (empty ok) but rejects a bad sort key", () => {
     expect(FindSchema.safeParse({}).success).toBe(true);
-    expect(FindSchema.safeParse({ q: "matrix", sort: "match" }).success).toBe(true);
+    expect(FindSchema.safeParse({ q: "matrix", sort: "fandexScore" }).success).toBe(true);
     expect(FindSchema.safeParse({ sort: "sideways" }).success).toBe(false);
   });
 

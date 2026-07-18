@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
-import { FacetRole } from "@/lib/facets";
+import { FacetKind, FacetRole } from "@/lib/facets";
+import { buildProfile, computeFandexScore, itemsWithFacet } from "@/lib/discovery";
 
 // P17 — the PERSONAL overlay for a public facet page. The page itself is public
 // and provider-sourced (publicFacetDetail.ts, no user data); this authed endpoint
@@ -28,6 +29,17 @@ export const GET = withUser(async (req: NextRequest, session) => {
     }
   }
 
+  // H5.6 — per-id Fandex Score for the client-side "Fandex Score" sort. Only the
+  // viewer's own catalog items carrying this facet get a score (via the discovery
+  // cache's facets); public pool items not in their library have none and sort
+  // last. Combined view (no role), matching the public page.
+  const profile = buildProfile(session.userId);
+  const fandexById: Record<string, number> = {};
+  for (const v of itemsWithFacet({ kind: kind as FacetKind, role: undefined, key })) {
+    const sc = computeFandexScore(v.facets, profile)?.score;
+    if (sc != null) fandexById[v.id] = sc;
+  }
+
   return NextResponse.json({
     stats: {
       userAvg: payload.stats.userAvg,
@@ -37,5 +49,6 @@ export const GET = withUser(async (req: NextRequest, session) => {
       baseline: payload.stats.baseline,
     },
     states,
+    fandexById,
   });
 });

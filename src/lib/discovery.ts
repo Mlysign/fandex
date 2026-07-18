@@ -14,6 +14,7 @@ import { extractFacets, Facet, facetId, FacetRole, personKey, companyKey } from 
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
+import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import { ScoringConfigValues } from "@/lib/scoringDefaults";
 import { MediaLink, MediaType } from "@/types";
 
@@ -43,6 +44,7 @@ export interface DiscoveryVector {
   year: number | null;
   communityScore: number | null; // 0-100 representative (one source)
   communityAvg: number | null;   // 0-100 average across all DBs (platform-rating sort)
+  communityVotes: number;        // summed vote count across sources (popularity + bayes rating)
   runtimeMinutes: number | null;
   addedAt: number;
   sources: { source: string; sourceId: string }[];
@@ -78,9 +80,9 @@ export interface DiscoverRefine {
   dislikes?: FacetRef[];
 }
 
-// T8 sort set: release (new/old), the user's own rating, the platform-average
-// (blended DB) rating, and personalized best-match.
-export type SortKey = "releaseNew" | "releaseOld" | "userRating" | "platformRating" | "match";
+// Unified sort set (2026-07-19): release date (newest), popularity (vote count),
+// rating (Bayesian-damped), and the personalized Fandex Score.
+export type SortKey = "releaseDate" | "popularity" | "rating" | "fandexScore";
 
 export interface FindRequest {
   q?: string;            // free-text title query (T5 search)
@@ -168,6 +170,7 @@ function buildCache() {
       year: extractYear(row.release_date ?? merged.releaseDate),
       communityScore: representativeCommunity(merged.communityRatings),
       communityAvg: averageCommunity(merged.communityRatings),
+      communityVotes: communityVotes(merged.communityRatings),
       runtimeMinutes: merged.runtimeMinutes,
       addedAt: row.created_at ?? 0,
       sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
@@ -517,6 +520,7 @@ export interface DiscoverResultItem {
   backdropUrl: string | null;
   communityScore: number | null;
   communityAvg: number | null;
+  communityVotes: number;
   platformSources: string[];
   onWatchlist: boolean;
   libraryStatus: string | null;
@@ -543,7 +547,7 @@ export function find(userId: string, req: FindRequest): FindResult {
   const rawProfile = buildProfile(userId);
   const profile = applyRefinements(rawProfile, req.refine, byId);
   const filters = req.filters ?? {};
-  const sort: SortKey = req.sort ?? "match";
+  const sort: SortKey = req.sort ?? "fandexScore";
   const limit = Math.min(Math.max(req.limit ?? 60, 1), 120);
   const offset = Math.max(req.offset ?? 0, 0);
   const q = (req.q ?? "").trim().toLowerCase();
@@ -557,44 +561,51 @@ export function find(userId: string, req: FindRequest): FindResult {
       ).map((r) => r.media_item_id))
     : null;
 
-  const scored: { v: DiscoveryVector; score: number; reasons: Reason[] }[] = [];
+  // Fandex Score is computed here (not just for the paged slice) so the whole
+  // set can be SORTED by it. The badge uses the RAW profile (H5.3) regardless.
+  const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null }[] = [];
   for (const v of vectors) {
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
     const s = scoreFacets(v.facets, profile.w, idf);
-    scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [] });
+    scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: computeFandexScore(v.facets, rawProfile)?.score ?? null });
   }
 
-  // Sort. "match" with no signal at all → fall back to the platform average so the page is useful.
-  const matchUsable = sort === "match" && profile.hasSignal;
+  // Unified sort model: releaseDate (newest) / popularity (votes) / rating
+  // (Bayesian-damped) / fandexScore. "Fandex Score" with no usable signal (cold
+  // start) falls back to the Bayesian rating so the page stays useful.
+  const score10 = (v: DiscoveryVector) => (v.communityAvg == null ? null : v.communityAvg / 10);
+  const prior = ratingPrior(scored.map(({ v }) => ({ score10: score10(v), votes: v.communityVotes })));
+  const bayes = (v: DiscoveryVector) => bayesRating(score10(v), v.communityVotes, prior);
+  const fandexUsable = sort === "fandexScore" && rawProfile.ratedItemCount >= MIN_RATED_FOR_FANDEX_SCORE;
   scored.sort((a, b) => {
     switch (sort) {
-      case "releaseNew": return cmpDate(b.v.releaseDate, a.v.releaseDate);
-      case "releaseOld": return cmpDate(a.v.releaseDate, b.v.releaseDate, true);
-      case "userRating": return (state.get(b.v.id)?.rating ?? -1) - (state.get(a.v.id)?.rating ?? -1);
-      case "platformRating": return (b.v.communityAvg ?? -1) - (a.v.communityAvg ?? -1);
-      default:
-        if (!matchUsable) return (b.v.communityAvg ?? -1) - (a.v.communityAvg ?? -1);
-        return b.score - a.score || b.reasons.length - a.reasons.length || (b.v.communityAvg ?? -1) - (a.v.communityAvg ?? -1);
+      case "releaseDate": return cmpDate(a.v.releaseDate, b.v.releaseDate); // cmpDate defaults to desc (newest first)
+      case "popularity": return b.v.communityVotes - a.v.communityVotes || bayes(b.v) - bayes(a.v);
+      case "rating": return bayes(b.v) - bayes(a.v) || b.v.communityVotes - a.v.communityVotes;
+      default: // fandexScore
+        if (!fandexUsable) return bayes(b.v) - bayes(a.v) || b.v.communityVotes - a.v.communityVotes;
+        return (b.fandexScore ?? -1) - (a.fandexScore ?? -1) || bayes(b.v) - bayes(a.v);
     }
   });
 
   const total = scored.length;
   const page = scored.slice(offset, offset + limit);
 
-  const items: DiscoverResultItem[] = page.map(({ v, score, reasons }) => {
+  const items: DiscoverResultItem[] = page.map(({ v, score, reasons, fandexScore }) => {
     const st = state.get(v.id);
     return {
       id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
       communityScore: v.communityScore,
       communityAvg: v.communityAvg,
+      communityVotes: v.communityVotes,
       platformSources: st?.platformSources ?? [],
       onWatchlist: st?.onWatchlist ?? false,
       libraryStatus: st?.libraryStatus ?? null,
       rating: st?.rating ?? null,
       sources: v.sources, score, reasons,
-      fandexScore: computeFandexScore(v.facets, rawProfile)?.score ?? null,
+      fandexScore,
     };
   });
 

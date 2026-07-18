@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 // back) by mirroring to sessionStorage. First paint uses `initial`; the stored
 // value is restored on mount. Used for the list pages' filters/search/sort so
 // back-nav doesn't reset them (T12).
-export function usePersistedState<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
+export function usePersistedState<T>(key: string, initial: T, normalize?: (v: T) => T): [T, (v: T | ((p: T) => T)) => void] {
   const [val, setVal] = useState<T>(initial);
   // `hydrated` is state, not a ref, so the save effect below skips the very first
   // commit: a ref would flip true synchronously inside the hydrate effect and the
@@ -20,10 +20,12 @@ export function usePersistedState<T>(key: string, initial: T): [T, (v: T | ((p: 
       // Hydrating from sessionStorage must happen post-mount (it's unavailable
       // during SSR), so this restore necessarily sets state in an effect.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw != null) setVal(JSON.parse(raw) as T);
+      if (raw != null) { const parsed = JSON.parse(raw) as T; setVal(normalize ? normalize(parsed) : parsed); }
     } catch { /* storage unavailable / bad JSON */ }
     setHydrated(true);
-  }, [key]);
+    // `normalize` must be a STABLE reference (module-level fn) — an inline arrow
+    // would re-run this hydrate effect every render and clobber user edits.
+  }, [key, normalize]);
 
   useEffect(() => {
     if (!hydrated) return;
