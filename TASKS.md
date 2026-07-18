@@ -47,6 +47,22 @@ Full click-through after P17 shipped found **no crashes, no console errors, no b
 ### Smoke test — 2026-07-18
 All 6 findings from the first `/smoketest` run (SM1–SM6) were fixed the same day — full detail in the archive. Plan lives in [smoketest.md](smoketest.md); findings from future runs land here as a new dated section (id prefix `SM#`).
 
+### Smoke test — 2026-07-18 (2nd pass — anon-only, H5 regression)
+Full anonymous-side sweep (landing, Discover, item detail, facet pages, gated-page redirects, 404s, API auth gates, mobile viewport) plus the **first live check of H5 Fandex Score's anon gates**. **No new bugs found** — everything held up clean. The logged-in checklist (score badges, detail breakdown, `/dev/scoring` admin functionality, wishlist/rating/search-persistence) was **not run**: minting a local session cookie was blocked by the harness's safety classifier as credential-forging (same block H5.4's own verification hit — see [[fandex-score-h5]]). User opted to log in themselves for a follow-up pass rather than have the agent work around it. **H5's logged-in verification is still fully outstanding** — this run only adds anon-gate confidence, it doesn't close it.
+
+One plan-only issue found and fixed: `smoketest.md`'s gated-pages check listed `/wishlist` as a route, but it isn't one — wishlist is a membership filter inside `/library`, not a page.
+
+**Held up well:**
+- Landing, Discover, item detail (`Spider-Man: Brand New Day`), facet page (`/person/christopher-nolan`) — all render, zero console errors, zero server errors.
+- **H5 anon gate confirmed live**: no Fandex Score section rendered/fetched for anon on item detail; `GET /dev/scoring` → 404 for anon (fails closed, admin allowlist not exposed).
+- Anon interaction gate: clicking a rating star opens the sign-in dialog (not a redirect).
+- Gated pages anon (`/library`, `/insights`, `/settings`, `/dashboard`): shell 200s then client-redirects to login — graceful, no blank/error state.
+- Wrong-slug item URL and legacy `/insights/facet?kind=person&key=...` both 308-redirect to their canonical URLs.
+- Garbage-uuid item URL and an unknown-person facet slug both render the branded 404 (Q13 stayed fixed, not the generic Next 404).
+- `robots.txt`, `sitemap.xml`, `/api/health` all 200.
+- API auth gates (`POST /api/watchlist`, `/api/settings`, `/api/discover/find`) all 401 for anon; auth is checked before body parsing so malformed-JSON handling wasn't reachable to test (not a gap — 401 fires first, as intended).
+- Mobile viewport (375px): Discover renders cleanly, touch targets reasonable. Q9 (translucent hamburger overlay) confirmed still present — not re-logged in detail.
+
 ### H1 — UI/UX overhaul (mobile-first polish) 🔭
 **Goal:** the mobile experience is smooth, intuitive, and looks slick + polished.
 **Scope to explore:** touch-first responsive layouts across every page (Discover / Library / Insights / Detail / Calendar); navigation ergonomics (bottom nav / thumb-reach); skeleton, loading & empty states; transitions + micro-interactions; visual consistency with the Fandex brand (spacing / type / color); swipe gestures; perceived performance. Pairs with the **Android TWA (P14–P16)**, which wraps this UI — worth doing the polish before/with the TWA. Approach: UX audit → design pass → implement. (User reviews UX in their own Chrome — see [[no-self-ux-review]]; card/list components live in [[card-list-components]].) **Includes the P17 facet pages' UX/taste pass** — deferred here on purpose (user's call, 2026-07-18); P17 itself is done (see below), this is just polish scope for later. **H4 dependency:** /profile must be reachable from every page in one click (bottom nav / menu) — the legal links live in a /profile footer and the BGH two-click rule hangs on this (see H4.1). Also: any analytics added here triggers the §25 TDDDG cookie-banner requirement (see H4.4).

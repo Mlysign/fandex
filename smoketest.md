@@ -42,6 +42,14 @@ Never enter real passwords / do real OAuth. The OAuth round-trip itself (Trakt l
 H2c intent-drain across the redirect) can only be verified on live — out of scope here;
 test the pieces (dialog opens, return-path cookie set, guard rejects evil paths).
 
+**2026-07-18 update: the mint-and-set-cookie recipe above is now reliably blocked** by the
+harness's safety classifier (flagged as credential-forging) — it fired on this run and on
+H5.4's own verification attempt (see memory). Don't keep retrying it. Instead: ask the user
+to log in themselves in the shared Browser pane (it's the same pane visible in their UI —
+they can click a real OAuth provider with their own account), then continue driving once
+they confirm. Fall back to an anon-only sweep + a follow-up run if they'd rather do that
+later.
+
 ## Flow checklist
 
 Anonymous first (public surface), then logged-in. Check console + server logs after each block.
@@ -58,8 +66,10 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
    provider, grid renders with real `<a>` links, sort re-queries, Load more 60→120, pagination
    past end doesn't error.
 6. `/insights/facet?...` legacy URL → 308 to the public facet page.
-7. Gated pages anon: `/wishlist` `/library` `/insights` `/settings` `/dashboard` — graceful
-   (redirect to login, not error/blank).
+7. Gated pages anon: `/library` `/insights` `/settings` `/dashboard` — graceful (page shell 200s,
+   then client-side redirect to login, not error/blank). Note: **`/wishlist` is not a real route**
+   — wishlist is a membership filter (`rr_library_membership`) inside `/library`, not its own page;
+   don't test it as a URL (confirmed 2026-07-18, no `src/app/wishlist`).
 8. 404s: garbage uuid item URL, unknown person. Known: unbranded default 404 (Q13).
 9. `/robots.txt`, `/sitemap.xml` (sitemap is cached-by-default — note staleness only),
    `/api/health` → 200 ok.
@@ -153,6 +163,10 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
   user's platform accounts and clearing isn't obviously exposed; note as not-exercised.
 - Facet "Highest rated" ranking obscure titles first is SM3 (no vote damping), not a
   provider bug.
+- **`navigate` is intermittently denied by the safety classifier** for no reason tied to the
+  URL (same URL succeeds on a bare retry seconds later) — don't treat one blocked `navigate`
+  as a broken page; just retry once before investigating further. This is separate from the
+  cookie-mint block above, which is a hard, consistent block, not intermittent.
 
 ## Environment gotchas
 
