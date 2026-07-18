@@ -67,6 +67,20 @@ function sortDiscover(items: any[], sort: SortKey): any[] {
   return arr;
 }
 
+// Merge freshly-fetched items into the browse timeline, deduping by id and
+// re-sorting by release date (module-scoped: no closure over component state).
+function mergeSorted(prev: any[], incoming: any[], prepend: boolean) {
+  const seen = new Set(prev.map((i) => i.id));
+  const fresh = incoming.filter((i) => !seen.has(i.id));
+  const all = prepend ? [...fresh, ...prev] : [...prev, ...fresh];
+  return all.sort((a, b) => {
+    if (!a.releaseDate && !b.releaseDate) return 0;
+    if (!a.releaseDate) return 1;
+    if (!b.releaseDate) return -1;
+    return a.releaseDate.localeCompare(b.releaseDate);
+  });
+}
+
 type Sentinel = { loading: boolean; has: boolean; busy: string; cta: string; end: string; onClick: () => void };
 
 // One end-of-list loader bar (top or bottom of the browse timeline). Module-scoped
@@ -219,18 +233,6 @@ export default function DiscoverPage() {
     setItems((prev) => mergeSorted(prev, newItems, true));
     setBackPages(next);
     setLoadingPrev(false);
-  }
-
-  function mergeSorted(prev: any[], incoming: any[], prepend: boolean) {
-    const seen = new Set(prev.map((i) => i.id));
-    const fresh = incoming.filter((i) => !seen.has(i.id));
-    const all = prepend ? [...fresh, ...prev] : [...prev, ...fresh];
-    return all.sort((a, b) => {
-      if (!a.releaseDate && !b.releaseDate) return 0;
-      if (!a.releaseDate) return 1;
-      if (!b.releaseDate) return -1;
-      return a.releaseDate.localeCompare(b.releaseDate);
-    });
   }
 
   // ── Search loader ──
