@@ -16,6 +16,15 @@ import { PUBLIC_TYPES } from "@/lib/publicUrl";
 // while noindex (PUBLIC_ITEMS_INDEXABLE=false): a crawler has to FETCH a page to
 // see its noindex tag, so a Disallow would hide the tag, not enforce it. The old
 // `/insights/facet` is covered by the `/insights` disallow (it's now a redirect).
+//
+// SM7 (2026-07-19) — MUST be request-time, same reason as sitemap.ts: without
+// this, Next prerenders the route once at `next build` time on Railway, baking
+// in whatever NEXT_PUBLIC_BASE_URL was (or wasn't) set during the BUILD phase —
+// which shipped `Host: http://localhost:3000` to production even though the
+// runtime env var was correct (proven by sitemap.ts, which already had this and
+// rendered the right origin).
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
