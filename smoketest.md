@@ -21,6 +21,16 @@ visual language) are in scope for the sweep.
   It's the production-shaped upgrade-path DB — treat writes as acceptable (it's a dev copy)
   but don't bulk-delete.
 - Server logs: `preview_logs`; console: `read_console_messages`; network: `read_network_requests`.
+- **Live/production run** (e.g. "smoketest the live version" after a deploy): point
+  `preview_start`/`navigate` at `https://fandex.org` instead of localhost. No `preview_logs`
+  or local DB access — rely on `read_console_messages`/`read_network_requests` + reading actual
+  response bodies (status codes alone aren't enough, see SM7). Auth mint recipe below is
+  dev-only (needs the dev `.env` JWT_SECRET, wouldn't match prod's) — a live run is anon-only
+  by construction, not just by the credential-forging block. Useful trick when another Claude
+  session already has `next dev` running in this folder and blocks a fresh `preview_start`:
+  `preview_start({url: "http://localhost:3000"})` (or the live URL) still opens a plain browser
+  tab pointed at it — that bypasses the "server already running" conflict entirely since it's
+  not trying to spawn a second dev server.
 
 ## Auth (logged-in state, no OAuth needed)
 
@@ -72,7 +82,11 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
    don't test it as a URL (confirmed 2026-07-18, no `src/app/wishlist`).
 8. 404s: garbage uuid item URL, unknown person. Known: unbranded default 404 (Q13).
 9. `/robots.txt`, `/sitemap.xml` (sitemap is cached-by-default — note staleness only),
-   `/api/health` → 200 ok.
+   `/api/health` → 200 ok. **On a LIVE run, actually read robots.txt's `Host:`/`Sitemap:`
+   values, don't just check the status code** — SM7 (2026-07-19) was a 200 response with a
+   dead `localhost:3000` origin baked in at build time (route lacked `dynamic =
+   "force-dynamic"`, fixed). A route returning 200 with the wrong content is exactly the
+   kind of thing a status-code-only check misses.
 
 **B. API probes (curl or fetch, both auth states)**
 10. `/api/discover` anon GET/POST happy path; malformed JSON body → 400 not 500 (S8 zod).
