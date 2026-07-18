@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { EnrichedItem, MediaType } from "@/types";
 import type { PlatformStatus } from "@/lib/watchlistStatus";
 import { IntentAction, stashIntent, takeIntent } from "@/lib/pendingIntent";
+import { probeSession } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
@@ -61,13 +62,15 @@ export default function PersonalSection({
   const idsKey = JSON.stringify(ids);
 
   const load = useCallback(async () => {
+    // SM6: don't fire the authed /api/detail just to learn we're logged out —
+    // the shared probe answers that without a 401.
+    if (!(await probeSession())) { setState("anon"); return; }
     const p = new URLSearchParams({ id: itemId, type });
     for (const [k, v] of Object.entries(JSON.parse(idsKey) as Record<string, string>)) {
       if (v != null) p.set(`${k}Id`, String(v));
     }
     const res = await fetch(`/api/detail?${p}`);
-    // 401 = logged out → show the real controls in "anon" mode (interactions
-    // open the sign-in dialog). Any other failure also degrades to anon.
+    // Any failure (incl. a race with logout) degrades to the anon controls.
     if (!res.ok) { setState("anon"); return; }
     const data: DetailResponse = await res.json();
     setDetail(data);

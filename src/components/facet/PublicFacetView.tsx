@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import NavBar from "@/components/NavBar";
 import { useScrollRestore } from "@/lib/usePersistedState";
+import { probeSession } from "@/lib/sessionProbe";
 import { TypeIcon } from "@/components/Badges";
 import { TYPE_COLORS } from "@/lib/constants";
 import { publicItemHref } from "@/lib/publicUrl";
@@ -113,11 +114,16 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
   useScrollRestore(`rr_facet_scroll_${prefix}_${initial.key}`, hydrated && items.length > 0);
 
-  // Personal overlay — silently absent for anonymous viewers (401).
+  // Personal overlay — absent for anonymous viewers. SM6: gate on the shared
+  // session probe instead of firing the authed endpoint into a guaranteed 401.
   useEffect(() => {
     let alive = true;
-    fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}`)
-      .then((r) => (r.ok ? r.json() : null))
+    probeSession()
+      .then((authed) => {
+        if (!alive || !authed) return null;
+        return fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}`)
+          .then((r) => (r.ok ? r.json() : null));
+      })
       .then((d: Mine | null) => { if (alive && d) setMine(d); })
       .catch(() => {});
     return () => { alive = false; };

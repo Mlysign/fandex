@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { resetSessionProbe } from "@/lib/sessionProbe";
 
 // The sign-in provider options — Trakt, Steam, RAWG — factored out of the login
 // page (src/app/page.tsx) so the H2c in-page SignInDialog renders the EXACT same
@@ -47,8 +48,11 @@ export default function AuthOptions({
       setRawgError(data.error || "Login failed");
       return;
     }
-    // RAWG login is a same-page POST that already set the session cookie. In the
-    // dialog we resume the pending intent in-place; on the login page we navigate.
+    // RAWG login is a same-page POST that already set the session cookie. Drop
+    // the cached anon probe FIRST so callers' reloads see the session (SM6). In
+    // the dialog we resume the pending intent in-place; on the login page we
+    // navigate.
+    resetSessionProbe();
     if (onAuthenticated) onAuthenticated();
     else router.push(data.redirect ?? "/dashboard");
   }

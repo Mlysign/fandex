@@ -8,7 +8,7 @@ import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
-import { usePersistedState } from "@/lib/usePersistedState";
+import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
@@ -18,6 +18,7 @@ import {
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX,
 } from "@/components/discovery/types";
 import { MediaType } from "@/types";
+import { probeSession } from "@/lib/sessionProbe";
 
 const LIMIT = 60;
 
@@ -129,13 +130,32 @@ export default function DiscoverPage() {
   // Declared before the mount effect that calls it (react-hooks: no use-before-declaration).
   async function loadDefault() {
     setLoading(true);
-    setPages({ games: 1, movies: 1, shows: 1 });
-    setBackPages({ games: 0, movies: 0, shows: 0 });
+    // N2 (Discover): restore the browse DEPTH from the last visit. The feed
+    // pages are server-cached and deterministic, so refetching the same page
+    // numbers reproduces the same list — which the saved scroll position
+    // (useScrollRestore below) then lands on. Depth is capped so a stale/huge
+    // stash can't trigger a fetch storm.
+    const CAP = 10;
+    let stash: { pages?: typeof pages; backPages?: typeof backPages } = {};
+    try { stash = JSON.parse(sessionStorage.getItem("rr_discover_browse") ?? "{}") ?? {}; } catch { /* bad JSON */ }
+    const cap = (n: unknown, min: number) => Math.min(CAP, Math.max(min, Number(n) || min));
+    const target = { games: cap(stash.pages?.games, 1), movies: cap(stash.pages?.movies, 1), shows: cap(stash.pages?.shows, 1) };
+    const targetBack = { games: cap(stash.backPages?.games, 0), movies: cap(stash.backPages?.movies, 0), shows: cap(stash.backPages?.shows, 0) };
+
+    const reqs: Promise<any>[] = [fetch("/api/discover").then((r) => r.json())];
+    for (const sec of ["games", "movies", "shows"] as const) {
+      for (let p = 2; p <= target[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}`).then((r) => r.json()));
+      for (let p = 1; p <= targetBack[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}&direction=past`).then((r) => r.json()));
+    }
+    const results = await Promise.all(reqs.map((p) => p.catch(() => ({}))));
+    const [base, ...rest] = results;
+    let merged: any[] = base.items ?? [];
+    for (const d of rest) merged = mergeSorted(merged, d.items ?? [], false);
+    setItems(merged);
+    setPages(target);
+    setBackPages(targetBack);
     setHasMore(true);
     setHasMoreBack(true);
-    const res = await fetch("/api/discover");
-    const data = await res.json();
-    setItems(data.items ?? []);
     setLoading(false);
   }
 
@@ -154,6 +174,16 @@ export default function DiscoverPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDefault();
   }, []);
+
+  // N2: mirror the browse depth for loadDefault's restore, and save/restore the
+  // browse scroll. The today-scroll yields when a restore is pending — same
+  // pattern as the wishlist/library pages.
+  useEffect(() => {
+    if (loading) return;
+    try { sessionStorage.setItem("rr_discover_browse", JSON.stringify({ pages, backPages })); } catch { /* quota */ }
+  }, [pages, backPages, loading]);
+  const [autoToday] = useState(() => !hasSavedScroll("rr_discover_scroll"));
+  useScrollRestore("rr_discover_scroll", !searchActive && !loading && items.length > 0);
 
   async function loadMore() {
     if (loadingMore || !hasMore || searchActive) return;
@@ -208,13 +238,22 @@ export default function DiscoverPage() {
     if (append) setSearchLoadingMore(true);
     else { setSearchLoading(true); setWebItems([]); }
     try {
-      const res = await fetch("/api/discover/find", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: q.trim(), filters: apiFilters(filters), sort, limit: LIMIT, offset }),
-      });
-      const d = await res.json();
-      const localItems: DiscoverItem[] = d.items ?? [];
-      setSearchTotal(d.total ?? 0);
+      // SM6: the local-catalog find is an authed endpoint — for anonymous
+      // viewers skip straight to the public database results below instead of
+      // eating a 401 on every keystroke.
+      const authed = await probeSession();
+      let localItems: DiscoverItem[] = [];
+      if (authed) {
+        const res = await fetch("/api/discover/find", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ q: q.trim(), filters: apiFilters(filters), sort, limit: LIMIT, offset }),
+        });
+        const d = await res.json();
+        localItems = d.items ?? [];
+        setSearchTotal(d.total ?? 0);
+      } else {
+        setSearchTotal(0);
+      }
       setSearchItems((prev) => (append ? [...prev, ...localItems] : localItems));
       // Show local results immediately; the DB fetch below populates separately.
       if (append) setSearchLoadingMore(false); else setSearchLoading(false);
@@ -235,7 +274,7 @@ export default function DiscoverPage() {
             extras.push(...(wd.items ?? []));
           } catch { /* ignore */ }
         }
-        if (filters.includeFacets.length > 0) {
+        if (authed && filters.includeFacets.length > 0) {
           try {
             const fd = await (await fetch("/api/discover/facet-fetch", {
               method: "POST", headers: { "Content-Type": "application/json" },
@@ -477,7 +516,7 @@ export default function DiscoverPage() {
                       <SentinelBar {...topSentinel} />
                     </div>
 
-                    <GroupedView items={browseFiltered} view={view} descending={descending} onSelect={(i) => router.push(buildItemHref(i as any))} />
+                    <GroupedView items={browseFiltered} view={view} descending={descending} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={autoToday} />
 
                     <div ref={sentinelRef} className="mt-10 flex justify-center">
                       <SentinelBar {...bottomSentinel} />

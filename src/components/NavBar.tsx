@@ -4,6 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import SignInDialog from "@/components/auth/SignInDialog";
+import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
 
 // Q1 — the nav is session-aware. Public pages (facets, /discover) render for
 // anonymous visitors too, so the nav can't assume a session: anon gets the
@@ -22,16 +23,6 @@ const ANON_LINKS = [
   { href: "/discover", label: "Discover" },
 ];
 
-// Every page renders its own <NavBar>, so client-side navigation would re-probe
-// /api/auth/me on every hop without this module-level cache. Login/logout paths
-// reset it (see logout below + the sign-in dialog's onAuthenticated).
-let sessionProbe: Promise<boolean> | null = null;
-const probeSession = () =>
-  (sessionProbe ??= fetch("/api/auth/me")
-    .then((r) => r.json())
-    .then((d) => Boolean(d.user))
-    .catch(() => false));
-
 export default function NavBar() {
   const router   = useRouter();
   const pathname = usePathname();
@@ -46,7 +37,7 @@ export default function NavBar() {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    sessionProbe = null;
+    resetSessionProbe();
     router.push("/");
   }
 
@@ -125,7 +116,7 @@ export default function NavBar() {
           onClose={() => setShowSignIn(false)}
           // RAWG login sets the session in-place (no redirect): drop the cached
           // probe and reload so every island on the page picks up the session.
-          onAuthenticated={() => { sessionProbe = null; window.location.reload(); }}
+          onAuthenticated={() => { resetSessionProbe(); window.location.reload(); }}
         />
       )}
     </nav>
