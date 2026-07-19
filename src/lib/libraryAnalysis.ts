@@ -9,6 +9,7 @@ import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
+import { getScoringConfig } from "@/lib/scoringConfig";
 import { MediaLink, MediaType } from "@/types";
 
 // One aggregated facet (tag / person / company) across the rated library.
@@ -20,7 +21,12 @@ export interface FacetStat {
   category?: string; // tags only
   count: number;     // # rated items carrying this facet
   sum: number;       // Σ of those items' personal ratings
-  avg: number;       // sum / count — the "well received" score (0-10)
+  avg: number;       // sum / count — the plain "well received" score (0-10)
+  // Q22 (2026-07-19) — the SAME Bayesian shrinkage average computeFandexScore's
+  // BA_f uses (shrunk toward your overall baseline by scoring_config's
+  // priorStrength), so Insights' tag panels rank the same way the score does
+  // instead of by a raw mean a single 10/10 can dominate.
+  ba: number;
 }
 
 // A rated library item, flattened for the overview / histogram / divergence /
@@ -138,20 +144,22 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       } else {
         statMap.set(id, {
           kind: f.kind, role: f.role, key: f.key, label: f.label,
-          category: f.category, count: 1, sum: rating, avg: 0,
+          category: f.category, count: 1, sum: rating, avg: 0, ba: 0,
         });
       }
     }
   }
 
+  const ratedItemCount = ratingValues.length;
+  const baseline = ratedItemCount ? ratingSum / ratedItemCount : 0;
+  const C = getScoringConfig().priorStrength;
+
   const facets = [...statMap.values()].map((s) => ({
     ...s,
     avg: Math.round((s.sum / s.count) * 10) / 10,
+    ba: Math.round(((C * baseline + s.sum) / (C + s.count)) * 10) / 10,
   }));
-  facets.sort((a, b) => b.avg - a.avg || b.count - a.count);
-
-  const ratedItemCount = ratingValues.length;
-  const baseline = ratedItemCount ? ratingSum / ratedItemCount : 0;
+  facets.sort((a, b) => b.ba - a.ba || b.count - a.count);
 
   return {
     facets, items, baseline, ratedItemCount,

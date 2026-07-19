@@ -1,10 +1,37 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_COLORS } from "@/lib/constants";
-import FacetLink from "@/components/FacetLink";
+import FacetLink, { facetHref } from "@/components/FacetLink";
 import { categorizeTag, CATEGORIES } from "@/lib/tags";
 import { tagKey } from "@/lib/facets";
+
+// Q21 (2026-07-19) — one cast member, styled like a PosterCard but for a
+// person (portrait photo, no release date/rating). Used in a horizontal
+// scroll strip, the same pattern Insights uses for "items behind this bar"
+// (InsightsView.tsx's ItemCardRow: flex/overflow-x-auto/snap-x row of
+// w-28/32 shrink-0 cards).
+function CastCard({ name, character, profileUrl }: { name: string; character: string | null; profileUrl?: string | null }) {
+  return (
+    <Link
+      href={facetHref("person", "cast", name)}
+      className="group block rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all overflow-hidden"
+    >
+      <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "140%" }}>
+        {profileUrl ? (
+          <Image src={profileUrl} alt={name} fill sizes="140px" className="object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-neutral-600">{name?.[0] ?? "?"}</div>
+        )}
+      </div>
+      <div className="px-2 py-1.5 space-y-0.5">
+        <p className="text-xs font-medium text-neutral-200 line-clamp-1 group-hover:text-white">{name}</p>
+        {character && <p className="text-[11px] text-neutral-500 line-clamp-1">{character}</p>}
+      </div>
+    </Link>
+  );
+}
 
 // The stacked lower-detail sections: trailer, cast, where-to-watch, DLC, the
 // combined tags/keywords/modes/platforms block, and store links.
@@ -41,24 +68,15 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
         </a>
       ) : null}
 
-      {/* Cast — full list */}
+      {/* Cast — horizontal scroll strip (Q21: matches the Insights "items
+          behind this bar" card-row pattern instead of a static photo grid) */}
       {(type === "movie" || type === "show") && cast.length > 0 && (
         <section>
           <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Cast</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
+          <div className="flex gap-3 overflow-x-auto pb-2 -mb-2 snap-x">
             {cast.map((c, i) => (
-              <div key={`${c.name}-${i}`} className="flex items-center gap-2.5 min-w-0">
-                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
-                  {c.profileUrl ? (
-                    <Image src={c.profileUrl} alt={c.name} fill sizes="40px" className="object-cover" />
-                  ) : (
-                    <span className="text-sm text-neutral-500 font-medium">{c.name?.[0] ?? "?"}</span>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <FacetLink kind="person" role="cast" label={c.name} className="text-neutral-200 text-sm truncate block hover:text-white hover:underline" />
-                  {c.character && <p className="text-neutral-500 text-xs truncate">{c.character}</p>}
-                </div>
+              <div key={`${c.name}-${i}`} className="w-28 sm:w-32 shrink-0 snap-start">
+                <CastCard name={c.name} character={c.character} profileUrl={c.profileUrl} />
               </div>
             ))}
           </div>

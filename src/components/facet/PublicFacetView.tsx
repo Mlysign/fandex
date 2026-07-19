@@ -1,14 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import NavBar from "@/components/NavBar";
+import GroupedView from "@/components/GroupedView";
 import { useScrollRestore } from "@/lib/usePersistedState";
 import { probeSession } from "@/lib/sessionProbe";
-import { TypeIcon } from "@/components/Badges";
-import { TYPE_COLORS } from "@/lib/constants";
-import { publicItemHref } from "@/lib/publicUrl";
+import type { MediaCardItem } from "@/components/cardItem";
 import type { PublicFacetPayload, PublicFacetItem, FacetSort } from "@/lib/detail/publicFacetDetail";
+import TagAdminControls from "./TagAdminControls";
 
 // P17 — the public, provider-sourced facet page UI. Renders the crowd half from
 // the SSR'd first page, then (a) pages deeper / re-sorts via the public
@@ -16,6 +15,13 @@ import type { PublicFacetPayload, PublicFacetItem, FacetSort } from "@/lib/detai
 // authed /api/facet/mine — which 401s for anon, so anonymous visitors simply see
 // the clean public page with no personal data. `import type` keeps the
 // server-only data module out of this client bundle.
+//
+// Q14 (2026-07-19): the grid is now GroupedView + PosterCard, the SAME
+// components Discover/Library/Wishlist use — this used to be a bespoke card +
+// flat grid that had drifted from the rest of the app (own aspect ratio, an
+// icon in the type bar, no quick-action bar, no dividers/scrubber). The facet
+// page keeps its OWN traits Discover doesn't need (community score, person
+// roles) via cardItem.ts's optional context-dependent fields.
 
 const SORT_LABELS: { key: FacetSort; label: string }[] = [
   { key: "popular", label: "Most popular" },
@@ -28,6 +34,8 @@ interface Mine {
   stats: { userAvg: number | null; userCount: number; communityAvg: number | null; delta: number | null; baseline: number } | null;
   states: Record<string, MineState>;
   fandexById: Record<string, number>;
+  bayesPersonalScore?: number | null;
+  bayesPersonalCount?: number | null;
 }
 
 interface Props {
@@ -37,40 +45,26 @@ interface Props {
   roleLabel: string;    // "Person" | "Tag" | "Studio" — header eyebrow
 }
 
-function ItemCard({ item, mine }: { item: PublicFacetItem; mine?: MineState }) {
-  const color = TYPE_COLORS[item.type] ?? "#888";
-  const year = item.releaseDate ? item.releaseDate.slice(0, 4) : null;
-  const inner = (
-    <div className="group rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all overflow-hidden relative">
-      <div className="h-1.5" style={{ background: color }} />
-      <div className="relative w-full bg-neutral-800" style={{ paddingBottom: "150%" }}>
-        {item.posterUrl ? (
-          <Image src={item.posterUrl} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover" />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
-            <TypeIcon type={item.type} size={28} /><span className="text-2xl font-bold">{item.title[0]}</span>
-          </div>
-        )}
-        {mine?.rating != null && (
-          <span className="absolute top-2 left-2 rounded-md bg-emerald-500/90 px-1.5 py-0.5 text-xs font-semibold text-black tabular-nums">{mine.rating}</span>
-        )}
-        {mine && mine.rating == null && (mine.libraryStatus || mine.onWatchlist) && (
-          <span className="absolute top-2 left-2 rounded-md bg-sky-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-black">{mine.onWatchlist ? "Wishlist" : "Library"}</span>
-        )}
-        {item.communityScore != null && (
-          <span className="absolute top-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums">{(item.communityScore / 10).toFixed(1)}</span>
-        )}
-      </div>
-      <div className="p-2">
-        <div className="text-sm font-medium line-clamp-2">{item.title}{year ? <span className="text-neutral-500 font-normal"> ({year})</span> : null}</div>
-        {item.roles.length > 0 && <div className="mt-1 text-[11px] text-neutral-500 line-clamp-1">{item.roles.join(", ")}</div>}
-      </div>
-    </div>
-  );
-  return item.linkable
-    ? <Link href={publicItemHref(item)} className="block">{inner}</Link>
-    : <div className="opacity-80" title="Not yet in the catalog">{inner}</div>;
+// PublicFacetItem + the personal overlay → the shared card shape.
+function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexScore: number | undefined): MediaCardItem {
+  return {
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    releaseDate: item.releaseDate,
+    posterUrl: item.posterUrl,
+    rating: mine?.rating ?? null,
+    onWatchlist: mine?.onWatchlist ?? false,
+    libraryStatus: mine?.libraryStatus ?? null,
+    fandexScore: fandexScore ?? null,
+    communityScore: item.communityScore,
+    roles: item.roles,
+    sources: item.sources,
+    linkable: item.linkable,
+  };
 }
+
+const noop = () => {};
 
 export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Props) {
   const [items, setItems] = useState<PublicFacetItem[]>(initial.items);
@@ -85,6 +79,8 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   const [loading, setLoading] = useState(false);
   const [mine, setMine] = useState<Mine | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // Q18 — tag category/bundle can change live via the admin controls below.
+  const [tagBundle, setTagBundle] = useState(initial.tagBundle);
 
   const person = initial.person;
 
@@ -169,6 +165,14 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
     ? [...items].sort((a, b) => (mine.fandexById[b.id] ?? -1) - (mine.fandexById[a.id] ?? -1))
     : items;
 
+  // Q14: same GroupedView grouping the unified sort model uses elsewhere —
+  // "Newest" gets month dividers + a month scrubber, "Highest rated" gets
+  // rating buckets, "Most popular" and the Fandex overlay stay flat (no
+  // natural date/rating grouping to divide by).
+  const cardItems: MediaCardItem[] = shownItems.map((it) => toCardItem(it, mine?.states[it.id], mine?.fandexById[it.id]));
+  const groupBy: "month" | "rating" | "none" = fandexActive ? "none" : sort === "newest" ? "month" : sort === "rating" ? "rating" : "none";
+  const ratingOf = (i: MediaCardItem) => (i.communityScore != null ? i.communityScore / 10 : null);
+
   const s = mine?.stats;
   const deltaTxt = s && s.delta != null
     ? s.delta > 0 ? `You rate ${initial.label} ${s.delta.toFixed(1)} higher than the crowd`
@@ -204,6 +208,20 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           </div>
         </div>
 
+        {/* Q18 — tag category + bundle membership (tags only) */}
+        {prefix === "tag" && (initial.tagCategory || tagBundle) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            {initial.tagCategory && (
+              <span className="px-2 py-0.5 rounded-full" style={{ background: `${initial.tagCategory.color}22`, color: initial.tagCategory.color }}>
+                {initial.tagCategory.label}
+              </span>
+            )}
+            {tagBundle && tagBundle.members.length > 0 && (
+              <span className="text-neutral-500">Also known as: {tagBundle.members.join(", ")}</span>
+            )}
+          </div>
+        )}
+
         {/* Stats — crowd always; you-vs-crowd only when logged in + rated */}
         <div className="mt-5 flex flex-wrap gap-3">
           {initial.community.avg != null && (
@@ -212,10 +230,22 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
               <div className="text-xs text-neutral-400 mt-0.5">Crowd average · {initial.community.count} titles</div>
             </div>
           )}
+          {prefix === "tag" && initial.bayesCommunityAvg != null && (
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
+              <div className="text-2xl font-semibold tabular-nums text-sky-300">{initial.bayesCommunityAvg.toFixed(1)}</div>
+              <div className="text-xs text-neutral-400 mt-0.5">Crowd average (Bayesian)</div>
+            </div>
+          )}
           {s?.userAvg != null && (
             <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
               <div className="text-2xl font-semibold tabular-nums text-emerald-400">{s.userAvg.toFixed(1)}</div>
               <div className="text-xs text-neutral-400 mt-0.5">Your average · {s.userCount} rated</div>
+            </div>
+          )}
+          {prefix === "tag" && mine?.bayesPersonalScore != null && (
+            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
+              <div className="text-2xl font-semibold tabular-nums text-emerald-300">{mine.bayesPersonalScore.toFixed(1)}</div>
+              <div className="text-xs text-neutral-400 mt-0.5">Your average (Bayesian){mine.bayesPersonalCount != null ? ` · ${mine.bayesPersonalCount} rated` : ""}</div>
             </div>
           )}
           <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
@@ -227,6 +257,18 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           <p className="text-sm mt-3">
             <span className={s!.delta! > 0 ? "text-emerald-400" : s!.delta! < 0 ? "text-rose-400" : "text-neutral-300"}>{deltaTxt}</span>
           </p>
+        )}
+
+        {/* Q18 — admin-only inline taxonomy editor (renders nothing for non-admins) */}
+        {prefix === "tag" && (
+          <div className="mt-4">
+            <TagAdminControls
+              tagKey={initial.key}
+              currentCategoryId={initial.tagCategory?.id ?? null}
+              bundle={tagBundle}
+              onBundleChange={setTagBundle}
+            />
+          </div>
         )}
 
         {/* Sort */}
@@ -249,12 +291,18 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
         </div>
 
         {/* Grid */}
-        {shownItems.length === 0 ? (
+        {cardItems.length === 0 ? (
           <p className="text-sm text-neutral-500 py-12 text-center">Nothing found for this {roleLabel.toLowerCase()}.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {shownItems.map((item) => <ItemCard key={item.id} item={item} mine={mine?.states[item.id]} />)}
-          </div>
+          <GroupedView
+            items={cardItems}
+            view="card"
+            groupBy={groupBy}
+            descending={sort === "newest"}
+            ratingOf={groupBy === "rating" ? ratingOf : undefined}
+            onSelect={noop}
+            autoScrollToToday={false}
+          />
         )}
 
         {hasMore && (

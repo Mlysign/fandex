@@ -13,7 +13,7 @@ export function communityVotes(ratings: CommunityRating[] | undefined | null): n
 }
 
 const BAYES_PRIOR_VOTES = 50; // matches publicFacetDetail.BAYES_PRIOR_VOTES
-const NEUTRAL_PRIOR = 6.5;
+export const NEUTRAL_PRIOR = 6.5; // exported for publicFacetDetail's tag-level Bayesian crowd average (Q18)
 const MIN_VOTES_FOR_PRIOR = 10;
 
 // Bayesian-damped score from a 0-10 rating + vote count: (v·R + m·C)/(v + m),

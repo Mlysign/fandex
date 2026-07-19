@@ -4,10 +4,11 @@
 import Link from "next/link";
 
 export default function StatBar({
-  label, value, count, color, baseline, title, href,
+  label, value, rawAvg, count, color, baseline, title, href,
 }: {
   label: string;
-  value: number;       // 0-10
+  value: number;       // 0-10 — drives the bar (Q22: the Bayesian score, not the raw average)
+  rawAvg?: number;      // Q22: the plain average, shown as a smaller secondary hint when it differs
   count: number;
   color: string;
   baseline: number;    // your mean rating (drawn as a tick)
@@ -30,8 +31,11 @@ export default function StatBar({
           />
         )}
       </div>
-      <span className="w-16 shrink-0 text-right text-xs tabular-nums text-neutral-400">
+      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-neutral-400">
         {value.toFixed(1)} <span className="text-neutral-600">×{count}</span>
+        {rawAvg != null && Math.abs(rawAvg - value) >= 0.05 && (
+          <span className="block text-[10px] text-neutral-600">avg {rawAvg.toFixed(1)}</span>
+        )}
       </span>
     </div>
   );

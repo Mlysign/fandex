@@ -23,6 +23,10 @@ import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId, PersonMeta, 
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
 import { getTagVocab } from "@/lib/discovery";
+import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
+import { categorizeTag } from "@/lib/tags";
+import { canonicalTagKey, listTagBundles } from "@/lib/tagAlias";
+import { bayesRating, NEUTRAL_PRIOR } from "@/lib/ratingsSort";
 import { BoundedCache } from "@/lib/boundedCache";
 import { log, errorFields } from "@/lib/logger";
 
@@ -48,6 +52,13 @@ export interface PublicFacetItem {
   posterUrl: string | null;
   communityScore: number | null; // 0-100
   roles: string[];               // person only: ["Director","Writer"] / ["Actor"]
+  // Q14 (2026-07-19): the provider source id backing this title — needed so the
+  // shared card's quick-action bar (rate/watched/wishlist) resolves to the SAME
+  // already-persisted thin row (persistDiscoverItems, above) instead of
+  // upsertMediaItem creating a second row for it (the thin-write/pool invariant:
+  // a discover-time write is insert-only, so a rating write must MATCH, not
+  // duplicate). Absent (empty array) for a non-linkable item, which has no row.
+  sources: { source: string; sourceId: string }[];
 }
 
 export interface PublicFacetPayload {
@@ -63,6 +74,12 @@ export interface PublicFacetPayload {
   page: number;                  // 0-based
   hasMore: boolean;
   sort: FacetSort;
+  // Q18 (2026-07-19) — tag pages only (null for person/studio): category +
+  // bundle membership (both DB-backed, taxonomy-editor-editable) and a
+  // Bayesian-damped crowd average alongside the plain `community.avg`.
+  tagCategory: { id: string; label: string; color: string } | null;
+  tagBundle: { canonical: string; members: string[] } | null;
+  bayesCommunityAvg: number | null;
 }
 
 // Internal pooled title (carries raw for persistence + votes for the crowd avg).
@@ -384,13 +401,34 @@ export async function buildPublicFacetDetail(
       posterUrl: t.posterUrl,
       communityScore: t.vote != null ? Math.round(t.vote * 10) : null,
       roles: t.roles,
+      sources: uuid != null ? [{ source: t.source, sourceId: t.sourceId }] : [],
     };
   });
+
+  // Q18 — tag-only extras. `key` arrives already-canonical (facetSsr.tsx
+  // resolves a member spelling before calling in, per H5.6), so a direct
+  // bundle lookup by canonical suffices — no extra resolution needed here.
+  let tagCategory: PublicFacetPayload["tagCategory"] = null;
+  let tagBundle: PublicFacetPayload["tagBundle"] = null;
+  let bayesCommunityAvg: number | null = null;
+  if (ref.kind === "tag") {
+    const categoryId = getTagCategoryOverrides().get(key) ?? categorizeTag(key);
+    const cat = getTagCategories().find((c) => c.id === categoryId);
+    if (cat) tagCategory = { id: cat.id, label: cat.label, color: cat.color };
+    const bundle = listTagBundles().find((b) => b.canonical === canonicalTagKey(key));
+    if (bundle) tagBundle = bundle;
+    if (community.avg != null) {
+      const minVotes = (t: PoolTitle) => (t.source === "rawg" ? 5 : 10);
+      const voted = sorted.filter((t) => t.vote != null && t.votes >= minVotes(t));
+      const totalVotes = voted.reduce((s, t) => s + t.votes, 0);
+      bayesCommunityAvg = Math.round(bayesRating(community.avg, totalVotes, NEUTRAL_PRIOR) * 10) / 10;
+    }
+  }
 
   return {
     kind: ref.kind, key, label, person, scope, community, nameCollision,
     items, total: sorted.length, page,
     hasMore: start + FACET_PAGE_SIZE < sorted.length,
-    sort,
+    sort, tagCategory, tagBundle, bayesCommunityAvg,
   };
 }

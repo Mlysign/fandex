@@ -243,8 +243,9 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
 
       <FacetSection
         title="Tag ratings"
-        subtitle="Average rating + count for every genre, theme and keyword in your rated library. Search any tag."
+        subtitle="Bayesian-averaged rating + count for every genre, theme and keyword in your rated library. Search any tag."
         kind="tag" facets={data.facets} baseline={baseline}
+        tagCategories={data.tagCategories}
         collapsible
       />
 

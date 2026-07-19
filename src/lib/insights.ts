@@ -5,6 +5,7 @@
 // per-item data (overview, histograms, you-vs-crowd, by-era) are computed here.
 
 import { getLibraryFacetAnalysis, FacetStat, RatedItem } from "@/lib/libraryAnalysis";
+import { getTagCategories } from "@/lib/scoringConfig";
 
 export interface HistogramBucket { bucket: number; count: number }
 
@@ -33,6 +34,10 @@ export interface InsightsPayload {
   histogram: HistogramBucket[];
   byTypeHistogram: Record<string, HistogramBucket[]>;
   facets: FacetStat[];
+  // Q22 — the live, DB-backed tag taxonomy (id/label/color/sortOrder only —
+  // weight/ignored are a scoring concern, not relevant to Insights' display),
+  // so a category added via /dev/scoring gets a panel here without a code change.
+  tagCategories: { id: string; label: string; color: string; sortOrder: number }[];
   items: RatedItem[];   // every rated item — lets the client list a bar's contributors
   extra: {
     divergence: { overRated: DivergenceItem[]; underRated: DivergenceItem[] };
@@ -107,6 +112,9 @@ export function buildInsights(userId: string): InsightsPayload {
     histogram: histogram(a.ratingValues),
     byTypeHistogram,
     facets: a.facets,
+    tagCategories: getTagCategories()
+      .filter((c) => c.id !== "meta")
+      .map((c) => ({ id: c.id, label: c.label, color: c.color, sortOrder: c.sortOrder })),
     items: a.items,
     extra: { divergence: { overRated, underRated }, byDecade },
   };

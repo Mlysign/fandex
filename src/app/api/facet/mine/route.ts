@@ -40,6 +40,18 @@ export const GET = withUser(async (req: NextRequest, session) => {
     if (sc != null) fandexById[v.id] = sc;
   }
 
+  // Q18 — the tag's personal Bayesian average (BA_f), the same shrinkage
+  // number computeFandexScore's breakdown uses for this facet — distinct from
+  // `stats.userAvg` above (a plain mean), shown on the public /tag page for
+  // whichever tag key was requested (kind === "tag" only; person/company
+  // facets don't carry a single BA_f the same way).
+  let bayesPersonalScore: number | null = null;
+  let bayesPersonalCount: number | null = null;
+  if (kind === "tag") {
+    const facetMeta = profile.meta.get(`tag||${key}`);
+    if (facetMeta?.BA != null) { bayesPersonalScore = Math.round(facetMeta.BA * 10) / 10; bayesPersonalCount = facetMeta.n ?? null; }
+  }
+
   return NextResponse.json({
     stats: {
       userAvg: payload.stats.userAvg,
@@ -50,5 +62,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     },
     states,
     fandexById,
+    bayesPersonalScore,
+    bayesPersonalCount,
   });
 });

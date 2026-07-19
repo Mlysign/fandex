@@ -10,6 +10,17 @@ export interface FacetStat {
   count: number;
   sum: number;
   avg: number;
+  ba: number; // Q22 — Bayesian shrinkage average, same as computeFandexScore's BA_f
+}
+
+// Q22 — the live, DB-backed tag taxonomy (mirrors scoringConfig.ts's
+// TagCategoryConfig), so a category added via /dev/scoring's Taxonomy editor
+// gets a panel here without a code change.
+export interface TagCategoryInfo {
+  id: string;
+  label: string;
+  color: string;
+  sortOrder: number;
 }
 
 export interface HistogramBucket { bucket: number; count: number }
@@ -97,6 +108,7 @@ export interface InsightsPayload {
   histogram: HistogramBucket[];
   byTypeHistogram: Record<string, HistogramBucket[]>;
   facets: FacetStat[];
+  tagCategories: TagCategoryInfo[];
   items: InsightItem[];
   extra: {
     divergence: { overRated: DivergenceItem[]; underRated: DivergenceItem[] };
