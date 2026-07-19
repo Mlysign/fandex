@@ -113,6 +113,10 @@ export interface EnrichedItem {
   // null when cold-start (too few rated items) or this item matches none of
   // the user's profile facets. Absent entirely for a logged-out viewer.
   fandexScore?: number | null;
+  // Q14 (2026-07-19) — crowd/platform rating, 0-100 scale (representativeCommunity
+  // over communityRatings). Card badge only; Library/Wishlist didn't show one at
+  // all before this.
+  communityScore?: number | null;
   developer: string | null;
   publisher: string | null;
   // Movie/show credits + keywords (from TMDB)

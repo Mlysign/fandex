@@ -16,6 +16,14 @@ export interface MediaCardItem {
   ratings?: { source: string; rating: number }[]; // per-platform breakdown
   libraryStatus?: string | null; // watched | played | owned
   fandexScore?: number | null;   // H5.3 — personalized taste-match (0-100); null/absent → no badge
+  // Q14 (2026-07-19) — context-dependent fields: rendered wherever present, absent
+  // on surfaces that don't carry them (no per-surface prop needed).
+  communityScore?: number | null; // crowd/platform rating, 0-100 scale; null/absent → no badge
+  roles?: string[];               // person-facet pages only: ["Director","Writer"] / ["Actor"]
+  // Facet-page items that couldn't be persisted to a real row (rare) have no
+  // resolvable item page and no identity to act on — undefined/true means linkable
+  // (every non-facet surface's items always are).
+  linkable?: boolean;
   // Identity for quick actions (rate / wishlist) without opening the detail page.
   sources?: { source: string; sourceId: string }[];
   ids?: Record<string, string | number>;

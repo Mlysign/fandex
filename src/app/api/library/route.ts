@@ -10,7 +10,7 @@ import { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
-import { parseRatings, averageRating } from "@/lib/ratings";
+import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { parseJsonBody } from "@/lib/validate";
 import { LibraryPostSchema, LibraryDeleteSchema } from "@/lib/schemas";
 import { log, errorFields } from "@/lib/logger";
@@ -88,6 +88,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         reviewedAt: item.reviewedAt,
         libraryStatus: item.status,
         fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
+        communityScore: representativeCommunity(merged.communityRatings),
       });
     }
 

@@ -152,6 +152,30 @@ export default function SubBar({
               {filters}
             </>
           )}
+
+          {/* Q14 (2026-07-19): sort as separate pill buttons, matching the public
+              facet pages — moved out of Row 3's search section (was a <select>
+              sitting right next to the search box) so sort reads as its own
+              control everywhere, not a search option. */}
+          {sort && (
+            <>
+              <div className="w-px h-4 bg-neutral-800 mx-1" />
+              <div className="flex gap-1" role="group" aria-label="Sort results">
+                {sort.options.map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => sort.onChange(k)}
+                    aria-pressed={sort.value === k}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                      sort.value === k ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Rows 2 & 2.5 — advanced filters (facets + year/membership). Always shown
@@ -195,18 +219,6 @@ export default function SubBar({
             >
               Filters
             </button>
-          )}
-
-          {sort && (
-            <select
-              value={sort.value}
-              onChange={(e) => sort.onChange(e.target.value)}
-              className="text-xs px-2 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 outline-none flex-shrink-0"
-              aria-label="Sort results"
-              title="Sort results"
-            >
-              {sort.options.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-            </select>
           )}
 
           {/* View mode toggle */}
