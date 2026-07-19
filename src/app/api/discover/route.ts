@@ -7,7 +7,7 @@ import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
-import { personalizedFeed, filterSectionPage } from "@/lib/liveDiscover";
+import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { fetchGamePage, fetchMoviePage, fetchShowPage, Direction } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -214,7 +214,10 @@ export async function GET(req: NextRequest) {
       if (section === "games")  results = await fetchGamePage(page, direction);
       if (section === "movies") results = await fetchMoviePage(page, direction, region);
       if (section === "shows")  results = await fetchShowPage(page, direction);
-      if (userId) results = filterSectionPage(userId, results);
+      // Q15/Q16: always decorate with community stats (+ Fandex Score when
+      // signed in) so a loaded-more page stays sortable by Popularity/Rating/
+      // Fandex Score, not just the initial batch.
+      results = userId ? filterSectionPage(userId, results) : decorateSection(results, null);
       return NextResponse.json({ items: annotate(persist(results)), section });
     }
 
@@ -233,7 +236,7 @@ export async function GET(req: NextRequest) {
       fetchMoviePage(1, "future", region),
       fetchShowPage(1, "future"),
     ]);
-    const all = sortByDate([...games, ...movies, ...shows]);
+    const all = sortByDate(decorateSection([...games, ...movies, ...shows], userId));
     return NextResponse.json({ items: annotate(persist(all)) });
 
   } catch (e: any) {

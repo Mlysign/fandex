@@ -145,6 +145,7 @@ export const FacetFetchSchema = z.object({
     }))
     .optional(),
   types: z.array(zMediaType).optional(),
+  membership: zMembership.optional(),
 });
 
 // ── H5.4 /dev/scoring (admin-only) ────────────────────────────────────────

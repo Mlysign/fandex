@@ -144,9 +144,14 @@ export default function DiscoverPage() {
   const [webLoading, setWebLoading] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Browse = the live infinite timeline; shown for either date sort when no query
-  // /filter is active. Non-date sorts (rating / best-match) use the find() search.
-  const searchActive = q.trim().length >= 2 || needsCatalogSearch(filters) || !DATE_SORTS.includes(sort);
+  // Browse = the live infinite timeline (a much wider pool of upcoming releases
+  // than the local catalog). Only a text query or a facet/year filter needs the
+  // catalog find() search — a plain SORT change does NOT, it just re-orders the
+  // same browse set client-side (see browseSorted below). This used to also flip
+  // to search mode for any non-releaseDate sort, which silently swapped the wide
+  // live pool for the much smaller local-catalog pool — that's what Q16 (2026-07-19)
+  // reported as Discover "losing a lot of items" when sorting by popularity.
+  const searchActive = q.trim().length >= 2 || needsCatalogSearch(filters);
 
   // ── Browse loaders ──
   // Declared before the mount effect that calls it (react-hooks: no use-before-declaration).
@@ -289,7 +294,7 @@ export default function DiscoverPage() {
           try {
             const fd = await (await fetch("/api/discover/facet-fetch", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ facets: filters.includeFacets, types: filters.types }),
+              body: JSON.stringify({ facets: filters.includeFacets, types: filters.types, membership: filters.membership }),
             })).json();
             extras.push(...(fd.items ?? []));
           } catch { /* ignore */ }
@@ -364,6 +369,13 @@ export default function DiscoverPage() {
     else if (m.wishlist === "only") r = r.filter((i) => !!i.onWatchlist);
     return r;
   }, [items, filters.types, filters.membership]);
+
+  // Non-date sorts re-order the SAME browse set client-side instead of switching
+  // to catalog search (see the searchActive comment above).
+  const browseSorted = useMemo(
+    () => (sort === "releaseDate" ? browseFiltered : sortDiscover(browseFiltered, sort)),
+    [browseFiltered, sort]
+  );
 
   useEffect(() => {
     if (searchActive) return;
@@ -514,19 +526,19 @@ export default function DiscoverPage() {
         ) : (
           /* ── Browse (Timeline) ── */
           <ErrorBoundary label="discover browse">
-            {loading && view === "card" && <Spinner label="Loading…" />}
-            {loading && view === "list" && <ListSkeleton />}
-            {loading && view === "calendar" && <Spinner label="Loading…" />}
+            {loading && effView === "card" && <Spinner label="Loading…" />}
+            {loading && effView === "list" && <ListSkeleton />}
+            {loading && effView === "calendar" && <Spinner label="Loading…" />}
 
-            {!loading && browseFiltered.length > 0 && (
+            {!loading && browseSorted.length > 0 && (
               <>
-                {(view === "list" || view === "card") && (
+                {(effView === "list" || effView === "card") && (
                   <>
                     <div ref={topSentinelRef} className="mb-6 flex justify-center">
                       <SentinelBar {...topSentinel} />
                     </div>
 
-                    <GroupedView items={browseFiltered} view={view} descending={descending} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={autoToday} />
+                    <GroupedView items={browseSorted} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={isDateSort && autoToday} />
 
                     <div ref={sentinelRef} className="mt-10 flex justify-center">
                       <SentinelBar {...bottomSentinel} />
@@ -534,8 +546,8 @@ export default function DiscoverPage() {
                   </>
                 )}
 
-                {view === "calendar" && (
-                  <CalendarView items={browseFiltered} onSelect={(i) => router.push(buildItemHref(i as any))} onVisibleMonthChange={handleCalendarMonth} />
+                {effView === "calendar" && (
+                  <CalendarView items={browseSorted} onSelect={(i) => router.push(buildItemHref(i as any))} onVisibleMonthChange={handleCalendarMonth} />
                 )}
               </>
             )}

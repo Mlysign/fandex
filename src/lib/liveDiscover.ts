@@ -14,7 +14,7 @@
 // and a crowd-vote floor.
 
 import { BoundedCache } from "@/lib/boundedCache";
-import { buildProfile, scoreFacets, getCatalogIdf, ROLE_WEIGHT, Reason } from "@/lib/discovery";
+import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, ROLE_WEIGHT, Reason, Profile } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
 import { extractFacets, tagKey, Facet } from "@/lib/facets";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
@@ -145,11 +145,24 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 // ── Per-type ranking ───────────────────────────────────────────────
-interface Scored { c: FeedCandidate; score: number; reasons: Reason[] }
+interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexScore: number | null }
+
+// Q15 (2026-07-19): the visible Fandex Score badge, using the RAW rated-library
+// profile (never the membership-boosted LiveProfile used for feed ranking above,
+// and never the seed/pill-refined one) — same rule H5.3 already applies to every
+// other surface (card badges, detail page). Facets are whatever's on hand (list
+// genres/tags for games + non-hydrated movies/shows, full hydrated facets once
+// hydration runs) — a documented, cheaper approximation than the catalog's fully
+// hydrated Fandex Score, consistent with this module's existing "no hydration on
+// the cheap path" tradeoff.
+function fandexFor(facets: Facet[], rawProfile: Profile): number | null {
+  return computeFandexScore(facets, rawProfile)?.score ?? null;
+}
 
 async function rankType(
   candidates: FeedCandidate[],
   profile: LiveProfile,
+  rawProfile: Profile,
   idf: Map<string, number>,
   hydrate: boolean
 ): Promise<Scored[]> {
@@ -165,8 +178,9 @@ async function rankType(
   if (!hydrate) {
     return pool
       .map((c): Scored => {
-        const s = scoreFacets(listFacets(c), profile.w, idf);
-        return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [] };
+        const facets = listFacets(c);
+        const s = scoreFacets(facets, profile.w, idf);
+        return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fandexFor(facets, rawProfile) };
       })
       .sort(byScore)
       .slice(0, FINAL_KEEP);
@@ -184,7 +198,7 @@ async function rankType(
       const h = hydrated[i];
       if (!c.posterUrl && h.posterUrl) c.posterUrl = h.posterUrl; // backfill Trakt items
       const s = scoreFacets(h.facets, profile.w, idf);
-      return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [] };
+      return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fandexFor(h.facets, rawProfile) };
     })
     .sort(byScore)
     .slice(0, FINAL_KEEP);
@@ -232,6 +246,33 @@ export interface PersonalizedItem {
   platforms?: string[]; overview?: string; ids: Record<string, number>;
   raw?: RawPayload | null;   // carried through for H2b persistence, not for the client
   score: number; reasons: Reason[];
+  // Q15/Q16 (2026-07-19): community stats + Fandex Score, so the browse feed can
+  // be sorted client-side by Popularity/Rating/Fandex Score the same way the
+  // catalog find() results already are — previously absent, which is why any
+  // non-releaseDate sort had to abandon the browse feed for the (much smaller)
+  // local catalog search. communityScore mirrors discovery.ts's 0-100 scale.
+  communityVotes: number; communityScore: number | null; fandexScore: number | null;
+}
+
+// Community stats (crowd popularity/rating) — independent of any per-user
+// profile, so always attachable regardless of auth state.
+function communityStatsOf(c: FeedCandidate): { communityVotes: number; communityScore: number | null } {
+  return { communityVotes: c.voteCount, communityScore: c.voteAverage != null ? c.voteAverage * 10 : null };
+}
+
+// Attach community stats (+ Fandex Score when signed in) to a page of raw
+// candidates — used by the section-pagination ("load more") and anonymous/
+// cold-start browse paths, which don't run through rankType's fuller pipeline.
+export function decorateSection<T extends FeedCandidate>(
+  candidates: T[],
+  userId: string | null
+): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null })[] {
+  const rawProfile = userId ? buildProfile(userId) : null;
+  return candidates.map((c) => ({
+    ...c,
+    ...communityStatsOf(c),
+    fandexScore: rawProfile ? fandexFor(listFacets(c), rawProfile) : null,
+  }));
 }
 
 const FEED_TTL_MS = 45 * 60 * 1000;
@@ -269,17 +310,22 @@ export async function personalizedFeed(userId: string, region: string): Promise<
   const movies = dedupeById([...tmdbMovies, ...traktMovies]);
   const shows = dedupeById([...tmdbShows, ...traktShows]);
 
+  // H5.3's rule (badge uses the RAW rated profile, never a refined/boosted one)
+  // extends to the browse feed's badge too — buildProfile() is per-user cached,
+  // so this is a cheap cache hit alongside buildLiveProfile's own internal call.
+  const rawProfile = buildProfile(userId);
+
   const [selGames, selMovies, selShows] = await Promise.all([
-    rankType(games, profile, idf, false),   // games: list-facet score only (RAWG + IGDB)
-    rankType(movies, profile, idf, true),   // movies: hydrate → full facets (TMDB + Trakt)
-    rankType(shows, profile, idf, true),    // shows: hydrate → full facets (TMDB + Trakt)
+    rankType(games, profile, rawProfile, idf, false),   // games: list-facet score only (RAWG + IGDB)
+    rankType(movies, profile, rawProfile, idf, true),   // movies: hydrate → full facets (TMDB + Trakt)
+    rankType(shows, profile, rawProfile, idf, true),    // shows: hydrate → full facets (TMDB + Trakt)
   ]);
 
-  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons }) => ({
+  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons, fandexScore }) => ({
     id: c.id, rawId: c.rawId, source: c.source, type: c.type,
     title: c.title, releaseDate: c.releaseDate, posterUrl: c.posterUrl,
     platforms: c.platforms, overview: c.overview, ids: c.ids, raw: c.raw,
-    score, reasons,
+    score, reasons, fandexScore, ...communityStatsOf(c),
   }));
 
   _feedCache.set(key, items);
@@ -289,12 +335,15 @@ export async function personalizedFeed(userId: string, region: string): Promise<
 // Cheap personalization for the infinite-scroll section pages: no hydration,
 // just drop the crowd-floor failures and the clearly-irrelevant (negative taste
 // + foreign-language no-match), so deeper scrolling doesn't revert to a global
-// popularity flood. Keeps load-more fast.
-export function filterSectionPage(userId: string, candidates: FeedCandidate[]): FeedCandidate[] {
+// popularity flood. Keeps load-more fast. Also decorates every kept candidate
+// with community stats + Fandex Score (Q15/Q16) so pages loaded via "load more"
+// stay sortable the same way the initial personalized pull is.
+export function filterSectionPage(userId: string, candidates: FeedCandidate[]) {
   const profile = buildLiveProfile(userId);
-  if (!profile.hasSignal) return candidates;
+  const decorated = decorateSection(candidates, userId);
+  if (!profile.hasSignal) return decorated;
   const idf = getCatalogIdf();
-  return candidates.filter((c) => {
+  return decorated.filter((c) => {
     if (belowFloor(c)) return false;
     const score = (scoreFacets(listFacets(c), profile.w, idf)?.score ?? 0) + langTerm(c.originalLanguage, profile);
     return score >= 0; // keep neutral-or-better; drop actively-mismatched
