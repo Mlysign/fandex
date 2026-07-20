@@ -106,6 +106,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
         <Link
           ref={ref as React.RefObject<HTMLAnchorElement>}
           href={buildItemHref(item)}
+          data-item-id={item.id}
           aria-label={`${item.title} — view details`}
           className="group cursor-pointer rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative block"
           onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
@@ -117,6 +118,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
       ) : (
         <div
           ref={ref as React.RefObject<HTMLDivElement>}
+          data-item-id={item.id}
           title="Not yet in the catalog"
           aria-label={`${item.title} — not yet in the catalog`}
           className="rounded-xl border border-neutral-800 bg-neutral-900 relative block opacity-80"

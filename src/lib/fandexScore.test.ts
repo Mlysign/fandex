@@ -79,6 +79,47 @@ describe("buildProfile — Bayesian average (H5.2)", () => {
     expect(profile.hasSignal).toBe(false);
     expect(profile.w.size).toBe(0);
   });
+
+  it("Q30: a cast member's BA is pulled toward their LEAD-billed rating more than their background one", () => {
+    // "Famous Actor" tops the bill (index 0, prominence 1) in a movie rated 9,
+    // and is buried at index 7 (prominence CAST_PROMINENCE_FLOOR = 0.4) in a
+    // movie rated 3. The weighted BA must land closer to the lead performance's
+    // rating than a plain (unweighted) average of 9 and 3 would.
+    const castRow = (name: string, i: number) => ({ name, order: i });
+    const leadMovie = upsertMediaItem({
+      source: "tmdb", sourceId: "301", type: "movie", title: "Lead Movie", releaseDate: "2020-01-01",
+      rawData: {
+        id: 301, title: "Lead Movie", release_date: "2020-01-01", poster_path: "/p.jpg", overview: "o",
+        genres: [], credits: { cast: [castRow("Famous Actor", 0)], crew: [] },
+      },
+    });
+    const cameoMovie = upsertMediaItem({
+      source: "tmdb", sourceId: "302", type: "movie", title: "Cameo Movie", releaseDate: "2020-01-01",
+      rawData: {
+        id: 302, title: "Cameo Movie", release_date: "2020-01-01", poster_path: "/p.jpg", overview: "o",
+        genres: [], credits: {
+          cast: [...Array(7).keys()].map((i) => castRow(`Filler ${i}`, i)).concat([castRow("Famous Actor", 7)]),
+          crew: [],
+        },
+      },
+    });
+    upsertLibraryEntry(USER, leadMovie, "tmdb", { status: "watched", rating: 9, reviewedAt: 1 });
+    upsertLibraryEntry(USER, cameoMovie, "tmdb", { status: "watched", rating: 3, reviewedAt: 2 });
+
+    const profile = buildProfile(USER);
+    const actorId = "person|cast|famous actor";
+    const baseline = (9 + 3) / 2;
+    const C = 5; // DEFAULT_SCORING_CONFIG.priorStrength
+    const weightedSum = 9 * 1 + 3 * 0.4;
+    const weightedCount = 1 + 0.4;
+    const expectedBA = (C * baseline + weightedSum) / (C + weightedCount);
+    const plainBA = (C * baseline + (9 + 3)) / (C + 2);
+
+    expect(profile.meta.get(actorId)?.n).toBe(2); // display count stays plain
+    expect(profile.meta.get(actorId)?.BA).toBeCloseTo(expectedBA, 6);
+    expect(profile.meta.get(actorId)!.BA!).not.toBeCloseTo(plainBA, 2);
+    expect(profile.meta.get(actorId)!.BA!).toBeGreaterThan(plainBA); // pulled toward the lead's 9, not the plain 6
+  });
 });
 
 describe("computeFandexScore — aggregate (H5.2)", () => {
@@ -181,8 +222,49 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     const result = computeFandexScore(facets, profile)!;
     const expectedWeightedDev = (5 + 4 + 3) / 3;
     expect(result.score).toBeCloseTo(Math.min(100, 50 + 10 * expectedWeightedDev), 6);
-    expect(result.reasons.length).toBe(3);
-    expect(result.reasons.map((r) => r.label).sort()).toEqual(["t0", "t1", "t2"]);
+    const counted = result.reasons.filter((r) => !r.capped);
+    expect(counted.length).toBe(3);
+    expect(counted.map((r) => r.label).sort()).toEqual(["t0", "t1", "t2"]);
+
+    // Q29: the two weakest (excluded from the aggregate above) still show in
+    // the breakdown, flagged capped with contribution pinned to 0 — so the
+    // additive sum (Q20) is unaffected even though the reasons list is longer.
+    const capped = result.reasons.filter((r) => r.capped);
+    expect(capped.length).toBe(2);
+    expect(capped.map((r) => r.label).sort()).toEqual(["t3", "t4"]);
+    expect(capped.every((r) => r.contribution === 0)).toBe(true);
+    const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
+    expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
+  });
+
+  it("Q30: a lead-cast occurrence pulls the score harder than a cameo occurrence of the SAME person", () => {
+    // One shared profile: "Lead" has a positive dev (BA above baseline), diluted
+    // by a neutral tag (dev 0, classWeight 1) that doesn't move independently.
+    // Scored once as billing position 0 (prominence 1) and once as a background
+    // cameo (prominence 0.4) — only the CURRENT item's occurrence should differ.
+    const profile: Profile = {
+      w: new Map([["person|cast|lead", 3], ["tag||neutral", 0]]),
+      meta: new Map([
+        ["person|cast|lead", meta({ key: "lead", role: "cast", label: "Lead", classWeight: 1, BA: 8, n: 5 })],
+        ["tag||neutral", meta({ key: "neutral", label: "Neutral", category: "genre", classWeight: 1, BA: 5, n: 5 })],
+      ]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+    const neutralTag: Facet = { kind: "tag", key: "neutral", label: "Neutral", category: "genre" };
+    const asLead = computeFandexScore(
+      [{ kind: "person", role: "cast", key: "lead", label: "Lead", prominence: 1 }, neutralTag],
+      profile
+    )!;
+    const asCameo = computeFandexScore(
+      [{ kind: "person", role: "cast", key: "lead", label: "Lead", prominence: 0.4 }, neutralTag],
+      profile
+    )!;
+    expect(asLead.score).toBeGreaterThan(asCameo.score);
+    // Additivity (Q20) must still hold at both prominence levels.
+    const sumLead = asLead.reasons.reduce((acc, r) => acc + r.contribution, 0);
+    const sumCameo = asCameo.reasons.reduce((acc, r) => acc + r.contribution, 0);
+    expect(asLead.center + sumLead).toBeCloseTo(asLead.score, 1);
+    expect(asCameo.center + sumCameo).toBeCloseTo(asCameo.score, 1);
   });
 
   it("returns null when no facet on the item matches the profile", () => {

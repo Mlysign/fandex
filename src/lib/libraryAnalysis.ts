@@ -8,8 +8,8 @@ import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
-import { applyTagAliases, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
-import { getScoringConfig } from "@/lib/scoringConfig";
+import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
+import { getScoringConfig, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import { MediaLink, MediaType } from "@/types";
 
 // One aggregated facet (tag / person / company) across the rated library.
@@ -19,14 +19,23 @@ export interface FacetStat {
   key: string;
   label: string;
   category?: string; // tags only
-  count: number;     // # rated items carrying this facet
-  sum: number;       // Σ of those items' personal ratings
+  count: number;     // # rated items carrying this facet — plain, for display ("N rated")
+  sum: number;       // Σ of those items' personal ratings — plain, for `avg`
   avg: number;       // sum / count — the plain "well received" score (0-10)
   // Q22 (2026-07-19) — the SAME Bayesian shrinkage average computeFandexScore's
   // BA_f uses (shrunk toward your overall baseline by scoring_config's
   // priorStrength), so Insights' tag panels rank the same way the score does
   // instead of by a raw mean a single 10/10 can dominate.
   ba: number;
+  // Q30 (2026-07-19) — prominence-weighted accumulators (cast billing order;
+  // 1:1 with count/sum for every non-cast facet, since prominence defaults to
+  // 1). `ba` is computed from THESE, not the plain count/sum, so a person's
+  // Bayesian average reflects how prominently they actually featured across
+  // your rated library — a lead role counts closer to a full data point, a
+  // cameo closer to CAST_PROMINENCE_FLOOR. `count`/`sum`/`avg` stay plain and
+  // unweighted so Insights' "N rated" / raw average keep reading as real counts.
+  weightedCount: number;
+  weightedSum: number;
 }
 
 // A rated library item, flattened for the overview / histogram / divergence /
@@ -112,6 +121,13 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   // facets — so all bundled spellings accumulate into one FacetStat (one merged
   // count/sum → one Bayesian average across the whole bundle).
   const aliases = getTagAliases();
+  // Q31 (2026-07-19): an admin-reassigned tag (tag_category_override) must win
+  // over categorizeTag()'s code heuristic HERE too — buildProfile() already
+  // resolves it this way for scoring, but Insights was still showing every
+  // reassigned tag under its ORIGINAL category, and a brand-new category
+  // (added via /dev/scoring's Taxonomy editor) never got any tags at all
+  // since nothing routed them there.
+  const tagOverrides = getTagCategoryOverrides();
 
   for (const { item, links } of groups.values()) {
     libraryIds.push(item.id);
@@ -137,14 +153,19 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
 
     for (const f of applyTagAliases(extractFacets(links, item.type, merged), aliases)) {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
+      const category = f.kind === "tag" ? (tagOverrides.get(f.key) ?? f.category) : f.category;
+      const prom = f.prominence ?? 1; // Q30: 1 for everything except cast
       const st = statMap.get(id);
       if (st) {
         st.count++;
         st.sum += rating;
+        st.weightedCount += prom;
+        st.weightedSum += rating * prom;
       } else {
         statMap.set(id, {
           kind: f.kind, role: f.role, key: f.key, label: f.label,
-          category: f.category, count: 1, sum: rating, avg: 0, ba: 0,
+          category, count: 1, sum: rating, avg: 0, ba: 0,
+          weightedCount: prom, weightedSum: rating * prom,
         });
       }
     }
@@ -157,7 +178,10 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   const facets = [...statMap.values()].map((s) => ({
     ...s,
     avg: Math.round((s.sum / s.count) * 10) / 10,
-    ba: Math.round(((C * baseline + s.sum) / (C + s.count)) * 10) / 10,
+    // Q30: from the prominence-weighted accumulators, not the plain ones —
+    // identical to the old formula for every non-cast facet (weightedCount ==
+    // count, weightedSum == sum there).
+    ba: Math.round(((C * baseline + s.weightedSum) / (C + s.weightedCount)) * 10) / 10,
   }));
   facets.sort((a, b) => b.ba - a.ba || b.count - a.count);
 
@@ -201,7 +225,11 @@ export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {
   // H5.6: fold the tag-alias signature into the cache key — a bundle edit
   // changes the aggregated facets but not the library itself, so librarySignature
   // alone would serve stale (pre-bundle) stats.
-  const sig = `${librarySignature(userId)}|${tagAliasSignature()}`;
+  // Q31: scoringConfigSignature() already folds tagAliasSignature() in (plus
+  // the category/override signatures) — using it directly here means a
+  // tag_category_override write (or a priorStrength change, which also feeds
+  // `ba` above) busts this cache too, not just buildProfile's.
+  const sig = `${librarySignature(userId)}|${scoringConfigSignature()}`;
   const cached = _cache.get(userId);
   if (cached && cached.sig === sig) return cached.data;
   const data = analyzeLibraryFacets(userId);

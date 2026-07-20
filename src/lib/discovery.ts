@@ -57,7 +57,10 @@ export interface VocabEntry { kind: string; role?: FacetRole; key: string; label
 // populated by computeFandexScore's reasons so the expanded "why" view can
 // read e.g. "Director — 8.9 avg over 4 titles". Optional: scoreFacets'
 // (unchanged, idf-weighted Discover-ranking) reasons don't carry them.
-export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; BA?: number; n?: number }
+// Q29: `capped` (computeFandexScore only) — this facet matched but lost the
+// per-category-cap cut, contribution pinned to 0. scoreFacets' reasons never
+// set it (that ranking score has no such cap).
+export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; BA?: number; n?: number; capped?: boolean }
 
 export interface MembershipFilter { library?: "include" | "exclude" | "only"; wishlist?: "include" | "exclude" | "only" }
 
@@ -221,6 +224,13 @@ export function getCatalogIdf(): Map<string, number> { return getCache().idf; }
 // category here — the caller (the vocab API route) decides what to show.
 export function getTagVocab(): VocabEntry[] { return getCache().vocab.filter((v) => v.kind === "tag"); }
 
+// Q25 (2026-07-19) — same "recover the real label from the catalog" trick as
+// getTagVocab (Q11), for companies. companyKey() strips trailing legal/role
+// tokens ("Focus Entertainment" -> "focus"), and a public /studio/<slug> URL
+// carries only that lossy key — searching providers with it directly matched
+// the wrong company (Focus Features, a different studio, beat "focus" out).
+export function getCompanyVocab(): VocabEntry[] { return getCache().vocab.filter((v) => v.kind === "company"); }
+
 // ── Preference profile ────────────────────────────────────────────
 // meta's classWeight/BA/n are set for every real (rated-library) facet — H5.2
 // adds them for computeFandexScore's aggregate + explainability. Facets
@@ -311,7 +321,12 @@ export function buildProfile(userId: string, overrides?: ProfileOverrides): Prof
       classWeight = cfg.roleWeights[f.role ?? "tag"] ?? 1;
     }
 
-    const BA = (cfg.priorStrength * a.baseline + f.sum) / (cfg.priorStrength + f.count);
+    // Q30: from the prominence-weighted accumulators (identical to
+    // weightedSum/weightedCount == sum/count for every non-cast facet) — a
+    // lead-role rating counts closer to a full data point toward this
+    // person's Bayesian average, a cameo closer to CAST_PROMINENCE_FLOOR.
+    // `n` stays the plain rated-title count for the breakdown's "N titles" text.
+    const BA = (cfg.priorStrength * a.baseline + f.weightedSum) / (cfg.priorStrength + f.weightedCount);
     const dev = BA - a.baseline;
 
     w.set(id, dev * classWeight);
@@ -417,7 +432,14 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
     const w = profile.w.get(id);
     const meta = profile.meta.get(id);
     if (w == null || !meta?.classWeight) continue;
-    matched.push({ f, dev: w / meta.classWeight, classWeight: meta.classWeight, BA: meta.BA, n: meta.n });
+    // Q30: `dev` recovers from `w` using the profile's BUILD-time classWeight
+    // (the same value `w` was computed with) — but the classWeight carried
+    // FORWARD into this item's weighted mean is scaled by THIS item's own
+    // cast prominence (f.prominence), so the same actor counts more here if
+    // they're the lead in THIS title than if they were a cameo. Absent/1 for
+    // every non-cast facet.
+    const classWeight = meta.classWeight * (f.prominence ?? 1);
+    matched.push({ f, dev: w / meta.classWeight, classWeight, BA: meta.BA, n: meta.n });
   }
   if (!matched.length) return null;
 
@@ -427,6 +449,11 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   // stay uncapped.
   const byCategory = new Map<string, FandexContrib[]>();
   const kept: FandexContrib[] = [];
+  // Q29 (2026-07-19): tags beyond the cap used to just vanish — no trace in
+  // the breakdown, so "why isn't this counted" had no visible answer. Tracked
+  // separately (not added to `kept`, so the score math is untouched) and
+  // rendered grayed-out with contribution pinned to 0 below.
+  const capped: FandexContrib[] = [];
   for (const c of matched) {
     if (c.f.kind === "tag" && c.f.category) {
       const arr = byCategory.get(c.f.category) ?? [];
@@ -439,6 +466,7 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   for (const arr of byCategory.values()) {
     arr.sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
     kept.push(...arr.slice(0, cfg.perCategoryCap));
+    capped.push(...arr.slice(cfg.perCategoryCap));
   }
   if (!kept.length) return null;
 
@@ -477,6 +505,13 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
       contribution: Math.round(((gain * c.dev * c.classWeight / totalWeight) * scale) * 10) / 10,
       BA: c.BA, n: c.n,
     }));
+
+  // Q29 — appended after the real contributors, contribution fixed at 0 (so
+  // the additive sum from Q20 is unaffected), flagged `capped` for the client
+  // to render grayed-out with a "not counted" note.
+  for (const c of capped.sort((a, b) => Math.abs(b.dev * b.classWeight) - Math.abs(a.dev * a.classWeight))) {
+    reasons.push({ kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: 0, BA: c.BA, n: c.n, capped: true });
+  }
 
   return { score: Math.round(score * 10) / 10, center: Math.round(center * 10) / 10, reasons };
 }

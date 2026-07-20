@@ -120,6 +120,29 @@ export async function discoverIgdbUpcoming(gte: number, lte: number, limit = 40,
   } catch { return []; }
 }
 
+// Q27 (2026-07-19) — games matching a tag/keyword facet (genre, theme, or
+// keyword name, case-insensitive contains) for the /discover "more from the
+// databases" supplement — previously TMDB+RAWG only, so a tag with no games
+// (or games IGDB just knows better, like most anime titles) undersold
+// "discover new games/anime". `sanitizeApicalypseSearch` already strips the
+// characters (incl. `*`) that would matter here — reused rather than adding a
+// second sanitizer, since the `*` wildcard delimiters below are ours, not the
+// caller's.
+export async function discoverIgdbByTag(query: string, limit = 40): Promise<any[]> {
+  if (!igdbConfigured()) return [];
+  const safe = sanitizeApicalypseSearch(query);
+  if (!safe) return [];
+  try {
+    return await igdbQuery(
+      "games",
+      `${GAME_FIELDS} ` +
+        `where (themes.name ~ *"${safe}"* | keywords.name ~ *"${safe}"* | genres.name ~ *"${safe}"*) ` +
+        `& version_parent = null & parent_game = null; ` +
+        `sort total_rating_count desc; limit ${safeInt(limit, 40)};`
+    );
+  } catch { return []; }
+}
+
 // IGDB images are referenced by image_id → build a sized CDN URL.
 export function igdbImageUrl(imageId: string | undefined | null, size = "t_cover_big"): string | null {
   return imageId ? `https://images.igdb.com/igdb/image/upload/${size}/${imageId}.jpg` : null;

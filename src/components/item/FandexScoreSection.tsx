@@ -59,7 +59,11 @@ export default function FandexScoreSection({
 
   const rounded = Math.round(score);
   const color = fandexScoreColor(score);
-  const sorted = [...reasons].sort((a, b) => b.contribution - a.contribution);
+  // Q29: counted contributors first (by contribution, as before); capped-out
+  // tags (beyond the per-category cap) sink to the bottom regardless of their
+  // own dev — they're 0 either way, but grouping keeps "why isn't this
+  // counted" visually separate from the real breakdown instead of interleaved.
+  const sorted = [...reasons].sort((a, b) => (!!a.capped === !!b.capped ? b.contribution - a.contribution : a.capped ? 1 : -1));
   const baseline = center != null ? Math.round(center) : null;
 
   return (
@@ -96,34 +100,49 @@ export default function FandexScoreSection({
             </div>
           )}
           <div className="space-y-2">
-            {sorted.map((r) => {
+            {sorted.map((r, i) => {
               const positive = r.contribution >= 0;
               const c = reasonColor(r);
               const linkable = r.kind === "tag" || r.kind === "person" || r.kind === "company";
+              // Q29: the first capped row gets a divider + one-line explainer
+              // above it, so "why do these look different" has an answer
+              // right where the pattern starts, not repeated per row.
+              const firstCapped = r.capped && sorted[i - 1]?.capped !== true;
               return (
-                <div key={`${r.kind}|${r.role ?? ""}|${r.label}`} className="flex items-start justify-between gap-3 text-xs">
-                  <span className="min-w-0 space-y-0.5">
-                    <span className="flex items-center gap-1.5 flex-wrap">
-                      <span className="uppercase tracking-wide text-[10px] font-bold shrink-0" style={{ color: c }}>{reasonGroupLabel(r)}</span>
-                      {linkable ? (
-                        <FacetLink
-                          kind={r.kind as "tag" | "person" | "company"} role={r.role} label={r.label}
-                          className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
-                          style={{ background: `${c}22`, color: c }}
-                        />
-                      ) : (
-                        <span className="text-neutral-300">{r.label}</span>
+                <div key={`${r.kind}|${r.role ?? ""}|${r.label}`}>
+                  {firstCapped && (
+                    <p className="text-[10px] text-neutral-600 uppercase tracking-wide pt-1 pb-1.5 border-t border-neutral-800/70 mt-1">
+                      Not counted — over the per-category limit
+                    </p>
+                  )}
+                  <div className={`flex items-start justify-between gap-3 text-xs ${r.capped ? "opacity-40" : ""}`}>
+                    <span className="min-w-0 space-y-0.5">
+                      <span className="flex items-center gap-1.5 flex-wrap">
+                        <span className="uppercase tracking-wide text-[10px] font-bold shrink-0" style={{ color: c }}>{reasonGroupLabel(r)}</span>
+                        {linkable ? (
+                          <FacetLink
+                            kind={r.kind as "tag" | "person" | "company"} role={r.role} label={r.label}
+                            className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
+                            style={{ background: `${c}22`, color: c }}
+                          />
+                        ) : (
+                          <span className="text-neutral-300">{r.label}</span>
+                        )}
+                      </span>
+                      {r.BA != null && r.n != null && (
+                        <span className="block text-neutral-500">
+                          you rate this {r.BA.toFixed(1)} avg over {r.n} title{r.n === 1 ? "" : "s"}
+                        </span>
                       )}
                     </span>
-                    {r.BA != null && r.n != null && (
-                      <span className="block text-neutral-500">
-                        you rate this {r.BA.toFixed(1)} avg over {r.n} title{r.n === 1 ? "" : "s"}
+                    {r.capped ? (
+                      <span className="shrink-0 text-neutral-600 pt-0.5">—</span>
+                    ) : (
+                      <span className="shrink-0 font-semibold pt-0.5" style={{ color: positive ? "#4ade80" : "#f87171" }}>
+                        {positive ? "+" : ""}{r.contribution.toFixed(1)}
                       </span>
                     )}
-                  </span>
-                  <span className="shrink-0 font-semibold pt-0.5" style={{ color: positive ? "#4ade80" : "#f87171" }}>
-                    {positive ? "+" : ""}{r.contribution.toFixed(1)}
-                  </span>
+                  </div>
                 </div>
               );
             })}

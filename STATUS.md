@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · High-level roadmap. **Full detail + completion history live in [TASKS.md](TASKS.md).**
 
-**👉 Currently: your QA batch is fixed, needs your login to verify.** All 9 findings from your 2026-07-19 logged-in pass (**Q14–Q22** — card-grid unification, two Discover filter bugs, Fandex Score recenter + additive breakdown, tag/Insights admin features) are implemented, tested (250 tests + typecheck clean), and browser-verified anonymously — see TASKS.md for the full list. **Please log in and eyeball**: Library/Wishlist cards, the Fandex Score "Why?" breakdown, and the admin-only controls on `/tag` pages + Insights. Before that: P13b shipped 2026-07-19 (whole library indexable) + QA polish Q7–Q12/N3/N4. Everything else is either waiting on you (Android TWA, H3.0, legal advice) or not yet scoped (H1).
+**👉 Currently: round-2 QA batch (Q23–Q31) shipped 2026-07-19.** All 9 follow-up items implemented: facet-page popularity/Fandex-badge/`/studio/focus` fixes, Discover tag search + IGDB + Fandex-sort scroll fixes, tag "Fandex impact" pill replacing the Bayesian stat, capped-facet graying, main-vs-support cast weighting, Insights category overrides. 255 tests + typecheck + lint (0 errors) clean; anon surfaces browser-verified. **Logged-in verification still outstanding** — please eyeball the Fandex Score breakdown, facet-page badges, the tag-page impact pill, and Discover's Fandex-sort scroll with your own session (see TASKS.md for the full list). Everything else is either waiting on you (Android TWA, H3.0, legal advice) or not yet scoped (H1).
 
 ---
 

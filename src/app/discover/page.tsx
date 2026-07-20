@@ -134,6 +134,15 @@ export default function DiscoverPage() {
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const prevScrollHeightRef = useRef(0);
   const pendingPrependRef = useRef(false);
+  // Q26 (2026-07-19) — for a non-date sort (Popularity/Rating/Fandex Score),
+  // new items can land ANYWHERE in the resorted list, not just at the top —
+  // the releaseDate timeline's height-delta prepend trick above assumes a
+  // clean prepend, which doesn't hold once the list is resorted by score.
+  // Track which item sits at the top of the viewport before a merge, then
+  // scroll so that same item lands back in the same spot after — keeps the
+  // viewport stable regardless of where the new items actually landed.
+  const anchorIdRef = useRef<string | null>(null);
+  const anchorOffsetRef = useRef(0);
 
   // ── Search state ──
   const [searchItems, setSearchItems] = useState<DiscoverItem[]>([]);
@@ -212,6 +221,22 @@ export default function DiscoverPage() {
   const [autoToday] = useState(() => !hasSavedScroll("rr_discover_scroll"));
   useScrollRestore("rr_discover_scroll", !searchActive && !loading && items.length > 0);
 
+  // Q26: which item currently sits at (or straddles) the top of the viewport,
+  // and how far into the viewport it sits — captured right before a merge so
+  // the restoring layout effect can put it back in the same spot regardless
+  // of where the resort actually placed the new items.
+  function captureAnchor() {
+    anchorIdRef.current = null;
+    for (const el of document.querySelectorAll<HTMLElement>("[data-item-id]")) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > 0) {
+        anchorIdRef.current = el.dataset.itemId ?? null;
+        anchorOffsetRef.current = r.top;
+        break;
+      }
+    }
+  }
+
   async function loadMore() {
     if (loadingMore || !hasMore || searchActive) return;
     setLoadingMore(true);
@@ -223,8 +248,16 @@ export default function DiscoverPage() {
     ]);
     const newItems = fetches.flatMap((d) => d.items ?? []);
     if (newItems.length === 0) { setHasMore(false); setLoadingMore(false); return; }
-    // Future items render at the TOP when newest-first → anchor the scroll there.
-    if (sort === "releaseDate") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
+    if (sort === "releaseDate") {
+      // Future items render at the TOP when newest-first → anchor the scroll there.
+      prevScrollHeightRef.current = document.documentElement.scrollHeight;
+      pendingPrependRef.current = true;
+    } else {
+      // Score sorts can insert new items ANYWHERE in the resorted list — the
+      // height-delta trick above assumes a clean prepend, which doesn't hold
+      // once the list is resorted (Q26).
+      captureAnchor();
+    }
     setItems((prev) => mergeSorted(prev, newItems, false));
     setPages(next);
     setLoadingMore(false);
@@ -242,8 +275,15 @@ export default function DiscoverPage() {
     const newItems = fetches.flatMap((d) => d.items ?? []);
     if (newItems.length === 0) { setHasMoreBack(false); setLoadingPrev(false); return; }
     // Past items render at the TOP only when oldest-first → anchor the scroll there.
-    // The single date sort (releaseDate) is newest-first, so past items append.
-    if (sort !== "releaseDate") { prevScrollHeightRef.current = document.documentElement.scrollHeight; pendingPrependRef.current = true; }
+    // The single date sort (releaseDate) is newest-first, so past items append
+    // at the bottom and need no compensation there.
+    if (sort !== "releaseDate") {
+      // Q26: same anchor-tracking fix as loadMore — this is the path the top
+      // sentinel calls for a score sort (scrolling toward the top used to keep
+      // queueing more items via the broken height-delta trick, which is why
+      // the true top was never reachable).
+      captureAnchor();
+    }
     setItems((prev) => mergeSorted(prev, newItems, true));
     setBackPages(next);
     setLoadingPrev(false);
@@ -401,6 +441,29 @@ export default function DiscoverPage() {
     if (delta > 0) window.scrollBy(0, delta);
     pendingPrependRef.current = false;
   }, [items]);
+
+  // Q26: restore the anchor item captured before the merge (non-date sorts) to
+  // its pre-merge viewport offset, wherever it ended up after the resort.
+  useLayoutEffect(() => {
+    const id = anchorIdRef.current;
+    if (!id) return;
+    anchorIdRef.current = null;
+    const el = document.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    const delta = el.getBoundingClientRect().top - anchorOffsetRef.current;
+    if (delta !== 0) window.scrollBy(0, delta);
+  }, [items, sort]);
+
+  // Q26: jump to the top when switching to a score/rating sort, so the #1
+  // item for the NEW sort is what you actually see first — previously the
+  // page kept whatever scroll depth releaseDate had left it at, and the top
+  // sentinel's own scroll-triggered loading (see loadPrevious) meant
+  // scrolling up from there could never actually reach true position 0.
+  const prevSortRef = useRef(sort);
+  useEffect(() => {
+    if (prevSortRef.current !== sort && sort !== "releaseDate") window.scrollTo(0, 0);
+    prevSortRef.current = sort;
+  }, [sort]);
 
   function handleCalendarMonth(month: Date) {
     if (searchActive) return;

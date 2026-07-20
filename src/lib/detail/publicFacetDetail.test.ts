@@ -55,6 +55,30 @@ describe("sortPool", () => {
     const withClassic = [...pool, mk("classic", 5000, 8.7, "1999-01-01")];
     expect(sortPool(withClassic, "rating")[0].sourceId).toBe("classic");
   });
+
+  // Q23 — a facet's games were sinking under raw TMDB vote counts, so "Most
+  // popular" never surfaced them regardless of how popular they were within
+  // games specifically.
+  it("popular rank-normalizes per source, so a games facet isn't drowned out by raw TMDB vote counts", () => {
+    const tmdb = (id: string, votes: number): PoolTitle => ({
+      source: "tmdb", sourceId: id, type: "movie", title: id, releaseDate: null, posterUrl: null, vote: 7, votes, roles: [], raw: {},
+    });
+    const rawg = (id: string, votes: number): PoolTitle => ({
+      source: "rawg", sourceId: id, type: "game", title: id, releaseDate: null, posterUrl: null, vote: 7, votes, roles: [], raw: {},
+    });
+    const mixed = [
+      tmdb("blockbuster", 50000), tmdb("mid-movie", 5000), tmdb("obscure-movie", 100),
+      rawg("top-game", 800), rawg("mid-game", 200),
+    ];
+    const order = sortPool(mixed, "popular").map((t) => t.sourceId);
+    // Top of each source's OWN scale ranks together at the front — the top
+    // game beats every movie except the single most popular one.
+    expect(order[0]).toBe("blockbuster"); // rank 0 within tmdb
+    expect(order[1]).toBe("top-game");    // rank 0 within rawg — ties blockbuster, raw votes tiebreak keeps it 2nd
+    expect(order.indexOf("top-game")).toBeLessThan(order.indexOf("mid-movie"));
+    expect(order.indexOf("top-game")).toBeLessThan(order.indexOf("obscure-movie"));
+    expect(order[order.length - 1]).toBe("obscure-movie"); // rank 1 within tmdb (least popular movie)
+  });
 });
 
 describe("crowdAvg", () => {

@@ -20,6 +20,8 @@ import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId, DiscoveryVect
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
+import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
+import { normalizeName, extractYear } from "@/lib/merge";
 import { FacetRole } from "@/lib/facets";
 import { MediaType } from "@/types";
 
@@ -80,7 +82,7 @@ export interface FacetDetailPayload {
 
 // Normalized external title (crowd vote on a 0-10 scale).
 interface ExtTitle {
-  source: "tmdb" | "rawg";
+  source: "tmdb" | "rawg" | "igdb";
   sourceId: string;
   type: MediaType;
   title: string;
@@ -160,6 +162,16 @@ function rawgGame(g: any): ExtTitle {
     posterUrl: g.background_image || null,
     vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // RAWG rating is 0-5
     votes: g.ratings_count ?? 0,
+  };
+}
+function igdbGame(g: any): ExtTitle {
+  return {
+    source: "igdb", sourceId: String(g.id), type: "game",
+    title: g.name || "Untitled",
+    releaseDate: igdbReleaseDate(g),
+    posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
+    vote: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null, // 0-100 → 0-10
+    votes: g.total_rating_count ?? 0,
   };
 }
 
@@ -254,7 +266,29 @@ async function tagTitles(key: string): Promise<ExtTitle[]> {
   for (const ordering of ["-added", "-released"]) for (const page of TAG_PAGES)
     reqs.push(rawgJson(`/games?${rawgParam}&ordering=${ordering}&page_size=20&page=${page}`).then((d) => pushRawg(d?.results)));
 
+  // Q27 (2026-07-19): IGDB alongside RAWG — a tag like "anime" is a real IGDB
+  // theme/keyword but not a RAWG genre, and IGDB's game catalog covers titles
+  // RAWG's doesn't. Collected separately (not pushed straight into `out`) so
+  // it can dedupe against RAWG's SETTLED results by normalized title + release
+  // year (same key liveDiscover.ts's dedupeGames uses for this exact pair,
+  // since the two sources use independent ids) — RAWG and IGDB race in the
+  // same Promise.all, so dedup can't run until both have actually landed.
+  let igdbGames: any[] = [];
+  if (igdbConfigured()) reqs.push(discoverIgdbByTag(key, 40).then((results) => { igdbGames = results; }));
+
   await Promise.all(reqs);
+
+  const rawgTitleYears = new Set(
+    out.filter((t) => t.source === "rawg").map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
+  );
+  for (const g of igdbGames) {
+    const k = `game:igdb:${g.id}`;
+    if (seen.has(k)) continue;
+    const dupeKey = `${normalizeName(g.name ?? "")}|${extractYear(igdbReleaseDate(g)) ?? "?"}`;
+    if (rawgTitleYears.has(dupeKey)) continue;
+    seen.add(k);
+    out.push(igdbGame(g));
+  }
   return out;
 }
 
@@ -317,6 +351,70 @@ export async function buildFacetDetail(userId: string, ref: FacetRefIn): Promise
   // tag
   const ext = await tagTitles(ref.key);
   return assemble(userId, ref, null, ext.length ? "sample" : "catalog", catVectors, ext.length ? ext : null);
+}
+
+// Q27 (2026-07-19) — the /discover "more from the databases" supplement wants
+// EXTERNAL candidates ONLY, filtered by hide-library/hide-wishlist — unlike
+// buildFacetDetail's merged list, which puts the user's own rated titles for
+// this facet FIRST (by design, for the facet detail page's "your titles"
+// framing) and caps at MAX_ITEMS. For a facet with a large local pool (a big
+// existing anime library, say), every one of those 150 slots was consumed by
+// titles the user already owns — so the membership filter had nothing left to
+// let through, even though the provider search itself found real candidates.
+// This bypasses that merge entirely: resolve the external set the same way,
+// skip catVectors, filter by membership directly against user state.
+export interface MembershipFilterIn { library?: string; wishlist?: string }
+
+export async function buildExternalCandidates(
+  userId: string, ref: FacetRefIn, membership?: MembershipFilterIn
+): Promise<FacetDetailItem[]> {
+  let external: ExtTitle[] = [];
+  if (ref.kind === "person") {
+    const id = resolvePersonTmdbId(ref.role ?? "cast", ref.key);
+    if (id) {
+      const credits = await tmdbJson(`/person/${id}/combined_credits`);
+      if (credits) external = personTitles(ref.role ?? "cast", credits);
+    }
+  } else if (ref.kind === "company") {
+    if (ref.role === "studio") {
+      const cid = await resolveTmdbCompanyId(ref.label);
+      if (cid != null) external = await tmdbCompanyTitles(cid);
+    } else if (ref.role === "developer" || ref.role === "publisher") {
+      const rid = resolveRawgEntityId(ref.role, ref.key);
+      if (rid != null) external = await rawgEntityTitles(ref.role, rid);
+    }
+  } else {
+    external = await tagTitles(ref.key);
+  }
+  if (!external.length) return [];
+
+  const extMap = resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId })));
+  const state = getUserStateMap(userId, [...new Set(extMap.values())]);
+
+  const seen = new Set<string>();
+  const out: FacetDetailItem[] = [];
+  for (const t of external) {
+    const mid = extMap.get(`${t.source}:${t.sourceId}`);
+    const key = mid ?? `${t.source}-${t.type}-${t.sourceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const st = mid ? state.get(mid) : undefined;
+    const inLib = !!st?.libraryStatus;
+    const inWl = !!st?.onWatchlist;
+    if (membership?.library === "only" && !inLib) continue;
+    if (membership?.library === "exclude" && inLib) continue;
+    if (membership?.wishlist === "only" && !inWl) continue;
+    if (membership?.wishlist === "exclude" && inWl) continue;
+
+    out.push({
+      id: mid ?? key, type: t.type, title: t.title, releaseDate: t.releaseDate, posterUrl: t.posterUrl,
+      communityScore: t.vote != null ? Math.round(t.vote * 10) : null,
+      platformSources: st?.platformSources ?? [], onWatchlist: inWl, libraryStatus: st?.libraryStatus ?? null,
+      rating: st?.rating ?? null, sources: [{ source: t.source, sourceId: t.sourceId }],
+    });
+  }
+  return out;
 }
 
 // ── Merge the user's catalog (authoritative for YOUR avg) with the external

@@ -21,6 +21,14 @@ export interface Facet {
   label: string;     // first-seen display label
   role?: FacetRole;  // people + companies
   category?: string; // tags only — category id from tags.ts
+  // Q30 (2026-07-19): billing-order prominence for CAST facets only (1 = lead,
+  // tapering to a floor for background cast) — absent/1 for every other facet.
+  // Applied both when learning taste (analyzeLibraryFacets weights this
+  // occurrence's rating into the person's Bayesian average) and when scoring
+  // an item (computeFandexScore scales the person's classWeight for THIS
+  // item's specific occurrence) — a lead role should move the needle more
+  // than a cameo, in both directions.
+  prominence?: number;
 }
 
 // Stable id for dedup + preference-map keys. A person who is both director and
@@ -76,6 +84,19 @@ const WRITER_JOBS = new Set([
 const CAST_CAP = 8;   // bound per-item facet count (matters for scoring top-K)
 const STUDIO_CAP = 6; // production_companies tail is mostly distributor noise
 
+// Q30 — billing-order prominence: the top LEAD_CAST_COUNT billed actors count
+// fully (1.0), tapering linearly down to CAST_PROMINENCE_FLOOR for the least
+// prominent kept cast member. TMDB's cast array already arrives in billing
+// order, so `index` here IS billing position.
+const LEAD_CAST_COUNT = 3;
+const CAST_PROMINENCE_FLOOR = 0.4;
+function castProminence(index: number): number {
+  if (index < LEAD_CAST_COUNT) return 1;
+  const span = Math.max(1, CAST_CAP - LEAD_CAST_COUNT - 1);
+  const t = Math.min(1, (index - LEAD_CAST_COUNT) / span);
+  return 1 - t * (1 - CAST_PROMINENCE_FLOOR);
+}
+
 // ── Extraction ────────────────────────────────────────────────────
 
 // All normalized facets for one item. `merged` supplies tags/keywords (already
@@ -105,10 +126,10 @@ export function extractFacets(
   const bySource = new Map<Source, any>();
   for (const l of links) bySource.set(l.source, l.rawData);
 
-  const addPerson = (name: any, role: PersonRole) => {
+  const addPerson = (name: any, role: PersonRole, prominence?: number) => {
     if (typeof name !== "string") return;
     const label = name.trim();
-    if (label) push({ kind: "person", role, key: personKey(label), label });
+    if (label) push({ kind: "person", role, key: personKey(label), label, prominence });
   };
   const addCompany = (name: any, role: CompanyRole) => {
     if (typeof name !== "string") return;
@@ -126,7 +147,7 @@ export function extractFacets(
       for (const c of crew) if (c?.job === "Director") addPerson(c?.name, "director");
     }
     for (const c of crew) if (WRITER_JOBS.has(c?.job)) addPerson(c?.name, "writer");
-    for (const c of (tmdb.credits?.cast ?? []).slice(0, CAST_CAP)) addPerson(c?.name, "cast");
+    (tmdb.credits?.cast ?? []).slice(0, CAST_CAP).forEach((c: any, i: number) => addPerson(c?.name, "cast", castProminence(i)));
   }
   const lb = bySource.get("letterboxd");
   if (lb) for (const d of lb.directors ?? []) addPerson(d?.name, "director");

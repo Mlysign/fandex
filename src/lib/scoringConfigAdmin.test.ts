@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
 import { buildProfile, computeFandexScore } from "./discovery";
+import { getLibraryFacetAnalysis } from "./libraryAnalysis";
 import {
   getScoringConfig, saveScoringConfig, getTagCategories, saveTagCategory, saveCategoryWeights,
   deleteTagCategory, setTagCategoryOverride, deleteTagCategoryOverride, listTagCategoryOverrides,
@@ -103,6 +104,35 @@ describe("D6 — a tag_category_override actually changes what buildProfile scor
     const profile = buildProfile(USER);
     expect(profile.meta.get("tag||action")?.classWeight).toBe(3);
     expect(profile.meta.get("tag||action")?.category).toBe("modes-perspectives");
+  });
+});
+
+describe("Q31 — getLibraryFacetAnalysis (Insights) also reflects tag_category_override", () => {
+  it("a reassigned tag's FacetStat.category is the override, not categorizeTag()'s heuristic", () => {
+    const a = movie("501", "Action Movie", ["Action"]);
+    upsertLibraryEntry(USER, a, "tmdb", { status: "watched", rating: 8, reviewedAt: 1 });
+
+    let facets = getLibraryFacetAnalysis(USER).facets;
+    expect(facets.find((f) => f.key === "action")?.category).toBe("genre");
+
+    saveTagCategory({ id: "modes-perspectives", label: "Modes & Perspectives", color: "#123456", weight: 1, ignored: false });
+    setTagCategoryOverride("action", "modes-perspectives");
+
+    facets = getLibraryFacetAnalysis(USER).facets;
+    expect(facets.find((f) => f.key === "action")?.category).toBe("modes-perspectives");
+  });
+
+  it("a category reassignment busts the cached analysis (not just buildProfile's)", () => {
+    const a = movie("502", "Sequel Movie", ["Action", "Sequel"]);
+    upsertLibraryEntry(USER, a, "tmdb", { status: "watched", rating: 8, reviewedAt: 1 });
+
+    const before = getLibraryFacetAnalysis(USER);
+    expect(before.facets.find((f) => f.key === "sequel")?.category).toBe("meta"); // default heuristic
+
+    setTagCategoryOverride("sequel", "genre");
+    const after = getLibraryFacetAnalysis(USER);
+    expect(after).not.toBe(before); // cache actually recomputed, not stale
+    expect(after.facets.find((f) => f.key === "sequel")?.category).toBe("genre");
   });
 });
 

@@ -30,12 +30,12 @@ const SORT_LABELS: { key: FacetSort; label: string }[] = [
 ];
 
 interface MineState { rating: number | null; libraryStatus: string | null; onWatchlist: boolean }
+interface TagImpact { points: number; direction: "up" | "down" | "neutral"; ratedCount: number }
 interface Mine {
   stats: { userAvg: number | null; userCount: number; communityAvg: number | null; delta: number | null; baseline: number } | null;
   states: Record<string, MineState>;
   fandexById: Record<string, number>;
-  bayesPersonalScore?: number | null;
-  bayesPersonalCount?: number | null;
+  tagImpact?: TagImpact | null;
 }
 
 interface Props {
@@ -118,18 +118,26 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
   // Personal overlay — absent for anonymous viewers. SM6: gate on the shared
   // session probe instead of firing the authed endpoint into a guaranteed 401.
+  // Q24: send the ids actually rendered so the server can score facet-page
+  // items outside the catalog pool (not yet in library/wishlist — exactly the
+  // ones worth discovering) directly from their own provider data, not just
+  // the pool-based fandexById. Re-fires as more pages load ("Load more"),
+  // rescoring the whole set each time — simple, and cheap at facet-page scale.
   useEffect(() => {
     let alive = true;
+    const ids = items.filter((it) => it.linkable).map((it) => it.id).join(",");
     probeSession()
       .then((authed) => {
         if (!alive || !authed) return null;
-        return fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}`)
+        const qs = ids ? `&ids=${encodeURIComponent(ids)}` : "";
+        return fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}${qs}`)
           .then((r) => (r.ok ? r.json() : null));
       })
       .then((d: Mine | null) => { if (alive && d) setMine(d); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [kind, initial.key]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, initial.key, items.length]);
 
   const load = useCallback(async (nextPage: number, nextSort: FacetSort, replace: boolean) => {
     setLoading(true);
@@ -242,12 +250,6 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
               <div className="text-xs text-neutral-400 mt-0.5">Your average · {s.userCount} rated</div>
             </div>
           )}
-          {prefix === "tag" && mine?.bayesPersonalScore != null && (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-              <div className="text-2xl font-semibold tabular-nums text-emerald-300">{mine.bayesPersonalScore.toFixed(1)}</div>
-              <div className="text-xs text-neutral-400 mt-0.5">Your average (Bayesian){mine.bayesPersonalCount != null ? ` · ${mine.bayesPersonalCount} rated` : ""}</div>
-            </div>
-          )}
           <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
             <div className="text-2xl font-semibold tabular-nums">{initial.total}</div>
             <div className="text-xs text-neutral-400 mt-0.5">Titles</div>
@@ -257,6 +259,29 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           <p className="text-sm mt-3">
             <span className={s!.delta! > 0 ? "text-emerald-400" : s!.delta! < 0 ? "text-rose-400" : "text-neutral-300"}>{deltaTxt}</span>
           </p>
+        )}
+
+        {/* Q28 (2026-07-19) — REVERTS Q18's "Your average (Bayesian)" stat: too
+            opaque for a non-technical viewer. Plain-language instead: what does
+            this tag actually DO to your Fandex Score. */}
+        {prefix === "tag" && mine?.tagImpact && (
+          <div className="mt-3 flex items-center gap-2.5">
+            <span
+              className="inline-flex items-center rounded-full px-2.5 py-1 text-sm font-bold tabular-nums"
+              style={{
+                background: mine.tagImpact.direction === "up" ? "#4ade8026" : mine.tagImpact.direction === "down" ? "#ef444426" : "#9ca3af26",
+                color: mine.tagImpact.direction === "up" ? "#4ade80" : mine.tagImpact.direction === "down" ? "#ef4444" : "#9ca3af",
+              }}
+            >
+              Fandex impact {mine.tagImpact.points > 0 ? "+" : ""}{mine.tagImpact.points}
+            </span>
+            <span className="text-xs text-neutral-500">
+              {mine.tagImpact.direction === "up" && "titles with this tag typically score above your average"}
+              {mine.tagImpact.direction === "down" && "titles with this tag typically score below your average"}
+              {mine.tagImpact.direction === "neutral" && "titles with this tag score about the same as your average"}
+              {" · "}{mine.tagImpact.ratedCount} rated
+            </span>
+          </div>
         )}
 
         {/* Q18 — admin-only inline taxonomy editor (renders nothing for non-admins) */}

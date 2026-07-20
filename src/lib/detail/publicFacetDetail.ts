@@ -21,8 +21,10 @@ import { MediaType } from "@/types";
 import { FacetKind, personKey } from "@/lib/facets";
 import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId, PersonMeta, FacetScope } from "@/lib/facetDetail";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
+import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
+import { normalizeName, extractYear } from "@/lib/merge";
 import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
-import { getTagVocab } from "@/lib/discovery";
+import { getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
 import { categorizeTag } from "@/lib/tags";
 import { canonicalTagKey, listTagBundles } from "@/lib/tagAlias";
@@ -85,7 +87,7 @@ export interface PublicFacetPayload {
 // Internal pooled title (carries raw for persistence + votes for the crowd avg).
 // Exported for unit tests of the pure pool logic (role-merge / sort / crowd avg).
 export interface PoolTitle {
-  source: "tmdb" | "rawg";
+  source: "tmdb" | "rawg" | "igdb";
   sourceId: string;
   type: MediaType;
   title: string;
@@ -128,6 +130,19 @@ function rawgTitle(g: any, roles: string[] = []): PoolTitle {
     posterUrl: g.background_image || null,
     vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0-5 → 0-10
     votes: g.ratings_count ?? 0,
+    roles,
+    raw: g,
+  };
+}
+
+function igdbTitle(g: any, roles: string[] = []): PoolTitle {
+  return {
+    source: "igdb", sourceId: String(g.id), type: "game",
+    title: g.name || "Untitled",
+    releaseDate: igdbReleaseDate(g),
+    posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
+    vote: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null, // 0-100 → 0-10
+    votes: g.total_rating_count ?? 0,
     roles,
     raw: g,
   };
@@ -225,21 +240,24 @@ async function tmdbCompanyPool(companyId: number): Promise<PoolTitle[]> {
 // added+recent). A studio may be both a developer and a publisher, so we search
 // and union both.
 const _rawgEntityCache = new BoundedCache<string, { developers: number[]; publishers: number[] }>({ max: 5000 });
-async function searchRawgEntityIds(key: string): Promise<{ developers: number[]; publishers: number[] }> {
-  if (_rawgEntityCache.has(key)) return _rawgEntityCache.get(key)!;
+// Q25: takes the recovered display LABEL, not the normalized key — "focus"
+// vs. "Focus Entertainment" is the difference between matching the wrong
+// company on RAWG's search and matching the right one.
+async function searchRawgEntityIds(query: string): Promise<{ developers: number[]; publishers: number[] }> {
+  if (_rawgEntityCache.has(query)) return _rawgEntityCache.get(query)!;
   const [dev, pub] = await Promise.all([
-    rawgJson(`/developers?search=${encodeURIComponent(key)}&page_size=1`),
-    rawgJson(`/publishers?search=${encodeURIComponent(key)}&page_size=1`),
+    rawgJson(`/developers?search=${encodeURIComponent(query)}&page_size=1`),
+    rawgJson(`/publishers?search=${encodeURIComponent(query)}&page_size=1`),
   ]);
   const ids = {
     developers: (dev?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
     publishers: (pub?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
   };
-  _rawgEntityCache.set(key, ids);
+  _rawgEntityCache.set(query, ids);
   return ids;
 }
-async function rawgEntityPool(key: string): Promise<PoolTitle[]> {
-  const { developers, publishers } = await searchRawgEntityIds(key);
+async function rawgEntityPool(query: string): Promise<PoolTitle[]> {
+  const { developers, publishers } = await searchRawgEntityIds(query);
   const reqs: Promise<any>[] = [];
   for (const [param, list] of [["developers", developers], ["publishers", publishers]] as const) {
     for (const id of list) for (const ordering of ["-added", "-released"]) {
@@ -288,7 +306,28 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
   const rawgParam = gslug ? `genres=${gslug}` : `tags=${rawgTagSlug(key)}`;
   for (const ordering of ["-added", "-released"]) for (const page of TAG_POOL_PAGES)
     reqs.push(rawgJson(`/games?${rawgParam}&ordering=${ordering}&page_size=40&page=${page}`).then((d) => pushRawg(d?.results)));
+
+  // Q27 (2026-07-19): IGDB alongside RAWG on the public tag page too — see
+  // facetDetail.ts's tagTitles for the same wiring + the reason it's a
+  // separate settle-then-dedupe pass instead of pushing straight into `out`.
+  let igdbGames: any[] = [];
+  if (igdbConfigured()) reqs.push(discoverIgdbByTag(key, 40).then((results) => { igdbGames = results; }));
+
   await Promise.all(reqs);
+
+  const rawgTitleYears = new Set(
+    out.filter((t) => t.source === "rawg").map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
+  );
+  for (const g of igdbGames) {
+    // Prefixed (unlike RAWG's plain `game:${id}` key above) — RAWG and IGDB ids
+    // are independent numeric spaces, so an unprefixed key could collide.
+    const k = `game:igdb:${g.id}`;
+    if (seen.has(k)) continue;
+    const dupeKey = `${normalizeName(g.name ?? "")}|${extractYear(igdbReleaseDate(g)) ?? "?"}`;
+    if (rawgTitleYears.has(dupeKey)) continue;
+    seen.add(k);
+    out.push(igdbTitle(g));
+  }
   return out;
 }
 
@@ -306,6 +345,29 @@ export function bayesScore(t: PoolTitle, prior: number): number {
   return (t.votes * t.vote + BAYES_PRIOR_VOTES * prior) / (t.votes + BAYES_PRIOR_VOTES);
 }
 
+// Q23 (2026-07-19) — "Most popular" ranked by RAW vote count buried games
+// pages deep: TMDB blockbusters carry tens of thousands of votes vs RAWG/IGDB's
+// hundreds, so a facet's games never reached the front page regardless of how
+// popular they are within games specifically. Rank each title within its OWN
+// source's vote scale (0 = most popular title from that source, 1 = least),
+// then sort by that rank — comparable across sources even though the raw vote
+// counts aren't. "Highest rated" doesn't need this: Bayesian damping already
+// operates on the shared 0-10 rating scale, not a source-specific vote count.
+function popularityRanks(pool: PoolTitle[]): Map<PoolTitle, number> {
+  const bySource = new Map<string, PoolTitle[]>();
+  for (const t of pool) {
+    const arr = bySource.get(t.source) ?? [];
+    arr.push(t);
+    bySource.set(t.source, arr);
+  }
+  const rank = new Map<PoolTitle, number>();
+  for (const arr of bySource.values()) {
+    const sorted = [...arr].sort((a, b) => b.votes - a.votes);
+    sorted.forEach((t, i) => rank.set(t, i / Math.max(1, sorted.length - 1)));
+  }
+  return rank;
+}
+
 export function sortPool(pool: PoolTitle[], sort: FacetSort): PoolTitle[] {
   // Prior from WELL-VOTED titles only (no crowdAvg small-pool fallback — that
   // would let the very low-vote outliers we're damping pull the prior toward
@@ -313,8 +375,12 @@ export function sortPool(pool: PoolTitle[], sort: FacetSort): PoolTitle[] {
   const minVotes = (t: PoolTitle) => (t.source === "rawg" ? 5 : 10);
   const voted = pool.filter((t) => t.vote != null && t.votes >= minVotes(t));
   const prior = voted.length ? voted.reduce((s, t) => s + (t.vote as number), 0) / voted.length : 6.5;
-  const cmp: Record<FacetSort, (a: PoolTitle, b: PoolTitle) => number> = {
-    popular: (a, b) => b.votes - a.votes || (b.vote ?? 0) - (a.vote ?? 0),
+
+  if (sort === "popular") {
+    const rank = popularityRanks(pool);
+    return [...pool].sort((a, b) => (rank.get(a) ?? 1) - (rank.get(b) ?? 1) || b.votes - a.votes);
+  }
+  const cmp: Record<Exclude<FacetSort, "popular">, (a: PoolTitle, b: PoolTitle) => number> = {
     newest: (a, b) => (b.releaseDate ?? "").localeCompare(a.releaseDate ?? ""),
     rating: (a, b) => bayesScore(b, prior) - bayesScore(a, prior) || b.votes - a.votes,
   };
@@ -347,7 +413,10 @@ export async function buildPublicFacetDetail(
   // form. Prefer the real first-seen catalog casing (catalog-wide, no per-user
   // data) when this tag has appeared in the library; it's the only place the
   // original spelling survives.
-  let label = ref.label || (ref.kind === "tag" ? getTagVocab().find((v) => v.key === key)?.label : undefined) || titleCase(key);
+  let label = ref.label
+    || (ref.kind === "tag" ? getTagVocab().find((v) => v.key === key)?.label : undefined)
+    || (ref.kind === "company" ? getCompanyVocab().find((v) => v.key === key)?.label : undefined)
+    || titleCase(key);
   let scope: FacetScope = "catalog";
   let nameCollision = false;
 
@@ -362,7 +431,11 @@ export async function buildPublicFacetDetail(
         if (credits) { pool = personPool(credits); scope = "filmography"; }
       }
     } else if (ref.kind === "company") {
-      const [tmdbId, rawgPool] = await Promise.all([resolveTmdbCompanyId(key), rawgEntityPool(key)]);
+      // Q25: search providers with the recovered LABEL ("Focus Entertainment"),
+      // never the lossy key ("focus") — companyKey() strips trailing legal/role
+      // tokens, so searching with the bare key can match an entirely different
+      // company (e.g. "focus" -> Focus Features on TMDB, not Focus Entertainment).
+      const [tmdbId, rawgPool] = await Promise.all([resolveTmdbCompanyId(label), rawgEntityPool(label)]);
       const tmdbPool = tmdbId != null ? await tmdbCompanyPool(tmdbId) : [];
       pool = [...tmdbPool, ...rawgPool];
       if (pool.length) scope = "sample";
