@@ -21,6 +21,18 @@ export function getDb(): Database.Database {
   const db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  // Litestream runs as a SECOND connection on this file in production
+  // (docker-entrypoint.sh: `litestream replicate -exec "node server.js"`), so
+  // writes can contend with its checkpoints. busy_timeout makes contended lock
+  // acquisitions wait instead of throwing SQLITE_BUSY. It matches
+  // better-sqlite3's constructor default (5000) — stated here so the policy is
+  // visible and greppable. NOTE: the timeout only helps when the write lock is
+  // taken up-front; see transaction() below for why that matters.
+  db.pragma("busy_timeout = 5000");
+  // Standard WAL pairing: commits skip the per-commit fsync of the WAL file
+  // (fsync happens at checkpoint). Durability only weakens for an OS/power
+  // crash — and Litestream's replica is the recovery story for that.
+  db.pragma("synchronous = NORMAL");
   // Only cache a connection whose schema setup SUCCEEDED. This used to assign
   // _db before calling ensureSchema, so a throw in there left a usable but
   // UNMIGRATED connection cached forever: the first request 500s, every request
@@ -49,8 +61,17 @@ export function get<T = any>(sql: string, params: any[] = []): T | null {
   return (getDb().prepare(sql).get(...params) as T) ?? null;
 }
 
+// BEGIN IMMEDIATE, deliberately. Every caller is a write batch, and the default
+// BEGIN DEFERRED starts as a reader: the matcher's lookup SELECTs pin a read
+// snapshot, and the first INSERT then tries to upgrade it to a write lock. If
+// ANY other connection committed in between — Litestream does, roughly every
+// second — SQLite fails the upgrade with SQLITE_BUSY immediately, WITHOUT
+// consulting busy_timeout (the snapshot is stale; waiting cannot fix it). That
+// was the "database is locked" error wall in production (2026-07-20).
+// IMMEDIATE takes the write lock at BEGIN, so contention goes through the 5s
+// busy handler instead.
 export function transaction<T>(fn: () => T): T {
-  return getDb().transaction(fn)();
+  return getDb().transaction(fn).immediate();
 }
 
 // Schema setup runs implicitly the first time getDb() opens the connection, so

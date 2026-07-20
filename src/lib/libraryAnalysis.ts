@@ -306,7 +306,11 @@ function membershipSignature(userId: string): string {
   return `${lib?.n ?? 0}:${wl?.n ?? 0}:${l?.lmx ?? 0}`;
 }
 
-const _memberCache = new Map<string, { sig: string; data: MembershipSignal }>();
+// Capped like its sibling `_cache` above (and discovery.ts's `_profileCache`)
+// so many distinct users can't grow it without bound — this one was missed in
+// the BoundedCache migration and leaked one entry per userId for the life of
+// the process.
+const _memberCache = new BoundedCache<string, { sig: string; data: MembershipSignal }>({ max: 500 });
 
 export function getMembershipSignal(userId: string): MembershipSignal {
   const sig = membershipSignature(userId);

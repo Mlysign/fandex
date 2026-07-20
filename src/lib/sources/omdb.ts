@@ -1,4 +1,5 @@
 import { httpFetch } from "@/lib/http";
+import { BoundedCache } from "@/lib/boundedCache";
 
 const API_KEY = process.env.OMDB_API_KEY!;
 
@@ -40,16 +41,29 @@ function parse(data: any): OmdbResult {
   };
 }
 
+// Review-aggregate scores move slowly; a day of staleness is invisible. Without
+// this, every detail read of a movie/show fired a live OMDB call — which both
+// added latency and would burn through the 1k/day free tier under a full site
+// crawl. EMPTY results are cached too (negative caching): an unmatched title
+// would otherwise re-fire on every crawl pass forever.
+const _omdbCache = new BoundedCache<string, OmdbResult>({ max: 5000, ttlMs: 24 * 60 * 60 * 1000 });
+
 async function omdbGet(params: Record<string, string>): Promise<OmdbResult> {
   if (!API_KEY) return EMPTY;
+  const cacheKey = new URLSearchParams(params).toString();
+  const cached = _omdbCache.get(cacheKey);
+  if (cached) return cached;
   try {
     const p = new URLSearchParams({ apikey: API_KEY, ...params });
     const res = await httpFetch(`https://www.omdbapi.com/?${p}`);
     if (!res.ok) return EMPTY;
     const data = await res.json();
-    if (data.Response === "False") return EMPTY;
-    return parse(data);
+    const result = data.Response === "False" ? EMPTY : parse(data);
+    _omdbCache.set(cacheKey, result);
+    return result;
   } catch {
+    // Transient failure (network, timeout): deliberately NOT cached, so the
+    // next read retries instead of pinning EMPTY for a day.
     return EMPTY;
   }
 }

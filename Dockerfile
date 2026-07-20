@@ -32,6 +32,13 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # SQLite lives on the mounted volume, NOT in the image (else it resets each deploy).
 ENV DB_PATH=/app/data/rr.db
+# Cap the V8 heap. Uncapped, V8 sizes itself off the host's RAM (Railway boxes
+# are big) and collects lazily, so RSS ramps into multiple GB of billed memory
+# even when the live set is a few hundred MB (observed 2026-07-20: ~4GB and
+# climbing under crawler load). 1536MB forces GC well before that while leaving
+# generous headroom over the bounded in-process caches; native memory (sharp,
+# SQLite) sits on top. If the app ever OOMs or GC-thrashes, raise to 2048.
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 # Standalone server bundle + static assets. `output: "standalone"` does not copy
 # public/ or .next/static, so we add them next to the generated server.js.
