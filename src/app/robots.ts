@@ -25,13 +25,25 @@ import { PUBLIC_TYPES } from "@/lib/publicUrl";
 // rendered the right origin).
 export const dynamic = "force-dynamic";
 
+// Crawl-cost trim (2026-07-20): `?sort=` is the only query param the public SSR
+// pages actually read (facetSsr.tsx) — every sort variant re-runs the full
+// provider fan-out server-side, and the variants are duplicate content by
+// design (the canonical tag already points at the bare URL). Canonical only
+// prevents INDEXING; Disallow prevents the FETCH, which is what costs money.
+// `?page=` never reaches SSR (pagination is client-side via the disallowed
+// /api/), so it needs no rule.
+const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/"];
+const DISALLOW = ["/api/", "/dashboard", "/discover", "/library", "/insights", "/settings", "/item", "/*?sort="];
+
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: {
-      userAgent: "*",
-      allow: ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/"],
-      disallow: ["/api/", "/dashboard", "/discover", "/library", "/insights", "/settings", "/item"],
-    },
+    rules: [
+      { userAgent: "*", allow: ALLOW, disallow: DISALLOW },
+      // Googlebot ignores crawl-delay (this rule costs no Google indexing
+      // speed); it throttles the long tail of bots that do honor it, which
+      // hammered the fully-dynamic public pages after P13b opened indexing.
+      { userAgent: ["Bingbot", "YandexBot", "Applebot"], crawlDelay: 5, allow: ALLOW, disallow: DISALLOW },
+    ],
     sitemap: `${BASE_URL}/sitemap.xml`,
     host: BASE_URL,
   };

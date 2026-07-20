@@ -52,6 +52,22 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.igdb.com" },
       { protocol: "https", hostname: "*.steamstatic.com" },
     ],
+    // Cost controls (2026-07-20, post-P13b crawler wave): poster CDN URLs are
+    // per-item and effectively immutable, so cache optimized variants for 31
+    // days (default is 4h) — this drives both the on-disk optimizer cache and
+    // the served Cache-Control, so browsers/crawlers stop re-fetching.
+    minimumCacheTTL: 2678400,
+    // Pin webp only — AVIF costs ~50% more encode CPU per variant and would
+    // double the variant cache for marginal size wins on small posters.
+    formats: ["image/webp"],
+    // Pin the default quality allowlist explicitly.
+    qualities: [75],
+    // The app never renders a poster larger than ~45vw × 768px @2x ≈ 700w (see
+    // the `sizes` attrs in PosterCard/CalendarView/etc.), so drop the
+    // 1200–3840w device buckets — each was a variant sharp could be made to
+    // render (and cache, and serve) per poster. Revisit if a full-viewport
+    // <Image> is ever added.
+    deviceSizes: [640, 750, 828, 1080],
   },
   // S6: security headers. nosniff, clickjacking (X-Frame-Options +
   // frame-ancestors), referrer leakage, HSTS, and powerful-feature gating.

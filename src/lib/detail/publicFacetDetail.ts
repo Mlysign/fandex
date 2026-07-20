@@ -25,7 +25,7 @@ import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from
 import { normalizeName, extractYear } from "@/lib/merge";
 import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
 import { getTagVocab, getCompanyVocab } from "@/lib/discovery";
-import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
+import { getTagCategories, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import { categorizeTag } from "@/lib/tags";
 import { canonicalTagKey, listTagBundles } from "@/lib/tagAlias";
 import { bayesRating, NEUTRAL_PRIOR } from "@/lib/ratingsSort";
@@ -397,6 +397,15 @@ export function crowdAvg(pool: PoolTitle[]): { avg: number | null; count: number
 
 export interface PublicFacetRef { kind: FacetKind; key: string; label?: string | null }
 
+// Cross-request cache for the built facet payload (2026-07-20): every facet
+// GET fans out to providers (studio = up to 8 TMDB discover calls; tag = TMDB +
+// RAWG + IGDB), and crawlers re-visit these pages constantly. The payload is
+// pure catalog/provider data — this module never takes a userId — so sharing
+// it across viewers can't leak anything; the personal overlay is client-side.
+// scoringConfigSignature is folded into the key so an admin edit (tag category,
+// bundle — Q18) shows up on the public page immediately instead of after TTL.
+const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 500, ttlMs: 60 * 60 * 1000 });
+
 // Build the public payload for one facet page. Provider-sourced, persisted thin
 // for linkability, no user data. Returns null only when the kind is unknown.
 export async function buildPublicFacetDetail(
@@ -405,6 +414,9 @@ export async function buildPublicFacetDetail(
 ): Promise<PublicFacetPayload | null> {
   const page = Math.max(0, opts.page ?? 0);
   const sort = opts.sort ?? "popular";
+  const cacheKey = `${ref.kind}:${ref.key}:${page}:${sort}:${scoringConfigSignature()}`;
+  const cachedPayload = _facetPageCache.get(cacheKey);
+  if (cachedPayload) return cachedPayload;
   const key = ref.key;
   let pool: PoolTitle[] = [];
   let person: PersonMeta | null = null;
@@ -419,6 +431,7 @@ export async function buildPublicFacetDetail(
     || titleCase(key);
   let scope: FacetScope = "catalog";
   let nameCollision = false;
+  let buildFailed = false;
 
   try {
     if (ref.kind === "person") {
@@ -446,6 +459,7 @@ export async function buildPublicFacetDetail(
   } catch (e) {
     log.error("public_facet_build_failed", { kind: ref.kind, key, ...errorFields(e) });
     // fall through with whatever pool we have (possibly empty)
+    buildFailed = true;
   }
 
   const sorted = sortPool(pool, sort);
@@ -498,10 +512,14 @@ export async function buildPublicFacetDetail(
     }
   }
 
-  return {
+  const payload: PublicFacetPayload = {
     kind: ref.kind, key, label, person, scope, community, nameCollision,
     items, total: sorted.length, page,
     hasMore: start + FACET_PAGE_SIZE < sorted.length,
     sort, tagCategory, tagBundle, bayesCommunityAvg,
   };
+  // A payload degraded by a provider failure must not be pinned for the TTL —
+  // the next request should retry the fan-out instead.
+  if (!buildFailed) _facetPageCache.set(cacheKey, payload);
+  return payload;
 }

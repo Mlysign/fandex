@@ -2,6 +2,7 @@ import { get, query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
+import { BoundedCache } from "@/lib/boundedCache";
 import {
   PublicEnrichedItem, loadLinks, ensureTmdbDetail,
   ensureGameDetail, enrichMissingSources, applyOmdbScores,
@@ -41,12 +42,25 @@ export function loadPublicItemRow(id: string): PublicItemRow | null {
   return row ? { id: row.id, type: row.type as MediaType, title: row.title } : null;
 }
 
+// Cross-request cache for the built public detail (2026-07-20, post-P13b:
+// every crawler re-visits all ~2,500 item pages, and each visit re-ran the
+// whole enrichment pipeline — provider refetches, OMDB, merge). Keyed by
+// id+region; leak-safe BY THE BOUNDARY ABOVE — PublicEnrichedItem structurally
+// cannot carry per-user data, and region is an explicit input, so two viewers
+// with the same key see identical bytes. Misses (null) are deliberately NOT
+// cached: a just-persisted uuid must resolve on its very first visit.
+const _detailCache = new BoundedCache<string, PublicEnrichedItem>({ max: 1000, ttlMs: 30 * 60 * 1000 });
+
 // Full public detail for a stored item. Returns null when the item doesn't
 // exist or has no links to merge (nothing to show → the page 404s).
 export async function loadPublicDetail(
   id: string,
   region: string = DEFAULT_COUNTRY
 ): Promise<PublicEnrichedItem | null> {
+  const cacheKey = `${id}:${region}`;
+  const cached = _detailCache.get(cacheKey);
+  if (cached) return cached;
+
   const row = loadPublicItemRow(id);
   if (!row) return null;
 
@@ -67,6 +81,7 @@ export async function loadPublicDetail(
   };
   await applyOmdbScores(enriched);
 
+  _detailCache.set(cacheKey, enriched);
   return enriched;
 }
 
