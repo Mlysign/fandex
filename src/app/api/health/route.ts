@@ -18,10 +18,25 @@ export async function GET() {
     db = false;
   }
 
+  // Memory breakdown (2026-07-21). Railway's dashboard only graphs total RSS,
+  // which cost two incidents' worth of guessing about WHERE the memory was.
+  // heap* is what --max-old-space-size bounds; external/arrayBuffers is Buffer
+  // territory; rss minus all of those is native (sharp, SQLite, allocator
+  // fragmentation). If rss ramps while heapUsed stays flat, it is not a JS leak.
+  const m = process.memoryUsage();
+  const mb = (n: number) => Math.round(n / 1048576);
+
   const body = {
     status: db ? "ok" : "degraded",
     db: db ? "up" : "down",
     uptime: Math.round(process.uptime()),
+    memoryMb: {
+      rss: mb(m.rss),
+      heapTotal: mb(m.heapTotal),
+      heapUsed: mb(m.heapUsed),
+      external: mb(m.external),
+      arrayBuffers: mb(m.arrayBuffers),
+    },
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }

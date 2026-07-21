@@ -41,9 +41,17 @@ const nextConfig: NextConfig = {
   },
   turbopack: { root: __dirname },
   images: {
-    // Must cover every host sanitizePosterUrl() (S12) admits — an un-listed host
-    // makes next/image throw at render, not just fail to load. Kept in sync with
-    // that allowlist: tmdb / rawg / igdb / steamstatic (+ the two steam CDNs).
+    // PR10 (2026-07-21): images no longer go through `/_next/image` at all. The
+    // loader rewrites each URL to the CDN's own size variant (TMDB w-buckets,
+    // RAWG /resize/, IGDB t_ tokens) and the browser fetches it directly — see
+    // src/lib/imageLoader.ts for the full why. This is what stops sharp from
+    // decoding multi-MB RAWG originals in-process (the 7.5 GB RSS ramp).
+    loader: "custom",
+    loaderFile: "./src/lib/imageLoader.ts",
+    // The documented host allowlist. With `loader: "custom"` nothing reaches the
+    // built-in optimizer so Next no longer enforces this — but it must stay in
+    // sync with sanitizePosterUrl() (S12) + the CSP img-src list, and it is what
+    // takes effect again if the custom loader is ever reverted.
     remotePatterns: [
       { protocol: "https", hostname: "cdn.akamai.steamstatic.com" },
       { protocol: "https", hostname: "shared.fastly.steamstatic.com" },
@@ -52,6 +60,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.igdb.com" },
       { protocol: "https", hostname: "*.steamstatic.com" },
     ],
+    // ── Below: inert while `loader: "custom"` is set (nothing hits the built-in
+    // optimizer). Kept as the tuned fallback if the custom loader is reverted,
+    // except deviceSizes, which is still live — it decides which widths the
+    // custom loader gets asked for in each srcset.
+    //
     // Cost controls (2026-07-20, post-P13b crawler wave): poster CDN URLs are
     // per-item and effectively immutable, so cache optimized variants for 31
     // days (default is 4h) — this drives both the on-disk optimizer cache and

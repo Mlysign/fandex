@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import { Dispatch, SetStateAction } from "react";
+import { cdnImageUrl } from "@/lib/imageLoader";
 
 // Hero media column for the item detail page: the main image with a hover
 // carousel + a thumbnail strip. `idx` is owned by the page (reset on item change).
@@ -19,12 +20,12 @@ export default function MediaGallery({
           {/* Hero art: kept as a plain <img>. Remote gallery images have no known
               intrinsic size, and this element sizes to the image's natural aspect
               (capped at 460px) — pinning it to a fixed next/image aspect would shift
-              the layout. The repeated poster/thumbnail images (the real bandwidth
-              cost) are optimized via next/image; this single hero isn't worth the
-              layout risk. */}
+              the layout. Still routed through cdnImageUrl(): a raw RAWG gallery URL
+              is a full-size original (up to 3.8 MB — PR10), and this element is at
+              most ~920 CSS px wide, so ask the CDN for that instead. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={images[idx]}
+            src={cdnImageUrl(images[idx], 1280)}
             alt={title}
             className="w-full object-cover"
             style={{ maxHeight: 460 }}

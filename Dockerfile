@@ -39,6 +39,14 @@ ENV DB_PATH=/app/data/rr.db
 # generous headroom over the bounded in-process caches; native memory (sharp,
 # SQLite) sits on top. If the app ever OOMs or GC-thrashes, raise to 2048.
 ENV NODE_OPTIONS="--max-old-space-size=1536"
+# glibc opens up to 8 malloc arenas PER CORE and sizes them off the host's core
+# count, not the container's CPU limit. Freed native memory then sits in those
+# arenas instead of going back to the OS, so RSS ratchets up under any
+# multi-threaded native workload and never comes back down — which is what the
+# 2026-07-21 ramp looked like (7.5 GB RSS against a 1.5 GB heap cap). Capping
+# arenas trades a little allocator contention for RSS that actually plateaus.
+# Applies to every native allocator in the process (better-sqlite3, zlib, TLS).
+ENV MALLOC_ARENA_MAX=2
 
 # Standalone server bundle + static assets. `output: "standalone"` does not copy
 # public/ or .next/static, so we add them next to the generated server.js.
