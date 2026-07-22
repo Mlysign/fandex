@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { parseJsonBody } from "@/lib/validate";
-import { previewPrune, runPrune, runVacuum, volumeInfo, orphanCheck } from "@/lib/dbPrune";
+import {
+  previewPrune, runPrune, runVacuum, volumeInfo, orphanCheck,
+  walDiagnostics, checkpointTruncate,
+} from "@/lib/dbPrune";
 import { readDbSize } from "@/lib/dbSize";
 
 // Reads + mutates live DB state — never prerender.
@@ -29,12 +32,14 @@ export const GET = withScoringAdmin(async () => {
     preview: previewPrune(),
     volume: volumeInfo(),
     orphans: orphanCheck(),
+    // Pure pragma reads — no PASSIVE probe here, that's a mutation (POST).
+    wal: walDiagnostics(),
     db: readDbSize(),
   });
 });
 
 const PruneBodySchema = z.object({
-  action: z.enum(["prune", "vacuum"]),
+  action: z.enum(["prune", "vacuum", "wal-probe", "wal-truncate"]),
   // Deliberately not a boolean: typing the word is the speed bump.
   confirm: z.string(),
   batchSize: z.number().int().positive().optional(),
@@ -43,6 +48,20 @@ const PruneBodySchema = z.object({
 
 export const POST = withScoringAdmin(async (req: NextRequest) => {
   const body = await parseJsonBody(req, PruneBodySchema);
+
+  // Diagnostics for the 2026-07-22 checkpoint stall. Neither needs a confirm
+  // string: PASSIVE only copies frames into the main DB (it can't remove
+  // anything), and TRUNCATE is protected by SQLite itself — it cannot discard
+  // frames another connection, Litestream included, still needs. Both are
+  // recoverable; the prune and the vacuum are not, which is why only those two
+  // demand typing a word.
+  if (body.action === "wal-probe") {
+    return NextResponse.json({ mode: "probe", wal: walDiagnostics({ probe: true }), volume: volumeInfo() });
+  }
+  if (body.action === "wal-truncate") {
+    const result = checkpointTruncate();
+    return NextResponse.json({ mode: "applied", action: "wal-truncate", result, wal: walDiagnostics(), volume: volumeInfo() });
+  }
 
   if (body.action === "prune") {
     if (body.confirm !== "PRUNE") {

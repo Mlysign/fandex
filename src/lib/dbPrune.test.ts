@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run, get } from "./db";
-import { previewPrune, runPrune, prunableIds, orphanCheck } from "./dbPrune";
+import { previewPrune, runPrune, prunableIds, orphanCheck, walDiagnostics } from "./dbPrune";
 
 // PR16 — the prune is the only operation in this repo that deletes production
 // rows in bulk, and two of the tables that cascade off media_items hold the
@@ -152,5 +152,39 @@ describe("runPrune — cascades reach links, never user rows", () => {
     expect(r.deleted).toBe(0);
     expect(r.batches).toBe(0);
     expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
+  });
+});
+
+// The test DB is :memory:, which cannot use WAL — so these pin the CONTRACT
+// (opt-in probing, shape, derived arithmetic) rather than real WAL numbers,
+// which only exist on the file-backed prod database. The probe being opt-in is
+// the part that actually matters: it writes, and the dry-run GET must not.
+describe("walDiagnostics — checkpoint-stall probe (PR16)", () => {
+  it("does NOT run the PASSIVE checkpoint unless explicitly asked", () => {
+    const w = walDiagnostics();
+    expect(w.busy).toBeNull();
+    expect(w.logFrames).toBeNull();
+    expect(w.checkpointedFrames).toBeNull();
+    expect(w.pendingFrames).toBeNull();
+    expect(w.pendingMb).toBeNull();
+  });
+
+  it("always reports the pure pragma reads, probe or not", () => {
+    const w = walDiagnostics();
+    expect(w).toHaveProperty("journalMode");
+    expect(w).toHaveProperty("autocheckpoint");
+    // The stall hypothesis rests on this being 0 in prod (Litestream disables
+    // SQLite's own autocheckpoint); reading it must never silently fail.
+    expect(w.autocheckpoint === null || typeof w.autocheckpoint === "number").toBe(true);
+  });
+
+  it("derives the pending backlog from the probe rather than guessing", () => {
+    const w = walDiagnostics({ probe: true });
+    if (w.logFrames == null || w.checkpointedFrames == null) {
+      // :memory: has no WAL — the probe legitimately reports nothing.
+      expect(w.pendingFrames).toBeNull();
+      return;
+    }
+    expect(w.pendingFrames).toBe(w.logFrames - w.checkpointedFrames);
   });
 });

@@ -277,6 +277,141 @@ export function runVacuum(): { ok: boolean; beforeMb: number | null; afterMb: nu
   return { ok: true, beforeMb, afterMb };
 }
 
+export type WalDiagnostics = {
+  journalMode: string | null;
+  /**
+   * Litestream sets this to 0 on databases it manages, taking sole control of
+   * checkpointing. If it IS 0, SQLite's own 4 MB autocheckpoint never fires and
+   * a stalled Litestream checkpointer means an unbounded WAL — which is exactly
+   * the 2026-07-22 symptom (walMb pinned at 60.7 across 12 h and several
+   * restarts, then at 130.3 for 200 s with zero writes).
+   */
+  autocheckpoint: number | null;
+  walMb: number | null;
+  /** Frames currently in the WAL, and how many are already in the main DB. */
+  busy: number | null;
+  logFrames: number | null;
+  checkpointedFrames: number | null;
+  /** logFrames - checkpointedFrames: real un-checkpointed backlog. */
+  pendingFrames: number | null;
+  pendingMb: number | null;
+};
+
+/**
+ * Read-only WAL state, plus a PASSIVE checkpoint probe.
+ *
+ * PASSIVE is the safe mode: it copies frames into the main DB and NEVER
+ * truncates or removes anything, so it cannot drop frames Litestream hasn't
+ * shipped yet. (Litestream's read lock exists specifically to block the
+ * RESTART/TRUNCATE modes that could.) Its return triple is the diagnostic worth
+ * having: `busy` non-zero means something is holding the checkpoint back, and
+ * logFrames vs checkpointedFrames says whether the WAL is genuinely full of
+ * pending data or is just a large file being reused at its high-water mark —
+ * the difference between "the prune needs 22 GB" and "the prune plateaus".
+ */
+export function walDiagnostics(opts: { probe?: boolean } = {}): WalDiagnostics {
+  // The PASSIVE probe writes frames into the main DB. Harmless and something
+  // SQLite does routinely, but it IS a mutation — so it's opt-in, and the
+  // dry-run GET asks for the pure pragma reads only.
+  const probe = opts.probe ?? false;
+  const dbPath = process.env.DB_PATH || path.join(process.cwd(), "data", "rr.db");
+  const one = (sql: string): number | null => {
+    try {
+      const row = get<Record<string, unknown>>(sql);
+      if (!row) return null;
+      const v = Object.values(row)[0];
+      return typeof v === "number" ? v : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let journalMode: string | null = null;
+  try {
+    const row = get<Record<string, unknown>>("PRAGMA journal_mode");
+    const v = row ? Object.values(row)[0] : null;
+    journalMode = typeof v === "string" ? v : null;
+  } catch {
+    journalMode = null;
+  }
+
+  let busy: number | null = null;
+  let logFrames: number | null = null;
+  let checkpointedFrames: number | null = null;
+  if (probe) {
+    try {
+      const row = getDb().prepare("PRAGMA wal_checkpoint(PASSIVE)").get() as
+        | Record<string, number>
+        | undefined;
+      if (row) {
+        const vals = Object.values(row);
+        [busy, logFrames, checkpointedFrames] = [vals[0] ?? null, vals[1] ?? null, vals[2] ?? null];
+      }
+    } catch {
+      /* leave nulls */
+    }
+  }
+
+  let walMb: number | null = null;
+  try {
+    walMb = Math.round((fs.statSync(`${dbPath}-wal`).size / 1048576) * 10) / 10;
+  } catch {
+    walMb = null;
+  }
+
+  const pendingFrames =
+    logFrames != null && checkpointedFrames != null ? logFrames - checkpointedFrames : null;
+
+  return {
+    journalMode,
+    autocheckpoint: one("PRAGMA wal_autocheckpoint"),
+    walMb,
+    busy,
+    logFrames,
+    checkpointedFrames,
+    pendingFrames,
+    // WAL frames carry a page plus a 24-byte header.
+    pendingMb: pendingFrames == null ? null : Math.round((pendingFrames * 4120) / 1048576),
+  };
+}
+
+/**
+ * Force a TRUNCATE checkpoint, shrinking the WAL file back to zero.
+ *
+ * Safe despite appearances: SQLite will not truncate past frames another
+ * connection still needs, and Litestream holds a read lock precisely to protect
+ * frames it hasn't replicated. So this either succeeds (everything shipped) or
+ * returns busy — it cannot silently drop un-replicated frames.
+ */
+export function checkpointTruncate(): { busy: number | null; logFrames: number | null; checkpointedFrames: number | null; walMbBefore: number | null; walMbAfter: number | null } {
+  const dbPath = process.env.DB_PATH || path.join(process.cwd(), "data", "rr.db");
+  const walMb = (): number | null => {
+    try {
+      return Math.round((fs.statSync(`${dbPath}-wal`).size / 1048576) * 10) / 10;
+    } catch {
+      return null;
+    }
+  };
+  const walMbBefore = walMb();
+  let busy: number | null = null;
+  let logFrames: number | null = null;
+  let checkpointedFrames: number | null = null;
+  try {
+    const row = getDb().prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as
+      | Record<string, number>
+      | undefined;
+    if (row) {
+      const vals = Object.values(row);
+      [busy, logFrames, checkpointedFrames] = [vals[0] ?? null, vals[1] ?? null, vals[2] ?? null];
+    }
+  } catch (e) {
+    log.error("wal_checkpoint_truncate_failed", { message: e instanceof Error ? e.message : String(e) });
+  }
+  const walMbAfter = walMb();
+  log.info("wal_checkpoint_truncate", { busy, logFrames, checkpointedFrames, walMbBefore, walMbAfter });
+  return { busy, logFrames, checkpointedFrames, walMbBefore, walMbAfter };
+}
+
 /** Post-prune sanity: nothing in the pool should reference a deleted item. */
 export function orphanCheck(): { orphanLinks: number; orphanExternalIds: number } {
   return {
