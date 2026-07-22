@@ -128,9 +128,15 @@ export function readProcessRss(): ProcessRss[] | null {
     const resident = Number(statm.trim().split(/\s+/)[1]);
     if (!Number.isFinite(resident)) continue;
 
+    // Next renames itself — process.title becomes "next-server (v16.2.7)", and
+    // /proc/<pid>/comm reflects that, truncated to 15 chars. The first run of
+    // this endpoint reported the app as "other" because of it.
     const comm = (readFileSafe(`/proc/${pid}/comm`) ?? "").trim();
-    const name =
-      comm === "node" ? "node" : comm === "litestream" ? "litestream" : "other";
+    const name = comm.startsWith("litestream")
+      ? "litestream"
+      : comm === "node" || comm.startsWith("next-server")
+        ? "node"
+        : "other";
 
     out.push({ name, pid: Number(pid), rssMb: Math.round((resident * PAGE_SIZE) / 1048576) });
   }
