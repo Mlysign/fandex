@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import { get } from "@/lib/db";
+import {
+  readCgroupMemory,
+  readDbFootprint,
+  readProcessRss,
+} from "@/lib/containerMemory";
+
+// Reads live process/cgroup state — must never be prerendered at build time.
+export const dynamic = "force-dynamic";
 
 // Liveness + readiness probe (P9). Unauthenticated on purpose so Railway's
 // healthcheck (and any uptime monitor) can hit it. Deliberately leaks nothing
@@ -26,6 +34,12 @@ export async function GET() {
   const m = process.memoryUsage();
   const mb = (n: number) => Math.round(n / 1048576);
 
+  // ...and the level ABOVE the process (2026-07-22). Railway graphs the whole
+  // container: two processes (litestream + node) plus kernel page cache. When
+  // the dashboard ramps to 2GB while `memoryMb.rss` sits flat at ~350MB, the
+  // answer is in here — cgroup.anonMb is real process memory, cgroup.fileMb is
+  // reclaimable page cache from SQLite I/O, and `processes` splits node from
+  // Litestream. See src/lib/containerMemory.ts.
   const body = {
     status: db ? "ok" : "degraded",
     db: db ? "up" : "down",
@@ -37,6 +51,9 @@ export async function GET() {
       external: mb(m.external),
       arrayBuffers: mb(m.arrayBuffers),
     },
+    cgroupMb: readCgroupMemory(),
+    processes: readProcessRss(),
+    dbFilesMb: readDbFootprint(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }
