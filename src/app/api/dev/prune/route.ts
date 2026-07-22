@@ -40,8 +40,11 @@ export const GET = withScoringAdmin(async () => {
 
 const PruneBodySchema = z.object({
   action: z.enum(["prune", "vacuum", "wal-probe", "wal-truncate"]),
-  // Deliberately not a boolean: typing the word is the speed bump.
-  confirm: z.string(),
+  // Optional at the schema level because only `prune` and `vacuum` require it,
+  // and those check the exact value themselves below — a required-but-ignored
+  // field just makes the WAL diagnostics fail with a confusing validation
+  // error. Deliberately not a boolean: typing the word is the speed bump.
+  confirm: z.string().optional(),
   batchSize: z.number().int().positive().optional(),
   budgetMs: z.number().int().positive().optional(),
 });
