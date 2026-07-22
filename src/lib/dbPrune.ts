@@ -196,6 +196,8 @@ export type PruneJobState = {
   deleted: number;
   batches: number;
   waits: number;
+  /** SQLITE_BUSY backoffs — expected under Litestream contention, not errors. */
+  busyRetries: number;
   remaining: number | null;
   freeMb: number | null;
   lastError: string | null;
@@ -205,7 +207,7 @@ export type PruneJobState = {
 
 let _job: PruneJobState = {
   running: false, startedAt: null, finishedAt: null,
-  deleted: 0, batches: 0, waits: 0, remaining: null, freeMb: null,
+  deleted: 0, batches: 0, waits: 0, busyRetries: 0, remaining: null, freeMb: null,
   lastError: null, abortedForSafety: false,
 };
 
@@ -237,7 +239,7 @@ export function startPruneJob(opts: {
 
   _job = {
     running: true, startedAt: Date.now(), finishedAt: null,
-    deleted: 0, batches: 0, waits: 0, remaining: null, freeMb: null,
+    deleted: 0, batches: 0, waits: 0, busyRetries: 0, remaining: null, freeMb: null,
     lastError: null, abortedForSafety: false,
   };
 
@@ -256,15 +258,40 @@ export function startPruneJob(opts: {
           continue;
         }
 
-        const info = transaction(() =>
-          getDb()
-            .prepare(
-              `DELETE FROM media_items WHERE id IN (
-                 SELECT id FROM media_items WHERE ${PRUNABLE_WHERE} LIMIT ?
-               )`,
-            )
-            .run(batchSize),
-        );
+        // SQLITE_BUSY is EXPECTED here, not exceptional. Litestream takes its
+        // own locks to checkpoint and ship the WAL, and under the write volume
+        // a prune generates it can hold them past db.ts's 5s busy_timeout —
+        // this is the same contention that caused the 2026-07-20 lock incident.
+        // A job meant to run for hours must treat that as backpressure and wait,
+        // not die (the first run stopped after 4,000 rows on exactly this).
+        let info: { changes: number } | null = null;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          try {
+            info = transaction(() =>
+              getDb()
+                .prepare(
+                  `DELETE FROM media_items WHERE id IN (
+                     SELECT id FROM media_items WHERE ${PRUNABLE_WHERE} LIMIT ?
+                   )`,
+                )
+                .run(batchSize),
+            );
+            break;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (!/database is locked|SQLITE_BUSY/i.test(msg)) throw e;
+            _job.busyRetries++;
+            // Linear backoff: Litestream's cycle is seconds, not minutes.
+            await sleep(2000 * (attempt + 1));
+          }
+        }
+        if (info === null) {
+          // Ten straight failures means sustained contention, not a blip —
+          // stop and surface it rather than hammering the write lock.
+          _job.lastError = "database is locked (gave up after 10 retries)";
+          log.error("prune_job_busy_exhausted", { deleted: _job.deleted });
+          break;
+        }
 
         if (info.changes === 0) break; // drained
         _job.deleted += info.changes;
