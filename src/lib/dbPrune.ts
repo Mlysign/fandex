@@ -175,6 +175,131 @@ export function runPrune(opts: { batchSize?: number; budgetMs?: number } = {}): 
   return result;
 }
 
+// ── Paced background prune (PR16, 2026-07-22) ───────────────────────────────
+//
+// Deleting rows grows the WAL and Litestream's shadow WAL faster than a burst
+// can be reclaimed: measured ~40 MB of volume per 1,000 rows. That space DOES
+// come back — Litestream replicates and expires segments continuously (observed
+// +131 MB reclaimed while idle) — but an on-demand `wal_checkpoint(TRUNCATE)`
+// usually returns busy=1, because Litestream holds a read lock to protect
+// frames it hasn't shipped. So the constraint is not total disk, it is RATE.
+//
+// Hence a self-pacing server-side job rather than ~40 hand-driven requests: it
+// deletes a batch, watches free space, and simply waits when the volume gets
+// tight, letting Litestream catch up before continuing. It is safe to
+// interrupt — the predicate is idempotent and progress is durable, so a restart
+// just resumes.
+export type PruneJobState = {
+  running: boolean;
+  startedAt: number | null;
+  finishedAt: number | null;
+  deleted: number;
+  batches: number;
+  waits: number;
+  remaining: number | null;
+  freeMb: number | null;
+  lastError: string | null;
+  /** Set if a cascade ever reached user rows — the job halts immediately. */
+  abortedForSafety: boolean;
+};
+
+let _job: PruneJobState = {
+  running: false, startedAt: null, finishedAt: null,
+  deleted: 0, batches: 0, waits: 0, remaining: null, freeMb: null,
+  lastError: null, abortedForSafety: false,
+};
+
+export function pruneJobState(): PruneJobState {
+  return { ..._job };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Start the paced prune. Returns immediately; poll pruneJobState().
+ *
+ * Guards, in order of how much they matter:
+ *  1. user rows — re-counted every batch; any change halts the job on the spot.
+ *  2. free space — never let the volume approach full, since that takes the
+ *     database down. Below `floorMb` it waits instead of deleting.
+ *  3. wall clock — a hard stop so a stuck job can't run forever.
+ */
+export function startPruneJob(opts: {
+  batchSize?: number;
+  floorMb?: number;
+  maxMs?: number;
+} = {}): PruneJobState {
+  if (_job.running) return pruneJobState();
+
+  const batchSize = Math.min(Math.max(opts.batchSize ?? 2000, 100), 20000);
+  const floorMb = Math.max(opts.floorMb ?? 700, 300);
+  const maxMs = Math.min(Math.max(opts.maxMs ?? 4 * 60 * 60 * 1000, 60000), 6 * 60 * 60 * 1000);
+
+  _job = {
+    running: true, startedAt: Date.now(), finishedAt: null,
+    deleted: 0, batches: 0, waits: 0, remaining: null, freeMb: null,
+    lastError: null, abortedForSafety: false,
+  };
+
+  void (async () => {
+    const libBefore = n("SELECT COUNT(*) n FROM user_library");
+    const wlBefore = n("SELECT COUNT(*) n FROM user_watchlist");
+    try {
+      while (Date.now() - (_job.startedAt ?? 0) < maxMs) {
+        const free = volumeInfo().freeMb;
+        _job.freeMb = free;
+
+        // Tight on space — stop deleting and let Litestream drain.
+        if (free != null && free < floorMb) {
+          _job.waits++;
+          await sleep(30000);
+          continue;
+        }
+
+        const info = transaction(() =>
+          getDb()
+            .prepare(
+              `DELETE FROM media_items WHERE id IN (
+                 SELECT id FROM media_items WHERE ${PRUNABLE_WHERE} LIMIT ?
+               )`,
+            )
+            .run(batchSize),
+        );
+
+        if (info.changes === 0) break; // drained
+        _job.deleted += info.changes;
+        _job.batches++;
+        _job.remaining = n(`SELECT COUNT(*) n FROM media_items WHERE ${PRUNABLE_WHERE}`);
+
+        // The one check worth halting for.
+        if (
+          n("SELECT COUNT(*) n FROM user_library") !== libBefore ||
+          n("SELECT COUNT(*) n FROM user_watchlist") !== wlBefore
+        ) {
+          _job.abortedForSafety = true;
+          log.error("prune_job_aborted_user_rows_changed", { deleted: _job.deleted });
+          break;
+        }
+
+        // Breathe between batches so replication keeps pace instead of the WAL
+        // outrunning it.
+        await sleep(1500);
+      }
+    } catch (e) {
+      _job.lastError = e instanceof Error ? e.message : String(e);
+      log.error("prune_job_failed", { message: _job.lastError, deleted: _job.deleted });
+    } finally {
+      _job.running = false;
+      _job.finishedAt = Date.now();
+      _job.remaining = n(`SELECT COUNT(*) n FROM media_items WHERE ${PRUNABLE_WHERE}`);
+      _job.freeMb = volumeInfo().freeMb;
+      log.info("prune_job_done", { deleted: _job.deleted, remaining: _job.remaining, waits: _job.waits });
+    }
+  })();
+
+  return pruneJobState();
+}
+
 export type VolumeInfo = {
   dbMb: number | null;
   freeMb: number | null;

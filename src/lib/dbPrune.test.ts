@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run, get } from "./db";
-import { previewPrune, runPrune, prunableIds, orphanCheck, walDiagnostics } from "./dbPrune";
+import {
+  previewPrune, runPrune, prunableIds, orphanCheck, walDiagnostics,
+  startPruneJob, pruneJobState,
+} from "./dbPrune";
 
 // PR16 — the prune is the only operation in this repo that deletes production
 // rows in bulk, and two of the tables that cascade off media_items hold the
@@ -153,6 +156,59 @@ describe("runPrune — cascades reach links, never user rows", () => {
     expect(r.batches).toBe(0);
     expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
   });
+});
+
+describe("startPruneJob — paced background prune", () => {
+  const settle = async () => {
+    // The job sleeps 1.5s between batches; give it room to drain a small set.
+    for (let i = 0; i < 40 && pruneJobState().running; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  };
+
+  it("drains the prunable set and leaves the pool alone", async () => {
+    addItem("keep-me", 0);
+    for (let i = 0; i < 3; i++) addItem(`junk-${i}`, 1);
+
+    startPruneJob({ batchSize: 2 });
+    await settle();
+
+    const s = pruneJobState();
+    expect(s.running).toBe(false);
+    expect(s.deleted).toBe(3);
+    expect(s.remaining).toBe(0);
+    expect(s.abortedForSafety).toBe(false);
+    expect(s.lastError).toBeNull();
+    expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
+  }, 20000);
+
+  it("refuses to start a second job while one is running", async () => {
+    for (let i = 0; i < 5; i++) addItem(`junk2-${i}`, 1);
+    const first = startPruneJob({ batchSize: 1 });
+    const second = startPruneJob({ batchSize: 1 });
+    // Same job object, not a second concurrent deleter racing the first.
+    expect(first.startedAt).toBe(second.startedAt);
+    // MUST drain before the test ends: the job is module-level singleton state,
+    // so leaving it running lets it observe the NEXT test's beforeEach wiping
+    // the tables — which trips its own user-rows-changed guard and makes an
+    // unrelated test fail. (It did, which is at least a good sign for the guard.)
+    await settle();
+  }, 20000);
+
+  it("never touches an item a user holds, even unattended", async () => {
+    addItem("browsed-but-mine", 1);
+    addLibrary("browsed-but-mine", 8);
+    addItem("really-junk", 1);
+
+    startPruneJob({ batchSize: 5 });
+    await settle();
+
+    const s = pruneJobState();
+    expect(s.deleted).toBe(1);
+    expect(s.abortedForSafety).toBe(false);
+    expect(count("SELECT COUNT(*) n FROM user_library")).toBe(1);
+    expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
+  }, 20000);
 });
 
 // The test DB is :memory:, which cannot use WAL — so these pin the CONTRACT

@@ -4,7 +4,7 @@ import { withScoringAdmin } from "@/lib/devAdmin";
 import { parseJsonBody } from "@/lib/validate";
 import {
   previewPrune, runPrune, runVacuum, volumeInfo, orphanCheck,
-  walDiagnostics, checkpointTruncate,
+  walDiagnostics, checkpointTruncate, startPruneJob, pruneJobState,
 } from "@/lib/dbPrune";
 import { readDbSize } from "@/lib/dbSize";
 
@@ -34,12 +34,13 @@ export const GET = withScoringAdmin(async () => {
     orphans: orphanCheck(),
     // Pure pragma reads — no PASSIVE probe here, that's a mutation (POST).
     wal: walDiagnostics(),
+    job: pruneJobState(),
     db: readDbSize(),
   });
 });
 
 const PruneBodySchema = z.object({
-  action: z.enum(["prune", "vacuum", "wal-probe", "wal-truncate"]),
+  action: z.enum(["prune", "prune-job", "vacuum", "wal-probe", "wal-truncate"]),
   // Optional at the schema level because only `prune` and `vacuum` require it,
   // and those check the exact value themselves below — a required-but-ignored
   // field just makes the WAL diagnostics fail with a confusing validation
@@ -47,6 +48,9 @@ const PruneBodySchema = z.object({
   confirm: z.string().optional(),
   batchSize: z.number().int().positive().optional(),
   budgetMs: z.number().int().positive().optional(),
+  // prune-job only: free-space floor to pause at, and a hard wall-clock stop.
+  floorMb: z.number().int().positive().optional(),
+  maxMs: z.number().int().positive().optional(),
 });
 
 export const POST = withScoringAdmin(async (req: NextRequest) => {
@@ -64,6 +68,28 @@ export const POST = withScoringAdmin(async (req: NextRequest) => {
   if (body.action === "wal-truncate") {
     const result = checkpointTruncate();
     return NextResponse.json({ mode: "applied", action: "wal-truncate", result, wal: walDiagnostics(), volume: volumeInfo() });
+  }
+
+  // Long-running, self-pacing version of `prune`. Same confirmation, because it
+  // deletes the same rows — it just paces itself against free space instead of
+  // needing ~40 hand-driven requests. Returns immediately; poll GET for `job`.
+  if (body.action === "prune-job") {
+    if (body.confirm !== "PRUNE") {
+      return NextResponse.json(
+        { error: 'Refusing to prune: send {"confirm":"PRUNE"} to proceed.', preview: previewPrune() },
+        { status: 400 },
+      );
+    }
+    const state = startPruneJob({
+      batchSize: body.batchSize,
+      floorMb: body.floorMb,
+      maxMs: body.maxMs,
+    });
+    return NextResponse.json({
+      mode: state.running ? "started" : "already-finished",
+      job: state,
+      hint: "Poll GET /api/dev/prune and read `job` for progress.",
+    });
   }
 
   if (body.action === "prune") {
