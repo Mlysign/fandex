@@ -34,9 +34,16 @@ export const SESSION_COOKIE = "rr2_session";
 // outstanding token for that user server-side — the 30-day cookie is no longer
 // un-revocable. Legacy tokens carry no epoch (read as 0) and stay valid until
 // the first bump, so the rollout is non-breaking.
-function currentEpoch(userId: string): number {
+// Returns null when the user row is GONE, which is not the same as "epoch 0".
+// After H4.6 account deletion there is nothing to bump — the row a bump would
+// have written to no longer exists — so a `?? 0` fallback here would keep every
+// outstanding token of a deleted account verifying happily (a first-generation
+// token carries se=0 and would match the fallback exactly). getSession() treats
+// null as "no valid session", which is what erasure has to mean.
+function currentEpoch(userId: string): number | null {
   const row = get<{ session_epoch: number }>("SELECT session_epoch FROM users WHERE id = ?", [userId]);
-  return row?.session_epoch ?? 0;
+  if (!row) return null;
+  return row.session_epoch ?? 0;
 }
 
 export function bumpSessionEpoch(userId: string): void {
@@ -44,7 +51,9 @@ export function bumpSessionEpoch(userId: string): void {
 }
 
 export async function createSession(user: SessionUser): Promise<string> {
-  return new SignJWT({ ...user, se: currentEpoch(user.userId) })
+  // At sign time the users row always exists (it was just created/looked up by
+  // the auth route), so the ?? 0 is only a type-level fallback.
+  return new SignJWT({ ...user, se: currentEpoch(user.userId) ?? 0 })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("30d")
     .setIssuedAt()
@@ -58,8 +67,11 @@ export async function getSession(): Promise<SessionUser | null> {
     if (!token) return null;
     const { payload } = await jwtVerify(token, getSecret());
     const user = payload as unknown as SessionUser & { se?: number };
-    // Reject tokens revoked by an epoch bump since they were issued.
-    if ((payload.se as number | undefined ?? 0) !== currentEpoch(user.userId)) return null;
+    // Reject tokens revoked by an epoch bump since they were issued — and tokens
+    // belonging to a user who no longer exists (deleted account, see above).
+    const epoch = currentEpoch(user.userId);
+    if (epoch === null) return null;
+    if ((payload.se as number | undefined ?? 0) !== epoch) return null;
     return user;
   } catch {
     return null;

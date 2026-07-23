@@ -53,6 +53,17 @@ describe("session revocation (S4)", () => {
     expect(await getSession()).toBeNull();
   });
 
+  it("rejects a token whose user no longer exists (H4.6 account deletion)", async () => {
+    // The subtle one: an epoch bump can't revoke the sessions of a deleted
+    // account, because the row it would bump is gone. A first-generation token
+    // carries se=0, so any `?? 0` fallback in currentEpoch() would make it match
+    // and keep verifying — a deleted user staying logged in.
+    cookieState.token = await createSession(base);
+    expect((await getSession())?.userId).toBe(USER);
+    run("DELETE FROM users WHERE id = ?", [USER]);
+    expect(await getSession()).toBeNull();
+  });
+
   it("treats a legacy token without an epoch claim as generation 0 (non-breaking rollout)", async () => {
     // Mirrors a JWT minted before S4 shipped — no `se` claim.
     const legacy = await new SignJWT({ ...base })

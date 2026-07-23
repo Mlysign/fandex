@@ -106,6 +106,13 @@ export const SettingsPostSchema = z.object({
   country: z.string().min(1),
 });
 
+// DELETE /api/account — H4.6 erasure. The literal is the type-to-confirm value
+// from the dialog; requiring it server-side means an accidental or forged
+// DELETE with an empty body 400s instead of erasing an account.
+export const AccountDeleteSchema = z.object({
+  confirm: z.literal("DELETE"),
+});
+
 // POST /api/auth/disconnect — remove a connected identity.
 export const DisconnectPostSchema = z.object({
   provider: zSource,

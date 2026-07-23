@@ -10,6 +10,17 @@ import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
 import { usePageTitle } from "@/lib/usePageTitle";
 
+// Table → plain-language label for the delete dialog's counts. Tables not listed
+// here (anything a future migration adds) are still deleted — they just don't
+// get a line in the dialog, which is the safe direction for an unknown name.
+const DELETE_LABELS: Array<[string, string]> = [
+  ["user_library", "Library entries (with your ratings and reviews)"],
+  ["user_watchlist", "Wishlist entries"],
+  ["user_item_state", "Per-provider ratings and status"],
+  ["user_identities", "Connected accounts"],
+  ["sync_log", "Sync history"],
+];
+
 function SettingsContent() {
   usePageTitle("Profile");
   const router = useRouter();
@@ -37,6 +48,12 @@ function SettingsContent() {
   const [rawgEmail, setRawgEmail] = useState("");
   const [rawgPassword, setRawgPassword] = useState("");
   const [rawgLoading, setRawgLoading] = useState(false);
+  // H4.6/H4.7 — account deletion (GDPR Art. 17) + export (Art. 20).
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteFootprint, setDeleteFootprint] = useState<Record<string, number> | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchMe(true);
@@ -140,6 +157,63 @@ function SettingsContent() {
     router.push("/");
   }
 
+  // Fetched via JS rather than a plain <a download>: the route is cookie-authed
+  // and returns JSON either way, so a failed download would otherwise navigate
+  // the user to a raw error body instead of showing a notice.
+  async function exportData() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/account/export");
+      if (!res.ok) {
+        setNotice({ msg: "Could not prepare your export. Please try again.", ok: false });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fandex-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setNotice({ msg: "Your data export has been downloaded.", ok: true });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function openDeleteDialog() {
+    setDeleteConfirm("");
+    setShowDelete(true);
+    // Show real counts in the dialog — "this deletes 1,900 library entries" is a
+    // far better last chance to back out than a generic warning.
+    const res = await fetch("/api/account");
+    if (res.ok) {
+      const data = await res.json();
+      setDeleteFootprint(data.perTable ?? null);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      if (!res.ok) {
+        setShowDelete(false);
+        setNotice({ msg: "Could not delete your account. Nothing was changed.", ok: false });
+        return;
+      }
+      // The session cookie is cleared server-side; a full reload (not a client
+      // navigation) makes sure no cached authed state survives on this device.
+      window.location.href = "/";
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const providers = [
     { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true  },
     { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true  },
@@ -183,6 +257,70 @@ function SettingsContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete-account confirmation (H4.6). Type-to-confirm rather than a plain
+          "are you sure": this is the one irreversible action in the app, and the
+          same word is required by the API so a stray click can't get there. */}
+      {showDelete && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => !deleting && setShowDelete(false)}>
+          <div className="bg-neutral-900 border border-red-900/60 rounded-2xl p-6 w-full max-w-md space-y-4"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-red-300">Delete your account?</h3>
+            <p className="text-sm text-neutral-400">
+              This permanently deletes your Fandex account and everything attached to it. It cannot be undone.
+            </p>
+
+            {deleteFootprint && (
+              <ul className="text-sm text-neutral-400 bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 space-y-1">
+                {DELETE_LABELS.filter(([table]) => (deleteFootprint[table] ?? 0) > 0).map(([table, label]) => (
+                  <li key={table} className="flex justify-between gap-4">
+                    <span>{label}</span>
+                    <span className="text-neutral-300">{deleteFootprint[table]}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Deliberately no retention NUMBER here: litestream.yml sets no
+                `retention`, so the effective window is Litestream's default and
+                nobody has confirmed it. H4.3's privacy policy has to state the
+                real figure — this text must not invent one first. */}
+            <p className="text-xs text-neutral-500">
+              Your ratings and lists on Trakt, TMDB, Steam and RAWG are not affected — only what Fandex stores.
+              Your data is removed immediately; copies in the backups age out with the backup retention window.
+            </p>
+
+            <div>
+              <label className="text-xs text-neutral-400 block mb-1">
+                Type <span className="font-mono text-neutral-200">DELETE</span> to confirm
+              </label>
+              <input
+                aria-label="Type DELETE to confirm"
+                autoFocus
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-red-500"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={deleteAccount}
+                disabled={deleteConfirm !== "DELETE" || deleting}
+                className="flex-1 py-2 rounded-lg text-sm font-medium bg-red-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting..." : "Delete my account"}
+              </button>
+              <button type="button" onClick={() => setShowDelete(false)} disabled={deleting}
+                className="px-4 py-2 rounded-lg text-sm text-neutral-400 hover:text-white border border-neutral-700 transition-colors">
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -352,6 +490,33 @@ function SettingsContent() {
               <span className="text-neutral-400">Watchlist items</span>
               <span>{itemCount}</span>
             </div>
+          </div>
+        </section>
+
+        {/* Your data (H4.6 + H4.7 — GDPR Art. 17 + Art. 20) */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Your data</h2>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium text-sm">Download your data</p>
+              <p className="text-xs text-neutral-500">
+                Everything Fandex stores about you — library, wishlist, ratings and connected accounts — as a JSON file.
+              </p>
+            </div>
+            <Button onClick={exportData} disabled={exporting}>
+              {exporting ? "Preparing..." : "Download"}
+            </Button>
+          </div>
+
+          <div className="bg-neutral-900 border border-red-900/50 rounded-xl p-5 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium text-sm text-red-300">Delete your account</p>
+              <p className="text-xs text-neutral-500">
+                Permanently removes your account and everything in it. This cannot be undone.
+              </p>
+            </div>
+            <Button variant="danger" onClick={openDeleteDialog}>Delete</Button>
           </div>
         </section>
       </main>
