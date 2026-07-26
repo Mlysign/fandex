@@ -17,7 +17,7 @@ export default function Chip({ active = false, color = "#C8A24B", dot, className
   return (
     <button
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-full border transition-colors min-h-[30px] ${className}`}
+      className={`tap-44 inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-full border transition-colors min-h-[30px] ${className}`}
       style={{
         borderColor: active ? color : "transparent",
         background: active ? `${color}24` : "var(--color-surface-elevated)",

@@ -128,11 +128,23 @@ export default function SubBar({
   // H1.6c: the nav is a bottom bar on mobile (no top chrome), so the filter bar
   // sticks to the very top there; on desktop it sits below the h-14 top nav.
   return (
-    <div className="sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-2.5">
-      <div className="max-w-6xl mx-auto space-y-2.5">
+    /* H1.6f: rows were space-y-2.5 (10px). Once each control claims a 44px
+       hit area (.tap-44), a 30px chip reaches 7px past its own box and a 20px
+       sort pill reaches 12px — so adjacent rows overlapped by ~11px and the
+       lower row silently stole taps from the one above. The gap now clears
+       7+12=19px. This is the one visible change from the a11y pass (Nils's
+       call, 2026-07-26: pad hit areas, keep the controls' own size, widen
+       spacing only where regions actually collide). */
+    <div className="sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3">
+      <div className="max-w-6xl mx-auto space-y-3">
 
-        {/* Row 1 — type + source filters + hide-rated + extras */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Row 1 — type + source filters + hide-rated + extras + sort.
+            gap-y > gap-x on purpose (H1.6f): this row WRAPS on mobile, so the
+            chip line and the sort line become vertical neighbours. With 44px
+            hit areas a 30px chip reaches 7px past its box and a 20px sort pill
+            12px, so the old uniform gap-2 (8px) let the lines overlap by ~11px
+            and steal each other's taps. Horizontal spacing is unchanged. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-5">
           {/* All pill — clears the type filter */}
           <Chip
             active={activeTypes.length === 0}
@@ -203,7 +215,7 @@ export default function SubBar({
                     key={k}
                     onClick={() => sort.onChange(k)}
                     aria-pressed={sort.value === k}
-                    className={`text-label px-2.5 py-1 rounded-md border transition-colors ${
+                    className={`tap-44 text-label px-2.5 py-1 rounded-md border transition-colors ${
                       sort.value === k ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"
                     }`}
                   >
@@ -228,7 +240,7 @@ export default function SubBar({
             <button
               onClick={() => setFiltersOpen(true)}
               aria-haspopup="dialog"
-              className="md:hidden flex-shrink-0 inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-lg border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
+              className="tap-44 md:hidden flex-shrink-0 inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-lg border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden />
               Filters
@@ -245,7 +257,7 @@ export default function SubBar({
                   onClick={() => onViewChange(v)}
                   aria-label={`${v.charAt(0).toUpperCase() + v.slice(1)} view`}
                   aria-pressed={view === v}
-                  className={`px-2.5 py-1.5 rounded-md transition-colors ${
+                  className={`tap-44-y px-2.5 py-1.5 rounded-md transition-colors ${
                     view === v ? "bg-neutral-750 text-accent" : "text-text-secondary hover:text-text-primary"
                   }`}
                   title={v.charAt(0).toUpperCase() + v.slice(1)}

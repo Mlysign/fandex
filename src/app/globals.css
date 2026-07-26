@@ -240,6 +240,41 @@
   box-shadow: var(--shadow-focus);
 }
 
+/* .tap-44 — H1.6f. Extends a control's TAP area to the 44×44 minimum WITHOUT
+   changing its visible size. 06-accessibility.md explicitly allows this:
+   "Visible glyphs may be smaller … but the hit area is padded to 44px."
+   Chosen (Nils, 2026-07-26) over growing the controls, because SubBar's dense
+   pill row is Q14's deliberate, shipped layout.
+
+   The ::after is transparent and belongs to the control itself, so clicks
+   landing on it still activate that control. Two constraints when applying it:
+     · the element must not sit inside an `overflow: hidden` ancestor, or the
+       expanded region is clipped away again;
+     · it must not contain a nested interactive element, or the overlay would
+       swallow that child's clicks.
+   Both were checked for every call site. Where two expanded regions would
+   overlap (adjacent SubBar rows), the ROW GAP was widened instead — see
+   SubBar.tsx — since an overlap silently steals taps from the neighbour,
+   which is worse than the small target it was meant to fix. */
+.tap-44, .tap-44-y { position: relative; }
+.tap-44::after, .tap-44-y::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  height: max(100%, 44px);
+}
+.tap-44::after   { width: max(100%, 44px); }
+/* Height-only variant, for controls packed side by side in a segmented group
+   (SubBar's list/card/calendar toggle). Three 34px buttons cannot each claim
+   44px of WIDTH inside a ~102px group — they'd overlap by 10px each and start
+   stealing taps from one another, which is a worse bug than the small target.
+   So they take the full 44px height and keep their real width. Documented as a
+   partial (34×44) rather than papered over; the consequence of a mis-tap here
+   is low — all three are instantly-reversible view switches. */
+.tap-44-y::after { width: 100%; }
+
 /* reduced-motion: global safe default per 06-accessibility.md — shimmer/
    hover-scale/carousel-fade collapse to instant, spinners stop spinning,
    scroll-behavior stays instant. Individual components (sheet cross-fade,
