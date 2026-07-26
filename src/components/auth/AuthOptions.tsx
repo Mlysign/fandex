@@ -110,20 +110,20 @@ export default function AuthOptions({
             <input type="password" placeholder="RAWG password" required
               className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
               value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
-            {rawgError && <p className="text-red-400 text-xs">{rawgError}</p>}
+            {rawgError && <p className="text-danger text-xs">{rawgError}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={rawgLoading}
                 className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                style={{ background: "#4ade80", color: "#000" }}>
+                style={{ background: "var(--color-success)", color: "var(--color-neutral-950)" }}>
                 {rawgLoading ? "Signing in..." : "Sign in"}
               </button>
               <button type="button" onClick={() => setShowRawg(false)}
-                className="px-3 py-2 rounded-lg text-sm text-neutral-500 hover:text-white transition-colors">
+                className="px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary transition-colors">
                 Cancel
               </button>
             </div>
           </form>
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-text-secondary">
             Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.
           </p>
         </div>

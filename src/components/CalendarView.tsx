@@ -88,7 +88,7 @@ function OverflowDrawer({
       <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface-overlay border border-border-strong rounded-xl shadow-2xl overflow-hidden min-w-[220px]">
         <div className="px-3 py-2 border-b border-border flex items-center justify-between">
           <span className="font-mono text-meta text-text-secondary">{dateLabel}</span>
-          <button onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text-primary">
+          <button onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary">
             <X className="w-3.5 h-3.5" aria-hidden />
           </button>
         </div>
@@ -183,7 +183,7 @@ function CalendarCell({
               {format(day, "d")}
             </span>
           ) : (
-            <span className="font-mono text-meta text-text-muted">{format(day, "d")}</span>
+            <span className="font-mono text-meta text-text-secondary">{format(day, "d")}</span>
           )}
         </div>
 
@@ -213,7 +213,7 @@ function CalendarCell({
             {overflow && (
               <div className="relative mt-auto">
                 <button
-                  className="font-mono text-[10px] text-text-muted hover:text-text-secondary transition-colors duration-fast"
+                  className="font-mono text-[10px] text-text-secondary hover:text-text-primary transition-colors duration-fast"
                   onClick={(e) => { e.stopPropagation(); setShowOverflow(true); }}
                 >
                   +{dayItems.length - VISIBLE} more
@@ -497,7 +497,7 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
               {/* Day-of-week headers */}
               <div className="grid grid-cols-7 gap-1.5 mb-1.5">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <div key={d} className="text-center font-mono text-micro text-text-muted py-1">{d}</div>
+                  <div key={d} className="text-center font-mono text-micro text-text-secondary py-1">{d}</div>
                 ))}
               </div>
 

@@ -57,29 +57,29 @@ export default function FacetAutocomplete({
         onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 150); }}
         onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQ(""); } }}
         placeholder={placeholder}
-        className="text-xs px-2.5 py-1.5 rounded-lg bg-neutral-900 border outline-none w-full focus:border-neutral-500"
+        className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-elevated border outline-none w-full text-text-primary placeholder:text-text-secondary focus:border-accent"
         style={{ borderColor: accent }}
       />
       {open && (matches.length > 0 || loading) && (
         <div
-          className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl"
+          className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-lg border border-border-strong bg-surface-overlay shadow-xl"
           onMouseDown={(e) => { if (blurTimer.current) clearTimeout(blurTimer.current); e.preventDefault(); }}
         >
-          {loading && matches.length === 0 && <div className="px-3 py-2 text-xs text-neutral-500">Searching…</div>}
+          {loading && matches.length === 0 && <div className="px-3 py-2 text-xs text-text-secondary">Searching…</div>}
           {mode === "title"
             ? (matches as TitleMatch[]).map((m) => (
-                <button key={m.id} onClick={() => pick(m)} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-neutral-800 text-left">
+                <button key={m.id} onClick={() => pick(m)} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-surface-elevated text-left">
                   <div className="relative w-6 h-9 shrink-0 rounded bg-neutral-800 overflow-hidden">
                     {m.posterUrl && <Image src={m.posterUrl} alt="" fill sizes="24px" className="object-cover" />}
                   </div>
-                  <span className="flex-1 text-xs truncate text-neutral-200">{m.title}</span>
-                  <span className="text-[10px] text-neutral-500">{m.year ?? ""} · {m.type}</span>
+                  <span className="flex-1 text-xs truncate text-text-primary">{m.title}</span>
+                  <span className="text-[10px] text-text-secondary">{m.year ?? ""} · {m.type}</span>
                 </button>
               ))
             : (matches as VocabMatch[]).map((m) => (
-                <button key={`${m.kind}|${m.role ?? ""}|${m.key}`} onClick={() => pick(m)} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-800 text-left">
-                  <span className="flex-1 text-xs truncate text-neutral-200">{m.label}</span>
-                  <span className="text-[10px] text-neutral-500">{m.role ? (ROLE_LABELS[m.role] ?? m.role) : m.kind} · {m.count}</span>
+                <button key={`${m.kind}|${m.role ?? ""}|${m.key}`} onClick={() => pick(m)} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-surface-elevated text-left">
+                  <span className="flex-1 text-xs truncate text-text-primary">{m.label}</span>
+                  <span className="text-[10px] text-text-secondary">{m.role ? (ROLE_LABELS[m.role] ?? m.role) : m.kind} · {m.count}</span>
                 </button>
               ))}
         </div>

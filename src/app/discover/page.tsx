@@ -121,13 +121,13 @@ type Sentinel = { loading: boolean; has: boolean; busy: string; cta: string; end
 // the page's render (the sentinel objects close over ref-stored loaders).
 function SentinelBar({ loading, has, busy, cta, end, onClick }: Sentinel) {
   return loading ? (
-    <span className="text-sm text-neutral-500 animate-pulse">{busy}</span>
+    <span className="text-sm text-text-secondary animate-pulse">{busy}</span>
   ) : has ? (
-    <button onClick={onClick} className="text-sm px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl transition-colors">
+    <button onClick={onClick} className="text-sm px-6 py-2.5 bg-surface-elevated hover:bg-surface-overlay border border-border-strong text-text-secondary hover:text-text-primary rounded-xl transition-colors">
       {cta}
     </button>
   ) : (
-    <span className="text-sm text-neutral-600">{end}</span>
+    <span className="text-sm text-text-secondary">{end}</span>
   );
 }
 
@@ -633,7 +633,7 @@ export default function DiscoverPage() {
                 ) : (
                   <GroupedView items={combined as any} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} />
                 )}
-                {webLoading && <div className="text-center text-xs text-neutral-500 animate-pulse pt-5">Pulling more from the databases…</div>}
+                {webLoading && <div className="text-center text-xs text-text-secondary animate-pulse pt-5">Pulling more from the databases…</div>}
                 {effView !== "calendar" && searchItems.length < searchTotal && (
                   <div className="flex justify-center pt-6">
                     <Button variant="secondary" size="md" onClick={() => runSearch(searchItems.length, true)} disabled={searchLoadingMore} className="px-6 py-2.5">

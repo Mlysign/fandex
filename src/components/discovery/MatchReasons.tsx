@@ -33,7 +33,7 @@ export default function MatchReasons({ reasons, max = 3 }: { reasons: Reason[]; 
           </span>
         );
       })}
-      {reasons.length > max && <span className="text-[10px] leading-none px-1.5 py-1 text-neutral-600">+{reasons.length - max}</span>}
+      {reasons.length > max && <span className="text-[10px] leading-none px-1.5 py-1 text-text-secondary">+{reasons.length - max}</span>}
     </div>
   );
 }

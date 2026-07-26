@@ -22,7 +22,8 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
         {profileUrl ? (
           <Image src={profileUrl} alt={name} fill sizes="140px" className="object-cover" />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-neutral-600">{name?.[0] ?? "?"}</div>
+          /* H1.6f a11y: neutral-600 here was 1.48:1 on the placeholder well — see PosterCard. */
+          <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-neutral-500">{name?.[0] ?? "?"}</div>
         )}
       </div>
       <div className="px-2 py-1.5 space-y-0.5">

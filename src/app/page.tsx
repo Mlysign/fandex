@@ -115,7 +115,7 @@ export default function HomePage() {
             <>
               <AuthOptions />
               <div className="space-y-4">
-                <div className="flex items-center gap-3 text-caption text-text-muted">
+                <div className="flex items-center gap-3 text-caption text-text-secondary">
                   <span className="flex-1 h-px bg-border" />
                   or
                   <span className="flex-1 h-px bg-border" />
@@ -130,7 +130,7 @@ export default function HomePage() {
             </>
           )}
 
-          <div className="flex justify-center gap-6 text-caption text-text-muted pt-1">
+          <div className="flex justify-center gap-6 text-caption text-text-secondary pt-1">
             {TYPES.map((t) => (
               <span key={t.label} className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.color }} />

@@ -4,6 +4,7 @@ import { format, parseISO, isToday, isTomorrow, isPast, isSameMonth } from "date
 import PosterCard, { PosterCardItem } from "@/components/PosterCard";
 import ListCard from "@/components/ListCard";
 import { MediaCardItem } from "@/components/cardItem";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 
 // ── Shared item interface ─────────────────────────────────────────
 // The canonical shape lives in cardItem.ts; aliased as MediaItem here for
@@ -52,19 +53,26 @@ function findTodayOrNextDate(sortedDates: string[]): string | null {
 
 // ── MonthDivider ──────────────────────────────────────────────────
 
+// H1.6f a11y: "past" used to be text-neutral-700 (1.27:1) and "future"
+// text-neutral-500 (3.42:1) — both below AA for this 12px label, i.e. the
+// past-month dividers were effectively invisible rather than merely dimmed.
+// Past stays visually recessed, but via neutral-400 (5.03:1 — the token
+// file's documented AA floor for small secondary text) plus the lighter
+// divider rule, not by dropping under the contrast floor. Current-month is
+// an accent pill, matching CalendarView's H1.6d treatment (was bare white).
 function MonthDivider({ label, past, current }: { label: string; past: boolean; current: boolean }) {
   return (
     <div className="flex items-center gap-4 py-2 mt-6 first:mt-0">
       {current ? (
-        <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap px-2.5 py-1 rounded-full bg-white text-neutral-900">
+        <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap px-2.5 py-1 rounded-full bg-accent text-text-on-accent">
           {label}
         </span>
       ) : (
-        <span className={`text-xs font-semibold uppercase tracking-widest whitespace-nowrap ${past ? "text-neutral-700" : "text-neutral-500"}`}>
+        <span className={`text-xs font-semibold uppercase tracking-widest whitespace-nowrap ${past ? "text-neutral-400" : "text-text-secondary"}`}>
           {label}
         </span>
       )}
-      <div className={`flex-1 h-px ${current ? "bg-white/20" : past ? "bg-neutral-800/60" : "bg-neutral-800"}`} />
+      <div className={`flex-1 h-px ${current ? "bg-accent/30" : past ? "bg-border" : "bg-border-strong"}`} />
     </div>
   );
 }
@@ -77,14 +85,18 @@ function DayHeader({ dateStr }: { dateStr: string }) {
   const past     = !today && isPast(parseISO(dateStr));
   return (
     <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0">
-      <span className={`text-xs font-medium ${today ? "text-white" : past ? "text-neutral-600" : "text-neutral-400"}`}>
+      {/* H1.6f a11y: past was neutral-600 (1.57:1) and the weekday name
+          neutral-700 (1.27:1) — both unreadable, not just dim. Both now sit
+          at neutral-400 (5.03:1); "today" uses the accent instead of raw
+          white, matching the month divider + CalendarView. */}
+      <span className={`text-xs font-medium ${today ? "text-accent" : past ? "text-neutral-400" : "text-text-primary"}`}>
         {today ? "Today" : tomorrow ? "Tomorrow" : format(parseISO(dateStr), "MMM d, yyyy")}
       </span>
       {!today && !tomorrow && (
-        <span className="text-xs text-neutral-700">{format(parseISO(dateStr), "EEEE")}</span>
+        <span className="text-xs text-neutral-400">{format(parseISO(dateStr), "EEEE")}</span>
       )}
       {today && (
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white text-neutral-900 font-bold uppercase tracking-wide">
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent text-text-on-accent font-bold uppercase tracking-wide">
           today
         </span>
       )}
@@ -181,7 +193,7 @@ function MonthNav({
             key={monthKey}
             ref={(el) => { btnRefs.current[i] = el; }}
             data-current={current ? "1" : "0"}
-            onClick={() => sectionRefs.current?.get(monthKey)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={() => sectionRefs.current?.get(monthKey)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })}
             style={{ transition: "transform 0.12s ease, opacity 0.12s ease" }}
             className={`text-xs text-right px-2 py-0.5 rounded hover:bg-neutral-800 whitespace-nowrap text-white ${
               current ? "font-semibold" : ""
@@ -196,7 +208,7 @@ function MonthNav({
         <button
           ref={(el) => { btnRefs.current[months.length] = el; }}
           data-current="0"
-          onClick={() => sectionRefs.current?.get("__nodate__")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          onClick={() => sectionRefs.current?.get("__nodate__")?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })}
           style={{ transition: "transform 0.12s ease, opacity 0.12s ease" }}
           className="text-xs text-right px-2 py-0.5 rounded hover:bg-neutral-800 text-white whitespace-nowrap"
         >
@@ -240,7 +252,7 @@ function SectionNav({ entries, sectionRefs }: { entries: [string, string][]; sec
       {entries.map(([key, label]) => (
         <button
           key={key}
-          onClick={() => sectionRefs.current?.get(key)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          onClick={() => sectionRefs.current?.get(key)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })}
           className="text-xs text-right px-2 py-0.5 rounded hover:bg-neutral-800 whitespace-nowrap text-white"
         >
           {label}

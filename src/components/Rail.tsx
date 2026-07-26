@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 
 // <Rail> — 03-components.md §4, NEW component (the board's "Card Carousel
 // View" — did not exist in code before H1.6). Generic horizontal-scroll
@@ -29,7 +30,7 @@ export default function Rail({ title, forYou, seeAllHref, children, className = 
   const [hovering, setHovering] = useState(false);
 
   const scrollBy = (dir: 1 | -1) => {
-    scrollerRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
+    scrollerRef.current?.scrollBy({ left: dir * 320, behavior: scrollBehavior() });
   };
 
   return (

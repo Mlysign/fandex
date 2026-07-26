@@ -54,7 +54,11 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
         {imageSrc && !imgErr ? (
           <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover transition-transform duration-base group-hover:scale-[1.02]" onError={() => setImgErr(true)} />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
+          /* H1.6f a11y: was neutral-600 on the neutral-800 placeholder well —
+             1.48:1, below even the 3:1 bar that applies to icons and 24px-bold
+             text. neutral-500 is 3.23:1 there: still clearly a recessed
+             placeholder, but actually perceivable. */
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-500">
             <TypeIcon type={item.type} size={28} />
             <span className="text-2xl font-bold">{item.title[0]}</span>
           </div>

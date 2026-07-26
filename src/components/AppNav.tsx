@@ -13,7 +13,8 @@ import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
 // either way. Replaces the old top-only NavBar, which was duplicated per-page.
 //
 // Five slots (D-A): Home · Search · Calendar · Library · You. Search = /discover
-// (the SearchModal stays dead). Library lights for BOTH /library and /wishlist
+// (per H1.1's decision 3 — the old SearchModal it replaced was deleted in
+// H1.6f, so there is no second search surface). Library lights for BOTH /library and /wishlist
 // (they're one "my stuff" surface, entered via a tab — H1.6e). You lights for
 // /profile and its /settings sub-page.
 //
