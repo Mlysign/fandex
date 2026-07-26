@@ -9,6 +9,7 @@ import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
 import Panel from "@/components/ui/Panel";
 import Eyebrow from "@/components/ui/Eyebrow";
+import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
@@ -58,18 +59,6 @@ function RailSkeleton({ title }: { title: string }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <Panel className="flex-1 min-w-[7.5rem] px-4 py-3">
-      <div className="flex items-center gap-1.5 text-text-secondary mb-1">
-        {icon}
-        <Eyebrow tone="secondary">{label}</Eyebrow>
-      </div>
-      <div className="font-serif text-serif-lg text-text-primary">{value}</div>
-    </Panel>
   );
 }
 
