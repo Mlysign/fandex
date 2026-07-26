@@ -368,6 +368,8 @@ Home (net-new: stats strip, best-genre card, rails, anon variant), Discover (+ a
 
 **Copy sweep (D-C):** the mockups' empty-state copy promises "release reminders" in at least `wishlist.html`. Rewrite every such line — the UI must not advertise a feature that doesn't exist.
 
+**✅ Checked 2026-07-26 (Sonnet).** Grepped the live app (`src/`) for `remind`/`notif`/"we'll let you know"/"we'll alert you" — the only hit is a code comment in `CalendarView.tsx` documenting the D-C decision itself (the Agenda row's `BellPlus` is wired to add-to-wishlist, not a reminder). No shipped page copies the mockups' reminder-promising language; every empty state built so far (Home, Calendar) was written fresh against the real feature set, not lifted from `docs/design/fandex-handoff/*.html`. The mockup HTML files themselves were left untouched — they're a historical design reference, not a live surface, so there's nothing to "ship" by editing their copy. Re-check this whenever a new page's empty state is drafted directly from a mockup file rather than written fresh.
+
 Backend work lands here: **A5's typed search groups** and the **Home bundle shapes** (Popular / Upcoming / Recommendation — derivable from the Discover feed + Fandex scores, but no carousel-shaped endpoint exists).
 
 ### H1.6f — Cross-cutting QA
