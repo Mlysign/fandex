@@ -227,31 +227,31 @@ function SettingsContent() {
       {showRawgForm && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
           onClick={() => setShowRawgForm(false)}>
-          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-sm space-y-4"
+          <div className="bg-surface-elevated border border-border-strong rounded-2xl p-6 w-full max-w-sm space-y-4 text-text-primary"
             onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold">Connect RAWG</h3>
+            <h3 className="font-serif text-serif-md text-text-primary">Connect RAWG</h3>
             <form onSubmit={connectRawg} className="space-y-3">
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">RAWG email</label>
+                <label className="text-xs text-text-secondary block mb-1">RAWG email</label>
                 <input type="email" required
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+                  className="w-full bg-surface-inset border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
                   value={rawgEmail} onChange={(e) => setRawgEmail(e.target.value)} />
               </div>
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">RAWG password</label>
+                <label className="text-xs text-text-secondary block mb-1">RAWG password</label>
                 <input type="password" required
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+                  className="w-full bg-surface-inset border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
                   value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
               </div>
-              <p className="text-xs text-neutral-600">Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.</p>
+              <p className="text-xs text-text-secondary">Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.</p>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={rawgLoading}
                   className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                  style={{ background: "#4ade80", color: "#000" }}>
+                  style={{ background: "var(--color-success)", color: "var(--color-neutral-950)" }}>
                   {rawgLoading ? "Connecting..." : "Connect"}
                 </button>
                 <button type="button" onClick={() => setShowRawgForm(false)}
-                  className="px-4 py-2 rounded-lg text-sm text-neutral-500 hover:text-white border border-neutral-700 transition-colors">
+                  className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary border border-border-strong transition-colors">
                   Cancel
                 </button>
               </div>
@@ -266,19 +266,19 @@ function SettingsContent() {
       {showDelete && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
           onClick={() => !deleting && setShowDelete(false)}>
-          <div className="bg-neutral-900 border border-red-900/60 rounded-2xl p-6 w-full max-w-md space-y-4"
+          <div className="bg-surface-elevated border border-danger/40 rounded-2xl p-6 w-full max-w-md space-y-4"
             onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-red-300">Delete your account?</h3>
-            <p className="text-sm text-neutral-400">
+            <h3 className="font-serif text-serif-md text-danger">Delete your account?</h3>
+            <p className="text-sm text-text-secondary">
               This permanently deletes your Fandex account and everything attached to it. It cannot be undone.
             </p>
 
             {deleteFootprint && (
-              <ul className="text-sm text-neutral-400 bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 space-y-1">
+              <ul className="text-sm text-text-secondary bg-surface-inset border border-border rounded-lg px-4 py-3 space-y-1">
                 {DELETE_LABELS.filter(([table]) => (deleteFootprint[table] ?? 0) > 0).map(([table, label]) => (
                   <li key={table} className="flex justify-between gap-4">
                     <span>{label}</span>
-                    <span className="text-neutral-300">{deleteFootprint[table]}</span>
+                    <span className="text-text-primary">{deleteFootprint[table]}</span>
                   </li>
                 ))}
               </ul>
@@ -288,19 +288,19 @@ function SettingsContent() {
                 `retention`, so the effective window is Litestream's default and
                 nobody has confirmed it. H4.3's privacy policy has to state the
                 real figure — this text must not invent one first. */}
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-text-secondary">
               Your ratings and lists on Trakt, TMDB, Steam and RAWG are not affected — only what Fandex stores.
               Your data is removed immediately; copies in the backups age out with the backup retention window.
             </p>
 
             <div>
-              <label className="text-xs text-neutral-400 block mb-1">
-                Type <span className="font-mono text-neutral-200">DELETE</span> to confirm
+              <label className="text-xs text-text-secondary block mb-1">
+                Type <span className="font-mono text-text-primary">DELETE</span> to confirm
               </label>
               <input
                 aria-label="Type DELETE to confirm"
                 autoFocus
-                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-surface-inset border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-danger"
                 value={deleteConfirm}
                 onChange={(e) => setDeleteConfirm(e.target.value)}
               />
@@ -311,12 +311,12 @@ function SettingsContent() {
                 type="button"
                 onClick={deleteAccount}
                 disabled={deleteConfirm !== "DELETE" || deleting}
-                className="flex-1 py-2 rounded-lg text-sm font-medium bg-red-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 py-2 rounded-lg text-sm font-medium bg-danger text-neutral-950 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {deleting ? "Deleting..." : "Delete my account"}
               </button>
               <button type="button" onClick={() => setShowDelete(false)} disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm text-neutral-400 hover:text-white border border-neutral-700 transition-colors">
+                className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary border border-border-strong transition-colors">
                 Cancel
               </button>
             </div>
@@ -326,19 +326,19 @@ function SettingsContent() {
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="font-serif text-serif-xl text-text-primary">Settings</h1>
         </div>
 
         {notice && (
-          <div className={`border rounded-lg px-4 py-3 text-sm ${notice.ok ? "bg-green-900/30 border-green-700 text-green-300" : "bg-red-900/30 border-red-700 text-red-300"}`}>
+          <div className={`border rounded-lg px-4 py-3 text-sm ${notice.ok ? "bg-success-subtle border-success/40 text-success" : "bg-danger-subtle border-danger/40 text-danger"}`}>
             {notice.msg}
           </div>
         )}
 
         {/* Connected accounts */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Connected accounts</h2>
-          <p className="text-sm text-neutral-500">Any connected account can be used to log in.</p>
+          <h2 className="font-serif text-serif-md text-text-primary">Connected accounts</h2>
+          <p className="text-sm text-text-secondary">Any connected account can be used to log in.</p>
 
           {providers.map((p) => {
             const identity = getIdentity(p.key);
@@ -346,7 +346,7 @@ function SettingsContent() {
             const color = SOURCE_COLORS[p.key] ?? "#888";
 
             return (
-              <div key={p.key} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+              <div key={p.key} className="bg-surface-elevated border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
@@ -354,8 +354,8 @@ function SettingsContent() {
                       {p.label[0]}
                     </div>
                     <div>
-                      <p className="font-medium">{p.label}</p>
-                      <p className="text-sm text-neutral-400">
+                      <p className="font-medium text-text-primary">{p.label}</p>
+                      <p className="text-sm text-text-secondary">
                         {identity ? `@${identity.display_name ?? identity.provider_user_id}` : p.description}
                       </p>
                     </div>
@@ -364,7 +364,7 @@ function SettingsContent() {
                   <div className="flex items-center gap-2">
                     {identity ? (
                       <>
-                        <span className="text-xs bg-green-900/30 text-green-400 px-2.5 py-1 rounded-full border border-green-800">
+                        <span className="text-xs bg-success-subtle text-success px-2.5 py-1 rounded-full border border-success/40">
                           Connected
                         </span>
                         <Button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}>
@@ -393,12 +393,12 @@ function SettingsContent() {
                 </div>
 
                 {log && (
-                  <p className="text-xs text-neutral-600">
+                  <p className="text-xs text-text-secondary">
                     Last synced {new Date(log.last_sync * 1000).toLocaleString()} · {log.item_count} items · {log.status}
                   </p>
                 )}
                 {!p.canWrite && identity && (
-                  <p className="text-xs text-neutral-600 mt-1">
+                  <p className="text-xs text-text-secondary mt-1">
                     {/* Template string, not JSX text: the space after {p.label} gets
                         swallowed in the compiled output (SM5). */}
                     {`Read-only – ${p.label} doesn’t support adding to wishlist via API`}
@@ -413,12 +413,12 @@ function SettingsContent() {
             linked the buttons all vanish — say so instead of rendering an
             empty section. */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Add login method</h2>
+          <h2 className="font-serif text-serif-md text-text-primary">Add login method</h2>
           {getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg") ? (
-            <p className="text-sm text-neutral-500">All available login methods are connected — any of them can sign you in.</p>
+            <p className="text-sm text-text-secondary">All available login methods are connected — any of them can sign you in.</p>
           ) : (
           <>
-          <p className="text-sm text-neutral-500">Connect another account to log in with it in the future.</p>
+          <p className="text-sm text-text-secondary">Connect another account to log in with it in the future.</p>
           {/*
             <a>, not <Link>: these hand off to an OAuth endpoint and Link would
             client-side navigate, breaking the redirect. The rule fires only
@@ -454,19 +454,19 @@ function SettingsContent() {
 
         {/* Region (T22) */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Region</h2>
-          <p className="text-sm text-neutral-500">Controls which release dates and streaming availability you see.</p>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex items-center justify-between gap-4">
+          <h2 className="font-serif text-serif-md text-text-primary">Region</h2>
+          <p className="text-sm text-text-secondary">Controls which release dates and streaming availability you see.</p>
+          <div className="bg-surface-elevated border border-border rounded-xl p-5 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="font-medium text-sm">Country</p>
-              <p className="text-xs text-neutral-500">Release dates and &ldquo;where to watch&rdquo; use this region.</p>
+              <p className="font-medium text-sm text-text-primary">Country</p>
+              <p className="text-xs text-text-secondary">Release dates and &ldquo;where to watch&rdquo; use this region.</p>
             </div>
             <select
               aria-label="Country"
               value={country}
               disabled={savingCountry || !country}
               onChange={(e) => saveCountry(e.target.value)}
-              className="flex-shrink-0 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-500 disabled:opacity-50"
+              className="flex-shrink-0 bg-surface-inset border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent disabled:opacity-50"
             >
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>{c.name}</option>
@@ -477,27 +477,27 @@ function SettingsContent() {
 
         {/* Account info */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Account</h2>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-2 text-sm">
+          <h2 className="font-serif text-serif-md text-text-primary">Account</h2>
+          <div className="bg-surface-elevated border border-border rounded-xl p-5 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-neutral-400">Logged in as</span>
-              <span>{user?.displayName} via {user?.provider}</span>
+              <span className="text-text-secondary">Logged in as</span>
+              <span className="text-text-primary">{user?.displayName} via {user?.provider}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-neutral-400">Watchlist items</span>
-              <span>{itemCount}</span>
+              <span className="text-text-secondary">Watchlist items</span>
+              <span className="text-text-primary">{itemCount}</span>
             </div>
           </div>
         </section>
 
         {/* Your data (H4.6 + H4.7 — GDPR Art. 17 + Art. 20) */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Your data</h2>
+          <h2 className="font-serif text-serif-md text-text-primary">Your data</h2>
 
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex items-center justify-between gap-4">
+          <div className="bg-surface-elevated border border-border rounded-xl p-5 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="font-medium text-sm">Download your data</p>
-              <p className="text-xs text-neutral-500">
+              <p className="font-medium text-sm text-text-primary">Download your data</p>
+              <p className="text-xs text-text-secondary">
                 Everything Fandex stores about you — library, wishlist, ratings and connected accounts — as a JSON file.
               </p>
             </div>
@@ -506,10 +506,10 @@ function SettingsContent() {
             </Button>
           </div>
 
-          <div className="bg-neutral-900 border border-red-900/50 rounded-xl p-5 flex items-center justify-between gap-4">
+          <div className="bg-surface-elevated border border-danger/40 rounded-xl p-5 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="font-medium text-sm text-red-300">Delete your account</p>
-              <p className="text-xs text-neutral-500">
+              <p className="font-medium text-sm text-danger">Delete your account</p>
+              <p className="text-xs text-text-secondary">
                 Permanently removes your account and everything in it. This cannot be undone.
               </p>
             </div>
