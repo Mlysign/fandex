@@ -10,7 +10,7 @@ import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
 import { syncToCompletion } from "@/lib/syncClient";
-import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
+import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import { usePageTitle } from "@/lib/usePageTitle";
 import CalendarView from "@/components/CalendarView";
@@ -111,9 +111,6 @@ export default function LibraryPage() {
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
   useScrollRestore("rr_library_scroll", !loading && sorted.length > 0);
-  // N2: sampled once on mount — if a Back-nav restore is pending, don't let
-  // GroupedView's today-scroll fight it.
-  const [autoToday] = useState(() => !hasSavedScroll("rr_library_scroll"));
 
   return (
     <div className="min-h-screen">
@@ -180,7 +177,15 @@ export default function LibraryPage() {
               ratingOf={ratingOf}
               onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))}
               highlightId={highlightId}
-              autoScrollToToday={autoToday}
+              // Q3 (H1.6f): Library never auto-scrolls to today. It's an
+              // archive of what you've ALREADY watched/played, so "today or
+              // the next release date" is the far unreleased edge of the
+              // list — landing there dropped you into a pile of TBA/
+              // unreleased games instead of your library. Wishlist keeps the
+              // behaviour: it's forward-looking, so "what's next" IS the
+              // point of the page. Back-nav scroll restore is unaffected —
+              // that's useScrollRestore above, a separate mechanism.
+              autoScrollToToday={false}
             />
           </ErrorBoundary>
         )}
