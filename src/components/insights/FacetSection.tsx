@@ -45,11 +45,11 @@ function TagCategoryHoverPanel({ tagKey, categoryId, categories }: { tagKey: str
         defaultValue={categoryId}
         disabled={saving}
         onChange={(e) => save(e.target.value)}
-        className="text-xs px-2 py-1 rounded-md bg-neutral-900 border border-neutral-700 outline-none shadow-xl whitespace-nowrap"
+        className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
       >
         {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
       </select>
-      {saved && <span className="text-emerald-400 text-xs">Saved ✓</span>}
+      {saved && <span className="text-success text-xs">Saved ✓</span>}
     </div>
   );
 }
@@ -74,11 +74,11 @@ function FacetGroup({
   const shown = expanded ? sorted : sorted.slice(0, limit);
 
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+    <div className="rounded-xl border border-border bg-surface-elevated p-3">
       <div className="flex items-center gap-2 mb-2">
         <span className="w-2 h-2 rounded-full" style={{ background: group.color }} />
-        <span className="text-sm font-medium text-neutral-200">{group.label}</span>
-        <span className="text-xs text-neutral-600">{eligibleCount}</span>
+        <span className="text-sm font-medium text-text-primary">{group.label}</span>
+        <span className="text-xs text-text-secondary">{eligibleCount}</span>
       </div>
       <div className="space-y-0.5">
         {shown.map((f) => (
@@ -91,13 +91,13 @@ function FacetGroup({
           ? sorted.length > limit && (
               <button
                 onClick={() => setExpanded((v) => !v)}
-                className="text-[11px] text-neutral-500 hover:text-white px-1 pt-1"
+                className="text-[11px] text-text-secondary hover:text-text-primary px-1 pt-1"
               >
                 {expanded ? "Show less" : `Show ${sorted.length - limit} more`}
               </button>
             )
           : sorted.length > PER_GROUP && (
-              <p className="text-[11px] text-neutral-600 px-1 pt-1">+{sorted.length - PER_GROUP} more — search to find them</p>
+              <p className="text-[11px] text-text-secondary px-1 pt-1">+{sorted.length - PER_GROUP} more — search to find them</p>
             )}
       </div>
     </div>
@@ -174,38 +174,38 @@ export default function FacetSection({
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-300">{title}</h2>
+        <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-text-secondary">{title}</h2>
         <div className="flex items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search ${kind === "company" ? "studios" : kind + "s"}…`}
-            className="text-xs px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 focus:border-neutral-600 outline-none w-44"
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-elevated border border-border focus:border-border-strong outline-none w-44 text-text-primary placeholder:text-text-secondary"
           />
           {!q && (
             <>
-              <div className="flex items-center gap-1 text-xs text-neutral-500">
+              <div className="flex items-center gap-1 text-xs text-text-secondary">
                 <span>min</span>
-                <button onClick={() => setMinCount((c) => Math.max(1, c - 1))} className="px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 hover:text-white">−</button>
-                <span className="w-5 text-center tabular-nums text-neutral-300">{minCount}</span>
-                <button onClick={() => setMinCount((c) => c + 1)} className="px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 hover:text-white">+</button>
+                <button onClick={() => setMinCount((c) => Math.max(1, c - 1))} className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border hover:text-text-primary">−</button>
+                <span className="w-5 text-center tabular-nums text-text-primary">{minCount}</span>
+                <button onClick={() => setMinCount((c) => c + 1)} className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border hover:text-text-primary">+</button>
               </div>
-              <div className="flex rounded-lg border border-neutral-800 overflow-hidden text-xs">
-                <button onClick={() => setSort("top")} className={`px-2 py-1 ${sort === "top" ? "bg-neutral-800 text-white" : "text-neutral-500 hover:text-white"}`}>Highest</button>
-                <button onClick={() => setSort("bottom")} className={`px-2 py-1 ${sort === "bottom" ? "bg-neutral-800 text-white" : "text-neutral-500 hover:text-white"}`}>Lowest</button>
+              <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                <button onClick={() => setSort("top")} className={`px-2 py-1 transition-colors ${sort === "top" ? "bg-accent-subtle text-accent" : "text-text-secondary hover:text-text-primary"}`}>Highest</button>
+                <button onClick={() => setSort("bottom")} className={`px-2 py-1 transition-colors ${sort === "bottom" ? "bg-accent-subtle text-accent" : "text-text-secondary hover:text-text-primary"}`}>Lowest</button>
               </div>
             </>
           )}
         </div>
       </div>
-      <p className="text-xs text-neutral-600 mb-3">{subtitle}</p>
+      <p className="text-xs text-text-secondary mb-3">{subtitle}</p>
 
       {q ? (
         // ── Search results ──
         searchResults.length === 0 ? (
-          <p className="text-sm text-neutral-600 py-6 text-center">No matches for “{query}”.</p>
+          <p className="text-sm text-text-secondary py-6 text-center">No matches for “{query}”.</p>
         ) : (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-2">
+          <div className="rounded-xl border border-border bg-surface-elevated p-2">
             {searchResults.map((f) => (
               <StatBar
                 key={`${f.role ?? ""}|${f.key}`}

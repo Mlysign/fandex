@@ -33,7 +33,7 @@ export default function Histogram({
               onClick={clickable ? () => onBarClick!(d.bucket) : undefined}
             >
               {!compact && d.count > 0 && (
-                <span className="text-[9px] leading-none text-neutral-500 mb-0.5 tabular-nums">{d.count}</span>
+                <span className="text-[9px] leading-none text-text-secondary mb-0.5 tabular-nums">{d.count}</span>
               )}
               <div
                 className="w-full rounded-t transition-all group-hover:brightness-125"
@@ -47,7 +47,7 @@ export default function Histogram({
                 }}
                 title={`${d.bucket.toFixed(1)} — ${d.count}`}
               />
-              <span className="text-[9px] leading-none text-neutral-600 mt-1 h-2.5 tabular-nums">
+              <span className="text-[9px] leading-none text-text-secondary mt-1 h-2.5 tabular-nums">
                 {isInt ? d.bucket : ""}
               </span>
             </div>

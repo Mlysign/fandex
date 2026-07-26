@@ -2,10 +2,10 @@
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="text-xs text-neutral-400 mt-0.5">{label}</div>
-      {sub && <div className="text-[11px] text-neutral-600 mt-0.5">{sub}</div>}
+    <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+      <div className="text-2xl font-semibold tabular-nums text-text-primary">{value}</div>
+      <div className="text-xs text-text-secondary mt-0.5">{label}</div>
+      {sub && <div className="text-[11px] text-text-secondary mt-0.5">{sub}</div>}
     </div>
   );
 }

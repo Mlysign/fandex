@@ -17,7 +17,7 @@ export default function StatBar({
 }) {
   const inner = (
     <div className="flex items-center gap-3 px-1 py-1" title={title ?? label}>
-      <span className="w-40 shrink-0 text-sm truncate text-neutral-300">{label}</span>
+      <span className="w-40 shrink-0 text-sm truncate text-text-secondary">{label}</span>
       <div className="relative flex-1 h-2.5 rounded-full bg-neutral-800 overflow-hidden">
         <div
           className="h-full rounded-full"
@@ -31,10 +31,10 @@ export default function StatBar({
           />
         )}
       </div>
-      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-neutral-400">
-        {value.toFixed(1)} <span className="text-neutral-600">×{count}</span>
+      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-text-secondary">
+        {value.toFixed(1)} <span className="text-text-secondary">×{count}</span>
         {rawAvg != null && Math.abs(rawAvg - value) >= 0.05 && (
-          <span className="block text-[10px] text-neutral-600">avg {rawAvg.toFixed(1)}</span>
+          <span className="block text-[10px] text-text-secondary">avg {rawAvg.toFixed(1)}</span>
         )}
       </span>
     </div>
@@ -42,7 +42,7 @@ export default function StatBar({
 
   if (href) {
     return (
-      <Link href={href} className="block rounded-md -mx-1 px-1 hover:bg-neutral-800/60 transition-colors">
+      <Link href={href} className="block rounded-md -mx-1 px-1 hover:bg-surface-elevated transition-colors">
         {inner}
       </Link>
     );

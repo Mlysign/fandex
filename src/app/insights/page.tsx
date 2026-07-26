@@ -1,10 +1,14 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BarChart3 } from "lucide-react";
 import InsightsView from "@/components/insights/InsightsView";
 import { InsightsPayload } from "@/components/insights/types";
 import { usePageTitle } from "@/lib/usePageTitle";
+import Spinner from "@/components/ui/Spinner";
+import EmptyState from "@/components/ui/EmptyState";
+import ErrorState from "@/components/ui/ErrorState";
 
 type Status = "loading" | "ready" | "empty" | "error";
 
@@ -14,9 +18,8 @@ export default function InsightsPage() {
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<InsightsPayload | null>(null);
 
-  useEffect(() => { init(); }, []);
-
-  async function init() {
+  const init = useCallback(async () => {
+    setStatus("loading");
     const me = await fetch("/api/auth/me");
     const meData = await me.json();
     if (!meData.user) { router.push("/"); return; }
@@ -30,28 +33,35 @@ export default function InsightsPage() {
     } catch {
       setStatus("error");
     }
-  }
+  }, [router]);
+
+  // Fetch-on-mount: the server can't know the session, so the auth-gate + the
+  // insights payload are both resolved client-side. Same justified disable the
+  // discover/insights/item-detail islands already use for this pattern.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { init(); }, [init]);
 
   return (
     <div className="min-h-screen">
       <main className="max-w-6xl mx-auto px-6 py-6">
         <div className="mb-6">
-          <h1 className="text-xl font-bold">Library insights</h1>
-          <p className="text-sm text-neutral-500">What your ratings reveal about your taste — tags, people, studios and more.</p>
+          <h1 className="font-serif text-serif-xl text-text-primary">Library insights</h1>
+          <p className="text-sm text-text-secondary">What your ratings reveal about your taste — tags, people, studios and more.</p>
         </div>
 
-        {status === "loading" && <div className="text-center py-20 text-neutral-500">Analyzing your library…</div>}
+        {status === "loading" && (
+          <div className="py-20 flex justify-center"><Spinner label="Analyzing your library…" /></div>
+        )}
         {status === "error" && (
-          <div className="text-center py-20 text-neutral-500">
-            <p className="mb-3">Couldn&apos;t load your insights.</p>
-            <button onClick={init} className="text-xs underline text-neutral-400">Try again</button>
-          </div>
+          <ErrorState title="Couldn't load your insights" hint="Check your connection and try again." onRetry={init} />
         )}
         {status === "empty" && (
-          <div className="text-center py-20 text-neutral-500">
-            <p className="mb-1">No rated items in your library yet.</p>
-            <p className="text-xs">Rate a few games, movies or shows, then come back — every chart here is built from your ratings. <Link href="/library" className="underline hover:text-white">Go to Library →</Link></p>
-          </div>
+          <EmptyState
+            icon={<BarChart3 className="w-5 h-5" aria-hidden />}
+            title="No rated items in your library yet"
+            hint="Rate a few games, movies or shows, then come back — every chart here is built from your ratings."
+            actions={<Link href="/library" className="text-label text-accent hover:underline">Go to Library →</Link>}
+          />
         )}
         {status === "ready" && data && <InsightsView data={data} />}
       </main>
