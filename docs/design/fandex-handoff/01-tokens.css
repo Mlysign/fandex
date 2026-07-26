@@ -1,0 +1,189 @@
+/* ============================================================================
+   Fandex — Design Tokens  ·  Direction 2a "Ticket · Calm"
+   Tailwind CSS v4 — CSS-first @theme (NO tailwind.config.js)
+   Import once, globally:  @import "tailwindcss";  then this file.
+
+   DARK IS PRIMARY and is the product default. A light theme is provided at the
+   bottom as ADDITIVE only (see [data-theme="light"]).
+
+   Values are exact. Where a token is intentionally translucent (hairline
+   borders, scrims, tint fills) it is expressed as rgb()/oklch() with alpha —
+   this is deliberate so borders read against any surface underneath.
+
+   Source of truth: this file. 02-tokens.json mirrors it 1:1 — keep in sync.
+   ========================================================================== */
+
+@theme {
+  /* ---- Font families ------------------------------------------------------
+     Production fonts. Load via next/font (self-hosted) — do NOT use a CDN.
+     Fallbacks matter: static mockups in 04-pages/ use the fallbacks only. */
+  --font-serif: "DM Serif Display", Georgia, "Times New Roman", serif; /* display / titles / stat numbers */
+  --font-sans:  "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif; /* body / UI */
+  --font-mono:  "Space Mono", ui-monospace, "SF Mono", Menlo, monospace; /* eyebrows / metadata / numeric labels */
+
+  /* ---- Neutral ramp (warm, brown-black → warm-parchment) -------------------
+     The whole surface system is built from this ramp. */
+  --color-neutral-950: #0B0A08; /* deepest — device / app letterbox */
+  --color-neutral-900: #100E0C; /* APP BACKGROUND / base surface */
+  --color-neutral-850: #15120F;
+  --color-neutral-800: #181512; /* ELEVATED surface — cards, panels, inputs */
+  --color-neutral-750: #201C18; /* OVERLAY surface — sheets, modals, menus */
+  --color-neutral-700: #2A2521; /* raised / hover-elevate, poster top stop */
+  --color-neutral-600: #3A342E; /* strong divider on elevated */
+  --color-neutral-500: #6F665A; /* muted / disabled text (LARGE or non-text only) */
+  --color-neutral-400: #8A8175; /* min for small secondary text (AA) */
+  --color-neutral-300: #9A8F80; /* secondary text */
+  --color-neutral-200: #C3B8A8; /* secondary-strong */
+  --color-neutral-100: #D8CFC0;
+  --color-neutral-50:  #EDE7DC; /* PRIMARY text / foreground */
+
+  /* ---- Semantic surface + text -------------------------------------------- */
+  --color-surface:          #100E0C;
+  --color-surface-elevated: #181512;
+  --color-surface-overlay:  #201C18;
+  --color-surface-inset:    #0B0A08; /* wells inside elevated (e.g. progress track base) */
+
+  --color-border:        rgb(237 231 220 / 0.09); /* default hairline */
+  --color-border-strong: rgb(237 231 220 / 0.14); /* interactive outline, chip border */
+  --color-border-focus:  #C8A24B;                 /* focus ring color (accent) */
+
+  --color-text-primary:   #EDE7DC;
+  --color-text-secondary: #9A8F80;
+  --color-text-muted:     #6F665A; /* see a11y: large/non-text only */
+  --color-text-on-accent: #100E0C; /* text/icon on gold fills */
+  --color-text-on-media:  #100E0C; /* text/icon on media-color fills */
+
+  /* ---- Brand accent (gold) — the single primary accent -------------------- */
+  --color-accent:         #C8A24B;
+  --color-accent-hover:   #D4B063;
+  --color-accent-active:  #B08C3B;
+  --color-accent-subtle:  rgb(200 162 75 / 0.14); /* tint fill behind accent text */
+
+  /* ---- Status ------------------------------------------------------------- */
+  --color-success: #5FE39A;
+  --color-warning: #F0A04B;
+  --color-danger:  #E5674C;
+  --color-danger-hover: #EC7A62;
+  --color-success-subtle: rgb(95 227 154 / 0.14);
+  --color-warning-subtle: rgb(240 160 75 / 0.14);
+  --color-danger-subtle:  rgb(229 103 76 / 0.14);
+
+  /* ---- Media-type accents (SHIPPING VALUES — do not retint) ----------------
+     These ship today and other features depend on them. Direction 2a's
+     mockups originally used earthier variants; the tokens intentionally keep
+     the shipping hexes. See 05-DELTA.md §(c). */
+  --color-media-game:  #4ade80;
+  --color-media-movie: #f59e0b;
+  --color-media-show:  #a78bfa;
+
+  /* ---- Fandex Score badge ramp (0–100, around a neutral baseline) ----------
+     >= 80 high (success) · 65–79 baseline (neutral) · < 65 low (warning) */
+  --color-score-high:     #5FE39A;
+  --color-score-baseline: #CFC9BE;
+  --color-score-low:      #F0A04B;
+
+  /* ---- Type scale  (size · line-height · weight; family noted) -------------
+     Serif = DM Serif Display (display). Sans = Space Grotesk. Mono = Space Mono. */
+  --text-eyebrow: 9px;   --text-eyebrow--line-height: 1;    --text-eyebrow--font-weight: 400;  --text-eyebrow--letter-spacing: 0.13em; /* mono, UPPERCASE */
+  --text-micro:   8px;   --text-micro--line-height: 1;      --text-micro--font-weight: 400;    --text-micro--letter-spacing: 0.06em;   /* mono, nav labels/chips */
+  --text-meta:    10px;  --text-meta--line-height: 1.4;     --text-meta--font-weight: 400;      /* mono, metadata */
+  --text-caption: 11px;  --text-caption--line-height: 1.5;  --text-caption--font-weight: 400;   /* sans */
+  --text-body-sm: 12px;  --text-body-sm--line-height: 1.55; --text-body-sm--font-weight: 400;   /* sans */
+  --text-body:    13px;  --text-body--line-height: 1.6;     --text-body--font-weight: 400;      /* sans */
+  --text-label:   11px;  --text-label--line-height: 1;      --text-label--font-weight: 600;     /* sans, buttons/chips */
+  --text-label-lg:12.5px;--text-label-lg--line-height: 1;   --text-label-lg--font-weight: 600;  /* sans, primary buttons */
+  --text-title:   15px;  --text-title--line-height: 1.15;   --text-title--font-weight: 600;     /* sans, dense list title alt */
+  --text-serif-sm:  15px; --text-serif-sm--line-height: 1.15; --text-serif-sm--font-weight: 400; /* serif, card title */
+  --text-serif-md:  21px; --text-serif-md--line-height: 1.1;  --text-serif-md--font-weight: 400; /* serif, section header */
+  --text-serif-lg:  26px; --text-serif-lg--line-height: 1.02; --text-serif-lg--font-weight: 400; /* serif, stat numbers */
+  --text-serif-xl:  30px; --text-serif-xl--line-height: 1;    --text-serif-xl--font-weight: 400; /* serif, page title */
+  --text-serif-2xl: 34px; --text-serif-2xl--line-height: 0.98;--text-serif-2xl--font-weight: 400;/* serif, detail hero */
+
+  /* ---- Spacing (4px base; explicit steps used across the system) ---------- */
+  --spacing: 4px;                 /* Tailwind multiplies this: p-2 = 8px, etc. */
+  --spacing-hairline: 1px;
+  --spacing-2xs: 2px;
+  --spacing-xs:  6px;
+  --spacing-sm:  8px;
+  --spacing-md:  12px;
+  --spacing-lg:  16px;
+  --spacing-xl:  20px;   /* screen gutter (mobile) */
+  --spacing-2xl: 24px;
+  --spacing-3xl: 26px;
+  --spacing-section: 44px; /* desktop section padding */
+
+  /* ---- Radius ------------------------------------------------------------- */
+  --radius-xs:   4px;   /* mono chips, tiny plates */
+  --radius-sm:   7px;   /* inline action buttons */
+  --radius-md:   10px;  /* poster card container */
+  --radius-lg:   12px;  /* panels, inputs, list cards */
+  --radius-xl:   16px;  /* modals / bottom sheets */
+  --radius-2xl:  20px;
+  --radius-full: 999px; /* pills, chips, avatars, filter circles */
+
+  /* ---- Elevation / shadow -------------------------------------------------
+     Cards use BORDER, not shadow. Shadow is reserved for lifted surfaces. */
+  --shadow-none: none;
+  --shadow-sm:  0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md:  0 8px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-lg:  0 20px 48px -16px rgb(0 0 0 / 0.6);  /* menus, popovers */
+  --shadow-sheet: 0 -12px 40px -8px rgb(0 0 0 / 0.55); /* bottom sheet, casts upward */
+  --shadow-focus: 0 0 0 2px #100E0C, 0 0 0 4px #C8A24B; /* offset focus ring */
+
+  /* ---- Motion ------------------------------------------------------------- */
+  --duration-instant: 80ms;
+  --duration-fast:    120ms;  /* hover / press feedback */
+  --duration-base:    200ms;  /* most transitions */
+  --duration-slow:    320ms;  /* sheet / view change */
+  --ease-standard:    cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate:  cubic-bezier(0, 0, 0, 1);   /* enter */
+  --ease-accelerate:  cubic-bezier(0.3, 0, 1, 1); /* exit */
+  --ease-emphasized:  cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- Layout ------------------------------------------------------------- */
+  --breakpoint-desktop: 768px; /* nav flips: bottom-bar < 768px ≤ top-bar */
+  --size-touch-min: 44px;      /* minimum interactive target (mobile) */
+  --size-nav-bar-mobile: 64px; /* bottom nav height (excl. safe-area inset) */
+  --size-nav-bar-desktop: 60px;/* top nav height */
+  --container-max: 1200px;     /* desktop content max-width */
+}
+
+/* ============================================================================
+   LIGHT THEME — ADDITIVE, NOT DEFAULT.
+   Opt-in via <html data-theme="light">. Ship dark; light is a later add.
+   Media, status and score hexes are unchanged; accent darkens for contrast.
+   ========================================================================== */
+[data-theme="light"] {
+  --color-surface:          #F5F1E8;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-overlay:  #FFFFFF;
+  --color-surface-inset:    #ECE6DA;
+
+  --color-border:        rgb(27 23 18 / 0.12);
+  --color-border-strong: rgb(27 23 18 / 0.20);
+  --color-border-focus:  #8A6A1E;
+
+  --color-text-primary:   #1B1712;
+  --color-text-secondary: #5A5045;
+  --color-text-muted:     #8A8175;
+  --color-text-on-accent: #FFFFFF;
+  --color-text-on-media:  #1B1712;
+
+  --color-accent:        #8A6A1E; /* darker gold — 4.5:1+ as text on light */
+  --color-accent-hover:  #9E7C2C;
+  --color-accent-active: #74561A;
+  --color-accent-subtle: rgb(138 106 30 / 0.12);
+
+  --color-danger:  #C0442C;
+  --color-success: #1F8F5B;
+  --color-warning: #B9741F;
+
+  --color-score-high:     #1F8F5B;
+  --color-score-baseline: #6B6357;
+  --color-score-low:      #B9741F;
+
+  --shadow-sm: 0 1px 2px rgb(27 23 18 / 0.10);
+  --shadow-md: 0 8px 24px -8px rgb(27 23 18 / 0.16);
+  --shadow-lg: 0 20px 48px -16px rgb(27 23 18 / 0.20);
+  --shadow-focus: 0 0 0 2px #F5F1E8, 0 0 0 4px #8A6A1E;
+}

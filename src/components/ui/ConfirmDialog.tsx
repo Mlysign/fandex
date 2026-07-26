@@ -1,9 +1,12 @@
 "use client";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
+import Sheet from "@/components/ui/Sheet";
 
-// Styled confirm dialog (T27/U11) — replaces the blocking native `confirm()`
-// (settings disconnect) with an in-app modal in the house style. Promise-based:
+// Styled confirm dialog (T27/U11, restyled H1.6b onto the shared <Sheet>
+// primitive — focus trap + Escape + return-focus now come from there) —
+// replaces the blocking native `confirm()` (settings disconnect) with an
+// in-app modal in the house style. Promise-based:
 // `const ok = await confirm({ title, message, danger: true })`.
 
 interface ConfirmOptions {
@@ -23,10 +26,12 @@ export function useConfirm() {
 
 export default function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
+  const [open, setOpen] = useState(false);
   const resolver = useRef<((v: boolean) => void) | null>(null);
 
   const confirm = useCallback<ConfirmFn>((options) => {
     setOpts(options);
+    setOpen(true);
     return new Promise<boolean>((resolve) => {
       resolver.current = resolve;
     });
@@ -35,26 +40,20 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
   const close = (value: boolean) => {
     resolver.current?.(value);
     resolver.current = null;
-    setOpts(null);
+    setOpen(false);
+    // opts stays set — Sheet keeps rendering the closing dialog's content
+    // through its exit transition; the next confirm() overwrites it before
+    // it's shown again.
   };
 
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      {opts && (
-        <div
-          className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4"
-          onClick={() => close(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label={opts.title}
-        >
-          <div
-            className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-sm space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-semibold text-base">{opts.title}</h3>
-            {opts.message && <p className="text-sm text-neutral-400 leading-relaxed">{opts.message}</p>}
+      <Sheet open={open} onClose={() => close(false)} title={opts?.title ?? "Confirm"} className="p-5 sm:p-6">
+        {opts && (
+          <div className="space-y-4">
+            <h3 className="font-serif text-serif-md text-text-primary">{opts.title}</h3>
+            {opts.message && <p className="text-body-sm text-text-secondary leading-relaxed">{opts.message}</p>}
             <div className="flex gap-2 justify-end pt-1">
               <Button variant="ghost" onClick={() => close(false)}>
                 {opts.cancelLabel ?? "Cancel"}
@@ -68,8 +67,8 @@ export default function ConfirmProvider({ children }: { children: React.ReactNod
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Sheet>
     </ConfirmContext.Provider>
   );
 }

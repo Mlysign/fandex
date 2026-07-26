@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fandex · Discover — mockup (2a)</title>
+<!-- SELF-CONTAINED: no network. Fonts fall back (prod = DM Serif Display/Space Grotesk/Space Mono). -->
+<style>
+  :root{--bg:#0B0A08;--surface:#100E0C;--elev:#181512;--overlay:#201C18;--border:rgba(237,231,220,.09);
+    --border-strong:rgba(237,231,220,.14);--tx:#EDE7DC;--sec:#9A8F80;--min:#8A8175;--muted:#6F665A;
+    --accent:#C8A24B;--accent-sub:rgba(200,162,75,.14);--game:#4ade80;--movie:#f59e0b;--show:#a78bfa;
+    --ok:#5FE39A;--warn:#F0A04B;--danger:#E5674C;--score-base:#CFC9BE;
+    --serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:var(--sans);color:var(--tx);padding:28px;-webkit-font-smoothing:antialiased}
+  h1.board{font:600 18px var(--sans);margin:0 0 4px}
+  p.board{font:400 13px/1.5 var(--sans);color:var(--sec);max-width:760px;margin:0 0 24px}
+  .row{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+  .framew{display:flex;flex-direction:column;gap:10px}
+  .flabel{font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#b9b2a4;
+    background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;padding:4px 9px;align-self:flex-start}
+  .screen{width:360px;background:var(--surface);border-radius:26px;border:1px solid var(--border-strong);overflow:hidden}
+  .sb{display:flex;justify-content:space-between;align-items:center;padding:12px 22px 2px;font:400 12px var(--mono);color:var(--tx)}
+  .sb .r{display:flex;gap:6px;align-items:center}
+  .ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .ic-f{fill:currentColor;stroke:none}
+  .gut{padding-left:20px;padding-right:20px}
+  .eyebrow{font:400 9px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
+  .h3{font:400 21px var(--serif);margin:0}
+  .iconbtn{width:38px;height:38px;border-radius:12px;background:var(--elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--sec)}
+  .panel{background:var(--elev);border:1px solid var(--border);border-radius:12px}
+  .filterrow{display:flex;gap:8px}
+  .fchip{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-strong);color:var(--sec)}
+  .fchip.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+  .search{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;background:var(--elev);border:1px solid var(--border);color:var(--sec);font:400 13px var(--sans)}
+  .search.active{border-color:rgba(200,162,75,.45)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--elev);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .poster{position:relative;width:100%;aspect-ratio:2/3;background:linear-gradient(175deg,#231f1b,#141110)}
+  .poster .stripes{position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0 2px,transparent 2px 11px)}
+  .poster .plabel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(237,231,220,.13);font:400 9px var(--mono);letter-spacing:.16em}
+  .typechip{position:absolute;top:8px;left:8px;display:flex;align-items:center;gap:5px;padding:3px 8px 3px 6px;border-radius:999px;background:rgba(16,14,12,.62)}
+  .dot{width:6px;height:6px;border-radius:50%}
+  .typechip span{font:400 8px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--tx)}
+  .cbody{padding:10px 11px;display:flex;flex-direction:column;gap:7px}
+  .ctitle{font:400 15px var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmeta{display:flex;align-items:center;justify-content:space-between}
+  .cmeta .rel{font:400 9px var(--mono);color:var(--sec)}
+  .score{font:400 19px var(--serif)}
+  .score .of{font:400 8px var(--mono);color:var(--sec)}
+  .actions{display:flex;gap:6px;margin-top:1px}
+  .abtn{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:6px 0;border-radius:7px;background:rgba(237,231,220,.06);border:1px solid rgba(237,231,220,.07);color:var(--tx);font:600 10px var(--sans)}
+  .abtn.sq{flex:none;width:32px;color:var(--sec)}
+  .sortbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px 12px}
+  .sortpill{display:flex;align-items:center;gap:5px;font:400 10px var(--mono);color:var(--sec)}
+  .navbar{display:flex;justify-content:space-around;align-items:center;padding:10px 6px 18px;border-top:1px solid var(--border);background:var(--surface)}
+  .nav{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--min)}
+  .nav.on{color:var(--accent)}
+  .nav span{font:400 8px var(--mono);letter-spacing:.04em}
+  .tri{display:flex;border:1px solid var(--border-strong);border-radius:999px;overflow:hidden}
+  .tri span{padding:5px 12px;font:600 10px var(--sans);color:var(--sec)}
+  .tri .inc{background:var(--accent);color:var(--surface)}
+  .tri .exc{background:var(--danger);color:var(--surface)}
+  .frow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--border)}
+  .frow .fl{font:500 11.5px var(--sans);color:var(--tx)}
+  .tag{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:999px;font:600 10.5px var(--sans)}
+  .tag.inc{background:var(--accent);color:var(--surface)}
+  .tag.exc{border:1px solid rgba(229,103,76,.55);color:#e88b76}
+  .tag.add{border:1px dashed var(--border-strong);color:var(--sec)}
+  .sheet{border-radius:16px 16px 26px 26px;background:var(--overlay);border-top:1px solid var(--border);box-shadow:0 -12px 40px -8px rgba(0,0,0,.55)}
+  .grab{width:36px;height:4px;border-radius:2px;background:var(--muted);margin:10px auto 4px}
+  .sk{background:var(--elev);border-radius:6px;position:relative;overflow:hidden}
+  .sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(237,231,220,.06),transparent);transform:translateX(-100%);animation:sh 1.2s linear infinite}
+  @keyframes sh{to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.sk::after{display:none}}
+  .empty,.error{margin:0 20px;padding:30px 18px;border-radius:12px;background:var(--elev);border:1px solid var(--border);text-align:center}
+  .tile{width:40px;height:40px;margin:0 auto 12px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+  .tile.a{background:var(--accent-sub);color:var(--accent)}
+  .tile.d{background:rgba(229,103,76,.14);color:var(--danger)}
+  .esr{font:400 18px var(--serif);margin-bottom:6px}
+  .esm{font:400 10.5px/1.5 var(--mono);color:var(--sec)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;font:600 11px var(--sans)}
+  .btn.primary{background:var(--accent);color:var(--surface);padding:9px 16px}
+  .btn.sec{background:var(--elev);border:1px solid var(--border-strong);color:var(--tx);padding:9px 16px}
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="i-house" viewBox="0 0 24 24"><path class="ic" d="M3 10.5 12 3l9 7.5V21H3z"/><path class="ic" d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle class="ic" cx="11" cy="11" r="7"/><path class="ic" d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect class="ic" x="3" y="4.5" width="18" height="16" rx="2"/><path class="ic" d="M3 9.5h18M8 3v3M16 3v3"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path class="ic" d="M6 4v16M10.5 4v16M15 5l4 15"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle class="ic" cx="12" cy="8" r="4"/><path class="ic" d="M4.5 21c0-4 3.5-6 7.5-6s7.5 2 7.5 6"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path class="ic-f" d="m12 3 2.6 5.6 6 .7-4.4 4.2 1.2 6L12 17.7 6.6 19.5l1.2-6L3.4 9.3l6-.7z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path class="ic" d="M6 3h12v18l-6-4-6 4z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path class="ic" d="m12 3 9 5-9 5-9-5z"/><path class="ic" d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24"><rect class="ic" x="2" y="7" width="20" height="10" rx="4"/><path class="ic" d="M7 11v2M6 12h2"/><circle class="ic-f" cx="16" cy="11" r="1"/><circle class="ic-f" cx="18.5" cy="13.5" r="1"/></symbol>
+    <symbol id="i-movie" viewBox="0 0 24 24"><rect class="ic" x="3" y="8" width="18" height="12" rx="2"/><path class="ic" d="m4 8 3-4 3.5 4M10.5 4 14 8M14 4l3.5 4"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect class="ic" x="3" y="7" width="18" height="12" rx="2"/><path class="ic" d="m8 3 4 4 4-4"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24"><path class="ic" d="M4 12h16M14 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path class="ic" d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path class="ic" d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path class="ic" d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path class="ic" d="M5 12h14"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path class="ic" d="M4 8h9M18 8h2M4 16h2M11 16h9"/><circle class="ic" cx="15" cy="8" r="2"/><circle class="ic" cx="9" cy="16" r="2"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path class="ic-f" d="m12 3 1.9 4.6L18 9.5l-4.1 1.9L12 16l-1.9-4.6L6 9.5l4.1-1.9z"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path class="ic" d="M12 4 2.5 20.5h19z"/><path class="ic" d="M12 10v4.5M12 17.5h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path class="ic" d="M20 8a8 8 0 1 0 .6 6"/><path class="ic" d="M20 3v5h-5"/></symbol>
+  </defs></svg>
+
+  <h1 class="board">Fandex — Discover ( /discover )</h1>
+  <p class="board">Global Search destination + browse. Default sort = <b style="color:#c9c9d1">Popularity</b> (locked). Frames:
+    populated browse, advanced-filters sheet (include/exclude wishlisted &amp; rated, include/exclude tags), loading,
+    empty (no results), error. Search is one field; results group Titles / People / Tags.</p>
+
+  <div class="row">
+
+    <!-- POPULATED browse -->
+    <div class="framew">
+      <span class="flabel">Populated · browse (sort: Popularity)</span>
+      <div class="screen">
+        <div class="sb"><span>9:41</span><span class="r"><svg width="15" height="15"><use href="#i-search"/></svg></span></div>
+        <div class="gut" style="padding-top:10px;padding-bottom:14px"><div class="search active"><svg width="17" height="17" style="color:var(--accent)"><use href="#i-search"/></svg><span style="flex:1;color:var(--tx)">the undertow</span><svg width="16" height="16"><use href="#i-x"/></svg></div></div>
+        <div class="gut" style="padding-bottom:16px;display:flex;gap:8px;align-items:center">
+          <div class="filterrow" style="flex:1">
+            <div class="fchip on"><svg width="17" height="17"><use href="#i-layers"/></svg></div>
+            <div class="fchip"><svg width="17" height="17"><use href="#i-game"/></svg></div>
+            <div class="fchip"><svg width="17" height="17"><use href="#i-movie"/></svg></div>
+            <div class="fchip"><svg width="17" height="17"><use href="#i-tv"/></svg></div>
+          </div>
+          <div class="iconbtn" style="border-radius:999px"><svg width="17" height="17"><use href="#i-sliders"/></svg></div>
+        </div>
+        <div class="sortbar"><span class="eyebrow">TITLES · 6</span><span class="sortpill">Popularity<svg width="13" height="13"><use href="#i-chev-down"/></svg></span></div>
+        <div class="gut grid2" style="padding-bottom:22px">
+          <div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:var(--movie)"></span><span>Movie</span></div></div><div class="cbody"><div class="ctitle">The Undertow</div><div class="cmeta"><span class="rel">Mar 2026</span><span class="score" style="color:var(--ok)">91<span class="of">/100</span></span></div></div></div>
+          <div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:var(--game)"></span><span>Game</span></div></div><div class="cbody"><div class="ctitle">Hollow Ascension</div><div class="cmeta"><span class="rel">Out now</span><span class="score" style="color:var(--ok)">88<span class="of">/100</span></span></div></div></div>
+          <div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:var(--show)"></span><span>Show</span></div></div><div class="cbody"><div class="ctitle">Nightjar</div><div class="cmeta"><span class="rel">Out now</span><span class="score" style="color:var(--ok)">95<span class="of">/100</span></span></div></div></div>
+          <div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:var(--movie)"></span><span>Movie</span></div></div><div class="cbody"><div class="ctitle">Meridian</div><div class="cmeta"><span class="rel">Jun 2026</span><span class="score" style="color:var(--warn)">69<span class="of">/100</span></span></div></div></div>
+        </div>
+        <div class="navbar">
+          <div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div>
+          <div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div>
+          <div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div>
+          <div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div>
+          <div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADVANCED FILTERS sheet -->
+    <div class="framew">
+      <span class="flabel">Advanced filters · bottom sheet (mobile)</span>
+      <div class="screen" style="position:relative">
+        <div style="filter:brightness(.5)">
+          <div class="sb"><span>9:41</span><span class="r"></span></div>
+          <div class="gut" style="padding-top:10px;padding-bottom:14px"><div class="search"><svg width="17" height="17"><use href="#i-search"/></svg><span style="flex:1">Search Fandex…</span></div></div>
+          <div class="gut grid2" style="padding-bottom:22px"><div class="card"><div class="poster"></div></div><div class="card"><div class="poster"></div></div></div>
+        </div>
+        <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;padding:0 20px 22px">
+          <div class="grab"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 14px"><span class="eyebrow">ADVANCED FILTERS</span><span style="font:400 9.5px var(--mono);color:var(--sec)">Reset</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:11px"><span class="fl" style="font:500 11.5px var(--sans)">Wishlisted</span><div class="tri"><span class="inc">Include</span><span>Exclude</span></div></div>
+          <div class="frow"><span class="fl">Already rated</span><div class="tri"><span>Include</span><span class="exc">Exclude</span></div></div>
+          <div style="padding-top:12px"><span class="fl" style="font:500 11.5px var(--sans)">Tags</span>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:9px">
+              <span class="tag inc"><svg width="12" height="12"><use href="#i-plus"/></svg>Slow-burn</span>
+              <span class="tag exc"><svg width="12" height="12"><use href="#i-minus"/></svg>Horror</span>
+              <span class="tag add"><svg width="12" height="12"><use href="#i-plus"/></svg>Add tag</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:9px;margin-top:18px"><span class="btn primary" style="flex:1">Show 42 results</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="framew">
+      <span class="flabel">Loading</span>
+      <div class="screen">
+        <div class="sb"><span>9:41</span><span class="r"></span></div>
+        <div class="gut" style="padding-top:10px;padding-bottom:14px"><div class="sk" style="height:44px;border-radius:12px"></div></div>
+        <div class="gut" style="padding-bottom:16px;display:flex;gap:8px"><div class="sk" style="width:40px;height:40px;border-radius:999px"></div><div class="sk" style="width:40px;height:40px;border-radius:999px"></div><div class="sk" style="width:40px;height:40px;border-radius:999px"></div><div class="sk" style="width:40px;height:40px;border-radius:999px"></div></div>
+        <div class="gut grid2" style="padding-bottom:22px">
+          <div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div>
+          <div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div>
+          <div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div>
+          <div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div>
+        </div>
+        <div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div>
+      </div>
+    </div>
+
+    <!-- EMPTY (no results) -->
+    <div class="framew">
+      <span class="flabel">Empty · no results</span>
+      <div class="screen">
+        <div class="sb"><span>9:41</span><span class="r"></span></div>
+        <div class="gut" style="padding-top:10px;padding-bottom:14px"><div class="search active"><svg width="17" height="17" style="color:var(--accent)"><use href="#i-search"/></svg><span style="flex:1;color:var(--tx)">qwertys unknown</span><svg width="16" height="16"><use href="#i-x"/></svg></div></div>
+        <div style="height:300px;display:flex;align-items:center">
+          <div class="empty" style="width:100%">
+            <div class="tile a"><svg width="20" height="20"><use href="#i-search"/></svg></div>
+            <div class="esr">No matches</div>
+            <div class="esm">Nothing matches "qwertys unknown" with these filters. Try clearing filters or a different spelling.</div>
+            <span class="btn sec" style="margin-top:14px">Clear filters</span>
+          </div>
+        </div>
+        <div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div>
+      </div>
+    </div>
+
+    <!-- ERROR -->
+    <div class="framew">
+      <span class="flabel">Error</span>
+      <div class="screen">
+        <div class="sb"><span>9:41</span><span class="r"></span></div>
+        <div class="gut" style="padding-top:10px;padding-bottom:14px"><div class="search"><svg width="17" height="17"><use href="#i-search"/></svg><span style="flex:1">Search Fandex…</span></div></div>
+        <div style="height:300px;display:flex;align-items:center">
+          <div class="error" style="width:100%">
+            <div class="tile d"><svg width="20" height="20"><use href="#i-alert"/></svg></div>
+            <div class="esr">Search is unavailable</div>
+            <div class="esm">We couldn't reach the catalogue. Try again in a moment.</div>
+            <span class="btn sec" style="margin-top:14px"><svg width="14" height="14"><use href="#i-refresh"/></svg>Try again</span>
+          </div>
+        </div>
+        <div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

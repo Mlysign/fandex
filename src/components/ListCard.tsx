@@ -38,9 +38,11 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
 
   const body = (
     <>
-      {/* Type accent — color-coded left bar carrying the type icon (T11) */}
+      {/* Type accent — color-coded left bar carrying the type icon (T11); the
+          distinct pictogram per type (not just the color) is what satisfies
+          06-accessibility.md's "never encode meaning by color alone" here. */}
       <div className="w-7 flex-shrink-0 flex items-center justify-center" style={{ background: typeColor }}>
-        <span className="text-black/75"><TypeIcon type={item.type} size={15} /></span>
+        <span className="text-text-on-media"><TypeIcon type={item.type} size={15} /></span>
       </div>
       {/* Full-height LANDSCAPE thumbnail, flush against the color bar. The image
           is absolutely filled so its aspect ratio can't drive the row height —
@@ -50,22 +52,22 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
         {thumb && !imgErr ? (
           <Image src={thumb} alt={item.title} fill sizes="112px" className="object-cover" onError={() => setImgErr(true)} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center"><TypeIcon type={item.type} size={16} className="text-neutral-600" /></div>
+          <div className="absolute inset-0 flex items-center justify-center"><TypeIcon type={item.type} size={16} className="text-text-muted" /></div>
         )}
       </div>
       <div className="flex-1 min-w-0 px-3 py-2.5">
-        <p className="font-medium text-sm truncate">{item.title}</p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-neutral-500">
+        <p className="font-serif text-serif-sm text-text-primary truncate">{item.title}</p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap font-mono text-meta text-text-secondary">
           <span>
             {item.releaseDate
               ? (() => { try { return format(parseISO(item.releaseDate), "MMM d, yyyy"); } catch { return item.releaseDate; } })()
               : "TBA"}
           </span>
           {item.dates && item.dates.length > 1 && (
-            <span className="text-neutral-600">· {item.dates.length} dates</span>
+            <span>· {item.dates.length} dates</span>
           )}
           {item.roles && item.roles.length > 0 && (
-            <span className="text-neutral-600">· {item.roles.join(", ")}</span>
+            <span>· {item.roles.join(", ")}</span>
           )}
           <CommunityScoreBadge score={item.communityScore} />
           <FandexScoreBadge score={item.fandexScore} />
@@ -89,8 +91,8 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
           href={buildItemHref(item)}
           data-item-id={item.id}
           aria-label={`${item.title} — view details`}
-          className={`flex items-stretch bg-neutral-900 hover:bg-neutral-800/80 border rounded-xl overflow-hidden transition-colors cursor-pointer group ${
-            highlight ? "border-white/20" : "border-neutral-800"
+          className={`flex items-stretch min-h-[60px] bg-surface-elevated hover:border-border-strong border rounded-lg overflow-hidden transition-colors duration-base cursor-pointer group ${
+            highlight ? "border-accent/40" : "border-border"
           }`}
           onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
           onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
@@ -104,7 +106,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
           data-item-id={item.id}
           title="Not yet in the catalog"
           aria-label={`${item.title} — not yet in the catalog`}
-          className="flex items-stretch bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden opacity-80"
+          className="flex items-stretch min-h-[60px] bg-surface-elevated border border-border rounded-lg overflow-hidden opacity-80"
         >
           {body}
         </div>

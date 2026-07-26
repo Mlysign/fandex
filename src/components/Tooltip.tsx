@@ -56,7 +56,7 @@ export default function Tooltip({ item, anchorRef }: TooltipProps) {
 
   const tooltip = (
     <div
-      className="fixed z-[9999] bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden pointer-events-none"
+      className="fixed z-[9999] bg-surface-overlay border border-border-strong rounded-xl shadow-2xl overflow-hidden pointer-events-none"
       style={{ top: pos.top, left: pos.left, width: w }}
     >
       {item.posterUrl && (
@@ -65,8 +65,8 @@ export default function Tooltip({ item, anchorRef }: TooltipProps) {
         </div>
       )}
       <div className="p-3 space-y-1.5">
-        <p className="font-semibold text-sm">{item.title}</p>
-        <p className="text-xs text-neutral-400">
+        <p className="font-serif text-serif-sm text-text-primary">{item.title}</p>
+        <p className="font-mono text-meta text-text-secondary">
           {item.releaseDate ? format(parseISO(item.releaseDate), "MMM d, yyyy") : "TBA"}
         </p>
         <div className="flex items-center gap-1.5 flex-wrap">

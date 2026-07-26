@@ -33,7 +33,10 @@ export const dynamic = "force-dynamic";
 // `?page=` never reaches SSR (pagination is client-side via the disallowed
 // /api/), so it needs no rule.
 const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/"];
-const DISALLOW = ["/api/", "/dashboard", "/discover", "/library", "/insights", "/settings", "/item", "/*?sort="];
+// H1.6c IA restructure: /wishlist (was /dashboard), plus new authed /calendar
+// and /profile — all private, keep crawlers out. /dashboard stays listed (it now
+// 308-redirects to /wishlist, harmless to keep disallowing).
+const DISALLOW = ["/api/", "/dashboard", "/wishlist", "/calendar", "/profile", "/discover", "/library", "/insights", "/settings", "/item", "/*?sort="];
 
 export default function robots(): MetadataRoute.Robots {
   return {

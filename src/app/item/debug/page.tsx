@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { EnrichedItem, MediaType, Source } from "@/types";
 import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
-import NavBar from "@/components/NavBar";
 import { TypeBadge, SourcePill } from "@/components/Badges";
 import { SOURCE_PARAMS } from "@/lib/itemUrl";
 
@@ -315,7 +314,6 @@ function DebugInspector() {
 export default function ItemDebugPage() {
   return (
     <div className="min-h-screen">
-      <NavBar />
       <main className="max-w-7xl mx-auto px-6 pt-6">
         <Suspense fallback={<p className="text-sm text-neutral-500 animate-pulse mt-10">Loading…</p>}>
           <DebugInspector />

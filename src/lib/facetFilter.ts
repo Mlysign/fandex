@@ -30,17 +30,20 @@ function itemFacetIds(item: FacetableItem): Set<string> {
 export function passesYearMembership(
   item: { releaseDate?: string | null; libraryStatus?: string | null; rating?: number | null; platformSources?: string[] },
   yearRange: [number, number],
-  membership: { library?: Membership; wishlist?: Membership }
+  membership: { library?: Membership; wishlist?: Membership; rated?: Membership }
 ): boolean {
   const y = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4), 10) : null;
   if (yearRange[0] > YEAR_MIN && (y == null || y < yearRange[0])) return false;
   if (yearRange[1] < YEAR_MAX && (y == null || y > yearRange[1])) return false;
   const inLib = item.libraryStatus != null || item.rating != null;
   const onWl = (item.platformSources?.length ?? 0) > 0;
+  const isRated = item.rating != null;
   if (membership.library === "only" && !inLib) return false;
   if (membership.library === "exclude" && inLib) return false;
   if (membership.wishlist === "only" && !onWl) return false;
   if (membership.wishlist === "exclude" && onWl) return false;
+  if (membership.rated === "only" && !isRated) return false;
+  if (membership.rated === "exclude" && isRated) return false;
   return true;
 }
 

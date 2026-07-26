@@ -62,7 +62,7 @@ export interface VocabEntry { kind: string; role?: FacetRole; key: string; label
 // set it (that ranking score has no such cap).
 export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; BA?: number; n?: number; capped?: boolean }
 
-export interface MembershipFilter { library?: "include" | "exclude" | "only"; wishlist?: "include" | "exclude" | "only" }
+export interface MembershipFilter { library?: "include" | "exclude" | "only"; wishlist?: "include" | "exclude" | "only"; rated?: "include" | "exclude" | "only" }
 
 export interface DiscoverFilters {
   types?: MediaType[];
@@ -527,7 +527,7 @@ function hasFacet(v: DiscoveryVector, ref: { kind: string; role?: FacetRole; key
 function passesFilters(
   v: DiscoveryVector,
   filters: DiscoverFilters,
-  state: { onWatchlist: boolean; libraryStatus: string | null } | undefined
+  state: { onWatchlist: boolean; libraryStatus: string | null; rating: number | null } | undefined
 ): boolean {
   if (filters.types?.length && !filters.types.includes(v.type)) return false;
 
@@ -558,10 +558,13 @@ function passesFilters(
   if (m) {
     const inLib = !!state?.libraryStatus;
     const inWl = !!state?.onWatchlist;
+    const isRated = state?.rating != null;
     if (m.library === "only" && !inLib) return false;
     if (m.library === "exclude" && inLib) return false;
     if (m.wishlist === "only" && !inWl) return false;
     if (m.wishlist === "exclude" && inWl) return false;
+    if (m.rated === "only" && !isRated) return false;
+    if (m.rated === "exclude" && isRated) return false;
   }
 
   for (const inc of filters.includeFacets ?? []) if (!hasFacet(v, inc)) return false;

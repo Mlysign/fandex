@@ -2,7 +2,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useViewMode } from "@/lib/useViewMode";
-import NavBar from "@/components/NavBar";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
@@ -407,6 +406,8 @@ export default function DiscoverPage() {
     else if (m.library === "only") r = r.filter((i) => !!i.libraryStatus);
     if (m.wishlist === "exclude") r = r.filter((i) => !i.onWatchlist);
     else if (m.wishlist === "only") r = r.filter((i) => !!i.onWatchlist);
+    if (m.rated === "exclude") r = r.filter((i) => i.rating == null);
+    else if (m.rated === "only") r = r.filter((i) => i.rating != null);
     return r;
   }, [items, filters.types, filters.membership]);
 
@@ -533,8 +534,6 @@ export default function DiscoverPage() {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
-
       <SubBar
         activeTypes={filters.types}
         onToggleType={toggleType}

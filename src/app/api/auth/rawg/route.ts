@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       displayName: slug,
     });
 
-    const redirect = existingSession ? "/settings?connected=rawg" : "/dashboard";
+    const redirect = existingSession ? "/settings?connected=rawg" : "/wishlist";
     const res = NextResponse.json({ ok: true, redirect });
     // Only set session cookie if this is a fresh login (not linking to existing account)
     if (!existingSession) {

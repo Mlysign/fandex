@@ -30,6 +30,9 @@ const zFacetRef = z.object({
 const zMembership = z.object({
   library: z.enum(["include", "exclude", "only"]).optional(),
   wishlist: z.enum(["include", "exclude", "only"]).optional(),
+  // A2 (H1.6c): "Already-rated" — filter by whether the user has a personal
+  // rating on the item (rating != null), distinct from being in-library.
+  rated: z.enum(["include", "exclude", "only"]).optional(),
 });
 
 const zFacetKey = z.object({ kind: z.string(), role: zFacetRole.optional(), key: z.string() });

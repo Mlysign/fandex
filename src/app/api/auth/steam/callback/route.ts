@@ -70,8 +70,8 @@ export async function GET(req: NextRequest) {
       displayName: identity.display_name,
     });
 
-    // Fresh login → the H2c return path (login-with-intent), else /dashboard.
-    const redirect = existingUserId ? "/settings?connected=steam" : (readOAuthReturn(req) ?? "/dashboard");
+    // Fresh login → the H2c return path (login-with-intent), else /wishlist.
+    const redirect = existingUserId ? "/settings?connected=steam" : (readOAuthReturn(req) ?? "/wishlist");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
     clearOAuthReturn(res);

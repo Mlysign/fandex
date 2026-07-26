@@ -1,10 +1,17 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { format, isToday, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, parseISO } from "date-fns";
+import {
+  format, isToday, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval,
+  addMonths, subMonths, getDay, parseISO, startOfDay, startOfWeek, endOfWeek,
+  addWeeks, compareAsc,
+} from "date-fns";
+import { ChevronLeft, ChevronRight, List, CalendarDays, BellPlus, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
-import ItemBadges from "@/components/ItemBadges";
+import { TypeIcon } from "@/components/Badges";
 import Tooltip from "@/components/Tooltip";
+import EmptyState from "@/components/ui/EmptyState";
+import { useQuickActions } from "@/lib/useQuickActions";
 
 // CalendarView accepts any item that has the minimum required fields.
 // Both EnrichedItem (wishlist) and discover items satisfy this.
@@ -40,6 +47,30 @@ function groupByDate(items: CalendarItem[]) {
   return groups;
 }
 
+// Compact type-icon + rating/wishlist/library indicator cluster shared by the
+// month grid's hover rows, its overflow drawer, and the Agenda view. Replaces
+// the old ItemBadges "calendar" variant (H1.6d) with token-driven colors:
+// accent for personal-preference signals (rating, wishlist), success for the
+// distinct in-library/completion signal — same convention ActionCells uses.
+function ItemMeta({ item, size = 11 }: { item: CalendarItem; size?: number }) {
+  const typeColor = TYPE_COLORS[item.type] ?? "#888";
+  const rating = typeof item.rating === "number" && item.rating > 0 ? item.rating : null;
+  const onWatchlist = item.onWatchlist ?? (item.platformSources?.length ?? 0) > 0;
+  const inLibrary = !!item.libraryStatus;
+  return (
+    <span className="inline-flex items-center gap-1 flex-shrink-0">
+      <span style={{ color: typeColor }}><TypeIcon type={item.type} size={size} /></span>
+      {rating !== null && (
+        <span className="inline-flex items-center gap-0.5 font-mono text-[9px] font-semibold text-accent">
+          <Star className="w-2.5 h-2.5 fill-current" aria-hidden />{rating % 1 === 0 ? rating.toFixed(0) : rating.toFixed(1)}
+        </span>
+      )}
+      {inLibrary && <Check className="w-2.5 h-2.5 text-success" aria-hidden />}
+      {onWatchlist && <Bookmark className="w-2.5 h-2.5 text-accent fill-current" aria-hidden />}
+    </span>
+  );
+}
+
 function OverflowDrawer({
   items,
   dateLabel,
@@ -54,24 +85,26 @@ function OverflowDrawer({
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden min-w-[220px]">
-        <div className="px-3 py-2 border-b border-neutral-800 flex items-center justify-between">
-          <span className="text-xs font-medium text-neutral-400">{dateLabel}</span>
-          <button onClick={onClose} aria-label="Close" className="text-neutral-600 hover:text-white text-xs"><span aria-hidden>✕</span></button>
+      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface-overlay border border-border-strong rounded-xl shadow-2xl overflow-hidden min-w-[220px]">
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+          <span className="font-mono text-meta text-text-secondary">{dateLabel}</span>
+          <button onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text-primary">
+            <X className="w-3.5 h-3.5" aria-hidden />
+          </button>
         </div>
         <div className="max-h-64 overflow-y-auto">
           {items.map((item) => (
             <button
               key={item.id}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-neutral-800 transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-elevated transition-colors duration-fast text-left"
               onClick={() => { onClose(); onSelect(item); }}
             >
               {item.posterUrl && (
-                <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded object-cover flex-shrink-0" />
+                <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded-sm object-cover flex-shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-white truncate">{item.title}</p>
-                <div className="mt-0.5"><ItemBadges variant="calendar" item={item} /></div>
+                <p className="text-caption font-medium text-text-primary truncate">{item.title}</p>
+                <div className="mt-0.5"><ItemMeta item={item} /></div>
               </div>
             </button>
           ))}
@@ -90,13 +123,13 @@ function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelec
     <>
       <button
         ref={ref}
-        className="flex items-center gap-1 text-left w-full hover:opacity-75 transition-opacity"
+        className="flex items-center gap-1 text-left w-full hover:opacity-75 transition-opacity duration-fast"
         onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
         onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
         onClick={() => onSelect(item)}
       >
-        <ItemBadges variant="calendar" item={item} />
-        <span className="text-xs text-neutral-200 truncate leading-tight">{item.title}</span>
+        <ItemMeta item={item} />
+        <span className="font-mono text-[10px] text-text-secondary truncate leading-tight">{item.title}</span>
       </button>
       {hovered && <Tooltip item={item} anchorRef={ref} />}
     </>
@@ -123,17 +156,10 @@ function CalendarCell({
 
   return (
     <div
-      className="h-32 rounded-xl overflow-visible relative border transition-colors"
-      style={{
-        borderColor: today
-          ? "rgba(255,255,255,0.3)"
-          : single
-          ? `${TYPE_COLORS[single.type]}44`
-          : dayItems.length > 0
-          ? "rgb(55,55,55)"
-          : "rgb(38,38,38)",
-        background: single ? "transparent" : "rgba(23,23,23,0.4)",
-      }}
+      className={`h-32 rounded-md overflow-visible relative border transition-colors duration-base ${
+        today ? "ring-2 ring-accent ring-inset" : ""
+      } ${single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"}`}
+      style={single ? { borderColor: `${TYPE_COLORS[single.type] ?? "#888"}44` } : undefined}
     >
       {single && single.posterUrl && (
         <>
@@ -142,10 +168,10 @@ function CalendarCell({
             alt={single.title}
             fill
             sizes="(max-width: 768px) 14vw, 120px"
-            className="object-cover opacity-40 rounded-xl"
+            className="object-cover opacity-40 rounded-md"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent rounded-xl" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/30 to-transparent rounded-md" />
         </>
       )}
 
@@ -153,11 +179,11 @@ function CalendarCell({
         {/* Day number */}
         <div className="mb-1">
           {today ? (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-neutral-900 font-bold text-xs">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-text-on-accent font-bold font-mono text-[10px]">
               {format(day, "d")}
             </span>
           ) : (
-            <span className="text-xs text-neutral-500">{format(day, "d")}</span>
+            <span className="font-mono text-meta text-text-muted">{format(day, "d")}</span>
           )}
         </div>
 
@@ -165,13 +191,17 @@ function CalendarCell({
           <>
             <div
               ref={singleRef}
+              tabIndex={0}
+              role="button"
+              aria-label={`${single.title} — view details`}
               className="flex-1 flex flex-col justify-end cursor-pointer"
               onMouseEnter={() => { singleTimer.current = setTimeout(() => setSingleHovered(true), 350); }}
               onMouseLeave={() => { if (singleTimer.current) clearTimeout(singleTimer.current); setSingleHovered(false); }}
               onClick={() => onSelect(single)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(single); } }}
             >
-              <p className="text-xs font-medium text-white leading-tight line-clamp-2 drop-shadow">{single.title}</p>
-              <div className="mt-0.5"><ItemBadges variant="calendar" item={single} /></div>
+              <p className="font-serif text-[13px] leading-tight line-clamp-2 text-text-primary drop-shadow">{single.title}</p>
+              <div className="mt-0.5"><ItemMeta item={single} /></div>
             </div>
             {singleHovered && <Tooltip item={single} anchorRef={singleRef} />}
           </>
@@ -183,7 +213,7 @@ function CalendarCell({
             {overflow && (
               <div className="relative mt-auto">
                 <button
-                  className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                  className="font-mono text-[10px] text-text-muted hover:text-text-secondary transition-colors duration-fast"
                   onClick={(e) => { e.stopPropagation(); setShowOverflow(true); }}
                 >
                   +{dayItems.length - VISIBLE} more
@@ -205,8 +235,126 @@ function CalendarCell({
   );
 }
 
+// ── Agenda (list) view — H1.6d, new per the design's A1 delta ────────────────
+// Grouped by "This week / Next week / <Month>", each item a ListRow-style row
+// with a date stack + poster thumb + title/type/platform meta. Strictly
+// forward-looking (today onward) to match the "Coming up" framing — the Month
+// grid already covers browsing past releases via its prev/next controls.
+
+function AgendaRow({ item, onSelect }: { item: CalendarItem; onSelect: (item: CalendarItem) => void }) {
+  const { wishlisted, busy, toggleWishlist } = useQuickActions(item);
+  const typeColor = TYPE_COLORS[item.type] ?? "#888";
+  const day = item.releaseDate ? parseISO(item.releaseDate) : null;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(item)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(item); } }}
+      className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-lg bg-surface-elevated border border-border hover:border-border-strong transition-colors duration-base cursor-pointer"
+    >
+      <div className="flex-none w-9 text-center">
+        <div className="font-serif text-serif-md leading-none text-text-primary">{day ? format(day, "d") : "–"}</div>
+        <div className="font-mono text-meta text-text-secondary mt-1">{day ? format(day, "MMM") : ""}</div>
+      </div>
+      <div className="relative flex-none w-11 h-14 rounded-sm overflow-hidden bg-neutral-800 border border-border">
+        {item.posterUrl ? (
+          <Image src={item.posterUrl} alt={item.title} fill sizes="44px" className="object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center"><TypeIcon type={item.type} size={14} className="text-text-muted" /></div>
+        )}
+        <span className="absolute top-1 left-1 w-1.5 h-1.5 rounded-xs" style={{ background: typeColor }} aria-hidden />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-serif text-serif-sm text-text-primary truncate">{item.title}</p>
+        <div className="flex items-center gap-1.5 mt-1 font-mono text-meta uppercase tracking-wide" style={{ color: typeColor }}>
+          <span>{item.type}</span>
+          {item.platformSources && item.platformSources.length > 0 && (
+            <>
+              <span className="w-0.5 h-0.5 rounded-full bg-border-strong" aria-hidden />
+              <span className="text-text-secondary normal-case tracking-normal">{item.platformSources.join(" · ")}</span>
+            </>
+          )}
+        </div>
+      </div>
+      {/* D-C: the design's Agenda-row BellPlus (reminder) has no backing
+          system — repurposed as add-to-wishlist, same icon, real action. */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleWishlist(); }}
+        disabled={busy}
+        aria-pressed={wishlisted}
+        aria-label={wishlisted ? `Remove ${item.title} from your wishlist` : `Add ${item.title} to your wishlist`}
+        title={wishlisted ? "On your wishlist" : "Add to wishlist"}
+        className={`flex-none w-9 h-9 rounded-lg border flex items-center justify-center transition-colors duration-fast disabled:opacity-40 ${
+          wishlisted ? "border-accent/50 bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary hover:bg-surface-overlay"
+        }`}
+      >
+        <BellPlus className="w-4 h-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (item: CalendarItem) => void }) {
+  const groups = useMemo(() => {
+    const now = startOfDay(new Date());
+    const thisWeekEnd = endOfWeek(now, { weekStartsOn: 0 });
+    const nextWeekEnd = endOfWeek(addWeeks(now, 1), { weekStartsOn: 0 });
+    const thisYear = now.getFullYear();
+
+    const bucketLabel = (d: Date): string => {
+      if (compareAsc(d, thisWeekEnd) <= 0) return "This week";
+      if (compareAsc(d, nextWeekEnd) <= 0) return "Next week";
+      return d.getFullYear() === thisYear ? format(d, "MMMM") : format(d, "MMMM yyyy");
+    };
+
+    const upcoming = items
+      .filter((it) => it.releaseDate)
+      .map((it) => ({ item: it, date: parseISO(it.releaseDate as string) }))
+      .filter(({ date }) => compareAsc(date, now) >= 0)
+      .sort((a, b) => compareAsc(a.date, b.date));
+
+    const out: { label: string; items: CalendarItem[] }[] = [];
+    for (const { item, date } of upcoming) {
+      const label = bucketLabel(date);
+      const last = out[out.length - 1];
+      if (last && last.label === label) last.items.push(item);
+      else out.push({ label, items: [item] });
+    }
+    return out;
+  }, [items]);
+
+  if (groups.length === 0) {
+    return (
+      <EmptyState
+        icon={<CalendarX className="w-5 h-5" aria-hidden />}
+        title="Nothing scheduled"
+        hint="No upcoming releases match these filters. Clear a filter, or check back later."
+      />
+    );
+  }
+
+  return (
+    <div>
+      {groups.map((group) => (
+        <div key={group.label} className="mb-1">
+          <div className="flex items-center gap-2.5 py-2">
+            <span className="font-mono text-eyebrow uppercase text-accent">{group.label}</span>
+            <span className="flex-1 h-px bg-border" aria-hidden />
+          </div>
+          {group.items.map((item) => (
+            <AgendaRow key={item.id} item={item} onSelect={onSelect} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function CalendarView({ items, onSelect, onVisibleMonthChange }: CalendarViewProps) {
   const [calMonth, setCalMonth] = useState(new Date());
+  const [mode, setMode] = useState<"month" | "agenda">("month");
 
   useEffect(() => {
     onVisibleMonthChange?.(calMonth);
@@ -238,111 +386,143 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
 
   return (
     <div>
-      {/* Month navigation */}
-      <div className="flex items-center justify-between mb-5">
+      {/* Section header + Month/Agenda toggle (H1.6d — the introduced Agenda view) */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-serif text-serif-md text-text-primary">Coming up</h3>
         <button
-          onClick={() => setCalMonth(subMonths(calMonth, 1))}
-          className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors"
+          onClick={() => setMode((m) => (m === "month" ? "agenda" : "month"))}
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-surface-elevated border border-border text-text-primary text-label hover:border-border-strong transition-colors duration-fast"
         >
-          ←
-        </button>
-        <div className="flex items-center gap-3">
-          <div className="text-center">
-            {isCurrentMonth ? (
-              // Current month: white pill — same treatment as list/card divider
-              <h2 className="font-bold text-sm px-3 py-1.5 rounded-full bg-white text-neutral-900 uppercase tracking-widest inline-block">
-                {format(calMonth, "MMMM yyyy")}
-              </h2>
-            ) : (
-              <h2 className="font-semibold">{format(calMonth, "MMMM yyyy")}</h2>
-            )}
-            {monthItemCount > 0 && (
-              <p className="text-xs text-neutral-500 mt-1">{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</p>
-            )}
-          </div>
-          {!isCurrentMonth && (
-            <button
-              onClick={() => setCalMonth(new Date())}
-              className="text-xs px-3 py-1.5 bg-white text-neutral-900 hover:bg-neutral-100 font-semibold rounded-full transition-colors shadow"
-            >
-              Today
-            </button>
+          {mode === "month" ? (
+            <><List className="w-3.5 h-3.5" aria-hidden />List</>
+          ) : (
+            <><CalendarDays className="w-3.5 h-3.5" aria-hidden />Month</>
           )}
-          {monthItemCount > 0 && nextMonthWithItems != null && (
-            <button
-              onClick={() => setCalMonth(new Date(nextMonthWithItems))}
-              className="text-xs px-3 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors whitespace-nowrap"
-              title="Jump to the next month with a release"
-            >
-              Next release →
-            </button>
-          )}
-        </div>
-        <button
-          onClick={() => setCalMonth(addMonths(calMonth, 1))}
-          className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors"
-        >
-          →
         </button>
       </div>
 
-      {monthItemCount === 0 ? (
-        // Empty month — offer to skip straight to a month that has releases.
-        <div className="text-center py-16 text-neutral-500 rounded-2xl border border-dashed border-neutral-800">
-          <p className="mb-3">No releases in {format(calMonth, "MMMM yyyy")}.</p>
-          {prevMonthWithItems == null && nextMonthWithItems == null ? (
-            <span className="text-xs">No dated releases here yet.</span>
-          ) : (
-            <div className="flex items-center justify-center gap-2">
+      {mode === "agenda" ? (
+        <AgendaView items={items} onSelect={onSelect} />
+      ) : (
+        <>
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mb-5 flex-wrap gap-y-2">
+            <button
+              onClick={() => setCalMonth(subMonths(calMonth, 1))}
+              aria-label="Previous month"
+              className="p-2 hover:bg-surface-elevated rounded-lg text-text-secondary hover:text-text-primary transition-colors duration-fast"
+            >
+              <ChevronLeft className="w-4 h-4" aria-hidden />
+            </button>
+            <div className="flex items-center gap-2.5 flex-wrap justify-center">
               {prevMonthWithItems != null && (
                 <button
                   onClick={() => setCalMonth(new Date(prevMonthWithItems))}
-                  className="text-xs px-3 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
+                  className="font-mono text-meta px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast whitespace-nowrap"
+                  title="Jump to the previous month with a release"
                 >
                   ← Previous release
+                </button>
+              )}
+              <div className="text-center">
+                {isCurrentMonth ? (
+                  <h2 className="font-mono text-eyebrow px-3 py-1.5 rounded-full bg-accent text-text-on-accent uppercase tracking-widest inline-block">
+                    {format(calMonth, "MMMM yyyy")}
+                  </h2>
+                ) : (
+                  <h2 className="font-serif text-serif-md text-text-primary">{format(calMonth, "MMMM yyyy")}</h2>
+                )}
+                {monthItemCount > 0 && (
+                  <p className="font-mono text-meta text-text-secondary mt-1">{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</p>
+                )}
+              </div>
+              {!isCurrentMonth && (
+                <button
+                  onClick={() => setCalMonth(new Date())}
+                  className="text-label px-3 py-1.5 bg-accent text-text-on-accent hover:bg-accent-hover font-semibold rounded-full transition-colors duration-fast"
+                >
+                  Today
                 </button>
               )}
               {nextMonthWithItems != null && (
                 <button
                   onClick={() => setCalMonth(new Date(nextMonthWithItems))}
-                  className="text-xs px-3 py-1.5 rounded-full bg-white text-neutral-900 font-semibold hover:bg-neutral-100 transition-colors shadow"
+                  className="font-mono text-meta px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast whitespace-nowrap"
+                  title="Jump to the next month with a release"
                 >
-                  Jump to next release →
+                  Next release →
                 </button>
               )}
             </div>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="text-center text-xs text-neutral-600 py-1 font-medium">{d}</div>
-            ))}
+            <button
+              onClick={() => setCalMonth(addMonths(calMonth, 1))}
+              aria-label="Next month"
+              className="p-2 hover:bg-surface-elevated rounded-lg text-text-secondary hover:text-text-primary transition-colors duration-fast"
+            >
+              <ChevronRight className="w-4 h-4" aria-hidden />
+            </button>
           </div>
 
-          {/* Calendar grid — subtle white glow on current month */}
-          <div
-            className="grid grid-cols-7 gap-1.5 rounded-2xl p-2 -m-2 transition-colors"
-            style={isCurrentMonth ? { background: "rgba(255,255,255,0.02)" } : undefined}
-          >
-            {Array.from({ length: startPad }).map((_, i) => (
-              <div key={`pad-${i}`} className="h-32 rounded-xl" />
-            ))}
-            {days.map((day) => {
-              const dateStr  = format(day, "yyyy-MM-dd");
-              const dayItems = groups[dateStr] || [];
-              return (
-                <CalendarCell
-                  key={day.toISOString()}
-                  day={day}
-                  dayItems={dayItems}
-                  onSelect={onSelect}
-                />
-              );
-            })}
-          </div>
+          {monthItemCount === 0 ? (
+            // Empty month — offer to skip straight to a month that has releases.
+            <EmptyState
+              icon={<CalendarX className="w-5 h-5" aria-hidden />}
+              title={`No releases in ${format(calMonth, "MMMM yyyy")}`}
+              hint={prevMonthWithItems == null && nextMonthWithItems == null ? "No dated releases here yet." : undefined}
+              actions={
+                prevMonthWithItems == null && nextMonthWithItems == null ? undefined : (
+                  <>
+                    {prevMonthWithItems != null && (
+                      <button
+                        onClick={() => setCalMonth(new Date(prevMonthWithItems))}
+                        className="text-label px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast"
+                      >
+                        ← Previous release
+                      </button>
+                    )}
+                    {nextMonthWithItems != null && (
+                      <button
+                        onClick={() => setCalMonth(new Date(nextMonthWithItems))}
+                        className="text-label px-3 py-1.5 rounded-full bg-accent text-text-on-accent font-semibold hover:bg-accent-hover transition-colors duration-fast"
+                      >
+                        Jump to next release →
+                      </button>
+                    )}
+                  </>
+                )
+              }
+            />
+          ) : (
+            <>
+              {/* Day-of-week headers */}
+              <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                  <div key={d} className="text-center font-mono text-micro text-text-muted py-1">{d}</div>
+                ))}
+              </div>
+
+              {/* Calendar grid — subtle accent tint on current month */}
+              <div
+                className={`grid grid-cols-7 gap-1.5 rounded-xl p-2 -m-2 transition-colors duration-base ${isCurrentMonth ? "bg-accent-subtle" : ""}`}
+              >
+                {Array.from({ length: startPad }).map((_, i) => (
+                  <div key={`pad-${i}`} className="h-32 rounded-md" />
+                ))}
+                {days.map((day) => {
+                  const dateStr  = format(day, "yyyy-MM-dd");
+                  const dayItems = groups[dateStr] || [];
+                  return (
+                    <CalendarCell
+                      key={day.toISOString()}
+                      day={day}
+                      dayItems={dayItems}
+                      onSelect={onSelect}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

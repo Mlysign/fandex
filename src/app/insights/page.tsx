@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import NavBar from "@/components/NavBar";
 import InsightsView from "@/components/insights/InsightsView";
 import { InsightsPayload } from "@/components/insights/types";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -35,7 +34,6 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
       <main className="max-w-6xl mx-auto px-6 py-6">
         <div className="mb-6">
           <h1 className="text-xl font-bold">Library insights</h1>

@@ -1,10 +1,15 @@
 "use client";
 import { useState } from "react";
+import { List, LayoutGrid, CalendarDays, SlidersHorizontal, X } from "lucide-react";
 import { TYPE_COLORS, SOURCE_COLORS, SOURCE_LABELS, ROLE_LABELS } from "@/lib/constants";
 import SearchBar from "@/components/SearchBar";
 import FacetAutocomplete from "@/components/discovery/FacetAutocomplete";
 import { FacetPill, VocabMatch } from "@/components/discovery/types";
 import Chip from "@/components/ui/Chip";
+import Sheet from "@/components/ui/Sheet";
+import { useMediaQuery } from "@/lib/useMediaQuery";
+
+const VIEW_ICONS = { list: List, card: LayoutGrid, calendar: CalendarDays } as const;
 
 export type ViewMode = "list" | "card" | "calendar";
 
@@ -57,7 +62,7 @@ interface SubBarProps {
 
 function FacetChip({ pill, color, onRemove }: { pill: FacetPill; color: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full" style={{ background: `${color}1f`, color }}>
+    <span className="inline-flex items-center gap-1 text-label px-2 py-1 rounded-full" style={{ background: `${color}24`, color }}>
       {pill.label}{pill.role ? ` (${ROLE_LABELS[pill.role] ?? pill.role})` : ""}
       <button onClick={onRemove} aria-label={`Remove ${pill.label}`} className="opacity-70 hover:opacity-100">×</button>
     </span>
@@ -84,14 +89,46 @@ export default function SubBar({
   filters,
   actions,
 }: SubBarProps) {
-  // On mobile the advanced rows (facets + year/membership) collapse behind a
-  // "Filters" toggle so the bar doesn't eat the viewport; on md+ they stay
+  // On mobile the advanced rows (facets + year/membership) open in a bottom
+  // Sheet instead of eating the viewport inline; on md+ they stay
   // always-visible (T24). The toggle only appears when there's something to show.
+  //
+  // H1.6d: this content (FacetAutocomplete's `q`/`matches`/`open` state, plus
+  // FilterPanel) must be rendered in exactly ONE of the two responsive
+  // locations at a time, never both — a naive `hidden md:block` copy for
+  // desktop alongside a second copy inside the mobile Sheet would mount two
+  // independently-stateful instances simultaneously (a real drifting-input
+  // bug, not cosmetic). `useMediaQuery` decides which single location
+  // renders it; crossing the breakpoint remounts (loses an in-progress
+  // search query) rather than ever duplicating.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const hasAdvanced = !!(searchFacets || advancedFilters);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
+  const advancedContent = hasAdvanced ? (
+    <div className="space-y-2.5">
+      {searchFacets && (
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must include</span>
+            <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#C8A24B" onPick={(m) => searchFacets.onAdd("include", m as VocabMatch)} /></div>
+            {searchFacets.include.map((p, i) => <FacetChip key={`i${i}`} pill={p} color="#C8A24B" onRemove={() => searchFacets.onRemove("include", i)} />)}
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must exclude</span>
+            <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#E5674C" onPick={(m) => searchFacets.onAdd("exclude", m as VocabMatch)} /></div>
+            {searchFacets.exclude.map((p, i) => <FacetChip key={`e${i}`} pill={p} color="#E5674C" onRemove={() => searchFacets.onRemove("exclude", i)} />)}
+          </div>
+        </div>
+      )}
+      {advancedFilters}
+    </div>
+  ) : null;
+
+  // H1.6c: the nav is a bottom bar on mobile (no top chrome), so the filter bar
+  // sticks to the very top there; on desktop it sits below the h-14 top nav.
   return (
-    <div className="sticky top-14 z-20 bg-neutral-950 border-b border-neutral-800/60 px-6 py-3 space-y-2.5">
+    <div className="sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-2.5">
       <div className="max-w-6xl mx-auto space-y-2.5">
 
         {/* Row 1 — type + source filters + hide-rated + extras */}
@@ -118,7 +155,7 @@ export default function SubBar({
 
           {availableSources.length > 0 && onToggleSource && (
             <>
-              <div className="w-px h-4 bg-neutral-800 mx-1" />
+              <div className="w-px h-4 bg-border-strong mx-1" />
               {availableSources.map((s) => (
                 <Chip
                   key={s}
@@ -135,7 +172,7 @@ export default function SubBar({
 
           {hideRated && (
             <>
-              <div className="w-px h-4 bg-neutral-800 mx-1" />
+              <div className="w-px h-4 bg-border-strong mx-1" />
               <Chip
                 active={hideRated.value}
                 onClick={() => hideRated.onChange(!hideRated.value)}
@@ -148,7 +185,7 @@ export default function SubBar({
 
           {filters && (
             <>
-              <div className="w-px h-4 bg-neutral-800 mx-1" />
+              <div className="w-px h-4 bg-border-strong mx-1" />
               {filters}
             </>
           )}
@@ -159,15 +196,15 @@ export default function SubBar({
               control everywhere, not a search option. */}
           {sort && (
             <>
-              <div className="w-px h-4 bg-neutral-800 mx-1" />
+              <div className="w-px h-4 bg-border-strong mx-1" />
               <div className="flex gap-1" role="group" aria-label="Sort results">
                 {sort.options.map(([k, label]) => (
                   <button
                     key={k}
                     onClick={() => sort.onChange(k)}
                     aria-pressed={sort.value === k}
-                    className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                      sort.value === k ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"
+                    className={`text-label px-2.5 py-1 rounded-md border transition-colors ${
+                      sort.value === k ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"
                     }`}
                   >
                     {label}
@@ -178,29 +215,10 @@ export default function SubBar({
           )}
         </div>
 
-        {/* Rows 2 & 2.5 — advanced filters (facets + year/membership). Always shown
-            on md+; collapse behind the mobile "Filters" toggle below md. */}
-        {hasAdvanced && (
-          <div className={`${filtersOpen ? "block" : "hidden"} md:block space-y-2.5`}>
-            {searchFacets && (
-              <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-neutral-500 whitespace-nowrap">Must include</span>
-                  <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#14532d" onPick={(m) => searchFacets.onAdd("include", m as VocabMatch)} /></div>
-                  {searchFacets.include.map((p, i) => <FacetChip key={`i${i}`} pill={p} color="#4ade80" onRemove={() => searchFacets.onRemove("include", i)} />)}
-                </div>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-neutral-500 whitespace-nowrap">Must exclude</span>
-                  <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#7f1d1d" onPick={(m) => searchFacets.onAdd("exclude", m as VocabMatch)} /></div>
-                  {searchFacets.exclude.map((p, i) => <FacetChip key={`e${i}`} pill={p} color="#f87171" onRemove={() => searchFacets.onRemove("exclude", i)} />)}
-                </div>
-              </div>
-            )}
-
-            {/* Year + membership */}
-            {advancedFilters}
-          </div>
-        )}
+        {/* Row 2 & 2.5 — advanced filters (facets + year/membership). Desktop:
+            always-visible inline (T24). Mobile: the single instance moves into
+            a bottom Sheet instead, opened by the "Filters" toggle below. */}
+        {hasAdvanced && isDesktop && advancedContent}
 
         {/* Row 3 — search + sort + view mode + actions */}
         <div className="flex flex-wrap items-center gap-3">
@@ -208,40 +226,53 @@ export default function SubBar({
 
           {hasAdvanced && (
             <button
-              onClick={() => setFiltersOpen((v) => !v)}
-              aria-expanded={filtersOpen}
-              className="md:hidden flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border transition-colors"
-              style={{
-                borderColor: filtersOpen ? "#fff" : "rgb(38,38,38)",
-                background: filtersOpen ? "#ffffff15" : "#171717",
-                color: filtersOpen ? "#fff" : "#9ca3af",
-              }}
+              onClick={() => setFiltersOpen(true)}
+              aria-haspopup="dialog"
+              className="md:hidden flex-shrink-0 inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-lg border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
             >
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden />
               Filters
             </button>
           )}
 
           {/* View mode toggle */}
-          <div className="flex bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 flex-shrink-0" role="group" aria-label="View mode">
-            {availableViews.map((v) => (
-              <button
-                key={v}
-                onClick={() => onViewChange(v)}
-                aria-label={`${v.charAt(0).toUpperCase() + v.slice(1)} view`}
-                aria-pressed={view === v}
-                className={`px-2.5 py-1.5 rounded-md transition-colors text-xs capitalize ${
-                  view === v ? "bg-neutral-700 text-white" : "text-neutral-500 hover:text-white"
-                }`}
-                title={v.charAt(0).toUpperCase() + v.slice(1)}
-              >
-                <span aria-hidden>{v === "list" ? "≡" : v === "card" ? "⊞" : "▦"}</span>
-              </button>
-            ))}
+          <div className="flex bg-surface-elevated border border-border-strong rounded-lg p-0.5 flex-shrink-0" role="group" aria-label="View mode">
+            {availableViews.map((v) => {
+              const Icon = VIEW_ICONS[v];
+              return (
+                <button
+                  key={v}
+                  onClick={() => onViewChange(v)}
+                  aria-label={`${v.charAt(0).toUpperCase() + v.slice(1)} view`}
+                  aria-pressed={view === v}
+                  className={`px-2.5 py-1.5 rounded-md transition-colors ${
+                    view === v ? "bg-neutral-750 text-accent" : "text-text-secondary hover:text-text-primary"
+                  }`}
+                  title={v.charAt(0).toUpperCase() + v.slice(1)}
+                >
+                  <Icon className="w-3.5 h-3.5" aria-hidden />
+                </button>
+              );
+            })}
           </div>
 
           {actions}
         </div>
       </div>
+
+      {/* Mobile-only: the single advanced-filters instance, moved here instead
+          of rendered a second time — see the isDesktop split above. */}
+      {hasAdvanced && !isDesktop && (
+        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters" className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-serif text-serif-md text-text-primary">Filters</h3>
+            <button onClick={() => setFiltersOpen(false)} aria-label="Close" className="text-text-secondary hover:text-text-primary">
+              <X className="w-4 h-4" aria-hidden />
+            </button>
+          </div>
+          {advancedContent}
+        </Sheet>
+      )}
     </div>
   );
 }

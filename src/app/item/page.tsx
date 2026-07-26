@@ -24,13 +24,13 @@ export default async function LegacyItemRedirect({
 
   const id = one(sp.id);
   const type = one(sp.type);
-  if (!id || !type || !isPublicType(type)) redirect("/dashboard");
+  if (!id || !type || !isPublicType(type)) redirect("/");
 
   // The legacy id was already a uuid for library/wishlist items — the common case.
   if (isUuid(id)) {
     const row = loadPublicItemRow(id);
     if (row) redirect(publicItemHref(row));
-    redirect("/dashboard");
+    redirect("/");
   }
 
   // Otherwise recover the source ids from their legacy param names (`tmdbId` →
@@ -42,5 +42,5 @@ export default async function LegacyItemRedirect({
     if (row) redirect(publicItemHref(row));
   }
 
-  redirect("/dashboard");
+  redirect("/");
 }

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fandex · Facet · Tag — mockup (2a)</title>
+<!-- SELF-CONTAINED: no network. Fonts fall back (prod = DM Serif Display/Space Grotesk/Space Mono). -->
+<style>
+  :root{--bg:#0B0A08;--surface:#100E0C;--elev:#181512;--overlay:#201C18;--border:rgba(237,231,220,.09);
+    --border-strong:rgba(237,231,220,.14);--tx:#EDE7DC;--sec:#9A8F80;--min:#8A8175;--muted:#6F665A;
+    --accent:#C8A24B;--accent-sub:rgba(200,162,75,.14);--game:#4ade80;--movie:#f59e0b;--show:#a78bfa;
+    --ok:#5FE39A;--warn:#F0A04B;--danger:#E5674C;--score-base:#CFC9BE;
+    --serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:var(--sans);color:var(--tx);padding:28px;-webkit-font-smoothing:antialiased}
+  h1.board{font:600 18px var(--sans);margin:0 0 4px}
+  p.board{font:400 13px/1.5 var(--sans);color:var(--sec);max-width:760px;margin:0 0 24px}
+  .row{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+  .framew{display:flex;flex-direction:column;gap:10px}
+  .flabel{font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#b9b2a4;
+    background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;padding:4px 9px;align-self:flex-start}
+  .screen{width:360px;background:var(--surface);border-radius:26px;border:1px solid var(--border-strong);overflow:hidden}
+  .sb{display:flex;justify-content:space-between;align-items:center;padding:12px 22px 2px;font:400 12px var(--mono);color:var(--tx)}
+  .sb .r{display:flex;gap:6px;align-items:center}
+  .ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .ic-f{fill:currentColor;stroke:none}
+  .gut{padding-left:20px;padding-right:20px}
+  .eyebrow{font:400 9px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
+  .h3{font:400 21px var(--serif);margin:0}
+  .iconbtn{width:38px;height:38px;border-radius:12px;background:var(--elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--sec)}
+  .panel{background:var(--elev);border:1px solid var(--border);border-radius:12px}
+  .filterrow{display:flex;gap:8px}
+  .fchip{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-strong);color:var(--sec)}
+  .fchip.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+  .search{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;background:var(--elev);border:1px solid var(--border);color:var(--sec);font:400 13px var(--sans)}
+  .search.active{border-color:rgba(200,162,75,.45)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--elev);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .poster{position:relative;width:100%;aspect-ratio:2/3;background:linear-gradient(175deg,#231f1b,#141110)}
+  .poster .stripes{position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0 2px,transparent 2px 11px)}
+  .poster .plabel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(237,231,220,.13);font:400 9px var(--mono);letter-spacing:.16em}
+  .typechip{position:absolute;top:8px;left:8px;display:flex;align-items:center;gap:5px;padding:3px 8px 3px 6px;border-radius:999px;background:rgba(16,14,12,.62)}
+  .dot{width:6px;height:6px;border-radius:50%}
+  .typechip span{font:400 8px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--tx)}
+  .cbody{padding:10px 11px;display:flex;flex-direction:column;gap:7px}
+  .ctitle{font:400 15px var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmeta{display:flex;align-items:center;justify-content:space-between}
+  .cmeta .rel{font:400 9px var(--mono);color:var(--sec)}
+  .score{font:400 19px var(--serif)}
+  .score .of{font:400 8px var(--mono);color:var(--sec)}
+  .actions{display:flex;gap:6px;margin-top:1px}
+  .abtn{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:6px 0;border-radius:7px;background:rgba(237,231,220,.06);border:1px solid rgba(237,231,220,.07);color:var(--tx);font:600 10px var(--sans)}
+  .abtn.sq{flex:none;width:32px;color:var(--sec)}
+  .sortbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px 12px}
+  .sortpill{display:flex;align-items:center;gap:5px;font:400 10px var(--mono);color:var(--sec)}
+  .navbar{display:flex;justify-content:space-around;align-items:center;padding:10px 6px 18px;border-top:1px solid var(--border);background:var(--surface)}
+  .nav{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--min)}
+  .nav.on{color:var(--accent)}
+  .nav span{font:400 8px var(--mono);letter-spacing:.04em}
+  .tri{display:flex;border:1px solid var(--border-strong);border-radius:999px;overflow:hidden}
+  .tri span{padding:5px 12px;font:600 10px var(--sans);color:var(--sec)}
+  .tri .inc{background:var(--accent);color:var(--surface)}
+  .tri .exc{background:var(--danger);color:var(--surface)}
+  .frow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--border)}
+  .frow .fl{font:500 11.5px var(--sans);color:var(--tx)}
+  .tag{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:999px;font:600 10.5px var(--sans)}
+  .tag.inc{background:var(--accent);color:var(--surface)}
+  .tag.exc{border:1px solid rgba(229,103,76,.55);color:#e88b76}
+  .tag.add{border:1px dashed var(--border-strong);color:var(--sec)}
+  .sheet{border-radius:16px 16px 26px 26px;background:var(--overlay);border-top:1px solid var(--border);box-shadow:0 -12px 40px -8px rgba(0,0,0,.55)}
+  .grab{width:36px;height:4px;border-radius:2px;background:var(--muted);margin:10px auto 4px}
+  .sk{background:var(--elev);border-radius:6px;position:relative;overflow:hidden}
+  .sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(237,231,220,.06),transparent);transform:translateX(-100%);animation:sh 1.2s linear infinite}
+  @keyframes sh{to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.sk::after{display:none}}
+  .empty,.error{margin:0 20px;padding:30px 18px;border-radius:12px;background:var(--elev);border:1px solid var(--border);text-align:center}
+  .tile{width:40px;height:40px;margin:0 auto 12px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+  .tile.a{background:var(--accent-sub);color:var(--accent)}
+  .tile.d{background:rgba(229,103,76,.14);color:var(--danger)}
+  .esr{font:400 18px var(--serif);margin-bottom:6px}
+  .esm{font:400 10.5px/1.5 var(--mono);color:var(--sec)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;font:600 11px var(--sans)}
+  .btn.primary{background:var(--accent);color:var(--surface);padding:9px 16px}
+  .btn.sec{background:var(--elev);border:1px solid var(--border-strong);color:var(--tx);padding:9px 16px}
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="i-house" viewBox="0 0 24 24"><path class="ic" d="M3 10.5 12 3l9 7.5V21H3z"/><path class="ic" d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle class="ic" cx="11" cy="11" r="7"/><path class="ic" d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect class="ic" x="3" y="4.5" width="18" height="16" rx="2"/><path class="ic" d="M3 9.5h18M8 3v3M16 3v3"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path class="ic" d="M6 4v16M10.5 4v16M15 5l4 15"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle class="ic" cx="12" cy="8" r="4"/><path class="ic" d="M4.5 21c0-4 3.5-6 7.5-6s7.5 2 7.5 6"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path class="ic-f" d="m12 3 2.6 5.6 6 .7-4.4 4.2 1.2 6L12 17.7 6.6 19.5l1.2-6L3.4 9.3l6-.7z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path class="ic" d="M6 3h12v18l-6-4-6 4z"/></symbol>
+    <symbol id="i-bookmark-f" viewBox="0 0 24 24"><path class="ic-f" d="M6 3h12v18l-6-4-6 4z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path class="ic" d="m12 3 9 5-9 5-9-5z"/><path class="ic" d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24"><rect class="ic" x="2" y="7" width="20" height="10" rx="4"/><path class="ic" d="M7 11v2M6 12h2"/><circle class="ic-f" cx="16" cy="11" r="1"/><circle class="ic-f" cx="18.5" cy="13.5" r="1"/></symbol>
+    <symbol id="i-movie" viewBox="0 0 24 24"><rect class="ic" x="3" y="8" width="18" height="12" rx="2"/><path class="ic" d="m4 8 3-4 3.5 4M10.5 4 14 8M14 4l3.5 4"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect class="ic" x="3" y="7" width="18" height="12" rx="2"/><path class="ic" d="m8 3 4 4 4-4"/></symbol>
+    <symbol id="i-arrow-r" viewBox="0 0 24 24"><path class="ic" d="M4 12h16M14 6l6 6-6 6"/></symbol>
+    <symbol id="i-arrow-l" viewBox="0 0 24 24"><path class="ic" d="M20 12H4M10 6l-6 6 6 6"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path class="ic" d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path class="ic" d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path class="ic" d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path class="ic" d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path class="ic" d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path class="ic" d="M5 12h14"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path class="ic" d="M4 8h9M18 8h2M4 16h2M11 16h9"/><circle class="ic" cx="15" cy="8" r="2"/><circle class="ic" cx="9" cy="16" r="2"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path class="ic-f" d="m12 3 1.9 4.6L18 9.5l-4.1 1.9L12 16l-1.9-4.6L6 9.5l4.1-1.9z"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path class="ic" d="M12 4 2.5 20.5h19z"/><path class="ic" d="M12 10v4.5M12 17.5h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path class="ic" d="M20 8a8 8 0 1 0 .6 6"/><path class="ic" d="M20 3v5h-5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path class="ic" d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path class="ic" d="M10 21h4"/></symbol>
+    <symbol id="i-bellplus" viewBox="0 0 24 24"><path class="ic" d="M6 16V11a6 6 0 0 1 9-5"/><path class="ic" d="M6 16l-2 2h13"/><path class="ic" d="M10 21h4M18 4v6M15 7h6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path class="ic-f" d="M7 4v16l13-8z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle class="ic" cx="18" cy="5" r="2.5"/><circle class="ic" cx="6" cy="12" r="2.5"/><circle class="ic" cx="18" cy="19" r="2.5"/><path class="ic" d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path class="ic" d="m5 12 5 5 9-11"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle class="ic" cx="12" cy="12" r="3"/><path class="ic" d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+    <symbol id="i-trending" viewBox="0 0 24 24"><path class="ic" d="M3 17l6-6 4 4 8-8"/><path class="ic" d="M15 7h6v6"/></symbol>
+    <symbol id="i-off" viewBox="0 0 24 24"><rect class="ic" x="3" y="4.5" width="18" height="16" rx="2"/><path class="ic" d="M8 3v3M16 3v3M4 14l16-6"/></symbol>
+  </defs></svg><style>
+  .rail{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}.rail::-webkit-scrollbar{display:none}
+  .rc{width:150px;flex:none}
+  .backbar{display:flex;justify-content:space-between;align-items:center;padding:8px 18px 6px}
+  .rndbtn{width:38px;height:38px;border-radius:12px;background:var(--elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--tx)}
+  .rndbtn.sec{color:var(--sec)}
+  .stat3{display:flex;align-items:center}
+  .statcell{flex:1}.statcell+.statcell{padding-left:16px}
+  .vdiv{width:1px;height:30px;background:var(--border)}
+  .statn{font:400 26px var(--serif);line-height:.9}.statl{font:400 8.5px var(--mono);color:var(--sec);margin-top:5px}
+  .sortpill{display:flex;align-items:center;gap:5px;font:400 10px var(--mono);color:var(--sec)}
+  .schip{flex:none;height:34px;display:flex;align-items:center;gap:6px;padding:0 14px;border-radius:999px;border:1px solid var(--border-strong);color:#c3b8a8;font:500 11px var(--sans)}
+  .schip.on{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .tagpill{font:500 11px var(--sans);padding:7px 13px;border-radius:999px;background:var(--elev);border:1px solid var(--border);color:#c3b8a8}
+  .fact{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-top:1px solid var(--border)}
+  .fact .k{font:400 11px var(--sans);color:var(--sec)}.fact .v{font:500 12px var(--sans)}
+</style>
+
+  <h1 class="board">Fandex — Facet · Tag ( /tag/[slug] — route unconfirmed, 05-DELTA A3 )</h1>
+  <p class="board">Genre/tag landing reached from a title's tags. Identity header + stats-overview (your avg vs catalogue avg + Fandex Score impact) + sorted results grid + related tags. Frames: populated, loading, empty, error.</p>
+
+  <div class="row">
+<div class="framew"><span class="flabel">Populated — introduced, see 05-DELTA A3</span><div class="screen"><div class="sb"><span>9:41</span><span class="r"><svg width="15" height="15"><use href="#i-search"/></svg></span></div><div class="backbar"><div class="rndbtn"><svg width="19" height="19"><use href="#i-arrow-l"/></svg></div><div style="display:flex;gap:9px"><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-share"/></svg></div><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-bellplus"/></svg></div></div></div>
+  <div class="gut" style="padding-top:14px;padding-bottom:18px"><div style="font:400 9px var(--mono);letter-spacing:.14em;color:var(--accent)">GENRE</div><div style="font:400 33px/1.02 var(--serif);margin-top:6px">Psychological Thriller</div><div style="font:400 10.5px var(--mono);color:var(--sec);margin-top:10px">128 titles · you've rated 14 · avg 9.0</div><div style="font:400 12.5px/1.6 var(--sans);color:#c3b8a8;margin-top:12px">Slow-burning stories that live in the mind — unreliable narrators, creeping dread and reveals that recolour everything before them.</div></div>
+  <div class="gut" style="padding-bottom:18px"><div class="panel" style="padding:14px 16px">
+  <div style="font:400 9px var(--mono);letter-spacing:.13em;color:var(--accent);margin-bottom:12px">YOUR RATING HERE</div>
+  <div class="stat3"><div class="statcell"><div class="statn">9.0</div><div class="statl">your average</div></div><div class="vdiv"></div><div class="statcell"><div class="statn" style="color:#c3b8a8">7.8</div><div class="statl">catalogue avg</div></div><div class="vdiv"></div><div class="statcell"><div class="statn" style="color:var(--accent)">+6</div><div class="statl">Score impact</div></div></div>
+  <div style="font:400 10px/1.5 var(--mono);color:var(--sec);margin-top:13px;padding-top:12px;border-top:1px solid var(--border)">You rate these <span style="color:var(--accent)">+1.2</span> above your baseline — the biggest single lift to your Fandex Score.</div>
+</div></div>
+  <div class="gut" style="display:flex;gap:8px;padding-bottom:16px;overflow-x:auto"><div class="schip on">Top rated</div><div class="schip">Newest</div><div class="schip">Highest for you</div><div class="schip"><svg width="14" height="14"><use href="#i-sliders"/></svg></div></div>
+  <div class="gut grid2" style="padding-bottom:24px"><div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:#f59e0b"></span><span>Movie</span></div></div><div class="cbody"><div class="ctitle">The Undertow</div><div class="cmeta"><span class="rel">2026</span><span class="score" style="color:#5FE39A">91<span class="of">/100</span></span></div></div></div><div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:#a78bfa"></span><span>Show</span></div></div><div class="cbody"><div class="ctitle">Nightjar</div><div class="cmeta"><span class="rel">2025</span><span class="score" style="color:#5FE39A">95<span class="of">/100</span></span></div></div></div><div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:#f59e0b"></span><span>Movie</span></div></div><div class="cbody"><div class="ctitle">Cold Harbor</div><div class="cmeta"><span class="rel">2026</span><span class="score" style="color:#CFC9BE">66<span class="of">/100</span></span></div></div></div><div class="card"><div class="poster"><div class="stripes"></div><div class="plabel">POSTER</div><div class="typechip"><span class="dot" style="background:#a78bfa"></span><span>Show</span></div></div><div class="cbody"><div class="ctitle">Static Bloom</div><div class="cmeta"><span class="rel">2026</span><span class="score" style="color:#CFC9BE">74<span class="of">/100</span></span></div></div></div></div>
+  <div class="gut" style="padding-bottom:12px"><span style="font:400 9px var(--mono);letter-spacing:.13em;color:var(--accent)">RELATED TAGS</span></div>
+  <div class="gut" style="display:flex;flex-wrap:wrap;gap:8px;padding-bottom:24px"><span class="tagpill">Neo-noir</span><span class="tagpill">Slow-burn</span><span class="tagpill">Mystery</span><span class="tagpill">Coastal</span><span class="tagpill">Cerebral</span></div>
+  <div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div></div></div>
+<div class="framew"><span class="flabel">Loading</span><div class="screen"><div class="sb"><span>9:41</span><span class="r"><svg width="15" height="15"><use href="#i-search"/></svg></span></div><div class="backbar"><div class="rndbtn"><svg width="19" height="19"><use href="#i-arrow-l"/></svg></div><div style="display:flex;gap:9px"><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-share"/></svg></div><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-bellplus"/></svg></div></div></div>
+  <div class="gut" style="padding-top:14px;padding-bottom:18px"><div class="sk" style="height:12px;width:60px"></div><div class="sk" style="height:32px;width:80%;margin-top:10px"></div><div class="sk" style="height:12px;width:55%;margin-top:12px"></div></div>
+  <div class="gut" style="padding-bottom:18px"><div class="sk" style="height:96px;border-radius:12px"></div></div>
+  <div class="gut grid2" style="padding-bottom:24px"><div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div><div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div><div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div><div><div class="sk" style="aspect-ratio:2/3;border-radius:10px"></div><div class="sk" style="height:13px;margin-top:9px"></div><div class="sk" style="height:11px;width:55%;margin-top:7px"></div></div></div><div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div></div></div>
+<div class="framew"><span class="flabel">Empty · no titles under filters</span><div class="screen"><div class="sb"><span>9:41</span><span class="r"><svg width="15" height="15"><use href="#i-search"/></svg></span></div><div class="backbar"><div class="rndbtn"><svg width="19" height="19"><use href="#i-arrow-l"/></svg></div><div style="display:flex;gap:9px"><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-share"/></svg></div><div class="rndbtn sec"><svg width="16" height="16"><use href="#i-bellplus"/></svg></div></div></div>
+  <div class="gut" style="padding-top:14px;padding-bottom:18px"><div style="font:400 9px var(--mono);letter-spacing:.14em;color:var(--accent)">GENRE</div><div style="font:400 33px/1.02 var(--serif);margin-top:6px">Documentary</div><div style="font:400 10.5px var(--mono);color:var(--sec);margin-top:10px">42 titles · you've rated 0</div></div>
+  <div style="height:240px;display:flex;align-items:center"><div class="empty" style="width:100%"><div class="tile a"><svg width="20" height="20"><use href="#i-sparkles"/></svg></div><div class="esr">Nothing here for you yet</div><div class="esm">You haven't rated anything in this genre. Rate a few and your standing appears.</div></div></div><div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div></div></div>
+<div class="framew"><span class="flabel">Error</span><div class="screen"><div class="sb"><span>9:41</span><span class="r"><svg width="15" height="15"><use href="#i-search"/></svg></span></div><div style="height:300px;display:flex;align-items:center"><div class="error" style="width:100%"><div class="tile d"><svg width="20" height="20"><use href="#i-alert"/></svg></div><div class="esr">Couldn't load this tag</div><div class="esm">Try again in a moment.</div><span class="btn sec" style="margin-top:14px"><svg width="14" height="14"><use href="#i-refresh"/></svg>Try again</span></div></div><div class="navbar"><div class="nav"><svg width="20" height="20"><use href="#i-house"/></svg><span>HOME</span></div><div class="nav on"><svg width="20" height="20"><use href="#i-search"/></svg><span>SEARCH</span></div><div class="nav"><svg width="20" height="20"><use href="#i-cal"/></svg><span>CAL</span></div><div class="nav"><svg width="20" height="20"><use href="#i-library"/></svg><span>LIBRARY</span></div><div class="nav"><svg width="20" height="20"><use href="#i-user"/></svg><span>YOU</span></div></div></div></div>
+  </div>
+</body>
+</html>

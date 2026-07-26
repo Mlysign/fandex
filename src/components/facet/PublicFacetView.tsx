@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import NavBar from "@/components/NavBar";
 import GroupedView from "@/components/GroupedView";
 import { useScrollRestore } from "@/lib/usePersistedState";
 import { probeSession } from "@/lib/sessionProbe";
@@ -190,7 +189,6 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
-      <NavBar />
       <main className="max-w-6xl mx-auto px-6 py-6">
         {/* Header */}
         <div className="flex gap-5">

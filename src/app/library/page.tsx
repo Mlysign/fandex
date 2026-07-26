@@ -4,9 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { useViewMode } from "@/lib/useViewMode";
-import NavBar from "@/components/NavBar";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membership, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -38,7 +37,7 @@ export default function LibraryPage() {
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_library_excFacets", []);
   const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "releaseDate", normalizeSort);
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_library_year", defaultUiFilters().yearRange);
-  const [membership, setMembership] = usePersistedState<{ library?: Membership; wishlist?: Membership }>("rr_library_membership", {});
+  const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_library_membership", {});
 
   useEffect(() => { init(); }, []);
 
@@ -117,8 +116,6 @@ export default function LibraryPage() {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
-
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}

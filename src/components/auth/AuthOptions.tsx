@@ -54,7 +54,7 @@ export default function AuthOptions({
     // navigate.
     resetSessionProbe();
     if (onAuthenticated) onAuthenticated();
-    else router.push(data.redirect ?? "/dashboard");
+    else router.push(data.redirect ?? "/wishlist");
   }
 
   return (

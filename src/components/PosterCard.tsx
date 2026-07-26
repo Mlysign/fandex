@@ -38,14 +38,21 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
 
   const body = (
     <>
-      {/* Type accent — color-only bar, no icon (Q14: matches the facet-page card) */}
-      <div className="h-1.5 rounded-t-xl" style={{ background: typeColor }} />
+      {/* Type chip — dot + UPPERCASE mono label (H1.6d: was a color-only bar,
+          which the a11y spec (06-accessibility.md) flags as encoding meaning
+          by color alone; a text label now pairs with the dot). Sits in its
+          own strip above the poster rather than overlaying it, since the
+          poster's top corners are already claimed by the score badges (Q14). */}
+      <div className="flex items-center gap-1.5 px-2 pt-2 pb-1.5">
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: typeColor }} aria-hidden />
+        <span className="font-mono text-micro uppercase text-text-secondary">{item.type}</span>
+      </div>
 
       {/* Poster image — wider-than-classic-poster ratio (Q14: matches the
           facet-page card); the image fills the frame (cropped). */}
-      <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "140%" }}>
+      <div className="relative w-full bg-neutral-800 overflow-hidden rounded-md" style={{ paddingBottom: "140%" }}>
         {imageSrc && !imgErr ? (
-          <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover" onError={() => setImgErr(true)} />
+          <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover transition-transform duration-base group-hover:scale-[1.02]" onError={() => setImgErr(true)} />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
             <TypeIcon type={item.type} size={28} />
@@ -53,10 +60,15 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           </div>
         )}
 
-        {/* Hover overlay */}
+        {/* Hover overlay — a neutral hint, not a CTA (the whole card is
+            already the click target), so it stays off the accent gold per
+            the design's restraint rule. */}
         {linkable && (
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
-            <span className="opacity-0 group-hover:opacity-100 transition-all text-xs text-white bg-black/60 px-3 py-1.5 rounded-lg">
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-base flex items-center justify-center">
+            <span
+              className="opacity-0 group-hover:opacity-100 transition-opacity duration-base text-label text-text-primary px-3 py-1.5 rounded-full backdrop-blur-[5px]"
+              style={{ background: "rgb(16 14 12 / 0.66)" }}
+            >
               View details
             </span>
           </div>
@@ -64,10 +76,10 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
 
         {/* Fandex Score — top-right; crowd rating — top-left. Both render nothing if absent. */}
         <div className="absolute top-1.5 left-1.5">
-          <CommunityScoreBadge score={item.communityScore} className="shadow-sm backdrop-blur-sm" />
+          <CommunityScoreBadge score={item.communityScore} variant="overlay" className="shadow-sm" />
         </div>
         <div className="absolute top-1.5 right-1.5">
-          <FandexScoreBadge score={item.fandexScore} className="shadow-sm backdrop-blur-sm" />
+          <FandexScoreBadge score={item.fandexScore} variant="overlay" className="shadow-sm" />
         </div>
       </div>
 
@@ -79,18 +91,18 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
         </div>
       )}
 
-      {/* Footer — title + date (type now reads from the color-coded top bar).
-          Q14: the title block reserves a fixed 2-line height regardless of
-          actual title length, so cards in the same row stay the same height. */}
+      {/* Footer — title + date. Q14: the title block reserves a fixed 2-line
+          height regardless of actual title length, so cards in the same row
+          stay the same height. */}
       <div className="px-2.5 pb-2.5 pt-1.5 space-y-0.5">
-        <p className="font-medium text-sm leading-tight line-clamp-2 min-h-[2.25rem]">{item.title}</p>
-        <div className="text-xs text-neutral-500">
+        <p className="font-serif text-serif-sm leading-tight line-clamp-2 min-h-[2.25rem] text-text-primary">{item.title}</p>
+        <div className="font-mono text-meta text-text-secondary">
           {item.releaseDate
             ? (() => { try { return format(parseISO(item.releaseDate), "MMM d, yyyy"); } catch { return item.releaseDate; } })()
             : "TBA"}
         </div>
         {item.roles && item.roles.length > 0 && (
-          <div className="text-[11px] text-neutral-500 line-clamp-1">{item.roles.join(", ")}</div>
+          <div className="text-caption text-text-secondary line-clamp-1">{item.roles.join(", ")}</div>
         )}
       </div>
     </>
@@ -108,7 +120,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           href={buildItemHref(item)}
           data-item-id={item.id}
           aria-label={`${item.title} — view details`}
-          className="group cursor-pointer rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative block"
+          className="group cursor-pointer overflow-hidden rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block"
           onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
           onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
           onClick={() => onSelect(item)}
@@ -121,7 +133,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           data-item-id={item.id}
           title="Not yet in the catalog"
           aria-label={`${item.title} — not yet in the catalog`}
-          className="rounded-xl border border-neutral-800 bg-neutral-900 relative block opacity-80"
+          className="overflow-hidden rounded-md border border-border bg-surface-elevated relative block opacity-80"
         >
           {body}
         </div>

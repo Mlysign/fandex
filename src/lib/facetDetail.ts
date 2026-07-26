@@ -363,7 +363,7 @@ export async function buildFacetDetail(userId: string, ref: FacetRefIn): Promise
 // let through, even though the provider search itself found real candidates.
 // This bypasses that merge entirely: resolve the external set the same way,
 // skip catVectors, filter by membership directly against user state.
-export interface MembershipFilterIn { library?: string; wishlist?: string }
+export interface MembershipFilterIn { library?: string; wishlist?: string; rated?: string }
 
 export async function buildExternalCandidates(
   userId: string, ref: FacetRefIn, membership?: MembershipFilterIn
@@ -402,10 +402,13 @@ export async function buildExternalCandidates(
     const st = mid ? state.get(mid) : undefined;
     const inLib = !!st?.libraryStatus;
     const inWl = !!st?.onWatchlist;
+    const isRated = st?.rating != null;
     if (membership?.library === "only" && !inLib) continue;
     if (membership?.library === "exclude" && inLib) continue;
     if (membership?.wishlist === "only" && !inWl) continue;
     if (membership?.wishlist === "exclude" && inWl) continue;
+    if (membership?.rated === "only" && !isRated) continue;
+    if (membership?.rated === "exclude" && isRated) continue;
 
     out.push({
       id: mid ?? key, type: t.type, title: t.title, releaseDate: t.releaseDate, posterUrl: t.posterUrl,

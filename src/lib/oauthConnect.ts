@@ -95,11 +95,11 @@ export async function handleOAuthCallback(
     });
 
     // Fresh login → the return path from the connect route (login-with-intent,
-    // H2c), falling back to /dashboard. Linking an extra provider to an existing
+    // H2c), falling back to /wishlist. Linking an extra provider to an existing
     // account keeps returning to settings.
     const redirect = existingUserId
       ? `/settings?connected=${opts.connectedLabel ?? opts.provider}`
-      : (readOAuthReturn(req) ?? "/dashboard");
+      : (readOAuthReturn(req) ?? "/wishlist");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
     clearOAuthReturn(res);

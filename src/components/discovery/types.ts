@@ -33,6 +33,11 @@ export interface FacetPill { kind: string; role?: string; key: string; label: st
 export interface SeedPill { id: string; title: string; type: string; posterUrl: string | null }
 
 export type Membership = "include" | "exclude" | "only";
+
+// The three membership dimensions the advanced filters expose, each tri-state
+// (Any = absent / Only / Hide). `rated` (A2, H1.6c) filters on whether the user
+// has a personal rating — distinct from `library` (watched/played/owned).
+export interface MembershipFilters { library?: Membership; wishlist?: Membership; rated?: Membership }
 export type SortKey = "releaseDate" | "popularity" | "rating" | "fandexScore";
 
 // The single shared sort option set, used by Discover / Wishlist / Library AND
@@ -83,7 +88,7 @@ export interface UiFilters {
   yearRange: [number, number];
   commRange: [number, number];
   runtimeRange: [number, number];
-  membership: { library?: Membership; wishlist?: Membership };
+  membership: MembershipFilters;
   includeFacets: FacetPill[];
   excludeFacets: FacetPill[];
 }

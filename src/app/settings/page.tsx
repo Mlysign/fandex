@@ -2,7 +2,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SOURCE_COLORS } from "@/lib/constants";
-import NavBar from "@/components/NavBar";
 import Button from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COUNTRIES } from "@/lib/countries";
@@ -324,8 +323,6 @@ function SettingsContent() {
           </div>
         </div>
       )}
-
-      <NavBar />
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         <div className="flex items-center justify-between">
