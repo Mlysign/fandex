@@ -50,7 +50,7 @@ export default function FandexScoreSection({
 
   if (coldStart) {
     return (
-      <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 px-3.5 py-3 text-sm text-neutral-400">
+      <div className="rounded-xl border border-border bg-neutral-900/40 px-3.5 py-3 text-sm text-text-secondary">
         Rate a few titles to unlock your Fandex Score — a personalized 0-100 taste match for everything you browse.
       </div>
     );
@@ -67,7 +67,7 @@ export default function FandexScoreSection({
   const baseline = center != null ? Math.round(center) : null;
 
   return (
-    <div ref={rootRef} className="relative rounded-xl border border-neutral-800 bg-neutral-900/40 overflow-visible">
+    <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
       <button
         onClick={() => setExpanded((v) => !v)}
         disabled={!reasons.length}
@@ -77,11 +77,11 @@ export default function FandexScoreSection({
       >
         <span className="text-2xl font-bold leading-none" style={{ color }}>{rounded}</span>
         <span className="flex-1 min-w-0">
-          <span className="block text-sm font-medium text-neutral-200">Fandex Score</span>
-          <span className="block text-xs text-neutral-500">how well this matches your taste</span>
+          <span className="block text-sm font-medium text-text-primary">Fandex Score</span>
+          <span className="block text-xs text-text-secondary">how well this matches your taste</span>
         </span>
         {reasons.length > 0 && (
-          <span className="text-neutral-500 text-xs shrink-0">{expanded ? "Hide why ▲" : "Why? ▼"}</span>
+          <span className="text-text-secondary text-xs shrink-0">{expanded ? "Hide why ▲" : "Why? ▼"}</span>
         )}
       </button>
 
@@ -91,12 +91,12 @@ export default function FandexScoreSection({
         <div
           role="dialog"
           aria-label="Fandex Score breakdown"
-          className="absolute z-30 top-full mt-1.5 left-0 right-0 sm:left-0 sm:right-auto sm:w-96 max-h-[70vh] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl p-3.5 space-y-2.5"
+          className="absolute z-30 top-full mt-1.5 left-0 right-0 sm:left-0 sm:right-auto sm:w-96 max-h-[70vh] overflow-y-auto rounded-xl border border-border-strong bg-surface-overlay shadow-2xl p-3.5 space-y-2.5"
         >
           {baseline != null && (
-            <div className="flex items-center justify-between gap-3 text-xs pb-2 border-b border-neutral-800">
-              <span className="text-neutral-400">Your baseline (average rating × 10)</span>
-              <span className="font-semibold text-neutral-200">{baseline}</span>
+            <div className="flex items-center justify-between gap-3 text-xs pb-2 border-b border-border">
+              <span className="text-text-secondary">Your baseline (average rating × 10)</span>
+              <span className="font-semibold text-text-primary">{baseline}</span>
             </div>
           )}
           <div className="space-y-2">
@@ -111,7 +111,7 @@ export default function FandexScoreSection({
               return (
                 <div key={`${r.kind}|${r.role ?? ""}|${r.label}`}>
                   {firstCapped && (
-                    <p className="text-[10px] text-neutral-600 uppercase tracking-wide pt-1 pb-1.5 border-t border-neutral-800/70 mt-1">
+                    <p className="text-[10px] text-text-secondary uppercase tracking-wide pt-1 pb-1.5 border-t border-border mt-1">
                       Not counted — over the per-category limit
                     </p>
                   )}
@@ -126,19 +126,19 @@ export default function FandexScoreSection({
                             style={{ background: `${c}22`, color: c }}
                           />
                         ) : (
-                          <span className="text-neutral-300">{r.label}</span>
+                          <span className="text-text-secondary">{r.label}</span>
                         )}
                       </span>
                       {r.BA != null && r.n != null && (
-                        <span className="block text-neutral-500">
+                        <span className="block text-text-secondary">
                           you rate this {r.BA.toFixed(1)} avg over {r.n} title{r.n === 1 ? "" : "s"}
                         </span>
                       )}
                     </span>
                     {r.capped ? (
-                      <span className="shrink-0 text-neutral-600 pt-0.5">—</span>
+                      <span className="shrink-0 text-text-secondary pt-0.5">—</span>
                     ) : (
-                      <span className="shrink-0 font-semibold pt-0.5" style={{ color: positive ? "#4ade80" : "#f87171" }}>
+                      <span className="shrink-0 font-semibold pt-0.5" style={{ color: positive ? "var(--color-success)" : "var(--color-danger)" }}>
                         {positive ? "+" : ""}{r.contribution.toFixed(1)}
                       </span>
                     )}
@@ -148,8 +148,8 @@ export default function FandexScoreSection({
             })}
           </div>
           {baseline != null && (
-            <div className="flex items-center justify-between gap-3 text-xs pt-2 border-t border-neutral-800">
-              <span className="text-neutral-400">Baseline + contributions</span>
+            <div className="flex items-center justify-between gap-3 text-xs pt-2 border-t border-border">
+              <span className="text-text-secondary">Baseline + contributions</span>
               <span className="font-bold" style={{ color }}>{rounded}</span>
             </div>
           )}

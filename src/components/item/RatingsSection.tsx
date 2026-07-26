@@ -51,7 +51,7 @@ export default function RatingsSection({
       {/* Your rating — 10-star scale, in the same section as platform ratings */}
       {canRate ? (
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-neutral-600 mb-1">Your rating</p>
+          <p className="font-mono text-[10px] uppercase tracking-wide text-text-secondary mb-1">Your rating</p>
           <div className="flex items-center gap-0.5 mb-2">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
               const active = n <= (hoverRating ?? personalRating ?? 0);
@@ -59,7 +59,7 @@ export default function RatingsSection({
                 <button
                   key={n}
                   className="text-2xl leading-none transition-colors disabled:opacity-40"
-                  style={{ color: active ? "#facc15" : "#3f3f46" }}
+                  style={{ color: active ? "var(--color-accent)" : "var(--color-neutral-600)" }}
                   onMouseEnter={() => setHoverRating(n)}
                   onMouseLeave={() => setHoverRating(null)}
                   onClick={() => onRate(n === personalRating ? null : n)}
@@ -69,7 +69,7 @@ export default function RatingsSection({
               );
             })}
             {personalRating != null && (
-              <span className="text-xs text-neutral-500 ml-2" title={ratingsTooltip(personalRatings)}>
+              <span className="text-xs text-text-secondary ml-2" title={ratingsTooltip(personalRatings)}>
                 {fmtScore(personalRating)}/10{personalRatings.length > 1 ? " avg" : ""}
               </span>
             )}
@@ -77,31 +77,31 @@ export default function RatingsSection({
           <RatingsBreakdown ratings={personalRatings} />
           <div className="flex items-center gap-2 flex-wrap mt-2">
             {libraryStatus ? (
-              <span className="text-xs text-neutral-500 capitalize">
+              <span className="text-xs text-text-secondary capitalize">
                 ✓ {libraryStatus}
                 {reviewedAt && (() => { try { return ` · ${format(new Date(reviewedAt * 1000), "MMM d, yyyy")}`; } catch { return ""; } })()}
               </span>
             ) : (
-              <button onClick={onMarkWatched} disabled={ratingAction} className="text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors disabled:opacity-40">
+              <button onClick={onMarkWatched} disabled={ratingAction} className="text-xs px-3 py-1.5 rounded-lg bg-surface-elevated border border-border-strong hover:bg-surface-overlay text-text-secondary transition-colors disabled:opacity-40">
                 {ratingAction ? "Saving…" : "Mark as " + (type === "game" ? "played" : "watched")}
               </button>
             )}
           </div>
-          {review && <p className="text-sm text-neutral-300 leading-relaxed italic mt-2">&quot;{review}&quot;</p>}
+          {review && <p className="text-sm text-text-secondary leading-relaxed italic mt-2">&quot;{review}&quot;</p>}
         </div>
       ) : (
         (libraryStatus || hasPersonal || review) && (
           <div className="flex items-center gap-3 flex-wrap">
-            {libraryStatus && <span className="text-xs px-2 py-1 rounded-full bg-neutral-800 text-neutral-300 capitalize">{libraryStatus}</span>}
+            {libraryStatus && <span className="text-xs px-2 py-1 rounded-full bg-surface-elevated text-text-secondary capitalize">{libraryStatus}</span>}
             {hasPersonal && (() => {
-              const c = personalRating! >= 7 ? "#4ade80" : personalRating! >= 5 ? "#f59e0b" : "#ef4444";
+              const c = personalRating! >= 7 ? "var(--color-success)" : personalRating! >= 5 ? "var(--color-warning)" : "var(--color-danger)";
               return (
                 <span className="text-sm font-bold" style={{ color: c }} title={ratingsTooltip(personalRatings)}>
-                  ★ {fmtScore(personalRating!)}<span className="text-neutral-600 font-normal text-xs"> / 10{personalRatings.length > 1 ? " avg" : ""}</span>
+                  ★ {fmtScore(personalRating!)}<span className="text-text-secondary font-normal text-xs"> / 10{personalRatings.length > 1 ? " avg" : ""}</span>
                 </span>
               );
             })()}
-            {review && <p className="text-sm text-neutral-300 leading-relaxed italic w-full">&quot;{review}&quot;</p>}
+            {review && <p className="text-sm text-text-secondary leading-relaxed italic w-full">&quot;{review}&quot;</p>}
             <div className="w-full"><RatingsBreakdown ratings={personalRatings} /></div>
           </div>
         )

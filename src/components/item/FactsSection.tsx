@@ -33,21 +33,21 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
       {(developer || publisher || director) && (
         <div className="flex flex-wrap gap-1.5">
           {director && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-neutral-800/60 border border-neutral-700">
-              <span className="text-neutral-500">{type === "show" ? "Creator" : "Director"}</span>
-              <FacetLink kind="person" role={type === "show" ? "creator" : "director"} label={director} className="text-neutral-200 hover:text-white hover:underline" />
+            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
+              <span className="text-text-secondary">{type === "show" ? "Creator" : "Director"}</span>
+              <FacetLink kind="person" role={type === "show" ? "creator" : "director"} label={director} className="text-text-primary hover:underline" />
             </span>
           )}
           {developer && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-neutral-800/60 border border-neutral-700">
-              <span className="text-neutral-500">Developer</span>
-              <FacetLink kind="company" role="developer" label={developer} className="text-neutral-200 hover:text-white hover:underline" />
+            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
+              <span className="text-text-secondary">Developer</span>
+              <FacetLink kind="company" role="developer" label={developer} className="text-text-primary hover:underline" />
             </span>
           )}
           {publisher && publisher !== developer && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-neutral-800/60 border border-neutral-700">
-              <span className="text-neutral-500">Publisher</span>
-              <FacetLink kind="company" role="publisher" label={publisher} className="text-neutral-200 hover:text-white hover:underline" />
+            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
+              <span className="text-text-secondary">Publisher</span>
+              <FacetLink kind="company" role="publisher" label={publisher} className="text-text-primary hover:underline" />
             </span>
           )}
         </div>
@@ -76,8 +76,8 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
       {/* Next episode (returning shows) */}
       {nextEpisode?.airDate && (
         <p className="text-sm">
-          <span className="text-neutral-500">Next episode </span>
-          <span className="text-neutral-200">
+          <span className="text-text-secondary">Next episode </span>
+          <span className="text-text-primary">
             {nextEpisode.season != null && nextEpisode.episode != null ? `S${nextEpisode.season}E${nextEpisode.episode} · ` : ""}
             {fmtDate(nextEpisode.airDate)}
           </span>
@@ -85,7 +85,7 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
       )}
 
       {/* Awards */}
-      {awards && <p className="text-sm text-amber-300/80">🏆 {awards}</p>}
+      {awards && <p className="text-sm" style={{ color: "var(--color-warning)" }}>🏆 {awards}</p>}
     </>
   );
 }

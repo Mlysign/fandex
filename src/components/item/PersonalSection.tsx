@@ -189,7 +189,7 @@ export default function PersonalSection({
   // Reserve the height while loading so the server-rendered content above
   // doesn't jump once this resolves.
   if (state === "loading") {
-    return <div className="h-24 rounded-xl border border-neutral-800 bg-neutral-900/40 animate-pulse" />;
+    return <div className="h-24 rounded-xl border border-border bg-neutral-900/40 animate-pulse" />;
   }
 
   const item = detail?.item ?? {};
@@ -256,17 +256,17 @@ export default function PersonalSection({
 // even signed out.
 function AnonWishlist({ steamStoreUrl, onAdd }: { steamStoreUrl: string | null; onAdd: () => void }) {
   return (
-    <div className="pt-4 border-t border-neutral-800/60">
-      <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Your wishlists</p>
+    <div className="pt-4 border-t border-border">
+      <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Your wishlists</p>
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={onAdd}
-          className="text-xs px-2.5 py-1 rounded-full border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200 transition-colors"
+          className="text-xs px-2.5 py-1 rounded-full border border-border-strong text-text-secondary hover:border-neutral-400 hover:text-text-primary transition-colors"
         >
           + Add to wishlist
         </button>
         {steamStoreUrl && (
-          <a href={steamStoreUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors">
+          <a href={steamStoreUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-text-secondary hover:text-text-primary transition-colors">
             View on Steam →
           </a>
         )}

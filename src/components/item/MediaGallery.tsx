@@ -16,7 +16,7 @@ export default function MediaGallery({
   return (
     <div className="flex-shrink-0">
       {images.length > 0 ? (
-        <div className="relative group rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800">
+        <div className="relative group rounded-2xl overflow-hidden bg-surface-elevated border border-border">
           {/* Hero art: kept as a plain <img>. Remote gallery images have no known
               intrinsic size, and this element sizes to the image's natural aspect
               (capped at 460px) — pinning it to a fixed next/image aspect would shift
@@ -47,8 +47,8 @@ export default function MediaGallery({
           )}
         </div>
       ) : (
-        <div className="w-full rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center" style={{ height: 320 }}>
-          <span className="text-neutral-700 text-sm">No image</span>
+        <div className="w-full rounded-2xl bg-surface-elevated border border-border flex items-center justify-center" style={{ height: 320 }}>
+          <span className="text-text-secondary text-sm">No image</span>
         </div>
       )}
 
@@ -62,7 +62,7 @@ export default function MediaGallery({
               aria-label={`Show image ${i + 1}`}
               aria-pressed={i === idx}
               className="relative w-16 h-10 rounded-lg overflow-hidden border transition-colors flex-shrink-0"
-              style={{ borderColor: i === idx ? "#fff" : "rgba(255,255,255,0.12)" }}
+              style={{ borderColor: i === idx ? "var(--color-accent)" : "var(--color-border-strong)" }}
             >
               <Image src={src} alt="" fill sizes="64px" className="object-cover" />
             </button>

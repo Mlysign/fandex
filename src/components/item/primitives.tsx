@@ -27,8 +27,8 @@ export function ScoreBadge({ r }: { r: { source: string; label: string; score: n
 export function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
-      <p className="text-sm text-neutral-200 truncate">{children}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-text-secondary">{label}</p>
+      <p className="text-sm text-text-primary truncate">{children}</p>
     </div>
   );
 }
@@ -41,8 +41,8 @@ export function RatingsBreakdown({ ratings }: { ratings: { source: string; ratin
       {ratings.map((r) => (
         <span key={r.source} className="inline-flex items-center gap-1 text-xs">
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: SOURCE_COLORS[r.source] ?? "#888" }} />
-          <span className="text-neutral-400">{SOURCE_LABELS[r.source] ?? r.source}</span>
-          <span className="text-neutral-200 font-medium">{fmtScore(r.rating)}</span>
+          <span className="text-text-secondary">{SOURCE_LABELS[r.source] ?? r.source}</span>
+          <span className="text-text-primary font-medium">{fmtScore(r.rating)}</span>
         </span>
       ))}
     </div>

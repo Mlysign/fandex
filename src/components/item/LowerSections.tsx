@@ -16,7 +16,7 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
   return (
     <Link
       href={facetHref("person", "cast", name)}
-      className="group block rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all overflow-hidden"
+      className="group block rounded-xl border border-border bg-surface-elevated hover:border-border-strong transition-all overflow-hidden"
     >
       <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "140%" }}>
         {profileUrl ? (
@@ -26,8 +26,8 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
         )}
       </div>
       <div className="px-2 py-1.5 space-y-0.5">
-        <p className="text-xs font-medium text-neutral-200 line-clamp-1 group-hover:text-white">{name}</p>
-        {character && <p className="text-[11px] text-neutral-500 line-clamp-1">{character}</p>}
+        <p className="text-xs font-medium text-text-primary line-clamp-1">{name}</p>
+        {character && <p className="text-[11px] text-text-secondary line-clamp-1">{character}</p>}
       </div>
     </Link>
   );
@@ -52,7 +52,7 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
       {/* Trailer */}
       {trailerKey ? (
         <section>
-          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Trailer</p>
+          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Trailer</p>
           <div className="relative w-full max-w-3xl rounded-xl overflow-hidden" style={{ paddingBottom: "min(56.25%, 480px)" }}>
             <iframe
               className="absolute inset-0 w-full h-full"
@@ -72,7 +72,7 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
           behind this bar" card-row pattern instead of a static photo grid) */}
       {(type === "movie" || type === "show") && cast.length > 0 && (
         <section>
-          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Cast</p>
+          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Cast</p>
           <div className="flex gap-3 overflow-x-auto pb-2 -mb-2 snap-x">
             {cast.map((c, i) => (
               <div key={`${c.name}-${i}`} className="w-28 sm:w-32 shrink-0 snap-start">
@@ -86,12 +86,12 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
       {/* Where to watch */}
       {streamingProviders.length > 0 && (
         <section>
-          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Where to watch</p>
+          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Where to watch</p>
           <div className="flex flex-wrap gap-2">
             {streamingProviders.map((p) => (
-              <div key={p.providerId} className="flex items-center gap-1.5 bg-neutral-800 rounded-lg px-2.5 py-1.5">
+              <div key={p.providerId} className="flex items-center gap-1.5 bg-surface-elevated rounded-lg px-2.5 py-1.5">
                 {p.logoPath && <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={20} height={20} className="w-5 h-5 rounded" alt={p.name} />}
-                <span className="text-xs">{p.name}</span>
+                <span className="text-xs text-text-primary">{p.name}</span>
               </div>
             ))}
           </div>
@@ -101,10 +101,10 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
       {/* DLC / expansions / included content */}
       {dlc.length > 0 && (
         <section>
-          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">DLC &amp; expansions</p>
+          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">DLC &amp; expansions</p>
           <div className="flex flex-wrap gap-1.5">
             {dlc.map((d) => (
-              <span key={d} className="text-xs px-2 py-0.5 bg-neutral-800 rounded-full text-neutral-300">{d}</span>
+              <span key={d} className="text-xs px-2 py-0.5 bg-surface-elevated rounded-full text-text-secondary">{d}</span>
             ))}
           </div>
         </section>
@@ -130,16 +130,18 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
           const items = byCat.get(c.id);
           if (items?.length) groups.push({ id: c.id, label: c.label, color: c.color, kind: "tag", items });
         }
-        if (platformList.length) groups.push({ id: "platform", label: "Platforms", color: "#9ca3af", kind: "plain", items: platformList });
-        if (gameModes.length) groups.push({ id: "mode", label: "Modes & perspective", color: "#9ca3af", kind: "plain", items: gameModes });
+        // Literal hex (not a CSS var): these feed the `${color}22`/`${color}1f`
+        // alpha-suffix trick below, which only works on a hex string.
+        if (platformList.length) groups.push({ id: "platform", label: "Platforms", color: "#9A8F80", kind: "plain", items: platformList });
+        if (gameModes.length) groups.push({ id: "mode", label: "Modes & perspective", color: "#9A8F80", kind: "plain", items: gameModes });
         if (!groups.length) return null;
         return (
           <section>
-            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Tags &amp; details</p>
+            <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Tags &amp; details</p>
             <div className="space-y-2.5">
               {groups.map((g) => (
                 <div key={g.id} className="flex flex-wrap items-baseline gap-1.5">
-                  <span className="text-[10px] uppercase tracking-wide text-neutral-600 mr-1 shrink-0">{g.label}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-text-secondary mr-1 shrink-0">{g.label}</span>
                   {g.items.map((it) =>
                     g.kind === "tag" ? (
                       <FacetLink key={it} kind="tag" label={it} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={{ background: `${g.color}22`, color: g.color }} />
@@ -156,8 +158,8 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
 
       {/* Store links */}
       {storeLinks.length > 0 && (
-        <section className="pt-2 border-t border-neutral-800">
-          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-3">Links</p>
+        <section className="pt-2 border-t border-border">
+          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Links</p>
           <div className="flex flex-wrap gap-2">
             {storeLinks.map((l) => (
               <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 rounded-lg transition-colors" style={{ background: `${SOURCE_COLORS[l.source] ?? "#888"}18`, color: SOURCE_COLORS[l.source] ?? "#aaa" }}>

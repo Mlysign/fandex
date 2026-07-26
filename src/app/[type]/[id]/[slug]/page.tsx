@@ -101,7 +101,7 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
   if (slug !== canonicalSlug) permanentRedirect(`/${type}/${canonicalId}/${canonicalSlug}`);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
+    <div className="min-h-screen bg-surface text-text-primary">
       <ItemView item={item} />
     </div>
   );

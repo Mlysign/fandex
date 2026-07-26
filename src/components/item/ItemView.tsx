@@ -51,25 +51,25 @@ export default function ItemView({ item }: { item: PublicEnrichedItem }) {
             <TypeBadge type={item.type} />
           </div>
 
-          <h1 className="text-3xl font-bold leading-tight">{item.title}</h1>
+          <h1 className="font-serif text-serif-2xl text-text-primary leading-tight">{item.title}</h1>
 
           {dates.length > 0 ? (
             <div className="space-y-1">
               {dates.map((d) => (
                 <div key={d.source} className="flex items-center gap-2 text-sm">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: SOURCE_COLORS[d.source] ?? "#888" }} />
-                  <span className="text-neutral-400 text-xs w-16">{SOURCE_LABELS[d.source] ?? d.source}</span>
-                  <span className="text-neutral-200">{fmtDate(d.date)}</span>
+                  <span className="text-text-secondary text-xs w-16">{SOURCE_LABELS[d.source] ?? d.source}</span>
+                  <span className="font-mono text-text-primary">{fmtDate(d.date)}</span>
                 </div>
               ))}
             </div>
           ) : item.releaseDate ? (
-            <p className="text-sm text-neutral-400">{fmtDate(item.releaseDate)}</p>
+            <p className="text-sm font-mono text-text-secondary">{fmtDate(item.releaseDate)}</p>
           ) : (
-            <p className="text-sm text-neutral-600">TBA</p>
+            <p className="text-sm font-mono text-text-secondary">TBA</p>
           )}
 
-          {item.tagline && <p className="text-base text-neutral-400 italic">{item.tagline}</p>}
+          {item.tagline && <p className="text-base text-text-secondary italic">{item.tagline}</p>}
 
           {/* Community/critic scores — public, so server-rendered. canRate=false
               + nulled personals means this renders the scores row only; the
@@ -104,7 +104,7 @@ export default function ItemView({ item }: { item: PublicEnrichedItem }) {
 
           <FactsSection enriched={enriched} type={item.type} />
 
-          {item.description && <p className="text-sm text-neutral-300 leading-relaxed">{item.description}</p>}
+          {item.description && <p className="text-sm text-text-secondary leading-relaxed">{item.description}</p>}
         </div>
       </div>
 
