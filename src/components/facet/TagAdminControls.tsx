@@ -95,28 +95,28 @@ export default function TagAdminControls({
     : [];
 
   return (
-    <div className="rounded-xl border border-dashed border-amber-700/50 bg-amber-950/10 p-3 space-y-3 text-xs">
-      <p className="text-amber-500/80 font-semibold uppercase tracking-wide text-[10px]">Admin — taxonomy editor</p>
+    <div className="rounded-xl border border-dashed border-warning/50 bg-warning-subtle p-3 space-y-3 text-xs">
+      <p className="font-mono font-semibold uppercase tracking-wide text-[10px]" style={{ color: "var(--color-warning)" }}>Admin — taxonomy editor</p>
 
       <div className="flex items-center gap-2">
-        <span className="text-neutral-400 shrink-0">Category</span>
+        <span className="text-text-secondary shrink-0">Category</span>
         <select
           defaultValue={currentCategoryId ?? ""}
           disabled={savingCategory}
           onChange={(e) => saveCategory(e.target.value)}
-          className="text-xs px-2 py-1 rounded-md bg-neutral-900 border border-neutral-700 outline-none"
+          className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none text-text-primary"
         >
           {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
-        {savingCategory && <span className="text-neutral-500">Saving…</span>}
+        {savingCategory && <span className="text-text-secondary">Saving…</span>}
       </div>
 
       <div className="space-y-1.5">
-        <span className="text-neutral-400 block">Bundle</span>
+        <span className="text-text-secondary block">Bundle</span>
         {bundle && bundle.members.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {bundle.members.map((m) => (
-              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300">
+              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-elevated text-text-primary">
                 {m}
                 <button onClick={() => removeMember(m)} aria-label={`Remove ${m} from bundle`} className="opacity-60 hover:opacity-100">×</button>
               </span>
@@ -130,19 +130,19 @@ export default function TagAdminControls({
             onFocus={loadVocab}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search a tag to bundle with…"
-            className="w-64 text-xs px-2 py-1 rounded-md bg-neutral-900 border border-neutral-700 outline-none placeholder:text-neutral-600"
+            className="w-64 text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none text-text-primary placeholder:text-text-secondary"
           />
           {suggestions.length > 0 && (
-            <div className="absolute z-30 mt-1 w-64 rounded-md border border-neutral-700 bg-neutral-900 shadow-xl max-h-48 overflow-y-auto">
+            <div className="absolute z-30 mt-1 w-64 rounded-md border border-border-strong bg-surface-overlay shadow-xl max-h-48 overflow-y-auto">
               {suggestions.map((s) => (
                 <button
                   key={s.key}
                   onClick={() => addToBundle(s.key)}
                   disabled={bundling === s.key}
-                  className="w-full text-left px-2.5 py-1.5 hover:bg-neutral-800 text-neutral-300 flex items-center justify-between gap-2"
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-surface-elevated text-text-secondary flex items-center justify-between gap-2"
                 >
                   <span>{s.label}</span>
-                  <span className="text-neutral-600">{s.count}</span>
+                  <span className="text-text-secondary">{s.count}</span>
                 </button>
               ))}
             </div>

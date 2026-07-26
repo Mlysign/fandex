@@ -188,29 +188,29 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
     : null;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
+    <div className="min-h-screen bg-surface text-text-primary">
       <main className="max-w-6xl mx-auto px-6 py-6">
         {/* Header */}
         <div className="flex gap-5">
           {person?.profileUrl && (
-            <Image src={person.profileUrl} alt={initial.label} width={112} height={160} className="w-28 h-40 rounded-xl object-cover border border-neutral-800 shrink-0" />
+            <Image src={person.profileUrl} alt={initial.label} width={112} height={160} className="w-28 h-40 rounded-xl object-cover border border-border shrink-0" />
           )}
           <div className="min-w-0">
-            <span className="text-[11px] uppercase tracking-wide text-neutral-500">{roleLabel}</span>
-            <h1 className="text-2xl font-bold">{initial.label}</h1>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-text-secondary">{roleLabel}</span>
+            <h1 className="font-serif text-serif-2xl text-text-primary">{initial.label}</h1>
             {initial.nameCollision && (
-              <p className="text-xs text-amber-500/90 mt-0.5">
+              <p className="text-xs mt-0.5" style={{ color: "var(--color-warning)" }}>
                 Multiple people share this name — showing the most well-known match{person?.knownForDepartment ? ` (${person.knownForDepartment})` : ""}.
               </p>
             )}
             {person && (
-              <p className="text-sm text-neutral-500 mt-0.5">
+              <p className="text-sm text-text-secondary mt-0.5">
                 {[person.knownForDepartment,
                   person.birthday ? `Born ${person.birthday}${person.age != null ? ` · age ${person.age}${person.deathday ? " at death" : ""}` : ""}` : null,
                   person.placeOfBirth].filter(Boolean).join(" · ")}
               </p>
             )}
-            {person?.biography && <p className="text-sm text-neutral-400 leading-relaxed mt-2 max-w-3xl line-clamp-4">{person.biography}</p>}
+            {person?.biography && <p className="text-sm text-text-secondary leading-relaxed mt-2 max-w-3xl line-clamp-4">{person.biography}</p>}
           </div>
         </div>
 
@@ -223,39 +223,43 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
               </span>
             )}
             {tagBundle && tagBundle.members.length > 0 && (
-              <span className="text-neutral-500">Also known as: {tagBundle.members.join(", ")}</span>
+              <span className="text-text-secondary">Also known as: {tagBundle.members.join(", ")}</span>
             )}
           </div>
         )}
 
-        {/* Stats — crowd always; you-vs-crowd only when logged in + rated */}
+        {/* Stats — crowd always; you-vs-crowd only when logged in + rated.
+            Crowd numbers stay UNCOLORED (H1.6b's restraint rule: crowd rating
+            is metadata, not a personal signal — color is reserved for your own
+            taste-match). "Your average" is a personal signal, so it gets the
+            one accent. */}
         <div className="mt-5 flex flex-wrap gap-3">
           {initial.community.avg != null && (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-              <div className="text-2xl font-semibold tabular-nums text-sky-400">{initial.community.avg.toFixed(1)}</div>
-              <div className="text-xs text-neutral-400 mt-0.5">Crowd average · {initial.community.count} titles</div>
+            <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+              <div className="text-2xl font-semibold tabular-nums text-text-primary">{initial.community.avg.toFixed(1)}</div>
+              <div className="text-xs text-text-secondary mt-0.5">Crowd average · {initial.community.count} titles</div>
             </div>
           )}
           {prefix === "tag" && initial.bayesCommunityAvg != null && (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-              <div className="text-2xl font-semibold tabular-nums text-sky-300">{initial.bayesCommunityAvg.toFixed(1)}</div>
-              <div className="text-xs text-neutral-400 mt-0.5">Crowd average (Bayesian)</div>
+            <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+              <div className="text-2xl font-semibold tabular-nums text-text-primary">{initial.bayesCommunityAvg.toFixed(1)}</div>
+              <div className="text-xs text-text-secondary mt-0.5">Crowd average (Bayesian)</div>
             </div>
           )}
           {s?.userAvg != null && (
-            <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-              <div className="text-2xl font-semibold tabular-nums text-emerald-400">{s.userAvg.toFixed(1)}</div>
-              <div className="text-xs text-neutral-400 mt-0.5">Your average · {s.userCount} rated</div>
+            <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+              <div className="text-2xl font-semibold tabular-nums text-accent">{s.userAvg.toFixed(1)}</div>
+              <div className="text-xs text-text-secondary mt-0.5">Your average · {s.userCount} rated</div>
             </div>
           )}
-          <div className="rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-            <div className="text-2xl font-semibold tabular-nums">{initial.total}</div>
-            <div className="text-xs text-neutral-400 mt-0.5">Titles</div>
+          <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+            <div className="text-2xl font-semibold tabular-nums text-text-primary">{initial.total}</div>
+            <div className="text-xs text-text-secondary mt-0.5">Titles</div>
           </div>
         </div>
         {deltaTxt && (
           <p className="text-sm mt-3">
-            <span className={s!.delta! > 0 ? "text-emerald-400" : s!.delta! < 0 ? "text-rose-400" : "text-neutral-300"}>{deltaTxt}</span>
+            <span style={{ color: s!.delta! > 0 ? "var(--color-success)" : s!.delta! < 0 ? "var(--color-danger)" : "var(--color-text-secondary)" }}>{deltaTxt}</span>
           </p>
         )}
 
@@ -267,13 +271,13 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
             <span
               className="inline-flex items-center rounded-full px-2.5 py-1 text-sm font-bold tabular-nums"
               style={{
-                background: mine.tagImpact.direction === "up" ? "#4ade8026" : mine.tagImpact.direction === "down" ? "#ef444426" : "#9ca3af26",
-                color: mine.tagImpact.direction === "up" ? "#4ade80" : mine.tagImpact.direction === "down" ? "#ef4444" : "#9ca3af",
+                background: mine.tagImpact.direction === "up" ? "var(--color-success-subtle)" : mine.tagImpact.direction === "down" ? "var(--color-danger-subtle)" : "var(--color-surface-elevated)",
+                color: mine.tagImpact.direction === "up" ? "var(--color-success)" : mine.tagImpact.direction === "down" ? "var(--color-danger)" : "var(--color-text-secondary)",
               }}
             >
               Fandex impact {mine.tagImpact.points > 0 ? "+" : ""}{mine.tagImpact.points}
             </span>
-            <span className="text-xs text-neutral-500">
+            <span className="text-xs text-text-secondary">
               {mine.tagImpact.direction === "up" && "titles with this tag typically score above your average"}
               {mine.tagImpact.direction === "down" && "titles with this tag typically score below your average"}
               {mine.tagImpact.direction === "neutral" && "titles with this tag score about the same as your average"}
@@ -296,17 +300,17 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
         {/* Sort */}
         <div className="mt-6 mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-300">Titles</h2>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-text-secondary">Titles</h2>
           <div className="flex gap-1">
             {SORT_LABELS.map((o) => (
               <button key={o.key} onClick={() => onSort(o.key)}
-                className={`text-xs px-2.5 py-1 rounded-md border ${!fandexActive && sort === o.key ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"}`}>
+                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${!fandexActive && sort === o.key ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"}`}>
                 {o.label}
               </button>
             ))}
             {mine && (
               <button onClick={() => setFandexActive(true)}
-                className={`text-xs px-2.5 py-1 rounded-md border ${fandexActive ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-400 hover:text-white"}`}>
+                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${fandexActive ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"}`}>
                 Fandex Score
               </button>
             )}
@@ -315,7 +319,7 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
         {/* Grid */}
         {cardItems.length === 0 ? (
-          <p className="text-sm text-neutral-500 py-12 text-center">Nothing found for this {roleLabel.toLowerCase()}.</p>
+          <p className="text-sm text-text-secondary py-12 text-center">Nothing found for this {roleLabel.toLowerCase()}.</p>
         ) : (
           <GroupedView
             items={cardItems}
@@ -331,7 +335,7 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
         {hasMore && (
           <div className="mt-6 text-center">
             <button onClick={() => load(page + 1, sort, false)} disabled={loading}
-              className="text-sm px-4 py-2 rounded-lg border border-neutral-700 hover:border-neutral-500 disabled:opacity-50">
+              className="text-sm px-4 py-2 rounded-lg border border-border-strong hover:border-neutral-400 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">
               {loading ? "Loading…" : "Load more"}
             </button>
           </div>
