@@ -7,11 +7,13 @@ import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
+import FacetLink from "@/components/FacetLink";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
+import Eyebrow from "@/components/ui/Eyebrow";
 import {
   UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort,
@@ -87,6 +89,31 @@ function mergeSorted(prev: any[], incoming: any[], prepend: boolean) {
   });
 }
 
+// A5 — typed search groups (Titles / People / Tags). People/Tags are a small
+// row of clickable pills above the title results, linking straight to the
+// facet page — the same catalog vocab `FacetAutocomplete` already searches
+// for the must-include/exclude pills, just surfaced as a result group here
+// instead of requiring you to already know that control exists.
+function FacetMatchGroup({ title, matches }: { title: string; matches: VocabMatch[] }) {
+  if (matches.length === 0) return null;
+  return (
+    <div className="mb-4">
+      <Eyebrow tone="secondary" className="block mb-2">{title}</Eyebrow>
+      <div className="flex flex-wrap gap-2">
+        {matches.map((m) => (
+          <FacetLink
+            key={`${m.kind}|${m.role ?? ""}|${m.key}`}
+            kind={m.kind as "tag" | "person" | "company"}
+            role={m.role}
+            label={m.label}
+            className="inline-flex items-center gap-1.5 text-label px-3 py-1.5 rounded-full border border-border bg-surface-elevated text-text-primary hover:border-border-strong transition-colors"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Sentinel = { loading: boolean; has: boolean; busy: string; cta: string; end: string; onClick: () => void };
 
 // One end-of-list loader bar (top or bottom of the browse timeline). Module-scoped
@@ -150,6 +177,12 @@ export default function DiscoverPage() {
   const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [webItems, setWebItems] = useState<any[]>([]);   // fresh DB matches (fetch-more)
   const [webLoading, setWebLoading] = useState(false);
+  // A5 — typed search groups: People/Tags matching a real text query, shown
+  // above the Titles results. Signed-in only (same reason /api/discover/find
+  // is skipped for anon above — it's an authed endpoint) so anon gets exactly
+  // today's Titles-only behavior, no regression.
+  const [peopleMatches, setPeopleMatches] = useState<VocabMatch[]>([]);
+  const [tagMatches, setTagMatches] = useState<VocabMatch[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Browse = the live infinite timeline (a much wider pool of upcoming releases
@@ -291,7 +324,7 @@ export default function DiscoverPage() {
   // ── Search loader ──
   async function runSearch(offset: number, append: boolean) {
     if (append) setSearchLoadingMore(true);
-    else { setSearchLoading(true); setWebItems([]); }
+    else { setSearchLoading(true); setWebItems([]); setPeopleMatches([]); setTagMatches([]); }
     try {
       // SM6: the local-catalog find is an authed endpoint — for anonymous
       // viewers skip straight to the public database results below instead of
@@ -318,6 +351,20 @@ export default function DiscoverPage() {
       // filmography). Both shown deduped under "More from the databases".
       if (!append) {
         const query = q.trim();
+
+        // A5 — typed groups (People/Tags): a real text query only (not a bare
+        // facet/year filter, which isn't something you "typed"), and only for
+        // a signed-in viewer — /api/discover/facets is the same authed
+        // catalog-vocab search FacetAutocomplete already uses.
+        if (authed && query.length >= 2) {
+          try {
+            const md = await (await fetch(`/api/discover/facets?q=${encodeURIComponent(query)}`)).json();
+            const matches: VocabMatch[] = md.matches ?? [];
+            setPeopleMatches(matches.filter((m) => m.kind === "person").slice(0, 8));
+            setTagMatches(matches.filter((m) => m.kind === "tag").slice(0, 8));
+          } catch { /* ignore — Titles results still render */ }
+        }
+
         const wantWeb = query.length >= 2 || filters.includeFacets.length > 0;
         if (!wantWeb) { setWebItems([]); return; }
         setWebLoading(true);
@@ -556,19 +603,31 @@ export default function DiscoverPage() {
             {searchLoading && effView === "list" && <ListSkeleton />}
             {searchLoading && effView === "calendar" && <Spinner label="Searching…" />}
 
-            {!searchLoading && combined.length === 0 && webLoading && (
+            {/* A5 — People/Tags groups, shown above the Titles results whenever
+                a real text query matched the catalog vocab. */}
+            {!searchLoading && (
+              <>
+                <FacetMatchGroup title="People" matches={peopleMatches} />
+                <FacetMatchGroup title="Tags" matches={tagMatches} />
+              </>
+            )}
+
+            {!searchLoading && combined.length === 0 && peopleMatches.length === 0 && tagMatches.length === 0 && webLoading && (
               <Spinner label="Searching the databases…" />
             )}
 
-            {!searchLoading && !webLoading && combined.length === 0 && (
+            {!searchLoading && !webLoading && combined.length === 0 && peopleMatches.length === 0 && tagMatches.length === 0 && (
               <EmptyState
-                title={<>No results{q.trim() ? <> for &ldquo;<span className="text-white">{q}</span>&rdquo;</> : " with these filters"}</>}
+                title={<>No results{q.trim() ? <> for &ldquo;<span className="text-text-primary">{q}</span>&rdquo;</> : " with these filters"}</>}
                 actions={<Button variant="ghost" onClick={resetFilters}>Clear search &amp; filters</Button>}
               />
             )}
 
             {!searchLoading && combined.length > 0 && (
               <>
+                {(peopleMatches.length > 0 || tagMatches.length > 0) && (
+                  <Eyebrow tone="secondary" className="block mb-2">Titles</Eyebrow>
+                )}
                 {effView === "calendar" ? (
                   <CalendarView items={combined as any} onSelect={(i) => router.push(buildItemHref(i as any))} />
                 ) : (
