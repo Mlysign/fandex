@@ -21,6 +21,7 @@ import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
+import LibraryWishlistTabs from "@/components/LibraryWishlistTabs";
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 
@@ -34,7 +35,7 @@ function OnboardingState({ identities }: { identities: any[] }) {
     {
       label: "Connect an account",
       done: hasAny,
-      action: <Link href="/settings" className="text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors">Go to Profile →</Link>,
+      action: <Link href="/settings" className="text-xs px-3 py-1.5 rounded-lg bg-surface-elevated hover:bg-surface-overlay text-text-secondary hover:text-text-primary transition-colors">Go to Profile →</Link>,
       detail: hasAny
         ? `Connected: ${[...connectedProviders].map((p) => SOURCE_LABELS[p] ?? p).join(", ")}`
         : "Link Steam, Trakt, or RAWG to import your lists automatically.",
@@ -42,7 +43,7 @@ function OnboardingState({ identities }: { identities: any[] }) {
     {
       label: "Add items from Discover",
       done: false,
-      action: <Link href="/discover" className="text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors">Go to Discover →</Link>,
+      action: <Link href="/discover" className="text-xs px-3 py-1.5 rounded-lg bg-surface-elevated hover:bg-surface-overlay text-text-secondary hover:text-text-primary transition-colors">Go to Discover →</Link>,
       detail: "Browse upcoming releases and add them to your wishlist.",
     },
     {
@@ -56,8 +57,8 @@ function OnboardingState({ identities }: { identities: any[] }) {
   return (
     <div className="max-w-md mx-auto mt-16 px-4">
       <div className="text-center mb-10">
-        <p className="text-2xl font-bold mb-2">Welcome to Fandex</p>
-        <p className="text-neutral-400 text-sm">Track every game, movie, and show you&apos;re waiting for — in one place.</p>
+        <p className="font-serif text-serif-lg text-text-primary mb-2">Welcome to Fandex</p>
+        <p className="text-text-secondary text-sm">Track every game, movie, and show you&apos;re waiting for — in one place.</p>
       </div>
       <div className="space-y-3">
         {steps.map((step, i) => (
@@ -65,22 +66,22 @@ function OnboardingState({ identities }: { identities: any[] }) {
             key={i}
             className="flex gap-4 p-4 rounded-xl border"
             style={{
-              borderColor: step.done ? "rgba(74,222,128,0.25)" : "rgb(38,38,38)",
-              background: step.done ? "rgba(74,222,128,0.04)" : "rgba(23,23,23,0.5)",
+              borderColor: step.done ? "var(--color-success-subtle)" : "var(--color-border)",
+              background: step.done ? "var(--color-success-subtle)" : "var(--color-surface-elevated)",
             }}
           >
             <div
               className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
-              style={{ background: step.done ? "#4ade80" : "rgb(38,38,38)", color: step.done ? "#000" : "#555" }}
+              style={{ background: step.done ? "var(--color-success)" : "var(--color-neutral-700)", color: step.done ? "var(--color-neutral-950)" : "var(--color-text-secondary)" }}
             >
               {step.done ? "✓" : i + 1}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-3 mb-1">
-                <p className={`text-sm font-medium ${step.done ? "text-neutral-300" : "text-white"}`}>{step.label}</p>
+                <p className={`text-sm font-medium ${step.done ? "text-text-secondary" : "text-text-primary"}`}>{step.label}</p>
                 {step.action}
               </div>
-              <p className="text-xs text-neutral-500 leading-relaxed">{step.detail}</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{step.detail}</p>
             </div>
           </div>
         ))}
@@ -213,6 +214,7 @@ export default function WishlistPage() {
 
   return (
     <div className="min-h-screen">
+      <LibraryWishlistTabs active="wishlist" />
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
@@ -229,7 +231,7 @@ export default function WishlistPage() {
           <button
             onClick={sync}
             disabled={isBusy}
-            className="flex-shrink-0 text-sm px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg disabled:opacity-40 transition-colors border border-neutral-700 whitespace-nowrap"
+            className="flex-shrink-0 text-sm px-3 py-1.5 bg-surface-elevated hover:bg-surface-overlay rounded-lg disabled:opacity-40 transition-colors border border-border-strong text-text-secondary hover:text-text-primary whitespace-nowrap"
           >
             {autoSyncing ? <span className="animate-pulse">Syncing…</span> : syncing ? "Syncing…" : "Sync"}
           </button>
@@ -245,7 +247,7 @@ export default function WishlistPage() {
 
         {!loading && items.length > 0 && sorted.length === 0 && (
           <EmptyState
-            title={<>No results{q ? <> for &ldquo;<span className="text-white">{search}</span>&rdquo;</> : " with these filters"}</>}
+            title={<>No results{q ? <> for &ldquo;<span className="text-text-primary">{search}</span>&rdquo;</> : " with these filters"}</>}
             actions={q ? <Button variant="ghost" onClick={() => setSearch("")}>Clear search</Button> : undefined}
           />
         )}

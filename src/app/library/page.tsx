@@ -19,6 +19,7 @@ import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
+import LibraryWishlistTabs from "@/components/LibraryWishlistTabs";
 
 
 export default function LibraryPage() {
@@ -116,6 +117,7 @@ export default function LibraryPage() {
 
   return (
     <div className="min-h-screen">
+      <LibraryWishlistTabs active="library" />
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
@@ -133,7 +135,7 @@ export default function LibraryPage() {
           <button
             onClick={sync}
             disabled={syncing}
-            className="flex-shrink-0 text-sm px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg disabled:opacity-40 transition-colors border border-neutral-700 whitespace-nowrap"
+            className="flex-shrink-0 text-sm px-3 py-1.5 bg-surface-elevated hover:bg-surface-overlay rounded-lg disabled:opacity-40 transition-colors border border-border-strong text-text-secondary hover:text-text-primary whitespace-nowrap"
           >
             {syncing ? "Syncing…" : "Sync"}
           </button>
@@ -163,7 +165,7 @@ export default function LibraryPage() {
 
         {!loading && items.length > 0 && sorted.length === 0 && (
           <EmptyState
-            title={q ? <>No results for &ldquo;<span className="text-white">{search}</span>&rdquo;</> : "No items match the current filters"}
+            title={q ? <>No results for &ldquo;<span className="text-text-primary">{search}</span>&rdquo;</> : "No items match the current filters"}
             actions={q ? <Button variant="ghost" onClick={() => setSearch("")}>Clear search</Button> : undefined}
           />
         )}
