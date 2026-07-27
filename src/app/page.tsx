@@ -14,7 +14,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
 import { buildItemHref } from "@/lib/itemUrl";
-import { usePageTitle } from "@/lib/usePageTitle";
 
 // H1.6e — the real Home: `/` is the public browse anchor of the H1 IA. Anon
 // gets a compact sign-in hero + the same public Popular/Upcoming rails
@@ -63,7 +62,6 @@ function RailSkeleton({ title }: { title: string }) {
 }
 
 export default function HomePage() {
-  usePageTitle("Home");
   const router = useRouter();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);

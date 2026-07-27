@@ -78,6 +78,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const { item, links } of itemMap.values()) {
       const merged = mergeLinks(links, item.type, country);
+      const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
       // `releaseDate` is the real release date (from the merged links) so the
       // "release" sort actually sorts by release. When the user watched/played it
       // is carried separately as `reviewedAt`.
@@ -92,7 +93,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
         reviewedAt: item.reviewedAt,
         addedAt: item.addedAt,
         libraryStatus: item.status,
-        fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
+        fandexScore: fx?.score ?? null,
+        fandexCenter: fx?.center ?? null,
         communityScore: representativeCommunity(merged.communityRatings),
       });
     }

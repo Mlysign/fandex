@@ -114,6 +114,12 @@ export interface EnrichedItem {
   // null when cold-start (too few rated items) or this item matches none of
   // the user's profile facets. Absent entirely for a logged-out viewer.
   fandexScore?: number | null;
+  // S11 (2026-07-27) — the SAME per-user constant `computeFandexScore` returns
+  // as `center` (baseline*10), carried alongside the score so the badge can
+  // render baseline-relative bands (center±8) instead of the old fixed 70/50.
+  // Identical across every item for a given user/request — attached per-item
+  // only because MediaCardItem has no per-response context to hang it on.
+  fandexCenter?: number | null;
   // Q14 (2026-07-19) — crowd/platform rating, 0-100 scale (representativeCommunity
   // over communityRatings). Card badge only; Library/Wishlist didn't show one at
   // all before this.

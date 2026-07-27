@@ -21,20 +21,24 @@ export interface ScoringConfigValues {
 }
 
 // Mirrors discovery.ts's ROLE_WEIGHT + K_SHRINK verbatim, so seeding this table
-// changes no live scoring behavior (that swap is H5.2). The K constants and
-// perCategoryCap are provisional defaults, tuned for real against a real
-// library in H5.5. Q19 asks for K_up > K_down (asymmetric); defaults stay
-// SYMMETRIC (matching the prior single-K behavior exactly) so the actual skew
-// amount is a real calibration decision made against real data via
-// /dev/scoring, not a guessed constant baked in here.
+// changes no live scoring behavior (that swap is H5.2). perCategoryCap is
+// still a provisional default. The K constants were originally 10/10
+// (unchanged from the pre-H5 behavior) pending real calibration — that
+// calibration happened in H5.5/S11 (2026-07-27, see SM13): measured against a
+// real 1,855-item library, K=10 compressed the whole score range into
+// 58.8–79.1 (p10–p90 of just 9 points), making "weak match" unreachable.
+// K=25 is the largest value that library supports with ZERO clamping at 0/100
+// (K=30 already clips the top item) — see fandex-score.md §3.3/D1 for the
+// projection math. Still symmetric: Q19's asymmetric-gain idea (K_up > K_down)
+// remains a live option but wasn't part of this calibration pass.
 export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   roleWeights: {
     director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6,
     developer: 1.2, publisher: 0.8, studio: 0.7, network: 0.6, tag: 1.0,
   },
   priorStrength: 5,
-  mappingConstantUp: 10,
-  mappingConstantDown: 10,
+  mappingConstantUp: 25,
+  mappingConstantDown: 25,
   perCategoryCap: 3,
 };
 

@@ -22,6 +22,7 @@ export interface DiscoverItem {
   score: number;
   reasons: Reason[];
   fandexScore: number | null;
+  fandexCenter: number | null;
   // PR15 (2026-07-22): absent/true means linkable, same convention as
   // MediaCardItem (cardItem.ts). false for an anonymous-viewer result that
   // wasn't persisted to a real row — id is a synthetic composite key

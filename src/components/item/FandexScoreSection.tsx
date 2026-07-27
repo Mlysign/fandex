@@ -58,7 +58,7 @@ export default function FandexScoreSection({
   if (score == null) return null;
 
   const rounded = Math.round(score);
-  const color = fandexScoreColor(score);
+  const color = fandexScoreColor(score, center);
   // Q29: counted contributors first (by contribution, as before); capped-out
   // tags (beyond the per-category cap) sink to the bottom regardless of their
   // own dev — they're 0 either way, but grouping keeps "why isn't this

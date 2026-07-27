@@ -9,7 +9,7 @@ import { get as dbGet } from "@/lib/db";
 import { personalizedFeed, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { fetchGamePage, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
-import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
+import { getLibraryFacetAnalysis, pickBestGenre } from "@/lib/libraryAnalysis";
 
 // H1.6e — Home's three rails (Popular / Upcoming / Fandex Recommendation) plus
 // a signed-in stats strip. Reuses the exact discover-feed + persist/annotate
@@ -97,14 +97,11 @@ export async function GET() {
       const wishlistTotal = dbGet<{ n: number }>(
         "SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?", [userId]
       )?.n ?? 0;
-      const bestTag = a.facets
-        .filter((f) => f.kind === "tag" && f.count >= MIN_TAG_COUNT)
-        .sort((x, y) => y.ba - x.ba)[0] ?? null;
       stats = {
         libraryTotal: a.libraryItemCount,
         wishlistTotal,
         ratedTotal: a.ratedItemCount,
-        bestGenre: bestTag ? { label: bestTag.label, ba: Math.round(bestTag.ba * 10) / 10 } : null,
+        bestGenre: pickBestGenre(a.facets, MIN_TAG_COUNT),
       };
     }
 

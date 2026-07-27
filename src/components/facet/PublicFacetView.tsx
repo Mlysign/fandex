@@ -34,6 +34,7 @@ interface Mine {
   stats: { userAvg: number | null; userCount: number; communityAvg: number | null; delta: number | null; baseline: number } | null;
   states: Record<string, MineState>;
   fandexById: Record<string, number>;
+  fandexCenter?: number | null;
   tagImpact?: TagImpact | null;
 }
 
@@ -45,7 +46,7 @@ interface Props {
 }
 
 // PublicFacetItem + the personal overlay → the shared card shape.
-function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexScore: number | undefined): MediaCardItem {
+function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexScore: number | undefined, fandexCenter: number | null | undefined): MediaCardItem {
   return {
     id: item.id,
     type: item.type,
@@ -56,6 +57,7 @@ function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexSc
     onWatchlist: mine?.onWatchlist ?? false,
     libraryStatus: mine?.libraryStatus ?? null,
     fandexScore: fandexScore ?? null,
+    fandexCenter: fandexCenter ?? null,
     communityScore: item.communityScore,
     roles: item.roles,
     sources: item.sources,
@@ -176,7 +178,7 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   // "Newest" gets month dividers + a month scrubber, "Highest rated" gets
   // rating buckets, "Most popular" and the Fandex overlay stay flat (no
   // natural date/rating grouping to divide by).
-  const cardItems: MediaCardItem[] = shownItems.map((it) => toCardItem(it, mine?.states[it.id], mine?.fandexById[it.id]));
+  const cardItems: MediaCardItem[] = shownItems.map((it) => toCardItem(it, mine?.states[it.id], mine?.fandexById[it.id], mine?.fandexCenter));
   const groupBy: "month" | "rating" | "none" = fandexActive ? "none" : sort === "newest" ? "month" : sort === "rating" ? "rating" : "none";
   const ratingOf = (i: MediaCardItem) => (i.communityScore != null ? i.communityScore / 10 : null);
 

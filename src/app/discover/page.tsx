@@ -146,10 +146,14 @@ export default function DiscoverPage() {
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
   const [filtersRest, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
   const filters: UiFilters = { ...filtersRest, types };
-  // Default = "releaseDate": the newest-first Timeline (works for anon + logged-in;
-  // a taste/rating sort would leave anon with an empty results view). Popularity /
-  // Rating / Fandex Score (or a query/filter) switch into catalog search results.
-  const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "releaseDate", normalizeSort);
+  // Default = "popularity" (S2, 2026-07-27): H1.1 locked "Popularity for
+  // everyone" as the industry-convention default; H5.7 held it back at
+  // "releaseDate" only because a taste/rating sort risked an empty results
+  // view for anon. The 4th smoke sweep (2026-07-27) measured Popularity
+  // holding a full, genuinely-reordered set for anon, so that blocker is
+  // gone. releaseDate stays the newest-first Timeline; Popularity / Rating /
+  // Fandex Score (or a query/filter) switch into catalog search results.
+  const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "popularity", normalizeSort);
   const [view, setView] = useViewMode("rr_view_discover", "card", ["list", "card", "calendar"]);
 
   // ── Browse (Timeline) state ──

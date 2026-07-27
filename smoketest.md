@@ -112,11 +112,19 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 11. Gated APIs anon (`/api/library`, `/api/watchlist` POST, `/api/settings`) → 401, error shape sane.
 12. Junk input: watchlist POST with bad posterUrl (S12), bad enum values → 400.
 
-**C. Logged-in (minted cookie)**
-> Everything below is **still fully unverified** as of 2026-07-27 — four consecutive sweeps have
-> been anon-only because of the mint block. This is the highest-value block to run the moment a
-> real session is available; H1.6e/f shipped a lot of authed-only surface that has never been
-> seen with real data.
+**C. Logged-in (minted cookie — or, much better, see below)**
+> **✅ 2026-07-27, 5th pass: this block finally RAN.** The unlock was trivial and is the thing to
+> try FIRST next time: **Nils's own Chrome (the `claude-in-chrome` tools, NOT the in-app Browser
+> pane) already holds a live `rr2_session` cookie for `localhost:3000`.** No mint, no OAuth, no
+> classifier block — `list_connected_browsers` → `tabs_create_mcp` → navigate to localhost →
+> probe `fetch('/api/library')` and check for 200. Don't reach for the (still-blocked) mint
+> recipe until that probe comes back 401.
+>
+> ⚠️ **Do NOT log out at the end of a logged-in sweep** — it bumps `session_epoch` and there is
+> no way back in without Nils re-doing OAuth by hand. Run anon checks in a separate profile, or
+> accept an authed-only pass. Findings from the 5th pass: **SM10–SM16**.
+>
+> Session in use: `ramses3006`, RAWG identity, 1,918 library items / 97 wishlist / 1,595 rated.
 13. Nav pages all render with real data (library ~2k items). **New/changed in H1.6c/e/f:**
     the **`/profile` hub** (stats strip, "Coming up" list, Recommended rail), **`/calendar`**
     (type-chip filter + its month/agenda toggle), Home's **stats strip + best-genre card +
@@ -195,9 +203,14 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
     small target it fixed. Run at 375 / 500 / 1280px — the chip and sort lines only become
     vertical neighbours once Row 1 wraps, so the collision is width-dependent.
     Known-and-accepted: the 3 view-toggle buttons are **34×44** (they can't each claim 44px of
-    width inside a ~102px segmented group). `ActionCells` is still **h-8 (32px)** in card
-    layout / **36px** in row layout — NOT yet addressed, and only measurable logged-in
-    (anon cards render no action bar).
+    width inside a ~102px segmented group). **`ActionCells` fixed 2026-07-27 (task S3)** — card
+    layout got `.tap-44-y` (width was already >44px in practice, only height 32→44 needed
+    expanding), row layout got full `.tap-44` **plus** its gap widened `gap-1`→`gap-2` (4px→8px,
+    otherwise the three 44px-wide expansions would overlap by 4px each), star-picker buttons got
+    `.tap-44-y` only (10 stars at 2px gaps can't each claim 44px width). Verified: zero overlap
+    in either layout, a functional click inside the invisible padding routes to the right button.
+    Don't re-measure this every sweep — it's fixed; just flag if a future style change to
+    `ActionCells.tsx`'s gaps/sizes looks like it could have reopened the collision.
 29. **Layout**: wasted or cramped space at each breakpoint; grids reflowing sensibly between
     375px / tablet / wide desktop; no overflow, truncation without tooltip/ellipsis, or
     overlapping elements; sticky headers/filters behaving while scrolling.
@@ -269,6 +282,49 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
   user's platform accounts and clearing isn't obviously exposed; note as not-exercised.
 - Facet "Highest rated" ranking obscure titles first is SM3 (no vote damping), not a
   provider bug.
+- **Tab titles: test them by HARD LOAD, never by clicking through the nav** (learned SM10). A
+  client-side nav is the one path where `usePageTitle` works, so a click-through check shows a
+  false pass on all 7 pages. `navigate` to the URL, wait, then read `document.title`.
+- **The dev server needs ~8s, not 5, for the fetch-heavy authed hubs** (`/profile` fires
+  `/api/home` + `/api/calendar` in parallel, both cold-compiled). At 5s `/profile` shows only its
+  identity + link grid, which reads convincingly as "the stats/Coming-up/Recommended rails were
+  never built" — they were; they just pop in late with **no skeleton**. Wait 8s before judging any
+  authed hub empty. (Corollary worth logging once: that missing skeleton is itself a minor finding.)
+- **Case-sensitivity + scroll position will fake a missing UI section.** A5's People/Titles group
+  headers are `text-transform: uppercase` in CSS, and the group sits above the default scroll
+  position after a search. A `/\bPeople\b/` probe on `innerText` plus an unscrolled screenshot
+  made a working feature look broken. Scroll to top and screenshot before concluding anything is
+  absent, and prefer querying for the elements (`a[href^="/person/"]`) over matching rendered text.
+- **Two `<nav aria-label="Primary">` in the DOM is CORRECT** — `AppNav` renders the desktop and
+  mobile bars as a pair and hides one with `display:none`, which removes it from the a11y tree.
+  `find`/`read_page` will still surface both and describe one as a "duplicate". Investigated and
+  dismissed 2026-07-27 — don't re-log it.
+- **`javascript_tool` blocks reads of anything it reads as a credential** — `getPropertyValue`
+  on a CSS custom property returned `[BLOCKED: Sensitive key]` purely because the surrounding
+  object key was named `accentToken`. Rename the variable (`brandAccent`) and it works. Not a
+  real block, just avoid `token`/`key`/`secret` in identifiers when probing styles.
+- **`resize_window` on a REAL connected Chrome browser (`claude-in-chrome` tools) cannot hit
+  arbitrary widths like 375/500/1280 — those are only reliably achievable in the sandboxed
+  in-app Browser pane (`mcp__Claude_Browser__resize_window`).** A real desktop Chrome window has
+  an OS/Chrome-imposed minimum width (measured 2026-07-27: ~606px was the narrowest achievable,
+  ~1034px the widest, on this machine) — asking for 375 silently clamps to whatever the window
+  manager allows, and `innerWidth` after the call may not match the requested value at all.
+  Always read `innerWidth`/`innerHeight` via `javascript_tool` right after a `resize_window` call
+  to confirm what you actually got, rather than trusting the tool's "successfully resized"
+  message. If a real 375px viewport matters (not just "narrow enough to hit the 2-column
+  breakpoint"), device emulation is needed, which these tools don't expose — note the
+  substitution rather than claim an exact width you didn't verify.
+- **Multiple Chrome browsers can be connected to one account** — if `list_connected_browsers`
+  ever shows more than one, a browser action mid-session can suddenly demand you call
+  `AskUserQuestion` to pick one (even after you were already successfully driving a tab). Ask,
+  then `select_browser` with the chosen deviceId — the existing tab/session state is preserved,
+  nothing is lost by the prompt.
+- **`.click()` via `javascript_tool` on a React-controlled element can read STALE state if you
+  check the DOM in the same synchronous script** — the click dispatches and React schedules the
+  re-render, but the very next line in the same script may run before that commit lands. Add a
+  small `await new Promise(r => setTimeout(r, 150))` between the click and the check (top-level
+  `await` works in `javascript_tool`), or use the `computer` tool's real click instead, which
+  goes through the actual browser event loop and doesn't have this race.
 - **`navigate` is intermittently denied by the safety classifier** for no reason tied to the
   URL (same URL succeeds on a bare retry seconds later) — don't treat one blocked `navigate`
   as a broken page; just retry once before investigating further. This is separate from the

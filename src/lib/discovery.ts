@@ -419,6 +419,17 @@ export function scoreFacets(facets: Facet[], w: Map<string, number>, idf: Map<st
 // them through even by mistake.
 export interface FandexScoreResult { score: number; center: number; reasons: Reason[] }
 
+// S11 (2026-07-27) — the center is a pure function of the profile (baseline*10,
+// same rounding computeFandexScore uses), with NO dependency on any item's
+// facets — unlike computeFandexScore, which returns null when an item shares
+// no facets with the profile. Lets a caller show/attach the center even for a
+// response that has no single "current item" (e.g. a facet page's one shared
+// per-request value) without needing a dummy facets array.
+export function fandexCenterFor(profile: Profile): number | null {
+  if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
+  return Math.round(profile.baseline * 10 * 10) / 10;
+}
+
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
 // `configOverride` (H5.4 live preview): use the draft mappingConstant/
@@ -592,6 +603,7 @@ export interface DiscoverResultItem {
   score: number;
   reasons: Reason[];
   fandexScore: number | null;
+  fandexCenter: number | null;
 }
 
 export interface FindResult {
@@ -626,13 +638,14 @@ export function find(userId: string, req: FindRequest): FindResult {
 
   // Fandex Score is computed here (not just for the paged slice) so the whole
   // set can be SORTED by it. The badge uses the RAW profile (H5.3) regardless.
-  const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null }[] = [];
+  const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }[] = [];
   for (const v of vectors) {
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
     const s = scoreFacets(v.facets, profile.w, idf);
-    scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: computeFandexScore(v.facets, rawProfile)?.score ?? null });
+    const fx = computeFandexScore(v.facets, rawProfile);
+    scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null });
   }
 
   // Unified sort model: releaseDate (newest) / popularity (votes) / rating
@@ -656,7 +669,7 @@ export function find(userId: string, req: FindRequest): FindResult {
   const total = scored.length;
   const page = scored.slice(offset, offset + limit);
 
-  const items: DiscoverResultItem[] = page.map(({ v, score, reasons, fandexScore }) => {
+  const items: DiscoverResultItem[] = page.map(({ v, score, reasons, fandexScore, fandexCenter }) => {
     const st = state.get(v.id);
     return {
       id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
@@ -668,7 +681,7 @@ export function find(userId: string, req: FindRequest): FindResult {
       libraryStatus: st?.libraryStatus ?? null,
       rating: st?.rating ?? null,
       sources: v.sources, score, reasons,
-      fandexScore,
+      fandexScore, fandexCenter,
     };
   });
 
@@ -698,9 +711,22 @@ export function searchFacets(q: string, kind: string | null, limit = 20): VocabE
   const { vocab } = getCache();
   const needle = q.trim().toLowerCase();
   if (!needle) return [];
-  return vocab
-    .filter((e) => (!kind || e.kind === kind) && e.label.toLowerCase().includes(needle))
-    .slice(0, limit);
+  const filtered = vocab.filter((e) => (!kind || e.kind === kind) && e.label.toLowerCase().includes(needle));
+  // SM14 (2026-07-27): the vocab keys person/company facets by kind+role+key
+  // (facetId — a person who both directed and wrote is two distinct entries,
+  // which matters for idf weighting). But facetUrl.ts drops role from the URL
+  // ON PURPOSE — /person/<slug> and /studio/<slug> fold every role into one
+  // page — so search must merge by kind+key too, or the same person/company
+  // shows up as duplicate pills pointing at the identical link. Re-sort after
+  // merging: a merged count can outrank entries that hadn't been split.
+  const merged = new Map<string, VocabEntry>();
+  for (const e of filtered) {
+    const mergeKey = `${e.kind}|${e.key}`;
+    const existing = merged.get(mergeKey);
+    if (existing) existing.count += e.count;
+    else merged.set(mergeKey, { ...e });
+  }
+  return [...merged.values()].sort((a, b) => b.count - a.count).slice(0, limit);
 }
 
 export interface TitleMatch { id: string; title: string; type: MediaType; posterUrl: string | null; year: number | null }

@@ -221,6 +221,18 @@ export function librarySignature(userId: string): string {
   return `${r?.n ?? 0}:${r?.mx ?? 0}:${r?.sm ?? 0}:${r?.wsm ?? 0}:${l?.lc ?? 0}:${l?.lmx ?? 0}`;
 }
 
+// SM11 (2026-07-27) — Home/Profile's "top genre" stat. Pulled out as a pure
+// function (rather than inlined in the route) so the "genre" narrowing is
+// unit-testable: `kind === "tag"` alone spans the whole tag taxonomy
+// (platform/theme/artstyle/meta…), so without the category check a
+// platform tag like "steam" can win the slot.
+export function pickBestGenre(facets: FacetStat[], minCount: number): { label: string; ba: number } | null {
+  const best = facets
+    .filter((f) => f.kind === "tag" && f.category === "genre" && f.count >= minCount)
+    .sort((x, y) => y.ba - x.ba)[0];
+  return best ? { label: best.label, ba: Math.round(best.ba * 10) / 10 } : null;
+}
+
 export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {
   // H5.6: fold the tag-alias signature into the cache key — a bundle edit
   // changes the aggregated facets but not the library itself, so librarySignature

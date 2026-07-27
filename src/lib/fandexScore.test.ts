@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
-import { buildProfile, computeFandexScore, Profile } from "./discovery";
+import { buildProfile, computeFandexScore, fandexCenterFor, Profile } from "./discovery";
 import { Facet } from "./facets";
+import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
+
+// S11 (2026-07-27): K was recalibrated 10 -> 25 against a real library (see
+// SM13/H5.5). These tests check the MAPPING FORMULA, not the specific K
+// value, so they read the live default rather than hardcoding a magic number
+// that the next recalibration would silently break.
+const K = DEFAULT_SCORING_CONFIG.mappingConstantUp;
 
 // H5.2 — the Bayesian rescore + the visible Fandex Score aggregate.
 //
@@ -126,7 +133,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
   const meta = (over: Partial<NonNullable<ReturnType<Profile["meta"]["get"]>>> & { classWeight: number }) =>
     ({ kind: "tag", key: "x", label: "X", ...over });
 
-  it("weighted-mean aggregate mapped via 50 + K·weightedDev (K=10 default)", () => {
+  it("weighted-mean aggregate mapped via 50 + K·weightedDev", () => {
     // Two facets, weight 1 each: dev = +1 and -0.5 → weightedDev = (1*1 + -0.5*1)/2 = 0.25
     const facets: Facet[] = [
       { kind: "tag", key: "a", label: "A", category: "genre" },
@@ -144,7 +151,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     };
     const result = computeFandexScore(facets, profile);
     expect(result).not.toBeNull();
-    expect(result!.score).toBeCloseTo(50 + 10 * 0.25, 6); // 52.5
+    expect(result!.score).toBeCloseTo(Math.round((50 + K * 0.25) * 10) / 10, 6);
     // Reasons carry BA/n through for the expanded breakdown (§3.4).
     const a = result!.reasons.find((r) => r.label === "A")!;
     expect(a.BA).toBe(1);
@@ -154,7 +161,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
   it("clamps to [0, 100] for an extreme weightedDev", () => {
     const facets: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
     const profile: Profile = {
-      w: new Map([["tag||a", 10]]), // dev 10 * K 10 = 100 above 50 → would be 150
+      w: new Map([["tag||a", 10]]), // dev 10 * K (>= 25) far overflows 50 → clamps to 100
       meta: new Map([["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })]]),
       baseline: 5, hasSignal: true, ratedItemCount: 10,
     };
@@ -221,7 +228,7 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
 
     const result = computeFandexScore(facets, profile)!;
     const expectedWeightedDev = (5 + 4 + 3) / 3;
-    expect(result.score).toBeCloseTo(Math.min(100, 50 + 10 * expectedWeightedDev), 6);
+    expect(result.score).toBeCloseTo(Math.min(100, 50 + K * expectedWeightedDev), 6);
     const counted = result.reasons.filter((r) => !r.capped);
     expect(counted.length).toBe(3);
     expect(counted.map((r) => r.label).sort()).toEqual(["t0", "t1", "t2"]);
@@ -311,5 +318,29 @@ describe("§4 hard exclusions — community rating, popularity/browsed, release 
     const scoreB = computeFandexScore(vectorHighPopularity.facets, profile);
     expect(scoreA).toEqual(scoreB);
     expect(scoreA!.score).toBe(computeFandexScore(facets, profile)!.score);
+  });
+});
+
+describe("fandexCenterFor (S11)", () => {
+  const base: Profile = { w: new Map(), meta: new Map(), baseline: 6.7, hasSignal: true, ratedItemCount: 10 };
+
+  it("matches computeFandexScore's own center for an item that DOES share a facet", () => {
+    const facets: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
+    const profile: Profile = {
+      ...base,
+      w: new Map([["tag||a", 1]]),
+      meta: new Map([["tag||a", { kind: "tag", key: "a", label: "A", category: "genre", classWeight: 1, BA: 1, n: 3 }]]),
+    };
+    expect(fandexCenterFor(profile)).toBe(computeFandexScore(facets, profile)!.center);
+  });
+
+  it("still returns a center when no item shares any facet — unlike computeFandexScore, which returns null", () => {
+    expect(computeFandexScore([], base)).toBeNull();
+    expect(fandexCenterFor(base)).toBe(67); // baseline 6.7 * 10
+  });
+
+  it("returns null under the same cold-start gate computeFandexScore uses", () => {
+    expect(fandexCenterFor({ ...base, hasSignal: false })).toBeNull();
+    expect(fandexCenterFor({ ...base, ratedItemCount: 0 })).toBeNull();
   });
 });

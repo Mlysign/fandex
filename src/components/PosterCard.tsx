@@ -83,7 +83,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           <CommunityScoreBadge score={item.communityScore} variant="overlay" className="shadow-sm" />
         </div>
         <div className="absolute top-1.5 right-1.5">
-          <FandexScoreBadge score={item.fandexScore} variant="overlay" className="shadow-sm" />
+          <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} variant="overlay" className="shadow-sm" />
         </div>
       </div>
 

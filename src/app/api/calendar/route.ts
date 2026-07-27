@@ -70,12 +70,14 @@ export const GET = withUser(async (req: NextRequest, session) => {
       if (sourceFilter && !item.platformSources.includes(sourceFilter)) continue;
 
       const merged = mergeLinks(links, item.type, country);
+      const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
       enriched.push({
         id: item.id,
         type: item.type,
         platformSources: item.platformSources,
         ...merged,
-        fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
+        fandexScore: fx?.score ?? null,
+        fandexCenter: fx?.center ?? null,
       });
     }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
 import { FacetKind, FacetRole, extractFacets } from "@/lib/facets";
-import { buildProfile, computeFandexScore, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, fandexCenterFor, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { loadLinks } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
@@ -111,6 +111,10 @@ export const GET = withUser(async (req: NextRequest, session) => {
     },
     states,
     fandexById,
+    // S11 (2026-07-27) — ONE center for the whole response (it's a per-user
+    // constant, not per-item), so the client can band fandexById's scores
+    // relative to it instead of a fixed 70/50.
+    fandexCenter: fandexCenterFor(profile),
     tagImpact,
   });
 });

@@ -16,6 +16,9 @@ export interface MediaCardItem {
   ratings?: { source: string; rating: number }[]; // per-platform breakdown
   libraryStatus?: string | null; // watched | played | owned
   fandexScore?: number | null;   // H5.3 — personalized taste-match (0-100); null/absent → no badge
+  // S11 (2026-07-27) — the score's center (baseline*10), so the badge can band
+  // strong/typical/weak relative to THIS user rather than a fixed 70/50.
+  fandexCenter?: number | null;
   // Q14 (2026-07-19) — context-dependent fields: rendered wherever present, absent
   // on surfaces that don't carry them (no per-surface prop needed).
   communityScore?: number | null; // crowd/platform rating, 0-100 scale; null/absent → no badge

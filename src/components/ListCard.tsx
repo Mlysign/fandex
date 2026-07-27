@@ -70,7 +70,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
             <span>· {item.roles.join(", ")}</span>
           )}
           <CommunityScoreBadge score={item.communityScore} />
-          <FandexScoreBadge score={item.fandexScore} />
+          <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} />
         </div>
       </div>
       {linkable && (

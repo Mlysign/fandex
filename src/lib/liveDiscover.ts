@@ -145,7 +145,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 // ── Per-type ranking ───────────────────────────────────────────────
-interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexScore: number | null }
+interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }
 
 // Q15 (2026-07-19): the visible Fandex Score badge, using the RAW rated-library
 // profile (never the membership-boosted LiveProfile used for feed ranking above,
@@ -155,8 +155,9 @@ interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexSco
 // hydration runs) — a documented, cheaper approximation than the catalog's fully
 // hydrated Fandex Score, consistent with this module's existing "no hydration on
 // the cheap path" tradeoff.
-function fandexFor(facets: Facet[], rawProfile: Profile): number | null {
-  return computeFandexScore(facets, rawProfile)?.score ?? null;
+function fandexFor(facets: Facet[], rawProfile: Profile): { score: number | null; center: number | null } {
+  const fx = computeFandexScore(facets, rawProfile);
+  return { score: fx?.score ?? null, center: fx?.center ?? null };
 }
 
 async function rankType(
@@ -180,7 +181,8 @@ async function rankType(
       .map((c): Scored => {
         const facets = listFacets(c);
         const s = scoreFacets(facets, profile.w, idf);
-        return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fandexFor(facets, rawProfile) };
+        const fx = fandexFor(facets, rawProfile);
+        return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fx.score, fandexCenter: fx.center };
       })
       .sort(byScore)
       .slice(0, FINAL_KEEP);
@@ -198,7 +200,8 @@ async function rankType(
       const h = hydrated[i];
       if (!c.posterUrl && h.posterUrl) c.posterUrl = h.posterUrl; // backfill Trakt items
       const s = scoreFacets(h.facets, profile.w, idf);
-      return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fandexFor(h.facets, rawProfile) };
+      const fx = fandexFor(h.facets, rawProfile);
+      return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fx.score, fandexCenter: fx.center };
     })
     .sort(byScore)
     .slice(0, FINAL_KEEP);
@@ -252,6 +255,9 @@ export interface PersonalizedItem {
   // non-releaseDate sort had to abandon the browse feed for the (much smaller)
   // local catalog search. communityScore mirrors discovery.ts's 0-100 scale.
   communityVotes: number; communityScore: number | null; fandexScore: number | null;
+  // S11 (2026-07-27) — the score's center, so the badge can band relative to
+  // this user's own baseline (center±8) instead of a fixed 70/50.
+  fandexCenter: number | null;
 }
 
 // Community stats (crowd popularity/rating) — independent of any per-user
@@ -266,13 +272,12 @@ function communityStatsOf(c: FeedCandidate): { communityVotes: number; community
 export function decorateSection<T extends FeedCandidate>(
   candidates: T[],
   userId: string | null
-): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null })[] {
+): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null; fandexCenter: number | null })[] {
   const rawProfile = userId ? buildProfile(userId) : null;
-  return candidates.map((c) => ({
-    ...c,
-    ...communityStatsOf(c),
-    fandexScore: rawProfile ? fandexFor(listFacets(c), rawProfile) : null,
-  }));
+  return candidates.map((c) => {
+    const fx = rawProfile ? fandexFor(listFacets(c), rawProfile) : { score: null, center: null };
+    return { ...c, ...communityStatsOf(c), fandexScore: fx.score, fandexCenter: fx.center };
+  });
 }
 
 const FEED_TTL_MS = 45 * 60 * 1000;
@@ -321,11 +326,11 @@ export async function personalizedFeed(userId: string, region: string): Promise<
     rankType(shows, profile, rawProfile, idf, true),    // shows: hydrate → full facets (TMDB + Trakt)
   ]);
 
-  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons, fandexScore }) => ({
+  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons, fandexScore, fandexCenter }) => ({
     id: c.id, rawId: c.rawId, source: c.source, type: c.type,
     title: c.title, releaseDate: c.releaseDate, posterUrl: c.posterUrl,
     platforms: c.platforms, overview: c.overview, ids: c.ids, raw: c.raw,
-    score, reasons, fandexScore, ...communityStatsOf(c),
+    score, reasons, fandexScore, fandexCenter, ...communityStatsOf(c),
   }));
 
   _feedCache.set(key, items);

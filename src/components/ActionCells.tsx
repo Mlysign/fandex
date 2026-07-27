@@ -27,8 +27,13 @@ function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: num
   return (
     <div className="flex items-center gap-0.5 bg-surface-overlay border border-border rounded-lg px-2 py-1.5 shadow-lg" onClick={stop} onMouseLeave={() => setHover(0)}>
       {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+        // S3 (2026-07-27): height-only (.tap-44-y), not full .tap-44 — 10 stars
+        // packed at gap-0.5 (2px) can't each claim 44px of WIDTH without
+        // overlapping their neighbours (would need ~22px of clearance per
+        // side); same tradeoff H1.6f accepted for SubBar's segmented
+        // view-toggle. Width stays the glyph's real size; height reaches 44px.
         <button key={n} onMouseEnter={() => setHover(n)} onClick={(e) => { stop(e); onPick(n); }} title={`${n}/10`} aria-label={`Rate ${n} out of 10`}
-          className="text-lg leading-none px-0.5 transition-transform hover:scale-125" style={{ color: shown >= n ? ratingColor(shown) : "var(--color-neutral-600)" }}>★</button>
+          className="tap-44-y text-lg leading-none px-0.5 transition-transform hover:scale-125" style={{ color: shown >= n ? ratingColor(shown) : "var(--color-neutral-600)" }}>★</button>
       ))}
     </div>
   );
@@ -53,8 +58,19 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
     return () => document.removeEventListener("pointerdown", onDown, true);
   }, [picking]);
 
+  // S3 (2026-07-27) — 44px minimum tap area, hit-only (visible size unchanged),
+  // same `.tap-44`/`.tap-44-y` technique H1.6f used on SubBar. Card cells are
+  // `flex-1` and already comfortably wider than 44px in practice (measured:
+  // ~50-60px even at 375px viewport / a 2-up grid), so only height (32→44)
+  // needs expanding — `.tap-44-y`, matching the width-already-fine case.
+  // Row cells are FIXED 36×36, under 44 on both axes, so they need the full
+  // `.tap-44` — which is why the row's own gap widens below (see the `gap-2`
+  // note): three 44px-wide expansions at the old 4px gap would overlap by 4px
+  // and start stealing taps from the neighbour, the exact trap the SubBar
+  // comment warns about.
+  const tapClass = layout === "card" ? "tap-44-y" : "tap-44";
   const cellSize = layout === "card" ? "flex-1 h-8" : "w-9 h-9 rounded-md";
-  const cell = "flex items-center justify-center gap-0.5 text-xs font-bold transition-all hover:brightness-125 disabled:opacity-50 " + cellSize + (layout === "card" ? " rounded-md" : "");
+  const cell = "flex items-center justify-center gap-0.5 text-xs font-bold transition-all hover:brightness-125 disabled:opacity-50 " + tapClass + " " + cellSize + (layout === "card" ? " rounded-md" : "");
 
   // Rate/Bookmark active states follow 03-components.md §2 literally (flat
   // accent, not the rating's own quality tier — that traffic-light coloring
@@ -99,9 +115,13 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
     );
   }
 
-  // Row: star picker inline to the left of the cells.
+  // Row: star picker inline to the left of the cells. gap-2 (not gap-1) — the
+  // three cells are fixed 36×36 (under 44 on both axes), so each gets the full
+  // `.tap-44`; at the old 4px gap their 44px-wide expansions would overlap by
+  // 4px (each cell bleeds (44-36)/2=4px toward its neighbour). 8px is the
+  // minimum gap where the two expansions meet edge-to-edge instead of overlapping.
   return (
-    <div className="flex items-center gap-1" onClick={stop} ref={rootRef}>
+    <div className="flex items-center gap-2" onClick={stop} ref={rootRef}>
       {picking && <StarPicker rating={rating} onPick={pick} />}
       {rateCell}{watchedCell}{wishlistCell}
     </div>

@@ -3,28 +3,42 @@
 // logged-out viewer): a missing number reads as neutral, a fabricated one
 // would mislead (docs/fandex-score.md §8).
 //
-// Restyled H1.6b onto Direction 2a's score ramp (03-components.md §9a) —
-// PER D-B (docs/ui-overhaul.md §8): the THRESHOLDS are unchanged from before
-// the restyle (>=70 / >=50 / below), only the three colors swap to the
-// design's tokens. The design's OWN 80/65 fixed band cutoffs are NOT
-// adopted — Q19 recentered the score on the user's own baseline, so there is
-// no fixed neutral point to band against; changing the cutoffs is a scoring
-// decision, not a restyle, and stays out of this file's scope.
-export function fandexScoreColor(score: number): string {
-  return score >= 70 ? "#5FE39A" : score >= 50 ? "#CFC9BE" : "#F0A04B";
+// Restyled H1.6b onto Direction 2a's score ramp (03-components.md §9a) — the
+// design's OWN 80/65 fixed band cutoffs are NOT adopted, since Q19 recentered
+// the score on the user's own baseline, so there is no fixed neutral point to
+// band against.
+//
+// S11 (2026-07-27, fixes SM12): D-B's decision was "keep baseline-relative
+// thresholds" — but the thresholds were never actually baseline-relative, they
+// were a hardcoded >=70/>=50 that only coincidentally read right for a user
+// whose baseline happened to be ~7. Bands are now `center ± BAND_MARGIN`, so
+// "typical match" means "about your own average" for every user. `center`
+// defaults to 50 (the pre-Q19 fixed center) when unavailable — same numeric
+// behavior as before this fix for any caller that hasn't threaded it through
+// yet, rather than silently mis-banding against a wrong assumed baseline.
+const BAND_MARGIN = 8;
+
+export function fandexScoreColor(score: number, center: number | null = 50): string {
+  const c = center ?? 50;
+  return score >= c + BAND_MARGIN ? "#5FE39A" : score <= c - BAND_MARGIN ? "#F0A04B" : "#CFC9BE";
 }
 
-function matchStrength(score: number): string {
-  return score >= 70 ? "strong match" : score >= 50 ? "typical match" : "weak match";
+function matchStrength(score: number, center: number | null = 50): string {
+  const c = center ?? 50;
+  return score >= c + BAND_MARGIN ? "strong match" : score <= c - BAND_MARGIN ? "weak match" : "typical match";
 }
 
 export default function FandexScoreBadge({
   score,
+  center = null,
   size = "sm",
   variant = "inline",
   className = "",
 }: {
   score: number | null | undefined;
+  /** The score's center (baseline*10) — bands render relative to THIS, not a
+   *  fixed point. Omit only when the caller genuinely has none to give. */
+  center?: number | null;
   size?: "sm" | "md";
   /** "inline" — plain colored text for a card meta row. "overlay" — dark
    *  blurred pill for a poster corner (§9a "pill-overlay" form). */
@@ -33,8 +47,8 @@ export default function FandexScoreBadge({
 }) {
   if (score == null) return null;
   const rounded = Math.round(score);
-  const color = fandexScoreColor(score);
-  const label = `Fandex Score ${rounded} out of 100 — ${matchStrength(score)}`;
+  const color = fandexScoreColor(score, center);
+  const label = `Fandex Score ${rounded} out of 100 — ${matchStrength(score, center)}`;
 
   if (variant === "overlay") {
     const dims = size === "md" ? "text-sm px-2.5 py-1 gap-1.5" : "text-[11px] px-1.5 py-0.5 gap-1";
