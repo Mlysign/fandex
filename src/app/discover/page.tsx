@@ -3,13 +3,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useViewMode } from "@/lib/useViewMode";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
 import FacetLink from "@/components/FacetLink";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
-import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -522,21 +521,9 @@ export default function DiscoverPage() {
     prevSortRef.current = sort;
   }, [sort]);
 
-  function handleCalendarMonth(month: Date) {
-    if (searchActive) return;
-    const visibleMonth = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
-    let latest = "", earliest = "", inMonth = 0;
-    for (const it of browseFiltered) {
-      if (!it.releaseDate) continue;
-      if (it.releaseDate > latest) latest = it.releaseDate;
-      if (!earliest || it.releaseDate < earliest) earliest = it.releaseDate;
-      if (it.releaseDate.slice(0, 7) === visibleMonth) inMonth++;
-    }
-    if (!latest) return;
-    if (earliest && visibleMonth <= earliest.slice(0, 7)) loadPreviousRef.current();
-    else if (visibleMonth >= latest.slice(0, 7)) loadMoreRef.current();
-    else if (inMonth === 0) loadMoreRef.current();
-  }
+  // (`handleCalendarMonth` lived here — it paged the browse feed as the
+  // calendar view scrolled between months. Deleted 2026-07-27 with Discover's
+  // calendar view; `/calendar` has its own paging.)
 
   // ── Filter mutators ──
   function toggleType(t: string) {
@@ -579,8 +566,13 @@ export default function DiscoverPage() {
   const ratingOf =
     sort === "rating" ? (i: any) => { const p = platformOf(i); return p != null ? p / 10 : null; }
     : undefined;
-  const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
-  const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
+  // 2026-07-27 (Nils): Discover is GRID-ONLY. The mockups show a 2-up card
+  // grid on every list page and no view switcher anywhere; list and calendar
+  // views are gone from here (Calendar keeps its own `/calendar` route, which
+  // is the IA's home for the month/agenda views). A single-entry
+  // `availableViews` makes SubBar drop the toggle entirely.
+  const availableViews: ViewMode[] = ["card"];
+  const effView: ViewMode = "card";
 
   // Browse timeline sentinels — top/bottom map to past/future by sort direction.
   const futureSentinel = { loading: loadingMore, has: hasMore, busy: "Loading newer releases…", cta: "Load newer releases", end: "No newer releases", onClick: () => loadMore() };
@@ -602,15 +594,14 @@ export default function DiscoverPage() {
         view={effView}
         onViewChange={setView}
         availableViews={availableViews}
+        resultCount={searchActive ? (searchTotal || combined.length) : browseSorted.length}
       />
 
       <main className="max-w-6xl mx-auto px-6 py-6">
         {/* ── Search results ── */}
         {searchActive ? (
           <ErrorBoundary label="discover search">
-            {searchLoading && effView === "card" && <Spinner label="Searching…" />}
-            {searchLoading && effView === "list" && <ListSkeleton />}
-            {searchLoading && effView === "calendar" && <Spinner label="Searching…" />}
+            {searchLoading && <Spinner label="Searching…" />}
 
             {/* A5 — People/Tags groups, shown above the Titles results whenever
                 a real text query matched the catalog vocab. */}
@@ -637,13 +628,9 @@ export default function DiscoverPage() {
                 {(peopleMatches.length > 0 || tagMatches.length > 0) && (
                   <Eyebrow tone="secondary" className="block mb-2">Titles</Eyebrow>
                 )}
-                {effView === "calendar" ? (
-                  <CalendarView items={combined as any} onSelect={(i) => router.push(buildItemHref(i as any))} />
-                ) : (
-                  <GroupedView items={combined as any} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} />
-                )}
+                <GroupedView items={combined as any} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} />
                 {webLoading && <div className="text-center text-xs text-text-secondary animate-pulse pt-5">Pulling more from the databases…</div>}
-                {effView !== "calendar" && searchItems.length < searchTotal && (
+                {searchItems.length < searchTotal && (
                   <div className="flex justify-center pt-6">
                     <Button variant="secondary" size="md" onClick={() => runSearch(searchItems.length, true)} disabled={searchLoadingMore} className="px-6 py-2.5">
                       {searchLoadingMore ? "Loading…" : `Load more (${(searchTotal - searchItems.length).toLocaleString()} left)`}
@@ -656,29 +643,19 @@ export default function DiscoverPage() {
         ) : (
           /* ── Browse (Timeline) ── */
           <ErrorBoundary label="discover browse">
-            {loading && effView === "card" && <Spinner label="Loading…" />}
-            {loading && effView === "list" && <ListSkeleton />}
-            {loading && effView === "calendar" && <Spinner label="Loading…" />}
+            {loading && <Spinner label="Loading…" />}
 
             {!loading && browseSorted.length > 0 && (
               <>
-                {(effView === "list" || effView === "card") && (
-                  <>
-                    <div ref={topSentinelRef} className="mb-6 flex justify-center">
-                      <SentinelBar {...topSentinel} />
-                    </div>
+                <div ref={topSentinelRef} className="mb-6 flex justify-center">
+                  <SentinelBar {...topSentinel} />
+                </div>
 
-                    <GroupedView items={browseSorted} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={isDateSort && autoToday} />
+                <GroupedView items={browseSorted} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={isDateSort && autoToday} />
 
-                    <div ref={sentinelRef} className="mt-10 flex justify-center">
-                      <SentinelBar {...bottomSentinel} />
-                    </div>
-                  </>
-                )}
-
-                {effView === "calendar" && (
-                  <CalendarView items={browseSorted} onSelect={(i) => router.push(buildItemHref(i as any))} onVisibleMonthChange={handleCalendarMonth} />
-                )}
+                <div ref={sentinelRef} className="mt-10 flex justify-center">
+                  <SentinelBar {...bottomSentinel} />
+                </div>
               </>
             )}
           </ErrorBoundary>

@@ -3,18 +3,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
-import { useViewMode } from "@/lib/useViewMode";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, LIBRARY_SORTS, DATE_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, LIBRARY_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
 import { syncToCompletion } from "@/lib/syncClient";
 import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
-import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
-import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -26,7 +24,6 @@ export default function LibraryPageClient() {
   const [items, setItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [view, setView] = useViewMode("rr_view_library", "list", ["list", "card", "calendar"]);
   // Persisted across back-nav (T12).
   // SM2: global type filter — one shared key across Wishlist / Library / Discover.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
@@ -106,17 +103,27 @@ export default function LibraryPageClient() {
   const highlightId = q && sorted.length > 0 ? sorted[0].id : null;
 
   // Sort-driven layout (T8).
-  const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
     sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
   const descending = sort === "releaseDate";
   const ratingOf = sort === "rating" ? (i: any) => platformRating10(i) : undefined;
-  const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
-  const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
+  // 2026-07-27 (Nils): grid-only, matching the mockups and Discover's same
+  // 2026-07-27 change — no view switcher on any list page.
+  const availableViews: ViewMode[] = ["card"];
+  const effView: ViewMode = "card";
   useScrollRestore("rr_library_scroll", !loading && sorted.length > 0);
+  const ratedCount = items.filter((i) => i.rating != null).length;
 
   return (
     <div className="min-h-screen">
+      {/* Page title row — 04-pages/library.html: serif "Library" + a mono
+          rated count, sitting above the tab switcher. */}
+      {!loading && (
+        <div className="max-w-6xl mx-auto px-6 pt-6 pb-1 flex items-baseline justify-between">
+          <h1 className="font-serif text-serif-lg text-text-primary">Library</h1>
+          <span className="font-mono text-meta text-text-secondary">{ratedCount} rated</span>
+        </div>
+      )}
       <LibraryWishlistTabs active="library" />
       <SubBar
         activeTypes={types}
@@ -129,7 +136,7 @@ export default function LibraryPageClient() {
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
         view={effView}
-        onViewChange={setView}
+        onViewChange={() => {}}
         availableViews={availableViews}
         actions={
           <button
@@ -143,9 +150,7 @@ export default function LibraryPageClient() {
       />
 
       <main className="max-w-6xl mx-auto px-6 py-6">
-        {loading && effView === "list"     && <ListSkeleton />}
-        {loading && effView === "card"     && <Spinner label="Loading…" />}
-        {loading && effView === "calendar" && <Spinner label="Loading…" />}
+        {loading && <Spinner label="Loading…" />}
 
         {!loading && items.length === 0 && (
           <EmptyState
@@ -170,7 +175,7 @@ export default function LibraryPageClient() {
           />
         )}
 
-        {!loading && sorted.length > 0 && effView !== "calendar" && (
+        {!loading && sorted.length > 0 && (
           <ErrorBoundary label="library view">
             <GroupedView
               items={sorted}
@@ -190,12 +195,6 @@ export default function LibraryPageClient() {
               // that's useScrollRestore above, a separate mechanism.
               autoScrollToToday={false}
             />
-          </ErrorBoundary>
-        )}
-
-        {!loading && sorted.length > 0 && effView === "calendar" && (
-          <ErrorBoundary label="calendar view">
-            <CalendarView items={sorted} onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))} />
           </ErrorBoundary>
         )}
       </main>

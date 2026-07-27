@@ -67,16 +67,21 @@ export default function FandexScoreBadge({
     );
   }
 
-  const dims = size === "md" ? "text-sm gap-1" : "text-[11px] gap-0.5";
+  // 03-components.md §2's meta-row score: the NUMBER is serif (19px on a card,
+  // scaled down for denser rows) in the score colour, with a mono "/100"
+  // suffix in text-secondary. Was mono-bold before the 2026-07-27 mockup
+  // audit — the serif is what makes the score read as the card's one
+  // editorial accent rather than another piece of metadata.
+  const dims = size === "md" ? "text-[21px]" : "text-[19px]";
   return (
     <span
-      className={`inline-flex items-center font-mono font-bold leading-none whitespace-nowrap tabular-nums ${dims} ${className}`}
+      className={`inline-flex items-baseline gap-0.5 font-serif leading-none whitespace-nowrap tabular-nums ${dims} ${className}`}
       style={{ color }}
       role="img"
       aria-label={label}
     >
       {rounded}
-      <span className="opacity-70 text-[0.85em]" aria-hidden>/100</span>
+      <span className="font-mono text-micro text-text-secondary" aria-hidden>/100</span>
     </span>
   );
 }

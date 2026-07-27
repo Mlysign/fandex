@@ -36,21 +36,25 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   // render it as an inert preview instead (ported from the old facet card).
   const linkable = item.linkable !== false;
 
+  // 2026-07-27 — rebuilt to `03-components.md §2`'s anatomy after the
+  // mockup-vs-live audit found this card had kept its pre-H1 structure and
+  // only picked up the new tokens. Three structural changes, all Nils's call:
+  //   1. The poster now starts at the card's TOP EDGE (it used to sit below a
+  //      type-chip strip), with the type chip OVERLAID on it top-left.
+  //   2. The score moved out of the poster's corners and into the meta row as
+  //      a serif number + "/100" — the design shows exactly ONE score there
+  //      (per D-E: Fandex when signed in, community rating in its place for
+  //      anon), never two badges competing over the artwork.
+  //   3. The action bar dropped to two buttons and moved BELOW title+meta.
+  const shownScore = item.fandexScore ?? item.communityScore;
+  const releaseLabel = item.releaseDate
+    ? (() => { try { return format(parseISO(item.releaseDate), "MMM yyyy"); } catch { return item.releaseDate; } })()
+    : "TBA";
+
   const body = (
     <>
-      {/* Type chip — dot + UPPERCASE mono label (H1.6d: was a color-only bar,
-          which the a11y spec (06-accessibility.md) flags as encoding meaning
-          by color alone; a text label now pairs with the dot). Sits in its
-          own strip above the poster rather than overlaying it, since the
-          poster's top corners are already claimed by the score badges (Q14). */}
-      <div className="flex items-center gap-1.5 px-2 pt-2 pb-1.5">
-        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: typeColor }} aria-hidden />
-        <span className="font-mono text-micro uppercase text-text-secondary">{item.type}</span>
-      </div>
-
-      {/* Poster image — wider-than-classic-poster ratio (Q14: matches the
-          facet-page card); the image fills the frame (cropped). */}
-      <div className="relative w-full bg-neutral-800 overflow-hidden rounded-md" style={{ paddingBottom: "140%" }}>
+      {/* Poster — 2:3 per spec, flush to the card's top edge. */}
+      <div className="relative w-full bg-neutral-800 overflow-hidden aspect-[2/3]">
         {imageSrc && !imgErr ? (
           <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover transition-transform duration-base group-hover:scale-[1.02]" onError={() => setImgErr(true)} />
         ) : (
@@ -78,36 +82,39 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           </div>
         )}
 
-        {/* Fandex Score — top-right; crowd rating — top-left. Both render nothing if absent. */}
-        <div className="absolute top-1.5 left-1.5">
-          <CommunityScoreBadge score={item.communityScore} variant="overlay" className="shadow-sm" />
-        </div>
-        <div className="absolute top-1.5 right-1.5">
-          <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} variant="overlay" className="shadow-sm" />
+        {/* Type chip — overlaid top-left per spec. Keeps the dot + text label
+            pairing H1.6d introduced (06-accessibility.md: never encode meaning
+            by color alone); only its position changed. */}
+        <div
+          className="absolute top-2 left-2 flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full"
+          style={{ background: "rgb(16 14 12 / 0.62)" }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: typeColor }} aria-hidden />
+          <span className="font-mono text-micro uppercase text-text-primary">{item.type}</span>
         </div>
       </div>
 
-      {/* Action toolbar — rate · watched · wishlist (always visible; skipped for
-          a non-linkable item, which has no identity to act on) */}
-      {linkable && (
-        <div className="px-2 pt-2">
-          <ActionCells item={item} layout="card" />
-        </div>
-      )}
+      {/* Body — title · meta row (release · score) · action bar, in that
+          order. Fixed padding + gap per spec (10px/11px, gap 7px). */}
+      <div className="px-2.5 py-2.5 flex flex-col gap-[7px]">
+        <p className="font-serif text-serif-sm text-text-primary truncate" title={item.title}>{item.title}</p>
 
-      {/* Footer — title + date. Q14: the title block reserves a fixed 2-line
-          height regardless of actual title length, so cards in the same row
-          stay the same height. */}
-      <div className="px-2.5 pb-2.5 pt-1.5 space-y-0.5">
-        <p className="font-serif text-serif-sm leading-tight line-clamp-2 min-h-[2.25rem] text-text-primary">{item.title}</p>
-        <div className="font-mono text-meta text-text-secondary">
-          {item.releaseDate
-            ? (() => { try { return format(parseISO(item.releaseDate), "MMM d, yyyy"); } catch { return item.releaseDate; } })()
-            : "TBA"}
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-meta text-text-secondary truncate">{releaseLabel}</span>
+          {shownScore != null && (
+            item.fandexScore != null
+              ? <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} variant="inline" />
+              : <CommunityScoreBadge score={item.communityScore} variant="inline" />
+          )}
         </div>
+
         {item.roles && item.roles.length > 0 && (
           <div className="text-caption text-text-secondary line-clamp-1">{item.roles.join(", ")}</div>
         )}
+
+        {/* Quick actions — skipped for a non-linkable item, which has no
+            identity to act on. */}
+        {linkable && <ActionCells item={item} layout="card" />}
       </div>
     </>
   );

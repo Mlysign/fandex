@@ -14,9 +14,12 @@ import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
 //
 // Five slots (D-A): Home · Search · Calendar · Library · You. Search = /discover
 // (per H1.1's decision 3 — the old SearchModal it replaced was deleted in
-// H1.6f, so there is no second search surface). Library lights for BOTH /library and /wishlist
-// (they're one "my stuff" surface, entered via a tab — H1.6e). You lights for
-// /profile and its /settings sub-page.
+// H1.6f, so there is no second search surface). The "Library" slot lights for
+// BOTH /library and /wishlist (they're one "my stuff" surface, entered via a
+// tab — H1.6e) and links to /wishlist by default (2026-07-27, Nils — the
+// forward-looking half of the pair; the LibraryWishlistTabs switcher lists
+// Wishlist first for the same reason). You lights for /profile and its
+// /settings sub-page.
 //
 // Session-aware like the old NavBar: the catalog is public, so anon visitors
 // see the same bar, but the "You" slot opens the H2c sign-in dialog (with a
@@ -27,7 +30,7 @@ const ITEMS = [
   { key: "home",     href: "/",         label: "Home",     Icon: House,       match: (p: string) => p === "/" },
   { key: "search",   href: "/discover", label: "Search",   Icon: Search,      match: (p: string) => p.startsWith("/discover") },
   { key: "calendar", href: "/calendar", label: "Calendar", Icon: CalendarDays, match: (p: string) => p.startsWith("/calendar") },
-  { key: "library",  href: "/library",  label: "Library",  Icon: LibraryIcon, match: (p: string) => p.startsWith("/library") || p.startsWith("/wishlist") },
+  { key: "library",  href: "/wishlist", label: "Library",  Icon: LibraryIcon, match: (p: string) => p.startsWith("/library") || p.startsWith("/wishlist") },
 ] as const;
 
 // One slot renderer shared by the bottom (mobile) and top (desktop) bars so the
@@ -105,10 +108,38 @@ export default function AppNav() {
             <Slot key={it.key} href={it.href} label={it.label} Icon={it.Icon} active={it.match(pathname)} variant="top" />
           ))}
           <div className="w-px h-4 bg-border-strong mx-1" />
+          {/* §1's trailing slot: an avatar button in place of the plain "You"
+              text link. Just the circular chrome for now, not a photo — a
+              real photo needs the user's identity data (displayName/
+              avatar_url), which only the boolean-only `probeSession` this
+              component already uses doesn't carry; adding a second fetch
+              here would mean every page load re-fetches identity data just
+              to render a nav icon. §1 also specs a collapsing search field
+              here, deliberately not added: Search is already a full nav item
+              pointing at the same /discover destination, so a second inline
+              search box needs a real answer for what it does differently
+              (live suggestions? a different destination?) before it's worth
+              building — flagged in the mockup-gap-audit, not decided here. */}
           {youAsButton ? (
-            <Slot label="Log in" Icon={User} active={false} variant="top" onClick={() => setShowSignIn(true)} />
+            <button
+              type="button"
+              onClick={() => setShowSignIn(true)}
+              aria-label="Log in"
+              className="tap-44 w-9 h-9 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors"
+            >
+              <User className="w-4 h-4" aria-hidden />
+            </button>
           ) : (
-            <Slot href="/profile" label="You" Icon={User} active={youActive} variant="top" />
+            <Link
+              href="/profile"
+              aria-label="Your profile"
+              aria-current={youActive ? "page" : undefined}
+              className={`tap-44 w-9 h-9 rounded-full border flex items-center justify-center transition-colors ${
+                youActive ? "border-accent text-accent" : "border-border bg-surface-elevated text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              <User className="w-4 h-4" aria-hidden />
+            </Link>
           )}
         </div>
       </nav>

@@ -1,12 +1,22 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Star, Bookmark } from "lucide-react";
 import { BookmarkIcon, LibraryIcon } from "@/components/Badges";
 import { useQuickActions, QuickActionItem } from "@/lib/useQuickActions";
 
-// Persistent 3-cell action toolbar shared by PosterCard + ListCard (T11 mockup):
-// Rate · Watched/Played · Wishlist. Always visible (works on touch), each cell is
-// both an indicator and a control. The rate cell opens a 10-star picker — inline
-// (to the left) in rows, popover (below) on cards.
+// Action toolbar shared by PosterCard + ListCard. Always visible (works on
+// touch); each cell is both an indicator and a control. The rate cell opens a
+// 10-star picker — inline (to the left) in rows, popover (below) on cards.
+//
+// LAYOUTS DIFFER ON PURPOSE (2026-07-27):
+//  - "card" is the design's quick-action bar, `03-components.md §2` verbatim:
+//    exactly TWO buttons — a flex:1 "Rate" with a Star glyph + text label, and
+//    a fixed 32px Bookmark square. Watched/played is deliberately NOT here
+//    (Nils, 2026-07-27) — the mockup never had a third action, and the verb
+//    stays reachable from the item detail page.
+//  - "row" keeps all three cells; the design's ListRow (§3) specs a single
+//    trailing action, but converting rows is a separate call — see the
+//    mockup-vs-live audit. Don't "unify" these two without checking that first.
 
 // Same 7/5 cutoffs as before H1.6b — only the three hexes moved onto the
 // design's tokens (success/warning/danger) instead of arbitrary literals.
@@ -58,19 +68,15 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
     return () => document.removeEventListener("pointerdown", onDown, true);
   }, [picking]);
 
+  // Row-layout cells only — the card layout builds its own two-button bar
+  // below (§2), so these no longer branch on `layout`.
   // S3 (2026-07-27) — 44px minimum tap area, hit-only (visible size unchanged),
-  // same `.tap-44`/`.tap-44-y` technique H1.6f used on SubBar. Card cells are
-  // `flex-1` and already comfortably wider than 44px in practice (measured:
-  // ~50-60px even at 375px viewport / a 2-up grid), so only height (32→44)
-  // needs expanding — `.tap-44-y`, matching the width-already-fine case.
-  // Row cells are FIXED 36×36, under 44 on both axes, so they need the full
-  // `.tap-44` — which is why the row's own gap widens below (see the `gap-2`
-  // note): three 44px-wide expansions at the old 4px gap would overlap by 4px
-  // and start stealing taps from the neighbour, the exact trap the SubBar
-  // comment warns about.
-  const tapClass = layout === "card" ? "tap-44-y" : "tap-44";
-  const cellSize = layout === "card" ? "flex-1 h-8" : "w-9 h-9 rounded-md";
-  const cell = "flex items-center justify-center gap-0.5 text-xs font-bold transition-all hover:brightness-125 disabled:opacity-50 " + tapClass + " " + cellSize + (layout === "card" ? " rounded-md" : "");
+  // same `.tap-44` technique H1.6f used on SubBar. Row cells are FIXED 36×36,
+  // under 44 on both axes, so they need the full `.tap-44` — which is why the
+  // row's own gap widens below (see the `gap-2` note): three 44px-wide
+  // expansions at the old 4px gap would overlap by 4px and start stealing taps
+  // from the neighbour, the exact trap the SubBar comment warns about.
+  const cell = "tap-44 w-9 h-9 rounded-md flex items-center justify-center gap-0.5 text-xs font-bold transition-all hover:brightness-125 disabled:opacity-50";
 
   // Rate/Bookmark active states follow 03-components.md §2 literally (flat
   // accent, not the rating's own quality tier — that traffic-light coloring
@@ -103,9 +109,43 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
   );
 
   if (layout === "card") {
+    // 03-components.md §2's quick-action bar, literally: Rate = Star + "Rate",
+    // flex:1; Bookmark = fixed 32px square. Both --radius-sm on the spec's
+    // rgb(237 231 220 / 0.06) fill with a 1px border. Rated/wishlisted states
+    // fill accent-subtle with an accent label and a FILLED glyph, per §2's
+    // "rated" state. The 32px visible size is padded to a 44px tap area.
+    const barBtn =
+      "tap-44-y flex items-center justify-center gap-1.5 rounded-sm border transition-colors disabled:opacity-50 h-8";
     return (
       <div className="relative" onClick={stop} ref={rootRef}>
-        <div className="flex gap-1">{rateCell}{watchedCell}{wishlistCell}</div>
+        <div className="flex gap-1.5">
+          <button
+            onClick={(e) => { stop(e); setPicking((v) => !v); }}
+            title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
+            aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
+            aria-haspopup="true" aria-expanded={picking}
+            className={`${barBtn} flex-1 text-label`}
+            style={rated
+              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
+              : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-primary)" }}
+          >
+            <Star className="w-3.5 h-3.5 shrink-0" fill={rated ? "currentColor" : "none"} aria-hidden />
+            {rated ? fmt(rating!) : "Rate"}
+          </button>
+          <button
+            onClick={(e) => { stop(e); if (!busy) toggleWishlist(); }}
+            disabled={busy}
+            title={wishlisted ? "On wishlist" : "Add to wishlist"}
+            aria-label={wishlisted ? "On your wishlist — remove" : "Add to wishlist"}
+            aria-pressed={wishlisted}
+            className={`${barBtn} w-8 shrink-0`}
+            style={wishlisted
+              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
+              : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-secondary)" }}
+          >
+            <Bookmark className="w-3.5 h-3.5" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
+          </button>
+        </div>
         {picking && (
           <div className="absolute z-30 top-full mt-1 left-1/2 -translate-x-1/2">
             <StarPicker rating={rating} onPick={pick} />

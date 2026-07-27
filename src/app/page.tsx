@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Library as LibraryIcon, Bookmark, Star, Trophy } from "lucide-react";
 import Logo from "@/components/Logo";
-import AuthOptions from "@/components/auth/AuthOptions";
+import SignInDialog from "@/components/auth/SignInDialog";
 import Rail from "@/components/Rail";
+import Button from "@/components/ui/Button";
+import TypeFilter from "@/components/ui/TypeFilter";
 import PosterCard from "@/components/PosterCard";
 import Panel from "@/components/ui/Panel";
 import Eyebrow from "@/components/ui/Eyebrow";
@@ -22,12 +24,6 @@ import { buildItemHref } from "@/lib/itemUrl";
 // signed-in visitor with a real taste signal (cold-start accounts get
 // Popular/Upcoming same as anon, no invented "for you" row). Replaces the
 // H1.6c minimal placeholder (sign-in hero / bare launcher grid).
-
-const TYPES = [
-  { label: "Games", color: "var(--color-media-game)" },
-  { label: "Movies", color: "var(--color-media-movie)" },
-  { label: "Shows", color: "var(--color-media-show)" },
-];
 
 interface HomeStats {
   libraryTotal: number;
@@ -66,6 +62,8 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [activeTypes, setActiveTypes] = useState<string[]>([]);
+  const [showSignIn, setShowSignIn] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -86,57 +84,67 @@ export default function HomePage() {
   const authed = !!data?.stats;
   const onSelect = (i: any) => router.push(buildItemHref(i));
 
-  const rail = (title: string, items: any[] | undefined, seeAllHref: string, forYou = false) =>
-    items && items.length > 0 ? (
+  // One media-type filter at the top of the page drives EVERY rail (the
+  // mockup shows a single `.filterrow` above all carousels, not per-rail
+  // controls). Purely client-side over already-fetched items — no refetch.
+  const toggleType = (t: string) =>
+    setActiveTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  const byType = (items: any[] | undefined) =>
+    !items ? items : activeTypes.length === 0 ? items : items.filter((i) => activeTypes.includes(i.type));
+
+  const rail = (title: string, items: any[] | undefined, seeAllHref: string, forYou = false) => {
+    const shown = byType(items);
+    return shown && shown.length > 0 ? (
       <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
-        {items.map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
+        {shown.map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
       </Rail>
     ) : null;
+  };
 
   const hasAnyContent = !!(data && (data.popular.length || data.upcoming.length || data.recommendation.length));
 
   return (
-    <main className="min-h-screen px-4 py-8 md:py-10">
-      <div className="max-w-5xl mx-auto space-y-10">
-        {/* Header — compact hero. Anon gets sign-in; authed gets a small
-            identity strip whose real content is the stats below. */}
-        <div className="text-center max-w-sm mx-auto space-y-5">
-          <div>
-            <Logo size={48} className="mx-auto mb-3" />
-            <h1 className="font-serif text-serif-2xl text-text-primary mb-1.5">Fandex</h1>
-            <p className="text-body-sm text-text-secondary">
-              Track your wishlists, discover what you&apos;ll love, and see what&apos;s coming — games, movies &amp; shows, all in one place.
-            </p>
+    <main className="min-h-screen px-5 py-4 md:py-10">
+      <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
+        {/* Brand row — MOBILE ONLY. The mockup is a 360px frame where AppNav is
+            a bottom bar carrying no brand, so the page supplies its own
+            mark + wordmark (+ Sign in for anon). On desktop AppNav's top bar
+            already shows both, so repeating them here would just be a second
+            logo on the same screen (D-D: derive desktop, don't copy the
+            mobile frame literally).
+            2026-07-27: replaced the big centred logo + "Fandex" headline +
+            "Track your wishlists…" flavour paragraph + the 4-provider button
+            stack, none of which the mockup has. */}
+        <div className="flex md:hidden items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Logo size={26} />
+            <span className="font-serif text-serif-lg text-text-primary">Fandex</span>
           </div>
-
           {!authed && !loading && (
-            <>
-              <AuthOptions />
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 text-caption text-text-secondary">
-                  <span className="flex-1 h-px bg-border" />
-                  or
-                  <span className="flex-1 h-px bg-border" />
-                </div>
-                <Link
-                  href="/discover"
-                  className="block w-full py-3 rounded-lg font-medium border border-border-strong text-text-secondary hover:text-text-primary hover:border-neutral-400 hover:bg-surface-elevated transition-colors duration-base"
-                >
-                  Browse without an account →
-                </Link>
-              </div>
-            </>
+            <Button variant="primary" size="sm" pill onClick={() => setShowSignIn(true)}>Sign in</Button>
           )}
-
-          <div className="flex justify-center gap-6 text-caption text-text-secondary pt-1">
-            {TYPES.map((t) => (
-              <span key={t.label} className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.color }} />
-                {t.label}
-              </span>
-            ))}
-          </div>
         </div>
+
+        {/* Media-type filter — one control, applies to every rail below. */}
+        <TypeFilter activeTypes={activeTypes} onToggleType={toggleType} />
+
+        {/* Anon: the mockup's GUEST MODE panel, in place of the old provider
+            button stack (sign-in now runs through the same SignInDialog the
+            nav's anon "You" slot opens, so there's one auth surface). */}
+        {!authed && !loading && (
+          <Panel className="px-4 py-4">
+            <Eyebrow>Guest mode</Eyebrow>
+            <div className="font-serif text-serif-lg text-text-primary mt-1.5 mb-3">
+              Sign in to unlock your Fandex Score
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="primary" size="sm" pill onClick={() => setShowSignIn(true)}>Create account</Button>
+              <Link href="/discover" className="text-label text-text-secondary hover:text-text-primary transition-colors">
+                Browse without an account →
+              </Link>
+            </div>
+          </Panel>
+        )}
 
         {/* Stats strip + best-genre card — signed-in only. */}
         {authed && data?.stats && (
@@ -177,6 +185,16 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {showSignIn && (
+        <SignInDialog
+          returnTo="/"
+          onClose={() => setShowSignIn(false)}
+          // RAWG login sets the session in-place (no redirect), so reload to
+          // let every island pick it up — same handling AppNav uses.
+          onAuthenticated={() => window.location.reload()}
+        />
+      )}
     </main>
   );
 }

@@ -3,24 +3,22 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { EnrichedItem } from "@/types";
-import { TYPE_COLORS } from "@/lib/constants";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Spinner from "@/components/ui/Spinner";
-import Chip from "@/components/ui/Chip";
+import TypeFilter from "@/components/ui/TypeFilter";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 
 // H1.6c shipped the minimal version (auth-gate → /api/calendar → CalendarView,
-// no filtering). H1.6e adds the type-chip row the plan called for — same
-// Chip/TYPE_COLORS convention SubBar's type filter already uses elsewhere, so
-// this reads as the same control rather than a bespoke one-off. Membership/
-// year filters are NOT added here: Calendar shows your whole upcoming
-// library+wishlist by design (that's the entire point of the page), so a
-// library/wishlist toggle would just be a way to hide your own calendar.
-
-const TYPES: EnrichedItem["type"][] = ["game", "movie", "show"];
+// no filtering). H1.6e added the type-chip row the plan called for, sharing
+// SubBar's type-filter control; that control itself became <TypeFilter>
+// (03-components.md §6a's circular icon chips) in the 2026-07-27
+// mockup-vs-live pass, so Calendar picks up the same restyle for free.
+// Membership/year filters are NOT added here: Calendar shows your whole
+// upcoming library+wishlist by design (that's the entire point of the page),
+// so a library/wishlist toggle would just be a way to hide your own calendar.
 
 export default function CalendarPageClient() {
   const router = useRouter();
@@ -66,16 +64,7 @@ export default function CalendarPageClient() {
     <div className="min-h-screen">
       <main className="max-w-6xl mx-auto px-6 py-6 space-y-4">
         {!loading && !error && items.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip active={activeTypes.length === 0} onClick={() => activeTypes.length > 0 && setActiveTypes([])}>
-              All
-            </Chip>
-            {TYPES.map((t) => (
-              <Chip key={t} active={activeTypes.includes(t)} color={TYPE_COLORS[t]} dot={TYPE_COLORS[t]} onClick={() => toggleType(t)}>
-                {t.charAt(0).toUpperCase() + t.slice(1)}s
-              </Chip>
-            ))}
-          </div>
+          <TypeFilter activeTypes={activeTypes} onToggleType={toggleType} />
         )}
 
         {error ? (

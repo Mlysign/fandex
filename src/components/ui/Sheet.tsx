@@ -48,7 +48,10 @@ export default function Sheet({ open, onClose, title, children, className = "" }
   useEffect(() => {
     if (!open || !rendered) return;
     const panel = panelRef.current;
-    panel?.focus();
+    // A child's `autoFocus` (e.g. the delete-account confirm's input) applies
+    // synchronously during commit, before this effect runs — only claim
+    // focus for the panel itself if nothing inside it already has it.
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {

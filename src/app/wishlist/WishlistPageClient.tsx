@@ -4,9 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_LABELS } from "@/lib/constants";
-import { useViewMode } from "@/lib/useViewMode";
 import SubBar, { ViewMode, SearchBarFacets } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -14,9 +13,8 @@ import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePe
 import { WISHLIST_TOGGLED_EVENT, WishlistToggledDetail } from "@/lib/useQuickActions";
 import { syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
-import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
-import ErrorBoundary, { ListSkeleton } from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -101,7 +99,6 @@ export default function WishlistPageClient() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
-  const [view, setView] = useViewMode("rr_view_wishlist", "list", ["list", "card", "calendar"]);
   // Persisted across back-nav (T12). SM2: the type filter is GLOBAL — one
   // shared key across Wishlist / Library / Discover.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
@@ -198,13 +195,14 @@ export default function WishlistPageClient() {
 
   // Sort-driven layout (T8): rating sorts group by rating, best-match is flat,
   // date sorts keep the month grouping; calendar view only for date sorts.
-  const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
     sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
   const descending = sort === "releaseDate";
   const ratingOf = sort === "rating" ? (i: any) => platformRating10(i) : undefined;
-  const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
-  const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
+  // 2026-07-27 (Nils): grid-only, matching the mockups and Discover's same
+  // 2026-07-27 change — no view switcher on any list page.
+  const availableViews: ViewMode[] = ["card"];
+  const effView: ViewMode = "card";
   useScrollRestore("rr_wishlist_scroll", !loading && sorted.length > 0);
   // N2: sampled once on mount — if a Back-nav restore is pending, don't let
   // GroupedView's today-scroll fight it.
@@ -212,6 +210,14 @@ export default function WishlistPageClient() {
 
   return (
     <div className="min-h-screen">
+      {/* Page title row — 04-pages/wishlist.html: serif "Wishlist" + a mono
+          saved count, sitting above the tab switcher. */}
+      {!loading && (
+        <div className="max-w-6xl mx-auto px-6 pt-6 pb-1 flex items-baseline justify-between">
+          <h1 className="font-serif text-serif-lg text-text-primary">Wishlist</h1>
+          <span className="font-mono text-meta text-text-secondary">{items.length} saved</span>
+        </div>
+      )}
       <LibraryWishlistTabs active="wishlist" />
       <SubBar
         activeTypes={types}
@@ -223,7 +229,7 @@ export default function WishlistPageClient() {
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
         view={effView}
-        onViewChange={setView}
+        onViewChange={() => {}}
         availableViews={availableViews}
         actions={
           <button
@@ -237,9 +243,7 @@ export default function WishlistPageClient() {
       />
 
       <main className="max-w-6xl mx-auto px-6 py-6">
-        {loading && effView === "list"     && <ListSkeleton />}
-        {loading && effView === "card"     && <Spinner label="Loading…" />}
-        {loading && effView === "calendar" && <Spinner label="Loading…" />}
+        {loading && <Spinner label="Loading…" />}
 
         {!loading && items.length === 0 && <OnboardingState identities={identities} />}
 
@@ -250,7 +254,7 @@ export default function WishlistPageClient() {
           />
         )}
 
-        {!loading && sorted.length > 0 && effView !== "calendar" && (
+        {!loading && sorted.length > 0 && (
           <ErrorBoundary label="wishlist view">
             <GroupedView
               items={sorted}
@@ -262,12 +266,6 @@ export default function WishlistPageClient() {
               highlightId={highlightId}
               autoScrollToToday={autoToday}
             />
-          </ErrorBoundary>
-        )}
-
-        {!loading && sorted.length > 0 && effView === "calendar" && (
-          <ErrorBoundary label="calendar view">
-            <CalendarView items={sorted} onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))} />
           </ErrorBoundary>
         )}
       </main>

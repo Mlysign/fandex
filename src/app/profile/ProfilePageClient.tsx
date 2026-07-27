@@ -4,34 +4,38 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
-  Compass, Library as LibraryIcon, Bookmark, CalendarDays, BarChart3,
-  Settings as SettingsIcon, LogOut, Star, Trophy,
+  TrendingUp, Bookmark, Star, Settings as SettingsIcon, ChevronRight,
 } from "lucide-react";
-import { SOURCE_LABELS, TYPE_COLORS } from "@/lib/constants";
+import { TYPE_COLORS } from "@/lib/constants";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 import { buildItemHref } from "@/lib/itemUrl";
+import { sortItems } from "@/lib/sortItems";
 import Avatar from "@/components/ui/Avatar";
+import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
-import StatTile from "@/components/ui/StatTile";
 import ErrorState from "@/components/ui/ErrorState";
 import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
 
-// H1.6c shipped the minimal hub (identity + quick links + sign-out). H1.6e
-// adds the doc's "account + stats + recent adds + upcoming + recommendations"
-// content, reusing data the app already fetches elsewhere rather than
-// inventing a parallel model:
-//  - stats + recommendations come straight off /api/home's payload;
-//  - "upcoming" is the user's own next-5 wishlist releases off /api/calendar
-//    (already release-date sorted).
-// "Recent adds" is NOT built here — it needs a library-item add timestamp
-// /api/library doesn't expose today (only reviewedAt/releaseDate), and
-// threading that through a shared, tested endpoint is bigger than this
-// hub-polish pass warrants. Flagged as a follow-up, not silently dropped.
-// H4.1's legal-footer link is also not added: the Impressum/ToS pages it
-// would point at don't exist yet (blocked on H4.0's pending legal advice).
+// 2026-07-27 (Nils, mockup-vs-live pass) — the hub is a MERGE of two source
+// documents that turned out to describe different pages:
+//  - profile.html (Claude Design mockup): identity header (avatar, name,
+//    handle · joined year, a settings-gear button) + a plain stat3 row
+//    (tracked/rated/wishlist) + a 4-row entry list (Insights/Wishlist/Your
+//    ratings/Settings, each icon+title+subtitle+chevron) + a full-width
+//    "Sign out" button. No rails, no recommendations.
+//  - ui-overhaul.md §4 (Nils's own Miro board): "stats + recent library adds
+//    + upcoming wishlist + recommendations" — the carousel content actually
+//    built in H1.6e.
+// Nils's call: the mockup wins for the top of the page (literally, not
+// reinterpreted), and the carousels are APPENDED below it rather than
+// dropped — hence "recently added"/"coming up"/"recommended" all survive
+// unchanged beneath a rebuilt header+stats+entries+sign-out block.
+// "Notifications" (the mockup's 4th entry row) is omitted — D-C dropped the
+// whole reminders feature, so there is nothing for that row to open.
 
-interface Me { user?: { displayName?: string; provider?: string } | null }
+interface Identity { provider: string; created_at: number; avatar_url: string | null }
+interface Me { user?: { displayName?: string; provider?: string } | null; identities?: Identity[] }
 interface HomeStats {
   libraryTotal: number;
   wishlistTotal: number;
@@ -39,21 +43,15 @@ interface HomeStats {
   bestGenre: { label: string; ba: number } | null;
 }
 
-const LINKS = [
-  { href: "/discover", label: "Discover",  Icon: Compass,      hint: "Browse games, movies & shows" },
-  { href: "/library",  label: "Library",   Icon: LibraryIcon,  hint: "Everything you've played & watched" },
-  { href: "/wishlist", label: "Wishlist",  Icon: Bookmark,     hint: "What you're waiting for" },
-  { href: "/calendar", label: "Calendar",  Icon: CalendarDays, hint: "Upcoming releases by date" },
-  { href: "/insights", label: "Insights",  Icon: BarChart3,    hint: "Your taste, analysed" },
-  { href: "/settings", label: "Settings",  Icon: SettingsIcon, hint: "Connections, account & your data" },
-];
-
 export default function ProfilePageClient() {
   const router = useRouter();
   const [me, setMe] = useState<Me["user"] | null | undefined>(undefined);
+  const [joinedYear, setJoinedYear] = useState<number | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [stats, setStats] = useState<HomeStats | null>(null);
   const [recommendation, setRecommendation] = useState<any[]>([]);
   const [upcoming, setUpcoming] = useState<any[]>([]);
+  const [recentlyAdded, setRecentlyAdded] = useState<any[]>([]);
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
@@ -62,13 +60,20 @@ export default function ProfilePageClient() {
       const meRes = await fetch("/api/auth/me").then((r) => r.json()) as Me;
       if (!meRes.user) { router.replace("/"); return; }
       setMe(meRes.user);
+      const identities = meRes.identities ?? [];
+      if (identities.length > 0) {
+        setJoinedYear(new Date(Math.min(...identities.map((i) => i.created_at)) * 1000).getFullYear());
+        setAvatarUrl(identities.find((i) => i.avatar_url)?.avatar_url ?? null);
+      }
 
-      const [home, calendar] = await Promise.all([
+      const [home, calendar, library] = await Promise.all([
         fetch("/api/home").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/calendar").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/library").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (home) { setStats(home.stats ?? null); setRecommendation(home.recommendation ?? []); }
       if (calendar) setUpcoming((calendar.items ?? []).slice(0, 5));
+      if (library) setRecentlyAdded(sortItems(library.items ?? [], "addedAt").slice(0, 5));
     } catch {
       setError(true);
     }
@@ -93,31 +98,108 @@ export default function ProfilePageClient() {
     return <main className="min-h-screen"><div className="max-w-2xl mx-auto px-6 py-10"><ErrorState title="Couldn't load your profile" hint="Check your connection and try again." onRetry={load} /></div></main>;
   }
 
-  const provider = me?.provider ? (SOURCE_LABELS[me.provider] ?? me.provider) : null;
   const onSelect = (i: any) => router.push(buildItemHref(i));
+  const name = me?.displayName ?? "You";
+  const handle = name.toLowerCase().replace(/\s+/g, "");
+
+  const entries = [
+    { href: "/insights", label: "Insights", hint: "Your taste in numbers", Icon: TrendingUp },
+    { href: "/wishlist", label: "Wishlist", hint: stats ? `${stats.wishlistTotal} saved` : "", Icon: Bookmark },
+    { href: "/library", label: "Your ratings", hint: stats ? `${stats.ratedTotal} titles` : "", Icon: Star },
+    { href: "/settings", label: "Settings", hint: "Account, theme, privacy", Icon: SettingsIcon },
+  ];
 
   return (
     <div className="min-h-screen">
-      <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
-        {/* Identity header */}
+      <main className="max-w-2xl mx-auto px-6 py-8 space-y-7">
+        {/* Identity header — 72px avatar, serif name, "@handle · joined YYYY",
+            a settings-gear icon button in place of the mockup's own (this app
+            already has a dedicated Settings entry below, so the gear button
+            here is a shortcut to the same destination, not a duplicate
+            surface). */}
         <header className="flex items-center gap-4">
-          <Avatar name={me?.displayName ?? "You"} size={64} />
-          <div className="min-w-0">
-            <h1 className="font-serif text-serif-lg text-text-primary truncate">{me?.displayName ?? "You"}</h1>
-            {provider && <p className="font-mono text-meta text-text-secondary mt-1">Signed in via {provider}</p>}
+          <Avatar src={avatarUrl} name={name} size={64} />
+          <div className="min-w-0 flex-1">
+            <h1 className="font-serif text-serif-xl text-text-primary truncate">{name}</h1>
+            <p className="font-mono text-meta text-text-secondary mt-1">
+              @{handle}{joinedYear ? ` · joined ${joinedYear}` : ""}
+            </p>
           </div>
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="tap-44 flex-none w-10 h-10 rounded-xl bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <SettingsIcon className="w-4 h-4" aria-hidden />
+          </Link>
         </header>
 
-        {/* Stats strip + best-genre card */}
+        {/* Stats — tracked / rated / wishlist, per the mockup's `.stat3`. */}
         {stats && (
-          <div className="flex flex-wrap gap-3">
-            <StatTile icon={<LibraryIcon className="w-3.5 h-3.5" aria-hidden />} label="Library" value={stats.libraryTotal} />
-            <StatTile icon={<Bookmark className="w-3.5 h-3.5" aria-hidden />} label="Wishlist" value={stats.wishlistTotal} />
-            <StatTile icon={<Star className="w-3.5 h-3.5" aria-hidden />} label="Rated" value={stats.ratedTotal} />
-            {stats.bestGenre && (
-              <StatTile icon={<Trophy className="w-3.5 h-3.5" aria-hidden />} label="Your top genre" value={stats.bestGenre.label} />
-            )}
+          <div className="flex items-center bg-surface-elevated border border-border rounded-xl overflow-hidden">
+            {[
+              { n: stats.libraryTotal, l: "tracked" },
+              { n: stats.ratedTotal, l: "rated" },
+              { n: stats.wishlistTotal, l: "wishlist" },
+            ].map(({ n, l }, i) => (
+              <div key={l} className={`flex-1 text-center py-3 px-2 ${i > 0 ? "border-l border-border" : ""}`}>
+                <div className="font-serif text-serif-lg leading-none text-text-primary">{n}</div>
+                <div className="font-mono text-micro text-text-secondary mt-1">{l}</div>
+              </div>
+            ))}
           </div>
+        )}
+
+        {/* Entry list — icon · title+subtitle · chevron, each a full-row link. */}
+        <nav aria-label="Your pages" className="divide-y divide-border border-y border-border">
+          {entries.map(({ href, label, hint, Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="flex items-center gap-3 py-3.5 hover:bg-surface-elevated transition-colors duration-base -mx-1 px-1"
+            >
+              <span className="flex-none w-9 h-9 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary">
+                <Icon className="w-4 h-4" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-label text-text-primary">{label}</span>
+                {hint && <span className="block text-caption text-text-secondary truncate mt-0.5">{hint}</span>}
+              </span>
+              <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" aria-hidden />
+            </Link>
+          ))}
+        </nav>
+
+        {/* Sign out — full-width secondary, per the mockup's `.btn.sec`. */}
+        <Button variant="secondary" size="lg" onClick={logout} className="w-full">
+          Sign out
+        </Button>
+
+        {/* ── Appended below the mockup's own content, per Nils's merge call ── */}
+
+        {/* Recently added — your own last few library adds */}
+        {recentlyAdded.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-serif text-serif-md text-text-primary">Recently added</h2>
+              <Link href="/library" className="text-label text-text-secondary hover:text-text-primary transition-colors">See all</Link>
+            </div>
+            <div className="space-y-1.5">
+              {recentlyAdded.map((item) => (
+                <Link
+                  key={item.id}
+                  href={buildItemHref(item)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-elevated border border-border hover:border-border-strong transition-colors duration-base"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_COLORS[item.type] ?? "#888" }} aria-hidden />
+                  <span className="flex-1 min-w-0 text-body-sm text-text-primary truncate">{item.title}</span>
+                  <span className="font-mono text-meta text-text-secondary shrink-0">
+                    {item.addedAt ? (() => { try { return format(new Date(item.addedAt * 1000), "MMM d, yyyy"); } catch { return null; } })() : ""}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Upcoming — your own next few wishlist releases */}
@@ -151,34 +233,6 @@ export default function ProfilePageClient() {
             {recommendation.slice(0, 8).map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
           </Rail>
         )}
-
-        {/* Quick links into every surface */}
-        <nav aria-label="Your pages" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {LINKS.map(({ href, label, Icon, hint }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 p-4 rounded-lg bg-surface-elevated border border-border hover:border-border-strong transition-colors duration-base"
-            >
-              <span className="flex-none w-10 h-10 rounded-lg bg-accent-subtle text-accent flex items-center justify-center">
-                <Icon className="w-5 h-5" aria-hidden />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-label text-text-primary">{label}</span>
-                <span className="block text-caption text-text-secondary truncate">{hint}</span>
-              </span>
-            </Link>
-          ))}
-        </nav>
-
-        {/* Sign out */}
-        <button
-          onClick={logout}
-          className="inline-flex items-center gap-2 text-label px-4 py-2 rounded-lg border border-border-strong text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors duration-base"
-        >
-          <LogOut className="w-4 h-4" aria-hidden />
-          Log out
-        </button>
       </main>
     </div>
   );

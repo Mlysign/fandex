@@ -8,6 +8,7 @@ import { InsightsPayload } from "@/components/insights/types";
 import Spinner from "@/components/ui/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
+import Eyebrow from "@/components/ui/Eyebrow";
 
 type Status = "loading" | "ready" | "empty" | "error";
 
@@ -42,9 +43,13 @@ export default function InsightsPageClient() {
   return (
     <div className="min-h-screen">
       <main className="max-w-6xl mx-auto px-6 py-6">
+        {/* Heading — 04-pages/insights.html: eyebrow "YOUR TASTE, IN NUMBERS"
+            + a plain serif "Insights", replacing "Library insights" + an
+            explanatory sentence (the section headers below already carry
+            that context). */}
         <div className="mb-6">
-          <h1 className="font-serif text-serif-xl text-text-primary">Library insights</h1>
-          <p className="text-sm text-text-secondary">What your ratings reveal about your taste — tags, people, studios and more.</p>
+          <Eyebrow>Your taste, in numbers</Eyebrow>
+          <h1 className="font-serif text-serif-xl text-text-primary mt-1">Insights</h1>
         </div>
 
         {status === "loading" && (

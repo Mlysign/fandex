@@ -405,63 +405,61 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
         <AgendaView items={items} onSelect={onSelect} />
       ) : (
         <>
-          {/* Month navigation */}
-          <div className="flex items-center justify-between mb-5 flex-wrap gap-y-2">
+          {/* Month navigation — 03-components.md's calendar.html shows a
+              plain 3-part row (chevron / serif month / chevron); the
+              "jump to nearest release" + "Today" controls the board flagged
+              as a real gap (H1.6d) don't fit in that row at mobile widths —
+              cramming all 5 into one flex row wrapped unpredictably and
+              split the corner arrows away from the month label (2026-07-27,
+              found via "the calendar looks broken"). Fixed by giving the
+              extra controls their OWN row underneath, which can wrap freely
+              without fracturing the primary nav. */}
+          <div className="flex items-center justify-between mb-1">
             <button
               onClick={() => setCalMonth(subMonths(calMonth, 1))}
               aria-label="Previous month"
-              className="p-2 hover:bg-surface-elevated rounded-lg text-text-secondary hover:text-text-primary transition-colors duration-fast"
+              className="tap-44 w-[30px] h-[30px] shrink-0 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors duration-fast"
             >
-              <ChevronLeft className="w-4 h-4" aria-hidden />
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden />
             </button>
-            <div className="flex items-center gap-2.5 flex-wrap justify-center">
+            <h2 className="font-serif text-serif-md text-text-primary">{format(calMonth, "MMMM yyyy")}</h2>
+            <button
+              onClick={() => setCalMonth(addMonths(calMonth, 1))}
+              aria-label="Next month"
+              className="tap-44 w-[30px] h-[30px] shrink-0 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors duration-fast"
+            >
+              <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+            </button>
+          </div>
+
+          {(monthItemCount > 0 || !isCurrentMonth || prevMonthWithItems != null || nextMonthWithItems != null) && (
+            <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 mb-4 font-mono text-meta text-text-secondary">
+              {monthItemCount > 0 && <span>{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</span>}
+              {!isCurrentMonth && (
+                <button onClick={() => setCalMonth(new Date())} className="text-accent hover:text-accent-hover transition-colors duration-fast">
+                  Today
+                </button>
+              )}
               {prevMonthWithItems != null && (
                 <button
                   onClick={() => setCalMonth(new Date(prevMonthWithItems))}
-                  className="font-mono text-meta px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast whitespace-nowrap"
+                  className="hover:text-text-primary transition-colors duration-fast whitespace-nowrap"
                   title="Jump to the previous month with a release"
                 >
                   ← Previous release
                 </button>
               )}
-              <div className="text-center">
-                {isCurrentMonth ? (
-                  <h2 className="font-mono text-eyebrow px-3 py-1.5 rounded-full bg-accent text-text-on-accent uppercase tracking-widest inline-block">
-                    {format(calMonth, "MMMM yyyy")}
-                  </h2>
-                ) : (
-                  <h2 className="font-serif text-serif-md text-text-primary">{format(calMonth, "MMMM yyyy")}</h2>
-                )}
-                {monthItemCount > 0 && (
-                  <p className="font-mono text-meta text-text-secondary mt-1">{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</p>
-                )}
-              </div>
-              {!isCurrentMonth && (
-                <button
-                  onClick={() => setCalMonth(new Date())}
-                  className="text-label px-3 py-1.5 bg-accent text-text-on-accent hover:bg-accent-hover font-semibold rounded-full transition-colors duration-fast"
-                >
-                  Today
-                </button>
-              )}
               {nextMonthWithItems != null && (
                 <button
                   onClick={() => setCalMonth(new Date(nextMonthWithItems))}
-                  className="font-mono text-meta px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast whitespace-nowrap"
+                  className="hover:text-text-primary transition-colors duration-fast whitespace-nowrap"
                   title="Jump to the next month with a release"
                 >
                   Next release →
                 </button>
               )}
             </div>
-            <button
-              onClick={() => setCalMonth(addMonths(calMonth, 1))}
-              aria-label="Next month"
-              className="p-2 hover:bg-surface-elevated rounded-lg text-text-secondary hover:text-text-primary transition-colors duration-fast"
-            >
-              <ChevronRight className="w-4 h-4" aria-hidden />
-            </button>
-          </div>
+          )}
 
           {monthItemCount === 0 ? (
             // Empty month — offer to skip straight to a month that has releases.
@@ -494,10 +492,13 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
             />
           ) : (
             <>
-              {/* Day-of-week headers */}
+              {/* Day-of-week headers — single-letter per the mockup, full name
+                  kept for screen readers via aria-label. */}
               <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <div key={d} className="text-center font-mono text-micro text-text-secondary py-1">{d}</div>
+                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+                  <div key={d} aria-label={d} className="text-center font-mono text-micro text-text-secondary py-1">
+                    <span aria-hidden>{d[0]}</span>
+                  </div>
                 ))}
               </div>
 

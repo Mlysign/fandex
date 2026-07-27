@@ -36,14 +36,20 @@ export default function CommunityScoreBadge({
     );
   }
 
-  const dims = size === "md" ? "text-sm" : "text-[11px]";
+  // Shares the meta-row shape FandexScoreBadge's inline variant uses
+  // (03-components.md §2) so the card's score slot looks identical whichever
+  // score fills it — per D-E, anon viewers get this one in the Fandex Score's
+  // place. Stays UNCOLORED (text-primary, not a score ramp): the restraint
+  // rule reserves colour meaning for the one personal score.
+  const dims = size === "md" ? "text-[21px]" : "text-[19px]";
   return (
     <span
-      className={`inline-flex items-center font-mono text-text-secondary leading-none whitespace-nowrap tabular-nums ${dims} ${className}`}
+      className={`inline-flex items-baseline gap-0.5 font-serif text-text-primary leading-none whitespace-nowrap tabular-nums ${dims} ${className}`}
       role="img"
       aria-label={label}
     >
-      ★ {value}
+      {value}
+      <span className="font-mono text-micro text-text-secondary" aria-hidden>/10</span>
     </span>
   );
 }

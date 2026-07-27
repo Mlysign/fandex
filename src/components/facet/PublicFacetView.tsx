@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import { ChevronDown } from "lucide-react";
 import GroupedView from "@/components/GroupedView";
+import Menu from "@/components/ui/Menu";
 import { useScrollRestore } from "@/lib/usePersistedState";
 import { probeSession } from "@/lib/sessionProbe";
 import type { MediaCardItem } from "@/components/cardItem";
@@ -300,23 +302,34 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           </div>
         )}
 
-        {/* Sort */}
+        {/* Sort — 03-components.md §6b SortMenu dropdown (mockup-vs-live gap,
+            resolved 2026-07-27, replacing the Q14 pill-button row here too for
+            consistency with SubBar's identical change). */}
         <div className="mt-6 mb-3 flex items-center justify-between">
           <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-text-secondary">Titles</h2>
-          <div className="flex gap-1">
-            {SORT_LABELS.map((o) => (
-              <button key={o.key} onClick={() => onSort(o.key)}
-                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${!fandexActive && sort === o.key ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"}`}>
-                {o.label}
-              </button>
-            ))}
-            {mine && (
-              <button onClick={() => setFandexActive(true)}
-                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${fandexActive ? "border-accent bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary"}`}>
-                Fandex Score
+          <Menu
+            label="Sort results"
+            items={[
+              ...SORT_LABELS.map((o) => ({
+                key: o.key,
+                label: o.label,
+                selected: !fandexActive && sort === o.key,
+                onSelect: () => onSort(o.key),
+              })),
+              ...(mine ? [{ key: "fandexScore", label: "Fandex Score", selected: fandexActive, onSelect: () => setFandexActive(true) }] : []),
+            ]}
+            align="right"
+            trigger={({ onClick, ...triggerProps }) => (
+              <button
+                {...triggerProps}
+                onClick={onClick}
+                className="tap-44 inline-flex items-center gap-1 font-mono text-meta text-text-secondary hover:text-text-primary transition-colors"
+              >
+                {fandexActive ? "Fandex Score" : SORT_LABELS.find((o) => o.key === sort)?.label ?? SORT_LABELS[0].label}
+                <ChevronDown className="w-3.5 h-3.5" aria-hidden />
               </button>
             )}
-          </div>
+          />
         </div>
 
         {/* Grid */}

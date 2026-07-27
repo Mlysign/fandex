@@ -1,26 +1,22 @@
-// P14 — generate the PWA / app icons from one SVG (placeholder radar mark in the
-// brand gradient, matching the OG image). Rasterized with sharp at the sizes a
-// manifest + iOS need. Re-run after editing the SVG or swapping in real art:
+// P14 — generate the PWA / app icons from one SVG. Rasterized with sharp at
+// the sizes a manifest + iOS need. Re-run after editing the SVG or swapping
+// in real art:
 //   node scripts/gen-icons.mjs
 import sharp from "sharp";
 import { writeFileSync } from "node:fs";
 
-// Full-bleed square (works as both a normal and a maskable icon): the gradient
-// reaches every edge and the "F" monogram sits inside the maskable safe zone
-// (center ~60%). Vibrant indigo→violet brand gradient with a white geometric F
-// (drawn as rects — no font dependency). 512 viewBox; sharp scales to each target.
+// 2026-07-27 (mockup-vs-live audit) — replaced the placeholder indigo→violet
+// "F" monogram (#6366f1/#8b5cf6, colours in no Ticket·Calm token) with the
+// real brand mark: the same two stacked, rotated cards `Logo.tsx` draws in
+// the app itself (show-purple behind, accent-gold in front), on the app's
+// own dark surface ground instead of a gradient. The mark is scaled to sit
+// well inside the maskable safe zone (roughly the center 60%) so Android's
+// adaptive-icon mask doesn't clip it.
 const SVG = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#8b5cf6"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" fill="url(#bg)"/>
-  <g fill="#ffffff">
-    <rect x="182" y="150" width="56" height="212" rx="14"/>
-    <rect x="182" y="150" width="160" height="56" rx="14"/>
-    <rect x="182" y="240" width="126" height="52" rx="14"/>
+  <rect width="512" height="512" fill="#100E0C"/>
+  <g transform="translate(256,256) scale(11) translate(-11.8,-14.1)">
+    <rect x="0" y="5" width="18" height="20" rx="4" fill="#a78bfa" transform="rotate(-9 9 15)"/>
+    <rect x="7" y="2" width="18" height="20" rx="4" fill="#C8A24B" stroke="#100E0C" stroke-width="1"/>
   </g>
 </svg>`;
 
