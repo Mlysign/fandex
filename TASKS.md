@@ -183,6 +183,28 @@ Scope: local dev, **authenticated as `ramses3006` (RAWG identity), 1,918-item li
 
 **Not covered this pass:** wishlist add/remove round-trip (14) and platform write-back validation (25), ratings (deliberately never exercised — real writes to the user's platform accounts), Settings' connected-accounts panel (18 — avoided, disconnecting bumps `session_epoch`), and the Fandex Score *breakdown overlay* on an item detail page (only the badge/score data layer was checked).
 
+### Smoke test — 2026-07-27 (6th pass — post mockup-vs-live rebuild, targeted)
+
+Scope: local dev, same authenticated session (`ramses3006`, RAWG). Not a full sweep — targeted at the pages touched by the mockup-vs-live rebuild (`docs/mockup-gap-audit.md`, commit `ebab6a9`): Home, Discover, Library, Wishlist, Calendar, Profile, Insights, an item detail page, a facet page, Settings. Desktop (1280) + mobile (375, in-app Browser). **Overall health: good — one real visual regression found (SM17, fixed same session), everything else holds up, zero console errors anywhere in the sweep.**
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| **SM17** | 🟡 | ui | `SubBar`'s mobile Filters button | ✅ **Fixed same session.** The round "Filters" trigger strands alone on its own line with a large empty gap above it, on any page whose chip row has more than the 4 type chips. Repro: `/library` at 375px width — the chip row is `All/Games/Movies/Shows` **+ "Hide rated"**, which is one chip too many to fit one line at 375px, so it wraps; the trigger (`ml-auto` inside that same flex row) lands alone on the wrapped line, visually disconnected from the sort bar below and the chips above by the row's intentional `gap-y-5` (added in H1.6f to stop tap-area overlap). Not reproducible on Discover/Wishlist (exactly 4 chips, still fits one line). Functionally fine either way — clicking it always opened the real filter sheet. **Fix:** split the chips into their own inner `flex-wrap` container and made the trigger a non-wrapping sibling in an outer `flex items-start` row, so it stays pinned top-right of the chip block regardless of how many lines the chips take. Verified at 375px (Library, now clean) and unchanged at desktop + on Discover/Wishlist; typecheck/lint/329 tests clean. |
+
+**Held up well:**
+- **Home** (desktop + mobile, logged in): brand mark, stats strip, media-type filter driving all 3 rails, avatar nav slot — all render correctly, zero console errors.
+- **Discover** (desktop + mobile): grid-only, sort bar (`TITLES · N` + dropdown) above the grid, circular type chips, Filters trigger correctly inline (only 4 chips here).
+- **Wishlist** (desktop + mobile): title row (`Wishlist` / `96 saved`), underline tabs (Wishlist active, correct order), Filters trigger correctly inline (same 4-chip case as Discover).
+- **Calendar** (desktop + mobile): round 3's month-nav fix holds at both widths — clean `‹ July 2026 ›` primary row, jump-controls on their own secondary row, no wrap-induced breakage.
+- **Profile** (desktop + mobile): merged mockup shape renders in full — real RAWG avatar photo, `@handle · joined 2026`, 3-stat row, entry list with live counts, Sign out, then Recently added/Coming up/Recommended appended below.
+- **Insights** (desktop + mobile): new eyebrow+serif heading, all 5 chart sections intact.
+- **Item detail** (`/movie/…/spirited-away`, desktop): personal section (stars, wishlist panel, Fandex Score panel) unaffected by today's `FandexScoreBadge`/`CommunityScoreBadge` styling change — that page uses its own bespoke `FandexScoreSection`, not the shared inline badge.
+- **Facet page** (`/person/hayao-miyazaki`, desktop): cards render with the new PosterCard anatomy correctly, sort dropdown works.
+- **Settings** (desktop): renders, zero console errors (not touched today, spot-checked for regressions from the shared component changes — none).
+- **Zero console errors across every page checked, both viewports.**
+
+**Not covered this pass:** a fresh anon pass (both available browser sessions — the in-app Browser pane and the real connected Chrome — turned out to already be authenticated as the same account; logging out to test anon would bump `session_epoch` and end Nils's real session, so this was deliberately not attempted). Anon coverage for today's changes comes from screenshots taken during implementation, before either session became authenticated — see the conversation's own record, not reproduced fresh here. Also not covered: the 8 items intentionally left open in `docs/mockup-gap-audit.md` (not code yet, nothing to smoke-test).
+
 ### Smoke test — 2026-07-19 (3rd pass — live production, post-deploy verification)
 Anon-only sweep against **https://fandex.org** (not the dev server) right after deploying `de0a6bd` (P13b + Q7–Q12/N3/N4), specifically to confirm the shipped fixes actually took effect in prod and nothing regressed. Same credential-forging constraint as the 2026-07-18 runs — no logged-in coverage.
 

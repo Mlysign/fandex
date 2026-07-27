@@ -164,46 +164,59 @@ export default function SubBar({
             hit areas a 30px chip reaches 7px past its box and a 20px sort pill
             12px, so the old uniform gap-2 (8px) let the lines overlap by ~11px
             and steal each other's taps. Horizontal spacing is unchanged. */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-5">
-          {/* 03-components.md §6a: circular icon chips, not text pills. */}
-          <TypeFilter activeTypes={activeTypes} onToggleType={onToggleType} availableTypes={availableTypes} />
+        <div className="flex items-start gap-x-2">
+          {/* Chips wrap in THEIR OWN flex-wrap container, separate from the
+              Filters trigger below (2026-07-27, SM17 fix): the trigger used
+              to be `ml-auto` inside this same wrapping row, which pushes an
+              element to the end of whichever line it lands on — fine when
+              everything fits one line (Discover/Wishlist's 4 base chips),
+              but on a page with one more chip (Library's "Hide rated") the
+              row wraps and the trigger strands alone on its own line, well
+              below the chips, with the row's intentional gap-y-5 gap above
+              it. Splitting the trigger into a sibling that never wraps keeps
+              it pinned top-right of the chip block regardless of how many
+              lines the chips take. */}
+          <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-5">
+            {/* 03-components.md §6a: circular icon chips, not text pills. */}
+            <TypeFilter activeTypes={activeTypes} onToggleType={onToggleType} availableTypes={availableTypes} />
 
-          {availableSources.length > 0 && onToggleSource && (
-            <>
-              <div className="w-px h-4 bg-border-strong mx-1" />
-              {availableSources.map((s) => (
+            {availableSources.length > 0 && onToggleSource && (
+              <>
+                <div className="w-px h-4 bg-border-strong mx-1" />
+                {availableSources.map((s) => (
+                  <Chip
+                    key={s}
+                    active={activeSources.includes(s)}
+                    color={SOURCE_COLORS[s]}
+                    dot={SOURCE_COLORS[s]}
+                    onClick={() => onToggleSource(s)}
+                  >
+                    {SOURCE_LABELS[s] ?? s}
+                  </Chip>
+                ))}
+              </>
+            )}
+
+            {hideRated && (
+              <>
+                <div className="w-px h-4 bg-border-strong mx-1" />
                 <Chip
-                  key={s}
-                  active={activeSources.includes(s)}
-                  color={SOURCE_COLORS[s]}
-                  dot={SOURCE_COLORS[s]}
-                  onClick={() => onToggleSource(s)}
+                  active={hideRated.value}
+                  onClick={() => hideRated.onChange(!hideRated.value)}
+                  title="Hide items you've already rated"
                 >
-                  {SOURCE_LABELS[s] ?? s}
+                  Hide rated
                 </Chip>
-              ))}
-            </>
-          )}
+              </>
+            )}
 
-          {hideRated && (
-            <>
-              <div className="w-px h-4 bg-border-strong mx-1" />
-              <Chip
-                active={hideRated.value}
-                onClick={() => hideRated.onChange(!hideRated.value)}
-                title="Hide items you've already rated"
-              >
-                Hide rated
-              </Chip>
-            </>
-          )}
-
-          {filters && (
-            <>
-              <div className="w-px h-4 bg-border-strong mx-1" />
-              {filters}
-            </>
-          )}
+            {filters && (
+              <>
+                <div className="w-px h-4 bg-border-strong mx-1" />
+                {filters}
+              </>
+            )}
+          </div>
 
           {/* Advanced-filters trigger — a round icon button at the end of the
               chip row (mockup). Mobile only: desktop renders the panel inline
@@ -214,7 +227,7 @@ export default function SubBar({
               aria-haspopup="dialog"
               aria-label="Filters"
               title="Filters"
-              className="tap-44 md:hidden ml-auto w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
+              className="tap-44 md:hidden w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
             >
               <SlidersHorizontal className="w-4 h-4" aria-hidden />
             </button>

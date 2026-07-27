@@ -191,6 +191,13 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
     badges), section headers — comfortably legible at arm's length on mobile? Contrast of
     dim/gray secondary text against the dark background OK (spot-check computed colors vs
     WCAG AA via `javascript_tool`)? Line lengths on wide desktop not overlong?
+28b. **SubBar's chip-row wrap at mobile widths, per page** (added 2026-07-27, SM17). The
+    "Filters" trigger sits `ml-auto` inside the same flex row as the type chips — on a page
+    whose chip row has MORE than the base 4 (`All`/`Games`/`Movies`/`Shows`), e.g. Library's
+    extra "Hide rated" chip, that row wraps at 375px and the trigger strands alone on its own
+    line with a visible gap above it. Discover and Wishlist (exactly 4 chips) don't show it.
+    Check every page that renders `SubBar` with an extra chip (`filters`/`hideRated` props) at
+    375px specifically, not just Discover — a pass on Discover does NOT clear this for Library.
 28. **Touch targets (mobile)**: links/buttons ≥ ~44×44px — measure the quick-action icons
     on cards (rate / watched / wishlist), tag chips, sort buttons, calendar day cells,
     month-scrollbar entries via `getBoundingClientRect`. Adjacent targets far enough apart
@@ -329,6 +336,19 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
   URL (same URL succeeds on a bare retry seconds later) — don't treat one blocked `navigate`
   as a broken page; just retry once before investigating further. This is separate from the
   cookie-mint block above, which is a hard, consistent block, not intermittent.
+
+- **Both the in-app Browser pane AND `claude-in-chrome` can end up already authenticated**
+  (observed 2026-07-27) — a session cookie apparently persists across conversations in this
+  environment, not just in the "real Chrome" tool. Always `fetch('/api/auth/me')` to check
+  BEFORE assuming a fresh browser tab is anon, in either surface. If both are authenticated and
+  you need a genuine anon pass, do NOT log out to get it — that bumps `session_epoch` and ends
+  the real session in both places at once (same account, same token validity). Either ask the
+  user to test anon in a separate profile, or accept an authed-only pass and say so explicitly.
+- **Post-rebuild targeted check (2026-07-27):** after any change to `SubBar`, `PosterCard`,
+  `ActionCells`, or the two score badges, re-check ALL of Discover/Library/Wishlist/Calendar's
+  facet pages — they share these components, and a fix verified on one (e.g. Discover) can
+  still be broken on another with slightly different props (Library's extra "Hide rated" chip
+  broke the Filters-button layout — SM17 — even though Discover was clean).
 
 ## Environment gotchas
 
