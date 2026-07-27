@@ -64,9 +64,24 @@ later.
 
 Anonymous first (public surface), then logged-in. Check console + server logs after each block.
 
+> **⚠️ Plan refreshed 2026-07-27 after H1.6c/e/f.** The IA changed substantially:
+> `/` is now the public browse **Home** (rails, not a login wall), `/dashboard` 308s to
+> **`/wishlist`** (which IS a real route now — the old "not a real route" note was removed),
+> and `/calendar` + `/profile` are new. The top `NavBar` was **deleted** and replaced by
+> `AppNav` (desktop top bar / mobile bottom bar) — so the old Q9 "hamburger overlay" and Q1
+> "nav not session-aware" notes are obsolete, there is no hamburger any more.
+
 **A. Public / anonymous**
-1. `/` landing — renders, login options; known gap: no browse-without-account link (Q2).
+1. `/` **Home** (rebuilt H1.6e) — anon: sign-in options + "Browse without an account" + the
+   public **Popular** and **Upcoming** rails. **Recommended-for-you must NOT appear for anon**
+   (signed-in-with-taste-signal only), and **no stats strip** (authed only). Cards in the rails
+   are linkable only when the item already has a catalog row (PR15) — a non-linkable card
+   renders inert, that's correct, not a bug.
 2. `/discover` anon — ungated (H2b), items render, search + filters work, no user-specific rows.
+   **A5 (2026-07-26):** typed **People / Tags** result groups are **signed-in only**. For anon,
+   searching a person's name must return Titles ONLY — no People/Tags groups, no "Titles"
+   header, and `/api/discover/facets` must never be called (check `read_network_requests`;
+   only `/api/discover?q=` should fire).
 3. Item page `/{movie|show|game}/{uuid}/{slug}` — pick one via discover link-through. SSR content,
    OG/meta tags present, `noindex` while `PUBLIC_ITEMS_INDEXABLE` unset. Anon sees REAL star +
    wishlist controls (H2c); interacting opens the sign-in dialog (not a redirect); dialog sets
@@ -76,11 +91,15 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
    provider, grid renders with real `<a>` links, sort re-queries, Load more 60→120, pagination
    past end doesn't error.
 6. `/insights/facet?...` legacy URL → 308 to the public facet page.
-7. Gated pages anon: `/library` `/insights` `/settings` `/dashboard` — graceful (page shell 200s,
-   then client-side redirect to login, not error/blank). Note: **`/wishlist` is not a real route**
-   — wishlist is a membership filter (`rr_library_membership`) inside `/library`, not its own page;
-   don't test it as a URL (confirmed 2026-07-18, no `src/app/wishlist`).
-8. 404s: garbage uuid item URL, unknown person. Known: unbranded default 404 (Q13).
+7. Gated pages anon: `/library` `/wishlist` `/calendar` `/profile` `/insights` `/settings` —
+   graceful (shell 200s, then client-side redirect to `/`, not error/blank). `/dashboard` must
+   **308 → `/wishlist`**. (`/wishlist` became a real route in H1.6c — the old "not a real route"
+   note here was stale and is removed.)
+   **Always pair this with the Back-button check in D.20 — see SM8**: a gated page that
+   redirects with `router.push` instead of `replace` leaves itself in history and traps Back.
+8. 404s: garbage uuid item URL, unknown person, and a plain unknown path. Branded 404 (Q13
+   fixed; retokened H1.6f — expect a serif heading + accent-gold "404" eyebrow, not the old
+   neutral one).
 9. `/robots.txt`, `/sitemap.xml` (sitemap is cached-by-default — note staleness only),
    `/api/health` → 200 ok. **On a LIVE run, actually read robots.txt's `Host:`/`Sitemap:`
    values, don't just check the status code** — SM7 (2026-07-19) was a 200 response with a
@@ -94,7 +113,22 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 12. Junk input: watchlist POST with bad posterUrl (S12), bad enum values → 400.
 
 **C. Logged-in (minted cookie)**
-13. `/dashboard` + nav pages all render with real data (library ~2k items).
+> Everything below is **still fully unverified** as of 2026-07-27 — four consecutive sweeps have
+> been anon-only because of the mint block. This is the highest-value block to run the moment a
+> real session is available; H1.6e/f shipped a lot of authed-only surface that has never been
+> seen with real data.
+13. Nav pages all render with real data (library ~2k items). **New/changed in H1.6c/e/f:**
+    the **`/profile` hub** (stats strip, "Coming up" list, Recommended rail), **`/calendar`**
+    (type-chip filter + its month/agenda toggle), Home's **stats strip + best-genre card +
+    Recommended rail**, and the **Library ⇄ Wishlist tab** (switch both directions; each side
+    must keep its own filters/sort — they use separate persisted keys by design).
+13b. **Library's default sort is now "Recently added"** (H1.6f). Verify: it's the pre-selected
+    sort on a fresh visit, the list really is newest-added-first (not release-date order), and
+    items with no `added_at` sort last. Also verify Library **no longer auto-scrolls to today**
+    (Q3 fix — it should open at the top); Wishlist SHOULD still auto-scroll (that's intended).
+13c. **A5 typed search groups, logged in**: search a person's name on Discover → a **People**
+    group and (for a genre word) a **Tags** group render above a **Titles** header, each pill
+    links to the right `/person/…` / `/tag/…` page. This is the half no anon sweep can reach.
 14. Wishlist: add from an item page → appears in `/wishlist` → survives reload → remove → gone.
     (DB write-back to platforms will fire with real tokens — acceptable on dev data, but prefer
     an obscure item and undo it.)
@@ -103,15 +137,25 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 17. Search in discover: query + filter, persisted across item→Back (usePersistedState; N-positives).
 18. Settings: renders, country setting present; don't disconnect anything (bumps epoch → kills
     minted token — re-mint if it happens).
-19. Calendar/timeline views on wishlist/library render; known mid-scroll landing (Q3/N2).
+19. Calendar/timeline views on wishlist/library render. (Q3's mid-scroll landing is FIXED for
+    Library as of 2026-07-27 — if it still drops you mid-list, that's a regression, not a known.)
 
 **D. Cross-cutting**
 20. Back-button spot checks on any NEW surface (full deep-dive already done — N1/N2/N3 known).
+    **Targeted regression test for SM8 (added 2026-07-27), run ANON:** from `/discover`, click a
+    gated nav item (Calendar), land on `/`, then press Back. **Pass = you return to `/discover`.**
+    **Fail = you bounce to `/` again** (the tab title flashes "Calendar · Fandex" on the way).
+    Instrument it — `history.length` before the click vs after: a jump of **+2** for one nav
+    click means the gate used `push` and left the gated route in history. Re-check every gated
+    route *and* the logout buttons on `/profile` and `/settings`.
 21. **Both layouts on every flow**: run each checklist flow in the desktop viewport AND
     `resize_window` preset mobile (375×812) — not just one mobile spot-check at the end.
     Cheap way: after each desktop flow passes, re-run its key screen at mobile width and
-    screenshot. Known mobile issues: hamburger overlay translucent (Q9), nav not
-    session-aware (Q1).
+    screenshot. (Q9's translucent hamburger and Q1's non-session-aware nav are both gone —
+    `NavBar` was deleted in H1.6c. Check `AppNav` instead: the mobile **bottom** bar, its
+    safe-area inset, `aria-current` on the active slot, and that the anon "You" slot opens the
+    sign-in dialog rather than linking to `/profile`. Measured 2026-07-27: nav slots are
+    75×52px, comfortably over the 44px bar.)
 22. Console errors anywhere = always log; server log warnings/errors after the sweep.
 23. Data consistency: same list twice in a row (discover, facet) — stable order, same counts.
 24. **Scroll smoothness**: on Discover browse + a big facet page + wishlist/library, scroll
@@ -143,6 +187,17 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
     on cards (rate / watched / wishlist), tag chips, sort buttons, calendar day cells,
     month-scrollbar entries via `getBoundingClientRect`. Adjacent targets far enough apart
     to not mis-tap?
+    **How to measure this properly (learned H1.6f):** the visible box is NOT the hit area.
+    SubBar controls carry a `.tap-44` / `.tap-44-y` class whose transparent `::after` claims
+    `max(100%, 44px)` — so compute the EFFECTIVE rect (`max(rect, 44)`, width-only for
+    `.tap-44-y`) and then **check every pair for overlap**, because an expanded region that
+    collides with its neighbour silently steals that neighbour's taps, which is worse than the
+    small target it fixed. Run at 375 / 500 / 1280px — the chip and sort lines only become
+    vertical neighbours once Row 1 wraps, so the collision is width-dependent.
+    Known-and-accepted: the 3 view-toggle buttons are **34×44** (they can't each claim 44px of
+    width inside a ~102px segmented group). `ActionCells` is still **h-8 (32px)** in card
+    layout / **36px** in row layout — NOT yet addressed, and only measurable logged-in
+    (anon cards render no action bar).
 29. **Layout**: wasted or cramped space at each breakpoint; grids reflowing sensibly between
     375px / tablet / wide desktop; no overflow, truncation without tooltip/ellipsis, or
     overlapping elements; sticky headers/filters behaving while scrolling.
@@ -187,8 +242,28 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
 - `GET /api/watchlist` is 405 (POST/DELETE only); use `/api/library` as the auth probe.
 - Wishlist remove leaves the row until reload (SM1) — verify removal via network 200 +
   reload, not the UI.
-- View mode is a single global `rr_view_mode` localStorage key (SM2) — toggling Calendar on
-  one page changes ALL pages incl. anon Discover; reset to card/list when done.
+- ~~View mode is a single global `rr_view_mode` key (SM2)~~ — **no longer true**: view mode is
+  per-page now (`rr_view_discover` / `rr_view_library` / `rr_view_wishlist` via `useViewMode`).
+  The *type* filter is still shared (`rr_type_filter`, SM2's real remaining half).
+- **NEVER run `npx next build` while the dev server is running** (cost real time on the
+  2026-07-27 run). It overwrites `.next` with production output and corrupts the running dev
+  server — routes start returning **404 HTML**, which then surfaces as a plausible-looking
+  product bug (`/api/auth/me` 404 → `/calendar` renders its "Couldn't load your calendar"
+  error state). If any route 404s unexpectedly mid-sweep: check the file still exists and
+  `git status` is clean, then `preview_stop` → `rm -rf .next` → `preview_start`. Build only
+  after stopping the preview.
+- **Clearing persisted UI state between probes:** `sessionStorage`/`localStorage` keys are all
+  `rr_`-prefixed, so
+  `Object.keys(sessionStorage).filter(k=>k.startsWith('rr_')).forEach(k=>sessionStorage.removeItem(k))`
+  (and the same for `localStorage`) gives a clean baseline. Worth doing before any
+  sort/filter/scroll test — a stale persisted query silently puts Discover in SEARCH mode and
+  you'll be measuring the wrong thing.
+- **Q26 scroll-to-top is intentional**: switching to a non-date sort on Discover jumps to the
+  top. Don't set a scroll position and then change sort — the effect will reset it and the
+  test measures nothing.
+- Anon Discover/facet cards are **non-linkable by design** (PR15/PR14 — no `<a>`, no action
+  bar), so "click an item then press Back" flows can't be tested anon there. Home's rails DO
+  have real links for items already in the catalog — use those for anon link-through tests.
 - Write tests: Steam is read-only; a game wishlist add/remove goes to RAWG (net-zero
   verified safe 2026-07-18). Skip RATING writes — they create real reviews/ratings on the
   user's platform accounts and clearing isn't obviously exposed; note as not-exercised.

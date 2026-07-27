@@ -83,6 +83,28 @@ One plan-only issue found and fixed: `smoketest.md`'s gated-pages check listed `
 - API auth gates (`POST /api/watchlist`, `/api/settings`, `/api/discover/find`) all 401 for anon; auth is checked before body parsing so malformed-JSON handling wasn't reachable to test (not a gap — 401 fires first, as intended).
 - Mobile viewport (375px): Discover renders cleanly, touch targets reasonable. Q9 (translucent hamburger overlay) confirmed still present — not re-logged in detail.
 
+### Smoke test — 2026-07-27 (4th pass — anon, post-H1.6e/f local sweep)
+Scope: local dev, **anonymous only** (the cookie-mint recipe is still hard-blocked by the harness — see smoketest.md). Focused on everything H1.6c/e/f changed: the new `/` Home, `/calendar`, `/profile`, the Library⇄Wishlist tab, A5's typed search groups, and the retokened item/facet/404 surfaces. **Overall health: good — 2 findings, both navigation/polish, no crashes and no console or server errors anywhere in the sweep.**
+Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| **SM8** | 🟠 | nav | All gated pages | **Back is trapped after hitting a gated page while logged out.** Repro (anon): open `/discover` → click **Calendar** in the nav → you land on `/` (correct) → press **Back** → the tab title flashes "Calendar · Fandex" and you bounce straight back to `/`. You never return to `/discover`. Cause: the auth gate uses `router.push("/")`, which *adds* a history entry, so Back re-enters the gated route and it redirects again. Measured: history length went 15 → **17** for one nav click. Affects **8 call sites**, all `router.push("/")` → should be `router.replace("/")`: `calendar:39`, `insights:25`, `library:53`, `profile:65`, `settings:65`, `wishlist:134`, `item/debug:132`, plus the two **logout** handlers (`profile:88`, `settings:156` — after logging out, Back currently returns you to the authed page, which then bounces). Pre-existing for library/insights/settings; H1.6c/e propagated the same pattern to the new routes. |
+| **SM9** | 🟡 | ui | `/` Home | **The same URL shows two different tab titles depending on how you arrived.** Fresh load of `/` → "Fandex — your index of every game, movie & show" (the layout's `metadata.title.default`, which server-renders and wins). Client-side nav to `/` (e.g. clicking Home in the nav) → "Home · Fandex", set by `usePageTitle("Home")` in an effect. The server-rendered one is the better title for the root URL (SEO/bookmarks), so the likely fix is dropping `usePageTitle("Home")` from `src/app/page.tsx` rather than trying to make the effect win. Related, pre-existing and NOT logged separately: `/discover` never calls `usePageTitle` at all, so it always shows the default title. |
+
+**Held up well** (all anon, dev):
+- **Route matrix** — `/ /discover /calendar /profile /library /wishlist /insights /settings` all 200 for anon; `/dashboard` correctly 308s to `/wishlist`. Gated pages land on `/` gracefully, no error/blank state.
+- **Home (H1.6e)** — renders 2 rails for anon (Popular + Upcoming; **Recommended correctly absent**, it's signed-in-with-signal only), 30 cards, sign-in options + "Browse without an account", and **no stats strip** (correctly authed-only).
+- **A5 typed search groups (anon path)** — searching a person's name ("nolan") returns Titles only: no People group, no Tags group, no "Titles" header, 0 facet pill links, and **`/api/discover/facets` is never called** (verified in the network tab — only `/api/discover?q=nolan` fires). Exactly the intended signed-in-only scoping, zero anon regression.
+- **Discover sort matrix (anon)** — all four sorts stay populated at 40 cards with no empty state, and Popularity genuinely re-orders (top becomes Avengers: Endgame / Star Wars / La La Land vs Release date's future-dated titles). **This closes H1.1's own flagged risk** that a popularity default might leave anon with an empty view — it does not.
+- **Touch targets after the H1.6f fix** — measured at 375 / 500 / 1280px: 11 SubBar controls, all ≥44px tall, 9 fully 44×44, the 2 view-toggle buttons 34×44 by documented design, and **zero overlapping hit regions at any width**. Chip toggle still filters and restores correctly through the expanded region.
+- **404 page (retokened this pass)** — branded copy, DM Serif Display heading in the primary text token, accent-gold eyebrow, both action links present.
+- **Zero console errors and zero server errors** across the whole sweep.
+
+**⚠️ One "finding" investigated and dismissed — do not re-log:** `/api/auth/me` returned **404 (HTML)** mid-sweep, which made `/calendar` render its "Couldn't load your calendar" error state. This was **not** a product bug: running `npx next build` while `next dev` is running overwrites `.next` and corrupts the running dev server. The route file was present and git-clean the whole time; after `rm -rf .next` + a dev restart it returns `200 {"user":null}` as expected. Gotcha added to smoketest.md.
+
+**Not covered** (unchanged constraint): everything logged-in — the populated Library/Wishlist with the new "Recently added" default sort, the Library⇄Wishlist tab in use, Profile's stats/rails, Insights' charts, Settings' connected accounts, and A5's actual People/Tags group rendering. All need Nils's own session.
+
 ### Smoke test — 2026-07-19 (3rd pass — live production, post-deploy verification)
 Anon-only sweep against **https://fandex.org** (not the dev server) right after deploying `de0a6bd` (P13b + Q7–Q12/N3/N4), specifically to confirm the shipped fixes actually took effect in prod and nothing regressed. Same credential-forging constraint as the 2026-07-18 runs — no logged-in coverage.
 
