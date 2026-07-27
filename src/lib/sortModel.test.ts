@@ -68,6 +68,32 @@ describe("sortItems (client, Library/Wishlist)", () => {
   it("fandexScore → highest first, null last", () => {
     expect(sortItems(items, "fandexScore").map((i) => i.title)).toEqual(["outlier", "mid", "classic", "none"]);
   });
+
+  // H1.6f — "Recently added" (Library's new default). Deliberately ordered
+  // INDEPENDENTLY of release date here, so a pass can't come from accidentally
+  // falling through to the releaseDate branch.
+  it("addedAt → most recently added first, regardless of release date", () => {
+    const added = [
+      { title: "old-film-added-today",  releaseDate: "1980-01-01", addedAt: 3000 },
+      { title: "new-film-added-first",  releaseDate: "2025-01-01", addedAt: 1000 },
+      { title: "mid-film-added-second", releaseDate: "2005-01-01", addedAt: 2000 },
+    ];
+    expect(sortItems(added, "addedAt").map((i) => i.title))
+      .toEqual(["old-film-added-today", "mid-film-added-second", "new-film-added-first"]);
+    // …and that really is a different order than sorting by release date.
+    expect(sortItems(added, "releaseDate").map((i) => i.title))
+      .toEqual(["new-film-added-first", "mid-film-added-second", "old-film-added-today"]);
+  });
+
+  it("addedAt → items with no timestamp sort LAST, never first", () => {
+    const mixed = [
+      { title: "no-timestamp", releaseDate: "2020-01-01", addedAt: null },
+      { title: "added-early",  releaseDate: "2020-01-01", addedAt: 100 },
+      { title: "added-late",   releaseDate: "2020-01-01", addedAt: 900 },
+    ];
+    expect(sortItems(mixed, "addedAt").map((i) => i.title))
+      .toEqual(["added-late", "added-early", "no-timestamp"]);
+  });
 });
 
 describe("find() server sort", () => {

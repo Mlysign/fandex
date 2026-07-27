@@ -22,7 +22,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     let sql = `
       SELECT
         mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
-        ul.platform_sources, ul.status, ul.rating, ul.review, ul.reviewed_at, ul.metadata,
+        ul.platform_sources, ul.status, ul.rating, ul.review, ul.reviewed_at, ul.added_at, ul.metadata,
         ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
       FROM user_library ul
       JOIN media_items mi ON mi.id = ul.media_item_id
@@ -51,6 +51,10 @@ export const GET = withUser(async (req: NextRequest, session) => {
             ratings: parseRatings(row.metadata),
             review: row.review,
             reviewedAt: row.reviewed_at,
+            // H1.6f — when YOU added it, for the "Recently added" sort. The
+            // column has always existed (db.ts, DEFAULT strftime('%s','now'));
+            // it just was never selected or returned.
+            addedAt: row.added_at,
           },
           links: [],
         });
@@ -86,6 +90,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         ratings: item.ratings,
         review: item.review,
         reviewedAt: item.reviewedAt,
+        addedAt: item.addedAt,
         libraryStatus: item.status,
         fandexScore: computeFandexScore(extractFacets(links, item.type, merged), profile)?.score ?? null,
         communityScore: representativeCommunity(merged.communityRatings),

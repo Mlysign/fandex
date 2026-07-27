@@ -38,7 +38,7 @@ export type Membership = "include" | "exclude" | "only";
 // (Any = absent / Only / Hide). `rated` (A2, H1.6c) filters on whether the user
 // has a personal rating — distinct from `library` (watched/played/owned).
 export interface MembershipFilters { library?: Membership; wishlist?: Membership; rated?: Membership }
-export type SortKey = "releaseDate" | "popularity" | "rating" | "fandexScore";
+export type SortKey = "releaseDate" | "popularity" | "rating" | "fandexScore" | "addedAt";
 
 // The single shared sort option set, used by Discover / Wishlist / Library AND
 // mirrored on the facet pages. "Rating" is Bayesian-damped (see ratingsSort.ts);
@@ -50,6 +50,18 @@ export const SORTS: [SortKey, string][] = [
   ["fandexScore", "Fandex Score"],
 ];
 
+// H1.6f — "Recently added" is deliberately NOT in the shared SORTS set: it
+// sorts on when YOU added the item, which only exists for rows in your own
+// library/wishlist. On Discover (a live provider feed) every item would tie at
+// null, i.e. a visibly dead option. So it's offered only where the data is
+// real, via a per-page option list — SubBar already takes `options` per page.
+//
+// It is also absent from the server side on purpose: `zSortKey` (schemas.ts)
+// and discovery.ts's own SortKey stay at the original four, so the catalog
+// `find()` endpoint can never be asked for a sort it has no column for.
+// Library sorts client-side through sortItems(), so nothing is sent anywhere.
+export const LIBRARY_SORTS: [SortKey, string][] = [["addedAt", "Recently added"], ...SORTS];
+
 // Sorts whose result list is grouped/scrolled by date (calendar view allowed).
 export const DATE_SORTS: SortKey[] = ["releaseDate"];
 
@@ -57,7 +69,7 @@ export const DATE_SORTS: SortKey[] = ["releaseDate"];
 // platformRating, match, …) linger in sessionStorage across a deploy; anything
 // unknown falls back to `fallback`.
 export function normalizeSort(v: unknown, fallback: SortKey = "fandexScore"): SortKey {
-  const valid: SortKey[] = ["releaseDate", "popularity", "rating", "fandexScore"];
+  const valid: SortKey[] = ["releaseDate", "popularity", "rating", "fandexScore", "addedAt"];
   if (typeof v === "string" && (valid as string[]).includes(v)) return v as SortKey;
   const legacy: Record<string, SortKey> = {
     releaseNew: "releaseDate",

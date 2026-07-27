@@ -5,7 +5,7 @@ import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { useViewMode } from "@/lib/useViewMode";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, LIBRARY_SORTS, DATE_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -36,7 +36,12 @@ export default function LibraryPage() {
   const [hideRated, setHideRated] = usePersistedState("rr_library_hideRated", false);
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_library_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_library_excFacets", []);
-  const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "releaseDate", normalizeSort);
+  // H1.6f (Nils's call, 2026-07-26): Library defaults to "Recently added".
+  // Release date is the wrong default for an archive of what you've already
+  // watched/played — it interleaves decades and parks unreleased/TBA titles at
+  // one end. `normalizeSort`'s fallback is passed explicitly so a stored legacy
+  // value that no longer maps lands here too, not on the shared default.
+  const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "addedAt", (v) => normalizeSort(v, "addedAt"));
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_library_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_library_membership", {});
 
@@ -123,7 +128,7 @@ export default function LibraryPage() {
         searchPlaceholder="Search your library…"
         searchFacets={searchFacets}
         hideRated={{ value: hideRated, onChange: setHideRated }}
-        sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: SORTS }}
+        sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
         view={effView}
         onViewChange={setView}

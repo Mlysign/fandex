@@ -12,6 +12,7 @@ interface SortableItem {
   rating?: number | null;                 // user's 0-10 score
   communityRatings?: CommunityRating[];
   fandexScore?: number | null;
+  addedAt?: number | null;                // unix seconds — when YOU added it
 }
 
 // Platform-average rating normalized to 0-10 (for the rating-grouped layout's
@@ -48,6 +49,13 @@ export function sortItems<T extends SortableItem>(items: T[], sort: SortKey): T[
     }
     case "fandexScore":
       arr.sort((a, b) => (b.fandexScore ?? -1) - (a.fandexScore ?? -1));
+      break;
+    case "addedAt":
+      // H1.6f — most recently added to YOUR library first. Items with no
+      // timestamp sort last rather than to the top, matching cmpDateDesc's
+      // nulls-last rule for releaseDate (a missing value must never look
+      // like "just added").
+      arr.sort((a, b) => (b.addedAt ?? -Infinity) - (a.addedAt ?? -Infinity));
       break;
   }
   return arr;

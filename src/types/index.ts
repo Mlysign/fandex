@@ -108,6 +108,7 @@ export interface EnrichedItem {
   ratings?: { source: Source; rating: number }[]; // per-platform breakdown
   review?: string | null;
   reviewedAt?: number | null;    // unix seconds
+  addedAt?: number | null;       // unix seconds — when the user added it (H1.6f, "Recently added" sort)
   libraryStatus?: string | null; // watched | played | owned
   // H5.3 — personalized taste-match (0-100), from the rated-library profile.
   // null when cold-start (too few rated items) or this item matches none of

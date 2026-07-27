@@ -71,6 +71,11 @@ function sortDiscover(items: any[], sort: SortKey): any[] {
       break;
     }
     case "fandexScore": arr.sort((a, b) => (b.fandexScore ?? -1) - (a.fandexScore ?? -1)); break;
+    // "addedAt" is a Library-only sort (H1.6f) and is not offered here — the
+    // browse feed is live provider data with no per-user added date. It can
+    // still ARRIVE via a stale persisted value, so degrade to release date
+    // rather than silently returning the list unsorted.
+    case "addedAt": arr.sort((a, b) => cmpDate(b.releaseDate, a.releaseDate)); break;
   }
   return arr;
 }
