@@ -36,7 +36,12 @@ export default function CalendarPage() {
     setError(false);
     try {
       const me = await fetch("/api/auth/me").then((r) => r.json());
-      if (!me.user) { router.push("/"); return; }
+      // SM8 (2026-07-27): replace(), never push(). push() leaves THIS gated
+      // route in history, so an anon visitor pressing Back re-enters it and
+      // gets redirected again — Back appears dead and they can never get
+      // back to the page they came from. Same rule at every auth gate and
+      // both logout handlers.
+      if (!me.user) { router.replace("/"); return; }
       const res = await fetch("/api/calendar");
       if (!res.ok) throw new Error("calendar fetch failed");
       const data = await res.json();

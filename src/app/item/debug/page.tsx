@@ -129,7 +129,7 @@ function DebugInspector() {
     }
     fetch(`/api/detail?${p}`)
       .then(async (res) => {
-        if (res.status === 401) { router.push("/"); return; }
+        if (res.status === 401) { router.replace("/"); return; }
         const data = await res.json();
         if (data.error) { setError(data.error); return; }
         setItem(data.item ?? null);

@@ -22,7 +22,7 @@ export default function InsightsPage() {
     setStatus("loading");
     const me = await fetch("/api/auth/me");
     const meData = await me.json();
-    if (!meData.user) { router.push("/"); return; }
+    if (!meData.user) { router.replace("/"); return; }
     try {
       const res = await fetch("/api/insights");
       if (!res.ok) throw new Error("request failed");

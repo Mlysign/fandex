@@ -62,7 +62,7 @@ export default function ProfilePage() {
     setError(false);
     try {
       const meRes = await fetch("/api/auth/me").then((r) => r.json()) as Me;
-      if (!meRes.user) { router.push("/"); return; }
+      if (!meRes.user) { router.replace("/"); return; }
       setMe(meRes.user);
 
       const [home, calendar] = await Promise.all([
@@ -85,7 +85,7 @@ export default function ProfilePage() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     resetSessionProbe();
-    router.push("/");
+    router.replace("/");
   }
 
   if (me === undefined && !error) {

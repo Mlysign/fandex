@@ -62,7 +62,7 @@ function SettingsContent() {
   async function fetchMe(initial = false) {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (!data.user) { router.push("/"); return; }
+    if (!data.user) { router.replace("/"); return; }
     setUser(data.user);
     setIdentities(data.identities ?? []);
     setSyncLogs(data.syncLogs ?? []);
@@ -153,7 +153,7 @@ function SettingsContent() {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/");
+    router.replace("/");
   }
 
   // Fetched via JS rather than a plain <a download>: the route is cookie-authed

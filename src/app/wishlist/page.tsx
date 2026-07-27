@@ -131,7 +131,7 @@ export default function WishlistPage() {
   async function init() {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (!data.user) { router.push("/"); return; }
+    if (!data.user) { router.replace("/"); return; }
     setIdentities(data.identities ?? []);
     const syncLogs: { last_sync: number }[] = data.syncLogs ?? [];
     const latestSyncMs = syncLogs.length > 0 ? Math.max(...syncLogs.map((l) => l.last_sync * 1000)) : 0;

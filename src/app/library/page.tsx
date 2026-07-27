@@ -50,7 +50,7 @@ export default function LibraryPage() {
   async function init() {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (!data.user) { router.push("/"); return; }
+    if (!data.user) { router.replace("/"); return; }
     await loadItems();
   }
 
