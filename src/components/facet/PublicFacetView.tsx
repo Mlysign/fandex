@@ -184,11 +184,19 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   const groupBy: "month" | "rating" | "none" = fandexActive ? "none" : sort === "newest" ? "month" : sort === "rating" ? "rating" : "none";
   const ratingOf = (i: MediaCardItem) => (i.communityScore != null ? i.communityScore / 10 : null);
 
+  // SM22 (2026-07-28): delta is a like-for-like comparison — your average
+  // across only the titles you've rated vs. the crowd's average across
+  // theirs — which is the statistically correct comparison (comparing your
+  // N against the crowd's different, larger N would be worse). But the
+  // sentence never said that basis, so it visibly contradicted the two
+  // averages shown right above it ("Your average 7.4" next to "you rate...
+  // 0.6 lower"). Name the basis instead of just asserting the delta.
   const s = mine?.stats;
+  const basisTxt = s ? `Across the ${s.userCount} you've rated, ` : "";
   const deltaTxt = s && s.delta != null
-    ? s.delta > 0 ? `You rate ${initial.label} ${s.delta.toFixed(1)} higher than the crowd`
-      : s.delta < 0 ? `You rate ${initial.label} ${Math.abs(s.delta).toFixed(1)} lower than the crowd`
-      : `You rate ${initial.label} the same as the crowd`
+    ? s.delta > 0 ? `${basisTxt}you score ${initial.label} ${s.delta.toFixed(1)} higher than the crowd`
+      : s.delta < 0 ? `${basisTxt}you score ${initial.label} ${Math.abs(s.delta).toFixed(1)} lower than the crowd`
+      : `${basisTxt}you score ${initial.label} the same as the crowd`
     : null;
 
   return (

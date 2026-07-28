@@ -102,7 +102,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: none
 
-- [ ] **T7** — Say what the facet you-vs-crowd delta is computed over (SM22 🟡)
+- [x] **T7** — Say what the facet you-vs-crowd delta is computed over (SM22 🟡)
   - Files: `src/components/facet/PublicFacetView.tsx`
   - Detail: the panel shows "Crowd average 7.2 · 22 titles" and "Your average 7.4 · 9 rated", then asserts "You rate Christopher Nolan 0.6 lower than the crowd" — visibly contradicting its own two numbers. The delta is right; it is computed like-for-like over just the 9 titles the viewer rated (see the Decisions entry). Fix the copy at `PublicFacetView.tsx:189-190` to name the basis, e.g. "Across the 9 you've rated, you score Christopher Nolan 0.6 lower than the crowd". Keep the number and its sign unchanged.
   - Done when: the sentence states the comparison set, and a reader can no longer derive a contradiction from the two displayed averages.
