@@ -2,7 +2,6 @@
 import { format } from "date-fns";
 import { CommunityRating } from "@/types";
 import { ScoreBadge, RatingsBreakdown } from "./primitives";
-import { fmtScore, ratingsTooltip } from "./format";
 
 type PersonalRating = { source: string; rating: number };
 
@@ -49,14 +48,12 @@ export default function RatingsSection({
               {reviewedAt && (() => { try { return ` · ${format(new Date(reviewedAt * 1000), "MMM d, yyyy")}`; } catch { return ""; } })()}
             </span>
           )}
-          {hasPersonal && (() => {
-            const c = personalRating! >= 7 ? "var(--color-success)" : personalRating! >= 5 ? "var(--color-warning)" : "var(--color-danger)";
-            return (
-              <span className="text-sm font-bold" style={{ color: c }} title={ratingsTooltip(personalRatings)}>
-                ★ {fmtScore(personalRating!)}<span className="text-text-secondary font-normal text-xs"> / 10{personalRatings.length > 1 ? " avg" : ""}</span>
-              </span>
-            );
-          })()}
+          {/* SM31 (2026-07-28): this used to repeat the score as "★ 8 / 10"
+              right next to the gold Rate-it button above (PersonalSection),
+              which already shows the identical score — the same number
+              rendered twice, stacked. The button is the one rating display
+              now; this line keeps only what it uniquely adds (the watched
+              date) and the per-platform breakdown below. */}
           {review && <p className="text-sm text-text-secondary leading-relaxed italic w-full">&quot;{review}&quot;</p>}
           <div className="w-full"><RatingsBreakdown ratings={personalRatings} /></div>
         </div>

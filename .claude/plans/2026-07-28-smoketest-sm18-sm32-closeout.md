@@ -88,7 +88,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: extend the insights tests — all-integer input yields step 1 and 10 buckets; input containing a `.5` value yields step 0.5 and 19 buckets.
   - Depends on: none
 
-- [ ] **T5** — Stop the item page showing the rating twice (SM31 🔵)
+- [x] **T5** — Stop the item page showing the rating twice (SM31 🔵)
   - Files: the item-detail personal block shipped as B6 — locate via `grep -rn "Watched" src/components/item/` and follow the rated-state render
   - Detail: a rated item renders the gold button "★ 8/10" and, directly beneath, "✓ Watched · Apr 6, 2015   ★ 8 / 10". Remove the star + score from the **meta line** only, leaving "✓ Watched · Apr 6, 2015". The button is the interactive control and stays exactly as-is. Check the equivalent played/read states if the block has them, so the fix is not movie-only.
   - Done when: a rated item shows its score exactly once, and the watched date is still visible.
