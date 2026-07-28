@@ -6,12 +6,12 @@ import {
   addMonths, subMonths, getDay, parseISO, startOfDay, startOfWeek, endOfWeek,
   addWeeks, compareAsc,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, List, CalendarDays, BellPlus, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, CalendarDays, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
 import { TypeIcon } from "@/components/Badges";
 import Tooltip from "@/components/Tooltip";
 import EmptyState from "@/components/ui/EmptyState";
-import { useQuickActions } from "@/lib/useQuickActions";
+import ActionCells from "@/components/ActionCells";
 
 // CalendarView accepts any item that has the minimum required fields.
 // Both EnrichedItem (wishlist) and discover items satisfy this.
@@ -242,7 +242,6 @@ function CalendarCell({
 // grid already covers browsing past releases via its prev/next controls.
 
 function AgendaRow({ item, onSelect }: { item: CalendarItem; onSelect: (item: CalendarItem) => void }) {
-  const { wishlisted, busy, toggleWishlist } = useQuickActions(item);
   const typeColor = TYPE_COLORS[item.type] ?? "#888";
   const day = item.releaseDate ? parseISO(item.releaseDate) : null;
 
@@ -278,20 +277,7 @@ function AgendaRow({ item, onSelect }: { item: CalendarItem; onSelect: (item: Ca
           )}
         </div>
       </div>
-      {/* D-C: the design's Agenda-row BellPlus (reminder) has no backing
-          system — repurposed as add-to-wishlist, same icon, real action. */}
-      <button
-        onClick={(e) => { e.stopPropagation(); toggleWishlist(); }}
-        disabled={busy}
-        aria-pressed={wishlisted}
-        aria-label={wishlisted ? `Remove ${item.title} from your wishlist` : `Add ${item.title} to your wishlist`}
-        title={wishlisted ? "On your wishlist" : "Add to wishlist"}
-        className={`flex-none w-9 h-9 rounded-lg border flex items-center justify-center transition-colors duration-fast disabled:opacity-40 ${
-          wishlisted ? "border-accent/50 bg-accent-subtle text-accent" : "border-border text-text-secondary hover:text-text-primary hover:bg-surface-overlay"
-        }`}
-      >
-        <BellPlus className="w-4 h-4" aria-hidden />
-      </button>
+      <ActionCells item={item} layout="row" />
     </div>
   );
 }
