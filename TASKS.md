@@ -174,7 +174,7 @@ Scope: 6th sweep, first one run **entirely logged in from the start** (the in-ap
 - SM31 ✅ The duplicate "★ 8 / 10" on the item page's meta line is gone; the gold Rate-it button is the one rating display.
 - SM32 ✅ The calendar star picker now closes on Escape and returns focus to its trigger, matching the "Why?" popover's existing pattern.
 
-362 → 396 tests (34 new, all passing), typecheck clean, lint 0 errors throughout. Verified in the browser logged in via `/api/dev/login`: `/library` tab switching + Back, `/calendar` agenda rows at 375px (measured via `scrollWidth`), `/settings` restyle incl. the delete-account dialog still working.
+362 → 385 tests (23 new, all passing, 1 pre-existing skip), typecheck clean, lint 0 errors throughout. Verified in the browser logged in via `/api/dev/login`: `/library` tab switching + Back, `/calendar` agenda rows at 375px (measured via `scrollWidth`), `/settings` restyle incl. the delete-account dialog still working.
 
 ---
 

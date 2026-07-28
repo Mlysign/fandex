@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-28-smoketest-sm18-sm32-closeout
 created: 2026-07-28
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -164,7 +164,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Done when: `TASKS.md` marks SM25 closed with the reasoning, and no calendar default-view code changed.
   - Depends on: none
 
-- [ ] **T16** — Verify in the browser, then update the docs (all findings)
+- [x] **T16** — Verify in the browser, then update the docs (all findings)
   - Files: `STATUS.md`, `TASKS.md`, `.claude/plans/2026-07-28-smoketest-sm18-sm32-closeout.md`
   - Detail: run the full verification set, then verify logged in via the browser pane. Start the dev server with `preview_start({name: "dev"})` and get a session with **`GET /api/dev/login`** — never hand-mint a JWT, never call `/api/auth/logout`. Walk each fixed surface: `/profile` (T1), `/settings` + `/discover` titles (T2, T14), `/discover` search (T3), `/insights` (T4), an item page (T5, T9), a `/calendar` agenda row (T6, T13), `/person/christopher-nolan` (T7, T12), the nav search by keyboard (T8), `/library` tab switching and Back (T10), `/library` render count and keystroke timing (T11). Check `read_console_messages` is clean on every page touched and `preview_logs` shows no server errors. Then record the outcome: add an `SM#` resolution section to `TASKS.md` marking each of the 15 findings closed (with the measured numbers for T11 and T13), update `STATUS.md`'s lead paragraph, and fill this plan's Session log.
   - Done when: `npx tsc --noEmit` silent, `npm run lint` at 0 errors, `npm test` green with the new tests included, every surface above checked in the browser with no console or server errors, and all three docs updated.
@@ -173,4 +173,28 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
 
 ## Blockers log
 
+None. All 16 tasks completed without needing a decision outside the plan.
+
 ## Session log
+
+All 16 tasks shipped, one commit each (`05e233c` through `864aa07`, plus this doc-finalization commit). Two deliberate deviations from the plan's literal text, both because live investigation (code reading + browser measurement) told a different story than the plan's assumptions:
+
+- **T13 (SM28, calendar agenda rows):** the plan guessed the fix was dropping the `platformSources` meta line to reclaim width. Reading `AgendaRow` showed that line sits BELOW the title in the same column, not beside it — removing it frees no horizontal space. Re-measured at 375px first (per the plan's own instruction): the title box is still 132px even after L4's density work, and none of date-stack/poster/action-bar can shrink further without hurting tap targets or legibility. Fixed with `line-clamp-2` instead — vertical space the row already has, not horizontal space it doesn't.
+- **T8 (SM24, NavSearch keyboard):** reading `NavSearch.tsx` (last touched `dfc36ab`, before the sweep) showed ArrowDown/ArrowUp/Enter/Escape and `aria-activedescendant` were already fully wired — the sweep's finding appears to have been inaccurate at the time it was written, or invalidated by something environmental. What was genuinely broken and got fixed: suggestions were bare `<li onMouseDown>` with no `href`, so middle-click/cmd-click/copy-link didn't work. Verified both facts directly in the browser (a real automation-tool key-name quirk — "Return"/"Down" vs the literal "ArrowDown"/"Enter" — briefly looked like a repro of the original bug before I isolated it).
+
+Everything else matched the plan as written. Verified logged in via `/api/dev/login` in the browser pane:
+
+- `/profile` — "Coming up" shows only Jul 30–Aug 27 2026 (no more 1954–1972 entries); `/api/calendar` itself still correctly returns the full unfiltered 96-item feed (untouched, by design).
+- `/insights` — histogram shows "whole-point buckets" matching its 10 populated bars; Overview hint no longer mentions "the tick on each bar."
+- `/discover` — title is "Discover · Fandex" on hard load; result count hidden while searching "inception."
+- `/settings` — title is "Settings · Fandex"; all six sections restyled to the eyebrow/panel anatomy; delete-account dialog still opens with real footprint counts (1920/96/2373/4/174).
+- Item page (Interstellar) — Fandex Score panel's score/eyebrow/reason are static text, only "Why?" (`aria-label="Show Fandex Score breakdown"`) is a button; breakdown overlay still opens; the item's rating shows once (gold button), not twice.
+- `/person/christopher-nolan` — "Across the 9 you've rated, you score Christopher Nolan 0.6 lower than the crowd"; Batman v Superman (unrated) now shows a Fandex Score (62/100) instead of falling back to a provider rating.
+- Nav search — typed "nolan", ArrowDown set `aria-activedescendant` to the first option, Enter navigated to `/person/christopher-nolan`; each suggestion confirmed a real `<a href>`.
+- `/calendar` — agenda row titles wrap to 2 full lines at 375px (measured: box still 132px, longest real title "Metal Gear Solid Master Collection: Volume 2" now shows ~35 characters instead of ~15); star picker closes on Escape and returns focus to its trigger.
+- `/library` — 300 cards rendered initially (6,846 DOM nodes vs. the sweep's 44,517), grew to 600 then 900 on scroll (IntersectionObserver sentinel confirmed); typing "dark" filtered correctly after the debounce; tab strip: clicking Wishlist → `/library?tab=wishlist`, `<h1>` → "Wishlist"; Back → `/library` (tab defaults to All), never leaving the page; tablist/tabpanel roles confirmed programmatically (`tabs[i].parentElement === tablist` for all 4, panel `aria-labelledby` tracks the active tab).
+- `read_console_messages` clean on every page touched throughout.
+
+Final verification: `npx tsc --noEmit` silent, `npm run lint` 0 errors / 385 warnings (unchanged baseline), `npm test` 385 passed / 1 skipped (up from 362 at session start — 23 new tests across `upcoming.test.ts`, `insights.test.ts`, `myStuffMerge.test.ts`, `incrementalList.test.ts`).
+
+No systems-level recommendation beyond what's already in TASKS.md's closeout note — the sweep's 15 findings are genuinely closed, not just marked closed.
