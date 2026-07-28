@@ -123,7 +123,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: T5 (same file region as (b))
 
-- [ ] **T10** — Put the Library/Wishlist tab in the URL (SM21 🟠)
+- [x] **T10** — Put the Library/Wishlist tab in the URL (SM21 🟠)
   - Files: `src/components/MyStuffView.tsx`, `src/lib/myStuffMerge.ts`, `src/lib/myStuffMerge.test.ts`
   - Detail: `activeTab` is plain `useState(initialTab)` (`MyStuffView.tsx:111`), so switching tabs changes no URL, no `document.title`, no heading and no count, pushes no history entry, and is lost on reload — and Back leaves the page entirely. Per the decision this reverses C8's "switching tabs is never navigation": **update the comment block at `MyStuffView.tsx:98-102` to record the reversal and why**, do not leave it contradicting the code. Implement: read the tab from `?tab=` on mount (falling back to the route's `initialTab`), and on tab change call `router.push` with the new query so Back returns to the previous tab. Add a pure `parseTab(raw, fallback)` to `myStuffMerge.ts` that validates against the four known tabs and falls back on anything unrecognised. Make the `sr-only` `<h1>` (`:238`) and the `resultCount`/`resultNoun` pair (`:250-251`) track the **active tab** rather than the route — today they always report the route's rated/saved totals, which is the "still reads 1597 rated" half of the finding. Keep `/library` and `/wishlist` as the two entry routes; only the tab moves into the query string.
   - Done when: clicking "Wishlist" on `/library` gives `/library?tab=wishlist`, the count and heading match that tab, a reload restores it, and Back returns to the All tab instead of leaving the page.

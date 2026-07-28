@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_LABELS } from "@/lib/constants";
@@ -13,7 +13,7 @@ import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePe
 import { WISHLIST_TOGGLED_EVENT, WishlistToggledDetail } from "@/lib/useQuickActions";
 import { syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
-import { mergeMyStuff, filterByTab, MyStuffTab } from "@/lib/myStuffMerge";
+import { mergeMyStuff, filterByTab, parseTab, MyStuffTab } from "@/lib/myStuffMerge";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
@@ -23,6 +23,7 @@ import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWis
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 const TAB_LABEL: Record<MyStuffTab, string> = { all: "All", wishlist: "Wishlist", unrated: "Unrated", rated: "Rated" };
+const TAB_NOUN: Record<MyStuffTab, string> = { all: "titles", wishlist: "saved", unrated: "unrated", rated: "rated" };
 
 // usePersistedState's `normalize` param must be a STABLE reference (its own
 // hydrate effect is keyed on it) — a fresh arrow every render re-runs that
@@ -96,19 +97,38 @@ function OnboardingState({ identities }: { identities: any[] }) {
 
 // ── Main view ─────────────────────────────────────────────────────
 // C8 (2026-07-28) — Library and Wishlist merged into one shared component.
-// `route` decides which page's <h1>/count/empty-state/search-placeholder
-// shows (it does NOT change when the user switches tabs — Back always
-// restores the route's own framing, not a stale in-page tab). `initialTab`
-// seeds the four-tab strip's local state; switching tabs is never navigation.
-export default function MyStuffView({ route, initialTab }: { route: "library" | "wishlist"; initialTab: MyStuffTab }) {
+// `route` decides the empty-state copy/search-placeholder and is the URL's
+// own path (/library or /wishlist); `initialTab` is that route's default tab.
+//
+// SM21 (2026-07-28) — REVERSES C8's "switching tabs is never navigation"
+// call. That made the tab strip pure client state: no URL/heading/count
+// change, lost on reload, and Back exited the page entirely instead of
+// returning to the previous tab — while /wishlist, a real route, got all of
+// that right. The tab now lives in `?tab=`, so <h1>/count both track the
+// ACTIVE TAB (not the route), a reload restores it, and Back is a real
+// history entry.
+function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; initialTab: MyStuffTab }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [identities, setIdentities] = useState<any[]>([]);
   const [libraryItems, setLibraryItems] = useState<EnrichedItem[]>([]);
   const [wishlistItems, setWishlistItems] = useState<EnrichedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<MyStuffTab>(initialTab);
+  // The `?tab=` query param IS the state — no local mirror. Deriving it
+  // directly (rather than useState+effect) means Back/Forward/reload all just
+  // work: each is a normal navigation that changes searchParams, and this
+  // recomputes on the next render with no sync effect to keep in step.
+  const activeTab = parseTab(searchParams.get("tab"), initialTab);
+
+  function changeTab(tab: MyStuffTab) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === initialTab) params.delete("tab"); // keep the canonical URL clean at the route's own default
+    else params.set("tab", tab);
+    const qs = params.toString();
+    router.push(`/${route}${qs ? `?${qs}` : ""}`, { scroll: false });
+  }
 
   // Persisted across back-nav (T12). SM2: the type filter is GLOBAL — one
   // shared key across Discover / this merged view. Everything else collapses
@@ -225,21 +245,21 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
   const autoScrollToToday = activeTab === "wishlist" && sort === "releaseDate" && autoTodaySampled;
 
   const isBusy = syncing || autoSyncing;
-  const ratedCount = merged.filter((i) => i.rating != null).length;
-  const savedCount = merged.filter((i) => i.inWishlist).length;
 
   return (
     <div className="min-h-screen">
       {/* 2026-07-28: the visible "Library"/"Wishlist" <h1> + rated/saved count
-          row is gone (Nils: "remove all headlines"). The route's own framing now
-          comes from the nav and the tab strip. The heading survives sr-only so
-          the page keeps a document outline; the count moved into SubBar's
-          existing result-count eyebrow, where every other list page shows it. */}
-      <h1 className="sr-only">{route === "library" ? "Library" : "Wishlist"}</h1>
+          row is gone (Nils: "remove all headlines"). The heading survives
+          sr-only so the page keeps a document outline. SM21 (2026-07-28):
+          both this and the result count below now track the ACTIVE TAB, not
+          the route — they used to always report the route's own rated/saved
+          totals even while a different tab (with a different, filtered set)
+          was showing. */}
+      <h1 className="sr-only">{TAB_LABEL[activeTab]}</h1>
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
-        tabs={<LibraryWishlistTabs active={activeTab} onChange={setActiveTab} />}
+        tabs={<LibraryWishlistTabs active={activeTab} onChange={changeTab} />}
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder={route === "library" ? "Search your library…" : "Search your wishlist…"}
@@ -247,8 +267,8 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
         advancedActiveCount={advancedActiveCount}
-        resultCount={loading ? null : route === "library" ? ratedCount : savedCount}
-        resultNoun={route === "library" ? "rated" : "saved"}
+        resultCount={loading ? null : tabItems.length}
+        resultNoun={TAB_NOUN[activeTab]}
         view={effView}
         onViewChange={() => {}}
         availableViews={availableViews}
@@ -317,5 +337,15 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
         )}
       </main>
     </div>
+  );
+}
+
+// useSearchParams requires a Suspense boundary above it in the app router
+// (same pattern as SettingsPageClient) — MyStuffContent does the real work.
+export default function MyStuffView({ route, initialTab }: { route: "library" | "wishlist"; initialTab: MyStuffTab }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <MyStuffContent route={route} initialTab={initialTab} />
+    </Suspense>
   );
 }

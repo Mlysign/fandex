@@ -5,6 +5,16 @@
 import { EnrichedItem } from "@/types";
 
 export type MyStuffTab = "all" | "wishlist" | "unrated" | "rated";
+const TABS: MyStuffTab[] = ["all", "wishlist", "unrated", "rated"];
+
+// SM21 (2026-07-28): the tab used to be pure client state — switching it
+// changed no URL, so it reset on reload and Back exited the page instead of
+// returning to the previous tab. Validates a `?tab=` query value against the
+// four real tabs, falling back to the route's own default for anything else
+// (missing, empty, or unrecognized) rather than crashing on a bad/stale link.
+export function parseTab(raw: string | null | undefined, fallback: MyStuffTab): MyStuffTab {
+  return (TABS as string[]).includes(raw ?? "") ? (raw as MyStuffTab) : fallback;
+}
 
 export interface MyStuffItem extends EnrichedItem {
   inLibrary: boolean;

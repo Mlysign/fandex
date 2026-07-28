@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeMyStuff, filterByTab } from "./myStuffMerge";
+import { mergeMyStuff, filterByTab, parseTab } from "./myStuffMerge";
 import { EnrichedItem } from "@/types";
 
 // C8 (2026-07-28) — merged Library/Wishlist view's pure logic: an item present
@@ -91,5 +91,30 @@ describe("filterByTab", () => {
 
   it("rated returns inLibrary items with a rating", () => {
     expect(filterByTab(items, "rated").map((i) => i.id).sort()).toEqual(["both", "rated"]);
+  });
+});
+
+describe("parseTab", () => {
+  it("accepts each of the four valid values", () => {
+    expect(parseTab("all", "wishlist")).toBe("all");
+    expect(parseTab("wishlist", "all")).toBe("wishlist");
+    expect(parseTab("unrated", "all")).toBe("unrated");
+    expect(parseTab("rated", "all")).toBe("rated");
+  });
+
+  it("falls back for undefined", () => {
+    expect(parseTab(undefined, "wishlist")).toBe("wishlist");
+  });
+
+  it("falls back for an empty string", () => {
+    expect(parseTab("", "wishlist")).toBe("wishlist");
+  });
+
+  it("falls back for an unknown value", () => {
+    expect(parseTab("bogus", "wishlist")).toBe("wishlist");
+  });
+
+  it("falls back for null", () => {
+    expect(parseTab(null, "rated")).toBe("rated");
   });
 });
