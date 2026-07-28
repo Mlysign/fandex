@@ -24,14 +24,9 @@
 
 ---
 
-## Small-tasks batch — 2026-07-27 (ID `S#`) — still open
+## Small-tasks batch — 2026-07-27 (ID `S#`) — ✅ ALL DONE
 
-Compiled after H1 closed, as a queue of low-blast-radius work. **None of these touch `migrations.ts`, `matcher.ts`'s write paths, sync/pull adapters, or auth/session code**, so all are delegable per AGENTS.md's routing rules. S1/S3/S5/S6/S7/S8/S11 are done — see the archive.
-
-- **S2** ⬜ · Med · ~8k · ⚠️ needs browser verification — **Flip Discover's default sort to Popularity.** `src/app/discover/page.tsx:152` — `usePersistedState<SortKey>("rr_discover_sort", "releaseDate", …)` → `"popularity"`. **Decision 2026-07-27 (Nils): flip**, honouring H1.1's locked "Popularity for everyone" over H5.7's `releaseDate` hold. H5.7 kept `releaseDate` only because a taste default left anon with an empty view; the 4th smoke sweep (2026-07-27) measured Popularity holding 40 cards for anon with genuine re-ordering, so that blocker is gone. **Watch out:** `releaseDate` is the *only* sort that runs the timeline's prepend/height-delta scroll machinery (`:288`, `:315`, `:447`, `:469`), and `:517` scrolls to top whenever `sort !== "releaseDate"` — check on first mount that `prevSortRef` doesn't fire that spuriously. Update the now-wrong explanatory comment at `:149`.
-- **S4** ⬜ · Low · ~1k — **Delete the dead `logout()` in `src/app/settings/page.tsx:154`.** Unreferenced since H1.6c moved logout to `/profile` (the only other occurrence in the file is the `/api/auth/logout` string inside the function itself). Confirm `/profile`'s handler is the live one before deleting.
-- **S9** ⬜ · Low · ~5k — **Fix SM11: "Your top genre: steam".** Add a `f.category === "genre"` clause to the `bestGenre` pick in `src/app/api/home/route.ts:100-102` (it currently filters only on `f.kind === "tag"`, which spans platform/theme/artstyle/meta tags too). `FacetStat.category` is already override-resolved per Q31, so no new plumbing. Fixes `/profile` at the same time — it renders the same field. Add a regression test that a platform-kind tag can't win the slot.
-- **S10** ⬜ · Low · ~6k — **Fix SM14: dedupe the Discover People group.** `/api/discover/facets` returns one match per `kind+key+role`, so a person who both directed and wrote shows up as two identical pills with identical hrefs. Collapse on `kind+key` (summing or maxing `count`) the way the facet pages already combine roles. Repro is `nolan` — expect 4 pills, not 6.
+S1–S11 all shipped in commit `34f87fe`; full write-ups in [docs/archive/history.md](docs/archive/history.md). S2/S4/S9/S10 were listed here as open until 2026-07-28 — a bookkeeping lag, not outstanding work.
 
 ---
 
@@ -121,7 +116,8 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 ## Remaining work (current)
 
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
-- **PR17** ⏸️ blocked until the Railway billing cycle resets (~2026-08-01) — see the catalog-pool-blowup section above.
+- **PR17** ⏸️ blocked until the Railway billing cycle resets (~2026-08-01) — see the catalog-pool-blowup section above. (Re-confirmed 2026-07-28: `https://fandex.org/api/health` still returns Railway's edge 404, `"Application not found"`.)
+- **Mockup-gap closeout** 🔵 planned, not started — the 5 remaining `docs/mockup-gap-audit.md` items (A1/B5/B6/B7/C8) all had their open questions decided with Nils on 2026-07-28. Executable plan: [.claude/plans/2026-07-28-mockup-gap-closeout.md](.claude/plans/2026-07-28-mockup-gap-closeout.md).
 - **H3 monetization + H4 legal/compliance** 🟢 scoped, not started (H4.6/H4.7 done ahead of schedule).
-- **Small-tasks batch:** S2/S4/S9/S10 still open (see above).
-- Everything else (Phases 0–6, H1, H2, H5, all audit findings, all QA/smoke-test/production-incident history) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.
+- **P18** ⬜ JustWatch clickable streaming links (UX/compliance, not monetization) — see "Open — carried forward" above.
+- Everything else (Phases 0–6, H1, H2, H5, the S# small-tasks batch, all audit findings, all QA/smoke-test/production-incident history) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.

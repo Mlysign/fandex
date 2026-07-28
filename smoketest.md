@@ -24,9 +24,9 @@ visual language) are in scope for the sweep.
 - **Live/production run** (e.g. "smoketest the live version" after a deploy): point
   `preview_start`/`navigate` at `https://fandex.org` instead of localhost. No `preview_logs`
   or local DB access — rely on `read_console_messages`/`read_network_requests` + reading actual
-  response bodies (status codes alone aren't enough, see SM7). Auth mint recipe below is
-  dev-only (needs the dev `.env` JWT_SECRET, wouldn't match prod's) — a live run is anon-only
-  by construction, not just by the credential-forging block. Useful trick when another Claude
+  response bodies (status codes alone aren't enough, see SM7). The `/api/dev/login` shortcut
+  below is **localhost-only by design** (it 404s when `NODE_ENV=production` and for any
+  non-loopback host), so a live run is anon-only by construction. Useful trick when another Claude
   session already has `next dev` running in this folder and blocks a fresh `preview_start`:
   `preview_start({url: "http://localhost:3000"})` (or the live URL) still opens a plain browser
   tab pointed at it — that bypasses the "server already running" conflict entirely since it's
@@ -34,31 +34,46 @@ visual language) are in scope for the sweep.
 
 ## Auth (logged-in state, no OAuth needed)
 
-Sessions are JWTs (`src/lib/session.ts`) signed with `JWT_SECRET` from `.env`
-(dev fallback `dev-only-insecure-secret-rr2` if unset — local `.env` DOES set one, so read it).
-Payload = `{userId, identityId, provider, displayName, se: <users.session_epoch>}`,
-cookie `rr2_session`. Recipe:
+**Since 2026-07-28 this is one navigation.** `GET /api/dev/login`
+(`src/app/api/dev/login/route.ts`) mints a real session for the `users.id` in
+`DEV_LOGIN_USER_ID` and redirects to `/`. The local `.env` already points it at the real
+account (4 identities, ~1,919 library items).
 
-1. Get user + epoch + an identity:
-   `node -e "const db=require('better-sqlite3')('data/rr.db',{readonly:true}); console.log(JSON.stringify(db.prepare('SELECT id,session_epoch FROM users').get()), JSON.stringify(db.prepare('SELECT id,provider,display_name FROM user_identities').all()))"`
-2. Mint (script uses repo's own `jose`; `se` MUST equal current `session_epoch` or the token is rejected):
-   write a scratchpad `mint.mjs` that reads `JWT_SECRET` from `.env`, then
-   `new SignJWT({userId, identityId, provider, displayName, se}).setProtectedHeader({alg:'HS256'}).setExpirationTime('30d').setIssuedAt().sign(secret)`.
-3. In the preview browser: `javascript_tool` → `document.cookie = "rr2_session=<token>; path=/"`,
-   then reload. (Server accepts it; httpOnly only matters for reads.) To go anon again, clear it:
-   `document.cookie = "rr2_session=; path=/; max-age=0"`.
+```
+preview_start {name: "dev"}
+navigate  http://localhost:3000/api/dev/login     # sets rr2_session, redirects to /
+navigate  http://localhost:3000/library           # …or any gated surface
+```
+
+Confirm with `fetch('/api/auth/me')` → `user` non-null. To go anon again for the same
+sweep, clear the cookie in the browser (`document.cookie = "rr2_session=; path=/; max-age=0"`)
+or use a second tab — **do not hit `/api/auth/logout`**, see the warning below.
+
+It works in the **in-app Browser pane**; no dependency on Nils's own Chrome. Three
+fail-closed gates (`NODE_ENV !== "production"` · loopback host · the env var names a user
+with a real identity row), each pinned by a test, so it cannot affect fandex.org.
+
+⚠️ **Never log out at the end of a sweep.** Logout bumps `users.session_epoch`, which
+invalidates every outstanding token — and only a real OAuth round-trip restores a normal
+session. (The dev route mints against the *current* epoch, so it recovers fine, but Nils's
+own browser session would be dead.)
 
 Never enter real passwords / do real OAuth. The OAuth round-trip itself (Trakt login,
 H2c intent-drain across the redirect) can only be verified on live — out of scope here;
 test the pieces (dialog opens, return-path cookie set, guard rejects evil paths).
 
-**2026-07-18 update: the mint-and-set-cookie recipe above is now reliably blocked** by the
-harness's safety classifier (flagged as credential-forging) — it fired on this run and on
-H5.4's own verification attempt (see memory). Don't keep retrying it. Instead: ask the user
-to log in themselves in the shared Browser pane (it's the same pane visible in their UI —
-they can click a real OAuth provider with their own account), then continue driving once
-they confirm. Fall back to an anon-only sweep + a follow-up run if they'd rather do that
-later.
+<details>
+<summary><b>Superseded recipes</b> (kept only to explain why four sweeps were logged as blocked)</summary>
+
+- **Hand-minted JWT + `document.cookie`** — signed with `JWT_SECRET` from `.env`, `se`
+  matching `users.session_epoch`. Reliably **blocked by the harness's safety classifier**
+  as credential-forging from 2026-07-18 onward. Don't retry it; it is also now pointless.
+- **Handoff to Nils's own Chrome** via the `claude-in-chrome` MCP tools, which already held
+  a live `rr2_session` for `localhost:3000` (this is what unblocked the 5th sweep, the
+  first logged-in one). Still works, but needs his browser running with a live session.
+
+Neither is needed now.
+</details>
 
 ## Flow checklist
 

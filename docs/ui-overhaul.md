@@ -309,10 +309,10 @@ Scope confirmed with Nils before starting: **nav + routes with minimal placehold
 
 **H1.6c is now complete** (nav/IA restructure + A2). Next is **H1.6e** (page-by-page, all four states — including fleshing out the minimal Home/Calendar/Profile placeholders this pass created, and the D-E card-score-slot fix).
 
-### H1.6d — Content components 🔵 in progress 2026-07-23
+### H1.6d — Content components ✅ done 2026-07-23 (finished within H1.6e/f; heading corrected 2026-07-28)
 `PosterCard` / `ListCard` to the card spec (quick-action bar, rated state, selected state, compact variant); `ListRow`; **`Rail` (new — the carousel the board has always wanted)**; `GroupedView`; `CalendarView` restyle **+ the new Agenda view + skip-to-previous-month**; `TypeFilter` circles; `SortMenu`; `FilterPanel` → bottom sheet on mobile; `SubBar` re-composition.
 
-**Per D-C:** the Agenda row's trailing `BellPlus` is replaced by an **add-to-wishlist** action, wired to the existing quick-action machinery (`useQuickActions` / `/api/watchlist`) rather than a new notification path. *(Not reached yet — Agenda view itself is still open, see below.)*
+**Per D-C:** the Agenda row's trailing `BellPlus` is replaced by an **add-to-wishlist** action, wired to the existing quick-action machinery (`useQuickActions` / `/api/watchlist`) rather than a new notification path. *(✅ Shipped — `AgendaRow`, `CalendarView.tsx:244`. Superseded 2026-07-28: the borrowed `BellPlus` gives way to the card's Rate + Bookmark pair, per the gap-audit's A1 decision — see §12.)*
 
 Backend work lands here: **A2's tri-state include/exclude filters**. No reminder backend.
 
@@ -446,3 +446,30 @@ With H1 fully shipped, went back through `05-DELTA.md` and this doc's own "still
   - **Profile "Recently added"** (flagged in §10 H1.6e's Profile note as needing `/api/library`'s `addedAt`, which H1.6f's "Recently added" sort work had since exposed) — added between the stats strip and "Coming up", reusing `sortItems(items, "addedAt")` (the same helper Library/Wishlist sort with) rather than a parallel implementation.
 - **Fresh visual sweep** of all 10 handoff pages (anon via in-app browser, logged-in via Nils's real Chrome session — 1918 library items, 97 wishlist, 1595 rated, a real account) found no further undocumented gaps: Home, Discover, item detail, tag/person facet pages (anon) and Library, Wishlist, Calendar, Insights, Settings, Profile (logged-in) all matched the design system with zero console/server errors.
 - **Verification:** typecheck clean, `eslint` 0 errors (pre-existing `any` warnings only), 329 tests passing throughout. `next build` was not run (a dev server from another session was already running against this same checkout — running build against a live dev server corrupts `.next`, per the H1.6f process note above).
+
+## 12. Gap-audit closeout — decided 2026-07-28, not yet built
+
+The 5 items §11 left open (`docs/mockup-gap-audit.md`'s A1/B5/B6/B7/C8) each carried a
+question only Nils could answer. All five are now answered; full rationale lives in the
+gap-audit doc, and the executable plan is
+[.claude/plans/2026-07-28-mockup-gap-closeout.md](../.claude/plans/2026-07-28-mockup-gap-closeout.md).
+Summary of what changes, with the two findings worth knowing before touching this code:
+
+- **A1 → the Calendar agenda rows, not `ListCard`.** ⚠️ **`ListCard` is unreachable dead
+  code** — every `GroupedView` caller hardcodes `view="card"` after the 2026-07-27
+  grid-only decision, so its list branch, `ActionCells`' `layout="row"`, and the `"list"`
+  entry in `ViewMode` are all inert. `AgendaRow` gets the Rate + Bookmark pair instead
+  (via the revived `layout="row"`). Deleting the dead path is a separate, un-made call.
+- **B5 → build the desktop nav search, with live suggestions** over the existing
+  `/api/discover/facets` vocab. A field that just re-routes to `/discover` would duplicate
+  the Search nav item beside it.
+- **B6 → the mockup's two-control personal block.** ⚠️ **This removes the manual
+  watched/played control app-wide.** Acceptable because `/api/library:154-155` already
+  infers `watched`/`played` from a rating; only "watched but deliberately unrated" without
+  provider sync is lost.
+- **B7 → keep all five Insights sections**, restyled to the mockup's panel + eyebrow
+  anatomy. Live is a superset; the extras are earned analysis, not clutter.
+- **C8 → merge the Library/Wishlist *view*, keep both routes**, with tabs
+  **All · Wishlist · Unrated · Rated**. Not the mockup's "Playing" — this app stores no
+  in-progress status (`watched`/`played`/`owned`/`beaten`/`toplay` are all terminal or
+  ownership flags), so that tab would be permanently empty.

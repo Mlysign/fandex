@@ -11,6 +11,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `docs/archive/history.md` — everything finished (completed phases, resolved audit findings, closed bugs/QA findings). Grep it for a keyword when you need the "why" behind a past decision — don't read it end to end, and don't pull it into context for planning new work.
 - `PLATFORMS.md` — platform integration capability reference.
 - `smoketest.md` — the `/smoketest` living plan; findings land in `TASKS.md`.
+- `.claude/plans/` — session plans written by one session and executed by another (the audit trail of planned-vs-shipped). This is the one path under `.claude/` that is tracked.
+
+## Verifying anything behind a login
+
+`/library`, `/wishlist`, `/insights`, `/profile`, `/settings` and the item-detail personal block all `router.replace("/")` for anonymous visitors, so **none of them can be checked without a session.** Use **`GET /api/dev/login`** — it mints one for the `users.id` in `DEV_LOGIN_USER_ID` and redirects to `/`; the local `.env` already points at the real account. Works in the in-app browser pane.
+
+Don't hand-mint a JWT (the harness blocks it as credential-forging, correctly) and don't assume anon-only verification is the best available — that assumption is why several batches shipped "not yet verified logged-in". **Never call `/api/auth/logout` to test the anon side**: it bumps `session_epoch` and kills Nils's own browser session, which only a real OAuth round-trip restores.
+
+The route's three fail-closed gates (`NODE_ENV !== "production"` · loopback host · a real identity row) are what keep it off fandex.org. Do not relax them, and treat it as auth code — main-loop only, per the routing rules below.
 
 ## Load-bearing invariants (don't relearn these the hard way)
 

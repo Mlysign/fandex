@@ -147,21 +147,14 @@ the real 1,919-item account), then visit the surface under test.
 
 ## Tasks
 
-- [ ] **T1** — Correct the stale small-tasks bookkeeping
-  - Files: `TASKS.md`, `STATUS.md`
-  - Detail: `TASKS.md:29-34` lists S2/S4/S9/S10 as open and `STATUS.md`'s
-    "Remaining work" repeats it, but commit `34f87fe` ("fix(S1-S11)") shipped
-    all four — verified in code: `discover/page.tsx:155` already defaults to
-    `"popularity"`, Settings has no `logout()`, `pickBestGenre`
-    (`libraryAnalysis.ts:229`) has the `category === "genre"` clause with six
-    tests, and S10's dedupe is in `discovery.ts`. Mark all four done with a
-    pointer to `34f87fe`, and move the whole "Small-tasks batch" section to
-    `docs/archive/history.md` since nothing in it remains open. Leave a
-    one-line pointer behind, per the archive convention in `TASKS.md:7`.
-  - Done when: `TASKS.md` and `STATUS.md` contain no claim that S2, S4, S9 or
-    S10 is open, and the batch's detail lives in the archive.
-  - Tests: none — docs only.
-  - Depends on: none
+- [x] **T1** — ~~Correct the stale small-tasks bookkeeping~~ **DONE 2026-07-28
+      by the planning session** (commit `docs: sync all markdown…`). S2/S4/S9/S10
+      had already shipped in `34f87fe`; their write-ups now live in
+      `docs/archive/history.md` and the `TASKS.md` section is a one-line pointer.
+      **Nothing to do — skip this task.** A wider doc-sync ran at the same time
+      (README env table, `smoketest.md`'s auth section, `docs/ui-overhaul.md`
+      §10/§12, `docs/fandex-score.md` §9, `AGENTS.md`), which also pre-empts part
+      of T7 — see T7's note.
 
 - [ ] **T2** — A1: give Calendar agenda rows the Rate + Bookmark pair
   - Files: `src/components/ActionCells.tsx`, `src/components/CalendarView.tsx`
@@ -291,20 +284,24 @@ the real 1,919-item account), then visit the surface under test.
 - [ ] **T7** — Close out the gap audit and the design docs
   - Files: `docs/mockup-gap-audit.md`, `docs/ui-overhaul.md`, `TASKS.md`,
     `STATUS.md`
-  - Detail: move items A1, B5, B6, B7 and C8 from `docs/mockup-gap-audit.md`'s
-    "🔲 Open" section into a "✅ Fixed 2026-07-28" section recording the
-    decision and what shipped for each. Record two findings explicitly: (a)
-    `ListCard`/`GroupedView`'s list branch are unreachable dead code (all four
-    callers hardcode `view="card"`) and were deliberately left untouched — flag
-    as a candidate future cleanup; (b) B6 removed the manual watched/played
-    control app-wide, with the `/api/library:154-155` rating-implies-status
-    mitigation noted. Update `docs/ui-overhaul.md` §11 if it references any of
-    these as open, and update `STATUS.md`'s H1 roadmap line so it no longer
-    says 8 items remain open.
-  - Done when: `docs/mockup-gap-audit.md` has an empty "Open" section (or says
-    so explicitly) and no root doc still describes A1/B5/B6/B7/C8 as open.
+  - ⚠️ **Reduced scope — the planning session already did the "decided" half.**
+    `docs/mockup-gap-audit.md`'s open section is now a **"🔵 Decided 2026-07-28
+    — ready to build, not yet built"** section carrying every decision and both
+    findings; `docs/ui-overhaul.md` gained a §12 with the same; `STATUS.md`'s
+    roadmap line is corrected. **Do not re-record the decisions.**
+  - Detail: what remains is turning *decided* into *shipped*. Move each of A1,
+    B5, B6, B7, C8 from the "🔵 Decided" section into a **"✅ Fixed 2026-07-28"**
+    section, replacing the decision text with **what actually shipped** — the
+    files touched and any deviation forced by the code. Update `docs/ui-overhaul.md`
+    §12's heading from "not yet built" to done. Update `STATUS.md`'s headline and
+    the "What's left" table row for the mockup-gap closeout. Add a summary entry
+    to `docs/archive/history.md`. If either flagged finding turned out wrong
+    while building, say so plainly rather than leaving the old claim standing.
+  - Done when: `docs/mockup-gap-audit.md` has no item still described as
+    pending, `STATUS.md`'s "What's left" no longer lists the closeout, and the
+    archive has the summary.
   - Tests: none — docs only.
-  - Depends on: T1, T2, T3, T4, T5, T6
+  - Depends on: T2, T3, T4, T5, T6
 
 - [ ] **T8** — Full verification pass, then push
   - Files: none (may fix defects found, in the files owned by T2–T6)

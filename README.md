@@ -15,9 +15,13 @@ recommendations, and an insights view.
 
 ```bash
 npm install
-cp .env.example .env   # then fill in the values (see table below)
 npm run dev            # http://localhost:3000
 ```
+
+Create a `.env` with the values from the table below. ⚠️ Note that **`.env.example` is not
+in the repo** — `.gitignore` excludes `.env*`, so a fresh clone has no sample file to copy.
+The table below is the authoritative list; boot-time validation will also name anything
+missing.
 
 `npm test` runs the suite. `npm run build` produces the production build.
 
@@ -26,6 +30,7 @@ npm run dev            # http://localhost:3000
 | Variable | Required | Purpose |
 |---|:--:|---|
 | `JWT_SECRET` | ✅ (prod) | Session signing. Generate: `openssl rand -hex 32`. **The server refuses to start in production without it.** |
+| `TOKEN_ENCRYPTION_KEY` | ✅ (prod) | OAuth-token encryption at rest (S2). Generate: `openssl rand -hex 32`. **Must differ from `JWT_SECRET`.** |
 | `TMDB_API_KEY` | ✅ | Movies & TV (core data source) |
 | `RAWG_API_KEY` | ✅ | Games (core data source) |
 | `NEXT_PUBLIC_BASE_URL` | ✅ | Public origin, no trailing slash (e.g. `https://app.example.com`) — used for OAuth redirects |
@@ -34,6 +39,10 @@ npm run dev            # http://localhost:3000
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
 | `OMDB_API_KEY` | ⬚ | Rotten Tomatoes / IMDb scores |
+| `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
+| `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
+| `SCORING_ADMIN_USER_IDS` | ⬚ | Comma-separated `users.id` allowlist for `/dev/scoring`. Unset = nobody (fails closed) |
+| `DEV_LOGIN_USER_ID` | ⬚ | **Local dev only.** A `users.id` that `GET /api/dev/login` mints a session for, so the logged-in pages are reachable without an OAuth round-trip. 404s unless `NODE_ENV !== "production"` *and* the host is loopback. Leave unset unless testing. |
 
 Required vars are validated once at boot ([`src/lib/config.ts`](src/lib/config.ts) via
 [`src/instrumentation.ts`](src/instrumentation.ts)) — a missing one fails fast in production with a
@@ -70,11 +79,13 @@ To carry over an existing local `data/rr.db` (library, wishlist, ratings), copy 
 volume once via the Railway CLI (`railway run` / volume upload). Otherwise the instance starts empty
 and rebuilds from your connected accounts on first sync.
 
-### Backups (recommended before relying on it)
+### Backups
 
-The Railway volume is a single copy. Set up **[Litestream](https://litestream.io)** to continuously
-replicate `rr.db` to S3-compatible object storage (Cloudflare R2 / Backblaze B2) with auto-restore on a
-fresh container, and test a restore. Tracked as **P5** in `TASKS.md`.
+✅ **Done.** The Railway volume is a single copy, so **[Litestream](https://litestream.io)**
+continuously replicates `rr.db` to object storage with auto-restore on a fresh container
+(config: [`litestream.yml`](litestream.yml)). Note that `litestream.yml` sets no explicit
+`retention`, so the effective backup window is Litestream's default — nobody has confirmed
+the real figure, and H4.3 (privacy policy) must establish it before any doc quotes one.
 
 ## Project docs
 

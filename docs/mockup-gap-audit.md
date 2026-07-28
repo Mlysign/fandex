@@ -162,50 +162,75 @@ architecture change, not a style/order tweak.
 
 ---
 
-## 🔲 Open — grouped by size
+## 🔵 Decided 2026-07-28 — ready to build, not yet built
+
+All five remaining items had their open question answered by Nils on 2026-07-28.
+The executable plan (files, done-when conditions, verification) is
+**[.claude/plans/2026-07-28-mockup-gap-closeout.md](../.claude/plans/2026-07-28-mockup-gap-closeout.md)**.
+Nothing below has shipped yet — this section records the *decisions*, and moves
+to "✅ Fixed" once the plan runs.
 
 ### A. Small, self-contained
 
-1. **`ListCard` / `ListRow` trailing slot** (§3) — spec is ONE trailing action
-   (icon button or price pill); live renders the same 3-cell `ActionCells` the
-   card used to. Should follow the card down to Rate + Bookmark, or to a single
-   action. *Needs a call: which?*
+1. **`ListCard` / `ListRow` trailing slot** (§3) — spec is ONE trailing action;
+   live renders the same 3-cell `ActionCells` the card used to.
+   → **DECIDED: retarget to the Calendar agenda rows; leave `ListCard` alone.**
+   ⚠️ **The original framing was wrong.** `ListCard` is **unreachable dead
+   code** — every `GroupedView` caller hardcodes `view="card"`
+   (`discover/page.tsx:575`, `LibraryPageClient.tsx:113`,
+   `WishlistPageClient.tsx:204`, `PublicFacetView.tsx:341`) since the
+   2026-07-27 grid-only decision, so its list branch never renders. Changing it
+   would edit something no user can see. The only list-shaped surface a user
+   can actually reach is `AgendaRow` (`CalendarView.tsx:244`), which gets the
+   card's Rate + Bookmark pair instead — via `ActionCells`' existing but
+   currently-dead `layout="row"`, repurposed as the one compact row shape.
+   Bonus: that retires the `BellPlus` glyph the agenda row borrowed from a
+   reminder feature that doesn't exist (D-C).
+   **Left open deliberately:** deleting `ListCard` / `GroupedView`'s list branch
+   / the vestigial `"list"` in `ViewMode` is a separate call, not yet made.
 
 ### B. Medium — structural, one page each
 
-5. **Desktop nav search field** (§1) — the avatar-button half is done (round
-   4). The search field itself is deliberately still missing: Search is
-   already a full nav item pointing at `/discover`, so a second inline search
-   box needs an answer for what it does differently before it's worth
-   building. *Needs a call: live suggestions, a different destination, or
-   skip it as redundant?*
+5. **Desktop nav search field** (§1) — the avatar-button half was done in round 4.
+   → **DECIDED: build it, with live suggestions.** Inline typeahead over the
+   existing `/api/discover/facets` vocab, grouped People / Tags / Titles,
+   navigating straight to the item or facet page. A field that merely re-routes
+   to `/discover` would duplicate the nav item already sitting next to it;
+   suggestions are what make a second entry point earn its space.
 6. **Item detail's personal block** — mockup is a `YOUR FANDEX SCORE` panel with
-   a `Rate it` / `Save` button pair. Live has a 10-star row, a "Mark as
-   watched" button and a separate "+ Add to wishlist" line — three controls
-   where the mockup has two, and no score panel framing. *Needs a call:* this
-   would mean removing the "mark as watched" control from the one other page
-   that could still offer it after round 1 dropped it from the card.
-7. **Insights section set** — mockup shows `HOW YOU RATE` and `TOP GENRES`.
-   Live ships five sections (Overview, Rating distribution, Distribution by
-   type, Taste by era, You vs the crowd). Live is a superset. *Needs a call:*
-   trim to the mockup, or keep the extras and just restyle the headings?
+   a `Rate it` / `Save` pair; live has three controls and no panel framing.
+   → **DECIDED: full mockup — two controls, and "Mark as watched" goes away.**
+   ⚠️ **This removes the manual watched/played control from the entire app**
+   (round 1 had already dropped it from cards; A1 drops it from rows). Checked
+   before deciding, and the reason it's acceptable: `/api/library:154-155`
+   already *infers* `watched`/`played` from a rating, so rating an item still
+   sets its status. The only capability actually lost is "watched but
+   deliberately unrated" without provider sync.
+7. **Insights section set** — mockup shows 2 sections, live ships 5.
+   → **DECIDED: keep all five, restyle to the mockup's anatomy.** Live is a
+   superset and the extra sections (Distribution by type, Taste by era, You vs
+   the crowd) are real earned analysis the mockup never considered. Apply the
+   panel + accent-eyebrow heading treatment uniformly instead of deleting them.
 
-### C. Needs a decision before any code
+### C. Needed a decision before any code
 
-8. **Library's tab row is actually a different feature, not a style choice.**
-   `library.html`'s own tab strip isn't "Library vs Wishlist" — it's **one**
-   page with a 4-way status filter: All / Rated / Wishlist / Playing. That's
-   collapsing the two current routes (`/library`, `/wishlist`, separate fetches,
-   separate filter state) into one page filtered by membership status — a real
-   architecture change, not the tab-order/style fix already done. Round 2 only
-   reordered + restyled the existing two-route switcher. **Do you want the
-   actual 4-way single-page merge, or is the two-route switcher (now styled and
-   defaulting to Wishlist) close enough?**
+8. **Library's tab row is a different feature, not a style choice.**
+   `library.html` is **one** page with a 4-way status filter, not a
+   Library-vs-Wishlist switcher — collapsing two routes with separate fetches
+   and separate filter state into one filtered page.
+   → **DECIDED: merge the *view*, keep both routes.** `/library` and
+   `/wishlist` both render one shared component; the route decides only which
+   tab opens. No redirect, no dead links, trivially revertible.
+   → **Tabs: All · Wishlist · Unrated · Rated** — *not* the mockup's
+   All/Rated/Wishlist/**Playing**. This app stores no in-progress status (values
+   are `watched` / `played` / `owned` / `beaten` / `toplay`, all terminal or
+   ownership flags), so "Playing" would be permanently empty. "Unrated" is
+   backed by real data. Never ship a tab the data can't fill.
 
 ---
 
 ## How to use this list
 
-Items in **A** are unambiguous and can just be done. **B** are a page's worth of
-work each and mostly need a yes/no on the flagged question. **C** genuinely
-can't proceed without a decision.
+Every item is now decided; none are blocked on input. Build them from the plan
+linked above, then move each into a "✅ Fixed" section with what actually
+shipped.

@@ -104,7 +104,14 @@ All config lives in the DB and cache-busts the profile/score caches on save.
 
 A personalized score needs signal. If `profile.hasSignal` is false or below a threshold (e.g. `< N` rated items or `< M` distinct facets), **show no score** with a "rate a few titles to unlock your Fandex Score" nudge — rather than a misleading number. No popularity fallback (that would break §4). This also cleanly handles logged-out visitors on public/SEO pages: no profile, no score.
 
-## 9. Phased build
+## 9. Phased build — ✅ ALL PHASES DONE (H5.1–H5.7, closed 2026-07-27)
+
+The five phases below are the original scoping and are kept for the rationale, not as a
+status board. All shipped; phase 5 (calibrate) landed as H5.5 — `K` 10→25 and bands
+re-anchored to `center ± 8`, verified against the real 1,855-item library (spread
+46.4–97.1, zero clamping). Per-phase changelog is in `docs/archive/history.md`.
+A future pass could still tune `C` / role weights now that the spread is legible.
+
 
 1. **Config core** (~20k) — `scoring_config` + `tag_category` + override tables, migration, config loader with cache-bust, seeded from current `tags.ts` / `ROLE_WEIGHT`.
 2. **Bayesian rescore** (~15k) — swap `buildProfile()` to the Bayesian average; refactor `scoreFacets()` to weighted-mean + 0–100 map reading config; extend `reasons[]` with `BA_f`/`n_f`. Add the §4 exclusion test.
