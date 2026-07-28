@@ -173,8 +173,8 @@ export default function FacetSection({
 
   return (
     <section>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-        <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-text-secondary">{title}</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-3 mb-1">
+        <span className="font-mono text-eyebrow uppercase text-accent">{title}</span>
         <div className="flex items-center gap-2">
           <input
             value={query}

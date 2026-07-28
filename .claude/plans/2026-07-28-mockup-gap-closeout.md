@@ -204,7 +204,7 @@ the real 1,919-item account), then visit the surface under test.
     verify in browser per T8.
   - Depends on: none
 
-- [ ] **T4** — B7: restyle Insights to the mockup's anatomy, keeping all 5 sections
+- [x] **T4** — B7: restyle Insights to the mockup's anatomy, keeping all 5 sections
   - Files: `src/components/insights/InsightsView.tsx`,
     `src/components/insights/FacetSection.tsx`,
     `src/components/insights/Histogram.tsx`,

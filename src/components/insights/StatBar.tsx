@@ -1,6 +1,8 @@
-// One horizontal rating bar: label · 0-10 bar with a baseline tick · avg ×count.
-// The visual language of the old TagBar, generalized for tags/people/companies.
-// When `href` is given, the whole row links to that facet's detail page.
+// One rating bar row — B7 (2026-07-28): the mockup's anatomy (04-pages/insights.html:149),
+// a label + count·avg pair above a 6px accent progress bar, rather than the
+// old single-line label/bar/value layout. The baseline tick + below-average
+// dimming are real analysis the mockup's static example never showed, kept
+// here rather than dropped for literal mockup parity.
 import Link from "next/link";
 
 export default function StatBar({
@@ -8,17 +10,23 @@ export default function StatBar({
 }: {
   label: string;
   value: number;       // 0-10 — drives the bar (Q22: the Bayesian score, not the raw average)
-  rawAvg?: number;      // Q22: the plain average, shown as a smaller secondary hint when it differs
+  rawAvg?: number;      // Q22: the plain average, shown alongside when it differs
   count: number;
   color: string;
   baseline: number;    // your mean rating (drawn as a tick)
   title?: string;
   href?: string;
 }) {
+  const showRaw = rawAvg != null && Math.abs(rawAvg - value) >= 0.05;
   const inner = (
-    <div className="flex items-center gap-3 px-1 py-1" title={title ?? label}>
-      <span className="w-40 shrink-0 text-sm truncate text-text-secondary">{label}</span>
-      <div className="relative flex-1 h-2.5 rounded-full bg-neutral-800 overflow-hidden">
+    <div className="py-1.5" title={title ?? label}>
+      <div className="flex items-baseline justify-between gap-3 mb-1.5">
+        <span className="text-sm font-medium text-text-primary truncate">{label}</span>
+        <span className="font-mono text-meta text-text-secondary shrink-0 tabular-nums">
+          {count} · {value.toFixed(1)}{showRaw && ` (avg ${rawAvg!.toFixed(1)})`}
+        </span>
+      </div>
+      <div className="relative h-1.5 rounded-full bg-neutral-800 overflow-hidden">
         <div
           className="h-full rounded-full"
           style={{ width: `${(value / 10) * 100}%`, background: color, opacity: value >= baseline ? 0.85 : 0.35 }}
@@ -31,18 +39,12 @@ export default function StatBar({
           />
         )}
       </div>
-      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-text-secondary">
-        {value.toFixed(1)} <span className="text-text-secondary">×{count}</span>
-        {rawAvg != null && Math.abs(rawAvg - value) >= 0.05 && (
-          <span className="block text-[10px] text-text-secondary">avg {rawAvg.toFixed(1)}</span>
-        )}
-      </span>
     </div>
   );
 
   if (href) {
     return (
-      <Link href={href} className="block rounded-md -mx-1 px-1 hover:bg-surface-elevated transition-colors">
+      <Link href={href} className="block rounded-md -mx-2 px-2 hover:bg-surface-elevated transition-colors">
         {inner}
       </Link>
     );

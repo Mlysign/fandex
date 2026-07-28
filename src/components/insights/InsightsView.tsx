@@ -5,19 +5,11 @@ import OverviewCards from "./OverviewCards";
 import Histogram from "./Histogram";
 import StatBar from "./StatBar";
 import FacetSection from "./FacetSection";
+import PanelHeader from "./PanelHeader";
 import PosterCard, { PosterCardItem } from "@/components/PosterCard";
 import { InsightsPayload, DivergenceItem, DecadeStat, FacetStat, InsightItem } from "./types";
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
 import { TYPE_COLORS, ROLE_COLORS } from "@/lib/constants";
-
-function SectionTitle({ children, hint }: { children: React.ReactNode; hint?: string }) {
-  return (
-    <div className="mb-2">
-      <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-text-secondary">{children}</h2>
-      {hint && <p className="text-xs text-text-secondary mt-0.5">{hint}</p>}
-    </div>
-  );
-}
 
 // Round a personal rating to the histogram's ½-point bucket (1..10 axis) so a
 // clicked bar matches the items that fed it.
@@ -172,13 +164,17 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
   return (
     <div className="space-y-10">
       <section>
-        <SectionTitle hint={`Scored against your ${baseline.toFixed(1)}/10 average — the tick on each bar.`}>Overview</SectionTitle>
+        <PanelHeader eyebrow="Overview" hint={`Scored against your ${baseline.toFixed(1)}/10 average — the tick on each bar.`} />
         <OverviewCards overview={data.overview} baseline={baseline} />
       </section>
 
       <section>
-        <SectionTitle hint="How many of your ratings fall at each score (½-point buckets). Click a bar to list those items.">Rating distribution</SectionTitle>
         <div className="rounded-xl border border-border bg-surface-elevated p-4">
+          <PanelHeader
+            eyebrow="How you rate"
+            stat={`avg ${baseline.toFixed(1)} · ${data.overview.ratedTotal} rated`}
+            hint="How many of your ratings fall at each score (½-point buckets). Click a bar to list those items."
+          />
           <Histogram
             data={data.histogram} color="#a78bfa" baseline={baseline} height={160}
             selected={selectedBucket}
@@ -196,7 +192,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
 
       {typeOrder.length > 0 && (
         <section>
-          <SectionTitle hint="Your score distribution per medium — do you rate games like you rate films?">Distribution by type</SectionTitle>
+          <PanelHeader eyebrow="Distribution by type" hint="Your score distribution per medium — do you rate games like you rate films?" />
           <div className="grid sm:grid-cols-3 gap-3">
             {typeOrder.map((t) => (
               <div key={t} className="rounded-xl border border-border bg-surface-elevated p-3">
@@ -212,7 +208,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
       )}
 
       <section>
-        <SectionTitle hint="Average rating you gave by release decade. Click a bar to list those items.">Taste by era</SectionTitle>
+        <PanelHeader eyebrow="Taste by era" hint="Average rating you gave by release decade. Click a bar to list those items." />
         <DecadeChart
           data={data.extra.byDecade} baseline={baseline}
           selected={selectedDecade}
@@ -228,7 +224,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
       </section>
 
       <section>
-        <SectionTitle hint="Where your ratings most diverge from the crowd (both shown on a 0-10 scale).">You vs the crowd</SectionTitle>
+        <PanelHeader eyebrow="You vs the crowd" hint="Where your ratings most diverge from the crowd (both shown on a 0-10 scale)." />
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="rounded-xl border border-border bg-surface-elevated p-3">
             <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-success mb-2">You rate higher</h3>
@@ -264,7 +260,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
       />
 
       <section>
-        <SectionTitle hint="Who appears most often across your rated library — actors and directors, film and game studios.">Most watched</SectionTitle>
+        <PanelHeader eyebrow="Most watched" hint="Who appears most often across your rated library — actors and directors, film and game studios." />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { title: "Actors", facets: mostWatched.actors },
