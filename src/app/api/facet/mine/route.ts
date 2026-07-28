@@ -3,7 +3,7 @@ import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
 import { FacetKind, FacetRole, extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore, fandexCenterFor, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
-import { loadLinks } from "@/lib/detail/enrich";
+import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
 import { getScoringConfig } from "@/lib/scoringConfig";
@@ -59,6 +59,20 @@ export const GET = withUser(async (req: NextRequest, session) => {
   // exactly the item a viewer wants scored ("is this worth discovering?").
   // The client sends the ids it actually rendered; score any not already
   // covered above directly from that item's own stored provider links.
+  //
+  // SM23 (2026-07-28): this used to call extractFacets on the RAW stored
+  // links with no refresh, so a thin browsed=1 row (persisted with minimal
+  // data, never opened on its own detail page) often carried too few facets
+  // to score at all — the exact case /api/detail gets right, because it
+  // calls these same two healers before scoring. Mirror that: they no-op
+  // instantly for anything already fresh (checked via projectionVersion) and
+  // only hit a provider for a genuinely stale/thin link, healing it in place
+  // (storeRefreshed) so it happens once per item, ever. Deliberately NOT
+  // pulling in /api/detail's enrichMissingSources — that title-searches every
+  // OTHER provider for a not-yet-linked source, which is fine for one item on
+  // its own page but would multiply into real per-provider traffic run across
+  // a whole facet page's rendered ids (the failure mode PR13-PR16 already
+  // cost a Railway outage over).
   const idsParam = searchParams.get("ids");
   if (idsParam) {
     const requested = [...new Set(idsParam.split(",").map((s) => s.trim()).filter(Boolean))];
@@ -68,6 +82,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
       if (!links.length) continue;
       const item = get<{ type: MediaType }>("SELECT type FROM media_items WHERE id = ?", [id]);
       if (!item) continue;
+      await ensureTmdbDetail(links, item.type);
+      await ensureGameDetail(links, item.type);
       const merged = mergeLinks(links, item.type);
       const sc = computeFandexScore(extractFacets(links, item.type, merged), profile)?.score;
       if (sc != null) fandexById[id] = sc;
