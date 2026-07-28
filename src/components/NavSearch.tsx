@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { VocabMatch, TitleMatch } from "@/components/discovery/types";
 import { ROLE_LABELS } from "@/lib/constants";
@@ -82,10 +83,13 @@ export default function NavSearch() {
     setActiveIdx(-1);
   }
 
+  function hrefFor(opt: Option) {
+    return opt.kind === "title" ? buildItemHref(opt.data) : buildFacetHref(opt.data);
+  }
+
   function go(opt: Option) {
-    const href = opt.kind === "title" ? buildItemHref(opt.data) : buildFacetHref(opt.data);
     reset();
-    router.push(href);
+    router.push(hrefFor(opt));
   }
 
   // Dismiss on outside pointerdown (ActionCells.tsx:62-69's pattern).
@@ -162,14 +166,24 @@ export default function NavSearch() {
                     {groupOptions.map((opt) => {
                       const idx = options.indexOf(opt);
                       const active = idx === activeIdx;
+                      // SM24 (2026-07-28): these used to be bare <li onMouseDown>
+                      // — no href, so no middle-click/cmd-click "open in new
+                      // tab" and no copy-link, unlike every other result card
+                      // in the app (PosterCard's N3 note). A real <Link>
+                      // fixes that; role="option" keeps the listbox semantics
+                      // the input's aria-activedescendant already relies on.
+                      // Plain left-click still goes through Next's client-side
+                      // nav, so `reset()` alone (not go()'s router.push) is
+                      // all the onClick needs to do.
                       return (
-                        <li
+                        <Link
                           key={opt.kind === "title" ? `title|${opt.data.id}` : `${opt.data.kind}|${opt.data.role ?? ""}|${opt.data.key}`}
                           id={`nav-search-opt-${idx}`}
+                          href={hrefFor(opt)}
                           role="option"
                           aria-selected={active}
                           onMouseEnter={() => setActiveIdx(idx)}
-                          onMouseDown={(e) => { e.preventDefault(); go(opt); }}
+                          onClick={() => reset()}
                           className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer ${active ? "bg-surface-elevated text-text-primary" : "text-text-secondary hover:bg-surface-elevated"}`}
                         >
                           {opt.kind === "title" ? (
@@ -183,7 +197,7 @@ export default function NavSearch() {
                               <span className="text-[10px] text-text-secondary shrink-0">{opt.data.role ? (ROLE_LABELS[opt.data.role] ?? opt.data.role) : opt.data.kind} · {opt.data.count}</span>
                             </>
                           )}
-                        </li>
+                        </Link>
                       );
                     })}
                   </ul>

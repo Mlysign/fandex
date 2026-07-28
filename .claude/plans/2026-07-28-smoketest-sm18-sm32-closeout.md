@@ -109,7 +109,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — copy change
   - Depends on: none
 
-- [ ] **T8** — Make the desktop nav search keyboard-operable (SM24 🟡)
+- [x] **T8** — Make the desktop nav search keyboard-operable (SM24 🟡)
   - Files: `src/components/NavSearch.tsx`
   - Detail: the B5 nav search is mouse-only. Suggestions are `<li role="option">` inside a `<ul role="presentation">` with no `href`; the input is `role="combobox" aria-expanded="true"` but never sets `aria-activedescendant`; ArrowDown/ArrowUp do nothing and **Enter does nothing at all**. Fix all of it: give each suggestion a real `<a href>` (the same target the click handler navigates to) so middle-click, open-in-new-tab and copy-link work; correct the list container to `role="listbox"` with each option carrying a stable `id`; track an active index, wire ArrowDown/ArrowUp/Home/End to move it, set `aria-activedescendant` to the active option's id, make Enter activate it, and make Escape close the list. Keep the existing mouse path working unchanged.
   - Done when: typing "nolan", pressing ArrowDown then Enter navigates to that person's page; each suggestion is a real link; `aria-activedescendant` tracks the highlighted option.
