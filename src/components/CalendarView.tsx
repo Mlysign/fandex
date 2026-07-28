@@ -14,6 +14,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Sheet from "@/components/ui/Sheet";
 import ActionCells from "@/components/ActionCells";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { upcomingFrom } from "@/lib/upcoming";
 
 // CalendarView accepts any item that has the minimum required fields.
 // Both EnrichedItem (wishlist) and discover items satisfy this.
@@ -341,10 +342,8 @@ function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (ite
       return d.getFullYear() === thisYear ? format(d, "MMMM") : format(d, "MMMM yyyy");
     };
 
-    const upcoming = items
-      .filter((it) => it.releaseDate)
+    const upcoming = upcomingFrom(items, now)
       .map((it) => ({ item: it, date: parseISO(it.releaseDate as string) }))
-      .filter(({ date }) => compareAsc(date, now) >= 0)
       .sort((a, b) => compareAsc(a.date, b.date));
 
     const out: { label: string; items: CalendarItem[] }[] = [];

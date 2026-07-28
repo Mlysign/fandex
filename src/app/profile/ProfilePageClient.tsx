@@ -10,6 +10,7 @@ import { TYPE_COLORS } from "@/lib/constants";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 import { buildItemHref } from "@/lib/itemUrl";
 import { sortItems } from "@/lib/sortItems";
+import { upcomingFrom } from "@/lib/upcoming";
 import Avatar from "@/components/ui/Avatar";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
@@ -72,7 +73,7 @@ export default function ProfilePageClient() {
         fetch("/api/library").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (home) { setStats(home.stats ?? null); setRecommendation(home.recommendation ?? []); }
-      if (calendar) setUpcoming((calendar.items ?? []).slice(0, 5));
+      if (calendar) setUpcoming(upcomingFrom(calendar.items ?? [], new Date()).slice(0, 5));
       if (library) setRecentlyAdded(sortItems(library.items ?? [], "addedAt").slice(0, 5));
     } catch {
       setError(true);

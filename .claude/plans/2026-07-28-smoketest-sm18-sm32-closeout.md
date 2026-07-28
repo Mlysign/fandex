@@ -60,7 +60,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
 
 ## Tasks
 
-- [ ] **T1** — Filter `/profile`'s "Coming up" to actually-upcoming releases (SM18 🟠)
+- [x] **T1** — Filter `/profile`'s "Coming up" to actually-upcoming releases (SM18 🟠)
   - Files: `src/app/profile/ProfilePageClient.tsx`, `src/lib/upcoming.ts` (new), `src/lib/upcoming.test.ts` (new)
   - Detail: `/api/calendar` returns all wishlist items sorted ascending with no future filter (`src/app/api/calendar/route.ts:94-99`), so `/profile` — which just slices the first 5 — shows Seven Samurai (1954), Dr. Strangelove (1964), The Godfather (1972). Do **not** change the API (see Decisions). Extract a pure `upcomingFrom(items, now)` helper into `src/lib/upcoming.ts` that keeps items whose `releaseDate` is today or later, drops undated ones, and preserves ascending order; call it in `ProfilePageClient.tsx` before the `.slice(0, 5)`. `/calendar`'s agenda view already does this filtering inline (`CalendarView.tsx:287`) — reuse the new helper there too so there is one definition of "upcoming".
   - Done when: `/profile`'s "Coming up" lists only releases dated today or later, and `npm test` covers the helper.
