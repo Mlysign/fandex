@@ -32,6 +32,7 @@ export interface InsightsPayload {
     meanRating: number | null;
   };
   histogram: HistogramBucket[];
+  histogramStep: number; // SM27 — the step histogram()/byTypeHistogram actually used
   byTypeHistogram: Record<string, HistogramBucket[]>;
   facets: FacetStat[];
   // Q22 — the live, DB-backed tag taxonomy (id/label/color/sortOrder only —
@@ -47,9 +48,20 @@ export interface InsightsPayload {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-// Personal ratings are platform-averaged decimals — bucket to the nearest 0.5
-// across a fixed 1..10 axis so the histogram x-axis is stable.
-function histogram(values: number[], step = 0.5, lo = 1, hi = 10): HistogramBucket[] {
+// SM27 (2026-07-28): personal ratings are decimals when platform-averaged,
+// but every rating actually stored comes off a 10-star picker — a plain
+// integer. A hard-coded 0.5 step built 19 buckets regardless, 9 of them
+// permanently empty (still consuming bar width) whenever the whole library is
+// integer-rated, which is normally. Pick the step from what's really there:
+// integer values get whole-point buckets, anything with a genuine fraction
+// keeps the finer 0.5 grid.
+export function histogramStep(values: number[]): number {
+  return values.length > 0 && values.every((v) => Number.isInteger(v)) ? 1 : 0.5;
+}
+
+// Bucket to the given step across a fixed 1..10 axis so the histogram x-axis
+// is stable regardless of how many distinct values are actually present.
+export function histogram(values: number[], step: number, lo = 1, hi = 10): HistogramBucket[] {
   const counts = new Map<number, number>();
   for (let b = lo; b <= hi + 1e-9; b = round2(b + step)) counts.set(round2(b), 0);
   for (const v of values) {
@@ -94,10 +106,13 @@ export function buildInsights(userId: string): InsightsPayload {
     .map(([decade, { count, sum }]) => ({ decade, count, avg: round1(sum / count) }));
 
   // ── Per-type histograms ──
+  // Same step as the overall histogram (not recomputed per type) so every
+  // chart on the page uses one consistent bucket granularity.
+  const step = histogramStep(a.ratingValues);
   const byTypeHistogram: Record<string, HistogramBucket[]> = {};
   for (const type of ["game", "movie", "show"]) {
     const vals = a.items.filter((i) => i.type === type).map((i) => i.rating);
-    byTypeHistogram[type] = histogram(vals);
+    byTypeHistogram[type] = histogram(vals, step);
   }
 
   return {
@@ -109,7 +124,8 @@ export function buildInsights(userId: string): InsightsPayload {
       byStatus: a.byStatus,
       meanRating: a.ratedItemCount ? round1(a.baseline) : null,
     },
-    histogram: histogram(a.ratingValues),
+    histogram: histogram(a.ratingValues, step),
+    histogramStep: step,
     byTypeHistogram,
     facets: a.facets,
     tagCategories: getTagCategories()

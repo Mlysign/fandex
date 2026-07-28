@@ -81,7 +81,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: T2 (renames the file)
 
-- [ ] **T4** — Make the ratings histogram's bucket step match the data (SM27 🟡)
+- [x] **T4** — Make the ratings histogram's bucket step match the data (SM27 🟡)
   - Files: `src/lib/insights.ts`, `src/components/insights/InsightsView.tsx`, `src/lib/insights.test.ts` (extend if it exists, else create)
   - Detail: two separate problems. (a) `histogram(values, step = 0.5, lo = 1, hi = 10)` (`insights.ts:52`) always builds 19 buckets, but every stored rating is an integer, so 9 buckets are permanently empty — they render as zero-height bars that still consume width, which is why the sweep counted "10 integer bars" under a caption promising ½-point ones. Make the step adaptive: if every value is an integer, use step 1; otherwise keep 0.5. Return the chosen step so the caller can describe it, and make the "How you rate" hint string reflect the actual step instead of hard-coding "½-point buckets". Keep `ratingBucket()` in `InsightsView.tsx:16` consistent with the step actually used, or the click-to-drill-down will select the wrong items. (b) The OVERVIEW `PanelHeader` hint reads "Scored against your 6.7/10 average — the tick on each bar" (`InsightsView.tsx:167`) but sits above five stat tiles that have no bars and no ticks. Drop the "— the tick on each bar" clause from the Overview hint; that sentence belongs to the histogram, which already has its own.
   - Done when: `/insights` shows one bar per distinct rating value with no invisible gaps, the caption names the step the chart actually uses, and the Overview hint no longer mentions bars or ticks.

@@ -106,6 +106,7 @@ export interface InsightsPayload {
     meanRating: number | null;
   };
   histogram: HistogramBucket[];
+  histogramStep: number; // SM27 — the step the histogram/byTypeHistogram charts actually use
   byTypeHistogram: Record<string, HistogramBucket[]>;
   facets: FacetStat[];
   tagCategories: TagCategoryInfo[];

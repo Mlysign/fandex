@@ -11,10 +11,12 @@ import { InsightsPayload, DivergenceItem, DecadeStat, FacetStat, InsightItem } f
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
 import { TYPE_COLORS, ROLE_COLORS } from "@/lib/constants";
 
-// Round a personal rating to the histogram's ½-point bucket (1..10 axis) so a
-// clicked bar matches the items that fed it.
-function ratingBucket(r: number): number {
-  const b = Math.min(10, Math.max(1, Math.round(r / 0.5) * 0.5));
+// Round a personal rating to the histogram's bucket (1..10 axis) so a clicked
+// bar matches the items that fed it. SM27: must use the SAME step the server
+// built the histogram with (data.histogramStep), or a click on an integer-step
+// chart would look for items at a stale 0.5-step bucket that no bar carries.
+function ratingBucket(r: number, step: number): number {
+  const b = Math.min(10, Math.max(1, Math.round(r / step) * step));
   return Math.round(b * 10) / 10;
 }
 function decadeOf(date: string | null): number | null {
@@ -151,8 +153,8 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
   }, [data.facets]);
 
   const bucketItems = useMemo(
-    () => (selectedBucket == null ? [] : data.items.filter((i) => ratingBucket(i.rating) === selectedBucket).sort((a, b) => b.rating - a.rating)),
-    [selectedBucket, data.items]
+    () => (selectedBucket == null ? [] : data.items.filter((i) => ratingBucket(i.rating, data.histogramStep) === selectedBucket).sort((a, b) => b.rating - a.rating)),
+    [selectedBucket, data.items, data.histogramStep]
   );
   const decadeItems = useMemo(
     () => (selectedDecade == null ? [] : data.items.filter((i) => decadeOf(i.releaseDate) === selectedDecade).sort((a, b) => b.rating - a.rating)),
@@ -164,7 +166,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
   return (
     <div className="space-y-10">
       <section>
-        <PanelHeader eyebrow="Overview" hint={`Scored against your ${baseline.toFixed(1)}/10 average — the tick on each bar.`} />
+        <PanelHeader eyebrow="Overview" hint={`Scored against your ${baseline.toFixed(1)}/10 average.`} />
         <OverviewCards overview={data.overview} baseline={baseline} />
       </section>
 
@@ -173,7 +175,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
           <PanelHeader
             eyebrow="How you rate"
             stat={`avg ${baseline.toFixed(1)} · ${data.overview.ratedTotal} rated`}
-            hint="How many of your ratings fall at each score (½-point buckets). Click a bar to list those items."
+            hint={`How many of your ratings fall at each score (${data.histogramStep === 1 ? "whole-point" : "½-point"} buckets). Click a bar to list those items.`}
           />
           <Histogram
             data={data.histogram} color="#a78bfa" baseline={baseline} height={160}
