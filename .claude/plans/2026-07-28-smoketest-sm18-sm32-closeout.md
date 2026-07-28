@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-28-smoketest-sm18-sm32-closeout
 created: 2026-07-28
-status: ready
+status: in_progress
 branch: current
 ---
 
