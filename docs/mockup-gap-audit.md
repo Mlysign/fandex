@@ -162,75 +162,99 @@ architecture change, not a style/order tweak.
 
 ---
 
-## 🔵 Decided 2026-07-28 — ready to build, not yet built
+## ✅ Fixed 2026-07-28
 
-All five remaining items had their open question answered by Nils on 2026-07-28.
-The executable plan (files, done-when conditions, verification) is
-**[.claude/plans/2026-07-28-mockup-gap-closeout.md](../.claude/plans/2026-07-28-mockup-gap-closeout.md)**.
-Nothing below has shipped yet — this section records the *decisions*, and moves
-to "✅ Fixed" once the plan runs.
+All five items decided earlier the same day were built the same session, per
+**[.claude/plans/2026-07-28-mockup-gap-closeout.md](../.claude/plans/2026-07-28-mockup-gap-closeout.md)**
+(T2–T6). Full verification (typecheck, `eslint` 0 errors, 346 tests, browser-
+checked logged in via `/api/dev/login`) in the plan's session log.
 
-### A. Small, self-contained
+1. **`ListCard` / `ListRow` trailing slot → Calendar's `AgendaRow`.**
+   Shipped as decided: `ActionCells`' dead `layout="row"` branch is now the
+   same two-button (Rate + Bookmark) shape as the card, just fixed-width
+   instead of `flex-1`; `AgendaRow` (`CalendarView.tsx`) renders it in place of
+   the lone `BellPlus` wishlist button, which — and the now-unused
+   `useQuickActions` import — are gone from the file. `ListCard` itself is
+   untouched, still dead code, still a separate call.
+   Files: `src/components/ActionCells.tsx`, `src/components/CalendarView.tsx`.
 
-1. **`ListCard` / `ListRow` trailing slot** (§3) — spec is ONE trailing action;
-   live renders the same 3-cell `ActionCells` the card used to.
-   → **DECIDED: retarget to the Calendar agenda rows; leave `ListCard` alone.**
-   ⚠️ **The original framing was wrong.** `ListCard` is **unreachable dead
-   code** — every `GroupedView` caller hardcodes `view="card"`
-   (`discover/page.tsx:575`, `LibraryPageClient.tsx:113`,
-   `WishlistPageClient.tsx:204`, `PublicFacetView.tsx:341`) since the
-   2026-07-27 grid-only decision, so its list branch never renders. Changing it
-   would edit something no user can see. The only list-shaped surface a user
-   can actually reach is `AgendaRow` (`CalendarView.tsx:244`), which gets the
-   card's Rate + Bookmark pair instead — via `ActionCells`' existing but
-   currently-dead `layout="row"`, repurposed as the one compact row shape.
-   Bonus: that retires the `BellPlus` glyph the agenda row borrowed from a
-   reminder feature that doesn't exist (D-C).
-   **Left open deliberately:** deleting `ListCard` / `GroupedView`'s list branch
-   / the vestigial `"list"` in `ViewMode` is a separate call, not yet made.
+5. **Desktop nav search field.** Shipped as decided: a collapsing field in
+   `AppNav`'s trailing slot (new `src/components/NavSearch.tsx`), debounced
+   against the existing `/api/discover/facets` vocab — `kind=title` for
+   titles, unfiltered for facets — grouped People / Tags / Titles, full
+   keyboard support (arrows, Enter, Escape), combobox/listbox ARIA. One
+   deviation found while building: that endpoint is `withUser`-gated (it's
+   Taste Match's own autocomplete), so an anon visitor's query 401s — the
+   dropdown just stays closed rather than show a misleading "No matches";
+   company/studio facet matches are also left out of this quick box (not one
+   of the three named groups), still reachable via `/discover`'s full search.
+   Files: `src/components/NavSearch.tsx` (new), `src/components/AppNav.tsx`.
 
-### B. Medium — structural, one page each
+6. **Item detail's personal block → the mockup's score panel + Rate it/Save.**
+   Shipped as decided, plus one addition found necessary while building: the
+   mockup's THIRD score-panel state ("Sign in to see your taste-match
+   Score.") didn't exist live at all — anon viewers never saw a score panel
+   before this session. `FandexScoreSection` now renders it, alongside the
+   existing scored/cold-start states and a newly-panelled "Not enough
+   ratings yet to score this." for the score-but-no-facet-overlap case
+   (previously rendered nothing). "Mark as watched" and its plumbing
+   (`handleMarkWatched`, the `watched` login-with-intent kind) are gone;
+   "Save" is the generic all-providers wishlist toggle (mirrors
+   `useQuickActions`' card/row behavior), with `WishlistPanel`'s per-provider
+   granularity kept below it for real management. Anon still opens the same
+   star popover as logged-in (not a flat CTA) — picking a value pre-auth
+   still stashes it via H2c and applies after sign-in.
+   Files: `src/components/item/PersonalSection.tsx`,
+   `src/components/item/FandexScoreSection.tsx`,
+   `src/components/item/RatingsSection.tsx` (now read-only display only —
+   the interactive controls moved to the button bar), `src/components/
+   item/ItemView.tsx` (call-site update for `RatingsSection`'s simplified
+   props), `src/components/ActionCells.tsx` (exported `StarPicker` for
+   reuse), `src/components/FandexScoreBadge.tsx` (exported `matchStrength`
+   for the panel's one-line reason), `src/lib/pendingIntent.ts` (dropped the
+   now-dead `watched` intent kind).
 
-5. **Desktop nav search field** (§1) — the avatar-button half was done in round 4.
-   → **DECIDED: build it, with live suggestions.** Inline typeahead over the
-   existing `/api/discover/facets` vocab, grouped People / Tags / Titles,
-   navigating straight to the item or facet page. A field that merely re-routes
-   to `/discover` would duplicate the nav item already sitting next to it;
-   suggestions are what make a second entry point earn its space.
-6. **Item detail's personal block** — mockup is a `YOUR FANDEX SCORE` panel with
-   a `Rate it` / `Save` pair; live has three controls and no panel framing.
-   → **DECIDED: full mockup — two controls, and "Mark as watched" goes away.**
-   ⚠️ **This removes the manual watched/played control from the entire app**
-   (round 1 had already dropped it from cards; A1 drops it from rows). Checked
-   before deciding, and the reason it's acceptable: `/api/library:154-155`
-   already *infers* `watched`/`played` from a rating, so rating an item still
-   sets its status. The only capability actually lost is "watched but
-   deliberately unrated" without provider sync.
-7. **Insights section set** — mockup shows 2 sections, live ships 5.
-   → **DECIDED: keep all five, restyle to the mockup's anatomy.** Live is a
-   superset and the extra sections (Distribution by type, Taste by era, You vs
-   the crowd) are real earned analysis the mockup never considered. Apply the
-   panel + accent-eyebrow heading treatment uniformly instead of deleting them.
+7. **Insights section set → kept all five, restyled uniformly.** Shipped as
+   decided: every section (Overview, Rating distribution, Distribution by
+   type, Taste by era, You vs the crowd, all three `FacetSection` kinds, Most
+   watched) now carries the mockup's accent-eyebrow heading instead of the
+   old uppercase-sans `SectionTitle`, with a right-aligned mono summary stat
+   where one exists (e.g. "avg 8.1 · 96 rated"). `StatBar`'s row anatomy also
+   changed to the mockup's label + count·avg pair above a 6px bar (was a
+   single-line label/bar/value row) — the baseline tick and below-average
+   dimming stayed, real analysis the mockup's static example never showed.
+   Files: `src/components/insights/InsightsView.tsx`,
+   `src/components/insights/FacetSection.tsx`,
+   `src/components/insights/StatBar.tsx`,
+   `src/components/insights/PanelHeader.tsx` (new, shared by both — Insights
+   renders FacetSection, so FacetSection can't import a header back from
+   InsightsView.tsx).
 
-### C. Needed a decision before any code
-
-8. **Library's tab row is a different feature, not a style choice.**
-   `library.html` is **one** page with a 4-way status filter, not a
-   Library-vs-Wishlist switcher — collapsing two routes with separate fetches
-   and separate filter state into one filtered page.
-   → **DECIDED: merge the *view*, keep both routes.** `/library` and
-   `/wishlist` both render one shared component; the route decides only which
-   tab opens. No redirect, no dead links, trivially revertible.
-   → **Tabs: All · Wishlist · Unrated · Rated** — *not* the mockup's
-   All/Rated/Wishlist/**Playing**. This app stores no in-progress status (values
-   are `watched` / `played` / `owned` / `beaten` / `toplay`, all terminal or
-   ownership flags), so "Playing" would be permanently empty. "Unrated" is
-   backed by real data. Never ship a tab the data can't fill.
+8. **Library/Wishlist merge.** Shipped as decided: one shared `MyStuffView`
+   (new) renders both routes, fetching `/api/library` + `/api/calendar` in
+   parallel and merging by item id (`src/lib/myStuffMerge.ts`, unit-tested —
+   dedupes an item present in both, each of the four tab predicates).
+   `LibraryWishlistTabs` is now the four-tab strip (All · Wishlist · Unrated ·
+   Rated) as local state, not navigation. Both routes keep their own
+   `<h1>`/count (tied to the route, not the active tab), and the two pages'
+   `rr_library_*`/`rr_wishlist_*` persisted keys collapsed into one
+   `rr_mystuff_*` set as decided. Library's never-auto-scroll and Wishlist's
+   stale-sync-on-mount both carry over exactly. One real bug found and fixed
+   while browser-verifying sort persistence: `usePersistedState`'s
+   `normalize` param was passed as an inline arrow, which — per that hook's
+   own documented gotcha — re-runs its hydrate effect every render and
+   silently reverts any sort change back to the stored value a beat later;
+   bound to a stable module-level function instead.
+   Files: `src/components/MyStuffView.tsx` (new),
+   `src/lib/myStuffMerge.ts` + `.test.ts` (new),
+   `src/components/LibraryWishlistTabs.tsx`,
+   `src/app/library/LibraryPageClient.tsx`,
+   `src/app/wishlist/WishlistPageClient.tsx` (both now thin wrappers).
 
 ---
 
 ## How to use this list
 
-Every item is now decided; none are blocked on input. Build them from the plan
-linked above, then move each into a "✅ Fixed" section with what actually
-shipped.
+Everything above is decided AND shipped. Nothing is currently open — if a new
+mockup-vs-live gap surfaces, add it under its own dated "Open" section above
+this line rather than reopening a closed item.

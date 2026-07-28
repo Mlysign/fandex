@@ -281,7 +281,7 @@ the real 1,919-item account), then visit the surface under test.
     dedupe of an item in both sets, and each of the four tab predicates.
   - Depends on: none (but do it last of the code tasks — it is the largest)
 
-- [ ] **T7** — Close out the gap audit and the design docs
+- [x] **T7** — Close out the gap audit and the design docs
   - Files: `docs/mockup-gap-audit.md`, `docs/ui-overhaul.md`, `TASKS.md`,
     `STATUS.md`
   - ⚠️ **Reduced scope — the planning session already did the "decided" half.**

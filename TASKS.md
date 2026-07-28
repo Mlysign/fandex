@@ -117,7 +117,6 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
 - **PR17** ⏸️ blocked until the Railway billing cycle resets (~2026-08-01) — see the catalog-pool-blowup section above. (Re-confirmed 2026-07-28: `https://fandex.org/api/health` still returns Railway's edge 404, `"Application not found"`.)
-- **Mockup-gap closeout** 🔵 planned, not started — the 5 remaining `docs/mockup-gap-audit.md` items (A1/B5/B6/B7/C8) all had their open questions decided with Nils on 2026-07-28. Executable plan: [.claude/plans/2026-07-28-mockup-gap-closeout.md](.claude/plans/2026-07-28-mockup-gap-closeout.md).
 - **H3 monetization + H4 legal/compliance** 🟢 scoped, not started (H4.6/H4.7 done ahead of schedule).
 - **P18** ⬜ JustWatch clickable streaming links (UX/compliance, not monetization) — see "Open — carried forward" above.
-- Everything else (Phases 0–6, H1, H2, H5, the S# small-tasks batch, all audit findings, all QA/smoke-test/production-incident history) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.
+- Everything else (Phases 0–6, H1, H2, H5, the S# small-tasks batch, all audit findings, all QA/smoke-test/production-incident history, and the **mockup-gap closeout** — A1/B5/B6/B7/C8, decided AND built 2026-07-28) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.

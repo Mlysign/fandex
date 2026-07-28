@@ -466,6 +466,51 @@ H1.6 applied the design's *tokens* (colour, type, radius, spacing) but kept the 
 - **8 items intentionally left open** — genuine judgment calls, not attempted unsupervised: `ListCard`'s trailing-action shape, item detail's personal block anatomy, whether to trim Insights' extra sections, the Library/Wishlist 4-way status-filter merge the mockup's own tab row implies, and the desktop search field's behavior. All logged with the specific question in `docs/mockup-gap-audit.md`.
 - 329 tests, typecheck, `eslint` (0 errors) clean throughout; verified live in the browser at every step (both anon and Nils's real logged-in session).
 
+## Mockup-gap closeout — DONE 2026-07-28 (A1/B5/B6/B7/C8)
+
+The 8 items the mockup-vs-live rebuild left open (above) were pared to 5 real
+judgment calls once round 4 fixed A.2/A.3/A.4 unsupervised. Nils decided all 5
+on 2026-07-28; they were built the same session, per
+[.claude/plans/2026-07-28-mockup-gap-closeout.md](../../.claude/plans/2026-07-28-mockup-gap-closeout.md).
+Full before/after + files touched: **[docs/mockup-gap-audit.md](../mockup-gap-audit.md)**'s
+"✅ Fixed 2026-07-28" section — read that for detail; this is a summary.
+
+- **A1 — Calendar agenda rows, not `ListCard`.** `ListCard`'s list branch is
+  unreachable dead code (every `GroupedView` caller hardcodes `view="card"`),
+  so the mockup's one-trailing-action shape went to the only reachable
+  list-shaped surface instead: `AgendaRow` now uses `ActionCells`' revived
+  `layout="row"` (the same Rate+Bookmark pair as the card, fixed-width), in
+  place of a lone `BellPlus` wishlist button borrowed from a reminders
+  feature that doesn't exist.
+- **B5 — desktop nav search**, `NavSearch.tsx`, debounced against the
+  existing `/api/discover/facets` vocab, grouped People/Tags/Titles, full
+  keyboard support. Found while building: that endpoint is `withUser`-gated
+  (it's Taste Match's own autocomplete) — an anon query 401s, so the
+  dropdown just stays closed rather than show a false "No matches".
+- **B6 — item detail's personal block**, rebuilt to the mockup's Fandex
+  Score panel + Rate it/Save pair. "Mark as watched" is gone app-wide (cards
+  and rows had already dropped it); `/api/library` already infers
+  watched/played from a rating, so the only real loss is "watched but
+  deliberately unrated" without provider sync. Found while building: anon
+  viewers never saw a score panel at all before this — the mockup's gated
+  "Sign in to see your taste-match Score." state is now live too.
+- **B7 — kept all five Insights sections**, restyled to the mockup's panel +
+  accent-eyebrow anatomy (new shared `PanelHeader.tsx`) instead of trimming
+  down to the mockup's 2; `StatBar` rows also picked up the mockup's
+  label + count·avg-above-a-bar layout.
+- **C8 — Library/Wishlist merged into one shared `MyStuffView`**, both
+  routes fetching `/api/library` + `/api/calendar` and merging by item id
+  (`src/lib/myStuffMerge.ts`, unit-tested). Four tabs — All/Wishlist/
+  Unrated/Rated, not the mockup's "Playing" (this app stores no in-progress
+  status). Found and fixed while browser-verifying: a `usePersistedState`
+  inline-`normalize`-function footgun that silently reverted any sort
+  change back to the stored value a beat after committing it.
+- Verified logged in via `GET /api/dev/login` (see below) — the first time
+  any of these surfaces could be checked without a real OAuth round-trip.
+  Typecheck clean, `eslint` 0 errors, 346 tests (9 new), zero console errors
+  across `/calendar`, an item page logged in AND out, `/insights`, the
+  desktop nav search, and `/library` + `/wishlist` across all four tabs.
+
 ## Small-tasks batch — ALL DONE — 2026-07-27 (ID `S#`)
 
 Compiled after H1 closed, as a queue of low-blast-radius work; none touched `migrations.ts`, `matcher.ts`'s write paths, sync/pull adapters, or auth/session code. **All eleven shipped in one commit, `34f87fe`.**

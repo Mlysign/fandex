@@ -447,29 +447,37 @@ With H1 fully shipped, went back through `05-DELTA.md` and this doc's own "still
 - **Fresh visual sweep** of all 10 handoff pages (anon via in-app browser, logged-in via Nils's real Chrome session — 1918 library items, 97 wishlist, 1595 rated, a real account) found no further undocumented gaps: Home, Discover, item detail, tag/person facet pages (anon) and Library, Wishlist, Calendar, Insights, Settings, Profile (logged-in) all matched the design system with zero console/server errors.
 - **Verification:** typecheck clean, `eslint` 0 errors (pre-existing `any` warnings only), 329 tests passing throughout. `next build` was not run (a dev server from another session was already running against this same checkout — running build against a live dev server corrupts `.next`, per the H1.6f process note above).
 
-## 12. Gap-audit closeout — decided 2026-07-28, not yet built
+## 12. Gap-audit closeout — done 2026-07-28
 
 The 5 items §11 left open (`docs/mockup-gap-audit.md`'s A1/B5/B6/B7/C8) each carried a
-question only Nils could answer. All five are now answered; full rationale lives in the
-gap-audit doc, and the executable plan is
+question only Nils could answer. All five were decided AND built the same session —
+full rationale + what actually shipped lives in the gap-audit doc's "✅ Fixed 2026-07-28"
+section; the plan that built them is
 [.claude/plans/2026-07-28-mockup-gap-closeout.md](../.claude/plans/2026-07-28-mockup-gap-closeout.md).
-Summary of what changes, with the two findings worth knowing before touching this code:
+Summary, with the two findings worth knowing before touching this code:
 
 - **A1 → the Calendar agenda rows, not `ListCard`.** ⚠️ **`ListCard` is unreachable dead
   code** — every `GroupedView` caller hardcodes `view="card"` after the 2026-07-27
-  grid-only decision, so its list branch, `ActionCells`' `layout="row"`, and the `"list"`
-  entry in `ViewMode` are all inert. `AgendaRow` gets the Rate + Bookmark pair instead
-  (via the revived `layout="row"`). Deleting the dead path is a separate, un-made call.
-- **B5 → build the desktop nav search, with live suggestions** over the existing
-  `/api/discover/facets` vocab. A field that just re-routes to `/discover` would duplicate
-  the Search nav item beside it.
+  grid-only decision, so its list branch and the `"list"` entry in `ViewMode` are still
+  inert. `AgendaRow` now gets the Rate + Bookmark pair via the revived `layout="row"`
+  (no longer dead — it's `AgendaRow`'s shape now). Deleting `ListCard` itself is still a
+  separate, un-made call.
+- **B5 → desktop nav search, with live suggestions**, shipped as `NavSearch.tsx` over the
+  existing `/api/discover/facets` vocab, grouped People/Tags/Titles with full keyboard
+  support. That endpoint is `withUser`-gated, so an anon query 401s — the dropdown just
+  stays closed rather than show a false "No matches".
 - **B6 → the mockup's two-control personal block.** ⚠️ **This removes the manual
   watched/played control app-wide.** Acceptable because `/api/library:154-155` already
   infers `watched`/`played` from a rating; only "watched but deliberately unrated" without
-  provider sync is lost.
-- **B7 → keep all five Insights sections**, restyled to the mockup's panel + eyebrow
+  provider sync is lost. Building it also surfaced a real gap: anon viewers never saw a
+  Fandex Score panel at all before this — the mockup's gated "Sign in to see your
+  taste-match Score." state now exists live too.
+- **B7 → kept all five Insights sections**, restyled to the mockup's panel + eyebrow
   anatomy. Live is a superset; the extras are earned analysis, not clutter.
-- **C8 → merge the Library/Wishlist *view*, keep both routes**, with tabs
+- **C8 → merged the Library/Wishlist *view*, kept both routes**, with tabs
   **All · Wishlist · Unrated · Rated**. Not the mockup's "Playing" — this app stores no
   in-progress status (`watched`/`played`/`owned`/`beaten`/`toplay` are all terminal or
-  ownership flags), so that tab would be permanently empty.
+  ownership flags), so that tab would have been permanently empty. Building it surfaced
+  and fixed a real pre-existing bug: `Library`'s sort persistence used an inline
+  `normalize` function, silently reverting any sort change — now bound to a stable
+  reference.
