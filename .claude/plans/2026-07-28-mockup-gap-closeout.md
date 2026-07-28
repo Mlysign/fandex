@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-28-mockup-gap-closeout
 created: 2026-07-28
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -303,7 +303,7 @@ the real 1,919-item account), then visit the surface under test.
   - Tests: none — docs only.
   - Depends on: T2, T3, T4, T5, T6
 
-- [ ] **T8** — Full verification pass, then push
+- [x] **T8** — Full verification pass, then push
   - Files: none (may fix defects found, in the files owned by T2–T6)
   - Detail: stop the dev server, run all four verification commands, and fix
     anything that fails. Then restart the dev server, log in via
@@ -322,8 +322,74 @@ the real 1,919-item account), then visit the surface under test.
 
 ## Blockers log
 
-(Left empty by the planner. The work skill appends here.)
+- **T8 — anon item-detail screenshot not captured.** T3's Done-when calls for
+  seeing the logged-out personal-block state in a browser; that specific half
+  wasn't empirically screenshotted. Every available browser surface in this
+  session already carried a session cookie (the dev-login session in the
+  Browser pane; a pre-existing real OAuth session in Nils's own Chrome via
+  the claude-in-chrome tool) — a private/incognito window wasn't available
+  through either tool, and `AGENTS.md` explicitly forbids calling
+  `/api/auth/logout` to force anon (it kills Nils's real browser session,
+  restorable only by a real OAuth round-trip). The session cookie
+  (`rr2_session`) is `httpOnly`, so it can't be cleared client-side either.
+  Verified instead by close code review: `PersonalSection.tsx`'s `anon`
+  boolean is a plain, deterministic prop threaded into `FandexScoreSection`
+  (gated score panel) and the button bar (`Sign in to rate`/`Save` both
+  routing through `requestAuth`/H2c), the same pattern already used and
+  tested elsewhere in this component (the drain effect, the anon rate-intent
+  stash) — low risk, but not the same as seeing it render. **Decision
+  needed:** if you want this literally screenshotted, the fastest path is a
+  real incognito Chrome window (outside these tools) hitting
+  `http://localhost:3000/game/711e855e-6acb-4937-bab5-fba9c1d0127e/ill` (or
+  any item page) while the dev server is running.
 
 ## Session log
 
-(Left empty by the planner. The work skill appends here.)
+**2026-07-28, single session, T2–T8 all complete.** Shipped all five
+mockup-gap items (A1/B5/B6/B7/C8) exactly per the Decisions section, plus
+docs closeout. Commits: `2cda013` (T2), `6583b5b` (T3), `632a9dd` (T4),
+`dfc36ab` (T5), `eeb9a88` (T6), `f0324af` (T7).
+
+**Deviations forced by the code, all within the Decisions' spirit:**
+- T3: added a NEW anon-gated Fandex Score panel state that never existed
+  live before (the mockup's third state); anon still opens the same star
+  popover as logged-in rather than a flat CTA, so a pre-auth rating choice
+  still stashes via H2c instead of being lost.
+- T5: the reused `/api/discover/facets` endpoint is `withUser`-gated, so
+  anon nav-search queries 401 — handled by just keeping the dropdown closed
+  rather than showing a false "No matches". Company/studio facets are
+  excluded from the nav search's three groups (People/Tags/Titles only, per
+  the decision text) but remain reachable via `/discover`.
+- T6: found and fixed a real, unrelated-to-the-merge bug while
+  browser-verifying sort persistence — `usePersistedState`'s own
+  documented gotcha (inline `normalize` re-runs its hydrate effect every
+  render and silently reverts edits) was present in the pre-merge
+  `LibraryPageClient.tsx` and got carried into `MyStuffView.tsx`; fixed by
+  binding a stable module-level function.
+
+**Verification:** `npm test` (346 passed, 1 skipped — 9 new in
+`myStuffMerge.test.ts`), `npm run lint` (0 errors, 387 warnings — all
+pre-existing patterns), `npx tsc --noEmit` (clean), `npm run build` (clean,
+all 59 routes). Browser-verified logged in via `GET /api/dev/login`:
+`/calendar` Agenda mode (rated a live item, confirmed persisted across
+reload, zero console errors); an item detail page logged in (score panel,
+breakdown expand/collapse, Rate/Save both wired, zero console errors) —
+**logged-out half not screenshotted, see Blockers log**; `/insights` (all
+eight sections — Overview through Most watched — scrolled and confirmed the
+new eyebrow/panel treatment, zero console errors); the desktop nav search
+(grouped People/Tags/Titles results, arrow-key highlight, Enter-to-navigate,
+Escape-to-close, mobile bottom nav visually unchanged); `/library` +
+`/wishlist` across all four tabs (All/Wishlist/Unrated/Rated all filter the
+real 1,919-item library correctly, an item both wishlisted and rated
+appears exactly once under All, sort/filters persist across a hard reload,
+`/wishlist` auto-scrolls to today on release-date sort and `/library` never
+does even on the identical sort).
+
+`git fetch` showed no upstream movement (`ahead 10`, never `behind`) — no
+rebase needed, pushed directly to `main`.
+
+**Systems-level recommendation:** `usePersistedState`'s inline-`normalize`
+footgun (see T6 above) is easy to reintroduce — worth either a lint rule
+banning inline arrows in that specific call position, or changing the
+hook's own signature so a non-stable function can't silently corrupt state
+(e.g. accept the fallback value instead of a function or nothing).
