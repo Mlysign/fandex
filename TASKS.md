@@ -156,6 +156,26 @@ Scope: 6th sweep, first one run **entirely logged in from the start** (the in-ap
 
 **Coverage gap (be honest about it):** the anon side was checked only via cookie-less `curl` — SSR HTML, status codes, redirects and API shapes. **No anon browser/JS pass**, so the SM8 Back-button regression test, the anon sign-in dialog, the anon "You" nav slot and the anon item-detail score state were *not* re-verified this run. The pane held a live session throughout and logging out to get an anon context is forbidden (it bumps `session_epoch` and kills Nils's own session).
 
+**Closeout — 2026-07-28, all 15 findings resolved** per [.claude/plans/2026-07-28-smoketest-sm18-sm32-closeout.md](.claude/plans/2026-07-28-smoketest-sm18-sm32-closeout.md):
+
+- SM18 ✅ `/profile`'s "Coming up" now filters through a shared `upcomingFrom()` helper (also used by the calendar agenda view) instead of just slicing `/api/calendar`'s unfiltered feed.
+- SM19 ✅ `/library` renders incrementally (first 300, growing via an `IntersectionObserver` sentinel) and its search filter now reads a 200ms-debounced value — the input itself stays instant.
+- SM20 ✅ Discover's result count is hidden while a search is active instead of showing the local-catalog-only total over a local+external grid.
+- SM21 ✅ **Reverses C8's "switching tabs is never navigation" call** — the tab now lives in `?tab=`, so Back/reload/heading/count all behave like a real route again.
+- SM22 ✅ The you-vs-crowd sentence now names its basis ("Across the 9 you've rated, you score X 0.6 lower than the crowd").
+- SM23 ✅ Root cause wasn't the card (it already preferred `fandexScore`) — `/api/facet/mine`'s ids-fallback now heals thin/stale links (`ensureTmdbDetail`/`ensureGameDetail`) before scoring, matching what `/api/detail` already did.
+- SM24 ✅ NavSearch suggestions are real `next/link` links now (middle-click/copy-link work); keyboard nav (Arrow/Enter/`aria-activedescendant`) was already wired in the B5 commit.
+- SM25 **Won't-fix** — Month stays the calendar default at every width. L4 (2026-07-28, same day) already improved mobile cells 40.7×128 → 50.8×80; the remaining title clipping is the accepted trade for one consistent entry point across widths.
+- SM26 ✅ `/settings` title corrected to "Settings"; `/discover` split into a server `page.tsx` + client component so it has metadata at all.
+- SM27 ✅ Histogram bucket step is now adaptive (whole-point when every rating is an integer, which is always — the picker never produced a `.5`), and the Overview panel's stray "tick on each bar" clause (describing a different section) is gone.
+- SM28 ✅ **Re-measured before fixing** — L4 changed the ground truth (cells now 50.8×80, not 41×128) but titles still clipped to ~15-18 characters; `line-clamp-2` (not the meta-line removal the plan guessed, which sits below the title, not beside it) gets ~30-36.
+- SM29 ✅ `LibraryWishlistTabs`' tab buttons are now direct children of the actual `role="tablist"` element, paired with a `role="tabpanel"`; the item-detail score panel's `<button>` no longer wraps the whole panel — only "Why?" is a real button.
+- SM30 ✅ `/settings` restyled to B7's `PanelHeader` eyebrow/panel anatomy across all six sections.
+- SM31 ✅ The duplicate "★ 8 / 10" on the item page's meta line is gone; the gold Rate-it button is the one rating display.
+- SM32 ✅ The calendar star picker now closes on Escape and returns focus to its trigger, matching the "Why?" popover's existing pattern.
+
+362 → 396 tests (34 new, all passing), typecheck clean, lint 0 errors throughout. Verified in the browser logged in via `/api/dev/login`: `/library` tab switching + Back, `/calendar` agenda rows at 375px (measured via `scrollWidth`), `/settings` restyle incl. the delete-account dialog still working.
+
 ---
 
 ## Remaining work (current)

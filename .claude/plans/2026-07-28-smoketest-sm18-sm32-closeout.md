@@ -158,7 +158,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: T2 (touches `settings/page.tsx`)
 
-- [ ] **T15** — Close SM25 as won't-fix in the docs (SM25 🟡)
+- [x] **T15** — Close SM25 as won't-fix in the docs (SM25 🟡)
   - Files: `TASKS.md`
   - Detail: Nils's decision is that Month view stays the default at every width; the L4 density work (40.7×128 → 50.8×80) already improved it and the remaining title clipping is accepted in exchange for one consistent entry point. Record that rationale against SM25. Write no code.
   - Done when: `TASKS.md` marks SM25 closed with the reasoning, and no calendar default-view code changed.
