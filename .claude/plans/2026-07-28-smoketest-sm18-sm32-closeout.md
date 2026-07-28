@@ -95,7 +95,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: none
 
-- [ ] **T6** — Close the calendar star picker on Escape (SM32 🔵)
+- [x] **T6** — Close the calendar star picker on Escape (SM32 🔵)
   - Files: the inline star picker used by `ActionCells` — `grep -rn "star" src/components/ | grep -i picker` to locate
   - Detail: the 10-star picker on a calendar agenda row does not dismiss on Escape, while the item page's "Why?" popover does. Add an Escape keydown handler that closes it and returns focus to the trigger. Mirror whatever pattern the "Why?" popover already uses rather than inventing a second one. Do **not** change the stars' hit area — `.tap-44-y` already expands them correctly and that was a deliberate a11y fix.
   - Done when: opening the picker on a `/calendar` agenda row and pressing Escape closes it, with focus back on the trigger.

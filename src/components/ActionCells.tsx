@@ -57,18 +57,29 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
   const { rating, wishlisted, busy, rate, toggleWishlist } = useQuickActions(item);
   const [picking, setPicking] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const rated = typeof rating === "number" && rating > 0;
 
   const pick = (n: number) => { rate(n); setPicking(false); };
 
-  // Dismiss the star picker on any click/tap outside the toolbar.
+  // Dismiss the star picker on any click/tap outside the toolbar, or on
+  // Escape (SM32: this used to only close on outside click, unlike the item
+  // page's "Why?" popover — same pattern as FandexScoreSection). Escape also
+  // returns focus to the trigger, so a keyboard user isn't left stranded.
   useEffect(() => {
     if (!picking) return;
     const onDown = (e: PointerEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setPicking(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setPicking(false); triggerRef.current?.focus(); }
+    };
     document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [picking]);
 
   // 03-components.md §2's quick-action bar, literally: Rate = Star + "Rate",
@@ -84,6 +95,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
       <div className="relative" onClick={stop} ref={rootRef}>
         <div className="flex gap-1.5">
           <button
+            ref={triggerRef}
             onClick={(e) => { stop(e); setPicking((v) => !v); }}
             title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
             aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
@@ -126,6 +138,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
     <div className="relative" onClick={stop} ref={rootRef}>
       <div className="flex gap-1.5">
         <button
+          ref={triggerRef}
           onClick={(e) => { stop(e); setPicking((v) => !v); }}
           title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
           aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
