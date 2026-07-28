@@ -224,7 +224,7 @@ the real 1,919-item account), then visit the surface under test.
   - Tests: none new — presentational; verify in browser per T8.
   - Depends on: none
 
-- [ ] **T5** — B5: desktop nav search field with live suggestions
+- [x] **T5** — B5: desktop nav search field with live suggestions
   - Files: `src/components/AppNav.tsx`, plus one new component
     (suggested `src/components/NavSearch.tsx`)
   - Detail: add the collapsing search field to the desktop nav's trailing slot

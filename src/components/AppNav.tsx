@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { House, Search, CalendarDays, Library as LibraryIcon, User } from "lucide-react";
 import Logo from "@/components/Logo";
 import SignInDialog from "@/components/auth/SignInDialog";
+import NavSearch from "@/components/NavSearch";
 import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
 
 // H1.6c — the ONE adaptive navigation component (docs/design/fandex-handoff
@@ -108,18 +109,18 @@ export default function AppNav() {
             <Slot key={it.key} href={it.href} label={it.label} Icon={it.Icon} active={it.match(pathname)} variant="top" />
           ))}
           <div className="w-px h-4 bg-border-strong mx-1" />
-          {/* §1's trailing slot: an avatar button in place of the plain "You"
-              text link. Just the circular chrome for now, not a photo — a
-              real photo needs the user's identity data (displayName/
-              avatar_url), which only the boolean-only `probeSession` this
-              component already uses doesn't carry; adding a second fetch
-              here would mean every page load re-fetches identity data just
-              to render a nav icon. §1 also specs a collapsing search field
-              here, deliberately not added: Search is already a full nav item
-              pointing at the same /discover destination, so a second inline
-              search box needs a real answer for what it does differently
-              (live suggestions? a different destination?) before it's worth
-              building — flagged in the mockup-gap-audit, not decided here. */}
+          {/* §1's trailing slot: a collapsing search field (B5, 2026-07-28)
+              with live suggestions — a plain re-route to /discover would just
+              duplicate the Search nav item already sitting next to it, so
+              this earns its place by finding a person/tag/title inline. See
+              NavSearch.tsx. Followed by an avatar button in place of the
+              plain "You" text link — just the circular chrome for now, not a
+              photo — a real photo needs the user's identity data
+              (displayName/avatar_url), which only the boolean-only
+              `probeSession` this component already uses doesn't carry;
+              adding a second fetch here would mean every page load
+              re-fetches identity data just to render a nav icon. */}
+          <NavSearch />
           {youAsButton ? (
             <button
               type="button"
