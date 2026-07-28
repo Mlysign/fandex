@@ -140,6 +140,11 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 > accept an authed-only pass. Findings from the 5th pass: **SM10–SM16**.
 >
 > Session in use: `ramses3006`, RAWG identity, 1,918 library items / 97 wishlist / 1,595 rated.
+>
+> **6th pass, 2026-07-28:** the **in-app Browser pane** was already authenticated on `preview_start`
+> — no mint, no Chrome handoff, no `/api/dev/login` call needed. Check auth first and you may find
+> the whole block is already unlocked. Counts as of this run: 1,920 library / 96 wishlist /
+> 1,597 rated. Findings: **SM18–SM32**.
 13. Nav pages all render with real data (library ~2k items). **New/changed in H1.6c/e/f:**
     the **`/profile` hub** (stats strip, "Coming up" list, Recommended rail), **`/calendar`**
     (type-chip filter + its month/agenda toggle), Home's **stats strip + best-genre card +
@@ -162,6 +167,38 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
     minted token — re-mint if it happens).
 19. Calendar/timeline views on wishlist/library render. (Q3's mid-scroll landing is FIXED for
     Library as of 2026-07-27 — if it still drops you mid-list, that's a regression, not a known.)
+
+**C2. The 2026-07-28 mockup-gap surfaces (A1/B5/B6/B7/C8)** — added after the 6th sweep, which
+was the first to exercise them. Every one of these produced a finding; re-check them directly.
+13d. **C8 — the Library/Wishlist merge.** The four status tabs (All/Wishlist/Unrated/Rated) are
+    `<button>`s, **not** links. Regression test (SM21): on `/library` click "Wishlist" → assert
+    `location.pathname`, `document.title`, the `<h1>` and the header count ALL change, and that
+    Back returns to the All tab. As of the 6th sweep none of them do and Back exits the page,
+    while `/wishlist` (the real route) gets all four right — so compare the two, don't test one.
+    Note the persisted keys are now **shared** (`rr_mystuff_sort` / `_search` / `_membership` /
+    `_incFacets` / `_excFacets` / `_year`); only `rr_view_*` is per page. The old checklist line
+    "each side must keep its own filters/sort — separate persisted keys by design" is **obsolete**.
+13e. **C8 render volume (SM19).** `/library` renders the whole list — measure it every sweep:
+    `document.querySelectorAll('a[href^="/game/"],a[href^="/movie/"],a[href^="/show/"]').length`
+    and `document.getElementsByTagName('*').length`. 2,014 cards / 44.5k nodes as of 2026-07-28.
+    Then time a search keystroke synchronously (set `.value` via the native setter, dispatch
+    `input`, measure around the dispatch) — and **specifically time clearing the box back to
+    empty**, which is the worst case (1,426ms). Small→small edits are ~12ms and prove nothing.
+13f. **B5 — NavSearch keyboard path.** Type a person's name in the desktop nav field, then test
+    **Enter** (must do something), **ArrowDown/Up** (must move a highlight and set
+    `aria-activedescendant`), and whether suggestions are real `<a href>`. All three failed in the
+    6th sweep (SM24) — suggestions are `li[role=option]` in a `ul[role=presentation]`. The mouse
+    path works, so a click-only check gives a false pass.
+13g. **B6 — item score panel.** Expand "Why?" and verify the parts compose: scrape
+    `Your baseline` + every `[+-]N.N` delta and assert `baseline + Σ ≈ headline` (passed:
+    67 + 3.8 = 70.8 → 71). Check both a **rated** and an **unrated** item — the unrated one is
+    what exposes SM23 (a Fandex Score exists on the detail page but the facet-page card shows the
+    provider's `/10` instead). Escape closes this popover; the calendar star picker doesn't (SM32).
+13h. **B7 — Insights.** Reconcile the numbers every time: type tiles must sum to "Rated items",
+    and the "HOW YOU RATE" histogram must sum to the same figure (both passed). Read the section
+    **copy** too, not just the numbers — SM27 is two wrong sentences over correct charts.
+13i. **A1 — calendar agenda rows at 375px.** The Rate+Bookmark bar eats ~145px of the row and
+    truncates most titles to ~12 chars (SM28). Screenshot at mobile, not just desktop.
 
 **D. Cross-cutting**
 20. Back-button spot checks on any NEW surface (full deep-dive already done — N1/N2/N3 known).
@@ -194,6 +231,25 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
     public wishlist of `@ramses3006`. Confirm the item appears after add and is gone after
     the remove. Steam is read-only (no write-back to verify). Log any drift (200 locally but
     absent on the platform = broken write-back; that's a 🟠).
+
+35. **"Coming up" / date-filtered lists must actually be filtered** (added 2026-07-28, SM18).
+    Any surface headed "Coming up"/"Upcoming" — `/profile`, `/calendar`'s two views, Home's
+    Upcoming rail — must be checked against **today's date**, not just for rendering. The trap:
+    `GET /api/calendar` returns all wishlist items sorted by release date **ascending with no
+    future filter**, so a consumer that naively slices the first N shows 1950s films as upcoming.
+    `/calendar` filters client-side and looked perfect; `/profile` didn't. Cheap probe:
+    `fetch('/api/calendar').then(r=>r.json()).then(j=>j.items[0].releaseDate)` — if that's a past
+    date, every consumer of the endpoint is suspect. Check each consumer separately.
+36. **Displayed counts vs displayed rows** (added 2026-07-28, SM20/SM21). Wherever a header shows
+    "N titles"/"N rated"/"N saved", count the rendered cards and compare. Two live mismatches:
+    Discover's `TITLES · N` counts local-catalog matches while the grid shows provider results
+    ("TITLES · 1" over 17 cards), and Library's header count is route-derived so it keeps saying
+    "1597 rated" while the Wishlist tab shows 96 items.
+37. **Page titles by hard load, every route, every sweep** (SM26 — the SM10 lesson generalized).
+    Cheapest form, no browser needed:
+    `curl -s http://localhost:3000/<route>` and regex the `<title>`. Loop all of
+    `/ /discover /library /wishlist /calendar /profile /insights /settings /person/… /tag/…`.
+    Found 2026-07-28: `/settings` → "Profile · Fandex", `/discover` → the root title.
 
 **E. Dedicated UI/UX evaluation (added 2026-07-18, per user request)**
 Run on the main surfaces (landing, Discover, item page, facet page, wishlist/library,
@@ -256,6 +312,40 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
 34. **Distribution sanity, logged-in** (missed Q19): for personalized numbers (Fandex Score),
     eyeball the spread across a real library — a tight clump (e.g. everything 40–60) or a
     misleading center is a product finding even when each individual value is "correct".
+
+## Gotchas learned (2026-07-28 run)
+
+- **`/api/auth/me` wraps the user as `{user:{userId,…}}` — the field is `userId`, NOT `id`.**
+  A probe reading `j.user.id` returns `undefined`, `JSON.stringify` drops the key, and the result
+  reads exactly like "anon". The 6th sweep spent its first probes believing it was logged out
+  while looking at an obviously authenticated Home. Always assert on `!!j.user`, or cross-check
+  with `fetch('/api/library').then(r=>r.status)` (200 = authed, 401 = anon).
+- **The anon side can be covered without touching the session** — `curl.exe` from PowerShell sends
+  no cookie, so status codes, redirects (`-D -` for `location:`), SSR HTML and API error shapes are
+  all reachable while staying logged in. What it CANNOT cover: anything client-side (the SM8 Back
+  test, the sign-in dialog, the anon "You" nav slot). Say so explicitly rather than implying a full
+  anon pass. To strip tags from SSR HTML in PS 5.1:
+  `[regex]::Replace($h,'<script[\s\S]*?</script>',' ')` then `[regex]::Replace($t,'<[^>]+>',"`n")`.
+- **`resize_window`'s `region` argument is ignored by `computer{action:"screenshot"}` and `zoom` in
+  the in-app pane** — both return the full viewport ("region crop not yet supported"). Don't build
+  a measurement on a cropped screenshot; read geometry via `javascript_tool` instead.
+- **Screenshot pixels ≠ viewport pixels at mobile.** After `resize_window {preset:"mobile"}`
+  (375×812) screenshots come back 563×1218 — a 1.5× factor. `computer` clicks take *screenshot*
+  coordinates, so scale before clicking.
+- **A `left_click` with `coordinate` fails until a screenshot has been taken in that viewport** —
+  "no screenshot dimensions cached". A `navigate` invalidates the cache, so re-screenshot after
+  every navigation before coordinate-clicking.
+- **`javascript_tool` DOES support top-level `await` in some calls and rejects it in others** —
+  the first call of a session failed with "await is only valid in async functions". Wrapping in
+  `new Promise(r=>setTimeout(…))` or `.then()` always works; prefer that.
+- **Consecutive `javascript_tool` calls share a scope** — re-declaring `const inp` in a later call
+  throws "Identifier already declared". Wrap every probe in `(function(){…})()`.
+- **`navigate`'s "navigated to <url>" line reports a stale URL** (usually the origin) and the tab
+  title in its footer can lag a redirect. Read `location.href` / `document.title` via
+  `javascript_tool` before concluding anything about where you landed — a made-up item uuid looked
+  like it had silently landed on Home when it had correctly rendered the branded 404.
+- **The dim numeric font makes 6 and 8 indistinguishable in screenshots** at small sizes — Settings'
+  "Watchlist items 96" read convincingly as 98. Confirm any number that matters via `innerText`.
 
 ## Gotchas learned (2026-07-18 run)
 
