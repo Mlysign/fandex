@@ -35,7 +35,7 @@ const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
 const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
 const IDLE = "rgb(237 231 220 / 0.06)"; // matches the ghost-button hover fill
 
-function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number) => void }) {
+export function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number) => void }) {
   const [hover, setHover] = useState(0);
   const shown = hover || rating || 0;
   return (

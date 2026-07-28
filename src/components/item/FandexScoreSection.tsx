@@ -1,17 +1,22 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Reason } from "@/components/discovery/types";
-import { fandexScoreColor } from "@/components/FandexScoreBadge";
+import { fandexScoreColor, matchStrength } from "@/components/FandexScoreBadge";
 import FacetLink from "@/components/FacetLink";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "@/lib/tags";
 import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
 
-// H5.3 — the detail-page Fandex Score: the prominent number + a click-to-expand
-// breakdown (docs/fandex-score.md §3.4/§7). Three states:
+// H5.3 — the detail-page Fandex Score panel (04-pages/item-detail.html:147/161/176,
+// B6 2026-07-28): a big serif number, an accent eyebrow, and a one-line reason,
+// with the scored state's reasons expandable into a breakdown overlay. Four states:
+//   anon           → gated: "Sign in to see your taste-match Score." (no number)
 //   coldStart      → "rate a few titles to unlock" nudge, no number (§8)
-//   score == null  → nothing (enough signal overall, but THIS item shares no
-//                     facets with the profile — not a cold-start, just no match)
-//   score present  → the number + expandable reasons
+//   score == null  → "Not enough ratings yet to score this." (enough signal
+//                     overall, but THIS item shares no facets with the profile —
+//                     not a cold-start, just no match; mockup's sparse-item copy
+//                     doubles for this case rather than adding a 5th message)
+//   score present  → the number + a one-line match-strength reason + expandable
+//                     reasons
 //
 // Q20 (2026-07-19): the breakdown is now (a) genuinely additive — `center +
 // Σ contribution ≈ score`, computeFandexScore does the scaling — with an
@@ -26,9 +31,50 @@ function reasonGroupLabel(r: Reason): string {
   return r.kind === "tag" ? (CATEGORY_LABELS[r.category ?? "other"] ?? "Tag") : (ROLE_LABELS[r.role ?? ""] ?? "Person");
 }
 
+// The panel shell every state shares: 44px-ish serif number/dash on the left,
+// an accent eyebrow + one-line reason filling the rest.
+function ScorePanel({
+  numberColor, number, eyebrow, reason, trailing, expandable, expanded, disabled, onToggle, ariaLabel, rootRef, children,
+}: {
+  numberColor: string; number: string; eyebrow: string; reason: React.ReactNode;
+  trailing?: React.ReactNode; expandable?: boolean; expanded?: boolean; disabled?: boolean;
+  onToggle?: () => void; ariaLabel?: string; rootRef?: React.RefObject<HTMLDivElement | null>;
+  children?: React.ReactNode;
+}) {
+  const Tag = expandable ? "button" : "div";
+  return (
+    <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
+      <Tag
+        {...(expandable
+          ? { onClick: onToggle, disabled, "aria-expanded": expanded, "aria-label": ariaLabel }
+          : {})}
+        className="w-full flex items-center gap-3.5 px-3.5 py-3 text-left disabled:cursor-default"
+      >
+        <span className="font-serif text-3xl leading-[0.8] shrink-0" style={{ color: numberColor }}>{number}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-mono text-[9px] tracking-[.13em] uppercase text-accent">{eyebrow}</span>
+          <span className="block text-xs font-medium text-text-primary mt-1">{reason}</span>
+        </span>
+        {trailing}
+      </Tag>
+      {children}
+    </div>
+  );
+}
+
+// One-line summary for the scored state — match strength, plus the top
+// counted facet when one exists (e.g. "Strong match — you rate Thriller highly.").
+function scoreReasonLine(score: number, center: number | null, top: Reason | undefined): string {
+  const strength = matchStrength(score, center);
+  const capped = strength.charAt(0).toUpperCase() + strength.slice(1);
+  if (!top) return `${capped} for your taste.`;
+  const verb = top.contribution >= 0 ? "highly" : "lower than most";
+  return `${capped} — you rate ${top.label} ${verb}.`;
+}
+
 export default function FandexScoreSection({
-  score, center, reasons, coldStart,
-}: { score: number | null; center: number | null; reasons: Reason[]; coldStart: boolean }) {
+  score, center, reasons, coldStart, anon,
+}: { score: number | null; center: number | null; reasons: Reason[]; coldStart: boolean; anon?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -48,14 +94,34 @@ export default function FandexScoreSection({
     };
   }, [expanded]);
 
-  if (coldStart) {
+  if (anon) {
     return (
-      <div className="rounded-xl border border-border bg-neutral-900/40 px-3.5 py-3 text-sm text-text-secondary">
-        Rate a few titles to unlock your Fandex Score — a personalized 0-100 taste match for everything you browse.
-      </div>
+      <ScorePanel
+        numberColor="var(--color-text-muted)" number="—" eyebrow="Fandex Score"
+        reason={<span className="text-text-secondary font-normal">Sign in to see your taste-match Score.</span>}
+      />
     );
   }
-  if (score == null) return null;
+  if (coldStart) {
+    return (
+      <ScorePanel
+        numberColor="var(--color-text-muted)" number="—" eyebrow="Fandex Score"
+        reason={
+          <span className="text-text-secondary font-normal">
+            Rate a few titles to unlock your Fandex Score — a personalized 0-100 taste match for everything you browse.
+          </span>
+        }
+      />
+    );
+  }
+  if (score == null) {
+    return (
+      <ScorePanel
+        numberColor="var(--color-text-muted)" number="—" eyebrow="Fandex Score"
+        reason={<span className="text-text-secondary font-normal">Not enough ratings yet to score this.</span>}
+      />
+    );
+  }
 
   const rounded = Math.round(score);
   const color = fandexScoreColor(score, center);
@@ -65,26 +131,24 @@ export default function FandexScoreSection({
   // counted" visually separate from the real breakdown instead of interleaved.
   const sorted = [...reasons].sort((a, b) => (!!a.capped === !!b.capped ? b.contribution - a.contribution : a.capped ? 1 : -1));
   const baseline = center != null ? Math.round(center) : null;
+  const topReason = sorted.find((r) => !r.capped);
 
   return (
-    <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        disabled={!reasons.length}
-        className="w-full flex items-center gap-3 px-3.5 py-3 text-left disabled:cursor-default"
-        aria-expanded={expanded}
-        aria-label={`Fandex Score ${rounded} out of 100${reasons.length ? " — show breakdown" : ""}`}
-      >
-        <span className="text-2xl font-bold leading-none" style={{ color }}>{rounded}</span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-sm font-medium text-text-primary">Fandex Score</span>
-          <span className="block text-xs text-text-secondary">how well this matches your taste</span>
-        </span>
-        {reasons.length > 0 && (
-          <span className="text-text-secondary text-xs shrink-0">{expanded ? "Hide why ▲" : "Why? ▼"}</span>
-        )}
-      </button>
-
+    <ScorePanel
+      rootRef={rootRef}
+      numberColor={color}
+      number={String(rounded)}
+      eyebrow="Your Fandex Score"
+      reason={scoreReasonLine(score, center, topReason)}
+      expandable
+      expanded={expanded}
+      disabled={!reasons.length}
+      onToggle={() => setExpanded((v) => !v)}
+      ariaLabel={`Fandex Score ${rounded} out of 100${reasons.length ? " — show breakdown" : ""}`}
+      trailing={reasons.length > 0 && (
+        <span className="text-text-secondary text-xs shrink-0">{expanded ? "Hide why ▲" : "Why? ▼"}</span>
+      )}
+    >
       {/* Q20: a floating overlay (not inline layout) — positioned below the
           button, elevated above surrounding content. */}
       {expanded && (
@@ -155,6 +219,6 @@ export default function FandexScoreSection({
           )}
         </div>
       )}
-    </div>
+    </ScorePanel>
   );
 }

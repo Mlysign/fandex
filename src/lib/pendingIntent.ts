@@ -13,7 +13,6 @@
 
 export type IntentAction =
   | { kind: "rate"; value: number | null }
-  | { kind: "watched" }
   | { kind: "wishlist" };
 
 export interface PendingIntent {

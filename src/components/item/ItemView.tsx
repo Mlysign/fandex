@@ -71,25 +71,18 @@ export default function ItemView({ item }: { item: PublicEnrichedItem }) {
 
           {item.tagline && <p className="text-base text-text-secondary italic">{item.tagline}</p>}
 
-          {/* Community/critic scores — public, so server-rendered. canRate=false
-              + nulled personals means this renders the scores row only; the
-              per-user half lives in <PersonalSection> below. */}
+          {/* Community/critic scores — public, so server-rendered. Nulled
+              personals means this renders the scores row only; the per-user
+              half lives in <PersonalSection> below. */}
           <RatingsSection
-            type={item.type}
             hasScores={hasScores}
             communityRatings={communityRatings}
             steamReview={item.steamReviewLabel ?? null}
-            canRate={false}
             personalRating={null}
             personalRatings={[]}
             libraryStatus={null}
             reviewedAt={null}
             review={null}
-            hoverRating={null}
-            setHoverRating={() => {}}
-            ratingAction={false}
-            onRate={() => {}}
-            onMarkWatched={() => {}}
           />
 
           <PersonalSection

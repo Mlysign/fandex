@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Star, Bookmark } from "lucide-react";
 import { EnrichedItem, MediaType } from "@/types";
 import type { PlatformStatus } from "@/lib/watchlistStatus";
 import { IntentAction, stashIntent, takeIntent } from "@/lib/pendingIntent";
 import { probeSession } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
+import { StarPicker } from "@/components/ActionCells";
+import { fmtScore } from "./format";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
 import FandexScoreSection from "./FandexScoreSection";
@@ -18,7 +21,7 @@ import { Reason } from "@/components/discovery/types";
 // on the client:
 //   401 → the REAL controls, but every interaction opens the sign-in dialog and
 //         remembers what you were doing (H2c login-with-intent)
-//   200 → the real rating stars, watched/played state and wishlist panel
+//   200 → the real Fandex Score, rate/save controls and wishlist panel
 //
 // It deliberately owns ALL the per-user state. The server render must never
 // depend on a session, or the public HTML would vary per user and the SSR
@@ -28,6 +31,7 @@ interface DetailResponse {
   item?: Partial<EnrichedItem>;
   platforms?: PlatformStatus[];
   resolvedMediaItemId?: string | null;
+  onAnyList?: boolean;
   fandexReasons?: Reason[];
   fandexCenter?: number | null;
   fandexColdStart?: boolean;
@@ -55,10 +59,12 @@ export default function PersonalSection({
   const [state, setState] = useState<"loading" | "anon" | "user">("loading");
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [mediaItemId, setMediaItemId] = useState<string | null>(null);
-  const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [ratingAction, setRatingAction] = useState(false);
   const [platformAction, setPlatformAction] = useState<string | null>(null);
+  const [saveAction, setSaveAction] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   // `ids` is an object literal rebuilt by the parent on EVERY render, so
   // depending on it directly would give `load` a new identity each render → the
@@ -110,19 +116,30 @@ export default function PersonalSection({
     }
   }
 
-  async function handleMarkWatched() {
-    setRatingAction(true);
+  // B6 (2026-07-28) — the "Save" button's generic all-providers toggle:
+  // no targetProvider on add (POST writes every writable connected provider),
+  // no source on remove (DELETE clears every provider link). The per-provider
+  // fine-grained toggles stay available below in WishlistPanel.
+  async function toggleSave() {
+    const onList = !!detail?.onAnyList;
+    setSaveAction(true);
     try {
-      const res = await fetch("/api/library", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body({ status: type === "game" ? "played" : "watched" })),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.mediaItemId && !mediaItemId) setMediaItemId(data.mediaItemId);
+      if (onList) {
+        await fetch("/api/watchlist", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaItemId: mediaItemId ?? undefined, ids }),
+        });
+      } else {
+        await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, title, releaseDate, posterUrl, ids }),
+        });
+      }
       await load();
     } finally {
-      setRatingAction(false);
+      setSaveAction(false);
     }
   }
 
@@ -173,18 +190,23 @@ export default function PersonalSection({
     // synchronous re-render.
     queueMicrotask(() => {
       if (intent.action.kind === "rate") void handleRate(intent.action.value);
-      else if (intent.action.kind === "watched") void handleMarkWatched();
-      else if (intent.action.kind === "wishlist") {
-        // The anon control is provider-less; resolve the concrete provider now
-        // from real data — first writable, connected, not-yet-listed one.
-        const p = (detail?.platforms ?? []).find((x) => x.canWrite && !x.notConnected && !x.onList);
-        if (p) void togglePlatform(p.provider, false);
-      }
+      else if (intent.action.kind === "wishlist") void toggleSave();
     });
     // handlers/detail are intentionally omitted: this must fire once, on the
     // state transition, with the values current at that point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
+  // Dismiss the star picker on any click/tap outside it (same pattern as
+  // ActionCells' own StarPicker use).
+  useEffect(() => {
+    if (!picking) return;
+    const onDown = (e: PointerEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicking(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [picking]);
 
   // Reserve the height while loading so the server-rendered content above
   // doesn't jump once this resolves.
@@ -194,39 +216,88 @@ export default function PersonalSection({
 
   const item = detail?.item ?? {};
   const anon = state === "anon";
+  const rated = !anon && typeof item.rating === "number" && item.rating > 0;
+  const wishlisted = !anon && !!detail?.onAnyList;
+  // h-11 is already the 44px tap minimum, so (unlike ActionCells' barBtn)
+  // this needs no .tap-44-y padding trick.
+  const barBtn = "flex items-center justify-center gap-1.5 rounded-sm border transition-colors disabled:opacity-50 h-11";
+
+  // Anon still opens the same star popover (not just a flat CTA) — picking a
+  // star stashes the H2c "rate" intent with that value instead of applying it
+  // immediately, so a value chosen before signing in still lands after.
+  const onPickStar = (n: number) => {
+    if (anon) requestAuth({ kind: "rate", value: n });
+    else void handleRate(n);
+    setPicking(false);
+  };
 
   return (
     <div className="space-y-4">
+      {/* H5.3/B6 — the Fandex Score panel: gated for anon, else scored /
+          cold-start / unscorable per FandexScoreSection's own logic. */}
+      <FandexScoreSection
+        anon={anon}
+        score={anon ? null : (item.fandexScore ?? null)}
+        center={anon ? null : (detail?.fandexCenter ?? null)}
+        reasons={anon ? [] : (detail?.fandexReasons ?? [])}
+        coldStart={!anon && !!detail?.fandexColdStart}
+      />
+
+      {/* B6 (2026-07-28) — the mockup's two-button pair: Rate it / Save.
+          Anon interactions still stash the intent (H2c) via the same star
+          popover / sign-in dialog once resolved. */}
+      <div className="relative" ref={pickerRef}>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPicking((v) => !v)}
+            disabled={ratingAction}
+            aria-haspopup="true"
+            aria-expanded={picking}
+            className={`${barBtn} flex-1 text-sm font-medium`}
+            style={rated
+              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
+              : { background: "rgb(237 231 220 / 0.06)", borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-primary)" }}
+          >
+            <Star className="w-4 h-4 shrink-0" fill={rated ? "currentColor" : "none"} aria-hidden />
+            {rated ? `${fmtScore(item.rating!)}/10` : anon ? "Sign in to rate" : "Rate it"}
+          </button>
+          <button
+            onClick={() => (anon ? requestAuth({ kind: "wishlist" }) : void toggleSave())}
+            disabled={saveAction}
+            aria-pressed={wishlisted}
+            className={`${barBtn} px-4 text-sm font-medium`}
+            style={wishlisted
+              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
+              : { background: "rgb(237 231 220 / 0.06)", borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-secondary)" }}
+          >
+            <Bookmark className="w-4 h-4" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
+            Save
+          </button>
+        </div>
+        {picking && (
+          <div className="absolute z-30 top-full mt-1.5 left-0">
+            <StarPicker rating={anon ? null : (item.rating ?? null)} onPick={onPickStar} />
+          </div>
+        )}
+      </div>
+      {anon && steamStoreUrl && (
+        <a href={steamStoreUrl} target="_blank" rel="noopener noreferrer" className="block text-xs text-text-secondary hover:text-text-primary transition-colors">
+          View on Steam →
+        </a>
+      )}
+
       <RatingsSection
-        type={type}
         hasScores={false} /* community scores are server-rendered above */
         communityRatings={[]}
         steamReview={null}
-        canRate
         personalRating={anon ? null : (item.rating ?? null)}
         personalRatings={anon ? [] : (item.ratings ?? [])}
         libraryStatus={anon ? null : (item.libraryStatus ?? null)}
         reviewedAt={anon ? null : (item.reviewedAt ?? null)}
         review={anon ? null : (item.review ?? null)}
-        hoverRating={hoverRating}
-        setHoverRating={setHoverRating}
-        ratingAction={ratingAction}
-        onRate={anon ? (n) => requestAuth({ kind: "rate", value: n }) : handleRate}
-        onMarkWatched={anon ? () => requestAuth({ kind: "watched" }) : handleMarkWatched}
       />
-      {/* H5.3 — anon viewers never fetch /api/detail (no session, no profile), so
-          there's nothing to show them; §8's "no popularity fallback" applies. */}
+
       {!anon && (
-        <FandexScoreSection
-          score={item.fandexScore ?? null}
-          center={detail?.fandexCenter ?? null}
-          reasons={detail?.fandexReasons ?? []}
-          coldStart={!!detail?.fandexColdStart}
-        />
-      )}
-      {anon ? (
-        <AnonWishlist steamStoreUrl={steamStoreUrl} onAdd={() => requestAuth({ kind: "wishlist" })} />
-      ) : (
         <WishlistPanel
           platforms={detail?.platforms ?? []}
           loading={false}
@@ -246,31 +317,6 @@ export default function PersonalSection({
           onAuthenticated={() => { setShowSignIn(false); void load(); }}
         />
       )}
-    </div>
-  );
-}
-
-// The wishlist affordance for a logged-out viewer. Deliberately provider-less: it
-// only signals "you'd add this" and opens sign-in; the concrete provider is
-// resolved after login (see the drain effect). The Steam store link stays useful
-// even signed out.
-function AnonWishlist({ steamStoreUrl, onAdd }: { steamStoreUrl: string | null; onAdd: () => void }) {
-  return (
-    <div className="pt-4 border-t border-border">
-      <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Your wishlists</p>
-      <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={onAdd}
-          className="text-xs px-2.5 py-1 rounded-full border border-border-strong text-text-secondary hover:border-neutral-400 hover:text-text-primary transition-colors"
-        >
-          + Add to wishlist
-        </button>
-        {steamStoreUrl && (
-          <a href={steamStoreUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-text-secondary hover:text-text-primary transition-colors">
-            View on Steam →
-          </a>
-        )}
-      </div>
     </div>
   );
 }

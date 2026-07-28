@@ -23,7 +23,7 @@ export function fandexScoreColor(score: number, center: number | null = 50): str
   return score >= c + BAND_MARGIN ? "#5FE39A" : score <= c - BAND_MARGIN ? "#F0A04B" : "#CFC9BE";
 }
 
-function matchStrength(score: number, center: number | null = 50): string {
+export function matchStrength(score: number, center: number | null = 50): string {
   const c = center ?? 50;
   return score >= c + BAND_MARGIN ? "strong match" : score <= c - BAND_MARGIN ? "weak match" : "typical match";
 }

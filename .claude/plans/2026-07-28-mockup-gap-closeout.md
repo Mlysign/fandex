@@ -156,7 +156,7 @@ the real 1,919-item account), then visit the surface under test.
       §10/§12, `docs/fandex-score.md` §9, `AGENTS.md`), which also pre-empts part
       of T7 — see T7's note.
 
-- [ ] **T2** — A1: give Calendar agenda rows the Rate + Bookmark pair
+- [x] **T2** — A1: give Calendar agenda rows the Rate + Bookmark pair
   - Files: `src/components/ActionCells.tsx`, `src/components/CalendarView.tsx`
   - Detail: rewrite `ActionCells`' `layout === "row"` branch (currently
     `ActionCells.tsx:163-168`, three 36px cells) into the compact two-button
@@ -178,7 +178,7 @@ the real 1,919-item account), then visit the surface under test.
     per T8.
   - Depends on: none
 
-- [ ] **T3** — B6: rebuild the item-detail personal block to the mockup
+- [x] **T3** — B6: rebuild the item-detail personal block to the mockup
   - Files: `src/components/item/PersonalSection.tsx`,
     `src/components/item/FandexScoreSection.tsx`,
     `src/components/item/RatingsSection.tsx`
