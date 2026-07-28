@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-28-mockup-gap-closeout
 created: 2026-07-28
-status: ready
+status: in_progress
 branch: current
 ---
 
