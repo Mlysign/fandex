@@ -598,7 +598,14 @@ export default function DiscoverPageClient() {
         view={effView}
         onViewChange={setView}
         availableViews={availableViews}
-        resultCount={searchActive ? (searchTotal || combined.length) : browseSorted.length}
+        /* SM20 (2026-07-28): this used to read searchTotal while searching —
+           the LOCAL-catalog match count from /api/discover/find — but the
+           grid renders combined (local + external database results), so it
+           could read "TITLES · 1" over 17 rendered cards. There's no single
+           number that spans both sources and also equals what's on screen,
+           so drop the count entirely while a search is active; "Load more
+           (N left)" below already communicates more local results exist. */
+        resultCount={searchActive ? null : browseSorted.length}
       />
 
       <main className="max-w-6xl mx-auto px-6 py-6">

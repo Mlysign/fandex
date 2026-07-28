@@ -74,7 +74,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: none
 
-- [ ] **T3** — Drop Discover's result count while searching (SM20 🟠)
+- [x] **T3** — Drop Discover's result count while searching (SM20 🟠)
   - Files: `src/app/discover/DiscoverPageClient.tsx`
   - Detail: `resultCount={searchActive ? (searchTotal || combined.length) : browseSorted.length}` reads `searchTotal`, which comes from `/api/discover/find` — the **local catalog** count only — while the grid renders `combined` (local + external database results). Hence "TITLES · 1" over 17 cards. Per the decision, pass `null` for `resultCount` when `searchActive` is true and keep `browseSorted.length` when browsing. Confirm `SubBar` already renders nothing for a `null` count (`MyStuffView.tsx:250` passes `null` while loading, so it should). Leave the "Load more (N left)" line alone — it is correctly scoped to the local set.
   - Done when: searching `inception` on `/discover` shows no "TITLES · N" eyebrow, and browsing with no query still shows one that matches the grid.
