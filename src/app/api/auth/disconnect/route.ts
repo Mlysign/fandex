@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { run, query } from "@/lib/db";
 import { createSession, setSessionCookie, bumpSessionEpoch } from "@/lib/session";
+import { disconnectSource } from "@/lib/matcher";
 import { Source } from "@/types";
 import { parseJsonBody } from "@/lib/validate";
 import { DisconnectPostSchema } from "@/lib/schemas";
@@ -27,21 +28,12 @@ export const POST = withUser(async (req: NextRequest, session) => {
     [session.userId, provider]
   );
 
-  // Remove cached release data for this source from watchlist
-  // (keep media_items and media_links – they may be shared with other sources)
-  // Just remove this provider from platform_sources in watchlist entries
-  const watchlistEntries = query<{ id: string; platform_sources: string }>(
-    "SELECT id, platform_sources FROM user_watchlist WHERE user_id = ?",
-    [session.userId]
-  );
-  for (const entry of watchlistEntries) {
-    const sources: string[] = JSON.parse(entry.platform_sources).filter((s: string) => s !== provider);
-    if (sources.length === 0) {
-      run("DELETE FROM user_watchlist WHERE id = ?", [entry.id]);
-    } else {
-      run("UPDATE user_watchlist SET platform_sources = ? WHERE id = ?", [JSON.stringify(sources), entry.id]);
-    }
-  }
+  // Remove this provider's wishlist + library state (keep media_items and
+  // media_links – they may be shared with other sources). Goes through
+  // user_item_state (the truth table) via disconnectSource rather than raw SQL
+  // against user_watchlist/user_library, so a disconnect can't leave orphaned
+  // truth rows the way a direct cache DELETE/UPDATE did (see 6b4756c).
+  disconnectSource(session.userId, provider as Source);
 
   // Revoke every outstanding token for this user (S4) — in particular any session
   // minted from the identity we just removed. Then re-issue a fresh cookie for

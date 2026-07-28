@@ -8,6 +8,7 @@ import {
   upsertLibraryEntry,
   removeLibrarySource,
   recordLibraryRating,
+  disconnectSource,
 } from "./matcher";
 
 // D1/D2: user_item_state is the normalized truth; user_watchlist/user_library are
@@ -98,5 +99,39 @@ describe("D1 library", () => {
     const { rating } = recordLibraryRating(USER, item, { rating: 5, status: "watched", sources: [], reviewedAt: 100 });
     expect(rating).toBe(5);
     expect(get<{ source: string }>("SELECT source FROM user_item_state WHERE relation='library'", [])!.source).toBe("local");
+  });
+});
+
+describe("disconnectSource (auth disconnect)", () => {
+  it("clears the disconnected provider's wishlist + library rows across every item, leaving other providers' state on the same items intact (regression: raw SQL against user_watchlist bypassed user_item_state, same class of bug as 6b4756c)", () => {
+    const item2 = upsertMediaItem({
+      source: "trakt", sourceId: "501", type: "movie", title: "Se7en", releaseDate: "1995-09-22",
+      rawData: { ids: { trakt: 501 }, title: "Se7en", released: "1995-09-22" },
+    });
+
+    // item: trakt + tmdb on both wishlist and library
+    upsertWatchlistEntry(USER, item, "trakt");
+    upsertWatchlistEntry(USER, item, "tmdb");
+    upsertLibraryEntry(USER, item, "trakt", { status: "watched", rating: 8, reviewedAt: 100 });
+    upsertLibraryEntry(USER, item, "tmdb", { status: "watched", rating: 6, reviewedAt: 200 });
+    // item2: trakt only, wishlist
+    upsertWatchlistEntry(USER, item2, "trakt");
+
+    disconnectSource(USER, "trakt");
+
+    // trakt truth rows gone everywhere; tmdb truth rows survive
+    expect(query("SELECT 1 FROM user_item_state WHERE source='trakt'").length).toBe(0);
+    expect(query("SELECT 1 FROM user_item_state WHERE source='tmdb'").length).toBe(2);
+
+    // item's wishlist cache now reflects only tmdb
+    expect(JSON.parse(get<{ platform_sources: string }>("SELECT platform_sources FROM user_watchlist WHERE media_item_id=?", [item])!.platform_sources))
+      .toEqual(["tmdb"]);
+    // item's library cache now reflects only tmdb's rating, not the trakt/tmdb average
+    const lib = get<{ rating: number; platform_sources: string }>("SELECT rating, platform_sources FROM user_library WHERE media_item_id=?", [item])!;
+    expect(lib.rating).toBe(6);
+    expect(JSON.parse(lib.platform_sources)).toEqual(["tmdb"]);
+
+    // item2 had only trakt on the wishlist — cache row is gone entirely
+    expect(get("SELECT 1 FROM user_watchlist WHERE media_item_id=?", [item2])).toBeNull();
   });
 });

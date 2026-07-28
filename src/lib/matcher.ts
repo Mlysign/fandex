@@ -389,6 +389,27 @@ export function removeLibrarySource(userId: string, mediaItemId: string, source:
   rebuildCaches(userId, mediaItemId);
 }
 
+// Fully unlink one source from a user (auth disconnect): clears every wishlist +
+// library truth row that source holds across ALL the user's items, and rebuilds
+// each affected item's cache. Other sources on the same items are untouched.
+// Goes through removeWatchlistSource/removeLibrarySource (not raw SQL against
+// user_watchlist/user_library) for the same reason clearWatchlist does — a raw
+// DELETE/UPDATE against the cache tables leaves user_item_state with orphaned
+// rows nothing ever cleans up.
+export function disconnectSource(userId: string, source: Source) {
+  const wishlistItems = query<{ media_item_id: string }>(
+    "SELECT DISTINCT media_item_id FROM user_item_state WHERE user_id = ? AND source = ? AND relation = 'wishlist'",
+    [userId, source]
+  ).map((r) => r.media_item_id);
+  for (const mediaItemId of wishlistItems) removeWatchlistSource(userId, mediaItemId, source);
+
+  const libraryItems = query<{ media_item_id: string }>(
+    "SELECT DISTINCT media_item_id FROM user_item_state WHERE user_id = ? AND source = ? AND relation = 'library'",
+    [userId, source]
+  ).map((r) => r.media_item_id);
+  for (const mediaItemId of libraryItems) removeLibrarySource(userId, mediaItemId, source);
+}
+
 // ── Ignored (T10 "For You" feed swipe-left) ───────────────────────
 // One per-item ignored marker (no cache rebuild needed — ignored never feeds the
 // wishlist/library views). Uses source 'local' so it's a single row per item.
