@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COUNTRIES } from "@/lib/countries";
 import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
+import PanelHeader from "@/components/insights/PanelHeader";
 
 // Table → plain-language label for the delete dialog's counts. Tables not listed
 // here (anything a future migration adds) are still deleted — they just don't
@@ -334,8 +335,7 @@ function SettingsContent() {
 
         {/* Connected accounts */}
         <section className="space-y-3">
-          <h2 className="font-serif text-serif-md text-text-primary">Connected accounts</h2>
-          <p className="text-sm text-text-secondary">Any connected account can be used to log in.</p>
+          <PanelHeader eyebrow="Connected accounts" hint="Any connected account can be used to log in." />
 
           {providers.map((p) => {
             const identity = getIdentity(p.key);
@@ -410,18 +410,21 @@ function SettingsContent() {
             linked the buttons all vanish — say so instead of rendering an
             empty section. */}
         <section className="space-y-3">
-          <h2 className="font-serif text-serif-md text-text-primary">Add login method</h2>
-          {getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg") ? (
-            <p className="text-sm text-text-secondary">All available login methods are connected — any of them can sign you in.</p>
-          ) : (
-          <>
-          <p className="text-sm text-text-secondary">Connect another account to log in with it in the future.</p>
-          {/*
+          <PanelHeader
+            eyebrow="Add login method"
+            hint={
+              getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg")
+                ? "All available login methods are connected — any of them can sign you in."
+                : "Connect another account to log in with it in the future."
+            }
+          />
+          {!(getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg")) && (
+          /*
             <a>, not <Link>: these hand off to an OAuth endpoint and Link would
             client-side navigate, breaking the redirect. The rule fires only
             because P13's `/[type]/[id]/[slug]` makes 3-segment paths look like
             pages to the linter; the static /api route still wins at runtime.
-          */}
+          */
           <div className="flex gap-3 flex-wrap">
             {!getIdentity("trakt") && (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
@@ -445,14 +448,12 @@ function SettingsContent() {
               </button>
             )}
           </div>
-          </>
           )}
         </section>
 
         {/* Region (T22) */}
         <section className="space-y-3">
-          <h2 className="font-serif text-serif-md text-text-primary">Region</h2>
-          <p className="text-sm text-text-secondary">Controls which release dates and streaming availability you see.</p>
+          <PanelHeader eyebrow="Region" hint="Controls which release dates and streaming availability you see." />
           <div className="bg-surface-elevated border border-border rounded-xl p-5 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="font-medium text-sm text-text-primary">Country</p>
@@ -474,7 +475,7 @@ function SettingsContent() {
 
         {/* Account info */}
         <section className="space-y-3">
-          <h2 className="font-serif text-serif-md text-text-primary">Account</h2>
+          <PanelHeader eyebrow="Account" />
           <div className="bg-surface-elevated border border-border rounded-xl p-5 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-text-secondary">Logged in as</span>
@@ -489,7 +490,7 @@ function SettingsContent() {
 
         {/* Your data (H4.6 + H4.7 — GDPR Art. 17 + Art. 20) */}
         <section className="space-y-3">
-          <h2 className="font-serif text-serif-md text-text-primary">Your data</h2>
+          <PanelHeader eyebrow="Your data" />
 
           <div className="bg-surface-elevated border border-border rounded-xl p-5 flex items-center justify-between gap-4">
             <div className="min-w-0">

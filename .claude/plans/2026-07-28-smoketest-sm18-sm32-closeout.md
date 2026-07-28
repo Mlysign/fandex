@@ -151,7 +151,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — measured in browser
   - Depends on: none
 
-- [ ] **T14** — Restyle `/settings` to the B7 panel/eyebrow anatomy (SM30 🔵)
+- [x] **T14** — Restyle `/settings` to the B7 panel/eyebrow anatomy (SM30 🔵)
   - Files: `src/app/settings/**`, reusing `src/components/insights/PanelHeader` (or wherever B7 put it — `grep -rn "PanelHeader" src/components/`)
   - Detail: `/settings` still uses plain headings while `/insights` was restyled in B7, so the two read as different design generations. Apply the same `PanelHeader` eyebrow + panel container treatment to Settings' sections. This is a visual change only — **do not alter any behaviour** in the account-deletion flow (H4.6), the data-export link (H4.7), or the provider connect/disconnect controls. Those carry their own invariants and are out of scope beyond their styling wrapper.
   - Done when: `/settings` sections use the same eyebrow/panel anatomy as `/insights`, and the delete-account dialog, export download and connect/disconnect buttons all still work.
