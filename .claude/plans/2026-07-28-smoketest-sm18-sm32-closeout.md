@@ -67,7 +67,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: `src/lib/upcoming.test.ts` — today's date included, yesterday excluded, `null` release date excluded, ascending order preserved.
   - Depends on: none
 
-- [ ] **T2** — Fix the two wrong page titles (SM26 🟡)
+- [x] **T2** — Fix the two wrong page titles (SM26 🟡)
   - Files: `src/app/settings/page.tsx`, `src/app/discover/page.tsx` → split into `src/app/discover/page.tsx` + `src/app/discover/DiscoverPageClient.tsx`
   - Detail: `/settings` exports `metadata = { title: "Profile" }` (`settings/page.tsx:9`) while its `<h1>` reads "Settings" — change the string to `"Settings"`. `/discover/page.tsx` is a `"use client"` file, so it cannot export `metadata` at all and falls back to the root title. Split it exactly as `src/app/library/page.tsx` and `src/app/calendar/page.tsx` already do: move the entire current file to `DiscoverPageClient.tsx` (keeping `"use client"`), and leave a server `page.tsx` that exports `metadata = { title: "Discover" }` and renders `<DiscoverPageClient />`. Carry over the S1/SM10 rationale comment those two files share.
   - Done when: a hard load (not client-side nav) of `/settings` shows `Settings · Fandex` and of `/discover` shows `Discover · Fandex` in the SSR `<title>`.
