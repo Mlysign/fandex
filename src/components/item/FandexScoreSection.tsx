@@ -33,30 +33,43 @@ function reasonGroupLabel(r: Reason): string {
 
 // The panel shell every state shares: 44px-ish serif number/dash on the left,
 // an accent eyebrow + one-line reason filling the rest.
+//
+// SM29 (2026-07-28): this used to wrap the WHOLE row — score, eyebrow, reason
+// AND the "Why?" label — in one <button>, so its accessible name was every
+// bit of that text concatenated ("71Your Fandex ScoreTypical match — you
+// rate Christopher Nolan highly.Why? ▼"), and clicking anywhere on the panel
+// (not just the "Why?" affordance) toggled the breakdown. The score/eyebrow/
+// reason are now always static content; only "Why?" is a real button, shown
+// exactly when there's something to disclose (mirrors the old
+// `disabled={!reasons.length}` gate, which hid the toggle in that case too).
 function ScorePanel({
-  numberColor, number, eyebrow, reason, trailing, expandable, expanded, disabled, onToggle, ariaLabel, rootRef, children,
+  numberColor, number, eyebrow, reason, expandable, expanded, disabled, onToggle, rootRef, children,
 }: {
   numberColor: string; number: string; eyebrow: string; reason: React.ReactNode;
-  trailing?: React.ReactNode; expandable?: boolean; expanded?: boolean; disabled?: boolean;
-  onToggle?: () => void; ariaLabel?: string; rootRef?: React.RefObject<HTMLDivElement | null>;
+  expandable?: boolean; expanded?: boolean; disabled?: boolean;
+  onToggle?: () => void; rootRef?: React.RefObject<HTMLDivElement | null>;
   children?: React.ReactNode;
 }) {
-  const Tag = expandable ? "button" : "div";
   return (
     <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
-      <Tag
-        {...(expandable
-          ? { onClick: onToggle, disabled, "aria-expanded": expanded, "aria-label": ariaLabel }
-          : {})}
-        className="w-full flex items-center gap-3.5 px-3.5 py-3 text-left disabled:cursor-default"
-      >
+      <div className="w-full flex items-center gap-3.5 px-3.5 py-3 text-left">
         <span className="font-serif text-3xl leading-[0.8] shrink-0" style={{ color: numberColor }}>{number}</span>
         <span className="flex-1 min-w-0">
           <span className="block font-mono text-[9px] tracking-[.13em] uppercase text-accent">{eyebrow}</span>
           <span className="block text-xs font-medium text-text-primary mt-1">{reason}</span>
         </span>
-        {trailing}
-      </Tag>
+        {expandable && !disabled && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide Fandex Score breakdown" : "Show Fandex Score breakdown"}
+            className="text-text-secondary text-xs shrink-0"
+          >
+            {expanded ? "Hide why ▲" : "Why? ▼"}
+          </button>
+        )}
+      </div>
       {children}
     </div>
   );
@@ -144,10 +157,6 @@ export default function FandexScoreSection({
       expanded={expanded}
       disabled={!reasons.length}
       onToggle={() => setExpanded((v) => !v)}
-      ariaLabel={`Fandex Score ${rounded} out of 100${reasons.length ? " — show breakdown" : ""}`}
-      trailing={reasons.length > 0 && (
-        <span className="text-text-secondary text-xs shrink-0">{expanded ? "Hide why ▲" : "Why? ▼"}</span>
-      )}
     >
       {/* Q20: a floating overlay (not inline layout) — positioned below the
           button, elevated above surrounding content. */}

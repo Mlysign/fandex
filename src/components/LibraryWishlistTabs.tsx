@@ -25,29 +25,39 @@ const TABS: { key: MyStuffTab; label: string; Icon: typeof LibraryIcon }[] = [
 // 2026-07-28: the outer `max-w-6xl mx-auto px-6 pt-4` wrapper is gone — the
 // strip now renders INSIDE SubBar (between the type chips and the search box,
 // per the shared page order), which already supplies the container and padding.
+// SM29 (2026-07-28): the tab buttons used to sit inside an unlabelled inner
+// div, one level BELOW the actual role="tablist" element — so a tab's real
+// DOM parent wasn't the tablist at all, breaking the tablist/tab relationship
+// screen readers rely on. One element now carries both the layout classes and
+// role="tablist", and each tab gets a stable id + aria-controls pointing at
+// MyStuffView's role="tabpanel" content region, so the pairing is explicit in
+// both directions.
+export const tabId = (key: MyStuffTab) => `mystuff-tab-${key}`;
+export const TABPANEL_ID = "mystuff-tabpanel";
+
 export default function LibraryWishlistTabs({ active, onChange }: { active: MyStuffTab; onChange: (tab: MyStuffTab) => void }) {
   return (
-    <div role="tablist" aria-label="Filter your library and wishlist">
-      <div className="flex items-center gap-5 border-b border-border">
-        {TABS.map(({ key, label, Icon }) => {
-          const isActive = key === active;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onChange(key)}
-              role="tab"
-              aria-selected={isActive}
-              className={`tap-44-y flex items-center gap-1.5 pb-3 text-label transition-colors ${
-                isActive ? "text-text-primary shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-neutral-400 hover:text-text-secondary"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" aria-hidden />
-              {label}
-            </button>
-          );
-        })}
-      </div>
+    <div role="tablist" aria-label="Filter your library and wishlist" className="flex items-center gap-5 border-b border-border">
+      {TABS.map(({ key, label, Icon }) => {
+        const isActive = key === active;
+        return (
+          <button
+            key={key}
+            id={tabId(key)}
+            type="button"
+            onClick={() => onChange(key)}
+            role="tab"
+            aria-selected={isActive}
+            aria-controls={TABPANEL_ID}
+            className={`tap-44-y flex items-center gap-1.5 pb-3 text-label transition-colors ${
+              isActive ? "text-text-primary shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-neutral-400 hover:text-text-secondary"
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" aria-hidden />
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }

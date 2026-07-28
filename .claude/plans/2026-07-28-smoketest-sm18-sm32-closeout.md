@@ -116,7 +116,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — verified in browser
   - Depends on: none
 
-- [ ] **T9** — Fix the two remaining a11y structure problems (SM29 🔵)
+- [x] **T9** — Fix the two remaining a11y structure problems (SM29 🔵)
   - Files: `src/components/LibraryWishlistTabs.tsx`, the B6 item-detail score panel (same file as T5)
   - Detail: (a) the four tabs are `role="tab"` but their direct parent is not the `role="tablist"` and nothing bridges them, and there is no `role="tabpanel"` anywhere. Either make the immediate parent the `tablist` or add `aria-owns`, and give the content region `role="tabpanel"` with `aria-labelledby` pointing at the active tab. (b) the entire item-detail score panel is one `<button>`, so its accessible name is the whole blob "71Your Fandex ScoreTypical match — you rate Christopher Nolan highly.Why? ▼". Split it: the score and its description become static content, and only the "Why?" disclosure stays a button with its own short accessible name.
   - Done when: the tab strip exposes a valid tablist/tab/tabpanel relationship, and the score panel's disclosure button reads as "Why?" rather than the full panel text.

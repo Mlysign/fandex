@@ -19,7 +19,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
-import LibraryWishlistTabs from "@/components/LibraryWishlistTabs";
+import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWishlistTabs";
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 const TAB_LABEL: Record<MyStuffTab, string> = { all: "All", wishlist: "Wishlist", unrated: "Unrated", rated: "Rated" };
@@ -263,7 +263,9 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
         }
       />
 
-      <main className="max-w-6xl mx-auto px-6 py-6">
+      {/* SM29 — bridges the tab strip's role="tab" buttons to their content,
+          which had no role="tabpanel" anywhere. */}
+      <main id={TABPANEL_ID} role="tabpanel" aria-labelledby={tabId(activeTab)} className="max-w-6xl mx-auto px-6 py-6">
         {loading && <Spinner label="Loading…" />}
 
         {!loading && merged.length === 0 && (
