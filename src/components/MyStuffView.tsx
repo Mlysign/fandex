@@ -10,6 +10,7 @@ import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
+import { useDebouncedValue } from "@/lib/useDebounced";
 import { WISHLIST_TOGGLED_EVENT, WishlistToggledDetail } from "@/lib/useQuickActions";
 import { syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
@@ -218,7 +219,13 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const merged = useMemo(() => mergeMyStuff(libraryItems, wishlistItems), [libraryItems, wishlistItems]);
   const tabItems = useMemo(() => filterByTab(merged, activeTab), [merged, activeTab]);
 
-  const q = search.trim().toLowerCase();
+  // SM19 (2026-07-28): the search box used to re-filter + re-render this
+  // (potentially ~2,000-item) list on every keystroke — 237ms for the first
+  // character, 1,426ms clearing the box. `search` stays the input's own
+  // instant, controlled value; only the filter predicate reads the debounced
+  // copy, so typing itself never lags but the expensive re-render does.
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const q = debouncedSearch.trim().toLowerCase();
   const filtered = tabItems.filter((item) => {
     if (types.length > 0 && !types.includes(item.type)) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
@@ -243,6 +250,17 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // a release-date sort (the forward-looking case "what's next" is about).
   const [autoTodaySampled] = useState(() => !hasSavedScroll("rr_mystuff_scroll"));
   const autoScrollToToday = activeTab === "wishlist" && sort === "releaseDate" && autoTodaySampled;
+
+  // SM19 (2026-07-28): /library's ~2,000-item "All"/"Rated"/"Unrated" tabs are
+  // what actually blocked the main thread — Wishlist (here or on its own
+  // route) is ~96 items, well under the 300-item first page, so the cap is a
+  // no-op there either way. Reuses the SAME "no restore pending" sample as
+  // autoScrollToToday above: a Back-nav's saved scroll offset may exceed what
+  // 300 items would render, so this session skips the cap entirely rather
+  // than fight the restore — the (rare) cost is one full-list render on that
+  // one navigation, not on every visit.
+  const INCREMENTAL_PAGE = 300;
+  const capRender = route === "library" && autoTodaySampled;
 
   const isBusy = syncing || autoSyncing;
 
@@ -332,6 +350,8 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
               onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))}
               highlightId={highlightId}
               autoScrollToToday={autoScrollToToday}
+              initialCount={capRender ? INCREMENTAL_PAGE : undefined}
+              step={capRender ? INCREMENTAL_PAGE : undefined}
             />
           </ErrorBoundary>
         )}

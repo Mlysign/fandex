@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format, parseISO, isToday, isTomorrow, isPast, isSameMonth } from "date-fns";
 import PosterCard, { PosterCardItem } from "@/components/PosterCard";
 import ListCard from "@/components/ListCard";
 import { MediaCardItem } from "@/components/cardItem";
 import { scrollBehavior } from "@/lib/scrollBehavior";
+import { initialVisibleCount, growVisibleCount } from "@/lib/incrementalList";
 
 // ── Shared item interface ─────────────────────────────────────────
 // The canonical shape lives in cardItem.ts; aliased as MediaItem here for
@@ -278,17 +279,58 @@ interface GroupedViewProps {
   // N2: pages that restore a saved scroll position (useScrollRestore) pass false
   // so the today-scroll doesn't fight the restore and win.
   autoScrollToToday?: boolean;
+  // SM19 (2026-07-28) — cap initial DOM size for very large lists (/library's
+  // ~2,000 cards blocked the main thread on every search keystroke). Render
+  // only the first `initialCount` items, growing by `step` as an
+  // IntersectionObserver sentinel at the end scrolls into view. Omitted (the
+  // default) renders everything at once, unchanged — Discover, the facet
+  // pages and small lists (Wishlist) all still do this.
+  initialCount?: number;
+  step?: number;
 }
 
 const cardGrid = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4";
 
-export default function GroupedView({ items, view, onSelect, highlightId, groupBy = "month", descending = false, ratingOf, autoScrollToToday = true }: GroupedViewProps) {
+export default function GroupedView({ items, view, onSelect, highlightId, groupBy = "month", descending = false, ratingOf, autoScrollToToday = true, initialCount, step }: GroupedViewProps) {
   const sectionRefs   = useRef<Map<string, HTMLElement>>(new Map());
   const todayScrolled = useRef(false);
+  const sentinelRef   = useRef<HTMLDivElement>(null);
 
-  const { groups, noDate } = groupByDate(items);
+  const incremental = initialCount != null;
+  const [visibleCount, setVisibleCount] = useState(() => (incremental ? initialVisibleCount(items.length, initialCount!) : items.length));
+
+  // React's "adjust state during render" pattern (not an effect): when the
+  // underlying set genuinely changes — a new search/filter/sort/tab, not this
+  // component's own incremental growth — reset back to the first page. Guarded
+  // by the length comparison, so this fires at most once per real change.
+  const [prevLength, setPrevLength] = useState(items.length);
+  if (incremental && items.length !== prevLength) {
+    setPrevLength(items.length);
+    setVisibleCount(initialVisibleCount(items.length, initialCount!));
+  }
+
+  const visibleItems = incremental ? items.slice(0, visibleCount) : items;
+  const hasMore = incremental && visibleCount < items.length;
+
+  // Grow the reveal as the sentinel (rendered at the end of the visible list)
+  // scrolls near the viewport. Re-subscribes on every growth step, which is
+  // cheap at the 300-item chunk size this is tuned for.
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        setVisibleCount((c) => growVisibleCount(c, items.length, step ?? initialCount!));
+      }
+    }, { rootMargin: "600px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, items.length, step, initialCount]);
+
+  const { groups, noDate } = groupByDate(visibleItems);
   const sortedDates = [...groups.keys()].sort();
-  const monthGroups = groupByMonth(items);
+  const monthGroups = groupByMonth(visibleItems);
   const months = descending ? [...monthGroups.months].reverse() : monthGroups.months;
 
   useEffect(() => { todayScrolled.current = false; }, [view, descending]);
@@ -346,7 +388,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
 
   // ── RATING grouping (userRating / platformRating sorts) ───────
   if (groupBy === "rating") {
-    const { ordered, unrated } = groupByRating(items, ratingOf ?? (() => null));
+    const { ordered, unrated } = groupByRating(visibleItems, ratingOf ?? (() => null));
     const sections: { key: string; label: string; items: MediaItem[] }[] = [
       ...ordered.map(([b, its]) => ({ key: `r${b}`, label: `${b}★`, items: its })),
       ...(unrated.length ? [{ key: "__unrated__", label: "Unrated", items: unrated }] : []),
@@ -369,6 +411,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
               )}
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
         </div>
         {sections.length > 1 && <SectionNav entries={nav} sectionRefs={sectionRefs} />}
       </div>
@@ -379,11 +422,13 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
   if (groupBy === "none") {
     return view === "list" ? (
       <div className="space-y-2">
-        {items.map((item) => <ListCard key={item.id} item={item} onSelect={onSelect} highlight={highlightId === item.id} />)}
+        {visibleItems.map((item) => <ListCard key={item.id} item={item} onSelect={onSelect} highlight={highlightId === item.id} />)}
+        {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
       </div>
     ) : (
       <div className={cardGrid}>
-        {items.map((item) => <PosterCard key={item.id} item={item as PosterCardItem} onSelect={(i) => onSelect(i as MediaItem)} />)}
+        {visibleItems.map((item) => <PosterCard key={item.id} item={item as PosterCardItem} onSelect={(i) => onSelect(i as MediaItem)} />)}
+        {hasMore && <div ref={sentinelRef} aria-hidden className="col-span-full h-px" />}
       </div>
     );
   }
@@ -428,6 +473,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
               </div>
             </div>
           )}
+          {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
         </div>
         {showNav && <MonthNav months={months} noDate={noDate} sectionRefs={sectionRefs} />}
       </div>
@@ -473,6 +519,7 @@ export default function GroupedView({ items, view, onSelect, highlightId, groupB
             </div>
           </div>
         )}
+        {hasMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
       </div>
       {showNav && <MonthNav months={months} noDate={noDate} sectionRefs={sectionRefs} />}
     </div>
