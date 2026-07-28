@@ -44,8 +44,14 @@ node_modules/
 .next/
 data/
 .env
-# Claude Code local config
-.claude/
+# Claude Code local config.
+# NB: `.claude/*`, not `.claude/` — git never descends into an excluded
+# DIRECTORY, so a `!` negation under one can never take effect. Excluding the
+# contents instead is what makes the plans exception below work.
+.claude/*
+# Session plans ARE the audit trail of what was planned vs what shipped (one
+# session writes the plan, another executes it), so they belong in history.
+!.claude/plans/
 
 # H2a verification artifacts (see migration7.dryrun.test.ts)
 migration7-out.txt
