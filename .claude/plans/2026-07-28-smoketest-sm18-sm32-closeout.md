@@ -144,7 +144,7 @@ Note `vitest.config.ts` includes **`src/**/*.test.ts` only**. A `.test.tsx` file
   - Tests: none — behaviour depends on real catalog data; verify in the browser against the named repro
   - Depends on: none
 
-- [ ] **T13** — Re-measure, then fix, the calendar agenda rows at 375px (SM28 🟡)
+- [x] **T13** — Re-measure, then fix, the calendar agenda rows at 375px (SM28 🟡)
   - Files: `src/components/CalendarView.tsx`
   - Detail: the sweep found the A1 Rate + Bookmark bar consuming ~145px of each agenda row at 375px, truncating titles to ~12 characters ("Mistfall Hu…", "Beast of Rei…"). That measurement predates `476d66a`, which changed calendar layout — so **measure first** at 375px with `javascript_tool` and record the actual title width. If titles still truncate below roughly 20 characters, fix by reclaiming space in `AgendaRow` (`CalendarView.tsx:290-328`): the `platformSources` meta line is the least load-bearing element at that width and can drop below `sm:`. Do not shrink the action buttons — they are `tap-44` for a reason. If the measurement shows titles now fit, close SM28 in `TASKS.md` with the measured numbers instead of changing code.
   - Done when: either agenda titles at 375px show ~20+ characters, or `TASKS.md` records the measured width that made the fix unnecessary.

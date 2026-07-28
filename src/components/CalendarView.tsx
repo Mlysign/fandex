@@ -313,7 +313,16 @@ function AgendaRow({ item, onSelect }: { item: CalendarItem; onSelect: (item: Ca
         <span className="absolute top-1 left-1 w-1.5 h-1.5 rounded-xs" style={{ background: typeColor }} aria-hidden />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-serif text-serif-sm text-text-primary truncate">{item.title}</p>
+        {/* SM28 (2026-07-28, re-measured post-L4): even after L4's mobile
+            density pass, the row's fixed date-stack (36px) + poster (44px) +
+            action bar (94px) leave only ~132px for the title at 375px —
+            single-line truncate clipped most titles to ~15-18 characters
+            ("Beast of Reincarn…"). The date/poster/actions can't shrink
+            further without hurting tap targets or legibility, so the fix is
+            vertical, not horizontal: line-clamp-2 uses the row's existing
+            height budget (the poster is 56px tall, room for 2 text lines +
+            the meta line below) to show ~30-36 characters before truncating. */}
+        <p className="font-serif text-serif-sm text-text-primary line-clamp-2">{item.title}</p>
         <div className="flex items-center gap-1.5 mt-1 font-mono text-meta uppercase tracking-wide" style={{ color: typeColor }}>
           <span>{item.type}</span>
           {item.platformSources && item.platformSources.length > 0 && (
