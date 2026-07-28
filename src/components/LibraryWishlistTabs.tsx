@@ -1,38 +1,38 @@
 "use client";
-import Link from "next/link";
-import { Library as LibraryIcon, Bookmark } from "lucide-react";
+import { Library as LibraryIcon, Bookmark, LayoutGrid, Star } from "lucide-react";
+import { MyStuffTab } from "@/lib/myStuffMerge";
 
-// H1.6e — the D-A "Library ⇄ Wishlist tab" that unifies the two pages into one
-// "my stuff" surface: they were already treated as one destination by the nav
-// (H1.6c — both light the same "Library" nav item), but had no way to switch
-// between them without leaving the page. Each page keeps its own route,
-// data fetch, filters and persisted state (usePersistedState keys are already
-// namespaced per-page) — this is a navigation affordance, not a merge of the
-// two pages' state.
+// C8 (2026-07-28) — the Library/Wishlist merge: what was a two-route Link
+// switcher (H1.6e) is now a four-tab strip over ONE shared view
+// (MyStuffView.tsx). Tab is local React state, not navigation — clicking a
+// tab never changes the URL, so Back always lands on the route's own
+// initial tab rather than a stale stored one. Reuses the underline anatomy
+// the two-route version had (2026-07-27 mockup-vs-live pass): 13px sans,
+// active = 2px accent inset-shadow underline, inactive = neutral-400.
 //
-// 2026-07-27 (Nils, mockup-vs-live pass): restyled from a pill/segmented
-// switcher to the mockup's underline-tab anatomy (library.html's `.entry`-
-// adjacent tab row — 13px sans, active = 2px accent inset-shadow underline,
-// inactive = --color-neutral-400 "min" tone) and reordered Wishlist first.
-// Wishlist is now also the default landing for the shared "Library" nav slot
-// (AppNav) — this is the forward-looking half of "my stuff" (what's next),
-// which is why H2c's onboarding already lands new sign-ins there.
+// "Playing" (the mockup's 4th tab) isn't here — this app stores no
+// in-progress status (watched/played/owned/beaten/toplay are all terminal or
+// ownership flags), so it would be permanently empty. "Unrated" is backed by
+// real data instead (2026-07-28 decision).
 
-const TABS = [
-  { href: "/wishlist", label: "Wishlist", Icon: Bookmark },
-  { href: "/library", label: "Library", Icon: LibraryIcon },
-] as const;
+const TABS: { key: MyStuffTab; label: string; Icon: typeof LibraryIcon }[] = [
+  { key: "all", label: "All", Icon: LayoutGrid },
+  { key: "wishlist", label: "Wishlist", Icon: Bookmark },
+  { key: "unrated", label: "Unrated", Icon: LibraryIcon },
+  { key: "rated", label: "Rated", Icon: Star },
+];
 
-export default function LibraryWishlistTabs({ active }: { active: "library" | "wishlist" }) {
+export default function LibraryWishlistTabs({ active, onChange }: { active: MyStuffTab; onChange: (tab: MyStuffTab) => void }) {
   return (
-    <div className="max-w-6xl mx-auto px-6 pt-4" role="tablist" aria-label="Library or Wishlist">
+    <div className="max-w-6xl mx-auto px-6 pt-4" role="tablist" aria-label="Filter your library and wishlist">
       <div className="flex items-center gap-5 border-b border-border">
-        {TABS.map(({ href, label, Icon }) => {
-          const isActive = href === `/${active}`;
+        {TABS.map(({ key, label, Icon }) => {
+          const isActive = key === active;
           return (
-            <Link
-              key={href}
-              href={href}
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(key)}
               role="tab"
               aria-selected={isActive}
               className={`tap-44-y flex items-center gap-1.5 pb-3 text-label transition-colors ${
@@ -41,7 +41,7 @@ export default function LibraryWishlistTabs({ active }: { active: "library" | "w
             >
               <Icon className="w-3.5 h-3.5" aria-hidden />
               {label}
-            </Link>
+            </button>
           );
         })}
       </div>

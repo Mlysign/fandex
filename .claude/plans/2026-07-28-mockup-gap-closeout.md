@@ -247,7 +247,7 @@ the real 1,919-item account), then visit the surface under test.
     `discoverySearch.test.ts`; verify keyboard + a11y in browser per T8.
   - Depends on: none
 
-- [ ] **T6** — C8: merge Library and Wishlist into one tabbed view
+- [x] **T6** — C8: merge Library and Wishlist into one tabbed view
   - Files: new `src/components/MyStuffView.tsx` (or similar),
     `src/app/library/LibraryPageClient.tsx`,
     `src/app/wishlist/WishlistPageClient.tsx`,
