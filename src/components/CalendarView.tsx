@@ -6,12 +6,14 @@ import {
   addMonths, subMonths, getDay, parseISO, startOfDay, startOfWeek, endOfWeek,
   addWeeks, compareAsc,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, List, CalendarDays, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
 import { TypeIcon } from "@/components/Badges";
 import Tooltip from "@/components/Tooltip";
 import EmptyState from "@/components/ui/EmptyState";
+import Sheet from "@/components/ui/Sheet";
 import ActionCells from "@/components/ActionCells";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 // CalendarView accepts any item that has the minimum required fields.
 // Both EnrichedItem (wishlist) and discover items satisfy this.
@@ -29,12 +31,19 @@ export interface CalendarItem {
   rating?: number | null;
 }
 
+export type CalendarMode = "month" | "agenda";
+
 interface CalendarViewProps {
   items: CalendarItem[];
   onSelect: (item: CalendarItem) => void;
   // Fired whenever the displayed month changes (and on mount). Lets a parent
   // fetch more data when the user pages past the end of what's been loaded.
   onVisibleMonthChange?: (month: Date) => void;
+  // Month grid vs. agenda list. Owned by the PAGE since 2026-07-28: the toggle
+  // that used to live in this component's "Coming up" header row now sits in
+  // the shared SubBar with every other page-level control, and the page needs
+  // to read the mode anyway to decide how far ahead to prefetch.
+  mode?: CalendarMode;
 }
 
 function groupByDate(items: CalendarItem[]) {
@@ -71,17 +80,63 @@ function ItemMeta({ item, size = 11 }: { item: CalendarItem; size?: number }) {
   );
 }
 
+function OverflowList({ items, onSelect, onClose }: { items: CalendarItem[]; onSelect: (item: CalendarItem) => void; onClose: () => void }) {
+  return (
+    <>
+      {items.map((item) => (
+        <button
+          key={item.id}
+          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-elevated transition-colors duration-fast text-left"
+          onClick={() => { onClose(); onSelect(item); }}
+        >
+          {item.posterUrl && (
+            <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded-sm object-cover flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-caption font-medium text-text-primary truncate">{item.title}</p>
+            <div className="mt-0.5"><ItemMeta item={item} /></div>
+          </div>
+        </button>
+      ))}
+    </>
+  );
+}
+
+// The day's full item list. On desktop it's a popover anchored under the cell.
+// On mobile it can't be: since the mobile density pass (2026-07-28) a day cell
+// is ~50px wide, and a 220px-min popover anchored inside one overhangs the grid
+// (and the viewport, for the last column). Below 768px the same list opens in
+// the shared bottom <Sheet> instead. Exactly ONE of the two renders — same rule
+// as SubBar's advanced filters, for the same reason.
 function OverflowDrawer({
   items,
   dateLabel,
   onSelect,
   onClose,
+  isDesktop,
 }: {
   items: CalendarItem[];
   dateLabel: string;
   onSelect: (item: CalendarItem) => void;
   onClose: () => void;
+  isDesktop: boolean;
 }) {
+  if (!isDesktop) {
+    return (
+      <Sheet open onClose={onClose} title={dateLabel} className="pb-3">
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+          <span className="font-mono text-meta text-text-secondary">{dateLabel}</span>
+          <button onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary">
+            <X className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <OverflowList items={items} onSelect={onSelect} onClose={onClose} />
+        </div>
+      </Sheet>
+    );
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -93,21 +148,7 @@ function OverflowDrawer({
           </button>
         </div>
         <div className="max-h-64 overflow-y-auto">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-elevated transition-colors duration-fast text-left"
-              onClick={() => { onClose(); onSelect(item); }}
-            >
-              {item.posterUrl && (
-                <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded-sm object-cover flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-caption font-medium text-text-primary truncate">{item.title}</p>
-                <div className="mt-0.5"><ItemMeta item={item} /></div>
-              </div>
-            </button>
-          ))}
+          <OverflowList items={items} onSelect={onSelect} onClose={onClose} />
         </div>
       </div>
     </>
@@ -140,10 +181,12 @@ function CalendarCell({
   day,
   dayItems,
   onSelect,
+  isDesktop,
 }: {
   day: Date;
   dayItems: CalendarItem[];
   onSelect: (item: CalendarItem) => void;
+  isDesktop: boolean;
 }) {
   const [showOverflow, setShowOverflow] = useState(false);
   const [singleHovered, setSingleHovered] = useState(false);
@@ -151,12 +194,14 @@ function CalendarCell({
   const singleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const today = isToday(day);
   const single = dayItems.length === 1 ? dayItems[0] : null;
-  const VISIBLE = 3;
+  // A mobile cell is 80px tall, which fits two title rows plus the "+N more"
+  // link; three would clip. Desktop's 128px still fits three.
+  const VISIBLE = isDesktop ? 3 : 2;
   const overflow = dayItems.length > VISIBLE;
 
   return (
     <div
-      className={`h-32 rounded-md overflow-visible relative border transition-colors duration-base ${
+      className={`h-20 md:h-32 rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
         today ? "ring-2 ring-accent ring-inset" : ""
       } ${single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"}`}
       style={single ? { borderColor: `${TYPE_COLORS[single.type] ?? "#888"}44` } : undefined}
@@ -168,18 +213,18 @@ function CalendarCell({
             alt={single.title}
             fill
             sizes="(max-width: 768px) 14vw, 120px"
-            className="object-cover opacity-40 rounded-md"
+            className="object-cover opacity-40 rounded-sm md:rounded-md"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/30 to-transparent rounded-md" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/30 to-transparent rounded-sm md:rounded-md" />
         </>
       )}
 
-      <div className="relative z-10 p-2 h-full flex flex-col">
+      <div className="relative z-10 p-1 md:p-2 h-full flex flex-col">
         {/* Day number */}
-        <div className="mb-1">
+        <div className="mb-0.5 md:mb-1">
           {today ? (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-text-on-accent font-bold font-mono text-[10px]">
+            <span className="inline-flex items-center justify-center w-4 h-4 md:w-5 md:h-5 rounded-full bg-accent text-text-on-accent font-bold font-mono text-[10px]">
               {format(day, "d")}
             </span>
           ) : (
@@ -200,7 +245,7 @@ function CalendarCell({
               onClick={() => onSelect(single)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(single); } }}
             >
-              <p className="font-serif text-[13px] leading-tight line-clamp-2 text-text-primary drop-shadow">{single.title}</p>
+              <p className="font-serif text-[11px] md:text-[13px] leading-tight line-clamp-2 text-text-primary drop-shadow">{single.title}</p>
               <div className="mt-0.5"><ItemMeta item={single} /></div>
             </div>
             {singleHovered && <Tooltip item={single} anchorRef={singleRef} />}
@@ -224,6 +269,7 @@ function CalendarCell({
                     dateLabel={format(day, "MMMM d")}
                     onSelect={onSelect}
                     onClose={() => setShowOverflow(false)}
+                    isDesktop={isDesktop}
                   />
                 )}
               </div>
@@ -338,9 +384,9 @@ function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (ite
   );
 }
 
-export default function CalendarView({ items, onSelect, onVisibleMonthChange }: CalendarViewProps) {
+export default function CalendarView({ items, onSelect, onVisibleMonthChange, mode = "month" }: CalendarViewProps) {
   const [calMonth, setCalMonth] = useState(new Date());
-  const [mode, setMode] = useState<"month" | "agenda">("month");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     onVisibleMonthChange?.(calMonth);
@@ -356,37 +402,13 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
 
   const monthItemCount = days.reduce((acc, day) => acc + (groups[format(day, "yyyy-MM-dd")]?.length ?? 0), 0);
 
-  // Distinct months (as start-of-month timestamps) that actually hold a release,
-  // so the user can skip empty stretches instead of paging one month at a time.
-  const monthStarts = useMemo(() => {
-    const set = new Set<number>();
-    for (const it of items) {
-      if (!it.releaseDate) continue;
-      set.add(startOfMonth(parseISO(it.releaseDate)).getTime());
-    }
-    return [...set].sort((a, b) => a - b);
-  }, [items]);
-  const curStart = startOfMonth(calMonth).getTime();
-  const nextMonthWithItems = monthStarts.find((m) => m > curStart) ?? null;
-  const prevMonthWithItems = [...monthStarts].reverse().find((m) => m < curStart) ?? null;
+  // The "← Previous release" / "Next release →" jumps that used to sit in the
+  // utility row (and again in the empty-month state) were removed 2026-07-28 at
+  // Nils's request — obsolete now that the Popular scope means most months have
+  // something in them, and they were crowding "Today" out of its own row.
 
   return (
     <div>
-      {/* Section header + Month/Agenda toggle (H1.6d — the introduced Agenda view) */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-serif text-serif-md text-text-primary">Coming up</h3>
-        <button
-          onClick={() => setMode((m) => (m === "month" ? "agenda" : "month"))}
-          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-surface-elevated border border-border text-text-primary text-label hover:border-border-strong transition-colors duration-fast"
-        >
-          {mode === "month" ? (
-            <><List className="w-3.5 h-3.5" aria-hidden />List</>
-          ) : (
-            <><CalendarDays className="w-3.5 h-3.5" aria-hidden />Month</>
-          )}
-        </button>
-      </div>
-
       {mode === "agenda" ? (
         <AgendaView items={items} onSelect={onSelect} />
       ) : (
@@ -418,69 +440,35 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
             </button>
           </div>
 
-          {(monthItemCount > 0 || !isCurrentMonth || prevMonthWithItems != null || nextMonthWithItems != null) && (
+          {/* Utility row — the release count, and "Today" with room to breathe
+              now that the two jump buttons are gone. Today is a real pill with
+              a 44px hit area; as a bare text link squeezed between four other
+              controls it was the smallest tap target on the page. */}
+          {(monthItemCount > 0 || !isCurrentMonth) && (
             <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 mb-4 font-mono text-meta text-text-secondary">
               {monthItemCount > 0 && <span>{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</span>}
               {!isCurrentMonth && (
-                <button onClick={() => setCalMonth(new Date())} className="text-accent hover:text-accent-hover transition-colors duration-fast">
+                <button
+                  onClick={() => setCalMonth(new Date())}
+                  className="tap-44 px-3 py-1 rounded-full border border-accent text-accent hover:bg-accent-subtle transition-colors duration-fast"
+                >
                   Today
-                </button>
-              )}
-              {prevMonthWithItems != null && (
-                <button
-                  onClick={() => setCalMonth(new Date(prevMonthWithItems))}
-                  className="hover:text-text-primary transition-colors duration-fast whitespace-nowrap"
-                  title="Jump to the previous month with a release"
-                >
-                  ← Previous release
-                </button>
-              )}
-              {nextMonthWithItems != null && (
-                <button
-                  onClick={() => setCalMonth(new Date(nextMonthWithItems))}
-                  className="hover:text-text-primary transition-colors duration-fast whitespace-nowrap"
-                  title="Jump to the next month with a release"
-                >
-                  Next release →
                 </button>
               )}
             </div>
           )}
 
           {monthItemCount === 0 ? (
-            // Empty month — offer to skip straight to a month that has releases.
             <EmptyState
               icon={<CalendarX className="w-5 h-5" aria-hidden />}
               title={`No releases in ${format(calMonth, "MMMM yyyy")}`}
-              hint={prevMonthWithItems == null && nextMonthWithItems == null ? "No dated releases here yet." : undefined}
-              actions={
-                prevMonthWithItems == null && nextMonthWithItems == null ? undefined : (
-                  <>
-                    {prevMonthWithItems != null && (
-                      <button
-                        onClick={() => setCalMonth(new Date(prevMonthWithItems))}
-                        className="text-label px-3 py-1.5 rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors duration-fast"
-                      >
-                        ← Previous release
-                      </button>
-                    )}
-                    {nextMonthWithItems != null && (
-                      <button
-                        onClick={() => setCalMonth(new Date(nextMonthWithItems))}
-                        className="text-label px-3 py-1.5 rounded-full bg-accent text-text-on-accent font-semibold hover:bg-accent-hover transition-colors duration-fast"
-                      >
-                        Jump to next release →
-                      </button>
-                    )}
-                  </>
-                )
-              }
+              hint="Use the arrows to browse another month, or turn on another source above."
             />
           ) : (
             <>
               {/* Day-of-week headers — single-letter per the mockup, full name
                   kept for screen readers via aria-label. */}
-              <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+              <div className="grid grid-cols-7 gap-0.5 md:gap-1.5 mb-1 md:mb-1.5">
                 {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
                   <div key={d} aria-label={d} className="text-center font-mono text-micro text-text-secondary py-1">
                     <span aria-hidden>{d[0]}</span>
@@ -488,12 +476,16 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
                 ))}
               </div>
 
-              {/* Calendar grid — subtle accent tint on current month */}
-              <div
-                className={`grid grid-cols-7 gap-1.5 rounded-xl p-2 -m-2 transition-colors duration-base ${isCurrentMonth ? "bg-accent-subtle" : ""}`}
-              >
+              {/* Calendar grid. The current month used to get a `bg-accent-subtle`
+                  tint here (with a p-2/-m-2 pair whose ONLY job was letting that
+                  tint bleed past the cells) — removed 2026-07-28, Nils's call.
+                  Today's cell keeps its accent ring and day-number pill, which
+                  is the signal that was actually doing the work.
+                  Mobile gaps are 2px, not 6px: at 375px the six gaps plus the
+                  page's old px-6 were eating a fifth of the screen width. */}
+              <div className="grid grid-cols-7 gap-0.5 md:gap-1.5">
                 {Array.from({ length: startPad }).map((_, i) => (
-                  <div key={`pad-${i}`} className="h-32 rounded-md" />
+                  <div key={`pad-${i}`} className="h-20 md:h-32 rounded-sm md:rounded-md" />
                 ))}
                 {days.map((day) => {
                   const dateStr  = format(day, "yyyy-MM-dd");
@@ -504,6 +496,7 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange }: 
                       day={day}
                       dayItems={dayItems}
                       onSelect={onSelect}
+                      isDesktop={isDesktop}
                     />
                   );
                 })}

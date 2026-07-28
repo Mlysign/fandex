@@ -117,3 +117,15 @@ export function defaultUiFilters(): UiFilters {
     membership: {}, includeFacets: [], excludeFacets: [],
   };
 }
+
+// How many of the ADVANCED filters (the ones behind SubBar's Filters trigger)
+// are currently narrowing the list. Since 2026-07-28 that panel is collapsed on
+// every viewport, so this badge is the only on-screen evidence that a year
+// range or a facet is still in effect — without it a filtered list is
+// indistinguishable from an unfiltered one. Deliberately excludes `types`,
+// which has its own always-visible chip row.
+export function countActiveAdvanced(f: Pick<UiFilters, "yearRange" | "membership" | "includeFacets" | "excludeFacets">): number {
+  const yearNarrowed = f.yearRange[0] > YEAR_MIN || f.yearRange[1] < YEAR_MAX;
+  const memberships = Object.values(f.membership ?? {}).filter(Boolean).length;
+  return (yearNarrowed ? 1 : 0) + memberships + f.includeFacets.length + f.excludeFacets.length;
+}

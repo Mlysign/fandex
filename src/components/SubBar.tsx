@@ -9,7 +9,6 @@ import Chip from "@/components/ui/Chip";
 import TypeFilter from "@/components/ui/TypeFilter";
 import Menu from "@/components/ui/Menu";
 import Sheet from "@/components/ui/Sheet";
-import { useMediaQuery } from "@/lib/useMediaQuery";
 
 const VIEW_ICONS = { list: List, card: LayoutGrid, calendar: CalendarDays } as const;
 
@@ -35,11 +34,15 @@ interface SubBarProps {
   onToggleSource?: (s: string) => void;
   availableSources?: string[];
 
-  // Search
-  searchValue: string;
-  onSearchChange: (val: string) => void;
+  /** Tab strip (Library/Wishlist). Sits between the chips and the search box. */
+  tabs?: React.ReactNode;
+
+  // Search. OMIT `onSearchChange` to render no search box at all — Home and
+  // Calendar are list pages with nothing to search within (2026-07-28).
+  searchValue?: string;
+  onSearchChange?: (val: string) => void;
   searchPlaceholder?: string;
-  searchFacets?: SearchBarFacets;     // must-include/exclude (T6) — rendered inline
+  searchFacets?: SearchBarFacets;     // must-include/exclude (T6)
 
   // Hide-rated toggle (Library) — a standard, shared control
   hideRated?: { value: boolean; onChange: (v: boolean) => void };
@@ -47,14 +50,21 @@ interface SubBarProps {
   // Sort (search results, T8)
   sort?: { value: string; onChange: (v: string) => void; options: [string, string][] };
 
-  // Year + membership filters (rendered as an inline sticky row — see FilterPanel)
+  // Year + membership filters — rendered inside the Filters sheet (see FilterPanel)
   advancedFilters?: React.ReactNode;
+  /**
+   * How many advanced filters are currently narrowing the results. Shown as a
+   * badge on the Filters trigger. Required in spirit whenever `advancedFilters`
+   * is passed: the panel is collapsed by default now, so without this a user
+   * cannot tell a filtered list from an unfiltered one.
+   */
+  advancedActiveCount?: number;
 
   // View mode. Pass a single-entry `availableViews` (or omit both handlers) to
   // hide the toggle entirely — the mockups show a grid on every list page and
   // no view switcher anywhere (2026-07-27 audit).
-  view: ViewMode;
-  onViewChange: (v: ViewMode) => void;
+  view?: ViewMode;
+  onViewChange?: (v: ViewMode) => void;
   availableViews?: ViewMode[];        // defaults to list/card
 
   /** Result count for the sort bar's left eyebrow ("TITLES · 128"). */
@@ -85,14 +95,16 @@ export default function SubBar({
   activeSources = [],
   onToggleSource,
   availableSources = [],
-  searchValue,
+  tabs,
+  searchValue = "",
   onSearchChange,
   searchPlaceholder = "Search...",
   searchFacets,
   hideRated,
   sort,
   advancedFilters,
-  view,
+  advancedActiveCount = 0,
+  view = "card",
   onViewChange,
   availableViews = ["list", "card"],
   resultCount = null,
@@ -100,36 +112,39 @@ export default function SubBar({
   filters,
   actions,
 }: SubBarProps) {
-  // On mobile the advanced rows (facets + year/membership) open in a bottom
-  // Sheet instead of eating the viewport inline; on md+ they stay
-  // always-visible (T24). The toggle only appears when there's something to show.
+  // The advanced rows (facets + year/membership) live behind a "Filters"
+  // trigger and open in <Sheet> — a bottom sheet on mobile, a centered modal on
+  // desktop, which Sheet already handles itself.
   //
-  // H1.6d: this content (FacetAutocomplete's `q`/`matches`/`open` state, plus
-  // FilterPanel) must be rendered in exactly ONE of the two responsive
-  // locations at a time, never both — a naive `hidden md:block` copy for
-  // desktop alongside a second copy inside the mobile Sheet would mount two
-  // independently-stateful instances simultaneously (a real drifting-input
-  // bug, not cosmetic). `useMediaQuery` decides which single location
-  // renders it; crossing the breakpoint remounts (loses an in-progress
-  // search query) rather than ever duplicating.
+  // 2026-07-28 (Nils's call: "collapse the advanced filters on mobile and web"):
+  // desktop used to render this content inline and permanently expanded, mobile
+  // in the sheet, with `useMediaQuery` picking exactly one so the two couldn't
+  // mount simultaneously and drift (H1.6d — a real bug, not cosmetic). There is
+  // now only one location at any width, so that invariant holds by construction
+  // and crossing the 768px breakpoint no longer remounts the panel or discards
+  // an in-progress facet query.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const hasAdvanced = !!(searchFacets || advancedFilters);
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const showSearch = !!onSearchChange;
   // A single available view means there's nothing to switch BETWEEN — render
   // no toggle at all rather than one permanently-pressed button. This is how
   // Discover now opts out entirely (2026-07-27).
-  const showViewToggle = availableViews.length > 1;
+  const showViewToggle = availableViews.length > 1 && !!onViewChange;
 
   const advancedContent = hasAdvanced ? (
     <div className="space-y-2.5">
       {searchFacets && (
-        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-          <div className="flex items-center gap-2 min-w-0">
+        // Stacked, not a wrapping row: this content now only ever renders
+        // inside Sheet (≤480px on desktop, full-width on mobile), so the old
+        // side-by-side layout tuned for a full-width inline bar just wrapped
+        // awkwardly.
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must include</span>
             <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#C8A24B" onPick={(m) => searchFacets.onAdd("include", m as VocabMatch)} /></div>
             {searchFacets.include.map((p, i) => <FacetChip key={`i${i}`} pill={p} color="#C8A24B" onRemove={() => searchFacets.onRemove("include", i)} />)}
           </div>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must exclude</span>
             <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#E5674C" onPick={(m) => searchFacets.onAdd("exclude", m as VocabMatch)} /></div>
             {searchFacets.exclude.map((p, i) => <FacetChip key={`e${i}`} pill={p} color="#E5674C" onRemove={() => searchFacets.onRemove("exclude", i)} />)}
@@ -153,10 +168,14 @@ export default function SubBar({
     <div className="sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3">
       <div className="max-w-6xl mx-auto space-y-3">
 
-        {/* Search — its own full-width row at the TOP, per the mockup's
-            header order (search → filters → sort → grid). It used to sit
-            below the chips, sharing a row with the view toggle. */}
-        <SearchBar value={searchValue} onChange={onSearchChange} placeholder={searchPlaceholder} />
+        {/* THE ORDER OF THIS BLOCK IS THE SPEC (Nils, 2026-07-28), and it is
+            the same on every page that uses SubBar:
+              1. media type filters   2. tabs   3. search   4. sort → content
+            Search used to sit at the top; the type chips are now the first
+            thing on every list page, and pages that pass no `onSearchChange`
+            (Home, Calendar) simply have no search row. Don't reorder these
+            without changing all four pages at once — the whole point is that
+            they no longer drift apart. */}
 
         {/* Row 1 — type + source filters + hide-rated + extras.
             gap-y > gap-x on purpose (H1.6f): this row WRAPS on mobile, so the
@@ -210,34 +229,61 @@ export default function SubBar({
               </>
             )}
 
+            {/* Divider + extras wrap together as ONE flex item, and the divider
+                itself is desktop-only. Left as loose siblings they break apart
+                at 375px and the divider dangles at the end of the type-chip
+                line (Calendar's scope chips push the row to 7 chips); kept on
+                mobile inside the group it just leads the second line, which
+                looks equally like a stray mark. Below md the line break is the
+                separation. */}
             {filters && (
-              <>
-                <div className="w-px h-4 bg-border-strong mx-1" />
+              <div className="flex items-center gap-x-2">
+                <div className="hidden md:block w-px h-4 bg-border-strong mx-1" />
                 {filters}
-              </>
+              </div>
             )}
           </div>
 
           {/* Advanced-filters trigger — a round icon button at the end of the
-              chip row (mockup). Mobile only: desktop renders the panel inline
-              below, so a trigger there would open nothing new. */}
+              chip row. Shown at EVERY width since 2026-07-28; the panel is
+              collapsed everywhere now. The count badge is what keeps that
+              honest: with the panel shut, it's the only signal that a year
+              range or a facet is still narrowing the list. */}
           {hasAdvanced && (
             <button
               onClick={() => setFiltersOpen(true)}
               aria-haspopup="dialog"
-              aria-label="Filters"
+              aria-expanded={filtersOpen}
+              aria-label={advancedActiveCount > 0 ? `Filters (${advancedActiveCount} active)` : "Filters"}
               title="Filters"
-              className="tap-44 md:hidden w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full border border-border-strong text-text-secondary hover:bg-surface-elevated transition-colors"
+              className={`tap-44 relative w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full border transition-colors ${
+                advancedActiveCount > 0
+                  ? "border-accent text-accent hover:bg-accent-subtle"
+                  : "border-border-strong text-text-secondary hover:bg-surface-elevated"
+              }`}
             >
               <SlidersHorizontal className="w-4 h-4" aria-hidden />
+              {advancedActiveCount > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-accent text-text-on-accent font-mono text-[10px] font-bold leading-4 text-center"
+                >
+                  {advancedActiveCount}
+                </span>
+              )}
             </button>
           )}
         </div>
 
-        {/* Advanced filters (facets + year/membership). Desktop:
-            always-visible inline (T24). Mobile: the single instance moves into
-            a bottom Sheet instead, opened by the "Filters" trigger above. */}
-        {hasAdvanced && isDesktop && advancedContent}
+        {/* Row 2 — tabs (Library/Wishlist only). Between the chips and the
+            search box, per the shared order above. */}
+        {tabs}
+
+        {/* Row 3 — search, full width. Absent entirely on pages that pass no
+            `onSearchChange`. */}
+        {showSearch && (
+          <SearchBar value={searchValue} onChange={onSearchChange} placeholder={searchPlaceholder} />
+        )}
 
         {/* Sort bar — the mockup's `.sortbar`: result count on the left, sort
             control on the right, sitting at the BOTTOM of the static header
@@ -245,7 +291,9 @@ export default function SubBar({
             sort to the top of the grid view"). It used to be a pill row wedged
             between the type chips and the search box. The view toggle (where a
             page still has one) rides along on the right. */}
-        {(sort || resultCount != null || showViewToggle) && (
+        {/* `actions` counts toward showing this row: Calendar passes only a
+            Month/List toggle here and would otherwise render nothing. */}
+        {(sort || resultCount != null || showViewToggle || actions) && (
           <div className="flex items-center justify-between gap-3 pt-0.5">
             <span className="font-mono text-micro uppercase tracking-wider text-accent">
               {resultCount != null ? `${resultNoun} · ${resultCount}` : ""}
@@ -282,7 +330,7 @@ export default function SubBar({
                     return (
                       <button
                         key={v}
-                        onClick={() => onViewChange(v)}
+                        onClick={() => onViewChange?.(v)}
                         aria-label={`${v.charAt(0).toUpperCase() + v.slice(1)} view`}
                         aria-pressed={view === v}
                         className={`tap-44-y px-2.5 py-1.5 rounded-md transition-colors ${
@@ -303,9 +351,9 @@ export default function SubBar({
         )}
       </div>
 
-      {/* Mobile-only: the single advanced-filters instance, moved here instead
-          of rendered a second time — see the isDesktop split above. */}
-      {hasAdvanced && !isDesktop && (
+      {/* The single advanced-filters instance, at every width. Sheet renders
+          itself as a bottom sheet under 768px and a centered modal above it. */}
+      {hasAdvanced && (
         <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters" className="p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-serif text-serif-md text-text-primary">Filters</h3>

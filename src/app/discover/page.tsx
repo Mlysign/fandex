@@ -15,7 +15,7 @@ import Spinner from "@/components/ui/Spinner";
 import Eyebrow from "@/components/ui/Eyebrow";
 import {
   UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
-  SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort,
+  SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort, countActiveAdvanced,
 } from "@/components/discovery/types";
 import { bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import { MediaType } from "@/types";
@@ -582,6 +582,9 @@ export default function DiscoverPage() {
 
   return (
     <div className="min-h-screen">
+      {/* No visible headline on any list page (2026-07-28) — Discover never had
+          one; this is just the sr-only outline the others now also carry. */}
+      <h1 className="sr-only">Discover</h1>
       <SubBar
         activeTypes={filters.types}
         onToggleType={toggleType}
@@ -591,6 +594,7 @@ export default function DiscoverPage() {
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: SORTS }}
         advancedFilters={<FilterPanel filters={filters} onChange={patchFilters} />}
+        advancedActiveCount={countActiveAdvanced(filters)}
         view={effView}
         onViewChange={setView}
         availableViews={availableViews}

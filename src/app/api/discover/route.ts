@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { httpFetch } from "@/lib/http";
-import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
-import { persistDiscoverItems } from "@/lib/discoverPersist";
+import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import { fetchGamePage, fetchMoviePage, fetchShowPage, Direction } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
@@ -153,60 +152,11 @@ export async function GET(req: NextRequest) {
     // then hand that uuid back as the item's `id`. This is what makes the item
     // url uuid-only: a discover result used to ship a composite id
     // (`tmdb-movie-693134`) that the url layer had to parse and resolve live.
-    //
-    // `raw` is the provider list payload used to write the row — it must be
-    // STRIPPED here, not serialized to the client. It exists for persistence
-    // only, and shipping it would undo a chunk of what H2a bought back.
-    //
-    // PR15 (2026-07-22): the write only happens for a real session now — same
-    // rule and same reasoning as the facet-page gate (publicFacetDetail.ts's
-    // PR14). /discover is public and infinite-scrolling, so unconditional
-    // persistence here was the OTHER half of the crawler-driven pool blowup
-    // that grew media_items to ~676k rows (see docs/archive/history.md,
-    // `prod-db-size-and-page-cache` memory note). An anon item keeps its
-    // synthetic composite id and gets `linkable: false`; PosterCard/ListCard
-    // already render that inert exactly as they do for a facet-page item that
-    // couldn't be persisted (Q14) — no new UI branch needed.
-    const persist = (items: any[]) => {
-      const idMap = userId ? persistDiscoverItems(items) : new Map<string, string>();
-      return items.map(({ raw, ...it }) => {
-        const uuid = idMap.get(it.id);
-        return uuid ? { ...it, id: uuid } : { ...it, linkable: false };
-      });
-    };
-
-    // Attach canonical user-state (wishlist providers + watched/played + rating)
-    // to a batch of live discover items, resolved against the local DB. DB-only
-    // (no extra external calls) so it stays fast with infinite scroll.
-    const annotate = (items: any[]) => {
-      if (!userId) return items.map((it) => ({ ...it, platformSources: [], onWatchlist: false, libraryStatus: null, rating: null }));
-
-      const pairs: { source: string; sourceId: string }[] = [];
-      for (const it of items) {
-        for (const [source, sid] of Object.entries(it.ids ?? {})) {
-          if (sid != null) pairs.push({ source, sourceId: String(sid) });
-        }
-      }
-      const idMap = resolveMediaIdsBySource(pairs);
-      const stateMap = getUserStateMap(userId, [...new Set(idMap.values())]);
-
-      return items.map((it) => {
-        let mediaItemId: string | undefined;
-        for (const [source, sid] of Object.entries(it.ids ?? {})) {
-          if (sid == null) continue;
-          const mid = idMap.get(`${source}:${sid}`);
-          if (mid) { mediaItemId = mid; break; }
-        }
-        const st = mediaItemId ? stateMap.get(mediaItemId) : undefined;
-        return {
-          ...it,
-          platformSources: st?.platformSources ?? [],
-          onWatchlist: st?.onWatchlist ?? false,
-          libraryStatus: st?.libraryStatus ?? null,
-          rating: st?.rating ?? null,
-        };
-      });
-    };
+    // Both helpers live in lib/annotateDiscover.ts (shared with /api/home and
+    // the calendar's popular route since 2026-07-28); the `raw`-stripping and
+    // session-gating rules and the incidents behind them are documented there.
+    const persist = (items: any[]) => persistDiscoverBatch(items, userId);
+    const annotate = (items: any[]) => annotateUserState(items, userId);
 
     // ── Search ────────────────────────────────────────────────────
     if (q && q.length >= 2) {

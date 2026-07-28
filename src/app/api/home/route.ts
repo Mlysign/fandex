@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
-import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { get as dbGet } from "@/lib/db";
 
 import { personalizedFeed, decorateSection } from "@/lib/liveDiscover";
-import { persistDiscoverItems } from "@/lib/discoverPersist";
+import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import { fetchGamePage, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
 import { getLibraryFacetAnalysis, pickBestGenre } from "@/lib/libraryAnalysis";
 
@@ -18,46 +17,12 @@ import { getLibraryFacetAnalysis, pickBestGenre } from "@/lib/libraryAnalysis";
 //
 // PR15's session-gated persist rule applies here too: Home is a public route,
 // so an anonymous view must not mint media_items rows either.
+// 2026-07-28: `persist`/`annotate` were a verbatim copy of /api/discover's
+// pair; both now come from lib/annotateDiscover.ts. That also closed a real
+// gap here — the local `persist` never took `userId`, so despite the comment
+// above, an ANONYMOUS Home view did mint media_items rows. It no longer does.
 const RAIL_SIZE = 15;
 const MIN_TAG_COUNT = 3; // best-genre card: don't crown a tag seen on 1-2 items
-
-function persist(items: any[]) {
-  const idMap = items.length ? persistDiscoverItems(items) : new Map<string, string>();
-  return items.map(({ raw, ...it }) => {
-    const uuid = idMap.get(it.id);
-    return uuid ? { ...it, id: uuid } : { ...it, linkable: false };
-  });
-}
-
-function annotate(items: any[], userId: string | null) {
-  if (!userId) return items.map((it) => ({ ...it, platformSources: [], onWatchlist: false, libraryStatus: null, rating: null }));
-
-  const pairs: { source: string; sourceId: string }[] = [];
-  for (const it of items) {
-    for (const [source, sid] of Object.entries(it.ids ?? {})) {
-      if (sid != null) pairs.push({ source, sourceId: String(sid) });
-    }
-  }
-  const idMap = resolveMediaIdsBySource(pairs);
-  const stateMap = getUserStateMap(userId, [...new Set(idMap.values())]);
-
-  return items.map((it) => {
-    let mediaItemId: string | undefined;
-    for (const [source, sid] of Object.entries(it.ids ?? {})) {
-      if (sid == null) continue;
-      const mid = idMap.get(`${source}:${sid}`);
-      if (mid) { mediaItemId = mid; break; }
-    }
-    const st = mediaItemId ? stateMap.get(mediaItemId) : undefined;
-    return {
-      ...it,
-      platformSources: st?.platformSources ?? [],
-      onWatchlist: st?.onWatchlist ?? false,
-      libraryStatus: st?.libraryStatus ?? null,
-      rating: st?.rating ?? null,
-    };
-  });
-}
 
 export async function GET() {
   try {
@@ -106,9 +71,9 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      popular: annotate(persist(popular), userId),
-      upcoming: annotate(persist(upcoming), userId),
-      recommendation: annotate(persist(recommendation), userId),
+      popular: annotateUserState(persistDiscoverBatch(popular, userId), userId),
+      upcoming: annotateUserState(persistDiscoverBatch(upcoming, userId), userId),
+      recommendation: annotateUserState(persistDiscoverBatch(recommendation, userId), userId),
       stats,
     });
   } catch (e: any) {

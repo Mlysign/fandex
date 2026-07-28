@@ -5,7 +5,7 @@ import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_LABELS } from "@/lib/constants";
 import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
-import { FacetPill, VocabMatch, SortKey, LIBRARY_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort } from "@/components/discovery/types";
+import { FacetPill, VocabMatch, SortKey, LIBRARY_SORTS, UiFilters, MembershipFilters, defaultUiFilters, normalizeSort, countActiveAdvanced } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -189,6 +189,7 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
   };
 
   const advFilters: UiFilters = { ...defaultUiFilters(), types, includeFacets, excludeFacets, yearRange, membership };
+  const advancedActiveCount = countActiveAdvanced(advFilters);
   const patchAdvanced = (patch: Partial<UiFilters>) => {
     if (patch.yearRange) setYearRange(patch.yearRange);
     if (patch.membership) setMembership(patch.membership);
@@ -229,26 +230,25 @@ export default function MyStuffView({ route, initialTab }: { route: "library" | 
 
   return (
     <div className="min-h-screen">
-      {/* Page title row — each route keeps its own heading + count, tied to
-          the ROUTE (not the active tab), same as before the merge. */}
-      {!loading && (
-        <div className="max-w-6xl mx-auto px-6 pt-6 pb-1 flex items-baseline justify-between">
-          <h1 className="font-serif text-serif-lg text-text-primary">{route === "library" ? "Library" : "Wishlist"}</h1>
-          <span className="font-mono text-meta text-text-secondary">
-            {route === "library" ? `${ratedCount} rated` : `${savedCount} saved`}
-          </span>
-        </div>
-      )}
-      <LibraryWishlistTabs active={activeTab} onChange={setActiveTab} />
+      {/* 2026-07-28: the visible "Library"/"Wishlist" <h1> + rated/saved count
+          row is gone (Nils: "remove all headlines"). The route's own framing now
+          comes from the nav and the tab strip. The heading survives sr-only so
+          the page keeps a document outline; the count moved into SubBar's
+          existing result-count eyebrow, where every other list page shows it. */}
+      <h1 className="sr-only">{route === "library" ? "Library" : "Wishlist"}</h1>
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
+        tabs={<LibraryWishlistTabs active={activeTab} onChange={setActiveTab} />}
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder={route === "library" ? "Search your library…" : "Search your wishlist…"}
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
+        advancedActiveCount={advancedActiveCount}
+        resultCount={loading ? null : route === "library" ? ratedCount : savedCount}
+        resultNoun={route === "library" ? "rated" : "saved"}
         view={effView}
         onViewChange={() => {}}
         availableViews={availableViews}

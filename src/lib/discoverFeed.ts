@@ -24,11 +24,36 @@ const offsetISO = (days: number) => new Date(Date.now() + days * 86400000).toISO
 
 export type Direction = "future" | "past";
 
+/** An explicit provider date range, overriding the direction-derived one. */
+export interface DateRange { gte: string; lte: string }
+
 // Date range for a direction. Past = [today-window, today]; future = [today, today+window].
-export function dateWindow(direction: Direction): { gte: string; lte: string } {
+export function dateWindow(direction: Direction): DateRange {
   return direction === "past"
     ? { gte: offsetISO(-DAYS_WINDOW), lte: todayISO() }
     : { gte: todayISO(), lte: offsetISO(DAYS_WINDOW) };
+}
+
+// The calendar asks providers for ONE month at a time, which the 18-month
+// direction windows can't express. `month` is "YYYY-MM"; the range is inclusive
+// of both the first and the last day. Built with UTC arithmetic (day 0 of the
+// NEXT month = last day of this one) so it can't drift by a day across a DST
+// boundary the way a local-time Date would.
+export function monthWindow(month: string): DateRange {
+  const [y, m] = month.split("-").map(Number);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+    throw new Error(`monthWindow: bad month "${month}"`);
+  }
+  const iso = (d: Date) => d.toISOString().split("T")[0];
+  return {
+    gte: iso(new Date(Date.UTC(y, m - 1, 1))),
+    lte: iso(new Date(Date.UTC(y, m, 0))),
+  };
+}
+
+/** True when a window has already fully elapsed — picks past-appropriate ranking. */
+export function isPastWindow(win: DateRange): boolean {
+  return win.lte < todayISO();
 }
 
 // A live discover item, enriched with scoring inputs. The first block matches
@@ -65,12 +90,19 @@ export interface FeedCandidate {
   originalLanguage: string | null;
   voteCount: number;             // crowd-vote sample size (community floor)
   voteAverage: number | null;    // 0–10 normalized crowd score
+  // Each provider's OWN popularity metric, on its own scale — TMDB `popularity`,
+  // RAWG `added`, IGDB `hypes`/`total_rating_count`. Comparable only against
+  // other candidates from the same source; popularMonth.ts is what makes it
+  // comparable across sources. Distinct from voteCount (sample size) and
+  // voteAverage (quality): this is reach/attention, which is what "popular
+  // releases this month" actually means.
+  popularity: number | null;
 }
 
-export async function fetchGamePage(page = 1, direction: Direction = "future"): Promise<FeedCandidate[]> {
+export async function fetchGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
   // Order by popularity (`-added`) within the window so notable games surface
   // first; the personalized feed re-ranks, the client date-sorts for display.
-  const { gte, lte } = dateWindow(direction);
+  const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.rawg.io/api/games?key=${RAWG_KEY}` +
       `&dates=${gte},${lte}&ordering=-added&page_size=40&page=${page}`
@@ -91,13 +123,14 @@ export async function fetchGamePage(page = 1, direction: Direction = "future"): 
     originalLanguage: null, // RAWG list carries no language; not language-relevant for games
     voteCount: g.ratings_count ?? 0,
     voteAverage: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0–5 → 0–10
+    popularity: typeof g.added === "number" ? g.added : null, // the metric `-added` orders by
   }));
 }
 
-export async function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY): Promise<FeedCandidate[]> {
+export async function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY, window?: DateRange): Promise<FeedCandidate[]> {
   // `discover` with a release-date window sorted by popularity. With `region` set,
   // TMDB filters by + returns that country's release date (T22).
-  const { gte, lte } = dateWindow(direction);
+  const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${region}` +
@@ -115,11 +148,12 @@ export async function fetchMoviePage(page = 1, direction: Direction = "future", 
     originalLanguage: m.original_language ?? null,
     voteCount: m.vote_count ?? 0,
     voteAverage: typeof m.vote_average === "number" && m.vote_average > 0 ? m.vote_average : null,
+    popularity: typeof m.popularity === "number" ? m.popularity : null,
   }));
 }
 
-export async function fetchShowPage(page = 1, direction: Direction = "future"): Promise<FeedCandidate[]> {
-  const { gte, lte } = dateWindow(direction);
+export async function fetchShowPage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+  const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&first_air_date.gte=${gte}` +
@@ -137,18 +171,28 @@ export async function fetchShowPage(page = 1, direction: Direction = "future"): 
     originalLanguage: s.original_language ?? null,
     voteCount: s.vote_count ?? 0,
     voteAverage: typeof s.vote_average === "number" && s.vote_average > 0 ? s.vote_average : null,
+    popularity: typeof s.popularity === "number" ? s.popularity : null,
   }));
 }
 
 // IGDB upcoming games (second game source). Covers/genres/themes come straight
-// off the list payload, so these score + render without hydration. `past` and
-// unconfigured both no-op (IGDB ranks by `hypes`, only meaningful for upcoming).
-export async function fetchIgdbGamePage(page = 1, direction: Direction = "future"): Promise<FeedCandidate[]> {
-  if (direction === "past" || !igdbConfigured()) return [];
-  const { gte, lte } = dateWindow(direction);
+// off the list payload, so these score + render without hydration.
+//
+// The bare `direction === "past"` bail this used to open with was about RANKING,
+// not coverage: `hypes` (pre-release follow count) is meaningless once a game is
+// out, so a past pull would have returned an arbitrary slice. With an explicit
+// `window` the caller wants THAT month whichever side of today it falls on, so
+// pick the ranking from the window instead of refusing to answer — a past month
+// ranks by how many people ended up rating the game. Only the direction-derived
+// path (which spans 18 months back, all of it stale) still no-ops.
+export async function fetchIgdbGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+  if (!igdbConfigured()) return [];
+  if (!window && direction === "past") return [];
+  const win = window ?? dateWindow(direction);
+  const { gte, lte } = win;
   const gteU = Math.floor(new Date(gte).getTime() / 1000);
   const lteU = Math.floor(new Date(lte).getTime() / 1000);
-  const games = await discoverIgdbUpcoming(gteU, lteU, 40, (page - 1) * 40);
+  const games = await discoverIgdbUpcoming(gteU, lteU, 40, (page - 1) * 40, isPastWindow(win) ? "total_rating_count" : "hypes");
   return games.map((g: any): FeedCandidate => ({
     id: `igdb-${g.id}`, rawId: g.id, source: "igdb", type: "game",
     title: g.name, releaseDate: igdbReleaseDate(g),
@@ -169,6 +213,9 @@ export async function fetchIgdbGamePage(page = 1, direction: Direction = "future
     originalLanguage: null,
     voteCount: g.total_rating_count ?? 0,
     voteAverage: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null, // 0–100 → 0–10
+    // Mirrors the sort actually used above: anticipation ahead of release,
+    // rating volume after it.
+    popularity: (typeof g.hypes === "number" ? g.hypes : null) ?? (typeof g.total_rating_count === "number" ? g.total_rating_count : null),
   }));
 }
 
@@ -195,6 +242,10 @@ function traktToCandidate(entry: any, type: MediaType, win: { gte: string; lte: 
     originalLanguage: m.language ?? null,
     voteCount: m.votes ?? 0,
     voteAverage: typeof m.rating === "number" && m.rating > 0 ? m.rating : null,
+    // Trakt's list is already an anticipation RANKING with no per-item reach
+    // metric; there's nothing honest to put here. (Trakt is also excluded from
+    // the calendar's popular pull — /movies/anticipated takes no date param.)
+    popularity: null,
   };
 }
 

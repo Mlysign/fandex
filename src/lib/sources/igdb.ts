@@ -107,15 +107,26 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
 // "how excited are people" signal for unreleased titles (better than RAWG's
 // popularity for upcoming). Excludes ports/remasters/editions (parent/version)
 // so the canonical base game surfaces. No-ops when IGDB isn't configured.
-export async function discoverIgdbUpcoming(gte: number, lte: number, limit = 40, offset = 0): Promise<any[]> {
+// `sort` is constrained to a closed set rather than interpolated freely — it
+// lands in an Apicalypse query string, and the rest of this file is careful to
+// only ever inject through safeInt/sanitizeApicalypseSearch. `hypes` is the
+// right ranking for a window that's still ahead of us; for a window already in
+// the past nobody is hyped any more, so rank by how many people ended up rating
+// it (the same signal discoverIgdbByTag uses).
+export type IgdbDiscoverSort = "hypes" | "total_rating_count";
+
+export async function discoverIgdbUpcoming(
+  gte: number, lte: number, limit = 40, offset = 0, sort: IgdbDiscoverSort = "hypes"
+): Promise<any[]> {
   if (!igdbConfigured()) return [];
+  const sortField = sort === "total_rating_count" ? "total_rating_count" : "hypes";
   try {
     return await igdbQuery(
       "games",
       `${GAME_FIELDS} ` +
         `where first_release_date >= ${safeInt(gte, 0)} & first_release_date <= ${safeInt(lte, 0)} ` +
         `& version_parent = null & parent_game = null; ` +
-        `sort hypes desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`
+        `sort ${sortField} desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`
     );
   } catch { return []; }
 }

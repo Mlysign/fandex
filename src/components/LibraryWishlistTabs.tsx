@@ -22,9 +22,12 @@ const TABS: { key: MyStuffTab; label: string; Icon: typeof LibraryIcon }[] = [
   { key: "rated", label: "Rated", Icon: Star },
 ];
 
+// 2026-07-28: the outer `max-w-6xl mx-auto px-6 pt-4` wrapper is gone — the
+// strip now renders INSIDE SubBar (between the type chips and the search box,
+// per the shared page order), which already supplies the container and padding.
 export default function LibraryWishlistTabs({ active, onChange }: { active: MyStuffTab; onChange: (tab: MyStuffTab) => void }) {
   return (
-    <div className="max-w-6xl mx-auto px-6 pt-4" role="tablist" aria-label="Filter your library and wishlist">
+    <div role="tablist" aria-label="Filter your library and wishlist">
       <div className="flex items-center gap-5 border-b border-border">
         {TABS.map(({ key, label, Icon }) => {
           const isActive = key === active;

@@ -3,11 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Library as LibraryIcon, Bookmark, Star, Trophy } from "lucide-react";
-import Logo from "@/components/Logo";
 import SignInDialog from "@/components/auth/SignInDialog";
 import Rail from "@/components/Rail";
 import Button from "@/components/ui/Button";
-import TypeFilter from "@/components/ui/TypeFilter";
+import SubBar from "@/components/SubBar";
 import PosterCard from "@/components/PosterCard";
 import Panel from "@/components/ui/Panel";
 import Eyebrow from "@/components/ui/Eyebrow";
@@ -16,6 +15,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
 import { buildItemHref } from "@/lib/itemUrl";
+import { usePersistedState } from "@/lib/usePersistedState";
+import { MediaType } from "@/types";
 
 // H1.6e — the real Home: `/` is the public browse anchor of the H1 IA. Anon
 // gets a compact sign-in hero + the same public Popular/Upcoming rails
@@ -62,7 +63,10 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [activeTypes, setActiveTypes] = useState<string[]>([]);
+  // SM2's shared key — one media-type setting across Home / Discover / Library
+  // / Wishlist / Calendar (2026-07-28). This was plain useState and reset on
+  // every visit, so Home ignored a filter the user had set two pages ago.
+  const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
   const [showSignIn, setShowSignIn] = useState(false);
 
   const load = useCallback(() => {
@@ -88,7 +92,7 @@ export default function HomePage() {
   // mockup shows a single `.filterrow` above all carousels, not per-rail
   // controls). Purely client-side over already-fetched items — no refetch.
   const toggleType = (t: string) =>
-    setActiveTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+    setActiveTypes((prev) => (prev.includes(t as MediaType) ? prev.filter((x) => x !== t) : [...prev, t as MediaType]));
   const byType = (items: any[] | undefined) =>
     !items ? items : activeTypes.length === 0 ? items : items.filter((i) => activeTypes.includes(i.type));
 
@@ -104,29 +108,20 @@ export default function HomePage() {
   const hasAnyContent = !!(data && (data.popular.length || data.upcoming.length || data.recommendation.length));
 
   return (
-    <main className="min-h-screen px-5 py-4 md:py-10">
-      <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
-        {/* Brand row — MOBILE ONLY. The mockup is a 360px frame where AppNav is
-            a bottom bar carrying no brand, so the page supplies its own
-            mark + wordmark (+ Sign in for anon). On desktop AppNav's top bar
-            already shows both, so repeating them here would just be a second
-            logo on the same screen (D-D: derive desktop, don't copy the
-            mobile frame literally).
-            2026-07-27: replaced the big centred logo + "Fandex" headline +
-            "Track your wishlists…" flavour paragraph + the 4-provider button
-            stack, none of which the mockup has. */}
-        <div className="flex md:hidden items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Logo size={26} />
-            <span className="font-serif text-serif-lg text-text-primary">Fandex</span>
-          </div>
-          {!authed && !loading && (
-            <Button variant="primary" size="sm" pill onClick={() => setShowSignIn(true)}>Sign in</Button>
-          )}
-        </div>
+    <div className="min-h-screen">
+      {/* 2026-07-28 (Nils: "no fandex logo on home"): the mobile-only brand row
+          — mark + wordmark + an anon "Sign in" button — is gone. Nothing needed
+          re-homing: the bottom nav's "You" slot opens the same SignInDialog, and
+          the Guest-mode panel just below has "Create account". Desktop never had
+          this row (AppNav's top bar carries the brand). */}
+      <h1 className="sr-only">Fandex</h1>
 
-        {/* Media-type filter — one control, applies to every rail below. */}
-        <TypeFilter activeTypes={activeTypes} onToggleType={toggleType} />
+      {/* The shared page header, same order as every other list page: media type
+          filters first. Home has no tabs, nothing to search and no sort. */}
+      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableViews={[]} />
+
+      <main className="px-5 py-4 md:py-8">
+        <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
 
         {/* Anon: the mockup's GUEST MODE panel, in place of the old provider
             button stack (sign-in now runs through the same SignInDialog the
@@ -184,7 +179,8 @@ export default function HomePage() {
             {rail("Upcoming", data?.upcoming, "/calendar")}
           </div>
         )}
-      </div>
+        </div>
+      </main>
 
       {showSignIn && (
         <SignInDialog
@@ -195,6 +191,6 @@ export default function HomePage() {
           onAuthenticated={() => window.location.reload()}
         />
       )}
-    </main>
+    </div>
   );
 }
