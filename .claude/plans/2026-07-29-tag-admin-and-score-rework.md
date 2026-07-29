@@ -312,7 +312,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: add a test pinning the item-page and facet-page averages to the same source value.
   - Depends on: T2
 
-- [ ] **T12** — Facet page: render library items with ratings and scores from the start
+- [x] **T12** — Facet page: render library items with ratings and scores from the start
   - Files: `src/components/facet/PublicFacetView.tsx`, `src/app/api/facet/mine/route.ts`
   - Detail: For **logged-in viewers only**, do not render the item grid until both the provider
     items and `/api/facet/mine` have resolved; show a skeleton meanwhile. This removes both the
@@ -421,6 +421,46 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T12 verification (2026-07-29) — logged-in gate on `/tag/action`, confound-free
+before/after comparison:**
+- Design: `facetSsr.tsx`'s `resolve()` already called `getSession()` once for the
+  `persist` decision; restructured it to also return `hasSession`, avoiding a SECOND
+  `getSession()` call (which isn't itself `cache()`-wrapped — `src/lib/session.ts` is
+  on this plan's Do-Not-Touch list, so the fix works around it rather than touching
+  it). `PublicFacetView` receives `isLoggedIn` as a plain prop and gates a new
+  `minePending` state (`useState(isLoggedIn)`) — true only for a logged-in viewer
+  until the first `/api/facet/mine` settles (success or failure), then never flips
+  back true on a later "load more" re-fetch. No more client-side `probeSession()`
+  round-trip in this component at all.
+- Anon SSR check: `curl` (no cookies) `/tag/action` before vs after the change, same
+  live dev-server process (a full restart confounds this — Turbopack's chunk hashes
+  AND live TMDB/RAWG "sample" fetch results both vary across process restarts,
+  independent of any code change — confirmed by diffing two back-to-back captures
+  of the SAME code before touching anything, which differed at first, then
+  diffing again with a warm cache and no restart, which came back byte-identical).
+  Stashed T12's two files (hot-reload only, no restart) and captured the visible
+  text (script/style stripped): **zero diff** against a same-process capture with
+  T12 active.
+- Authed check: `curl` with the real session cookie shows the RSC payload still
+  carries the full item data (needed for hydration) but the VISIBLE text is only
+  the header/stats/"Titles" heading + "Load more" (218 chars) — **12** skeleton
+  `animate-pulse` placeholders render, zero item titles. In the actual browser,
+  ~2s after navigation the skeleton was gone (0 pulses) and the grid showed real
+  items with scores/ratings already attached (e.g. "The Avengers … 57", "Grand
+  Theft Auto V … 8") — no item ever appeared unrated in between.
+- Not literally network-throttled (no throttle control in this session's browser
+  tooling) — verified instead by code-path analysis: the skeleton is present in
+  the raw SSR bytes for an authed request regardless of connection speed (proven
+  by the curl capture above), and the grid render is strictly gated on
+  `!minePending`, which only clears once the mine fetch settles — so a slower
+  connection only lengthens the skeleton window, it cannot produce an
+  unrated-item flash.
+- Known minor gap, not in T12's scope: the "Load more" button stays visible/
+  clickable during the skeleton phase (it's gated separately, by `hasMore`, not
+  `minePending`) — clicking it before the first mine fetch settles would append
+  more items behind an already-shown skeleton rather than being blocked. Left
+  alone since T12 is about the initial grid render, not pagination.
 
 **T11 verification (2026-07-29) — facet page's "your average" now reads the SAME
 Bayesian figure the item page/Insights show, for three tags spanning thin to heavy
