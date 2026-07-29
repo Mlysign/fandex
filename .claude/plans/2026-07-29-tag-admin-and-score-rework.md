@@ -135,7 +135,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
 
 ## Tasks
 
-- [ ] **T1** — Add the four selection-count knobs to the scoring config
+- [x] **T1** — Add the four selection-count knobs to the scoring config
   - Files: `src/lib/scoringDefaults.ts`, `src/lib/schemas.ts`, `src/lib/scoringConfig.ts`
   - Detail: Add `topTagsPositive: 5`, `topTagsNegative: 3`, `topPeople: 3`, `topCompanies: 2` to
     `ScoringConfigValues` and `DEFAULT_SCORING_CONFIG`. Remove `perCategoryCap` from the interface
@@ -148,7 +148,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     *without* the new fields still reads back the four defaults.
   - Depends on: none
 
-- [ ] **T2** — Rewrite `computeFandexScore` as an unbounded raw sum over a bounded selection
+- [x] **T2** — Rewrite `computeFandexScore` as an unbounded raw sum over a bounded selection
   - Files: `src/lib/discovery.ts`
   - Detail: Replace the per-category cap block and the weighted-mean block (roughly lines 460–521)
     with:
@@ -173,7 +173,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     legitimately exceeding 100 or falling below 0 being returned unclamped.
   - Depends on: T1
 
-- [ ] **T3** — Calibrate `K` and re-anchor `BAND_MARGIN` against the real library
+- [x] **T3** — Calibrate `K` and re-anchor `BAND_MARGIN` against the real library
   - Files: `scripts/calibrate-fandex.mjs` (new), `src/lib/scoringDefaults.ts`,
     `src/components/FandexScoreBadge.tsx`
   - Detail: Write a script (pattern-match `scripts/rehearse-prune.mjs`; it must open
@@ -403,3 +403,21 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
 ## Blockers log
 
 ## Session log
+
+**T3 finding — systemic `import type` gap (2026-07-29):** writing
+`scripts/calibrate-fandex.mjs` surfaced that Node's native type-stripping (used by
+`scripts/alias-hooks.mjs` for every `rehearse-*.mjs`/`calibrate-*.mjs` script) only
+erases syntactically type-only constructs, not type-directed ones — a plain
+`import { Foo } from "mod"` where `Foo` is a type/interface throws
+`SyntaxError: does not provide an export named 'Foo'` at load time, even though
+tsc/webpack/SWC (and therefore `next dev`/`build`, `tsc --noEmit`, `vitest`) all
+elide it correctly and see nothing wrong. Every export of `src/types/index.ts` is a
+type with zero runtime presence, so ANY plain `import { X } from "@/types"` has this
+latent bug; grepping `^import \{[^}]*\} from "@/types"` across `src/` turns up ~50
+files, only 10 of which were on this script's actual import chain (fixed in
+`4718d13`). The other ~40 are unaffected today (no script reaches them) but will hit
+the identical wall the next time someone writes a `scripts/*.mjs` that imports them.
+**Recommendation:** enable `@typescript-eslint/consistent-type-imports` repo-wide (or
+at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
+commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
+separate, mechanical PR, not something to bundle into this plan.
