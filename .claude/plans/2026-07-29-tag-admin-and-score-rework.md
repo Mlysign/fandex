@@ -189,7 +189,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — covered by T2. The script is a measurement tool, not shipped behaviour.
   - Depends on: T2
 
-- [ ] **T4** — Drop the `/100` framing from the score badge
+- [x] **T4** — Drop the `/100` framing from the score badge
   - Files: `src/components/FandexScoreBadge.tsx`, `src/components/PosterCard.tsx`
   - Detail: Remove the visible `/100` span (`:84`) and change the aria-label (`:51`) from
     `"Fandex Score ${rounded} out of 100 — ${matchStrength(...)}"` to
