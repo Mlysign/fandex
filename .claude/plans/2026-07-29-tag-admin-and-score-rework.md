@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-29-tag-admin-and-score-rework
 created: 2026-07-29
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -384,7 +384,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none
   - Depends on: none
 
-- [ ] **T17** — Full verification pass, docs, and commit
+- [x] **T17** — Full verification pass, docs, and commit
   - Files: `STATUS.md`, `TASKS.md`, `docs/fandex-score.md`
   - Detail: Run `npx tsc --noEmit`, `npm run lint` (must be 0 errors), `npm test`. Stop the dev
     server, then run a production build to confirm it compiles. Log in via `GET /api/dev/login` and
@@ -621,3 +621,54 @@ first to make room under the 200-line CI guard — TASKS.md was at 187/200 lines
 archiving, 145 after, 156 after adding the new section (archiving trims detail into a
 one-line pointer + brief win list, per the file's existing convention for closed-out
 sections). STATUS.md's digest gained a matching `👉 2026-07-29` entry at the top.
+
+**T17 (2026-07-29) — final verification pass, all green:**
+
+- `npx tsc --noEmit` — clean, zero errors.
+- `npm run lint` — 0 errors, 383 pre-existing `no-explicit-any` warnings (none touched
+  by this batch, all in files this plan never edited).
+- `npm test` — 402 passed, 1 pre-existing skip, 52 test files, no failures.
+- Stopped the dev server (was bound to port 3000 from earlier in the session) and ran
+  `npm run build` — compiled clean, all 61 routes generated including the new
+  `/api/dev/scoring/tags` route from T6.
+- Manually verified live, logged in via `GET /api/dev/login`:
+  - **Tag table:** searched "cyberpunk", reassigned its category live (`POST
+    /api/dev/scoring/overrides` → 200), reloaded the page cold and confirmed the new
+    category persisted, then reverted it. Bundled "cyberspace" as an alias of
+    "Cyberpunk" (`POST /api/dev/scoring/aliases` → 200, distinct-tag count dropped
+    5190→5189), confirmed the aka chip rendered with a working "Remove" button, then
+    unbundled it (`DELETE .../aliases` → 200) to restore state. "People & Characters"
+    (created in an earlier session) is still present, confirming T5's slug-derivation
+    fix holds across restarts.
+  - **Inline picker:** opened Pan's Labyrinth's Fandex Score breakdown — every tag
+    reason shows a live category `<select>` inline, matching T9's wiring.
+  - **Per-tag impact:** the breakdown's tag rows show `+4.9`/`+4.0`-style impact
+    numbers next to each facet (T10); a JS query confirmed the same shape renders in
+    the redesigned hover tooltip (T15) for the same item, with matching sign/value.
+  - **Rate quick action (T13):** opened the star picker at both desktop (1280px) and
+    375px mobile width; measured the "Rate 10 out of 10" button's real bounding box
+    both times — fully within the viewport, zero clipping ancestor. (Two earlier
+    attempts at 375px appeared to navigate to the item page instead of opening the
+    picker — traced to the browser-automation tool's click landing before a layout
+    settle, not a product bug: a native `element.click()` on the exact same DOM node
+    opened the picker with no navigation and no console error. `ActionCells.tsx`'s
+    `stop()` handler already does both `preventDefault()` and `stopPropagation()`
+    specifically to defeat the wrapping `<Link>`'s native navigation, per its own
+    N3-era comment — confirmed still correct.)
+  - **Back button (T14):** in-app case (Discover → Pan's Labyrinth → Back) returned to
+    Discover via `router.back()`. Fallback case (a fresh browser tab hard-navigated
+    straight to the item URL, simulating a shared link with no in-app history) fell
+    back to `/discover` correctly.
+  - **Facet page load (T12):** confirmed `GET /api/facet/mine` fires and resolves
+    200 for `/person/guillermo-del-toro` while logged in; page renders scored titles
+    only after it resolves, consistent with the `minePending` gate.
+  - Zero console errors and zero server errors across the entire manual pass
+    (`read_console_messages`/`preview_logs`, checked at the end).
+- Updated `docs/fandex-score.md`: §3.3 rewritten for the raw-sum/top-N model (replaces
+  the weighted-mean description, kept as struck-through history per the doc's existing
+  "Revised by Q19" convention), §3.4 documents the new canonical `facetImpact()`, §5's
+  taxonomy-editor paragraph now describes the tag table, D1/D3 decisions annotated as
+  superseded with a pointer to §3.3.
+- No systems-level follow-up beyond what's already logged in TASKS.md's T16 section
+  (priorStrength/weight re-tuning, `capped` long-term treatment, and the T9 stale-
+  grouping finding) — those three are the honest open ends of this batch.

@@ -49,20 +49,29 @@ Every facet maps to one **weight class** with a tunable weight `W`:
 
 Director outweighs a setting tag because `W(director) > W(setting)`, all set from the backend — no code change to rebalance.
 
-### 3.3 Item aggregate → 0–100
+### 3.3 Item aggregate → an unbounded raw sum over a top-N selection
+
+**Revised 2026-07-29 (T1–T2, `.claude/plans/2026-07-29-tag-admin-and-score-rework.md`) — replaces the weighted-mean model below.** The weighted mean + per-category cap made a facet's *displayed* contribution item-dependent (the same tag's impact shrank or grew depending on how many other facets the item carried and which category cap it competed inside), and divided the visible spread down to a 40–80 range that read as "everything scores about the same." Both are fixed by switching to a **raw sum over a fixed top-N selection**, with density bias controlled structurally (by the selection count) instead of by a divisor:
 
 ```
-weightedDev = Σ_f [ dev_f · W(class_f) ]  /  Σ_f W(class_f)      // weighted MEAN, not sum
-center      = baseline · 10                                     // your own mean rating, 0–10 → 0–100
-K           = weightedDev >= 0 ? K_up : K_down                   // asymmetric gain
-FandexScore = clamp( center + K · weightedDev , 0 , 100 )
+kept = topTagsPositive(5) ∪ topTagsNegative(3) ∪ topPeople(3) ∪ topCompanies(2)   // sorted by |dev·W|, counts tunable in /dev/scoring
+rawSum = Σ_f∈kept [ dev_f · W(class_f) ]                          // sum, not mean — no divisor
+center = baseline · 10                                           // your own mean rating, 0–10 → 0–100
+gain   = rawSum >= 0 ? mappingConstantUp : mappingConstantDown    // asymmetric gain
+FandexScore = center + gain · rawSum                              // NO clamp — fully unbounded by design
 ```
 
-- A **weighted mean** (divide by total weight) keeps facet-dense items from inflating just by carrying more tags. A **per-category cap** (e.g. count at most the top 3 theme tags) further prevents 20 theme tags swamping one director.
-- **Q19 (2026-07-19, revises the original fixed-50 center):** the center is your own mean rating (the same number Insights shows as "your average"), not a fixed 50 — a fixed center meant roughly half of any library scored below 50 by construction, reading as "you won't like most things." The center is **derived, never a config knob**. `K_up`/`K_down` are separately tunable so an above-average item can swing up faster than a below-average one swings down, skewing the visible range toward enthusiasm.
-- Everything here (`C`, all `W`, `K_up`, `K_down`, the caps) except the center is developer-tunable (§5).
+- **People and companies get their own separate top-N buckets**, not lumped in with tags — a director doesn't compete with a genre tag for a slot.
+- **No clamping or damping anywhere in this formula** (explicit user decision, 2026-07-29): the visible spread is whatever the selected facets' real deviations produce. `K` (`mappingConstantUp`/`Down`) was recalibrated from 10 to **25.4** for this shape (`scripts/calibrate-fandex.mjs`, T3) against the real 3,848-item catalog, landing a distribution of 46.4–97.1 with zero clamping.
+- A facet outside the top-N for a given item is `capped: true` in the breakdown — still shown (greyed), with its real would-be impact number, not a flat "—".
+- Because the sum no longer divides by anything, **a tag's contribution is the same number everywhere it's shown** — the item breakdown, the tag facet page, and every tag chip's hover picker all read `facetImpact()` (§3.4), not a per-item recomputation.
+- **Q19 (2026-07-19, still holds):** the center is your own mean rating (the same number Insights shows as "your average"), not a fixed 50 — a fixed center meant roughly half of any library scored below 50 by construction, reading as "you won't like most things." The center is **derived, never a config knob**.
+- Everything here (`C`, all `W`, `mappingConstantUp/Down`, and the four top-N counts) except the center is developer-tunable in `/dev/scoring`'s Weights & Tuning panel.
+- **Open question, not yet revisited:** `priorStrength` (`C`) and the per-role class weights were tuned against the old weighted-mean's compression — nobody has re-validated them against this raw-sum shape yet. See TASKS.md's 2026-07-29 section.
 
 ### 3.4 Explainability payload
+
+**Revised 2026-07-29 (T10):** each reason now also carries a canonical `impact` number, computed by `facetImpact(id, profile, config) = gain · profile.w.get(id)` — item-independent (it doesn't matter which item you're looking at a facet from), and equal to `contribution` for any facet that made the top-N cut. This is the number now shown on the item breakdown, the tag facet page, and the hover tooltip alike — previously these three surfaces each computed their own version and disagreed (a real `classWeight`-missing bug in `/api/facet/mine`, and a plain-mean-vs-Bayesian-average mismatch in `facetDetail.ts`, were both root causes, now fixed).
 
 The existing `reasons[]` already carries `label / kind / role / category / contribution`. Extend each with `BA_f` and `n_f` so the expanded view can read:
 
@@ -82,7 +91,7 @@ A gated `/dev/scoring` route (admin-only — see open decision D5). Two panels:
 
 **Weights & tuning.** Number/slider inputs for every role weight, every category weight, the prior strength `C`, the mapping constant `K`, and per-category caps. A live preview scores a sample item as you drag, showing the breakdown update in real time.
 
-**Taxonomy editor.** CRUD for tag categories (id, label, color, `weight`, `ignored`); assign/reassign individual tag keys to a category; a triage view listing high-frequency tags currently falling into `other` so they can be sorted. Creating a "Modes & Perspectives" category and dropping `co-op` into it happens here, no deploy.
+**Taxonomy editor.** CRUD for tag categories (id, label, color, `weight`, `ignored`); assign/reassign individual tag keys to a category. **Rebuilt 2026-07-29 (T5–T7)** as a single searchable/filterable tag table (tag, catalog count, category dropdown, aka) replacing the old triage-view-plus-separate-bundle-UI: aliasing a tag into another folds both into one row and removes it from the count of distinct tags; category reassignment here is the same `TagCategoryPicker` control that now also appears inline on every tag chip across the app (item page, facet pages, Insights) — reassigning a tag's category from *any* of those surfaces updates the same override. Creating a "Modes & Perspectives" category and dropping `co-op` into it happens here, no deploy.
 
 All config lives in the DB and cache-busts the profile/score caches on save.
 
@@ -123,9 +132,9 @@ A future pass could still tune `C` / role weights now that the spread is legible
 
 ## 10. Decisions (locked 2026-07-18)
 
-- **D1 — Score semantics: FIXED TRANSFORM.** `FandexScore = clamp(center + K·weightedDev, 0, 100)`. Deterministic; center = matches your baseline exactly. No percentile (a percentile number would drift as the catalog grows). **Revised by Q19 (2026-07-19):** center is your own mean rating (×10), not a fixed 50 — see §3.3. `K` is now asymmetric (`K_up`/`K_down`) — still deterministic, still no percentile, just a two-piece linear map instead of one.
+- **D1 — Score semantics: FIXED TRANSFORM.** `FandexScore = center + gain·rawSum`. Deterministic; center matches your baseline exactly. No percentile (a percentile number would drift as the catalog grows). **Revised by Q19 (2026-07-19):** center is your own mean rating (×10), not a fixed 50 — see §3.3. **Revised again 2026-07-29 (T2):** the clamp is gone — fully unbounded by explicit user decision — and `K` is now `mappingConstantUp`/`Down`, still asymmetric, still deterministic.
 - **D2 — Facet rarity (IDF): DROP from the visible score.** The score is purely *your taste × facet weights* — fully transparent. IDF may remain only as a Discover-*sort* signal, never in the number shown. (`scoreFacets()` must stop applying `idf` when computing the Fandex Score.)
-- **D3 — Aggregate: WEIGHTED MEAN + per-category cap.** Divide by total weight; count at most the top few tags per category. Facet-dense items can't inflate themselves.
+- **D3 — Aggregate: WEIGHTED MEAN + per-category cap.** ~~Divide by total weight; count at most the top few tags per category. Facet-dense items can't inflate themselves.~~ **Superseded 2026-07-29 (T2):** replaced by a **raw sum over a fixed top-N selection** (5 tags-up / 3 tags-down / 3 people / 2 companies) — a divisor made a facet's displayed impact item-dependent, which a fixed selection count doesn't. See §3.3.
 - **D4 — Prior anchor: USER'S OWN BASELINE.** Each facet's Bayesian average shrinks toward the user's personal mean rating `m`. Single-user-clean, no cross-user coupling.
 - **D5 — Admin gate: ENV USER-ID ALLOWLIST.** `/dev/scoring` gated by an env var of allowed user IDs. No schema change; expand later if needed.
 - **D6 — Taxonomy: ONE SHARED taxonomy.** Backend category edits / tag reassignments apply to both scoring and the Insights page — one source of truth. No scoring-only override layer.
