@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
-import { buildProfile, computeFandexScore, itemsWithFacet, getTagVocab, invalidateDiscoveryCache } from "./discovery";
+import { buildProfile, computeFandexScore, itemsWithFacet, getTagVocab, getRawTagCounts, invalidateDiscoveryCache } from "./discovery";
 import {
   canonicalTagKey, applyTagAliases, setTagAlias, deleteTagAlias,
   deleteTagBundle, listTagBundles, invalidateTagAliasCache,
@@ -147,6 +147,27 @@ describe("catalog-side bundling", () => {
     expect(vocab.find((v) => v.key === "scifi")).toBeUndefined();
     expect(vocab.find((v) => v.key === "science fiction")).toBeUndefined();
     expect(vocab.find((v) => v.key === "sci fi")?.count).toBe(2);
+  });
+
+  // T6 (2026-07-29) — the tag admin table's aka chips need each alias
+  // MEMBER's own pre-fold count/label (getTagVocab can't answer this: its
+  // counts are already summed into the canonical, with no row of its own left
+  // for a member to read a count from).
+  it("getRawTagCounts keeps each alias member's own pre-fold count, separate from the folded vocab", () => {
+    setTagAlias("scifi", "sci fi");
+    setTagAlias("science fiction", "sci fi");
+    invalidateDiscoveryCache();
+
+    const raw = getRawTagCounts();
+    expect(raw.get("scifi")).toEqual({ label: "Scifi", count: 1 });
+    expect(raw.get("science fiction")).toEqual({ label: "Science Fiction", count: 1 });
+    // The canonical's OWN raw occurrences (if it ever appeared un-aliased)
+    // stay tracked too — folded only in getTagVocab, not here.
+    expect(raw.get("sci fi")).toBeUndefined(); // never appeared under its own spelling in this seed
+
+    // Not folded: same population getTagVocab summed to 2 stays as two
+    // separate raw entries here.
+    expect(getTagVocab().find((v) => v.key === "sci fi")?.count).toBe(2);
   });
 });
 

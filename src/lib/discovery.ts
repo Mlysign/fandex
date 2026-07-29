@@ -99,7 +99,7 @@ export interface FindRequest {
 
 // ── Candidate cache (whole catalog, user-independent) ──────────────
 const CANDIDATE_TTL_MS = 5 * 60 * 1000;
-let _cache: { sig: string; aliasSig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number> } | null = null;
+let _cache: { sig: string; aliasSig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number>; rawTagCounts: Map<string, { label: string; count: number }> } | null = null;
 
 // ── The catalog POOL (H2b) ───────────────────────────────────────────────────
 //
@@ -164,9 +164,16 @@ function buildCache() {
   const aliases = getTagAliases();
   const vectors: DiscoveryVector[] = [];
   const vocabMap = new Map<string, VocabEntry>();
+  // 2026-07-29 (T6, tag admin table): a byproduct of the SAME pass, not a
+  // second loop — the tag table's aka chips want each alias MEMBER's own
+  // pre-fold count/label (e.g. "rpg (42)"), which vocabMap can't answer since
+  // it's built from the POST-alias facets. Keyed by raw tag key (tags have no
+  // role, so the key alone is the identity — see facets.ts).
+  const rawTagCounts = new Map<string, { label: string; count: number }>();
   for (const { row, links } of groups.values()) {
     const merged = mergeLinks(links, row.type);
-    const facets = applyTagAliases(extractFacets(links, row.type, merged), aliases);
+    const rawFacets = extractFacets(links, row.type, merged);
+    const facets = applyTagAliases(rawFacets, aliases);
     vectors.push({
       id: row.id, type: row.type,
       title: row.title ?? merged.title,
@@ -188,6 +195,12 @@ function buildCache() {
       if (v) v.count++;
       else vocabMap.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, count: 1 });
     }
+    for (const f of rawFacets) {
+      if (f.kind !== "tag") continue;
+      const r = rawTagCounts.get(f.key);
+      if (r) r.count++;
+      else rawTagCounts.set(f.key, { label: f.label, count: 1 });
+    }
   }
 
   // IDF: a facet on most items (Singleplayer, Action) is a weak signal; a rare
@@ -199,7 +212,7 @@ function buildCache() {
 
   const byId = new Map(vectors.map((v) => [v.id, v]));
   const vocab = [...vocabMap.values()].sort((a, b) => b.count - a.count);
-  return { vectors, byId, vocab, idf };
+  return { vectors, byId, vocab, idf, rawTagCounts };
 }
 
 function getCache() {
@@ -226,6 +239,12 @@ export function getCatalogIdf(): Map<string, number> { return getCache().idf; }
 // vocab, sorted by frequency (already the vocab's sort order). Not filtered by
 // category here — the caller (the vocab API route) decides what to show.
 export function getTagVocab(): VocabEntry[] { return getCache().vocab.filter((v) => v.kind === "tag"); }
+
+// T6 (2026-07-29) — pre-alias-fold per-key tag counts, for the tag admin
+// table's aka chips (e.g. "rpg (42)" as a member of "role playing (rpg)").
+// getTagVocab() can't answer this: its counts are POST-fold, so an alias
+// member never gets its own row there.
+export function getRawTagCounts(): Map<string, { label: string; count: number }> { return getCache().rawTagCounts; }
 
 // Q25 (2026-07-19) — same "recover the real label from the catalog" trick as
 // getTagVocab (Q11), for companies. companyKey() strips trailing legal/role
