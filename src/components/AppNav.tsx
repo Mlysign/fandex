@@ -7,6 +7,7 @@ import Logo from "@/components/Logo";
 import SignInDialog from "@/components/auth/SignInDialog";
 import NavSearch from "@/components/NavSearch";
 import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
+import { recordPageView } from "@/lib/navHistory";
 
 // H1.6c — the ONE adaptive navigation component (docs/design/fandex-handoff
 // 03-components.md §1 + D-A). Bottom bar on mobile (<768px, safe-area inset),
@@ -85,6 +86,14 @@ export default function AppNav() {
   const [showSignIn, setShowSignIn] = useState(false);
 
   useEffect(() => { void probeSession().then(setAuthed); }, []);
+
+  // T14 (2026-07-29) — AppNav mounts app-wide (root layout, outside the
+  // per-page {children}) and re-runs on every route change, including
+  // client-side transitions, since it depends on `pathname` — the one place
+  // that can mark "a page was viewed" for EVERY page, not just the ones with
+  // a BackButton. See navHistory.ts for why this beats document.referrer or
+  // history.length alone.
+  useEffect(() => { recordPageView(); }, [pathname]);
 
   const youActive = pathname.startsWith("/profile") || pathname.startsWith("/settings");
 

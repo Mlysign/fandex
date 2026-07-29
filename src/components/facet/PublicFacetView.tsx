@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import GroupedView from "@/components/GroupedView";
 import Menu from "@/components/ui/Menu";
+import BackButton from "@/components/ui/BackButton";
 import { useScrollRestore } from "@/lib/usePersistedState";
 import type { MediaCardItem } from "@/components/cardItem";
 import type { PublicFacetPayload, PublicFacetItem, FacetSort } from "@/lib/detail/publicFacetDetail";
@@ -224,6 +225,12 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel, isLo
   return (
     <div className="min-h-screen bg-surface text-text-primary">
       <main className="max-w-6xl mx-auto px-6 py-6">
+        {/* T14 (2026-07-29) — same BackButton as the item page: /discover is
+            the fallback for a hard-loaded/shared link (a facet page has no
+            single canonical "parent item" to fall back to instead); a real
+            in-app visit uses router.back(), landing you exactly where you were. */}
+        <BackButton fallbackHref="/discover" className="mb-4" />
+
         {/* Header */}
         <div className="flex gap-5">
           {person?.profileUrl && (

@@ -10,6 +10,7 @@ import RatingsSection from "./RatingsSection";
 import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
+import BackButton from "@/components/ui/BackButton";
 
 // P13 — THE item view. One page, one url, for everyone.
 //
@@ -43,6 +44,12 @@ export default function ItemView({ item }: { item: PublicEnrichedItem }) {
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-6">
+      {/* T14 (2026-07-29) — the item and facet pages had no back affordance at
+          all. /discover is the fallback for a hard-loaded/shared link; a real
+          in-app visit (e.g. from Discover, a facet page, Insights) uses
+          router.back() instead, landing you exactly where you were. */}
+      <BackButton fallbackHref="/discover" className="mb-4" />
+
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-8">
         <MediaGallery images={imgs} idx={Math.min(idx, Math.max(0, imgs.length - 1))} setIdx={setIdx} title={item.title} />
 
