@@ -432,9 +432,9 @@ export function fandexCenterFor(profile: Profile): number | null {
 
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
-// `configOverride` (H5.4 live preview): use the draft mappingConstant/
-// perCategoryCap instead of the persisted ones — pass the SAME override
-// object given to buildProfile so K/cap and the role/category weights that
+// `configOverride` (H5.4 live preview): use the draft mappingConstant/top-N
+// selection instead of the persisted ones — pass the SAME override object
+// given to buildProfile so K/selection and the role/category weights that
 // produced `profile` stay consistent with each other.
 export function computeFandexScore(facets: Facet[], profile: Profile, configOverride?: ScoringConfigValues): FandexScoreResult | null {
   if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
@@ -457,37 +457,48 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   }
   if (!matched.length) return null;
 
-  // §3.3/D3: per-category cap, TAGS ONLY — top-N by |dev| per category, so a
-  // facet-dense item (20 theme tags) can't swamp a single strong director
-  // match. People/company roles are naturally low-cardinality per item and
-  // stay uncapped.
-  const byCategory = new Map<string, FandexContrib[]>();
-  const kept: FandexContrib[] = [];
-  // Q29 (2026-07-19): tags beyond the cap used to just vanish — no trace in
-  // the breakdown, so "why isn't this counted" had no visible answer. Tracked
-  // separately (not added to `kept`, so the score math is untouched) and
-  // rendered grayed-out with contribution pinned to 0 below.
-  const capped: FandexContrib[] = [];
-  for (const c of matched) {
-    if (c.f.kind === "tag" && c.f.category) {
-      const arr = byCategory.get(c.f.category) ?? [];
-      arr.push(c);
-      byCategory.set(c.f.category, arr);
-    } else {
-      kept.push(c);
-    }
-  }
-  for (const arr of byCategory.values()) {
-    arr.sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
-    kept.push(...arr.slice(0, cfg.perCategoryCap));
-    capped.push(...arr.slice(cfg.perCategoryCap));
-  }
+  // 2026-07-29: fixed-size top-N selection, replacing the per-category cap.
+  // The aggregate below is now a RAW SUM, not a mean — with no divisor, a
+  // tag's contribution is `gain · dev · classWeight`, independent of every
+  // OTHER facet on the item (the whole point: it's printable on a chip and
+  // means the same thing everywhere). But an unbounded sum over an unbounded
+  // facet count would let a 300-tag item swamp a 5-tag one, so instead of
+  // capping tags per-category we cap by SIGN across the whole item — the
+  // user's framing: "an item with 5 genre tags should count all 5", which a
+  // per-category cap of 3 forbade.
+  const tags = matched.filter((c) => c.f.kind === "tag");
+  const people = matched.filter((c) => c.f.kind === "person");
+  const companies = matched.filter((c) => c.f.kind === "company");
+
+  const tagsPositive = tags.filter((c) => c.dev > 0).sort((a, b) => b.dev - a.dev);
+  const tagsNegative = tags.filter((c) => c.dev < 0).sort((a, b) => a.dev - b.dev); // most negative first
+  const peopleSorted = [...people].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+  const companiesSorted = [...companies].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+
+  const kept: FandexContrib[] = [
+    ...tagsPositive.slice(0, cfg.topTagsPositive),
+    ...tagsNegative.slice(0, cfg.topTagsNegative),
+    ...peopleSorted.slice(0, cfg.topPeople),
+    ...companiesSorted.slice(0, cfg.topCompanies),
+  ];
+  // Q29 (2026-07-19): facets beyond the selection used to just vanish — no
+  // trace in the breakdown, so "why isn't this counted" had no visible
+  // answer. Tracked separately (not added to `kept`, so the score math is
+  // untouched) and rendered grayed-out with contribution pinned to 0 below.
+  // A tag with dev === 0 belongs to neither the positive nor negative bucket
+  // and lands here too — it would contribute nothing either way.
+  const capped: FandexContrib[] = [
+    ...tagsPositive.slice(cfg.topTagsPositive),
+    ...tagsNegative.slice(cfg.topTagsNegative),
+    ...peopleSorted.slice(cfg.topPeople),
+    ...companiesSorted.slice(cfg.topCompanies),
+    ...tags.filter((c) => c.dev === 0),
+  ];
   if (!kept.length) return null;
 
-  // Weighted MEAN (divide by total weight, not count/sqrt) — keeps
-  // facet-dense items from inflating just by carrying more tags (D3).
-  const totalWeight = kept.reduce((acc, c) => acc + c.classWeight, 0);
-  const weightedDev = totalWeight ? kept.reduce((acc, c) => acc + c.dev * c.classWeight, 0) / totalWeight : 0;
+  // Raw sum — NOT divided by totalWeight (that division is what made a mean
+  // out of it, and what made per-tag contribution item-dependent).
+  const rawSum = kept.reduce((acc, c) => acc + c.dev * c.classWeight, 0);
 
   // Q19 (2026-07-19): center on the user's OWN mean rating (matching what
   // Insights shows as "your average"), not a fixed 50 — a fixed center meant
@@ -497,32 +508,25 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   // get separately tunable gains (K_up / K_down) so the visible range can be
   // skewed toward enthusiasm without an asymmetric center.
   const center = profile.baseline * 10; // baseline is 0-10 (mean personal rating) → 0-100
-  const gain = weightedDev >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
-  const rawDelta = gain * weightedDev;
-  const score = Math.max(0, Math.min(100, center + rawDelta));
-
-  // Q20 (2026-07-19): make the breakdown genuinely additive — `center + Σ
-  // reasons[].contribution` must equal `score` (within rounding), not just be
-  // "in the same ballpark". Each reason's raw points are its share of
-  // `gain·weightedDev` (i.e. `gain · dev_i · classWeight_i / totalWeight`,
-  // which is exactly what the weighted-mean formula above sums to rawDelta).
-  // When clamping caps the score (rawDelta pushed it past 0/100), scale every
-  // reason's points down by the same factor the clamp applied, so the shown
-  // parts never overstate what actually reached the visible number.
-  const clampedDelta = score - center;
-  const scale = rawDelta !== 0 ? clampedDelta / rawDelta : 0;
+  const gain = rawSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  // 2026-07-29: deliberately UNBOUNDED — no Math.max/Math.min clamp. Clamping
+  // required a compensating `scale` factor on every reason's contribution to
+  // keep the breakdown additive (see history for the old formula); removing
+  // the clamp removes the need for it, so `center + Σ contribution` is now
+  // EXACTLY `score`, not just approximately.
+  const score = center + gain * rawSum;
 
   const reasons: Reason[] = kept
     .sort((a, b) => b.dev * b.classWeight - a.dev * a.classWeight)
     .map((c) => ({
       kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category,
-      contribution: Math.round(((gain * c.dev * c.classWeight / totalWeight) * scale) * 10) / 10,
+      contribution: Math.round(gain * c.dev * c.classWeight * 10) / 10,
       BA: c.BA, n: c.n,
     }));
 
   // Q29 — appended after the real contributors, contribution fixed at 0 (so
-  // the additive sum from Q20 is unaffected), flagged `capped` for the client
-  // to render grayed-out with a "not counted" note.
+  // the additive sum is unaffected), flagged `capped` for the client to
+  // render grayed-out with a "not counted for this title" note.
   for (const c of capped.sort((a, b) => Math.abs(b.dev * b.classWeight) - Math.abs(a.dev * a.classWeight))) {
     reasons.push({ kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: 0, BA: c.BA, n: c.n, capped: true });
   }

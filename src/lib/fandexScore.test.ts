@@ -6,17 +6,19 @@ import { Facet } from "./facets";
 import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
 
 // S11 (2026-07-27): K was recalibrated 10 -> 25 against a real library (see
-// SM13/H5.5). These tests check the MAPPING FORMULA, not the specific K
-// value, so they read the live default rather than hardcoding a magic number
-// that the next recalibration would silently break.
-const K = DEFAULT_SCORING_CONFIG.mappingConstantUp;
+// SM13/H5.5); recalibrated again 2026-07-29 for the raw-sum aggregate (T3).
+// These tests check the MAPPING FORMULA, not the specific K value, so they
+// read the live default rather than hardcoding a magic number that the next
+// recalibration would silently break.
+const K_UP = DEFAULT_SCORING_CONFIG.mappingConstantUp;
+const K_DOWN = DEFAULT_SCORING_CONFIG.mappingConstantDown;
 
 // H5.2 — the Bayesian rescore + the visible Fandex Score aggregate.
 //
 // buildProfile() is tested against a real seeded library (DB integration —
 // catches config-loader/category-lookup wiring bugs). computeFandexScore() is
-// tested against a HAND-BUILT Profile (pure aggregation math — the per-category
-// cap and the 50+K·weightedDev mapping don't need a real library to verify).
+// tested against a HAND-BUILT Profile (pure aggregation math — the top-N
+// selection and the 50+K·rawSum mapping don't need a real library to verify).
 
 initDb();
 
@@ -133,8 +135,10 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
   const meta = (over: Partial<NonNullable<ReturnType<Profile["meta"]["get"]>>> & { classWeight: number }) =>
     ({ kind: "tag", key: "x", label: "X", ...over });
 
-  it("weighted-mean aggregate mapped via 50 + K·weightedDev", () => {
-    // Two facets, weight 1 each: dev = +1 and -0.5 → weightedDev = (1*1 + -0.5*1)/2 = 0.25
+  it("2026-07-29: raw-sum aggregate mapped via 50 + K·Σ(dev·classWeight) — NOT divided by total weight", () => {
+    // Two facets, weight 1 each: dev = +1 and -0.5 → rawSum = 1*1 + (-0.5*1) = 0.5.
+    // (The old weighted-MEAN formula would have divided by totalWeight=2, giving
+    // weightedDev 0.25 — this pins that the divisor is gone.)
     const facets: Facet[] = [
       { kind: "tag", key: "a", label: "A", category: "genre" },
       { kind: "tag", key: "b", label: "B", category: "genre" },
@@ -151,21 +155,32 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     };
     const result = computeFandexScore(facets, profile);
     expect(result).not.toBeNull();
-    expect(result!.score).toBeCloseTo(Math.round((50 + K * 0.25) * 10) / 10, 6);
+    const rawSum = 1 * 1 + -0.5 * 1;
+    expect(result!.score).toBeCloseTo(Math.round((50 + K_UP * rawSum) * 10) / 10, 6);
     // Reasons carry BA/n through for the expanded breakdown (§3.4).
     const a = result!.reasons.find((r) => r.label === "A")!;
     expect(a.BA).toBe(1);
     expect(a.n).toBe(4);
   });
 
-  it("clamps to [0, 100] for an extreme weightedDev", () => {
-    const facets: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
-    const profile: Profile = {
-      w: new Map([["tag||a", 10]]), // dev 10 * K (>= 25) far overflows 50 → clamps to 100
+  it("2026-07-29: is deliberately UNBOUNDED — no clamp at 0 or 100 in either direction", () => {
+    const positive: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
+    const profileUp: Profile = {
+      w: new Map([["tag||a", 10]]), // rawSum 10 * K_up (>= 25) far overflows 100
       meta: new Map([["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })]]),
       baseline: 5, hasSignal: true, ratedItemCount: 10,
     };
-    expect(computeFandexScore(facets, profile)!.score).toBe(100);
+    expect(computeFandexScore(positive, profileUp)!.score).toBeGreaterThan(100);
+
+    const negative: Facet[] = [{ kind: "tag", key: "a", label: "A", category: "genre" }];
+    const profileDown: Profile = {
+      w: new Map([["tag||a", -10]]), // rawSum -10 * K_down far undershoots 0
+      meta: new Map([["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })]]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+    const downResult = computeFandexScore(negative, profileDown)!;
+    expect(downResult.score).toBeLessThan(0);
+    expect(downResult.score).toBeCloseTo(Math.round((50 + K_DOWN * -10) * 10) / 10, 6);
   });
 
   it("Q20: center is the user's own baseline×10, and center + Σ contributions == score (additive breakdown)", () => {
@@ -189,14 +204,13 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
   });
 
-  it("Q20: additivity still holds when clamping caps the score (contributions scale down with it)", () => {
+  it("2026-07-29: additivity holds even when the raw sum pushes the score past 100 (no clamp to compensate for)", () => {
     const facets: Facet[] = [
       { kind: "tag", key: "a", label: "A", category: "genre" },
       { kind: "tag", key: "b", label: "B", category: "theme" },
     ];
     const profile: Profile = {
-      // baseline 9 (center 90) + a strongly positive dev would blow past 100
-      // without clamping — the two reasons must still sum to score - center.
+      // baseline 9 (center 90) + a strongly positive rawSum blows well past 100 — unclamped now.
       w: new Map([["tag||a", 8], ["tag||b", 6]]),
       meta: new Map([
         ["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })],
@@ -205,15 +219,16 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
       baseline: 9, hasSignal: true, ratedItemCount: 10,
     };
     const result = computeFandexScore(facets, profile)!;
-    expect(result.score).toBe(100); // clamped
+    expect(result.score).toBeGreaterThan(100); // NOT clamped
     const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
-    expect(result.center + sumContributions).toBeCloseTo(100, 1);
+    expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
   });
 
-  it("per-category cap: only the top-N |dev| tags per category count toward the aggregate", () => {
-    // 5 "theme" tags, cap defaults to 3 — the two weakest (by |dev|) must be
-    // excluded from the weighted mean, or a facet-dense item would inflate itself.
-    const devs = [5, 4, 3, 0.1, 0.2]; // top 3 by |dev|: 5, 4, 3
+  it("2026-07-29: an item with 5 positive genre tags counts all 5 — the per-category cap of 3 used to exclude 2 of them", () => {
+    // This is the user's own motivating example for replacing perCategoryCap
+    // with a fixed-size top-N selection: "an item with 5 genre tags should
+    // count all 5". Default topTagsPositive is 5, so nothing here is capped.
+    const devs = [5, 4, 3, 2, 1];
     const w = new Map<string, number>();
     const metaMap = new Map<string, ReturnType<typeof meta>>();
     const facets: Facet[] = [];
@@ -221,27 +236,84 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
       const key = `t${i}`;
       const id = `tag||${key}`;
       w.set(id, d); // classWeight 1
-      metaMap.set(id, meta({ key, label: key, category: "theme", classWeight: 1 }));
-      facets.push({ kind: "tag", key, label: key, category: "theme" });
+      metaMap.set(id, meta({ key, label: key, category: "genre", classWeight: 1 }));
+      facets.push({ kind: "tag", key, label: key, category: "genre" });
     });
     const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
 
     const result = computeFandexScore(facets, profile)!;
-    const expectedWeightedDev = (5 + 4 + 3) / 3;
-    expect(result.score).toBeCloseTo(Math.min(100, 50 + K * expectedWeightedDev), 6);
     const counted = result.reasons.filter((r) => !r.capped);
-    expect(counted.length).toBe(3);
-    expect(counted.map((r) => r.label).sort()).toEqual(["t0", "t1", "t2"]);
+    expect(counted.length).toBe(5);
+    expect(counted.map((r) => r.label).sort()).toEqual(["t0", "t1", "t2", "t3", "t4"]);
+    expect(result.reasons.filter((r) => r.capped).length).toBe(0);
 
-    // Q29: the two weakest (excluded from the aggregate above) still show in
-    // the breakdown, flagged capped with contribution pinned to 0 — so the
-    // additive sum (Q20) is unaffected even though the reasons list is longer.
-    const capped = result.reasons.filter((r) => r.capped);
-    expect(capped.length).toBe(2);
-    expect(capped.map((r) => r.label).sort()).toEqual(["t3", "t4"]);
-    expect(capped.every((r) => r.contribution === 0)).toBe(true);
+    const rawSum = devs.reduce((a, b) => a + b, 0);
+    expect(result.score).toBeCloseTo(Math.round((50 + K_UP * rawSum) * 10) / 10, 6);
+  });
+
+  it("2026-07-29: a 300-tag item counts exactly topTagsPositive + topTagsNegative tags, the rest greyed out as capped", () => {
+    const POSITIVE_N = DEFAULT_SCORING_CONFIG.topTagsPositive; // 5
+    const NEGATIVE_N = DEFAULT_SCORING_CONFIG.topTagsNegative; // 3
+    const w = new Map<string, number>();
+    const metaMap = new Map<string, ReturnType<typeof meta>>();
+    const facets: Facet[] = [];
+    // 150 positive-dev tags (p0..p149, dev descending 150..1), 150 negative-dev
+    // tags (n0..n149, dev ascending -150..-1, i.e. n0 is the MOST negative).
+    for (let i = 0; i < 150; i++) {
+      const posKey = `p${i}`, negKey = `n${i}`;
+      w.set(`tag||${posKey}`, 150 - i);
+      w.set(`tag||${negKey}`, -(150 - i));
+      metaMap.set(`tag||${posKey}`, meta({ key: posKey, label: posKey, category: "genre", classWeight: 1 }));
+      metaMap.set(`tag||${negKey}`, meta({ key: negKey, label: negKey, category: "genre", classWeight: 1 }));
+      facets.push({ kind: "tag", key: posKey, label: posKey, category: "genre" });
+      facets.push({ kind: "tag", key: negKey, label: negKey, category: "genre" });
+    }
+    expect(facets.length).toBe(300);
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
+
+    const result = computeFandexScore(facets, profile)!;
+    const counted = result.reasons.filter((r) => !r.capped);
+    expect(counted.length).toBe(POSITIVE_N + NEGATIVE_N);
+    // Highest-dev positives: p0..p4 (150..146). Most-negative: n0..n2 (-150..-148).
+    expect(counted.map((r) => r.label).sort()).toEqual(
+      ["n0", "n1", "n2", "p0", "p1", "p2", "p3", "p4"].sort()
+    );
+    expect(result.reasons.filter((r) => r.capped).length).toBe(300 - (POSITIVE_N + NEGATIVE_N));
+
     const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
     expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
+  });
+
+  it("2026-07-29: people and companies each get their OWN top-N selection, independent of the tag selection", () => {
+    const facets: Facet[] = [
+      { kind: "person", role: "director", key: "d1", label: "Director 1" },
+      { kind: "person", role: "director", key: "d2", label: "Director 2" },
+      { kind: "person", role: "cast", key: "c1", label: "Cast 1" },
+      { kind: "person", role: "cast", key: "c2", label: "Cast 2" }, // 4th person, topPeople default 3 → capped (weakest |dev|)
+      { kind: "company", role: "studio", key: "s1", label: "Studio 1" },
+      { kind: "company", role: "studio", key: "s2", label: "Studio 2" },
+      { kind: "company", role: "studio", key: "s3", label: "Studio 3" }, // 3rd company, topCompanies default 2 → capped
+    ];
+    const w = new Map([
+      ["person|director|d1", 5], ["person|director|d2", 4], ["person|cast|c1", 3], ["person|cast|c2", 1],
+      ["company|studio|s1", 5], ["company|studio|s2", 4], ["company|studio|s3", 3],
+    ]);
+    const metaMap = new Map([
+      ["person|director|d1", meta({ key: "d1", role: "director", label: "Director 1", classWeight: 1 })],
+      ["person|director|d2", meta({ key: "d2", role: "director", label: "Director 2", classWeight: 1 })],
+      ["person|cast|c1", meta({ key: "c1", role: "cast", label: "Cast 1", classWeight: 1 })],
+      ["person|cast|c2", meta({ key: "c2", role: "cast", label: "Cast 2", classWeight: 1 })],
+      ["company|studio|s1", meta({ key: "s1", role: "studio", label: "Studio 1", classWeight: 1 })],
+      ["company|studio|s2", meta({ key: "s2", role: "studio", label: "Studio 2", classWeight: 1 })],
+      ["company|studio|s3", meta({ key: "s3", role: "studio", label: "Studio 3", classWeight: 1 })],
+    ]);
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
+
+    const result = computeFandexScore(facets, profile)!;
+    const counted = result.reasons.filter((r) => !r.capped).map((r) => r.label).sort();
+    expect(counted).toEqual(["Cast 1", "Director 1", "Director 2", "Studio 1", "Studio 2"]);
+    const capped = result.reasons.filter((r) => r.capped).map((r) => r.label).sort();
+    expect(capped).toEqual(["Cast 2", "Studio 3"]);
   });
 
   it("Q30: a lead-cast occurrence pulls the score harder than a cameo occurrence of the SAME person", () => {
