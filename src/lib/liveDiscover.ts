@@ -14,8 +14,9 @@
 // and a crowd-vote floor.
 
 import { BoundedCache } from "@/lib/boundedCache";
-import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, ROLE_WEIGHT, Reason, Profile } from "@/lib/discovery";
+import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT, Reason, Profile } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
+import { resolveMediaIdsBySource } from "@/lib/userState";
 import { extractFacets, tagKey, Facet } from "@/lib/facets";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
@@ -145,7 +146,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 // ── Per-type ranking ───────────────────────────────────────────────
-interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }
+interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null; fandexPending: boolean }
 
 // Q15 (2026-07-19): the visible Fandex Score badge, using the RAW rated-library
 // profile (never the membership-boosted LiveProfile used for feed ranking above,
@@ -158,6 +159,52 @@ interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexSco
 function fandexFor(facets: Facet[], rawProfile: Profile): { score: number | null; center: number | null } {
   const fx = computeFandexScore(facets, rawProfile);
   return { score: fx?.score ?? null, center: fx?.center ?? null };
+}
+
+// ── Facet source of truth (2026-07-29) ─────────────────────────────
+// `listFacets` returns a provider list payload's GENRES and nothing else, while
+// every DB-backed surface (/api/detail, /api/library, the catalog "find" path)
+// scores the same item off its persisted links — credits, keywords, studios.
+// Two facet sources, one scorer, two different numbers for one item: Spirited
+// Away read 65.8 on the Home rail and 101.5 on its own detail page.
+//
+// That gap was survivable under the pre-T2 weighted-mean aggregate, which
+// divided facet count back out, so a thin item and a rich one landed in the same
+// neighbourhood. T2's raw sum removed the divisor by design, which makes score
+// magnitude scale directly with how many facets happen to be loaded — turning a
+// documented approximation (Q15, H5.3) into a visible 35-point contradiction,
+// in BOTH directions (Avengers: Endgame read 68.4 live vs 60.9 persisted).
+//
+// So the live paths now resolve each candidate to its catalog vector and score
+// THOSE facets. Pure in-memory once `getCache()` is warm, plus one batched
+// id→uuid query — no hydration, no provider round-trip.
+const isDeep = (facets: Facet[]) => facets.some((f) => f.kind !== "tag");
+
+function catalogFacets(candidates: FeedCandidate[]): Map<string, Facet[]> {
+  const out = new Map<string, Facet[]>();
+  if (!candidates.length) return out;
+
+  const pairs: { source: string; sourceId: string }[] = [];
+  for (const c of candidates) {
+    for (const [source, sid] of Object.entries(c.ids ?? {})) {
+      if (sid != null) pairs.push({ source, sourceId: String(sid) });
+    }
+  }
+  if (!pairs.length) return out;
+
+  const idMap = resolveMediaIdsBySource(pairs);
+  for (const c of candidates) {
+    for (const [source, sid] of Object.entries(c.ids ?? {})) {
+      if (sid == null) continue;
+      const mid = idMap.get(`${source}:${String(sid)}`);
+      const facets = mid ? getCatalogFacets(mid) : null;
+      // Only a DEEP catalog row is an upgrade. A browsed-only row's facets are
+      // the same genre list we already hold, so falling through to listFacets
+      // costs nothing and keeps the `pending` classification below honest.
+      if (facets && isDeep(facets)) { out.set(c.id, facets); break; }
+    }
+  }
+  return out;
 }
 
 async function rankType(
@@ -176,13 +223,24 @@ async function rankType(
   const cheap = (c: FeedCandidate) =>
     (scoreFacets(listFacets(c), profile.w, idf)?.score ?? 0) + langTerm(c.originalLanguage, profile);
 
+  // The visible Fandex Score always prefers the catalog's persisted facets (see
+  // `catalogFacets`). Feed RANKING deliberately keeps using list facets below —
+  // it's a relative ordering over a mostly-unreleased pool, and re-basing it on
+  // whichever candidates happen to be in the catalog would quietly reorder the
+  // feed, which is a bigger behaviour change than the bug being fixed here.
+  const deepByCandidate = catalogFacets(pool);
+
   if (!hydrate) {
     return pool
       .map((c): Scored => {
         const facets = listFacets(c);
         const s = scoreFacets(facets, profile.w, idf);
-        const fx = fandexFor(facets, rawProfile);
-        return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fx.score, fandexCenter: fx.center };
+        const deep = deepByCandidate.get(c.id);
+        const fx = deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+        return {
+          c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [],
+          fandexScore: fx.score, fandexCenter: fx.center, fandexPending: !deep,
+        };
       })
       .sort(byScore)
       .slice(0, FINAL_KEEP);
@@ -200,8 +258,17 @@ async function rankType(
       const h = hydrated[i];
       if (!c.posterUrl && h.posterUrl) c.posterUrl = h.posterUrl; // backfill Trakt items
       const s = scoreFacets(h.facets, profile.w, idf);
-      const fx = fandexFor(h.facets, rawProfile);
-      return { c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [], fandexScore: fx.score, fandexCenter: fx.center };
+      // Catalog facets win over freshly-hydrated ones even here: hydration sees
+      // TMDB alone, while a persisted row merges every source's links, so only
+      // the catalog's array is guaranteed to equal what /api/detail will show.
+      // Hydrated facets are still a fine second choice — they're deep too, so
+      // nothing is left pending on this branch.
+      const deep = deepByCandidate.get(c.id) ?? h.facets;
+      const fx = fandexFor(deep, rawProfile);
+      return {
+        c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [],
+        fandexScore: fx.score, fandexCenter: fx.center, fandexPending: false,
+      };
     })
     .sort(byScore)
     .slice(0, FINAL_KEEP);
@@ -258,6 +325,11 @@ export interface PersonalizedItem {
   // S11 (2026-07-27) — the score's center, so the badge can band relative to
   // this user's own baseline (center±8) instead of a fixed 70/50.
   fandexCenter: number | null;
+  // 2026-07-29 — "signed in, but this item's local row is too thin to score
+  // honestly yet". Distinct from `fandexScore: null` with this false, which
+  // means no score is coming (anonymous, or cold start). The client uses it to
+  // show a pending badge and ask for a hydrated score.
+  fandexPending: boolean;
 }
 
 // Community stats (crowd popularity/rating) — independent of any per-user
@@ -272,11 +344,21 @@ function communityStatsOf(c: FeedCandidate): { communityVotes: number; community
 export function decorateSection<T extends FeedCandidate>(
   candidates: T[],
   userId: string | null
-): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null; fandexCenter: number | null })[] {
+): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null; fandexCenter: number | null; fandexPending: boolean })[] {
   const rawProfile = userId ? buildProfile(userId) : null;
+  const catalog = rawProfile ? catalogFacets(candidates) : new Map<string, Facet[]>();
   return candidates.map((c) => {
-    const fx = rawProfile ? fandexFor(listFacets(c), rawProfile) : { score: null, center: null };
-    return { ...c, ...communityStatsOf(c), fandexScore: fx.score, fandexCenter: fx.center };
+    const deep = catalog.get(c.id);
+    // No profile → no score at all (anonymous / cold start), and nothing to
+    // resolve later, so never pending. With a profile: a deep catalog row
+    // scores now; a thin one is deliberately left UNSCORED and flagged, so the
+    // client can hydrate it rather than render a number we know is depressed.
+    const fx = rawProfile && deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+    return {
+      ...c, ...communityStatsOf(c),
+      fandexScore: fx.score, fandexCenter: fx.center,
+      fandexPending: !!rawProfile && !deep,
+    };
   });
 }
 
@@ -326,11 +408,11 @@ export async function personalizedFeed(userId: string, region: string): Promise<
     rankType(shows, profile, rawProfile, idf, true),    // shows: hydrate → full facets (TMDB + Trakt)
   ]);
 
-  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons, fandexScore, fandexCenter }) => ({
+  const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons, fandexScore, fandexCenter, fandexPending }) => ({
     id: c.id, rawId: c.rawId, source: c.source, type: c.type,
     title: c.title, releaseDate: c.releaseDate, posterUrl: c.posterUrl,
     platforms: c.platforms, overview: c.overview, ids: c.ids, raw: c.raw,
-    score, reasons, fandexScore, fandexCenter, ...communityStatsOf(c),
+    score, reasons, fandexScore, fandexCenter, fandexPending, ...communityStatsOf(c),
   }));
 
   _feedCache.set(key, items);

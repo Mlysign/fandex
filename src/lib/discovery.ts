@@ -253,6 +253,16 @@ export function getTagVocab(): VocabEntry[] { return getCache().vocab.filter((v)
 // member never gets its own row there.
 export function getRawTagCounts(): Map<string, { label: string; count: number }> { return getCache().rawTagCounts; }
 
+// 2026-07-29 — the FULL persisted facets for one catalog item (credits,
+// keywords, studios), by media_items uuid. This is the same array runDiscovery
+// scores, exposed so the live-provider paths in liveDiscover.ts can score an
+// already-ingested item off its real facets instead of the provider list
+// payload's genres-only view. Returns null for an item not in the catalog.
+// See liveDiscover.ts's `catalogFacets` for why this matters post-T2.
+export function getCatalogFacets(mediaItemId: string): Facet[] | null {
+  return getCache().byId.get(mediaItemId)?.facets ?? null;
+}
+
 // Q25 (2026-07-19) — same "recover the real label from the catalog" trick as
 // getTagVocab (Q11), for companies. companyKey() strips trailing legal/role
 // tokens ("Focus Entertainment" -> "focus"), and a public /studio/<slug> URL
