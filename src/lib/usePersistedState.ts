@@ -72,6 +72,21 @@ export function useScrollRestore(key: string, ready: boolean) {
         const raw = sessionStorage.getItem(key);
         const target = raw != null ? parseInt(raw, 10) || 0 : 0;
         if (target > 4) {
+          // Apply SYNCHRONOUSLY here, not only via the rAF loop below: on a
+          // client-side back-navigation this effect can run against a
+          // component instance that gets torn down again almost immediately
+          // (Next's router-cache/traverse handling remounts the segment more
+          // than once in quick succession). A `requestAnimationFrame(tick)`
+          // scheduled from the FIRST of those mounts routinely got cancelled
+          // by that mount's own cleanup before the browser ever ran it — so
+          // the one-shot `restored` budget was spent scheduling a callback
+          // that never fired, and the page silently fell back to whatever the
+          // browser's native (Next.js doesn't manage `history.scrollRestoration`)
+          // or Next's own scroll-into-view handling left it at. A direct call
+          // here doesn't depend on a future frame surviving, so at least one
+          // real attempt lands on every mount, no matter how many times this
+          // effect gets torn down and re-run for the same navigation.
+          window.scrollTo(0, target);
           // Re-apply across a short window rather than once: filters persisted via
           // usePersistedState hydrate a beat after the list first renders, so a
           // single scrollTo would land against the un-filtered (taller) list and

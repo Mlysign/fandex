@@ -470,18 +470,34 @@ separate, mechanical PR, not something to bundle into this plan.
   both, and clicking Back landed on `/discover` in both — not a dead no-op.
 - Case (a) in-app history — Discover → item → Back correctly returns to
   `/discover` (confirmed via `router.back()`). Scroll position, however, did
-  **not** restore (landed at `scrollY: 56` against a saved `600`) — but this was
-  confirmed, via a control test, to be a **pre-existing bug unrelated to this
-  change**: the identical result (`56`, not `600`) reproduces using the browser's
-  own native back navigation (no BackButton/`router.back()` involved at all),
-  with `sessionStorage`'s saved value confirmed correct (`"600"`) right up to the
-  navigation. The bug lives in `useScrollRestore()` (`src/lib/usePersistedState.ts`)
-  or its interaction with Next's router cache — BackButton correctly delegates to
-  the same navigation primitive a native back button uses, so there's nothing
-  T14 introduced to fix here. Flagged as a separate task
-  (`task_d56cdfbc`, "Fix Discover's scroll-restoration on browser Back
-  navigation") rather than silently leaving it unmentioned or pulling a
-  different subsystem's bug into this plan's scope.
+  **not** restore (landed at `scrollY: 56` against a saved `600`) — confirmed,
+  via a control test, to be a **pre-existing bug unrelated to this change**
+  (identical result via a plain native back too, BackButton not involved) —
+  flagged separately at the time (`task_d56cdfbc`) and **root-caused + fixed
+  same session** (see the follow-up entry below) rather than left open.
+
+**Follow-up (2026-07-29) — Discover/facet scroll-restore-on-Back, root-caused
++ fixed:** `useScrollRestore()`'s one-shot restore deferred its actual
+`window.scrollTo()` entirely to a `requestAnimationFrame` callback scheduled
+from inside the effect. Instrumented the hook live (temporary `console.log`s
+on the running dev server, reverted after) and confirmed via the browser
+console that on a client-side back-navigation, Next's router-cache/traverse
+handling remounts the page's component more than once in quick succession —
+and the *first* mount's scheduled rAF was reliably cancelled (by that mount's
+own cleanup) before the browser ever ran it. So the one-shot `restored` ref
+budget was spent scheduling a callback that never fired, and the page's
+actual landing position was left entirely to the browser's native
+`history.scrollRestoration` (`'auto'`, unmanaged by Next.js) or Next's own
+internal scroll-into-view handling — both of which restoring anything was
+observed to be a matter of luck, not the hook's doing. Fixed by calling
+`window.scrollTo(0, target)` synchronously in the effect body (which reliably
+runs every remount, confirmed via the same instrumentation) in addition to
+the existing rAF-based nudge loop for tall-list convergence — `src/lib/usePersistedState.ts:74-89`.
+Verified live against the running dev server: 3 consecutive Discover
+round-trips (previously broke on the 2nd) all restored correctly, plus the
+actual T14 BackButton and the `/tag/action` facet page (which shares the same
+hook). `npx tsc --noEmit` clean, full suite 400/403 passing (3 pre-existing
+skips). `task_d56cdfbc`'s suggestion is now stale/closed.
 
 **T13 verification (2026-07-29) — rate popover clipping, bottom row, both widths:**
 - Root cause confirmed: `PosterCard`'s root `<Link>` had `overflow-hidden` (needed
