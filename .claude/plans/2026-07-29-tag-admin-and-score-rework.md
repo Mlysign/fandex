@@ -218,7 +218,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     collapsing repeated separators.
   - Depends on: none
 
-- [ ] **T6** — Add a merged tag-table endpoint
+- [x] **T6** — Add a merged tag-table endpoint
   - Files: `src/app/api/dev/scoring/tags/route.ts` (new)
   - Detail: `GET /api/dev/scoring/tags?category=<id>&q=<search>&limit=<n>`, wrapped in
     `withScoringAdmin`. Returns one row **per canonical tag**: `{ key, label, count, category,
