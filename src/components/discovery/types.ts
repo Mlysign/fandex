@@ -2,7 +2,11 @@
 
 // BA/n (H5.2 §3.4): the facet's Bayesian average + rated-item count, only
 // populated on Fandex Score reasons (not the older Discover match-score ones).
-export interface Reason { kind: string; role?: string; label: string; category?: string; contribution: number; BA?: number; n?: number; capped?: boolean }
+// T10 (2026-07-29): `impact` is the facet's canonical points value (same
+// number wherever this tag appears — see discovery.ts's facetImpact()),
+// distinct from `contribution` (what actually reached THIS item's score,
+// forced to 0 when `capped`).
+export interface Reason { kind: string; role?: string; label: string; category?: string; contribution: number; impact?: number | null; BA?: number; n?: number; capped?: boolean }
 
 export interface DiscoverItem {
   id: string;

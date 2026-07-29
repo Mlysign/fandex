@@ -67,7 +67,7 @@ function FacetGroup({
         {shown.map((f) => (
           <div key={`${f.role ?? ""}|${f.key}`} className={tagAdmin ? "relative group" : undefined}>
             {tagAdmin && <TagCategoryHoverPanel tagKey={f.key} categoryId={f.category} />}
-            <StatBar label={f.label} value={f.ba} rawAvg={f.avg} count={f.count} color={group.color} baseline={baseline} href={buildFacetHref(f)} />
+            <StatBar label={f.label} value={f.ba} rawAvg={f.avg} count={f.count} color={group.color} baseline={baseline} href={buildFacetHref(f)} impact={f.impact} />
           </div>
         ))}
         {collapsible
@@ -194,6 +194,7 @@ export default function FacetSection({
                 color={colorOf(f)}
                 baseline={baseline}
                 href={buildFacetHref(f)}
+                impact={f.impact}
                 title={`${f.label}${f.role ? ` · ${ROLE_LABELS[f.role] ?? f.role}` : ""} — ${f.ba.toFixed(1)} Bayesian avg (raw ${f.avg.toFixed(1)}) over ${f.count}`}
               />
             ))}

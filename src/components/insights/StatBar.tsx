@@ -6,7 +6,7 @@
 import Link from "next/link";
 
 export default function StatBar({
-  label, value, rawAvg, count, color, baseline, title, href,
+  label, value, rawAvg, count, color, baseline, title, href, impact,
 }: {
   label: string;
   value: number;       // 0-10 — drives the bar (Q22: the Bayesian score, not the raw average)
@@ -16,6 +16,10 @@ export default function StatBar({
   baseline: number;    // your mean rating (drawn as a tick)
   title?: string;
   href?: string;
+  // T10 (2026-07-29) — the canonical Fandex Score points this facet is worth
+  // (facetImpact()), the SAME number the item page's breakdown and the facet
+  // page's "Fandex impact" panel show. Omit for kinds that don't carry one.
+  impact?: number | null;
 }) {
   const showRaw = rawAvg != null && Math.abs(rawAvg - value) >= 0.05;
   const inner = (
@@ -24,6 +28,11 @@ export default function StatBar({
         <span className="text-sm font-medium text-text-primary truncate">{label}</span>
         <span className="font-mono text-meta text-text-secondary shrink-0 tabular-nums">
           {count} · {value.toFixed(1)}{showRaw && ` (avg ${rawAvg!.toFixed(1)})`}
+          {impact != null && (
+            <span className="ml-1.5" style={{ color: impact >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+              {impact >= 0 ? "+" : ""}{impact.toFixed(1)}
+            </span>
+          )}
         </span>
       </div>
       <div className="relative h-1.5 rounded-full bg-neutral-800 overflow-hidden">

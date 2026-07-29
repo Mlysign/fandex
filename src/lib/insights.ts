@@ -6,6 +6,8 @@
 
 import { getLibraryFacetAnalysis, FacetStat, RatedItem } from "@/lib/libraryAnalysis";
 import { getTagCategories } from "@/lib/scoringConfig";
+import { buildProfile, facetImpact } from "@/lib/discovery";
+import { facetId } from "@/lib/facets";
 
 export interface HistogramBucket { bucket: number; count: number }
 
@@ -81,6 +83,14 @@ function year(date: string | null): number | null {
 export function buildInsights(userId: string): InsightsPayload {
   const a = getLibraryFacetAnalysis(userId);
 
+  // T10 (2026-07-29) — the SAME canonical facetImpact() the item page's Fandex
+  // Score breakdown and the facet page's "impact" panel use, so a tag's shown
+  // impact agrees across all three surfaces. buildProfile() (unlike
+  // getLibraryFacetAnalysis above) applies classWeight + ignored-category
+  // filtering, so a meta/ignored facet correctly gets no impact here.
+  const profile = buildProfile(userId);
+  const facetsWithImpact: FacetStat[] = a.facets.map((f) => ({ ...f, impact: facetImpact(facetId(f), profile) }));
+
   // ── You vs the crowd ──
   const withCommunity = a.items.filter((i) => i.community != null) as (RatedItem & { community: number })[];
   const diverged = withCommunity.map((i) => ({
@@ -127,7 +137,7 @@ export function buildInsights(userId: string): InsightsPayload {
     histogram: histogram(a.ratingValues, step),
     histogramStep: step,
     byTypeHistogram,
-    facets: a.facets,
+    facets: facetsWithImpact,
     tagCategories: getTagCategories()
       .filter((c) => c.id !== "meta")
       .map((c) => ({ id: c.id, label: c.label, color: c.color, sortOrder: c.sortOrder })),

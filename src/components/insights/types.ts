@@ -11,6 +11,11 @@ export interface FacetStat {
   sum: number;
   avg: number;
   ba: number; // Q22 — Bayesian shrinkage average, same as computeFandexScore's BA_f
+  // T10 (2026-07-29) — the SAME canonical points value the item page's Fandex
+  // Score breakdown and the facet page's "Fandex impact" panel show for this
+  // facet. null/undefined when this facet has no scoring signal (e.g. an
+  // ignored/meta category).
+  impact?: number | null;
 }
 
 // Q22 — the live, DB-backed tag taxonomy (mirrors scoringConfig.ts's

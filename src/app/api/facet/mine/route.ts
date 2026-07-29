@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
 import { FacetKind, FacetRole, extractFacets } from "@/lib/facets";
-import { buildProfile, computeFandexScore, fandexCenterFor, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
-import { getScoringConfig } from "@/lib/scoringConfig";
 import { MediaType } from "@/types";
 
 // P17 — the PERSONAL overlay for a public facet page. The page itself is public
@@ -98,17 +97,17 @@ export const GET = withUser(async (req: NextRequest, session) => {
   // mean, adding any other matched facet can only dilute a single facet's own
   // contribution toward zero, never amplify it past this ceiling — so it's a
   // meaningful "best case" number, not an average across real mixed items.
-  // Same points currency the Why-breakdown shows, so the two surfaces agree.
-  // tag-only; person/company facets don't carry a single BA_f/classWeight the
-  // same way.
+  // T10 (2026-07-29): the SAME canonical facetImpact() the item page's
+  // breakdown and every tag chip use — was its own hand-rolled `gain * dev`
+  // before, silently missing the category classWeight multiplication
+  // computeFandexScore's reasons[] always included (see facetImpact's own
+  // comment). tag-only; person/company facets don't carry a single
+  // BA_f/classWeight the same way.
   let tagImpact: { points: number; direction: "up" | "down" | "neutral"; ratedCount: number } | null = null;
   if (kind === "tag") {
     const facetMeta = profile.meta.get(`tag||${key}`);
-    if (facetMeta?.BA != null && facetMeta.n != null) {
-      const dev = facetMeta.BA - profile.baseline;
-      const cfg = getScoringConfig();
-      const gain = dev >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
-      const points = Math.round(gain * dev * 10) / 10;
+    const points = facetImpact(`tag||${key}`, profile);
+    if (facetMeta?.n != null && points != null) {
       tagImpact = {
         points,
         direction: Math.abs(points) < 0.5 ? "neutral" : points > 0 ? "up" : "down",

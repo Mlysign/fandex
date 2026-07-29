@@ -60,7 +60,14 @@ export interface VocabEntry { kind: string; role?: FacetRole; key: string; label
 // Q29: `capped` (computeFandexScore only) — this facet matched but lost the
 // per-category-cap cut, contribution pinned to 0. scoreFacets' reasons never
 // set it (that ranking score has no such cap).
-export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; BA?: number; n?: number; capped?: boolean }
+// `contribution` — what actually reached THIS item's score (0 for a capped
+// reason, by construction, so `center + Σcontribution === score` stays exact).
+// `impact` (T10, 2026-07-29) — the facet's CANONICAL points value from
+// facetImpact(): what it adds to ANY item carrying it. Populated by
+// computeFandexScore (the Fandex Score reasons, incl. capped ones — a capped
+// tag can still show its real worth instead of a flat 0); left undefined by
+// scoreFacets' unrelated idf-ranking Reason[] above, which has no use for it.
+export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; impact?: number | null; BA?: number; n?: number; capped?: boolean }
 
 export interface MembershipFilter { library?: "include" | "exclude" | "only"; wishlist?: "include" | "exclude" | "only"; rated?: "include" | "exclude" | "only" }
 
@@ -449,6 +456,32 @@ export function fandexCenterFor(profile: Profile): number | null {
   return Math.round(profile.baseline * 10 * 10) / 10;
 }
 
+// T10 (2026-07-29) — THE canonical per-facet score impact: the points a facet
+// (almost always a tag) adds to ANY item carrying it, independent of which
+// other facets that item happens to have. Before this, two call sites each
+// hand-rolled their own version and quietly disagreed: /api/facet/mine's
+// tagImpact computed `gain * (BA - baseline)`, dropping the category
+// classWeight multiplication computeFandexScore's own reasons[].contribution
+// always included. Every category in the live DB happens to have weight 1
+// today, which is exactly why nobody noticed — the two formulas only diverge
+// once an admin sets a category weight != 1 in the Weights panel.
+//
+// Why this is safe to compute WITHOUT a specific item's facets: buildProfile
+// already stores `profile.w.get(id) === dev * classWeight` per facet (see
+// its `w.set(id, dev * classWeight)` line) — classWeight there is the
+// facet's OWN category/role weight, with no per-occurrence adjustment
+// (prominence, the cast lead-vs-cameo scaling) baked in. So for a tag this
+// is exactly the same number computeFandexScore uses; for a person/company
+// it's the canonical (prominence == 1, i.e. lead-billed) value, since actual
+// per-item prominence isn't known outside a specific item's facets.
+export function facetImpact(id: string, profile: Profile, config?: ScoringConfigValues): number | null {
+  const w = profile.w.get(id);
+  if (w == null) return null;
+  const cfg = config ?? getScoringConfig();
+  const gain = w >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  return Math.round(gain * w * 10) / 10;
+}
+
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
 // `configOverride` (H5.4 live preview): use the draft mappingConstant/top-N
@@ -540,14 +573,21 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
     .map((c) => ({
       kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category,
       contribution: Math.round(gain * c.dev * c.classWeight * 10) / 10,
+      impact: facetImpact(facetId(c.f), profile, cfg),
       BA: c.BA, n: c.n,
     }));
 
   // Q29 — appended after the real contributors, contribution fixed at 0 (so
   // the additive sum is unaffected), flagged `capped` for the client to
-  // render grayed-out with a "not counted for this title" note.
+  // render grayed-out with a "not counted for this title" note. `impact`
+  // (T10) is still populated for these — the client can show the tag's real
+  // canonical worth instead of the flat 0 `contribution` implies.
   for (const c of capped.sort((a, b) => Math.abs(b.dev * b.classWeight) - Math.abs(a.dev * a.classWeight))) {
-    reasons.push({ kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: 0, BA: c.BA, n: c.n, capped: true });
+    reasons.push({
+      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: 0,
+      impact: facetImpact(facetId(c.f), profile, cfg),
+      BA: c.BA, n: c.n, capped: true,
+    });
   }
 
   return { score: Math.round(score * 10) / 10, center: Math.round(center * 10) / 10, reasons };

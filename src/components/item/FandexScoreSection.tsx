@@ -187,7 +187,7 @@ export default function FandexScoreSection({
                 <div key={`${r.kind}|${r.role ?? ""}|${r.label}`}>
                   {firstCapped && (
                     <p className="text-[10px] text-text-secondary uppercase tracking-wide pt-1 pb-1.5 border-t border-border mt-1">
-                      Not counted — over the per-category limit
+                      Not counted for this title — outside the top matches this item selects
                     </p>
                   )}
                   <div className={`flex items-start justify-between gap-3 text-xs ${r.capped ? "opacity-40" : ""}`}>
@@ -230,7 +230,12 @@ export default function FandexScoreSection({
                       )}
                     </span>
                     {r.capped ? (
-                      <span className="shrink-0 text-text-secondary pt-0.5">—</span>
+                      // T10: the tag's real canonical impact, not a flat "—" — greyed via
+                      // the row's own opacity-40, so this stays visually "not counted"
+                      // while still answering "how much would this tag be worth".
+                      <span className="shrink-0 font-semibold pt-0.5 text-text-secondary">
+                        {r.impact != null ? `${r.impact >= 0 ? "+" : ""}${r.impact.toFixed(1)}` : "—"}
+                      </span>
                     ) : (
                       <span className="shrink-0 font-semibold pt-0.5" style={{ color: positive ? "var(--color-success)" : "var(--color-danger)" }}>
                         {positive ? "+" : ""}{r.contribution.toFixed(1)}

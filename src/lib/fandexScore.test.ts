@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
-import { buildProfile, computeFandexScore, fandexCenterFor, Profile } from "./discovery";
+import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, Profile } from "./discovery";
 import { Facet } from "./facets";
 import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
 
@@ -161,6 +161,45 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     const a = result!.reasons.find((r) => r.label === "A")!;
     expect(a.BA).toBe(1);
     expect(a.n).toBe(4);
+
+    // T10: facetImpact() and a COUNTED reason's contribution must be the same
+    // number — that's the whole point of a canonical, item-independent impact
+    // figure. (impact is ALSO populated on capped reasons, where it diverges
+    // from contribution by design — that's covered separately below.)
+    for (const r of result!.reasons) {
+      const id = r.label === "A" ? "tag||a" : "tag||b";
+      expect(r.impact).toBeCloseTo(facetImpact(id, profile)!, 6);
+      expect(r.impact).toBeCloseTo(r.contribution, 6);
+    }
+  });
+
+  it("2026-07-29: facetImpact() is item-independent — same tag, same impact, on two items with totally different other facets", () => {
+    const profile: Profile = {
+      w: new Map([["tag||shared", 2], ["tag||only-on-x", 5], ["tag||only-on-y", -3]]),
+      meta: new Map([
+        ["tag||shared", meta({ key: "shared", label: "Shared", category: "genre", classWeight: 1 })],
+        ["tag||only-on-x", meta({ key: "only-on-x", label: "OnlyX", category: "genre", classWeight: 1 })],
+        ["tag||only-on-y", meta({ key: "only-on-y", label: "OnlyY", category: "genre", classWeight: 1 })],
+      ]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+    const itemX: Facet[] = [
+      { kind: "tag", key: "shared", label: "Shared", category: "genre" },
+      { kind: "tag", key: "only-on-x", label: "OnlyX", category: "genre" },
+    ];
+    const itemY: Facet[] = [
+      { kind: "tag", key: "shared", label: "Shared", category: "genre" },
+      { kind: "tag", key: "only-on-y", label: "OnlyY", category: "genre" },
+    ];
+    const resultX = computeFandexScore(itemX, profile)!;
+    const resultY = computeFandexScore(itemY, profile)!;
+    const sharedOnX = resultX.reasons.find((r) => r.label === "Shared")!;
+    const sharedOnY = resultY.reasons.find((r) => r.label === "Shared")!;
+    // Different items, different OTHER facets, different scores — but the
+    // SAME tag's impact is identical on both, and matches the standalone helper.
+    expect(resultX.score).not.toBeCloseTo(resultY.score, 1);
+    expect(sharedOnX.impact).toBeCloseTo(sharedOnY.impact!, 6);
+    expect(sharedOnX.impact).toBeCloseTo(facetImpact("tag||shared", profile)!, 6);
   });
 
   it("2026-07-29: is deliberately UNBOUNDED — no clamp at 0 or 100 in either direction", () => {
@@ -282,6 +321,15 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
 
     const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
     expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
+
+    // T10: a capped reason's contribution is forced to 0 (so the additive sum
+    // above holds), but its impact is still the tag's REAL standalone worth —
+    // "not counted for THIS title" is not "worth nothing".
+    const cappedP50 = result.reasons.find((r) => r.label === "p50")!;
+    expect(cappedP50.capped).toBe(true);
+    expect(cappedP50.contribution).toBe(0);
+    expect(cappedP50.impact).toBeCloseTo(facetImpact("tag||p50", profile)!, 6);
+    expect(cappedP50.impact).not.toBe(0);
   });
 
   it("2026-07-29: people and companies each get their OWN top-N selection, independent of the tag selection", () => {

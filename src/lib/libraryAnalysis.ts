@@ -36,6 +36,11 @@ export interface FacetStat {
   // unweighted so Insights' "N rated" / raw average keep reading as real counts.
   weightedCount: number;
   weightedSum: number;
+  // T10 (2026-07-29) — NOT set by getLibraryFacetAnalysis itself (it has no
+  // classWeight/config); insights.ts attaches it after the fact via
+  // discovery.ts's facetImpact(), so the field lives here for FacetStat's one
+  // shape to stay consistent end to end.
+  impact?: number | null;
 }
 
 // A rated library item, flattened for the overview / histogram / divergence /
