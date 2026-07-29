@@ -281,7 +281,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — covered by T17.
   - Depends on: T8
 
-- [ ] **T10** — Show each tag's score impact on its chip, consistently everywhere
+- [x] **T10** — Show each tag's score impact on its chip, consistently everywhere
   - Files: `src/lib/discovery.ts` (export a per-facet impact helper),
     `src/components/TagCategoryPicker.tsx` or a sibling chip component, item/facet/insights chip
     render sites
@@ -421,6 +421,28 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T10 verification (2026-07-29) — identical impact across all three surfaces, for
+both a positive and a negative tag:**
+- `Action` (genre): Insights `impact` 0.4 · `/api/facet/mine` `tagImpact.points` 0.4 ·
+  item page (`/api/detail` → `fandexReasons`, on *Spider-Man: Beyond the
+  Spider-Verse*) `impact` 0.4, `contribution` 0.4 (counted, so the two agree exactly).
+- `Drama` (genre): Insights `impact` -0.4 · `/api/facet/mine` `tagImpact.points` -0.4 ·
+  item page (on *The Apothecary Diaries: The Deceased Empress' Treasure*) `impact`
+  -0.4, `contribution` 0 (**capped** — excluded from this item's score, but its real
+  worth still shows instead of a flat 0/dash, per the plan's explicit requirement).
+- Root cause of the pre-existing mismatch: `/api/facet/mine`'s `tagImpact` computed
+  `gain * (BA - baseline)`, silently dropping the category `classWeight`
+  multiplication `computeFandexScore`'s `reasons[].contribution` always had. Every
+  category in the live DB happens to have weight 1 today, which is exactly why this
+  never surfaced as a visible bug before — it would diverge the moment an admin sets
+  a category weight != 1 in the Weights panel.
+- Deliberately NOT wired into LowerSections' plain "Tags & details" chips: that
+  section is server-rendered with explicitly NO session data (`ItemView.tsx`'s own
+  comment: "Nothing above [PersonalSection] may depend on a session, or the server
+  HTML would vary per viewer and the SSR guarantee would break"). Adding impact
+  there would need a second client-side `/api/detail` fetch duplicating what
+  `PersonalSection` already does — a real architecture change, not a "wire it in".
 
 **T9 finding — item-detail tag chips are grouped by the code heuristic, not the live
 override:** `LowerSections.tsx`'s "Tags & details" section calls `categorizeTag(key)`
