@@ -16,7 +16,13 @@
 // defaults to 50 (the pre-Q19 fixed center) when unavailable — same numeric
 // behavior as before this fix for any caller that hasn't threaded it through
 // yet, rather than silently mis-banding against a wrong assumed baseline.
-const BAND_MARGIN = 8;
+//
+// 2026-07-29: re-anchored from 8 to 10 alongside the raw-sum aggregate rework
+// (scripts/calibrate-fandex.mjs) — round((p75 - p25) / 2) of the owner's real
+// calibrated score distribution (p25 60.3, p75 80.9). The old value of 8 was
+// calibrated for the mean's much narrower spread and no longer means anything
+// against the wider, unbounded sum.
+const BAND_MARGIN = 10;
 
 export function fandexScoreColor(score: number, center: number | null = 50): string {
   const c = center ?? 50;

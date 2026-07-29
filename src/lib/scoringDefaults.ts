@@ -34,19 +34,26 @@ export interface ScoringConfigValues {
 // compressed toward the center as facet count grew, and a tag's contribution
 // was a share of the total — item-dependent) to an UNBOUNDED RAW SUM over a
 // fixed-size top-N selection (topTagsPositive/topTagsNegative/topPeople/
-// topCompanies below) — see computeFandexScore. K was recalibrated for the
-// new math by scripts/calibrate-fandex.mjs against the owner's real library;
-// see that script's output and docs/fandex-score.md for the measured
-// before/after distribution. The OLD K=25 value (H5.5/S11, 2026-07-27) was
-// calibrated for the mean and is not meaningful under the sum.
+// topCompanies below) — see computeFandexScore. The OLD K=25 value (H5.5/S11,
+// 2026-07-27) was calibrated for the mean and is meaningless under the sum —
+// a mean's weightedDev tops out around ±10, a raw sum over up to 13 selected
+// facets does not.
+//
+// K=5.4 was computed by scripts/calibrate-fandex.mjs against the owner's real
+// ~1,921-item library (1,857 of them score): with K=1, rawSum's real p10-p90
+// spread was 7.40 points; K = round(40 / 7.40, 1) = 5.4 targets a 40-point
+// spread. Measured result: p10 50.6 · median 71.3 · p90 90.2 (min 27.5, max
+// 129.2 — genuinely unbounded, unlike the old clamped mean). See
+// docs/fandex-score.md for the full before/after and the script's own output
+// for the exact numbers.
 export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   roleWeights: {
     director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6,
     developer: 1.2, publisher: 0.8, studio: 0.7, network: 0.6, tag: 1.0,
   },
   priorStrength: 5,
-  mappingConstantUp: 25,
-  mappingConstantDown: 25,
+  mappingConstantUp: 5.4,
+  mappingConstantDown: 5.4,
   topTagsPositive: 5,
   topTagsNegative: 3,
   topPeople: 3,
