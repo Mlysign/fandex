@@ -203,7 +203,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     out-of-range (e.g. 104, −3) rendering case.
   - Depends on: T2
 
-- [ ] **T5** — Fix category creation: derive the slug from the label
+- [x] **T5** — Fix category creation: derive the slug from the label
   - Files: `src/app/dev/scoring/TaxonomyPanel.tsx` (or its T7 replacement if T7 landed first)
   - Detail: This is the actual bug behind "my created categories are gone". Remove the hand-typed
     `id` input as a required field. Auto-derive it from the label: lowercase, trim, replace any run
