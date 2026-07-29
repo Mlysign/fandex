@@ -326,7 +326,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — covered by T17's manual pass plus the anon curl diff.
   - Depends on: none
 
-- [ ] **T13** — Stop the rate quick action being clipped by the card
+- [x] **T13** — Stop the rate quick action being clipped by the card
   - Files: `src/components/PosterCard.tsx`, `src/components/QuickActions.tsx`,
     `src/components/ActionCells.tsx`
   - Detail: `PosterCard`'s root carries `overflow-hidden` (`:134` and `:147`) to clip the poster's
@@ -421,6 +421,28 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T13 verification (2026-07-29) — rate popover clipping, bottom row, both widths:**
+- Root cause confirmed: `PosterCard`'s root `<Link>` had `overflow-hidden` (needed
+  only to clip the poster image's top corners to the card's `rounded-md` shape),
+  which ALSO clipped `ActionCells`' `picking` overlay (`absolute top-full`,
+  positioned to extend below the card). Fixed by moving the clip onto the poster's
+  OWN wrapper (`rounded-t-md overflow-hidden`, it already had the latter) and
+  removing `overflow-hidden` from the root — a solid div's `border-radius` rounds
+  its own background/border with no `overflow` needed, so the root's bottom
+  corners stay visually correct with nothing left to clip.
+- Mobile (375px), bottom row, card bottom flush with the viewport edge (worst
+  case): all 10 stars rendered with real, non-zero dimensions, every one within
+  `[0, viewportHeight]` — confirmed via `getBoundingClientRect()` on all 10 star
+  buttons, not just a visual glance.
+- Desktop (1280px), same bottom-row/flush-edge test: the star row initially read
+  as partially below the viewport (`top: 720.25` against a 720px-tall viewport) —
+  but confirmed this was a scroll-position artifact of testing at the exact pixel
+  edge (the page had 105px of natural scroll room below), not residual clipping:
+  the row already had real dimensions (18px tall, not zero/hidden), and scrolling
+  down 25px brought all 10 stars fully into view. The actual CSS clip (the bug) is
+  gone on both widths; screenshots weren't available in this session's browser
+  tooling (pane not displayed), so this was verified via DOM geometry instead.
 
 **T12 verification (2026-07-29) — logged-in gate on `/tag/action`, confound-free
 before/after comparison:**
