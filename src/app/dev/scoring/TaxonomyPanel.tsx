@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { TagCategoryConfig, TagBundle } from "./types";
 import { OverrideEntry } from "./ScoringAdmin";
+import { slugify } from "@/lib/slug";
 
 interface VocabTag { key: string; label: string; count: number; category: string; overridden: boolean }
 interface TagItem { id: string; title: string; type: string; posterUrl: string | null; year: number | null }
@@ -26,9 +27,19 @@ export default function TaxonomyPanel({
 }
 
 function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig[]; onChanged: () => void }) {
-  const [newCat, setNewCat] = useState({ id: "", label: "", color: "#9ca3af" });
+  // 2026-07-29 (T5) — the id is DERIVED from the label by default (root cause
+  // of "my created categories are gone": this form used to require typing a
+  // separate lowercase-kebab id, and typing only a human label like "People &
+  // Characters" into it 400'd — the category was never actually created).
+  // `idOverride` stays null until the admin explicitly opts to hand-edit it.
+  const [newCat, setNewCat] = useState({ label: "", color: "#9ca3af" });
+  const [idOverride, setIdOverride] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const derivedId = slugify(newCat.label);
+  const effectiveId = idOverride ?? derivedId;
 
   async function addCategory() {
     setBusy("new");
@@ -37,11 +48,13 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
       const res = await fetch("/api/dev/scoring/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: newCat.id, label: newCat.label, color: newCat.color, weight: 1, ignored: false }),
+        body: JSON.stringify({ id: effectiveId, label: newCat.label, color: newCat.color, weight: 1, ignored: false }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Could not create category"); return; }
-      setNewCat({ id: "", label: "", color: "#9ca3af" });
+      setNewCat({ label: "", color: "#9ca3af" });
+      setIdOverride(null);
+      setEditingId(false);
       onChanged();
     } finally {
       setBusy(null);
@@ -79,17 +92,38 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
         ))}
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800/70">
-        <input placeholder="id (lowercase-kebab)" value={newCat.id} onChange={(e) => setNewCat((c) => ({ ...c, id: e.target.value }))}
-          className={`${inputCls} w-40`} />
-        <input placeholder="Label" value={newCat.label} onChange={(e) => setNewCat((c) => ({ ...c, label: e.target.value }))}
-          className={`${inputCls} flex-1 min-w-0`} />
-        <input type="color" value={newCat.color} onChange={(e) => setNewCat((c) => ({ ...c, color: e.target.value }))}
-          className="w-9 h-8 rounded-md bg-neutral-950 border border-neutral-700" />
-        <button onClick={addCategory} disabled={busy === "new" || !newCat.id || !newCat.label}
-          className="px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-sm text-neutral-200 transition-colors disabled:opacity-50">
-          Add
-        </button>
+      <div className="space-y-1.5 pt-2 border-t border-neutral-800/70">
+        <div className="flex items-center gap-2">
+          <input placeholder="Label (e.g. People & Characters)" value={newCat.label}
+            onChange={(e) => setNewCat((c) => ({ ...c, label: e.target.value }))}
+            className={`${inputCls} flex-1 min-w-0`} />
+          <input type="color" value={newCat.color} onChange={(e) => setNewCat((c) => ({ ...c, color: e.target.value }))}
+            className="w-9 h-8 rounded-md bg-neutral-950 border border-neutral-700" />
+          <button onClick={addCategory} disabled={busy === "new" || !newCat.label || !effectiveId}
+            className="px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-sm text-neutral-200 transition-colors disabled:opacity-50">
+            Add
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-neutral-500 pl-0.5">
+          {editingId ? (
+            <input
+              placeholder="id (lowercase-kebab)"
+              value={idOverride ?? derivedId}
+              onChange={(e) => setIdOverride(e.target.value)}
+              className={`${inputCls} w-48 text-xs py-0.5`}
+            />
+          ) : (
+            <>
+              <span>
+                id: <span className="font-mono text-neutral-400">{derivedId || "—"}</span>
+              </span>
+              <button type="button" onClick={() => { setIdOverride(derivedId); setEditingId(true); }}
+                className="text-neutral-600 hover:text-neutral-300 transition-colors underline decoration-dotted">
+                edit
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
     </section>
