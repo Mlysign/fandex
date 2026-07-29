@@ -4,6 +4,7 @@ import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
 import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, Profile } from "./discovery";
 import { Facet } from "./facets";
 import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
+import { getLibraryFacetAnalysis } from "./libraryAnalysis";
 
 // S11 (2026-07-27): K was recalibrated 10 -> 25 against a real library (see
 // SM13/H5.5); recalibrated again 2026-07-29 for the raw-sum aggregate (T3).
@@ -70,6 +71,38 @@ describe("buildProfile — Bayesian average (H5.2)", () => {
     expect(profile.w.get(horrorId)).toBeCloseTo(baHorror - baseline, 6);
     // Below baseline → a dislike emerges with no special-casing.
     expect(profile.w.get(horrorId)!).toBeLessThan(0);
+  });
+
+  // T11 (2026-07-29) — pins the exact invariant facetDetail.ts's fix relies on:
+  // getLibraryFacetAnalysis()'s FacetStat.ba is not just SIMILAR to
+  // buildProfile()'s meta.BA, it's the same value re-derived from the same
+  // inputs. This is what makes it safe for the facet page's "your average" to
+  // read FacetStat.ba directly instead of recomputing its own plain mean
+  // (the SM22 root cause this session's T11 fixed — see the plan's session log
+  // for the live cross-surface verification against three real tags).
+  it("getLibraryFacetAnalysis's FacetStat.ba is exactly buildProfile's meta.BA for the same facet — the invariant facetDetail.ts's userAvg fix depends on", () => {
+    const a = movie("111", "Thin Tag Movie", ["Cybersecurity"]);
+    const b = movie("112", "Other Movie A", ["Drama"]);
+    const c = movie("113", "Other Movie B", ["Drama"]);
+    upsertLibraryEntry(USER, a, "tmdb", { status: "watched", rating: 1, reviewedAt: 1 }); // thin (n=1), far below baseline
+    upsertLibraryEntry(USER, b, "tmdb", { status: "watched", rating: 9, reviewedAt: 2 });
+    upsertLibraryEntry(USER, c, "tmdb", { status: "watched", rating: 9, reviewedAt: 3 });
+
+    const profile = buildProfile(USER);
+    const analysis = getLibraryFacetAnalysis(USER);
+    const cyberId = "tag||cybersecurity";
+    const stat = analysis.facets.find((f) => f.kind === "tag" && f.key === "cybersecurity")!;
+
+    expect(stat).toBeDefined();
+    // The plain mean (1) and the Bayesian BA are meaningfully different at n=1 —
+    // this is the exact scenario where the old plain-mean userAvg diverged.
+    expect(stat.avg).toBeCloseTo(1, 6);
+    expect(stat.ba).not.toBeCloseTo(1, 1);
+    // FacetStat.ba is pre-rounded to 1dp (libraryAnalysis.ts); profile.meta.BA
+    // is the raw unrounded value — compare at the precision both surfaces
+    // actually DISPLAY, which is the invariant that matters here.
+    expect(stat.ba).toBeCloseTo(Math.round(profile.meta.get(cyberId)!.BA! * 10) / 10, 6);
+    expect(stat.count).toBe(profile.meta.get(cyberId)!.n);
   });
 
   it("excludes an ignored tag category (meta) from the profile entirely", () => {

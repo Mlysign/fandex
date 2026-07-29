@@ -467,8 +467,22 @@ function assemble(
 
   // YOUR average — over every title you rated (from the full merged set).
   const rated = items.filter((i) => i.rating != null);
-  const userAvg = mean(rated.map((i) => i.rating as number));
   const catalogCommunityAvg = mean(rated.filter((i) => i.communityScore != null).map((i) => (i.communityScore as number) / 10));
+
+  // T11 (2026-07-29) — SM22's root cause: this used to be a PLAIN mean over
+  // `rated`, while the item page and Insights show the Bayesian-shrunk BA
+  // (profile.meta.get(id)?.BA / getLibraryFacetAnalysis's FacetStat.ba — the
+  // SAME formula, since buildProfile's BA is literally re-derived from these
+  // same facets). The two converge once a facet has many ratings (shrinkage
+  // becomes negligible) but genuinely diverge for a thin one — exactly a
+  // "different value" complaint. Read the SAME figure here instead of
+  // recomputing a different one from whatever's in `rated`.
+  const analysis = getLibraryFacetAnalysis(userId);
+  const myStat = analysis.facets.find(
+    (f) => f.kind === ref.kind && (f.role ?? "") === (ref.role ?? "") && f.key === ref.key
+  );
+  const userAvg = myStat ? myStat.ba : mean(rated.map((i) => i.rating as number));
+  const userCount = myStat ? myStat.count : rated.length;
 
   // CROWD average — over the broad external set (well-rated only), else catalog.
   let communityAvg: number | null;
@@ -485,14 +499,14 @@ function assemble(
     crowdCount = pool.length;
   }
 
-  const baseline = getLibraryFacetAnalysis(userId).baseline;
+  const baseline = analysis.baseline;
   return {
     facet: ref,
     person,
     scope,
     stats: {
       userAvg: userAvg != null ? round1(userAvg) : null,
-      userCount: rated.length,
+      userCount,
       totalCount: items.length,
       crowdCount,
       communityAvg: communityAvg != null ? round1(communityAvg) : null,
