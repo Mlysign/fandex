@@ -299,7 +299,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     return the same value for the same facet on an item where that facet is counted.
   - Depends on: T2
 
-- [ ] **T11** — Reconcile the facet page's you-vs-crowd average with the item page
+- [x] **T11** — Reconcile the facet page's you-vs-crowd average with the item page
   - Files: `src/lib/facetDetail.ts`, `src/app/api/facet/mine/route.ts`, `src/lib/discovery.ts`
   - Detail: An item page and that tag's facet page currently report different averages for the same
     tag because they recompute over different populations. Make both read the **same** Bayesian
@@ -421,6 +421,31 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T11 verification (2026-07-29) — facet page's "your average" now reads the SAME
+Bayesian figure the item page/Insights show, for three tags spanning thin to heavy
+data:**
+- `little red riding hood` (n=1, the dramatic case): raw rating was **1**/10 — the
+  OLD plain-mean `userAvg` would have shown exactly that. Now: facet page
+  (`/api/facet/mine`) `userAvg` **5.8** = item page (*Jin-Roh: The Wolf Brigade*)
+  `BA` 5.7554→**5.8** = the Bayesian shrinkage toward baseline 6.7, correctly heavy
+  at n=1.
+- `guitar playing` (n=3, moderate): facet page `userAvg` **7.9** = item page
+  (*BioShock Infinite*) `BA` 7.9416→**7.9**. Raw mean would have been 10 (three
+  10s and an 8 across the library) — visibly different from 7.9.
+- `action` (n=729, heavy data, shrinkage negligible): facet page `userAvg` **6.8** =
+  Insights `ba` **6.8** = item page (from the T10 verification above) `BA`
+  6.788→**6.8**. Confirms the fix doesn't disturb the well-data case.
+- Root cause: `facetDetail.ts`'s `assemble()` computed `userAvg` as a plain
+  `mean(rated.map(i => i.rating))` over whatever items its own merge happened to
+  load — a genuinely different number from the Bayesian `BA` every other surface
+  shows, diverging most exactly where it matters most (thin data, where shrinkage
+  bites hardest). Fixed by reading `getLibraryFacetAnalysis(userId).facets`' matching
+  entry's `.ba`/`.count` instead — the exact same values `buildProfile()` re-derives
+  from, confirmed by direct inspection of both formulas.
+- SM22's original fix (2026-07-28) only labelled the basis of the crowd-comparison
+  sentence; it didn't touch this deeper number-source mismatch, which is what T11
+  actually resolves.
 
 **T10 verification (2026-07-29) — identical impact across all three surfaces, for
 both a positive and a negative tag:**
