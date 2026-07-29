@@ -170,35 +170,46 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 
 **C2. The 2026-07-28 mockup-gap surfaces (A1/B5/B6/B7/C8)** — added after the 6th sweep, which
 was the first to exercise them. Every one of these produced a finding; re-check them directly.
-13d. **C8 — the Library/Wishlist merge.** The four status tabs (All/Wishlist/Unrated/Rated) are
-    `<button>`s, **not** links. Regression test (SM21): on `/library` click "Wishlist" → assert
-    `location.pathname`, `document.title`, the `<h1>` and the header count ALL change, and that
-    Back returns to the All tab. As of the 6th sweep none of them do and Back exits the page,
-    while `/wishlist` (the real route) gets all four right — so compare the two, don't test one.
+13d. **C8 — the Library/Wishlist merge.** The four status tabs (All/Wishlist/Unrated/Rated)
+    reversed C8's original "never navigation" call (fixed 2026-07-28, SM21 — T10). Regression
+    test: on `/library` click "Wishlist" → assert `location.search` becomes `?tab=wishlist`
+    (`location.pathname` deliberately stays `/library` — only the query changes), the `<h1>` and
+    the header count both track the ACTIVE TAB, and that Back returns to the All tab (query param
+    dropped) rather than exiting the page. `document.title` is NOT part of the fix (stays
+    "Library · Fandex" on every tab, on purpose — a client-side title effect would reintroduce the
+    SM10 race). `/wishlist` (the real route) should still get everything right by the same logic.
     Note the persisted keys are now **shared** (`rr_mystuff_sort` / `_search` / `_membership` /
     `_incFacets` / `_excFacets` / `_year`); only `rr_view_*` is per page. The old checklist line
     "each side must keep its own filters/sort — separate persisted keys by design" is **obsolete**.
-13e. **C8 render volume (SM19).** `/library` renders the whole list — measure it every sweep:
-    `document.querySelectorAll('a[href^="/game/"],a[href^="/movie/"],a[href^="/show/"]').length`
-    and `document.getElementsByTagName('*').length`. 2,014 cards / 44.5k nodes as of 2026-07-28.
-    Then time a search keystroke synchronously (set `.value` via the native setter, dispatch
-    `input`, measure around the dispatch) — and **specifically time clearing the box back to
-    empty**, which is the worst case (1,426ms). Small→small edits are ~12ms and prove nothing.
+13e. **C8 render volume (SM19, fixed 2026-07-28 — T11).** `/library` used to render the whole
+    list at once (2,014 cards / 44.5k nodes as of the 6th sweep); it now caps the first render at
+    300 and grows by 300 via an `IntersectionObserver` sentinel as you scroll. Re-verify the cap
+    holds: `document.querySelectorAll('a[href^="/game/"],a[href^="/movie/"],a[href^="/show/"]').length`
+    should read ~300 on load, then grow after `window.scrollTo(0, document.body.scrollHeight)`.
+    Also re-time a search keystroke (set `.value` via the native setter, dispatch `input`, measure
+    around the dispatch, **especially clearing the box back to empty** — 1,426ms pre-fix) — the
+    search filter now reads a 200ms-debounced value, so this should be well under 100ms.
 13f. **B5 — NavSearch keyboard path.** Type a person's name in the desktop nav field, then test
-    **Enter** (must do something), **ArrowDown/Up** (must move a highlight and set
-    `aria-activedescendant`), and whether suggestions are real `<a href>`. All three failed in the
-    6th sweep (SM24) — suggestions are `li[role=option]` in a `ul[role=presentation]`. The mouse
-    path works, so a click-only check gives a false pass.
+    **Enter** (must navigate), **ArrowDown/Up** (must move a highlight and set
+    `aria-activedescendant`), and whether suggestions are real `<a href>`. 6th-sweep note (SM24):
+    keyboard nav was actually already working — only the missing `<a href>` was real (fixed
+    2026-07-28, T8, now `next/link`). If a future sweep sees Enter/ArrowDown doing nothing again,
+    check the browser-automation tool's key names first (a "Return"/"Down" alias not mapping to
+    `key: "Enter"`/`"ArrowDown"` produced a false positive here) before filing a new finding.
 13g. **B6 — item score panel.** Expand "Why?" and verify the parts compose: scrape
     `Your baseline` + every `[+-]N.N` delta and assert `baseline + Σ ≈ headline` (passed:
-    67 + 3.8 = 70.8 → 71). Check both a **rated** and an **unrated** item — the unrated one is
-    what exposes SM23 (a Fandex Score exists on the detail page but the facet-page card shows the
-    provider's `/10` instead). Escape closes this popover; the calendar star picker doesn't (SM32).
+    67 + 3.8 = 70.8 → 71). Check both a **rated** and an **unrated** item — the unrated one used to
+    expose SM23 (a Fandex Score existed on the detail page but the facet-page card showed the
+    provider's `/10` instead — fixed 2026-07-28, T12, by healing thin links before scoring). Escape
+    closes this popover, and now closes the calendar star picker too (SM32, fixed T6).
 13h. **B7 — Insights.** Reconcile the numbers every time: type tiles must sum to "Rated items",
     and the "HOW YOU RATE" histogram must sum to the same figure (both passed). Read the section
-    **copy** too, not just the numbers — SM27 is two wrong sentences over correct charts.
-13i. **A1 — calendar agenda rows at 375px.** The Rate+Bookmark bar eats ~145px of the row and
-    truncates most titles to ~12 chars (SM28). Screenshot at mobile, not just desktop.
+    **copy** too, not just the numbers — SM27 (two wrong sentences over correct charts) was fixed
+    2026-07-28, T4: the bucket step is now adaptive and the stray "tick on each bar" clause is gone.
+13i. **A1 — calendar agenda rows at 375px.** SM28 found the Rate+Bookmark bar eating ~145px of the
+    row, truncating most titles to ~12 chars. Re-measured 2026-07-28 (after L4 changed the row's
+    density): the title box was still only 132px, so titles wrapped to 2 lines (`line-clamp-2`, T13)
+    instead — expect ~30-36 chars now, not a fixed-width truncation. Screenshot at mobile.
 
 **D. Cross-cutting**
 20. Back-button spot checks on any NEW surface (full deep-dive already done — N1/N2/N3 known).
@@ -232,19 +243,24 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     the remove. Steam is read-only (no write-back to verify). Log any drift (200 locally but
     absent on the platform = broken write-back; that's a 🟠).
 
-35. **"Coming up" / date-filtered lists must actually be filtered** (added 2026-07-28, SM18).
-    Any surface headed "Coming up"/"Upcoming" — `/profile`, `/calendar`'s two views, Home's
-    Upcoming rail — must be checked against **today's date**, not just for rendering. The trap:
-    `GET /api/calendar` returns all wishlist items sorted by release date **ascending with no
-    future filter**, so a consumer that naively slices the first N shows 1950s films as upcoming.
-    `/calendar` filters client-side and looked perfect; `/profile` didn't. Cheap probe:
-    `fetch('/api/calendar').then(r=>r.json()).then(j=>j.items[0].releaseDate)` — if that's a past
-    date, every consumer of the endpoint is suspect. Check each consumer separately.
-36. **Displayed counts vs displayed rows** (added 2026-07-28, SM20/SM21). Wherever a header shows
-    "N titles"/"N rated"/"N saved", count the rendered cards and compare. Two live mismatches:
-    Discover's `TITLES · N` counts local-catalog matches while the grid shows provider results
-    ("TITLES · 1" over 17 cards), and Library's header count is route-derived so it keeps saying
-    "1597 rated" while the Wishlist tab shows 96 items.
+35. **"Coming up" / date-filtered lists must actually be filtered** (added 2026-07-28, SM18, fixed
+    same day — T1). Any surface headed "Coming up"/"Upcoming" — `/profile`, `/calendar`'s two
+    views, Home's Upcoming rail — must be checked against **today's date**, not just for
+    rendering. The trap: `GET /api/calendar` returns all wishlist items sorted by release date
+    **ascending with no future filter** (still true, by design — the calendar's own Month grid and
+    the Wishlist tab both need the unfiltered history), so a consumer that naively slices the
+    first N shows 1950s films as upcoming. `/calendar` always filtered client-side; `/profile` now
+    does too via the shared `upcomingFrom()` helper (`src/lib/upcoming.ts`). Cheap probe:
+    `fetch('/api/calendar').then(r=>r.json()).then(j=>j.items[0].releaseDate)` will still show a
+    past date (that's the raw feed, correctly) — check what each CONSUMER does with it, not the
+    endpoint itself.
+36. **Displayed counts vs displayed rows** (added 2026-07-28, SM20/SM21, fixed same day — T3/T10).
+    Wherever a header shows "N titles"/"N rated"/"N saved", count the rendered cards and compare.
+    Two mismatches found: Discover's `TITLES · N` counted local-catalog matches while the grid
+    showed provider results ("TITLES · 1" over 17 cards) — now hidden entirely while a search is
+    active, since no single number spans both sources. Library's header count was route-derived
+    so it kept saying "1597 rated" while the Wishlist tab showed 96 items — now tracks the active
+    tab (see 13d above for the accompanying `?tab=` URL check).
 37. **Page titles by hard load, every route, every sweep** (SM26 — the SM10 lesson generalized).
     Cheapest form, no browser needed:
     `curl -s http://localhost:3000/<route>` and regex the `<title>`. Loop all of
