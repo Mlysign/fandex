@@ -18,7 +18,16 @@ import { useEffect, useState } from "react";
 
 export interface TagCategoryOpt { id: string; label: string; color: string }
 
-interface AdminState { isAdmin: boolean; categories: TagCategoryOpt[] }
+// T9 (2026-07-29): `overrides` is included so a caller that only has a
+// CODE-HEURISTIC guess for a tag's category (categorizeTag(), not
+// override-aware) — the item detail page's tag chips, unlike the facet page
+// and Insights, which already get an override-aware categoryId server-side
+// — still ends up pre-selecting the TRUE current category. No race with the
+// select's uncontrolled `defaultValue`: TagCategoryPicker renders nothing
+// until `isAdmin` flips true, which only happens once this SAME fetch
+// (overrides included) has already resolved — so by the time the <select>
+// exists, `overrides` is already populated.
+interface AdminState { isAdmin: boolean; categories: TagCategoryOpt[]; overrides: Map<string, string> }
 
 let cache: AdminState | null = null;
 let inflight: Promise<AdminState> | null = null;
@@ -29,13 +38,15 @@ function loadAdminState(): Promise<AdminState> {
   if (inflight) return inflight;
   inflight = fetch("/api/dev/scoring")
     .then((r) => (r.ok ? r.json() : null))
-    .then((d: { categories?: TagCategoryOpt[] } | null) => {
-      cache = d ? { isAdmin: true, categories: d.categories ?? [] } : { isAdmin: false, categories: [] };
+    .then((d: { categories?: TagCategoryOpt[]; overrides?: { tagKey: string; categoryId: string }[] } | null) => {
+      cache = d
+        ? { isAdmin: true, categories: d.categories ?? [], overrides: new Map((d.overrides ?? []).map((o) => [o.tagKey, o.categoryId])) }
+        : { isAdmin: false, categories: [], overrides: new Map() };
       listeners.forEach((fn) => fn(cache!));
       return cache;
     })
     .catch(() => {
-      cache = { isAdmin: false, categories: [] };
+      cache = { isAdmin: false, categories: [], overrides: new Map() };
       listeners.forEach((fn) => fn(cache!));
       return cache;
     });
@@ -43,7 +54,7 @@ function loadAdminState(): Promise<AdminState> {
 }
 
 export function useTagAdminState(): AdminState {
-  const [state, setState] = useState<AdminState>(cache ?? { isAdmin: false, categories: [] });
+  const [state, setState] = useState<AdminState>(cache ?? { isAdmin: false, categories: [], overrides: new Map() });
   useEffect(() => {
     listeners.add(setState);
     void loadAdminState().then(setState);
@@ -61,15 +72,20 @@ export default function TagCategoryPicker({
   tagKey, categoryId, className, onSaved,
 }: {
   tagKey: string;
+  // Caller's best guess (a server-computed, override-aware value where the
+  // caller has one; a code-heuristic fallback otherwise — see the `overrides`
+  // note above for why either is fine).
   categoryId?: string | null;
   className?: string;
   onSaved?: (categoryId: string) => void;
 }) {
-  const { isAdmin, categories } = useTagAdminState();
+  const { isAdmin, categories, overrides } = useTagAdminState();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   if (!isAdmin) return null;
+
+  const effectiveCategoryId = overrides.get(tagKey) ?? categoryId ?? "";
 
   async function save(id: string) {
     setSaving(true);
@@ -79,6 +95,10 @@ export default function TagCategoryPicker({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tagKey, categoryId: id }),
       });
+      // Keep the shared cache in sync so any OTHER picker instance for this
+      // same tag (unlikely on one page, but cheap to guarantee) shows the new
+      // value too, without waiting on a full re-fetch.
+      if (cache) { cache.overrides.set(tagKey, id); listeners.forEach((fn) => fn(cache!)); }
       setSaved(true);
       onSaved?.(id);
     } finally {
@@ -89,7 +109,7 @@ export default function TagCategoryPicker({
   return (
     <>
       <select
-        defaultValue={categoryId ?? ""}
+        defaultValue={effectiveCategoryId}
         disabled={saving}
         onChange={(e) => save(e.target.value)}
         className={className}

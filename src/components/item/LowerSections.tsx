@@ -6,6 +6,7 @@ import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink, { facetHref } from "@/components/FacetLink";
 import { categorizeTag, CATEGORIES } from "@/lib/tags";
 import { tagKey } from "@/lib/facets";
+import TagCategoryPicker from "@/components/TagCategoryPicker";
 
 // Q21 (2026-07-19) — one cast member, styled like a PosterCard but for a
 // person (portrait photo, no release date/rating). Used in a horizontal
@@ -114,7 +115,7 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
       {/* Tags · keywords · modes · platforms — one section, grouped & color-coded by type (T13) */}
       {(() => {
         // Tags and keywords are the same thing: merge, dedupe by normalized key, categorize.
-        const byCat = new Map<string, string[]>();
+        const byCat = new Map<string, { key: string; label: string }[]>();
         const seen = new Set<string>();
         for (const t of [...tags, ...keywords]) {
           const k = tagKey(t);
@@ -123,10 +124,11 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
           const cat = categorizeTag(k);
           let arr = byCat.get(cat);
           if (!arr) { arr = []; byCat.set(cat, arr); }
-          arr.push(t);
+          arr.push({ key: k, label: t });
         }
-        type Group = { id: string; label: string; color: string; kind: "tag" | "plain"; items: string[] };
-        const groups: Group[] = [];
+        type TagGroup = { id: string; label: string; color: string; kind: "tag"; items: { key: string; label: string }[] };
+        type PlainGroup = { id: string; label: string; color: string; kind: "plain"; items: string[] };
+        const groups: (TagGroup | PlainGroup)[] = [];
         for (const c of CATEGORIES) {
           const items = byCat.get(c.id);
           if (items?.length) groups.push({ id: c.id, label: c.label, color: c.color, kind: "tag", items });
@@ -143,13 +145,27 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
               {groups.map((g) => (
                 <div key={g.id} className="flex flex-wrap items-baseline gap-1.5">
                   <span className="text-[10px] uppercase tracking-wide text-text-secondary mr-1 shrink-0">{g.label}</span>
-                  {g.items.map((it) =>
-                    g.kind === "tag" ? (
-                      <FacetLink key={it} kind="tag" label={it} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={{ background: `${g.color}22`, color: g.color }} />
-                    ) : (
-                      <span key={it} className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${g.color}1f`, color: g.color }}>{it}</span>
-                    )
-                  )}
+                  {g.kind === "tag"
+                    ? g.items.map((it) => (
+                        // T9 (2026-07-29): admin-only inline category picker, hover-revealed —
+                        // same pattern as insights/FacetSection's TagCategoryHoverPanel.
+                        // categoryId is the code-heuristic guess (categorizeTag, computed
+                        // above) — TagCategoryPicker itself prefers a live override over
+                        // this if one exists, so it's a fallback, not the source of truth.
+                        <div key={it.key} className="relative group">
+                          <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-30 hidden group-hover:flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <TagCategoryPicker
+                              tagKey={it.key}
+                              categoryId={g.id}
+                              className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
+                            />
+                          </div>
+                          <FacetLink kind="tag" label={it.label} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={{ background: `${g.color}22`, color: g.color }} />
+                        </div>
+                      ))
+                    : g.items.map((it) => (
+                        <span key={it} className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${g.color}1f`, color: g.color }}>{it}</span>
+                      ))}
                 </div>
               ))}
             </div>

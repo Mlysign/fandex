@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Reason } from "@/components/discovery/types";
 import { fandexScoreColor, matchStrength } from "@/components/FandexScoreBadge";
 import FacetLink from "@/components/FacetLink";
+import TagCategoryPicker from "@/components/TagCategoryPicker";
 import { CATEGORY_COLORS, CATEGORY_LABELS } from "@/lib/tags";
 import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
+import { tagKey } from "@/lib/facets";
 
 // H5.3 — the detail-page Fandex Score panel (04-pages/item-detail.html:147/161/176,
 // B6 2026-07-28): a big serif number, an accent eyebrow, and a one-line reason,
@@ -193,11 +195,30 @@ export default function FandexScoreSection({
                       <span className="flex items-center gap-1.5 flex-wrap">
                         <span className="uppercase tracking-wide text-[10px] font-bold shrink-0" style={{ color: c }}>{reasonGroupLabel(r)}</span>
                         {linkable ? (
-                          <FacetLink
-                            kind={r.kind as "tag" | "person" | "company"} role={r.role} label={r.label}
-                            className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
-                            style={{ background: `${c}22`, color: c }}
-                          />
+                          r.kind === "tag" ? (
+                            // T9 (2026-07-29): admin-only inline category picker, hover-revealed —
+                            // same pattern as the "Tags & details" section below and Insights.
+                            <span className="relative group inline-block">
+                              <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-30 hidden group-hover:flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <TagCategoryPicker
+                                  tagKey={tagKey(r.label)}
+                                  categoryId={r.category}
+                                  className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
+                                />
+                              </span>
+                              <FacetLink
+                                kind="tag" label={r.label}
+                                className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
+                                style={{ background: `${c}22`, color: c }}
+                              />
+                            </span>
+                          ) : (
+                            <FacetLink
+                              kind={r.kind as "person" | "company"} role={r.role} label={r.label}
+                              className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
+                              style={{ background: `${c}22`, color: c }}
+                            />
+                          )
                         ) : (
                           <span className="text-text-secondary">{r.label}</span>
                         )}
