@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fandexScoreColor } from "./FandexScoreBadge";
+import { fandexScoreColor, matchStrength } from "./FandexScoreBadge";
 
 // S11 (2026-07-27, fixes SM12) — bands are `center ± BAND_MARGIN`, not a fixed
 // 70/50. Colors: strong "#5FE39A", typical "#CFC9BE", weak "#F0A04B".
@@ -30,5 +30,17 @@ describe("fandexScoreColor — baseline-relative bands (S11)", () => {
     expect(fandexScoreColor(59)).toBe(TYPICAL);
     expect(fandexScoreColor(40)).toBe(WEAK);     // exactly center(50)-10
     expect(fandexScoreColor(70, null)).toBe(STRONG);
+  });
+
+  // 2026-07-29: the raw-sum aggregate (computeFandexScore) is deliberately
+  // unbounded — no clamp to [0, 100] — so a score of 104 or -3 is a real,
+  // expected input, not a bug to guard against. Both functions must keep
+  // working (no NaN, no throw, a real band) since the badge no longer shows a
+  // "/100" denominator to make an out-of-range number look wrong anyway.
+  it("handles scores outside the old [0, 100] range — real inputs since the raw-sum rework", () => {
+    expect(fandexScoreColor(104, 67)).toBe(STRONG);
+    expect(matchStrength(104, 67)).toBe("strong match");
+    expect(fandexScoreColor(-3, 67)).toBe(WEAK);
+    expect(matchStrength(-3, 67)).toBe("weak match");
   });
 });

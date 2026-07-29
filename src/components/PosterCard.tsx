@@ -42,7 +42,8 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   //   1. The poster now starts at the card's TOP EDGE (it used to sit below a
   //      type-chip strip), with the type chip OVERLAID on it top-left.
   //   2. The score moved out of the poster's corners and into the meta row as
-  //      a serif number + "/100" — the design shows exactly ONE score there
+  //      a serif number (bare, no "/100" as of 2026-07-29 — see
+  //      FandexScoreBadge.tsx) — the design shows exactly ONE score there
   //      (per D-E: Fandex when signed in, community rating in its place for
   //      anon), never two badges competing over the artwork.
   //   3. The action bar dropped to two buttons and moved BELOW title+meta.

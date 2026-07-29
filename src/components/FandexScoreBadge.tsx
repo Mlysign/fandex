@@ -54,7 +54,7 @@ export default function FandexScoreBadge({
   if (score == null) return null;
   const rounded = Math.round(score);
   const color = fandexScoreColor(score, center);
-  const label = `Fandex Score ${rounded} out of 100 — ${matchStrength(score, center)}`;
+  const label = `Fandex Score ${rounded} — ${matchStrength(score, center)}`;
 
   if (variant === "overlay") {
     const dims = size === "md" ? "text-sm px-2.5 py-1 gap-1.5" : "text-[11px] px-1.5 py-0.5 gap-1";
@@ -74,10 +74,15 @@ export default function FandexScoreBadge({
   }
 
   // 03-components.md §2's meta-row score: the NUMBER is serif (19px on a card,
-  // scaled down for denser rows) in the score colour, with a mono "/100"
-  // suffix in text-secondary. Was mono-bold before the 2026-07-27 mockup
-  // audit — the serif is what makes the score read as the card's one
-  // editorial accent rather than another piece of metadata.
+  // scaled down for denser rows) in the score colour. Was mono-bold before the
+  // 2026-07-27 mockup audit — the serif is what makes the score read as the
+  // card's one editorial accent rather than another piece of metadata.
+  //
+  // 2026-07-29: dropped the mono "/100" suffix — the raw-sum rework made the
+  // score genuinely unbounded (this library's real range is 27.5-129.2), so a
+  // "/100" denominator would be actively misleading now, not just decorative.
+  // The strong/typical/weak band word (in the aria-label, and via `color`
+  // here) carries the meaning a fixed scale used to.
   const dims = size === "md" ? "text-[21px]" : "text-[19px]";
   return (
     <span
@@ -87,7 +92,6 @@ export default function FandexScoreBadge({
       aria-label={label}
     >
       {rounded}
-      <span className="font-mono text-micro text-text-secondary" aria-hidden>/100</span>
     </span>
   );
 }
