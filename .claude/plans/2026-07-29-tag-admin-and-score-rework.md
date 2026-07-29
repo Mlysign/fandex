@@ -252,7 +252,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — covered by T5/T6 unit tests plus the manual browser verification in T17.
   - Depends on: T5, T6
 
-- [ ] **T8** — Extract a shared inline tag-category picker
+- [x] **T8** — Extract a shared inline tag-category picker
   - Files: `src/components/TagCategoryPicker.tsx` (new), `src/components/facet/TagAdminControls.tsx`,
     `src/components/insights/FacetSection.tsx`
   - Detail: Factor the duplicated logic in `TagAdminControls` and `FacetSection`'s
