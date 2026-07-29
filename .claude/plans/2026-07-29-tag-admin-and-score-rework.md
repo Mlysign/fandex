@@ -267,7 +267,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — behaviour is admin-gated UI; covered by T17's manual pass.
   - Depends on: none
 
-- [ ] **T9** — Put the category picker on every surface that renders a tag
+- [x] **T9** — Put the category picker on every surface that renders a tag
   - Files: `src/components/item/**` (tag chips on the detail page),
     `src/components/facet/PublicFacetView.tsx`, plus any other tag-chip render site found by
     grepping for `FacetLink` / tag chip rendering
@@ -421,6 +421,17 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T9 finding — item-detail tag chips are grouped by the code heuristic, not the live
+override:** `LowerSections.tsx`'s "Tags & details" section calls `categorizeTag(key)`
+directly to decide which group heading a tag renders under, never consulting
+`tag_category_override`. Concretely: "Role-playing (RPG)" is overridden to `genre`
+(pre-existing, from before this plan), but still visibly renders under "Other" on
+every item page, for every viewer — not just admins. The newly-wired
+`TagCategoryPicker` on that same chip correctly shows "genre" as its pre-selected
+value (verified live), so the picker and the chip's own group heading now visibly
+disagree with each other. Pre-existing bug, not introduced by T9; out of scope to fix
+there (wiring a picker ≠ fixing display grouping) and carried to T16.
 
 **T7 note — dropped "Revert to auto-categorized" affordance:** the old TagTriage panel
 had a button to delete a tag's category override and fall back to `categorizeTag()`'s
