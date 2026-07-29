@@ -340,7 +340,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — visual; covered by T17.
   - Depends on: none
 
-- [ ] **T14** — Add smart back buttons to item and facet pages
+- [x] **T14** — Add smart back buttons to item and facet pages
   - Files: `src/components/ui/BackButton.tsx` (new), item detail page, `/person|/tag|/studio` pages
   - Detail: New client component. Use `router.back()` when in-app history exists, otherwise
     `router.push()` to a sensible parent (`/discover` for an item; the referring item or
@@ -421,6 +421,38 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T14 verification (2026-07-29) — smart back, both page types:**
+- Design: `navHistory.ts`'s `hasPriorPageView()`/`recordPageView()` (a sessionStorage
+  page-view counter) instead of `document.referrer` (stale across Next.js
+  `<Link>`'s client-side transitions — never updates without a real document
+  reload) or `window.history.length` alone (empirically confirmed to read **2** for
+  a genuinely fresh tab opened by this session's own browser tooling — an
+  artifact, not real history — exactly the false positive the plan warned about).
+  `AppNav.tsx` (mounted app-wide, outside the per-page `{children}`) calls
+  `recordPageView()` in a `[pathname]`-keyed effect, firing on every route change
+  including client-side ones. `BackButton` reads `hasPriorPageView()` during
+  **render** (`useState(() => ...)`), not an effect — render always precedes every
+  effect in a commit, so this is ordering-independent from AppNav's own effect for
+  the same navigation.
+- Case (b)/(c) direct-link fallback — verified in TWO separate fresh browser tabs
+  (sessionStorage is per-tab, so this is a clean test): opening an item URL and a
+  `/tag/action` URL directly, `navCount` read `"1"` (correctly no prior page) in
+  both, and clicking Back landed on `/discover` in both — not a dead no-op.
+- Case (a) in-app history — Discover → item → Back correctly returns to
+  `/discover` (confirmed via `router.back()`). Scroll position, however, did
+  **not** restore (landed at `scrollY: 56` against a saved `600`) — but this was
+  confirmed, via a control test, to be a **pre-existing bug unrelated to this
+  change**: the identical result (`56`, not `600`) reproduces using the browser's
+  own native back navigation (no BackButton/`router.back()` involved at all),
+  with `sessionStorage`'s saved value confirmed correct (`"600"`) right up to the
+  navigation. The bug lives in `useScrollRestore()` (`src/lib/usePersistedState.ts`)
+  or its interaction with Next's router cache — BackButton correctly delegates to
+  the same navigation primitive a native back button uses, so there's nothing
+  T14 introduced to fix here. Flagged as a separate task
+  (`task_d56cdfbc`, "Fix Discover's scroll-restoration on browser Back
+  navigation") rather than silently leaving it unmentioned or pulling a
+  different subsystem's bug into this plan's scope.
 
 **T13 verification (2026-07-29) — rate popover clipping, bottom row, both widths:**
 - Root cause confirmed: `PosterCard`'s root `<Link>` had `overflow-hidden` (needed
