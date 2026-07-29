@@ -355,7 +355,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     the DOM interaction out of it.
   - Depends on: none
 
-- [ ] **T15** — Rebuild the hover tooltip as a score explainer
+- [x] **T15** — Rebuild the hover tooltip as a score explainer
   - Files: `src/components/Tooltip.tsx`
   - Detail: The tooltip currently duplicates the card (poster, title, date, type badge, source
     dots). Replace its body with: **title**; the **Fandex Score** as a bare number plus its band
@@ -421,6 +421,35 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T15 verification (2026-07-29) — tooltip rebuilt as a score explainer:**
+- Design: dropped the duplicated poster image; kept width (260px) and the
+  existing left/right-flip positioning algorithm unchanged, only widened the
+  vertical clamp buffer (240 → 340px) since the new content is taller than the
+  old poster+title+date shell. Score/rating/status render immediately from data
+  already on `MediaCardItem` (`fandexScore`/`fandexCenter`/`rating`/
+  `libraryStatus` — no new fetch needed for those). The "contributing tags"
+  section needs the full per-item `Reason[]` breakdown, which no list endpoint
+  returns — added a lazy, hover-only fetch to the SAME `/api/detail` endpoint
+  `PersonalSection` already uses for this (no new endpoint invented). Gated on
+  `item.fandexScore != null` alone, no extra session probe: a non-null score can
+  only ever exist for an authed, non-cold-start viewer in the first place
+  (`computeFandexScore` needs a real profile), so there's nothing to probe for.
+- Verified live on Discover, real hover (dispatching a bubbling `mouseover` —
+  `mouseenter`/`mouseleave` don't bubble natively, so a directly-dispatched
+  `mouseenter` never reaches React's delegated listener; `mouseover` is what
+  React actually listens for under the hood): hovering "David" showed `65 ·
+  Typical Match`, then `Bible +1.9 / giant man +1.2 / Independent Film +0.9`
+  (top 3 positive) and `3d Animation -2.2 / History -2.0` (top 2 negative, most-
+  negative first). Cross-checked against `/api/detail?id=<same id>`'s own
+  `fandexReasons`: **exact match** — same score (65.1→65), same 5 tags, same
+  signed values, same ordering.
+- Overflow check: hovered a card near the grid's right edge (`right: 1184` in a
+  1280px-wide viewport — well within the flip threshold) and confirmed the
+  rendered tooltip's full bounding rect stayed within `[0, viewport]` on every
+  edge; the unscored fallback path (title + date + type badge, no fetch) is
+  unchanged from before and gated by the same `item.fandexScore == null` check
+  the score badge itself already uses everywhere else in the app.
 
 **T14 verification (2026-07-29) — smart back, both page types:**
 - Design: `navHistory.ts`'s `hasPriorPageView()`/`recordPageView()` (a sessionStorage
