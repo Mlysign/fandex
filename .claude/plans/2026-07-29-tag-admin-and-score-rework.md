@@ -233,7 +233,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
     the combined count is the sum.
   - Depends on: none
 
-- [ ] **T7** — Build the tag table, replacing the Taxonomy panel
+- [x] **T7** — Build the tag table, replacing the Taxonomy panel
   - Files: `src/app/dev/scoring/TagTable.tsx` (new), `src/app/dev/scoring/ScoringAdmin.tsx`,
     `src/app/dev/scoring/TaxonomyPanel.tsx` (removed or reduced to the category CRUD the table
     doesn't cover)
@@ -421,3 +421,12 @@ the identical wall the next time someone writes a `scripts/*.mjs` that imports t
 at least add it as a `.eslintrc` override for `src/lib/**`) so this is caught at
 commit/lint time instead of at the next standalone-script surprise — a bulk fix is a
 separate, mechanical PR, not something to bundle into this plan.
+
+**T7 note — dropped "Revert to auto-categorized" affordance:** the old TagTriage panel
+had a button to delete a tag's category override and fall back to `categorizeTag()`'s
+code heuristic. The new TagTable doesn't expose an equivalent — an admin can still
+manually re-pick whatever category the heuristic currently assigns (functionally
+identical for scoring), but that tag then stops auto-tracking any FUTURE change to the
+heuristic. Not required by T7's spec (columns are tag/category/aka, not a revert
+action); flagging so it's a visible decision, not a silent loss. `DELETE
+/api/dev/scoring/overrides?tagKey=` still works if this needs to come back.
