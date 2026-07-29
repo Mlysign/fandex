@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import TagCategoryPicker, { useTagAdminState } from "@/components/TagCategoryPicker";
 
 // Q18 (2026-07-19) — inline taxonomy editing on the public /tag page, for
 // SCORING_ADMIN_USER_IDS-whitelisted viewers only. Reuses the exact same
@@ -8,8 +9,11 @@ import { useEffect, useState } from "react";
 // admin gate. `GET /api/dev/scoring` 404s for a non-admin (withScoringAdmin's
 // fail-closed rule), which doubles as this component's own admin check: a
 // 200 means render; a 404 (or logged-out) means render nothing.
+//
+// T8 (2026-07-29): the category select + its admin/fetch/save logic moved to
+// the shared TagCategoryPicker — this component keeps only what's still
+// unique to it, the bundle (aka) search-and-add UI.
 
-interface CategoryOpt { id: string; label: string; color: string }
 interface VocabTag { key: string; label: string; count: number }
 interface Bundle { canonical: string; members: string[] }
 
@@ -21,40 +25,13 @@ export default function TagAdminControls({
   bundle: Bundle | null;
   onBundleChange: (b: Bundle | null) => void;
 }) {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [categories, setCategories] = useState<CategoryOpt[]>([]);
-  const [savingCategory, setSavingCategory] = useState(false);
+  const { isAdmin } = useTagAdminState();
 
   const [vocab, setVocab] = useState<VocabTag[] | null>(null);
   const [query, setQuery] = useState("");
   const [bundling, setBundling] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/dev/scoring")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { categories?: CategoryOpt[] } | null) => {
-        if (!alive || !d) return;
-        setIsAdmin(true);
-        setCategories(d.categories ?? []);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
   if (!isAdmin) return null;
-
-  async function saveCategory(id: string) {
-    setSavingCategory(true);
-    try {
-      await fetch("/api/dev/scoring/overrides", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagKey, categoryId: id }),
-      });
-    } finally {
-      setSavingCategory(false);
-    }
-  }
 
   async function loadVocab() {
     if (vocab) return;
@@ -100,15 +77,11 @@ export default function TagAdminControls({
 
       <div className="flex items-center gap-2">
         <span className="text-text-secondary shrink-0">Category</span>
-        <select
-          defaultValue={currentCategoryId ?? ""}
-          disabled={savingCategory}
-          onChange={(e) => saveCategory(e.target.value)}
+        <TagCategoryPicker
+          tagKey={tagKey}
+          categoryId={currentCategoryId}
           className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none text-text-primary"
-        >
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-        </select>
-        {savingCategory && <span className="text-text-secondary">Saving…</span>}
+        />
       </div>
 
       <div className="space-y-1.5">

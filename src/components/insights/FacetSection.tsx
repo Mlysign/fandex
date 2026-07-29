@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import StatBar from "./StatBar";
 import { FacetStat, TagCategoryInfo } from "./types";
 import { CATEGORY_COLORS } from "@/lib/tags";
 import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
 import { buildFacetHref } from "@/lib/itemUrl";
+import TagCategoryPicker, { useTagAdminState } from "@/components/TagCategoryPicker";
 
 const PERSON_ROLES = ["director", "writer", "creator", "cast"];
 const COMPANY_ROLES = ["developer", "publisher", "studio", "network"];
@@ -13,43 +14,26 @@ const PER_GROUP = 12; // top/bottom rows shown per group before "+N more"
 interface Group { id: string; label: string; color: string; facets: FacetStat[] }
 
 // Q22 — non-intrusive admin-only category reassignment: hovering a tag row
-// reveals a small dropdown to its LEFT (out of the way of the bar/number),
-// reusing the same POST /api/dev/scoring/overrides the Taxonomy editor uses.
+// reveals a small dropdown to its LEFT (out of the way of the bar/number).
 // Purely a save-and-confirm; it doesn't live-reshuffle the tag between group
 // panels (that'd need lifting the whole grouped-view state) — the row moves
 // on the next load.
-function TagCategoryHoverPanel({ tagKey, categoryId, categories }: { tagKey: string; categoryId?: string; categories: TagCategoryInfo[] }) {
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  async function save(id: string) {
-    setSaving(true);
-    setSaved(false);
-    try {
-      await fetch("/api/dev/scoring/overrides", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagKey, categoryId: id }),
-      });
-      setSaved(true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
+//
+// T8 (2026-07-29): the select + its admin/fetch/save logic moved to the
+// shared TagCategoryPicker (also used by the facet page's TagAdminControls)
+// — this wrapper keeps only the absolute hover-reveal positioning, unique to
+// this surface.
+function TagCategoryHoverPanel({ tagKey, categoryId }: { tagKey: string; categoryId?: string }) {
   return (
     <div
       className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-30 hidden group-hover:flex items-center gap-1.5"
       onClick={(e) => e.stopPropagation()}
     >
-      <select
-        defaultValue={categoryId}
-        disabled={saving}
-        onChange={(e) => save(e.target.value)}
+      <TagCategoryPicker
+        tagKey={tagKey}
+        categoryId={categoryId}
         className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
-      >
-        {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-      </select>
-      {saved && <span className="text-success text-xs">Saved ✓</span>}
+      />
     </div>
   );
 }
@@ -58,7 +42,7 @@ function TagCategoryHoverPanel({ tagKey, categoryId, categories }: { tagKey: str
 // at that many rows with a click-to-expand toggle; otherwise it keeps the legacy
 // "show up to PER_GROUP, +N more — search" behaviour.
 function FacetGroup({
-  group, sorted, eligibleCount, baseline, collapsedCount, tagAdmin, tagCategories,
+  group, sorted, eligibleCount, baseline, collapsedCount, tagAdmin,
 }: {
   group: Group;
   sorted: FacetStat[];
@@ -66,7 +50,6 @@ function FacetGroup({
   baseline: number;
   collapsedCount: number | null;
   tagAdmin: boolean; // Q22: admin viewer + kind === "tag" — show the hover category editor
-  tagCategories: TagCategoryInfo[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const collapsible = collapsedCount != null;
@@ -83,7 +66,7 @@ function FacetGroup({
       <div className="space-y-0.5">
         {shown.map((f) => (
           <div key={`${f.role ?? ""}|${f.key}`} className={tagAdmin ? "relative group" : undefined}>
-            {tagAdmin && <TagCategoryHoverPanel tagKey={f.key} categoryId={f.category} categories={tagCategories} />}
+            {tagAdmin && <TagCategoryHoverPanel tagKey={f.key} categoryId={f.category} />}
             <StatBar label={f.label} value={f.ba} rawAvg={f.avg} count={f.count} color={group.color} baseline={baseline} href={buildFacetHref(f)} />
           </div>
         ))}
@@ -124,16 +107,11 @@ export default function FacetSection({
   const [minCount, setMinCount] = useState(3);
   const [sort, setSort] = useState<"top" | "bottom">("top");
 
-  // Q22 — admin check for the hover category editor (tag panel only). Reuses
-  // the same fail-closed gate /dev/scoring itself uses: a 200 means admin, a
-  // 404 (or logged-out) means render nothing extra.
-  const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    if (kind !== "tag") return;
-    let alive = true;
-    fetch("/api/dev/scoring").then((r) => { if (alive && r.ok) setIsAdmin(true); }).catch(() => {});
-    return () => { alive = false; };
-  }, [kind]);
+  // Q22 — admin check for the hover category editor (tag panel only).
+  // T8 (2026-07-29): reads the SAME shared cache TagCategoryPicker itself
+  // uses (one fetch across the whole page, not one per FacetSection/tag row).
+  const { isAdmin: isAdminUser } = useTagAdminState();
+  const isAdmin = kind === "tag" && isAdminUser;
 
   const ofKind = useMemo(() => facets.filter((f) => f.kind === kind), [facets, kind]);
 
@@ -236,8 +214,7 @@ export default function FacetSection({
                 eligibleCount={eligible.length}
                 baseline={baseline}
                 collapsedCount={collapsible ? defaultVisible : null}
-                tagAdmin={kind === "tag" && isAdmin}
-                tagCategories={tagCategories ?? []}
+                tagAdmin={isAdmin}
               />
             );
           })}
