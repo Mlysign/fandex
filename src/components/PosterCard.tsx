@@ -54,8 +54,13 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
 
   const body = (
     <>
-      {/* Poster — 2:3 per spec, flush to the card's top edge. */}
-      <div className="relative w-full bg-neutral-800 overflow-hidden aspect-[2/3]">
+      {/* Poster — 2:3 per spec, flush to the card's top edge. rounded-t-md
+          matches the root's rounded-md now that the root itself no longer
+          clips (T13, 2026-07-29) — the poster is the only child that ever
+          needed clipping to the card's shape; a solid div's own
+          border-radius already rounds its background/border with no
+          overflow needed. */}
+      <div className="relative w-full bg-neutral-800 overflow-hidden rounded-t-md aspect-[2/3]">
         {imageSrc && !imgErr ? (
           <Image src={imageSrc} alt={item.title} fill sizes="(max-width: 768px) 45vw, 200px" className="object-cover transition-transform duration-base group-hover:scale-[1.02]" onError={() => setImgErr(true)} />
         ) : (
@@ -132,7 +137,15 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           href={buildItemHref(item)}
           data-item-id={item.id}
           aria-label={`${item.title} — view details`}
-          className="group cursor-pointer overflow-hidden rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block"
+          // T13 (2026-07-29): overflow-hidden removed — it was clipping the
+          // rate quick-action's expanding 10-star popover at the card's
+          // bottom edge (ActionCells' `picking` overlay is `absolute
+          // top-full`, positioned to extend BELOW the card). rounded-md
+          // alone still rounds this element's own background/border with no
+          // overflow needed; the poster (the only child that ever overflowed
+          // this box's rounded shape) now clips itself via its own wrapper's
+          // rounded-t-md + overflow-hidden, just above.
+          className="group cursor-pointer rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block"
           onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
           onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
           onClick={() => onSelect(item)}
