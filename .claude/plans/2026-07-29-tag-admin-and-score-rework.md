@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-29-tag-admin-and-score-rework
 created: 2026-07-29
-status: ready
+status: in_progress
 branch: current
 ---
 
