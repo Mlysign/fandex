@@ -5,7 +5,6 @@ import { ChevronDown } from "lucide-react";
 import GroupedView from "@/components/GroupedView";
 import Menu from "@/components/ui/Menu";
 import { useScrollRestore } from "@/lib/usePersistedState";
-import { probeSession } from "@/lib/sessionProbe";
 import type { MediaCardItem } from "@/components/cardItem";
 import type { PublicFacetPayload, PublicFacetItem, FacetSort } from "@/lib/detail/publicFacetDetail";
 import TagAdminControls from "./TagAdminControls";
@@ -45,6 +44,10 @@ interface Props {
   prefix: string;       // "person" | "tag" | "studio" — for /api/facet paging
   kind: string;         // "person" | "tag" | "company" — for /api/facet/mine
   roleLabel: string;    // "Person" | "Tag" | "Studio" — header eyebrow
+  // T12 (2026-07-29): server-known (facetSsr.tsx's own getSession() call),
+  // so the FIRST client render can decide synchronously whether to hold the
+  // grid behind a skeleton — no probeSession() round-trip to wait on first.
+  isLoggedIn: boolean;
 }
 
 // PublicFacetItem + the personal overlay → the shared card shape.
@@ -69,7 +72,12 @@ function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexSc
 
 const noop = () => {};
 
-export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Props) {
+// T12 (2026-07-29): matches GroupedView's own `cardGrid` layout (not exported
+// from there) so the skeleton doesn't visibly reflow into a different column
+// count once the real grid replaces it.
+const cardGridSkeletonClass = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4";
+
+export default function PublicFacetView({ initial, prefix, kind, roleLabel, isLoggedIn }: Props) {
   const [items, setItems] = useState<PublicFacetItem[]>(initial.items);
   const [page, setPage] = useState(initial.page);
   const [hasMore, setHasMore] = useState(initial.hasMore);
@@ -84,6 +92,18 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
   const [hydrated, setHydrated] = useState(false);
   // Q18 — tag category/bundle can change live via the admin controls below.
   const [tagBundle, setTagBundle] = useState(initial.tagBundle);
+  // T12 (2026-07-29): true ONLY when logged in AND the first /api/facet/mine
+  // hasn't settled yet — gates the grid behind a skeleton so a logged-in
+  // viewer never sees an item without its rating/score attached, even for an
+  // instant. Initialized from the server-known `isLoggedIn`, so this is
+  // correct on the very FIRST render (server and client match exactly — no
+  // hydration mismatch, no client-side probe to wait on). Anonymous viewers
+  // get `false` here from the very start, so their render path — and the
+  // SSR HTML a crawler/curl sees — is byte-for-byte what it was before this
+  // change. Once flipped false (the first settle, success OR failure), it
+  // never flips back — "load more" re-fetches mine again but must not
+  // re-hide an already-visible grid.
+  const [minePending, setMinePending] = useState(isLoggedIn);
 
   const person = initial.person;
 
@@ -119,28 +139,30 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
 
   useScrollRestore(`rr_facet_scroll_${prefix}_${initial.key}`, hydrated && items.length > 0);
 
-  // Personal overlay — absent for anonymous viewers. SM6: gate on the shared
-  // session probe instead of firing the authed endpoint into a guaranteed 401.
-  // Q24: send the ids actually rendered so the server can score facet-page
-  // items outside the catalog pool (not yet in library/wishlist — exactly the
-  // ones worth discovering) directly from their own provider data, not just
-  // the pool-based fandexById. Re-fires as more pages load ("Load more"),
+  // Personal overlay — absent for anonymous viewers. T12 (2026-07-29): gate on
+  // the server-known `isLoggedIn` prop directly — no more probeSession()
+  // round-trip to find out what the server already told us. Q24: send the ids
+  // actually rendered so the server can score facet-page items outside the
+  // catalog pool (not yet in library/wishlist — exactly the ones worth
+  // discovering) directly from their own provider data, not just the
+  // pool-based fandexById. Re-fires as more pages load ("Load more"),
   // rescoring the whole set each time — simple, and cheap at facet-page scale.
   useEffect(() => {
+    if (!isLoggedIn) return;
     let alive = true;
     const ids = items.filter((it) => it.linkable).map((it) => it.id).join(",");
-    probeSession()
-      .then((authed) => {
-        if (!alive || !authed) return null;
-        const qs = ids ? `&ids=${encodeURIComponent(ids)}` : "";
-        return fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}${qs}`)
-          .then((r) => (r.ok ? r.json() : null));
-      })
+    const qs = ids ? `&ids=${encodeURIComponent(ids)}` : "";
+    fetch(`/api/facet/mine?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(initial.key)}${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
       .then((d: Mine | null) => { if (alive && d) setMine(d); })
-      .catch(() => {});
+      .catch(() => {})
+      // Settle the skeleton gate on the FIRST resolution only (success or
+      // failure — never hang on a failed fetch), never re-set it true again
+      // on a later "load more" re-fetch.
+      .finally(() => { if (alive) setMinePending(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, initial.key, items.length]);
+  }, [kind, initial.key, items.length, isLoggedIn]);
 
   const load = useCallback(async (nextPage: number, nextSort: FacetSort, replace: boolean) => {
     setLoading(true);
@@ -340,8 +362,17 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel }: Pr
           />
         </div>
 
-        {/* Grid */}
-        {cardItems.length === 0 ? (
+        {/* Grid — T12 (2026-07-29): a logged-in viewer sees the skeleton, never
+            the real grid without ratings/scores attached. `minePending` starts
+            false for anon (from the server-known `isLoggedIn` prop), so this
+            branch never fires for an anonymous viewer/crawler/curl. */}
+        {minePending ? (
+          <div className={cardGridSkeletonClass} aria-hidden>
+            {Array.from({ length: 12 }, (_, i) => (
+              <div key={i} className="rounded-md bg-surface-elevated animate-pulse" style={{ aspectRatio: "2/3" }} />
+            ))}
+          </div>
+        ) : cardItems.length === 0 ? (
           <p className="text-sm text-text-secondary py-12 text-center">Nothing found for this {roleLabel.toLowerCase()}.</p>
         ) : (
           <GroupedView

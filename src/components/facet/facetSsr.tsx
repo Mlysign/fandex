@@ -19,10 +19,15 @@ const ROLE_LABEL: Record<FacetPrefix, string> = { person: "Person", tag: "Tag", 
 // pass the SAME sort from searchParams — resolve to one build per request. The
 // session doesn't need to be in this key: it can't change mid-request, so both
 // callers see the same persist decision regardless of which one runs first.
-const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Promise<PublicFacetPayload | null> => {
-  if (!isFacetPrefix(prefix)) return null;
+//
+// T12 (2026-07-29): also returns `hasSession` (from the ONE getSession() call
+// already made here) so FacetPageBody can pass it to PublicFacetView without a
+// second cookie/JWT/DB round-trip — getSession() itself isn't cache()-wrapped,
+// so calling it again here would double that work on every facet-page request.
+const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Promise<{ payload: PublicFacetPayload | null; hasSession: boolean }> => {
+  if (!isFacetPrefix(prefix)) return { payload: null, hasSession: false };
   let key = slugToKey(slug);
-  if (!key) return null;
+  if (!key) return { payload: null, hasSession: false };
   // H5.6: a tag bundle's member spellings resolve to the canonical key, so the
   // provider pool + metadata use the canonical (the body separately 308s the URL).
   if (prefix === "tag") key = canonicalTagKey(key);
@@ -30,7 +35,8 @@ const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Pro
   // writable) from a Server Component, so this is safe to call from metadata
   // generation too — see @/lib/session.
   const session = await getSession();
-  return buildPublicFacetDetail({ kind: prefixToKind(prefix), key }, { page: 0, sort, persist: !!session });
+  const payload = await buildPublicFacetDetail({ kind: prefixToKind(prefix), key }, { page: 0, sort, persist: !!session });
+  return { payload, hasSession: !!session };
 });
 
 function sortOf(sp: Record<string, string | string[] | undefined> | undefined): FacetSort {
@@ -44,7 +50,7 @@ export async function buildFacetMetadata(
   slug: string,
   searchParams?: Record<string, string | string[] | undefined>
 ): Promise<Metadata> {
-  const found = await resolve(prefix, slug, sortOf(searchParams));
+  const { payload: found } = await resolve(prefix, slug, sortOf(searchParams));
   if (!found || (found.total === 0 && !found.person)) {
     return { title: "Not found", robots: { index: false, follow: false } };
   }
@@ -76,7 +82,15 @@ export async function FacetPageBody({
     if (canonical && canonical !== key) permanentRedirect(publicFacetHref({ kind: "tag", key: canonical }));
   }
   const sort = sortOf(searchParams);
-  const found = await resolve(prefix, slug, sort);
+  const { payload: found, hasSession } = await resolve(prefix, slug, sort);
   if (!found || (found.total === 0 && !found.person)) notFound();
-  return <PublicFacetView initial={found} prefix={prefix} kind={found.kind} roleLabel={ROLE_LABEL[prefix]} />;
+  // T12 (2026-07-29): `hasSession` came from the SAME getSession() call
+  // `resolve` already made (React's cache() dedupes the call across
+  // generateMetadata + here) — passing it down as a plain boolean lets
+  // PublicFacetView decide synchronously, on its very first render, whether
+  // to hold the grid behind a skeleton until /api/facet/mine is ready.
+  // Deliberately NOT a client-side probeSession() round-trip: on a throttled
+  // connection that round-trip is exactly the window where an unrated item
+  // would otherwise flash on screen.
+  return <PublicFacetView initial={found} prefix={prefix} kind={found.kind} roleLabel={ROLE_LABEL[prefix]} isLoggedIn={hasSession} />;
 }
