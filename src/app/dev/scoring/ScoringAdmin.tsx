@@ -1,21 +1,23 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { ScoringConfigValues, TagCategoryConfig, TagBundle } from "./types";
+import { ScoringConfigValues, TagCategoryConfig } from "./types";
 import WeightsPanel from "./WeightsPanel";
 import TaxonomyPanel from "./TaxonomyPanel";
 
 // H5.4 — /dev/scoring: the Fandex Score dev backend (docs/fandex-score.md §5).
-// Two tabs: Weights & tuning (role/category weights, C, K, cap — live
-// preview) and Taxonomy (category CRUD + tag reassignment triage).
-
-export interface OverrideEntry { tagKey: string; categoryId: string }
+// Two tabs: Weights & tuning (role/category weights, C, K, top-N selection —
+// live preview) and Taxonomy (category CRUD + the tag table, T7).
+//
+// 2026-07-29 (T7): overrides/bundles used to be fetched here and threaded
+// down through TaxonomyPanel to its BundleList/TagTriage children. Both are
+// gone — TagTable.tsx fetches its own rows (already override/aka-aware) from
+// GET /api/dev/scoring/tags — so this component no longer needs to know about
+// either.
 
 export default function ScoringAdmin() {
   const [tab, setTab] = useState<"weights" | "taxonomy">("weights");
   const [config, setConfig] = useState<ScoringConfigValues | null>(null);
   const [categories, setCategories] = useState<TagCategoryConfig[]>([]);
-  const [overrides, setOverrides] = useState<OverrideEntry[]>([]);
-  const [bundles, setBundles] = useState<TagBundle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,16 +25,11 @@ export default function ScoringAdmin() {
     setLoading(true);
     setError(null);
     try {
-      const [res, bundleRes] = await Promise.all([
-        fetch("/api/dev/scoring"),
-        fetch("/api/dev/scoring/aliases"),
-      ]);
+      const res = await fetch("/api/dev/scoring");
       if (!res.ok) throw new Error(`Failed to load (${res.status})`);
       const data = await res.json();
       setConfig(data.config);
       setCategories(data.categories);
-      setOverrides(data.overrides);
-      if (bundleRes.ok) setBundles((await bundleRes.json()).bundles ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -73,7 +70,7 @@ export default function ScoringAdmin() {
         tab === "weights" ? (
           <WeightsPanel config={config} categories={categories} onSaved={load} />
         ) : (
-          <TaxonomyPanel categories={categories} overrides={overrides} bundles={bundles} onChanged={load} />
+          <TaxonomyPanel categories={categories} onChanged={load} />
         )
       )}
     </div>
