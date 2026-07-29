@@ -161,13 +161,16 @@ export const FacetFetchSchema = z.object({
 // ── H5.4 /dev/scoring (admin-only) ────────────────────────────────────────
 const zRoleWeights = z.record(z.string(), z.number());
 
-// PUT /api/dev/scoring — save role weights + C/K/cap.
+// PUT /api/dev/scoring — save role weights + C/K/top-N selection counts.
 export const ScoringConfigPutSchema = z.object({
   roleWeights: zRoleWeights,
   priorStrength: z.number().positive(),
   mappingConstantUp: z.number().positive(),
   mappingConstantDown: z.number().positive(),
-  perCategoryCap: z.number().int().positive(),
+  topTagsPositive: z.number().int().min(0),
+  topTagsNegative: z.number().int().min(0),
+  topPeople: z.number().int().min(0),
+  topCompanies: z.number().int().min(0),
 });
 
 // POST /api/dev/scoring/categories — create/edit one tag_category row.

@@ -5,7 +5,10 @@ export interface ScoringConfigValues {
   priorStrength: number;
   mappingConstantUp: number;
   mappingConstantDown: number;
-  perCategoryCap: number;
+  topTagsPositive: number;
+  topTagsNegative: number;
+  topPeople: number;
+  topCompanies: number;
 }
 
 export interface TagCategoryConfig {

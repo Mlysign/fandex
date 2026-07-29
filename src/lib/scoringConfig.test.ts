@@ -37,6 +37,29 @@ describe("scoringConfig loader (H5.1)", () => {
     saveScoringConfig(DEFAULT_SCORING_CONFIG);
   });
 
+  it("a config blob saved before topTagsPositive/topTagsNegative/topPeople/topCompanies existed still reads back their defaults (forward-compat merge)", () => {
+    invalidateScoringConfigCaches();
+    // Simulate a pre-2026-07-29 stored row: write JSON missing the four new keys directly,
+    // bypassing saveScoringConfig (which would always write the full current shape).
+    const legacyBlob = {
+      roleWeights: DEFAULT_SCORING_CONFIG.roleWeights,
+      priorStrength: DEFAULT_SCORING_CONFIG.priorStrength,
+      mappingConstantUp: DEFAULT_SCORING_CONFIG.mappingConstantUp,
+      mappingConstantDown: DEFAULT_SCORING_CONFIG.mappingConstantDown,
+    };
+    run(`UPDATE scoring_config SET config = ?, version = version + 1 WHERE id = 1`, [JSON.stringify(legacyBlob)]);
+    invalidateScoringConfigCaches();
+
+    const cfg = getScoringConfig();
+    expect(cfg.topTagsPositive).toBe(DEFAULT_SCORING_CONFIG.topTagsPositive);
+    expect(cfg.topTagsNegative).toBe(DEFAULT_SCORING_CONFIG.topTagsNegative);
+    expect(cfg.topPeople).toBe(DEFAULT_SCORING_CONFIG.topPeople);
+    expect(cfg.topCompanies).toBe(DEFAULT_SCORING_CONFIG.topCompanies);
+
+    // Restore so this test doesn't leak state into other test files sharing the in-memory db.
+    saveScoringConfig(DEFAULT_SCORING_CONFIG);
+  });
+
   it("caches getScoringConfig until the signature (version/updated_at) changes", () => {
     invalidateScoringConfigCaches();
     const first = getScoringConfig();

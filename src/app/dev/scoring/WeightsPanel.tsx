@@ -184,8 +184,9 @@ export default function WeightsPanel({
                   onChange={(e) => setDraftConfig((c) => ({ ...c, mappingConstantUp: Number(e.target.value) }))} />
               </label>
               <p className="text-xs text-neutral-500">
-                Formula: <code className="text-neutral-400">yourAvgRating×10 + K · weightedDev</code>. Applied when an
-                item scores above your own average rating. Higher K_up = a good match swings up more dramatically.
+                Formula: <code className="text-neutral-400">yourAvgRating×10 + K · Σ(dev·weight)</code> — a raw sum
+                over the selected facets below, not an average, and no longer clamped to 0–100. Applied when an
+                item&apos;s facets sum positive. Higher K_up = a good match swings up more dramatically.
               </p>
             </div>
             <div className="space-y-1">
@@ -201,17 +202,38 @@ export default function WeightsPanel({
                 these two gains are.
               </p>
             </div>
-            <div className="space-y-1">
-              <label className="flex items-center justify-between gap-2 text-neutral-400">
-                Per-category cap
-                <input type="number" step="1" min="1" className={numInput} value={draftConfig.perCategoryCap}
-                  onChange={(e) => setDraftConfig((c) => ({ ...c, perCategoryCap: Number(e.target.value) }))} />
-              </label>
-              <p className="text-xs text-neutral-500">
-                Only the top-N tags per category (by contribution) count toward the score, so an item tagged with
-                many tags in one category (e.g. 15 mood tags) can&apos;t drown out a single strong director/cast signal.
-              </p>
-            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-4">
+          <h2 className="text-sm font-semibold text-neutral-200">Selection (top-N)</h2>
+          <p className="text-xs text-neutral-500">
+            The score is a raw sum, not an average — so it needs a fixed number of facets to sum, or a tag-dense
+            item (a 300-tag game) would swamp a sparse one (a 5-tag film). Each item&apos;s highest-contributing
+            facets, up to these counts per bucket, are summed; everything else is shown greyed-out as
+            &ldquo;not counted for this title.&rdquo;
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <label className="flex items-center justify-between gap-2 text-neutral-400">
+              Top tags (positive)
+              <input type="number" step="1" min="0" className={numInput} value={draftConfig.topTagsPositive}
+                onChange={(e) => setDraftConfig((c) => ({ ...c, topTagsPositive: Number(e.target.value) }))} />
+            </label>
+            <label className="flex items-center justify-between gap-2 text-neutral-400">
+              Top tags (negative)
+              <input type="number" step="1" min="0" className={numInput} value={draftConfig.topTagsNegative}
+                onChange={(e) => setDraftConfig((c) => ({ ...c, topTagsNegative: Number(e.target.value) }))} />
+            </label>
+            <label className="flex items-center justify-between gap-2 text-neutral-400">
+              Top people
+              <input type="number" step="1" min="0" className={numInput} value={draftConfig.topPeople}
+                onChange={(e) => setDraftConfig((c) => ({ ...c, topPeople: Number(e.target.value) }))} />
+            </label>
+            <label className="flex items-center justify-between gap-2 text-neutral-400">
+              Top companies
+              <input type="number" step="1" min="0" className={numInput} value={draftConfig.topCompanies}
+                onChange={(e) => setDraftConfig((c) => ({ ...c, topCompanies: Number(e.target.value) }))} />
+            </label>
           </div>
         </section>
 

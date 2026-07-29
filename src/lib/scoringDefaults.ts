@@ -15,22 +15,30 @@ export interface ScoringConfigValues {
   // down (skews the visible range toward enthusiasm rather than half the
   // library reading as "you won't like this"). The center itself is derived,
   // never a knob — only the two gains are.
-  mappingConstantUp: number;   // K_up — gain applied when weightedDev >= 0
-  mappingConstantDown: number; // K_down — gain applied when weightedDev < 0
-  perCategoryCap: number;  // top-N tags per category counted toward the aggregate (§3.3, D3)
+  mappingConstantUp: number;   // K_up — gain applied when rawSum >= 0
+  mappingConstantDown: number; // K_down — gain applied when rawSum < 0
+  // 2026-07-29: replaced `perCategoryCap` (top-N per category, capped an item's
+  // OWN 5 genre tags to 3) with a fixed-size top-N selection across the whole
+  // item — see computeFandexScore. This is what makes a tag's contribution
+  // item-independent (no divisor) and therefore printable on a chip.
+  topTagsPositive: number; // top-N tags with dev > 0, by dev descending
+  topTagsNegative: number; // top-N tags with dev < 0, by dev ascending (most negative first)
+  topPeople: number;       // top-N director/creator/writer/cast facets, by |dev| descending
+  topCompanies: number;    // top-N developer/publisher/studio/network facets, by |dev| descending
 }
 
 // Mirrors discovery.ts's ROLE_WEIGHT + K_SHRINK verbatim, so seeding this table
-// changes no live scoring behavior (that swap is H5.2). perCategoryCap is
-// still a provisional default. The K constants were originally 10/10
-// (unchanged from the pre-H5 behavior) pending real calibration — that
-// calibration happened in H5.5/S11 (2026-07-27, see SM13): measured against a
-// real 1,855-item library, K=10 compressed the whole score range into
-// 58.8–79.1 (p10–p90 of just 9 points), making "weak match" unreachable.
-// K=25 is the largest value that library supports with ZERO clamping at 0/100
-// (K=30 already clips the top item) — see fandex-score.md §3.3/D1 for the
-// projection math. Still symmetric: Q19's asymmetric-gain idea (K_up > K_down)
-// remains a live option but wasn't part of this calibration pass.
+// changes no live scoring behavior (that swap is H5.2).
+//
+// 2026-07-29 (this batch): the aggregate changed from a weighted MEAN (score
+// compressed toward the center as facet count grew, and a tag's contribution
+// was a share of the total — item-dependent) to an UNBOUNDED RAW SUM over a
+// fixed-size top-N selection (topTagsPositive/topTagsNegative/topPeople/
+// topCompanies below) — see computeFandexScore. K was recalibrated for the
+// new math by scripts/calibrate-fandex.mjs against the owner's real library;
+// see that script's output and docs/fandex-score.md for the measured
+// before/after distribution. The OLD K=25 value (H5.5/S11, 2026-07-27) was
+// calibrated for the mean and is not meaningful under the sum.
 export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   roleWeights: {
     director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6,
@@ -39,7 +47,10 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   priorStrength: 5,
   mappingConstantUp: 25,
   mappingConstantDown: 25,
-  perCategoryCap: 3,
+  topTagsPositive: 5,
+  topTagsNegative: 3,
+  topPeople: 3,
+  topCompanies: 2,
 };
 
 export interface TagCategorySeed {
