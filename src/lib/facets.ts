@@ -7,7 +7,7 @@
 // and companies are read straight from `raw_data` here. Tags reuse the merged
 // `tags` + `keywords` (which already union genres/keywords across sources).
 
-import { MediaLink, MediaType, Source } from "@/types";
+import type { MediaLink, MediaType, Source } from "@/types";
 import { categorizeTag } from "@/lib/tags";
 
 export type FacetKind = "tag" | "person" | "company";

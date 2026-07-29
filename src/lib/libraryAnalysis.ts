@@ -7,10 +7,10 @@ import { query, get } from "@/lib/db";
 import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
-import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
+import { extractFacets, facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
 import { getScoringConfig, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
-import { MediaLink, MediaType } from "@/types";
+import type { MediaLink, MediaType } from "@/types";
 
 // One aggregated facet (tag / person / company) across the rated library.
 export interface FacetStat {

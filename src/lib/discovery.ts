@@ -10,13 +10,13 @@ import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks, extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
-import { extractFacets, Facet, facetId, FacetRole, personKey, companyKey } from "@/lib/facets";
+import { extractFacets, type Facet, facetId, type FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
-import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, TagCategoryConfig } from "@/lib/scoringConfig";
+import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
-import { ScoringConfigValues } from "@/lib/scoringDefaults";
-import { MediaLink, MediaType } from "@/types";
+import type { ScoringConfigValues } from "@/lib/scoringDefaults";
+import type { MediaLink, MediaType } from "@/types";
 
 // ── Tunables ───────────────────────────────────────────────────────
 // K_SHRINK (the old raw·count/(count+K) confidence shrink) is gone from HERE —

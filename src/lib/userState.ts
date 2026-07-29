@@ -1,5 +1,5 @@
 import { query } from "@/lib/db";
-import { Source } from "@/types";
+import type { Source } from "@/types";
 
 // The canonical per-item user-state shown on list / card / calendar items.
 // `platformSources` is canonically the WISHLIST providers (so the source dots

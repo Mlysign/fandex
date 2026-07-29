@@ -3,7 +3,7 @@
 // facet pages' bayesScore (publicFacetDetail.ts) so a handful of high votes
 // can't outrank a well-voted classic — same semantics on every surface.
 
-import { CommunityRating } from "@/types";
+import type { CommunityRating } from "@/types";
 
 // Total community vote count across all sources (the "Popularity" signal).
 // CommunityRating.votes is per-source; absent → 0.

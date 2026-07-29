@@ -1,4 +1,4 @@
-import { Source, CommunityRating } from "@/types";
+import type { Source, CommunityRating } from "@/types";
 
 // Per-platform ratings live in user_library.metadata as { [source]: { rating, ... } }.
 // The canonical user_library.rating is the AVERAGE across platforms.

@@ -11,7 +11,7 @@
 // deep and canonicalTagKey is a single lookup.
 
 import { get, query, run, transaction } from "@/lib/db";
-import { Facet, facetId } from "@/lib/facets";
+import { type Facet, facetId } from "@/lib/facets";
 
 // ── cache ─────────────────────────────────────────────────────────────
 let _aliasCache: { sig: string; value: Map<string, string> } | null = null;

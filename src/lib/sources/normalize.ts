@@ -1,4 +1,4 @@
-import { Source, MediaType, CommunityRating, EnrichedItem } from "@/types";
+import type { Source, MediaType, CommunityRating, EnrichedItem } from "@/types";
 
 // ── A1: per-source normalizers ────────────────────────────────────────────────
 // Each source maps its raw_data → a SourceNormalized partial (one place per

@@ -5,7 +5,7 @@
 // only makes the DB-backed values loadable ahead of it.
 
 import { get, query, run } from "@/lib/db";
-import { DEFAULT_SCORING_CONFIG, ScoringConfigValues } from "@/lib/scoringDefaults";
+import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from "@/lib/scoringDefaults";
 import { tagAliasSignature } from "@/lib/tagAlias";
 
 export interface TagCategoryConfig {

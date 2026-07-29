@@ -1,5 +1,5 @@
-import { Source, MediaLink, EnrichedItem, MediaType, CommunityRating } from "@/types";
-import { SourceNormalized, normalizeSource } from "./sources/normalize";
+import type { Source, MediaLink, EnrichedItem, MediaType, CommunityRating } from "@/types";
+import { type SourceNormalized, normalizeSource } from "./sources/normalize";
 import { DEFAULT_COUNTRY } from "./countries";
 
 // merge.ts is now pure POLICY: it merges the per-source SourceNormalized partials
