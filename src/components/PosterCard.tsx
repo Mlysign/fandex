@@ -10,6 +10,7 @@ import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
 import CommunityScoreBadge from "@/components/CommunityScoreBadge";
+import { usePendingFandexScore } from "@/components/usePendingFandexScore";
 import { MediaCardItem } from "@/components/cardItem";
 import { buildItemHref } from "@/lib/itemUrl";
 
@@ -47,7 +48,14 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   //      (per D-E: Fandex when signed in, community rating in its place for
   //      anon), never two badges competing over the artwork.
   //   3. The action bar dropped to two buttons and moved BELOW title+meta.
-  const shownScore = item.fandexScore ?? item.communityScore;
+  // 2026-07-29 — an item the feed left `fandexPending` has no score YET (its
+  // local row is too thin to score honestly). Resolve it client-side; until it
+  // lands, the badge slot shows a pending pip rather than the community score,
+  // so the number in that slot never silently changes meaning mid-load.
+  const { score: resolvedScore, loading: scoreLoading } = usePendingFandexScore(item.id, item.fandexPending);
+  const fandexScore = item.fandexScore ?? resolvedScore?.score ?? null;
+  const fandexCenter = item.fandexCenter ?? resolvedScore?.center ?? null;
+  const shownScore = fandexScore ?? item.communityScore;
   const releaseLabel = item.releaseDate
     ? (() => { try { return format(parseISO(item.releaseDate), "MMM yyyy"); } catch { return item.releaseDate; } })()
     : "TBA";
@@ -107,9 +115,15 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
 
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-meta text-text-secondary truncate">{releaseLabel}</span>
-          {shownScore != null && (
-            item.fandexScore != null
-              ? <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} variant="inline" />
+          {scoreLoading ? (
+            <span
+              className="w-8 h-3 rounded-full bg-surface-overlay animate-pulse shrink-0"
+              role="status"
+              aria-label="Working out your Fandex Score"
+            />
+          ) : shownScore != null && (
+            fandexScore != null
+              ? <FandexScoreBadge score={fandexScore} center={fandexCenter} variant="inline" />
               : <CommunityScoreBadge score={item.communityScore} variant="inline" />
           )}
         </div>

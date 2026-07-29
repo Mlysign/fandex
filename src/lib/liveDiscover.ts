@@ -17,6 +17,7 @@ import { BoundedCache } from "@/lib/boundedCache";
 import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT, Reason, Profile } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
 import { resolveMediaIdsBySource } from "@/lib/userState";
+import { loadLinks } from "@/lib/detail/enrich";
 import { extractFacets, tagKey, Facet } from "@/lib/facets";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
@@ -179,6 +180,8 @@ function fandexFor(facets: Facet[], rawProfile: Profile): { score: number | null
 // THOSE facets. Pure in-memory once `getCache()` is warm, plus one batched
 // id→uuid query — no hydration, no provider round-trip.
 const isDeep = (facets: Facet[]) => facets.some((f) => f.kind !== "tag");
+// One feed page's worth of direct media_links reads (see `catalogFacets`).
+const DIRECT_LINK_READ_CAP = 60;
 
 function catalogFacets(candidates: FeedCandidate[]): Map<string, Facet[]> {
   const out = new Map<string, Facet[]>();
@@ -193,19 +196,44 @@ function catalogFacets(candidates: FeedCandidate[]): Map<string, Facet[]> {
   if (!pairs.length) return out;
 
   const idMap = resolveMediaIdsBySource(pairs);
+  const unresolved: { candidateId: string; mediaItemId: string }[] = [];
+
   for (const c of candidates) {
     for (const [source, sid] of Object.entries(c.ids ?? {})) {
       if (sid == null) continue;
       const mid = idMap.get(`${source}:${String(sid)}`);
-      const facets = mid ? getCatalogFacets(mid) : null;
-      // Only a DEEP catalog row is an upgrade. A browsed-only row's facets are
-      // the same genre list we already hold, so falling through to listFacets
-      // costs nothing and keeps the `pending` classification below honest.
+      if (!mid) continue;
+      const facets = getCatalogFacets(mid);
       if (facets && isDeep(facets)) { out.set(c.id, facets); break; }
+      // In the catalog table but NOT in the discovery cache: POOL_WHERE keeps
+      // browsed-only rows out of it (H2b), and roughly half a feed page is
+      // exactly that — rows whose links are already fully enriched
+      // (projection_version 2, 20 KB payloads), just pool-excluded. Reading
+      // them straight from media_links below is a local query with no provider
+      // call, so deferring them to the client's hydration round-trip would be
+      // pure latency for data we already hold.
+      unresolved.push({ candidateId: c.id, mediaItemId: mid });
+      break;
     }
+  }
+
+  // Bounded on purpose: one feed page, not the whole catalog. Each read parses
+  // that item's stored blobs, which is why the pooled path uses the cache.
+  for (const { candidateId, mediaItemId } of unresolved.slice(0, DIRECT_LINK_READ_CAP)) {
+    const links = loadLinks(mediaItemId);
+    if (!links.length) continue;
+    const type = candidateTypeOf(candidates, candidateId);
+    if (!type) continue;
+    const facets = extractFacets(links, type, mergeLinks(links, type));
+    // Still shallow → genuinely thin, and only a provider fetch can fix it.
+    // Leave it out so it's classified pending and healed asynchronously.
+    if (isDeep(facets)) out.set(candidateId, facets);
   }
   return out;
 }
+
+const candidateTypeOf = (candidates: FeedCandidate[], id: string): MediaType | null =>
+  candidates.find((c) => c.id === id)?.type ?? null;
 
 async function rankType(
   candidates: FeedCandidate[],
