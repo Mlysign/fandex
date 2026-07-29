@@ -1254,4 +1254,52 @@ This file is the **bug collection** — Claude reads/writes here.
 
 ## Changelog
 - _2026-06-14_ — Triaged the 2 logged bugs. Bug 1 (Warriors of the Wind) = not a bug (TMDB alt-title; relates to T22). Bug 2 (studios) = display half fixed in InsightsView (publishers now shown); data-coverage half tracked as **D9** in TASKS.md.
+
+---
+
+## Smoke test — 2026-07-28 (ID `SM#`, continues SM1–SM17) — ✅ ALL 15 CLOSED same day
+
+Scope: 6th sweep, first one run **entirely logged in from the start** (the in-app Browser pane already held a live `rr2_session` — no mint, no OAuth). Local dev on `dc91279`, desktop + 375px mobile, anon side covered via cookie-less `curl` (SSR/status/API only). Focus: the five surfaces shipped 2026-07-28 (A1/B5/B6/B7/C8), which no sweep had touched. Zero console errors and zero server errors for the whole sweep. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| SM18 | 🟠 | data | /profile "Coming up" | Lists 1954–1972 releases as upcoming (Seven Samurai, Dr. Strangelove, PlayTime, The Godfather, Deliverance). Root cause: `GET /api/calendar` returns all 96 wishlist items sorted by release date ascending with no future filter; `/calendar`'s List view filters client-side, `/profile` just took the first 5. |
+| SM19 | 🟠 | perf | Library / My Stuff | `/library` rendered the entire list in one shot — 2,014 cards, 44,517 DOM nodes, no pagination/virtualization. Search input blocked the main thread: 237ms first keystroke, 1,426ms clearing back to empty. |
+| SM20 | 🟠 | ux/data | Discover result count | The `TITLES · N` label contradicted the grid (local-catalog count vs local+external grid) — e.g. "TITLES · 1" with 17+ cards rendered for "inception". |
+| SM21 | 🟠 | nav/state | Library ⇄ Wishlist tabs (C8) | The four status tabs were pure client state — no URL/`title`/`h1`/count change, no history entry, lost on reload; Back left the page entirely. `/wishlist` (a real route) got all of this right. |
+| SM22 | 🟡 | data/ux | Facet page you-vs-crowd | The you-vs-crowd delta sentence contradicted the two displayed averages shown next to it (computed over a different subset with no on-screen disclosure). |
+| SM23 | 🟡 | ui | Card score badge, facet pages | Same badge slot carried two different metrics on two different scales (Fandex Score `/100` vs provider rating `/10`) with no label, disagreeing with Discover's consistent `/100`. |
+| SM24 | 🟡 | a11y | NavSearch (B5) | Suggestions were `<li role="option">` with no `href`, no `aria-activedescendant`, Arrow keys and Enter did nothing — mouse-only. |
+| SM25 | 🟡 | ui | /calendar month view at 375px | 7 columns in 375px gave 42px-wide day cells, titles clipped to fragments. |
+| SM26 | 🟡 | ui | Page titles | `/settings` sent "Profile · Fandex" while its `<h1>` read "Settings"; `/discover` had no title of its own. |
+| SM27 | 🟡 | ui/copy | /insights (B7) | Two stale-copy mismatches: "(½-point buckets)" over a 10-integer-bar chart, and an Overview subtitle referencing "the tick on each bar" over tiles with no bars/ticks. |
+| SM28 | 🟡 | ui | /calendar agenda rows (A1) | At 375px the Rate + Bookmark bar took ~145px of the row, truncating most titles to ~12 characters. |
+| SM29 | 🔵 | a11y | Library tabs + item score panel | Tabs weren't wired to their `tablist`/`tabpanel`; the item-page score panel was one giant `<button>` with an unreadable accessible name. |
+| SM30 | 🔵 | ui | /settings vs /insights | Settings still used plain headings while B7 gave Insights the eyebrow/panel anatomy. |
+| SM31 | 🔵 | ux | Item page rating display | A rated item's rating rendered twice, stacked, in two different formats. |
+| SM32 | 🔵 | ux | Calendar star picker | The inline 10-star picker didn't close on Escape (the item page's "Why?" popover did). |
+
+**Held up well:** A1/B5/B6/B7/C8 all genuinely shipped and functional; zero console/server errors across the sweep; Fandex Score + Insights math reconciled exactly; anon gating held (401s, branded 404s, no stats strip on anon Home); H4.6/H4.7 verified logged-in for the first time (export 200, correct filename/size, zero credential leaks).
+
+**Coverage gap:** the anon side was checked only via cookie-less `curl` (SSR HTML, status codes, API shapes) — no anon browser/JS pass, since logging out to get one is forbidden (bumps `session_epoch`, kills Nils's own session).
+
+**Closeout — 2026-07-28, all 15 findings resolved** per [.claude/plans/2026-07-28-smoketest-sm18-sm32-closeout.md](../../.claude/plans/2026-07-28-smoketest-sm18-sm32-closeout.md):
+
+- SM18 ✅ `/profile`'s "Coming up" now filters through a shared `upcomingFrom()` helper (also used by the calendar agenda view).
+- SM19 ✅ `/library` renders incrementally (first 300, `IntersectionObserver` sentinel); search reads a 200ms-debounced value.
+- SM20 ✅ Discover's result count is hidden while a search is active.
+- SM21 ✅ **Reverses C8's "switching tabs is never navigation" call** — the tab now lives in `?tab=`.
+- SM22 ✅ The you-vs-crowd sentence now names its basis.
+- SM23 ✅ `/api/facet/mine`'s ids-fallback now heals thin/stale links before scoring, matching `/api/detail`.
+- SM24 ✅ NavSearch suggestions are real `next/link` links; keyboard nav was already wired in the B5 commit.
+- SM25 **Won't-fix** — Month stays the calendar default at every width; L4 already improved mobile cells 40.7×128 → 50.8×80.
+- SM26 ✅ `/settings` title corrected; `/discover` split into a server `page.tsx` + client component for its own metadata.
+- SM27 ✅ Histogram bucket step is adaptive; the stray "tick on each bar" clause removed.
+- SM28 ✅ `line-clamp-2` on the title (re-measured against L4's new 50.8×80 cells first).
+- SM29 ✅ `LibraryWishlistTabs` tabs are now direct children of the real `tablist`, paired with a `tabpanel`; the item-page score panel's button is now just "Why?".
+- SM30 ✅ `/settings` restyled to B7's `PanelHeader` eyebrow/panel anatomy.
+- SM31 ✅ Duplicate "★ 8 / 10" removed from the item page's meta line.
+- SM32 ✅ The calendar star picker now closes on Escape and returns focus to its trigger.
+
+362 → 385 tests (23 new, all passing, 1 pre-existing skip), typecheck clean, lint 0 errors. Verified in-browser logged in via `/api/dev/login`.
 - _2026-06-14_ — Triaged the Search Bar section → **T24** (consistency + remove source/Community/Runtime filters + search-on-filter) and **T8** (5-option sort set + new platform-avg & user-rating sorts + sort-driven result layout). Specs in TASKS.md.

@@ -371,7 +371,7 @@ Lint must stay at **0 errors** (385 pre-existing warnings are expected and fine)
   - Tests: none — visual; covered by T17.
   - Depends on: T10
 
-- [ ] **T16** — Log the open questions this session deliberately did not answer
+- [x] **T16** — Log the open questions this session deliberately did not answer
   - Files: `TASKS.md`
   - Detail: Add a dated section for this batch. Record as **open**: whether `priorStrength` (C) and
     the per-role weights want re-tuning now that the aggregate changed shape; and whether the
@@ -611,3 +611,13 @@ identical for scoring), but that tag then stops auto-tracking any FUTURE change 
 heuristic. Not required by T7's spec (columns are tag/category/aka, not a revert
 action); flagging so it's a visible decision, not a silent loss. `DELETE
 /api/dev/scoring/overrides?tagKey=` still works if this needs to come back.
+
+**T16 (2026-07-29):** Logged the two required open questions (`priorStrength`/
+per-role-weight re-tuning under the new raw-sum shape; whether `capped` is the right
+long-term treatment as more items accumulate more excluded facets) plus the T9 stale-
+grouping finding, as a new dated section in TASKS.md. Archived the fully-closed
+2026-07-28 smoke-test section (SM18–SM32, ~46 lines) into `docs/archive/history.md`
+first to make room under the 200-line CI guard — TASKS.md was at 187/200 lines before
+archiving, 145 after, 156 after adding the new section (archiving trims detail into a
+one-line pointer + brief win list, per the file's existing convention for closed-out
+sections). STATUS.md's digest gained a matching `👉 2026-07-29` entry at the top.
