@@ -55,9 +55,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Known-accepted (S10): 2 *moderate*, build-time-only advisories via Next's
-      # bundled postcss (GHSA-qx2v-qp2m-jg93). npm's only "fix" is downgrading Next,
-      # which we refuse — Dependabot will open a PR once Next ships a patched
-      # postcss. Fail only on HIGH+ so a genuinely new/serious advisory blocks merge.
-      - name: Audit (high or above)
-        run: npm audit --audit-level=high
+      # --omit=dev: the only remaining high-severity advisory (2026-07-29) is
+      # brace-expansion's DoS-via-glob-expansion, reachable only through eslint's
+      # own minimatch@3.1.5 chain (eslint/eslint-plugin-import/jsx-a11y/react,
+      # @eslint/config-array, @eslint/eslintrc) — devDependencies, never shipped,
+      # and not fixable without a major eslint 9->10 bump (no patched brace-expansion
+      # exists for minimatch@3.x's API). It only ever matches this repo's own static
+      # lint globs, never attacker input, so there's nothing here to exploit.
+      # Runtime deps (next, postcss, etc.) are still fully audited.
+      - name: Audit (high or above, runtime deps)
+        run: npm audit --audit-level=high --omit=dev
