@@ -9,6 +9,7 @@ import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
 import FacetLink from "@/components/FacetLink";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
+import { readBrowseCache, writeBrowseCache } from "@/lib/discoverBrowseCache";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
@@ -93,6 +94,28 @@ function mergeSorted(prev: any[], incoming: any[], prepend: boolean) {
     if (!b.releaseDate) return -1;
     return a.releaseDate.localeCompare(b.releaseDate);
   });
+}
+
+// T7 — the actual network fetch loadDefault() needs, pulled out module-scope
+// (no closure over component state) so it can run TWICE: once synchronously
+// for a cold load, once in the background to revalidate a warm cache-painted
+// one. Same page depth either way — these are server-cached + deterministic
+// (see loadDefault's own comment), so a revalidation is expected to mostly
+// reproduce the cache, not diverge from it.
+async function fetchBrowsePages(
+  target: { games: number; movies: number; shows: number },
+  targetBack: { games: number; movies: number; shows: number }
+): Promise<any[]> {
+  const reqs: Promise<any>[] = [fetch("/api/discover").then((r) => r.json())];
+  for (const sec of ["games", "movies", "shows"] as const) {
+    for (let p = 2; p <= target[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}`).then((r) => r.json()));
+    for (let p = 1; p <= targetBack[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}&direction=past`).then((r) => r.json()));
+  }
+  const results = await Promise.all(reqs.map((p) => p.catch(() => ({}))));
+  const [base, ...rest] = results;
+  let merged: any[] = base.items ?? [];
+  for (const d of rest) merged = mergeSorted(merged, d.items ?? [], false);
+  return merged;
 }
 
 // A5 — typed search groups (Titles / People / Tags). People/Tags are a small
@@ -207,7 +230,6 @@ export default function DiscoverPageClient() {
   // ── Browse loaders ──
   // Declared before the mount effect that calls it (react-hooks: no use-before-declaration).
   async function loadDefault() {
-    setLoading(true);
     // N2 (Discover): restore the browse DEPTH from the last visit. The feed
     // pages are server-cached and deterministic, so refetching the same page
     // numbers reproduces the same list — which the saved scroll position
@@ -220,15 +242,36 @@ export default function DiscoverPageClient() {
     const target = { games: cap(stash.pages?.games, 1), movies: cap(stash.pages?.movies, 1), shows: cap(stash.pages?.shows, 1) };
     const targetBack = { games: cap(stash.backPages?.games, 0), movies: cap(stash.backPages?.movies, 0), shows: cap(stash.backPages?.shows, 0) };
 
-    const reqs: Promise<any>[] = [fetch("/api/discover").then((r) => r.json())];
-    for (const sec of ["games", "movies", "shows"] as const) {
-      for (let p = 2; p <= target[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}`).then((r) => r.json()));
-      for (let p = 1; p <= targetBack[sec]; p++) reqs.push(fetch(`/api/discover?section=${sec}&page=${p}&direction=past`).then((r) => r.json()));
+    // T7 — a warm cache paints immediately (no spinner, no re-fetch wait), the
+    // exact ~1.5s gap the previous plan's T4 traced Discover's late scroll
+    // restore to. Written alongside the depth stash, so it always represents
+    // this same target/targetBack pair. A cold load (no cache) behaves exactly
+    // as before this change: spinner, fetch, then paint once.
+    const cached = readBrowseCache();
+    if (cached && cached.items.length > 0) {
+      setItems(cached.items);
+      setPages(target);
+      setBackPages(targetBack);
+      setHasMore(true);
+      setHasMoreBack(true);
+      setLoading(false);
+      // Revalidate silently in the background — same fetch a cold load would
+      // do, just not blocking the paint. On success, re-anchor the viewport
+      // (Q26's existing mechanism — see captureAnchor's own comment) before
+      // swapping in the fresh data, in case revalidation genuinely differs
+      // from what was cached. On failure, keep showing the cached view rather
+      // than erroring out from under the visitor.
+      fetchBrowsePages(target, targetBack)
+        .then((merged) => {
+          captureAnchor();
+          setItems(merged);
+        })
+        .catch(() => { /* keep the cache-painted view */ });
+      return;
     }
-    const results = await Promise.all(reqs.map((p) => p.catch(() => ({}))));
-    const [base, ...rest] = results;
-    let merged: any[] = base.items ?? [];
-    for (const d of rest) merged = mergeSorted(merged, d.items ?? [], false);
+
+    setLoading(true);
+    const merged = await fetchBrowsePages(target, targetBack);
     setItems(merged);
     setPages(target);
     setBackPages(targetBack);
@@ -256,10 +299,18 @@ export default function DiscoverPageClient() {
   // N2: mirror the browse depth for loadDefault's restore, and save/restore the
   // browse scroll. The today-scroll yields when a restore is pending — same
   // pattern as the wishlist/library pages.
+  //
+  // T7: the SAME effect also mirrors the items cache — writing both together
+  // (one commit, `pages`/`backPages`/`items` as the trigger) keeps the depth
+  // stash and the cached items from ever disagreeing about what target they
+  // correspond to. Runs after loadMore/loadPrevious/the background
+  // revalidation too, not just the initial load, so Back always paints
+  // whatever was most recently seen.
   useEffect(() => {
     if (loading) return;
     try { sessionStorage.setItem("rr_discover_browse", JSON.stringify({ pages, backPages })); } catch { /* quota */ }
-  }, [pages, backPages, loading]);
+    writeBrowseCache(items);
+  }, [pages, backPages, loading, items]);
   const [autoToday] = useState(() => !hasSavedScroll("rr_discover_scroll"));
   useScrollRestore("rr_discover_scroll", !searchActive && !loading && items.length > 0);
 

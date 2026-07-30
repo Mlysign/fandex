@@ -248,7 +248,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none — covered by T1's content-presence test.
   - Depends on: T1
 
-- [ ] **T7** — Cache Discover's browse payload across navigation
+- [x] **T7** — Cache Discover's browse payload across navigation
   - Files: `src/app/discover/DiscoverPageClient.tsx`, `src/lib/usePersistedState.ts` only if a
     shared helper genuinely belongs there
   - Detail: The leftover from the previous plan's T4. On Back, `loadDefault()` re-fetches
