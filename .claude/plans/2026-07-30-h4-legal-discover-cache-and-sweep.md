@@ -201,7 +201,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none — covered by T1's both-locales-present test.
   - Depends on: T1, T2
 
-- [ ] **T4** — Draft the terms of service (EN + DE)
+- [x] **T4** — Draft the terms of service (EN + DE)
   - Files: `src/lib/legal/content/en/terms.ts`, `src/lib/legal/content/de/terms.ts`
   - Detail: Free-service terms: account and acceptable use, user content (ratings, reviews,
     library), an availability disclaimer appropriate to a one-person hobby project,
