@@ -217,7 +217,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none — covered by T1.
   - Depends on: T1
 
-- [ ] **T5** — Support/contact page + the profile footer
+- [x] **T5** — Support/contact page + the profile footer
   - Files: `src/lib/legal/content/en/support.ts`, `src/lib/legal/content/de/support.ts`,
     `src/components/legal/LegalFooter.tsx` (new), `src/app/profile/ProfilePageClient.tsx`
   - Detail: A simple support page built around `hello@fandex.org` (routing is already live)

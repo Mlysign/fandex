@@ -17,6 +17,7 @@ import Spinner from "@/components/ui/Spinner";
 import ErrorState from "@/components/ui/ErrorState";
 import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
+import LegalFooter from "@/components/legal/LegalFooter";
 
 // 2026-07-27 (Nils, mockup-vs-live pass) — the hub is a MERGE of two source
 // documents that turned out to describe different pages:
@@ -234,6 +235,11 @@ export default function ProfilePageClient() {
             {recommendation.slice(0, 8).map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
           </Rail>
         )}
+
+        {/* H4.1 — the ONE legal footer in the whole app, here per the locked
+            2026-07-18 decision (BGH two-click rule; /profile is reachable
+            from everywhere via H1's nav). */}
+        <LegalFooter />
       </main>
     </div>
   );
