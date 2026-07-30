@@ -89,7 +89,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
 
 ## Tasks
 
-- [ ] **T1** — Probe prod; run PR17 steps 1–3 only if it's actually back
+- [x] **T1** — Probe prod; run PR17 steps 1–3 only if it's actually back
   - Files: `TASKS.md`, `STATUS.md`, `docs/archive/history.md` (only if prod is up)
   - Detail: `curl -s -o - -w "\n%{http_code}" https://fandex.org/api/health`. If the body is
     Railway's `{"status":"error","code":404,"message":"Application not found"}`, append one dated
