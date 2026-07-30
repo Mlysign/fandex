@@ -213,7 +213,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
     sharing only a common facet.
   - Depends on: none
 
-- [ ] **T7** — Run the 7th smoke sweep; log findings only
+- [x] **T7** — Run the 7th smoke sweep; log findings only
   - Files: `TASKS.md` (a new dated "Smoke test — 2026-07-31" section), `smoketest.md` (only if a step
     needs correcting)
   - Detail: Run the `/smoketest` skill against the local dev server, logged in via
