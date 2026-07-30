@@ -6,7 +6,7 @@ import {
   canonicalTagKey, applyTagAliases, setTagAlias, deleteTagAlias,
   deleteTagBundle, listTagBundles, invalidateTagAliasCache,
 } from "./tagAlias";
-import { Facet } from "./facets";
+import type { Facet } from "./facets";
 
 // H5.6 — tag bundling. A tag_alias maps a member spelling to a canonical key;
 // applying that remap at the two aggregation chokepoints must make bundled

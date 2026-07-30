@@ -1,6 +1,7 @@
 "use client";
 import DualRangeSlider from "@/components/DualRangeSlider";
-import { UiFilters, Membership, YEAR_MIN, YEAR_MAX } from "./types";
+import type { UiFilters, Membership} from "./types";
+import { YEAR_MIN, YEAR_MAX } from "./types";
 
 // Year range + membership (library / wishlist). Type lives in SubBar's chips;
 // must-include/exclude facets live in SubBar's facet row. Source / Community /

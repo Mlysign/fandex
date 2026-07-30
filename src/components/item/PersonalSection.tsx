@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Star, Bookmark } from "lucide-react";
-import { EnrichedItem, MediaType } from "@/types";
+import type { EnrichedItem, MediaType } from "@/types";
 import type { PlatformStatus } from "@/lib/watchlistStatus";
-import { IntentAction, stashIntent, takeIntent } from "@/lib/pendingIntent";
+import type { IntentAction} from "@/lib/pendingIntent";
+import { stashIntent, takeIntent } from "@/lib/pendingIntent";
 import { probeSession } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
 import { StarPicker } from "@/components/ActionCells";
@@ -11,7 +12,7 @@ import { fmtScore } from "./format";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
 import FandexScoreSection from "./FandexScoreSection";
-import { Reason } from "@/components/discovery/types";
+import type { Reason } from "@/components/discovery/types";
 
 // P13 — the ONE section that differs between a logged-out and a logged-in
 // viewer, on the ONE shared item url.

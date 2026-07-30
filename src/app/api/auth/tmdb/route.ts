@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { createTmdbRequestToken } from "@/lib/sources/tmdb";
 import { setOAuthStateCookie, setOAuthReturnCookie } from "@/lib/oauthState";

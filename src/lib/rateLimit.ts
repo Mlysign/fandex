@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { BoundedCache } from "./boundedCache";
 
 // In-process rate limiting (S3/P7). Single-instance only (P1 = one long-lived

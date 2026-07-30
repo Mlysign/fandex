@@ -4,8 +4,9 @@
 // so a facet pill means the same thing here as in catalog search.
 
 import { extractFacets, facetId } from "@/lib/facets";
-import { FacetPill, Membership, YEAR_MIN, YEAR_MAX } from "@/components/discovery/types";
-import { MediaLink, MediaType } from "@/types";
+import type { FacetPill, Membership} from "@/components/discovery/types";
+import { YEAR_MIN, YEAR_MAX } from "@/components/discovery/types";
+import type { MediaLink, MediaType } from "@/types";
 
 interface FacetableItem {
   id: string;

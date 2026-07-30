@@ -78,9 +78,9 @@ describe("linksForScoring", () => {
       title: "Spirited Away",
       releaseDate: null,
       rawData: { id: 999, name: "Spirited Away", tags: [{ name: "Unpersisted Tag" }] },
-      lastSynced: null,
+      lastSynced: 0,
       projectionVersion: 2,
-    } as MediaLink);
+    });
 
     const scored = linksForScoring(ITEM, live);
     expect(scored.map((l) => l.source)).toEqual(["tmdb"]);

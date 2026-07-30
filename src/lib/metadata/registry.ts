@@ -1,5 +1,5 @@
-import { MediaType, Source } from "@/types";
-import { MetadataProvider } from "./types";
+import type { MediaType, Source } from "@/types";
+import type { MetadataProvider } from "./types";
 import { tmdbMetadata } from "./providers/tmdb";
 import { rawgMetadata } from "./providers/rawg";
 import { steamMetadata } from "./providers/steam";

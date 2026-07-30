@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run, query } from "@/lib/db";
-import { MediaSource, PulledItem } from "@/lib/sources/types";
+import type { MediaSource, PulledItem } from "@/lib/sources/types";
 import { syncProvider } from "./index";
 
 // Regression: a FAILED pull must never prune.

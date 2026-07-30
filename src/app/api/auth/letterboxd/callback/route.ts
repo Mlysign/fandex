@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { exchangeLetterboxdCode, getLetterboxdMe } from "@/lib/sources/letterboxd";
 import { handleOAuthCallback } from "@/lib/oauthConnect";
 

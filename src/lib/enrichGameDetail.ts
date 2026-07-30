@@ -1,7 +1,7 @@
 import { query } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
 import { METADATA } from "@/lib/metadata/registry";
-import { Source } from "@/types";
+import type { Source } from "@/types";
 
 // D9 — game *list* payloads (Steam owned-games = appid/name/playtime, RAWG
 // played-list) omit developer/publisher, so Insights/facets have no studio data

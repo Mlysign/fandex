@@ -3,8 +3,9 @@ import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
 import { buildProfile, computeFandexScore, invalidateDiscoveryCache } from "./discovery";
 import { decorateSection } from "./liveDiscover";
-import { extractFacets, Facet } from "./facets";
-import { FeedCandidate } from "./discoverFeed";
+import type { Facet } from "./facets";
+import { extractFacets } from "./facets";
+import type { FeedCandidate } from "./discoverFeed";
 
 // 2026-07-29 — THE FACET-SOURCE INVARIANT.
 //

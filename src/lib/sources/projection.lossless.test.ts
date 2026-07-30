@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { normalizeSource } from "./normalize";
 import { projectRawData } from "./project";
 import { COUNTRIES } from "@/lib/countries";
-import { Source, MediaType } from "@/types";
+import type { Source, MediaType } from "@/types";
 
 // H2a guard: the raw_data projection must be LOSSLESS with respect to what the
 // app actually reads.

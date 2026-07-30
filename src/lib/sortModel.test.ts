@@ -4,7 +4,7 @@ import { upsertMediaItem } from "./matcher";
 import { find, invalidateDiscoveryCache } from "./discovery";
 import { sortItems } from "./sortItems";
 import { communityVotes, bayesRating, ratingPrior } from "./ratingsSort";
-import { CommunityRating } from "@/types";
+import type { CommunityRating } from "@/types";
 
 // Unified sort model (2026-07-19): Release date / Popularity / Rating (Bayesian)
 // / Fandex Score. These lock the two non-obvious pieces — Bayesian damping (a

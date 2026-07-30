@@ -1,4 +1,5 @@
-import { FacetKind, FacetRole, tagKey, personKey, companyKey } from "@/lib/facets";
+import type { FacetKind, FacetRole} from "@/lib/facets";
+import { tagKey, personKey, companyKey } from "@/lib/facets";
 
 // P17 — public, shareable, readable facet URLs: `/{prefix}/{slug}`
 //

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
@@ -6,7 +7,7 @@ import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap, resolveMediaItemFromIds } from "@/lib/userState";
 import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore } from "@/lib/discovery";
-import { MediaLink, EnrichedItem, MediaType } from "@/types";
+import type { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";

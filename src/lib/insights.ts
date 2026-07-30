@@ -4,7 +4,8 @@
 // the top/bottom + volume-vs-quality views. Only item-level extras that need
 // per-item data (overview, histograms, you-vs-crowd, by-era) are computed here.
 
-import { getLibraryFacetAnalysis, FacetStat, RatedItem } from "@/lib/libraryAnalysis";
+import type { FacetStat, RatedItem } from "@/lib/libraryAnalysis";
+import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getTagCategories } from "@/lib/scoringConfig";
 import { buildProfile, facetImpact } from "@/lib/discovery";
 import { facetId } from "@/lib/facets";

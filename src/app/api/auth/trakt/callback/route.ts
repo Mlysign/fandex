@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { exchangeTraktCode, getTraktUserInfo } from "@/lib/sources/trakt";
 import { handleOAuthCallback } from "@/lib/oauthConnect";
 

@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
-import { FacetKind, FacetRole, extractFacets } from "@/lib/facets";
+import type { FacetKind, FacetRole} from "@/lib/facets";
+import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 
 // P17 — the PERSONAL overlay for a public facet page. The page itself is public
 // and provider-sourced (publicFacetDetail.ts, no user data); this authed endpoint

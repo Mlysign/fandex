@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { get } from "@/lib/db";
 import { createSession, setSessionCookie } from "@/lib/session";
-import { SessionUser, Source } from "@/types";
+import type { SessionUser, Source } from "@/types";
 
 // Dev-only login shortcut. Mints a REAL session for a configured users.id so a
 // local browser — or an unattended agent session driving the preview tools —

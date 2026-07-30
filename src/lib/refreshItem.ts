@@ -2,7 +2,7 @@ import { get } from "@/lib/db";
 import { log, errorFields } from "@/lib/logger";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
 import { sourcesForType } from "@/lib/sources/registry";
-import { MediaSource, CrossIds } from "@/lib/sources/types";
+import type { MediaSource, CrossIds } from "@/lib/sources/types";
 import { ingestWishlistItem, ingestLibraryItem, itemMatches } from "@/lib/sources/ingest";
 
 // Known source ids for the item being refreshed. A discover movie carries `tmdb`

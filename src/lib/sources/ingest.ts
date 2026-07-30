@@ -1,5 +1,5 @@
-import { MediaType } from "@/types";
-import { MediaSource, PulledItem, CrossIds } from "./types";
+import type { MediaType } from "@/types";
+import type { MediaSource, PulledItem, CrossIds } from "./types";
 import { upsertMediaItem, upsertWatchlistEntry, upsertLibraryEntry } from "@/lib/matcher";
 
 // Shared atoms for turning a provider's PulledItem into local DB state. Used by

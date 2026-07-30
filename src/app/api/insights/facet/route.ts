@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
-import { FacetRole } from "@/lib/facets";
+import type { FacetRole } from "@/lib/facets";
 
 // Detail for one facet (tag/person/company): catalog items carrying it (+ your
 // library state), your average vs the crowd, and a TMDB bio/age for people.

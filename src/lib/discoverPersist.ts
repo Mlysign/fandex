@@ -29,8 +29,8 @@
 import { upsertMediaItem } from "@/lib/matcher";
 import { log, errorFields } from "@/lib/logger";
 import { transaction, query } from "@/lib/db";
-import { RawPayload } from "@/lib/discoverFeed";
-import { MediaType } from "@/types";
+import type { RawPayload } from "@/lib/discoverFeed";
+import type { MediaType } from "@/types";
 
 export interface PersistableItem {
   id: string;

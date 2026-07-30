@@ -21,6 +21,18 @@ const eslintConfig = defineConfig([
       // genuinely actionable errors — react-hooks correctness, etc. — aren't
       // drowned out in lint output.
       "@typescript-eslint/no-explicit-any": "warn",
+      // An ERROR, not a style preference: it guards a real load-time crash.
+      // Node's native type-stripping (what scripts/alias-hooks.mjs relies on for
+      // every rehearse-*.mjs / calibrate-*.mjs) only erases syntactically
+      // type-only constructs. A plain `import { Foo } from "@/types"` where Foo
+      // is an interface therefore survives stripping and throws
+      //   SyntaxError: does not provide an export named 'Foo'
+      // the moment a standalone script reaches that module — while tsc, vitest,
+      // next dev and next build all elide it correctly and report nothing. Every
+      // export of src/types/index.ts is type-only, so this was latent in ~50
+      // files; it cost real debugging time writing calibrate-fandex.mjs
+      // (2026-07-29) and was recommended there. Enabled 2026-07-30.
+      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "separate-type-imports" }],
       // usePersistedState's `normalize` (3rd arg) must be a STABLE reference —
       // its own hydrate effect is keyed on it (see usePersistedState.ts's own
       // comment). An inline arrow/function re-runs that effect every render,

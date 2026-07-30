@@ -7,8 +7,9 @@
 import { query } from "@/lib/db";
 import { categorizeTag } from "@/lib/tags";
 import { persistItemFromIds } from "@/lib/persistItem";
+import type {
+  CandidateRef} from "@/lib/sources/tagDiscover";
 import {
-  CandidateRef,
   tmdbGenreId,
   rawgGenreSlug,
   rawgTagSlug,

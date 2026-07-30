@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Star, Bookmark } from "lucide-react";
-import { useQuickActions, QuickActionItem } from "@/lib/useQuickActions";
+import type { QuickActionItem } from "@/lib/useQuickActions";
+import { useQuickActions } from "@/lib/useQuickActions";
 
 // Action toolbar shared by PosterCard + ListCard. Always visible (works on
 // touch); each cell is both an indicator and a control. The rate cell opens a

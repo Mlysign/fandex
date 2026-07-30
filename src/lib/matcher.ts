@@ -3,7 +3,7 @@ import { projectRawData, PROJECTION_VERSION } from "./sources/project";
 import { query, run, get, transaction } from "./db";
 import { normalizeName, extractYear, mergeForCanonical } from "./merge";
 import { averageFromMetadata } from "./ratings";
-import { Source, MediaType } from "@/types";
+import type { Source, MediaType } from "@/types";
 
 interface SourceItem {
   source: Source;

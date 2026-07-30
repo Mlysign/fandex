@@ -1,6 +1,6 @@
 import { permanentRedirect, redirect } from "next/navigation";
 import { publicFacetHref } from "@/lib/facetUrl";
-import { FacetKind, FacetRole } from "@/lib/facets";
+import type { FacetKind, FacetRole } from "@/lib/facets";
 
 // P17 — the facet detail experience moved to the PUBLIC pages
 // (/person, /tag, /studio), which are provider-sourced and session-aware (the

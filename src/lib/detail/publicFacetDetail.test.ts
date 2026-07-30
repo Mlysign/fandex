@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { initDb, run } from "@/lib/db";
-import { personPool, sortPool, crowdAvg, PoolTitle, PublicFacetItem, PublicFacetPayload } from "./publicFacetDetail";
+import type { PoolTitle, PublicFacetItem, PublicFacetPayload } from "./publicFacetDetail";
+import { personPool, sortPool, crowdAvg } from "./publicFacetDetail";
+// Named up here rather than inline as `typeof import("…")` in the importOriginal
+// generics below: consistent-type-imports forbids import() type annotations, and
+// a type-only import is fully erased, so it can't interfere with vi.mock hoisting.
+import type * as FacetDetailModule from "@/lib/facetDetail";
+import type * as DiscoverPersistModule from "@/lib/discoverPersist";
 
 // PR14 (2026-07-22) mocks — buildPublicFacetDetail fans out to live TMDB/RAWG
 // calls; stub the exact seams so a "tag" build resolves via the static genre
@@ -9,7 +15,7 @@ import { personPool, sortPool, crowdAvg, PoolTitle, PublicFacetItem, PublicFacet
 // test exists to assert is (or isn't) called, not something to exercise for
 // real against the in-memory test DB.
 vi.mock("@/lib/facetDetail", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/facetDetail")>();
+  const actual = await importOriginal<typeof FacetDetailModule>();
   return {
     ...actual,
     tmdbJson: vi.fn().mockResolvedValue({ results: [{ id: 101, title: "Mock Movie", vote_average: 7, vote_count: 100 }] }),
@@ -17,7 +23,7 @@ vi.mock("@/lib/facetDetail", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/discoverPersist", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/discoverPersist")>();
+  const actual = await importOriginal<typeof DiscoverPersistModule>();
   return { ...actual, persistDiscoverItems: vi.fn().mockReturnValue(new Map()) };
 });
 

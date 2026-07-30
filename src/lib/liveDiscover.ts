@@ -14,18 +14,21 @@
 // and a crowd-vote floor.
 
 import { BoundedCache } from "@/lib/boundedCache";
-import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT, Reason, Profile } from "@/lib/discovery";
+import type { Reason, Profile } from "@/lib/discovery";
+import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
 import { resolveMediaIdsBySource } from "@/lib/userState";
 import { loadLinks } from "@/lib/detail/enrich";
-import { extractFacets, tagKey, Facet } from "@/lib/facets";
+import type { Facet } from "@/lib/facets";
+import { extractFacets, tagKey } from "@/lib/facets";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
-import {
-  FeedCandidate, RawPayload, fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
+import type {
+  FeedCandidate, RawPayload} from "@/lib/discoverFeed";
+import { fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
   fetchIgdbGamePage, fetchTraktMoviePage, fetchTraktShowPage,
 } from "@/lib/discoverFeed";
-import { MediaLink, MediaType } from "@/types";
+import type { MediaLink, MediaType } from "@/types";
 
 // ── Tunables ───────────────────────────────────────────────────────
 const PAGES_PER_SOURCE = 5;   // wide pull: ~200 candidates per type before ranking

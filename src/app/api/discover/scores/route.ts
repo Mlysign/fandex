@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore, invalidateDiscoveryCache } from "@/lib/discovery";
 import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 
 // 2026-07-29 — the second half of the facet-source fix (see liveDiscover.ts's
 // `catalogFacets`). A live feed marks an item `fandexPending` when its local row

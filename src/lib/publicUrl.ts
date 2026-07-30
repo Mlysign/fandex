@@ -1,4 +1,4 @@
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 
 // P13 — public, shareable, crawlable item URLs: `/{type}/{uuid}/{slug}`
 //

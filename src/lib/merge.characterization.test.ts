@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mergeLinks, explainMerge, mergeForCanonical } from "./merge";
-import { MediaLink, Source } from "@/types";
+import type { MediaLink, Source } from "@/types";
 
 // Characterization snapshot of the FULL merge output. merge.ts's ~40 detail
 // fields had no coverage; this captures current behavior so the A1 inversion

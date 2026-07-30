@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
 import { parseCspReport } from "@/lib/cspReport";
 import { log } from "@/lib/logger";

@@ -1,4 +1,4 @@
-import { MetadataProvider, MetaLink } from "../types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { getTmdbMovie, getTmdbShow, searchTmdbMovie, searchTmdbShow } from "@/lib/sources/tmdb";
 
 function movieLink(data: any): MetaLink {

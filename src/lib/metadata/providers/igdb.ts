@@ -1,4 +1,4 @@
-import { MetadataProvider, MetaLink } from "../types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { getIgdbGame, searchIgdbGames, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
 

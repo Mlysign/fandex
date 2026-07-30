@@ -1,6 +1,6 @@
 "use client";
 import { Library as LibraryIcon, Bookmark, LayoutGrid, Star } from "lucide-react";
-import { MyStuffTab } from "@/lib/myStuffMerge";
+import type { MyStuffTab } from "@/lib/myStuffMerge";
 
 // C8 (2026-07-28) — the Library/Wishlist merge: what was a two-route Link
 // switcher (H1.6e) is now a four-tab strip over ONE shared view

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { setUserCountry } from "@/lib/userCountry";
 import { parseJsonBody } from "@/lib/validate";

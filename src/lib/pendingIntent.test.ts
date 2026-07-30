@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { stashIntent, takeIntent, PendingIntent } from "./pendingIntent";
+import type { PendingIntent } from "./pendingIntent";
+import { stashIntent, takeIntent } from "./pendingIntent";
 
 // Node test env has no localStorage; back it with a Map so the module's real code
 // path runs. A `throws` flag lets us simulate storage being unavailable.

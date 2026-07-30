@@ -7,7 +7,7 @@
 // These id sets are stable TMDB reference data (movie and TV use DIFFERENT ids,
 // e.g. movie 28 = Action vs TV 10759 = Action & Adventure).
 
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 
 const MOVIE_GENRES: Record<number, string> = {
   28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",

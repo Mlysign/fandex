@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { get, run } from "@/lib/db";
-import { SessionUser } from "@/types";
+import type { SessionUser } from "@/types";
 
 // Sessions are signed with JWT_SECRET. Refuse to run in production without it
 // rather than silently falling back to a source-controlled default (which would

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { VocabMatch, TitleMatch } from "@/components/discovery/types";
+import type { VocabMatch, TitleMatch } from "@/components/discovery/types";
 import { ROLE_LABELS } from "@/lib/constants";
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
 

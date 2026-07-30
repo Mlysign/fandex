@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { get, query } from "@/lib/db";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
-import { refreshItemFromProviders, ItemIds } from "@/lib/refreshItem";
+import type { ItemIds } from "@/lib/refreshItem";
+import { refreshItemFromProviders } from "@/lib/refreshItem";
 import { parseRatings, averageRating } from "@/lib/ratings";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

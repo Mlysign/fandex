@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { EnrichedItem, MediaType } from "@/types";
+import type { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink, { facetHref } from "@/components/FacetLink";
 import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";

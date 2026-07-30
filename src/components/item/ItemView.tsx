@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { EnrichedItem } from "@/types";
-import { PublicEnrichedItem } from "@/lib/detail/enrich";
+import type { EnrichedItem } from "@/types";
+import type { PublicEnrichedItem } from "@/lib/detail/enrich";
 import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
 import { TypeBadge } from "@/components/Badges";
 import { fmtDate } from "./format";

@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
-import { buildPublicFacetDetail, isFacetSort, PublicFacetRef } from "@/lib/detail/publicFacetDetail";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
+import type { PublicFacetRef } from "@/lib/detail/publicFacetDetail";
+import { buildPublicFacetDetail, isFacetSort } from "@/lib/detail/publicFacetDetail";
 import { prefixToKind, isFacetPrefix } from "@/lib/facetUrl";
 import { getSession } from "@/lib/session";
 

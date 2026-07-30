@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { rankPopularMonth } from "@/lib/popularMonth";
-import { monthWindow, isPastWindow, FeedCandidate } from "@/lib/discoverFeed";
+import type { FeedCandidate } from "@/lib/discoverFeed";
+import { monthWindow, isPastWindow } from "@/lib/discoverFeed";
 
 // The calendar's "Popular" scope (2026-07-28). The load-bearing property is
 // that the type mix is whatever the month actually looks like — the ranking

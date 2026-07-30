@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mergeMyStuff, filterByTab, parseTab } from "./myStuffMerge";
-import { EnrichedItem } from "@/types";
+import type { EnrichedItem } from "@/types";
 
 // C8 (2026-07-28) — merged Library/Wishlist view's pure logic: an item present
 // in both fetches must appear once (deduped by id), and each of the four tabs

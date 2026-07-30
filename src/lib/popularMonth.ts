@@ -24,7 +24,7 @@
 // MIN_BUCKET (when a median is trustworthy). Both live here; the calendar UI
 // never needs to change to retune this.
 
-import { FeedCandidate } from "@/lib/discoverFeed";
+import type { FeedCandidate } from "@/lib/discoverFeed";
 // Straight from lib/normalize (merge.ts only re-exports it) — this module is
 // pure logic and the calendar client shares the same dedupe key.
 import { normalizeName } from "@/lib/normalize";

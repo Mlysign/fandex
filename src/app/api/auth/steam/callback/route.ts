@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";

@@ -16,14 +16,15 @@
 
 import { BoundedCache } from "@/lib/boundedCache";
 import { httpFetch } from "@/lib/http";
-import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId, DiscoveryVector } from "@/lib/discovery";
+import type { DiscoveryVector } from "@/lib/discovery";
+import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
-import { FacetRole } from "@/lib/facets";
-import { MediaType } from "@/types";
+import type { FacetRole } from "@/lib/facets";
+import type { MediaType } from "@/types";
 
 const TMDB = process.env.TMDB_API_KEY;
 const RAWG = process.env.RAWG_API_KEY;

@@ -30,13 +30,16 @@
 //      `persist: true` only for a viewer with a real session; anonymous
 //      visitors and crawlers get the same payload shape with no new writes.
 
-import { MediaType } from "@/types";
-import { FacetKind, personKey } from "@/lib/facets";
-import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId, PersonMeta, FacetScope } from "@/lib/facetDetail";
+import type { MediaType } from "@/types";
+import type { FacetKind} from "@/lib/facets";
+import { personKey } from "@/lib/facets";
+import type { PersonMeta, FacetScope } from "@/lib/facetDetail";
+import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId } from "@/lib/facetDetail";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
-import { persistDiscoverItems, PersistableItem } from "@/lib/discoverPersist";
+import type { PersistableItem } from "@/lib/discoverPersist";
+import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { getTagCategories, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import { categorizeTag } from "@/lib/tags";

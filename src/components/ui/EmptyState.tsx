@@ -1,5 +1,5 @@
 "use client";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 // Shared <EmptyState> (T27/U5, restyled H1.6b — 03-components.md §14) — one
 // consistent shape for "nothing here yet" and "nothing matched" states that

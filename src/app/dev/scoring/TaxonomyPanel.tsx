@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { TagCategoryConfig } from "./types";
+import type { TagCategoryConfig } from "./types";
 import TagTable from "./TagTable";
 import { slugify } from "@/lib/slug";
 

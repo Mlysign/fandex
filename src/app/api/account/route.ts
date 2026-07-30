@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { accountFootprint, deleteAccount } from "@/lib/account";
 import { SESSION_COOKIE } from "@/lib/session";

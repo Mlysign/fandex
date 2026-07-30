@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 import { TypeBadge } from "@/components/Badges";
 import { matchStrength } from "@/components/FandexScoreBadge";
 import type { Reason } from "@/components/discovery/types";

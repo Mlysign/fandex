@@ -2,7 +2,7 @@
 // Library/Wishlist view (MyStuffView.tsx). Extracted so it's unit-testable
 // without a DOM: dedupe an item present in both sets, and each of the four
 // tab predicates.
-import { EnrichedItem } from "@/types";
+import type { EnrichedItem } from "@/types";
 
 export type MyStuffTab = "all" | "wishlist" | "unrated" | "rated";
 const TABS: MyStuffTab[] = ["all", "wishlist", "unrated", "rated"];

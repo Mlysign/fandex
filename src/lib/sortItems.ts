@@ -2,10 +2,10 @@
 // honor the same unified sort options as Discover. Discover sorts server-side
 // via find(); these pages sort the EnrichedItems they already hold.
 
-import { SortKey } from "@/components/discovery/types";
+import type { SortKey } from "@/components/discovery/types";
 import { averageCommunity } from "@/lib/ratings";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
-import { CommunityRating } from "@/types";
+import type { CommunityRating } from "@/types";
 
 interface SortableItem {
   releaseDate?: string | null;

@@ -6,8 +6,9 @@ import Histogram from "./Histogram";
 import StatBar from "./StatBar";
 import FacetSection from "./FacetSection";
 import PanelHeader from "./PanelHeader";
-import PosterCard, { PosterCardItem } from "@/components/PosterCard";
-import { InsightsPayload, DivergenceItem, DecadeStat, FacetStat, InsightItem } from "./types";
+import type { PosterCardItem } from "@/components/PosterCard";
+import PosterCard from "@/components/PosterCard";
+import type { InsightsPayload, DivergenceItem, DecadeStat, FacetStat, InsightItem } from "./types";
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
 import { TYPE_COLORS, ROLE_COLORS } from "@/lib/constants";
 

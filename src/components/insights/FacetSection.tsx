@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import StatBar from "./StatBar";
-import { FacetStat, TagCategoryInfo } from "./types";
+import type { FacetStat, TagCategoryInfo } from "./types";
 import { CATEGORY_COLORS } from "@/lib/tags";
 import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
 import { buildFacetHref } from "@/lib/itemUrl";

@@ -5,7 +5,7 @@
 // These return only lightweight { source, sourceId, type } refs — full metadata
 // (with keywords/tags) is fetched later by persistItemFromIds during ingestion.
 
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 import { BoundedCache } from "@/lib/boundedCache";
 import { httpFetch } from "@/lib/http";
 

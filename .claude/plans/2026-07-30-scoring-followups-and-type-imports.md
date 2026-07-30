@@ -197,7 +197,7 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
     link set, i.e. mutating the in-memory link array after the heal does not change the score.
   - Depends on: none
 
-- [ ] **T3** — Enable `consistent-type-imports` as an error and sweep the repo
+- [x] **T3** — Enable `consistent-type-imports` as an error and sweep the repo
   - Files: `eslint.config.mjs`, plus whatever `--fix` rewrites under `src/`
   - Detail: Add `"@typescript-eslint/consistent-type-imports": "error"` to the rules block in
     `eslint.config.mjs`, with a comment explaining *why* it is an error here — Node's native

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Reason } from "@/components/discovery/types";
+import type { Reason } from "@/components/discovery/types";
 import { fandexScoreColor, matchStrength } from "@/components/FandexScoreBadge";
 import FacetLink from "@/components/FacetLink";
 import TagCategoryPicker from "@/components/TagCategoryPicker";

@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
 import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
-import { Source } from "@/types";
+import type { Source } from "@/types";
 
 // Normalized profile every OAuth provider resolves to after exchanging its code.
 export interface OAuthProfile {

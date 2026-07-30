@@ -1,7 +1,7 @@
 // The "why" chips under a recommended card: the facets that pushed it up (+) or,
 // when present, down (−). Tags use their category color; people/companies use
 // their role color.
-import { Reason } from "./types";
+import type { Reason } from "./types";
 import { CATEGORY_COLORS } from "@/lib/tags";
 import { ROLE_COLORS } from "@/lib/constants";
 

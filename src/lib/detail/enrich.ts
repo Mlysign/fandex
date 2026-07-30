@@ -2,10 +2,11 @@ import { query, get } from "@/lib/db";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { linkSourceToItem } from "@/lib/matcher";
 import { extractYear } from "@/lib/merge";
-import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
-import { fetchOmdbScores, fetchOmdbByImdbId, OmdbResult } from "@/lib/sources/omdb";
+import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
+import type { OmdbResult } from "@/lib/sources/omdb";
+import { fetchOmdbScores, fetchOmdbByImdbId } from "@/lib/sources/omdb";
 import { METADATA, metadataForType } from "@/lib/metadata/registry";
-import { MetaLink } from "@/lib/metadata/types";
+import type { MetaLink } from "@/lib/metadata/types";
 
 // ── Shared detail-enrichment pipeline ────────────────────────────────────────
 //

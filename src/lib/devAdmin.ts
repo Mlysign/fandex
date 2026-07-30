@@ -2,9 +2,10 @@
 // No schema change; SCORING_ADMIN_USER_IDS is a comma-separated list of
 // users.id values (see .env.example). Unset → nobody is admin (fails closed).
 
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
-import { SessionUser } from "@/types";
+import type { SessionUser } from "@/types";
 
 export function isScoringAdmin(userId: string): boolean {
   const raw = process.env.SCORING_ADMIN_USER_IDS;

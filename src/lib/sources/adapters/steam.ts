@@ -1,6 +1,6 @@
 import { get } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
-import { MediaSource, PulledItem } from "../types";
+import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
 import {
   getSteamWishlistIds, getSteamOwnedGames, getSteamAppDetails,

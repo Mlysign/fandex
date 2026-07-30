@@ -11,7 +11,7 @@ import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
 import CommunityScoreBadge from "@/components/CommunityScoreBadge";
 import { usePendingFandexScore } from "@/components/usePendingFandexScore";
-import { MediaCardItem } from "@/components/cardItem";
+import type { MediaCardItem } from "@/components/cardItem";
 import { buildItemHref } from "@/lib/itemUrl";
 
 // The shared media-item shape (see cardItem.ts). Re-exported as PosterCardItem

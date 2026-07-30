@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { Dispatch, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { cdnImageUrl } from "@/lib/imageLoader";
 
 // Hero media column for the item detail page: the main image with a hover

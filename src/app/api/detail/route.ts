@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { get } from "@/lib/db";
 import { mergeLinks, explainMerge } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
 import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore, invalidateDiscoveryCache, MIN_RATED_FOR_FANDEX_SCORE } from "@/lib/discovery";
-import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
+import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
 // The catalog-enrichment half lives in lib/detail/enrich.ts, shared with the

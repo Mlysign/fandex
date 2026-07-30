@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { BadRequestError } from "@/lib/validate";
 import { getUserCountry } from "@/lib/userCountry";
@@ -6,8 +7,9 @@ import { BoundedCache } from "@/lib/boundedCache";
 import { decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import { rankPopularMonth, POPULAR_PER_MONTH } from "@/lib/popularMonth";
-import {
-  FeedCandidate, monthWindow,
+import type {
+  FeedCandidate} from "@/lib/discoverFeed";
+import { monthWindow,
   fetchGamePage, fetchMoviePage, fetchShowPage, fetchIgdbGamePage,
 } from "@/lib/discoverFeed";
 

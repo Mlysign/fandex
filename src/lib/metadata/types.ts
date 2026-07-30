@@ -1,4 +1,4 @@
-import { MediaType, Source } from "@/types";
+import type { MediaType, Source } from "@/types";
 
 // ── MetadataProvider contract ─────────────────────────────────────────────────
 //

@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
 import { enforceRateLimit } from "@/lib/rateLimit";
 import { BadRequestError } from "@/lib/validate";
 import { log, errorFields } from "@/lib/logger";
-import { SessionUser } from "@/types";
+import type { SessionUser } from "@/types";
 
 // Per-user cap across all authed routes (S3/P7). These routes proxy third-party
 // APIs with our keys, so this blunts a single account draining TMDB/RAWG quota.

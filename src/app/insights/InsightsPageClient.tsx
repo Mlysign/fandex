@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import InsightsView from "@/components/insights/InsightsView";
-import { InsightsPayload } from "@/components/insights/types";
+import type { InsightsPayload } from "@/components/insights/types";
 import Spinner from "@/components/ui/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";

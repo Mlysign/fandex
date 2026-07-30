@@ -1,7 +1,7 @@
 // Lightweight CSS bar chart — no charting dependency. Used for the rating
 // distribution (0.5 buckets, 1..10) and the per-type mini distributions.
 
-import { HistogramBucket } from "./types";
+import type { HistogramBucket } from "./types";
 
 export default function Histogram({
   data, color = "#a3a3a3", baseline, height = 140, compact = false, onBarClick, selected,

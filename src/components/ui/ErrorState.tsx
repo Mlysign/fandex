@@ -1,5 +1,5 @@
 "use client";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { TriangleAlert, RefreshCw, RotateCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 

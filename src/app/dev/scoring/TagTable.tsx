@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { TagCategoryConfig } from "./types";
+import type { TagCategoryConfig } from "./types";
 import { useDebouncedValue } from "@/lib/useDebounced";
 
 interface AkaTag { key: string; label: string; count: number }

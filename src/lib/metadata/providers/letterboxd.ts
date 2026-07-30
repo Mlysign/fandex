@@ -1,4 +1,4 @@
-import { MetadataProvider, MetaLink } from "../types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { getLetterboxdFilm, searchLetterboxdFilms, posterFromFilm, releaseDateFromFilm } from "@/lib/sources/letterboxd";
 import { normalizeName } from "@/lib/merge";
 

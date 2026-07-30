@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { httpFetch } from "@/lib/http";
@@ -8,7 +9,8 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
-import { fetchGamePage, fetchMoviePage, fetchShowPage, Direction } from "@/lib/discoverFeed";
+import type { Direction } from "@/lib/discoverFeed";
+import { fetchGamePage, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
 

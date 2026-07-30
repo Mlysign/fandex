@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { query, run } from "@/lib/db";
-import { MediaSource } from "@/lib/sources/types";
+import type { MediaSource } from "@/lib/sources/types";
 import { SOURCES, getSource } from "@/lib/sources/registry";
 import { ingestWishlistItem, ingestLibraryItem } from "@/lib/sources/ingest";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";

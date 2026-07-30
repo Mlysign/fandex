@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
@@ -6,7 +7,7 @@ import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
 import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore } from "@/lib/discovery";
-import { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
+import type { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
 
 export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;

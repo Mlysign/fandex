@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { ScoringConfigValues, TagCategoryConfig, Reason, ROLE_ORDER } from "./types";
+import type { ScoringConfigValues, TagCategoryConfig, Reason} from "./types";
+import { ROLE_ORDER } from "./types";
 import { ROLE_LABELS } from "@/lib/constants";
 
 interface PreviewResult {

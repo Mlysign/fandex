@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { ViewMode } from "@/components/SubBar";
+import type { ViewMode } from "@/components/SubBar";
 
 const VALID: ViewMode[] = ["list", "card", "calendar"];
 

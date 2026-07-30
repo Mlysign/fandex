@@ -1,6 +1,6 @@
 import { get, run } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
-import { MediaSource, PulledItem } from "../types";
+import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
 import { decryptSecret, decryptNullable, encryptSecret, encryptNullable } from "@/lib/crypto";
 import {

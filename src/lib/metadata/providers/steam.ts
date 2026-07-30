@@ -1,4 +1,4 @@
-import { MetadataProvider, MetaLink } from "../types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { searchSteamByName, getSteamAppDetails, getSteamTagMap, resolveTagNames, extractSteamDate } from "@/lib/sources/steam";
 
 async function toLink(appid: number, data: any): Promise<MetaLink> {

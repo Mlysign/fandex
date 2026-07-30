@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { EnrichedItem, MediaType, Source } from "@/types";
+import type { EnrichedItem, MediaType, Source } from "@/types";
 import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
 import { TypeBadge, SourcePill } from "@/components/Badges";
 import { SOURCE_PARAMS } from "@/lib/itemUrl";

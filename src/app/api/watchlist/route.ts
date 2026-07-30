@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { get, query } from "@/lib/db";
 import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource, clearWatchlist } from "@/lib/matcher";
@@ -9,7 +10,7 @@ import { parseJsonBody } from "@/lib/validate";
 import { WatchlistPostSchema, WatchlistDeleteSchema } from "@/lib/schemas";
 import { log, errorFields } from "@/lib/logger";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
-import { MediaType, Source } from "@/types";
+import type { MediaType, Source } from "@/types";
 
 export const POST = withUser(async (req: NextRequest, session) => {
     const { type, title, releaseDate, posterUrl, ids, targetProvider } =

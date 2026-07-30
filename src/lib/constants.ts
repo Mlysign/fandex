@@ -1,4 +1,4 @@
-import { MediaType, Source } from "@/types";
+import type { MediaType, Source } from "@/types";
 import { CATALOG } from "@/lib/sources/catalog";
 
 export const TYPE_COLORS: Record<MediaType | string, string> = {

@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { run, query } from "@/lib/db";
 import { createSession, setSessionCookie, bumpSessionEpoch } from "@/lib/session";
 import { disconnectSource } from "@/lib/matcher";
-import { Source } from "@/types";
+import type { Source } from "@/types";
 import { parseJsonBody } from "@/lib/validate";
 import { DisconnectPostSchema } from "@/lib/schemas";
 

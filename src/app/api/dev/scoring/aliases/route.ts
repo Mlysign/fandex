@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { setTagAlias, deleteTagAlias, deleteTagBundle, listTagBundles } from "@/lib/tagAlias";
 import { invalidateDiscoveryCache } from "@/lib/discovery";

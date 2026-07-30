@@ -3,7 +3,7 @@
 import { CATALOG } from "@/lib/sources/catalog";
 import { publicItemHref } from "@/lib/publicUrl";
 import { publicFacetHref } from "@/lib/facetUrl";
-import { FacetKind, FacetRole } from "@/lib/facets";
+import type { FacetKind, FacetRole } from "@/lib/facets";
 
 export interface InspectableItem {
   id: string;

@@ -1,5 +1,5 @@
-import { MediaType, Source } from "@/types";
-import { Capabilities } from "./types";
+import type { MediaType, Source } from "@/types";
+import type { Capabilities } from "./types";
 
 // Client-safe static metadata for every connectable platform. This is the ONE
 // place provider labels/colors/types/capabilities are declared. The server-side

@@ -3,13 +3,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import Tooltip, { TooltipItem } from "@/components/Tooltip";
+import type { TooltipItem } from "@/components/Tooltip";
+import Tooltip from "@/components/Tooltip";
 import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
 import CommunityScoreBadge from "@/components/CommunityScoreBadge";
 import { TYPE_COLORS } from "@/lib/constants";
-import { MediaCardItem } from "@/components/cardItem";
+import type { MediaCardItem } from "@/components/cardItem";
 import { buildItemHref } from "@/lib/itemUrl";
 
 // The list-view analog of PosterCard: one canonical, reusable row used wherever

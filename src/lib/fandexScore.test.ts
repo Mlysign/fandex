@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
-import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, Profile } from "./discovery";
-import { Facet } from "./facets";
+import type { Profile } from "./discovery";
+import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact } from "./discovery";
+import type { Facet } from "./facets";
 import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
 import { getLibraryFacetAnalysis } from "./libraryAnalysis";
 

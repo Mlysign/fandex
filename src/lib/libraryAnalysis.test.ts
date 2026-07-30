@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { pickBestGenre, FacetStat } from "@/lib/libraryAnalysis";
+import type { FacetStat } from "@/lib/libraryAnalysis";
+import { pickBestGenre } from "@/lib/libraryAnalysis";
 
 // SM11 (2026-07-27) — Home/Profile showed "Your top genre: steam" because the
 // original inline pick only checked `kind === "tag"`, which spans the whole

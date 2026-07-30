@@ -1,4 +1,4 @@
-import { MetadataProvider, MetaLink } from "../types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { getRawgGame, searchRawg } from "@/lib/sources/rawg";
 import { normalizeName } from "@/lib/merge";
 

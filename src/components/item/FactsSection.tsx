@@ -1,5 +1,5 @@
 "use client";
-import { EnrichedItem, MediaType } from "@/types";
+import type { EnrichedItem, MediaType } from "@/types";
 import FacetLink from "@/components/FacetLink";
 import { Fact } from "./primitives";
 import { fmtRuntime, fmtMoney, fmtDate } from "./format";

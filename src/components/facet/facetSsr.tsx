@@ -3,9 +3,11 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
 import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
-import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref, FacetPrefix } from "@/lib/facetUrl";
+import type { FacetPrefix } from "@/lib/facetUrl";
+import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref } from "@/lib/facetUrl";
 import { canonicalTagKey } from "@/lib/tagAlias";
-import { buildPublicFacetDetail, isFacetSort, FacetSort, PublicFacetPayload } from "@/lib/detail/publicFacetDetail";
+import type { FacetSort, PublicFacetPayload } from "@/lib/detail/publicFacetDetail";
+import { buildPublicFacetDetail, isFacetSort } from "@/lib/detail/publicFacetDetail";
 import { getSession } from "@/lib/session";
 import PublicFacetView from "@/components/facet/PublicFacetView";
 

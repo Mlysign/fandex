@@ -4,7 +4,7 @@ import { List, LayoutGrid, CalendarDays, SlidersHorizontal, ChevronDown, X } fro
 import { SOURCE_COLORS, SOURCE_LABELS, ROLE_LABELS } from "@/lib/constants";
 import SearchBar from "@/components/SearchBar";
 import FacetAutocomplete from "@/components/discovery/FacetAutocomplete";
-import { FacetPill, VocabMatch } from "@/components/discovery/types";
+import type { FacetPill, VocabMatch } from "@/components/discovery/types";
 import Chip from "@/components/ui/Chip";
 import TypeFilter from "@/components/ui/TypeFilter";
 import Menu from "@/components/ui/Menu";

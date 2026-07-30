@@ -7,7 +7,7 @@
 // auth) catch it themselves or use `badRequest()`.
 
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import type { z } from "zod";
 
 /** Thrown when a request body is malformed or fails its schema. → HTTP 400. */
 export class BadRequestError extends Error {

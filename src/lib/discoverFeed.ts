@@ -7,7 +7,7 @@
 // Shared by `api/discover/route.ts` (cold-start + section pagination) and
 // `liveDiscover.ts` (wide multi-page pull → re-rank).
 
-import { MediaType, Source } from "@/types";
+import type { MediaType, Source } from "@/types";
 import { httpFetch } from "@/lib/http";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";

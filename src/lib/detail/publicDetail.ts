@@ -1,11 +1,12 @@
 import { get, query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { BoundedCache } from "@/lib/boundedCache";
 import { POOL_WHERE } from "@/lib/discovery";
-import {
-  PublicEnrichedItem, loadLinks, ensureTmdbDetail,
+import type {
+  PublicEnrichedItem} from "./enrich";
+import { loadLinks, ensureTmdbDetail,
   ensureGameDetail, enrichMissingSources, applyOmdbScores,
 } from "./enrich";
 

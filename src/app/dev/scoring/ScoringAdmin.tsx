@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { ScoringConfigValues, TagCategoryConfig } from "./types";
+import type { ScoringConfigValues, TagCategoryConfig } from "./types";
 import WeightsPanel from "./WeightsPanel";
 import TaxonomyPanel from "./TaxonomyPanel";
 

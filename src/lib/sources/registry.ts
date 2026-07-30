@@ -1,5 +1,5 @@
-import { MediaType, Source } from "@/types";
-import { MediaSource } from "./types";
+import type { MediaType, Source } from "@/types";
+import type { MediaSource } from "./types";
 import { HIDDEN_PROVIDERS } from "./catalog";
 import { rawgSource } from "./adapters/rawg";
 import { traktSource } from "./adapters/trakt";

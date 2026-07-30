@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { format, parseISO, isToday, isTomorrow, isPast, isSameMonth } from "date-fns";
-import PosterCard, { PosterCardItem } from "@/components/PosterCard";
+import type { PosterCardItem } from "@/components/PosterCard";
+import PosterCard from "@/components/PosterCard";
 import ListCard from "@/components/ListCard";
-import { MediaCardItem } from "@/components/cardItem";
+import type { MediaCardItem } from "@/components/cardItem";
 import { scrollBehavior } from "@/lib/scrollBehavior";
 import { initialVisibleCount, growVisibleCount } from "@/lib/incrementalList";
 

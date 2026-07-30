@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { VocabMatch, TitleMatch } from "./types";
+import type { VocabMatch, TitleMatch } from "./types";
 import { ROLE_LABELS } from "@/lib/constants";
 
 // Debounced search box with a results dropdown. Used for example-title seeds

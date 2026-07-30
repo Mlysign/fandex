@@ -1,6 +1,6 @@
 "use client";
 import { format } from "date-fns";
-import { CommunityRating } from "@/types";
+import type { CommunityRating } from "@/types";
 import { ScoreBadge, RatingsBreakdown } from "./primitives";
 
 type PersonalRating = { source: string; rating: number };

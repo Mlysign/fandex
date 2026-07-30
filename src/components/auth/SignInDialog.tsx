@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 import AuthOptions from "./AuthOptions";
 
 // H2c — the in-page sign-in dialog. An anonymous viewer interacting with the real

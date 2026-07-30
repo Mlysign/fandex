@@ -1,5 +1,5 @@
-import { MediaType } from "@/types";
-import { MetadataProvider, MetaLink } from "../types";
+import type { MediaType } from "@/types";
+import type { MetadataProvider, MetaLink } from "../types";
 import { getTraktMovieSummary, getTraktShowSummary, searchTraktPublic, traktConfigured } from "@/lib/sources/trakt";
 import { normalizeName } from "@/lib/merge";
 

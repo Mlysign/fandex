@@ -2,7 +2,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useViewMode } from "@/lib/useViewMode";
-import SubBar, { SearchBarFacets, ViewMode } from "@/components/SubBar";
+import type { SearchBarFacets, ViewMode } from "@/components/SubBar";
+import SubBar from "@/components/SubBar";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
@@ -13,12 +14,13 @@ import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 import Eyebrow from "@/components/ui/Eyebrow";
-import {
-  UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
+import type {
+  UiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem} from "@/components/discovery/types";
+import { defaultUiFilters,
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort, countActiveAdvanced,
 } from "@/components/discovery/types";
 import { bayesRating, ratingPrior } from "@/lib/ratingsSort";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 import { probeSession } from "@/lib/sessionProbe";
 
 const LIMIT = 60;

@@ -1,8 +1,8 @@
 import { upsertMediaItem } from "@/lib/matcher";
 import { log, errorFields } from "@/lib/logger";
-import { MediaType, Source } from "@/types";
+import type { MediaType, Source } from "@/types";
 import { METADATA } from "@/lib/metadata/registry";
-import { MetaLink } from "@/lib/metadata/types";
+import type { MetaLink } from "@/lib/metadata/types";
 
 export interface PersistItemInput {
   type: MediaType;

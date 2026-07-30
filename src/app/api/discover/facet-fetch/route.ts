@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
-import { buildExternalCandidates, FacetDetailItem } from "@/lib/facetDetail";
+import type { FacetDetailItem } from "@/lib/facetDetail";
+import { buildExternalCandidates } from "@/lib/facetDetail";
 import { parseJsonBody } from "@/lib/validate";
 import { FacetFetchSchema } from "@/lib/schemas";
 

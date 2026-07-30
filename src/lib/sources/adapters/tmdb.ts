@@ -1,5 +1,5 @@
 import { get } from "@/lib/db";
-import { MediaSource, PulledItem } from "../types";
+import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
 import { decryptNullable } from "@/lib/crypto";
 import {

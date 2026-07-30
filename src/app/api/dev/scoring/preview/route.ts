@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest} from "next/server";
+import { NextResponse } from "next/server";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
@@ -8,7 +9,7 @@ import { buildProfile, computeFandexScore, MIN_RATED_FOR_FANDEX_SCORE } from "@/
 import { loadLinks } from "@/lib/detail/enrich";
 import { parseJsonBody } from "@/lib/validate";
 import { ScoringPreviewSchema } from "@/lib/schemas";
-import { MediaType } from "@/types";
+import type { MediaType } from "@/types";
 
 // POST /api/dev/scoring/preview — the Weights panel's "Preview" button.
 // Scores ONE sample item (the admin's own top-rated library item, unless
