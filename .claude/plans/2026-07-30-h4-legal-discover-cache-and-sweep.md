@@ -234,7 +234,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none — covered by T1.
   - Depends on: T1
 
-- [ ] **T6** — Imprint placeholder page, noindex
+- [x] **T6** — Imprint placeholder page, noindex
   - Files: `src/lib/legal/content/en/imprint.ts`, `src/lib/legal/content/de/imprint.ts`,
     `src/app/legal/[locale]/[doc]/page.tsx`
   - Detail: A short reachable page stating the imprint is in preparation, with the contact
