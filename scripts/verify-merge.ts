@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { mergeLinks } from "@/lib/merge";
-import { MediaLink, Source, MediaType } from "@/types";
+import type { MediaLink, Source, MediaType } from "@/types";
 
 const db = new Database("data/rr.db", { readonly: true });
 

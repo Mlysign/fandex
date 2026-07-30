@@ -3,7 +3,7 @@
 import { get, initDb } from "@/lib/db";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { buildFacetDetail } from "@/lib/facetDetail";
-import { FacetStat } from "@/lib/libraryAnalysis";
+import type { FacetStat } from "@/lib/libraryAnalysis";
 
 async function show(userId: string, f: FacetStat) {
   const d = await buildFacetDetail(userId, { kind: f.kind, role: f.role, key: f.key, label: f.label });

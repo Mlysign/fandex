@@ -5,7 +5,7 @@ import { query, get, initDb } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { extractFacets } from "@/lib/facets";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
-import { MediaLink, MediaType } from "@/types";
+import type { MediaLink, MediaType } from "@/types";
 
 function loadLinks(mediaItemId: string): { type: MediaType; title: string; links: MediaLink[] } {
   const mi = get<{ type: MediaType; title: string }>(`SELECT type, title FROM media_items WHERE id = ?`, [mediaItemId])!;

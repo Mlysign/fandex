@@ -1,7 +1,8 @@
 // Read-only probe of the Taste Match engine. Run:
 //   npx tsx --env-file=.env scripts/probe-find.ts
 import { get, initDb } from "@/lib/db";
-import { find, searchTitles, FindRequest } from "@/lib/discovery";
+import type { FindRequest } from "@/lib/discovery";
+import { find, searchTitles } from "@/lib/discovery";
 
 function show(label: string, userId: string, req: FindRequest, n = 8) {
   const r = find(userId, req);

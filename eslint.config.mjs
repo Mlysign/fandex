@@ -12,6 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 2026-07-30 — `npm run lint` runs plain `eslint` with no path filter, and
+    // flat config's ignores are the only thing standing between that and
+    // scanning EVERY nested directory under the repo root, gitignored or not.
+    // A `git worktree add` under .claude/worktrees/ (isolation:"worktree" agent
+    // runs use this) checks out a full second copy of the source tree there —
+    // found live when an abandoned worktree from an unrelated prior session
+    // (checked out at an old commit, predating this very rule) surfaced 200+
+    // stale "errors" against code nobody was editing. Ignoring it here doesn't
+    // touch or delete that worktree, which may be another session's own
+    // in-progress work — it just stops lint from scanning it.
+    ".claude/worktrees/**",
   ]),
   {
     rules: {

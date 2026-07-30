@@ -10,7 +10,8 @@
 //
 // Env: DB_PATH (defaults to ./data/rr.db) + RAWG key for game detail fetches.
 import { query } from "@/lib/db";
-import { enrichStoredGameDetail, rawHasDevPub, GameEnrichStatus } from "@/lib/enrichGameDetail";
+import type { GameEnrichStatus } from "@/lib/enrichGameDetail";
+import { enrichStoredGameDetail, rawHasDevPub } from "@/lib/enrichGameDetail";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");

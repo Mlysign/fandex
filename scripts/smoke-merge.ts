@@ -5,7 +5,7 @@
 //   npx tsx --env-file=.env scripts/smoke-merge.ts
 import { mergeLinks } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
-import { MediaLink, MediaType, Source } from "@/types";
+import type { MediaLink, MediaType, Source } from "@/types";
 
 async function buildLinks(type: MediaType, ids: Partial<Record<Source, string>>): Promise<MediaLink[]> {
   const links: MediaLink[] = [];
