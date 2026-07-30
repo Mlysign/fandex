@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-30-scoring-followups-and-type-imports
 created: 2026-07-30
-status: ready
+status: in_progress
 branch: current
 ---
 
