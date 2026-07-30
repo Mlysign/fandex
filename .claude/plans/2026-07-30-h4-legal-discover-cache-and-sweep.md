@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-30-h4-legal-discover-cache-and-sweep
 created: 2026-07-30
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -303,7 +303,7 @@ them in order; do not skip ahead to the sweep.
     modified by this task**.
   - Depends on: T1, T5, T6, T7
 
-- [ ] **T10** — Verify, document, commit, push
+- [x] **T10** — Verify, document, commit, push
   - Files: `STATUS.md`, `TASKS.md`, `AGENTS.md`, this plan file
   - Detail: Run `npx tsc --noEmit`, `npm run lint` (0 errors), `npm test`. Stop the dev server,
     then `npm run build`. Confirm the build output lists the new `/legal/[locale]/[doc]` route
@@ -324,4 +324,146 @@ them in order; do not skip ahead to the sweep.
 
 ## Blockers log
 
+_(none — all 10 tasks completed; T8 recorded a not-yet-reachable state for PR17, which is expected and not a blocker per the plan's own instruction.)_
+
 ## Session log
+
+**Executed 2026-07-30, all 10 tasks complete, no blockers.** Ran on Sonnet
+as intended (the previous plan in this same day's chain ran on Opus by
+mistake, noted there — this run had no such mismatch).
+
+**T1 — `/legal` route infrastructure** (`40e66d2`). Greenfield: no
+`/legal` route existed. `/legal/{en,de}/{privacy,terms,support,imprint}`,
+distinct URLs per locale (not a client toggle — a German user can be
+linked straight to the German text), `alternates.languages` hreflang,
+content as a typed `LegalDocument` structure (no markdown, no
+`dangerouslySetInnerHTML` given the enforced CSP). `force-dynamic` is
+mandatory, not optional — `generateMetadata` builds canonical/hreflang
+URLs from `BASE_URL`, the exact trap that shipped `localhost:3000` to
+prod in `robots.ts` (SM7). `robots.ts` gained an explicit `/legal/`
+allow so crawlers can fetch `imprint` to see its `noindex` tag. Verified
+live: 6 indexable routes 200, unknown locale/doc both 404, sitemap has
+exactly 6 `/legal/` entries and 0 `imprint` entries. 5 tests.
+
+**T2 — cookie/consent assessment** (`278259a`). `docs/cookie-assessment.md`
+— a document per H4.4's own scope, not a page. Grepped every
+`.cookies.set(` call site in the repo rather than assuming: exactly 3
+cookies exist (`rr2_session` 30d, `rr2_oauth_state` 10min single-use CSRF
+nonce, `rr2_oauth_return` 10min single-use H2c return path). Corrected
+the plan's own task description, which called the login-intent stash "the
+pending-intent cookie" — it's `localStorage` (`pendingIntent.ts`), never
+reaches the server, named for completeness but not counted as a cookie.
+
+**T3 — privacy policy, EN+DE** (`9aae148`). Data inventory mapped to the
+six real user-scoped tables' actual column names. Recipients section
+required checking each provider adapter's real `push*`/`pull*` exports
+rather than assuming symmetry — TMDB/Trakt/RAWG genuinely push ratings/
+wishlist actions back (confirmed in `trakt.ts`/`rawg.ts`/`tmdb.ts`), Steam
+is read-only (no push functions exist), IGDB is metadata-only with no
+user account at all. The backup-retention figure is a **confirmed
+number**: Litestream pins v0.3.13 in the Dockerfile with no `retention`
+key set in `litestream.yml`, so the effective window is that VERSION's
+default — verified via `WebFetch` against `litestream.io/v0.3/reference/
+config/` specifically (not the current v0.5+ LTX-era docs, which use an
+entirely different config schema and default) at **24h, checked hourly,
+covering both snapshots and WAL segments**. 3 `TODO(H4.x)` markers left
+deliberately (2 unique + 1 duplicated across locales) rather than guessed
+— all genuinely need facts outside this repo.
+
+**T4 — terms of service, EN+DE** (`74872b8`). Grounded in what exists
+today (connect-a-provider account, no Fandex password). Monetization
+sections explicitly marked `TODO(H3)` and correctly scoped against the
+**locked v1 model** (`TASKS.md` H3: donations + affiliate only, neither a
+direct sale) — they describe a possible Path B gated on H3.8, not a live
+feature; getting this wrong would have made the ToS claim something
+false.
+
+**T5 — support page + profile footer** (`0fed16a`). `LegalFooter` at the
+bottom of `/profile` only, defaulted to `en`. Verified the two-click rule
+this decision depends on actually holds: `AppNav.tsx`'s bottom-nav "You"
+slot reaches `/profile` from every page in one click. Footer confirmed
+present in exactly 2 places in `src/` (definition + one import site).
+
+**T6 — imprint placeholder** (`a08709c`). Minimal on purpose: "in
+preparation" + contact email, nothing else — no name, no address, no §18
+MStV line. Re-verified all three T1-wired mechanics (noindex, sitemap
+exclusion, other-docs-unaffected) against the REAL content, not just T1's
+bare placeholder.
+
+**T7 — Discover browse cache** (`88359c3`). Closes the exact "left
+behind" wart the previous plan's T4 (F4) logged. `discoverBrowseCache.ts`
+mirrors `items` into `sessionStorage` alongside the existing depth stash,
+written from the same effect so the two can't disagree. Warm loads paint
+immediately and revalidate via the same fetch in the background, reusing
+the EXISTING Q26 anchor-capture mechanism (not new logic) so a genuinely
+different revalidation result can't fight `useScrollRestore`. Ceiling
+(3MB) set from a real measurement against the live dev server (32KB/40
+items), not a guess. Measured two trials against the real dev server:
+cards painted at t=275-307ms, saved scroll landed by t=400-414ms — versus
+the ~1.5s baseline. `/library` and a facet page re-verified unaffected
+(regression risk named explicitly in the plan). 8 tests, including one
+that proves a quota-exception write can't corrupt an existing cache.
+
+**T8 — PR17 probe** (`29285fa`). `https://fandex.org/api/health` → 404,
+identical body to 2026-07-28's probe. Recorded and stopped per the plan's
+explicit instruction — no retry loop.
+
+**T9 — smoke sweep, log-only** (`634d6cb`). Scoped to what this plan
+shipped, not a full checklist re-run. One real finding: **SM33** —
+`LocaleToggle` (39×24px) and `LegalFooter` (~45×16px) links are under the
+app's own 44×44 `.tap-44` convention at 375px. Not fixed, per the plan's
+explicit "observe, don't fix" instruction — this commit touches only
+`TASKS.md`. One transient false alarm (a bogus-cookie `curl` appearing to
+404 once) investigated with 3 immediate retries, confirmed a dev-server
+compile race, not logged.
+
+**T10 — verify, document, commit, push.** Verification surfaced a real
+gap that had nothing to do with this plan's own work: `npm run lint`
+(no path filter) was scanning `.claude/worktrees/nervous-nightingale-
+c5c8e0` — an abandoned `git worktree` (confirmed via `git worktree list`)
+from an unrelated prior session, checked out at commit `ef0fa74`,
+predating the `consistent-type-imports` rule the previous plan added —
+and reporting 208 false errors. **Did not delete or touch that
+worktree** — it may represent another session's own in-progress work;
+fixed by excluding `.claude/worktrees/**` in `eslint.config.mjs`'s
+`globalIgnores` instead (`8a60914`). That surfaced 6 REAL pre-existing
+errors underneath, in `scripts/*.ts` files the previous sweep missed
+(scoped to `npx eslint src --fix`, not `scripts/`) — fixed the same
+mechanical way, diff confirmed import-only, sanity-checked
+`scripts/probe-find.ts` still loads through `alias-hooks.mjs` afterward.
+
+Final verification: `npx tsc --noEmit` clean · `npm run lint` **0
+errors**, 382 warnings (all pre-existing `no-explicit-any`) · `npm test`
+**432 passed, 1 skipped** (baseline was 419; +13 from T1's/T7's own new
+tests) · `npm run build` — dev server stopped first, compiled in ~4.3s,
+**61 routes**, `/legal/[locale]/[doc]` confirmed **`ƒ (Dynamic)`** in the
+build output (not `○ Static` — the `force-dynamic` invariant held).
+
+Docs: `TASKS.md` marks H4.1/H4.3/H4.4/H4.5/H4.8 done inline (matching the
+existing convention already used for H4.6/H4.7), leaves H4.0/H4.2/H4.9/
+H4.10 open with the dependency chain stated; the F4 finding from the
+previous plan is updated with T7's closure; SM33 added under its own
+dated section; 182/200 lines, no archiving needed. `STATUS.md` gains a
+digest entry and updates the H4 roadmap row + "What's left" table.
+`AGENTS.md` gains the `/legal` example on the existing `force-dynamic`
+invariant and a new note about the worktree-lint gotcha.
+
+**Systems-level recommendations, not acted on (out of this plan's
+scope):**
+
+1. **H4.2 (Impressum) and H4.9/H4.10 are now genuinely unblocked except
+   for H4.0** — the moment legal advice on the address requirement comes
+   back, H4.2 is a content-only fill-in against an already-live,
+   already-tested route (noindex/sitemap-exclusion mechanics all proven
+   in T6). Worth a short follow-up plan the day that advice lands.
+2. **The touch-target gap (SM33) is small and mechanical** — both
+   components just need `.tap-44`/`.tap-44-y` classes, the exact pattern
+   `ActionCells.tsx` already uses. Good candidate for a "mixed
+   maintenance batch" style follow-up alongside other small UI fixes,
+   not urgent enough to justify its own plan.
+3. **The worktree-lint gap likely wasn't unique to this one abandoned
+   worktree** — any future `isolation:"worktree"` agent run that doesn't
+   get cleaned up will recreate it. The `eslint.config.mjs` fix is
+   durable (a glob pattern, not a one-off), so this shouldn't recur, but
+   it's worth knowing `git worktree list` is the first thing to check if
+   `npm run lint` ever reports a wall of unfamiliar errors again.
