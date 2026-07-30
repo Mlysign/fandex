@@ -146,7 +146,7 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
 
 ## Tasks
 
-- [ ] **T1** — Group item-page tag chips by the live category, not the code heuristic
+- [x] **T1** — Group item-page tag chips by the live category, not the code heuristic
   - Files: `src/app/[type]/[id]/[slug]/page.tsx`, `src/components/item/ItemView.tsx`,
     `src/components/item/LowerSections.tsx`
   - Detail: In the **server** page component, read `getTagCategoryOverrides()` and

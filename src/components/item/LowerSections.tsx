@@ -4,7 +4,7 @@ import Link from "next/link";
 import { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink, { facetHref } from "@/components/FacetLink";
-import { categorizeTag, CATEGORIES } from "@/lib/tags";
+import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";
 import { tagKey } from "@/lib/facets";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
 
@@ -37,7 +37,16 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
 
 // The stacked lower-detail sections: trailer, cast, where-to-watch, DLC, the
 // combined tags/keywords/modes/platforms block, and store links.
-export default function LowerSections({ enriched, type }: { enriched: EnrichedItem | null; type: MediaType }) {
+export default function LowerSections({ enriched, type, tagOverrides = {}, tagCategories = [] }: {
+  enriched: EnrichedItem | null;
+  type: MediaType;
+  // Global taxonomy, resolved on the SERVER and passed down: this is a client
+  // component and can't read the DB, but the data is the same for every viewer,
+  // so threading it as a prop keeps ItemView's "nothing above PersonalSection
+  // may depend on a session" SSR guarantee intact.
+  tagOverrides?: Record<string, string>;
+  tagCategories?: TagDisplayCategory[];
+}) {
   const trailerKey      = enriched?.trailerYoutubeKey ?? null;
   const steamTrailerUrl = enriched?.steamTrailerUrl ?? null;
   const cast            = enriched?.cast ?? [];
@@ -114,25 +123,18 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
 
       {/* Tags · keywords · modes · platforms — one section, grouped & color-coded by type (T13) */}
       {(() => {
-        // Tags and keywords are the same thing: merge, dedupe by normalized key, categorize.
-        const byCat = new Map<string, { key: string; label: string }[]>();
-        const seen = new Set<string>();
-        for (const t of [...tags, ...keywords]) {
-          const k = tagKey(t);
-          if (!k || seen.has(k)) continue;
-          seen.add(k);
-          const cat = categorizeTag(k);
-          let arr = byCat.get(cat);
-          if (!arr) { arr = []; byCat.set(cat, arr); }
-          arr.push({ key: k, label: t });
-        }
+        // Tags and keywords are the same thing: merge, dedupe by normalized key,
+        // categorize. Grouping lives in groupTagsByCategory() so the live admin
+        // override (tag_category_override) wins over categorizeTag()'s heuristic
+        // — this section used to call the heuristic directly and so contradicted
+        // the inline picker sitting on the very same chip.
         type TagGroup = { id: string; label: string; color: string; kind: "tag"; items: { key: string; label: string }[] };
         type PlainGroup = { id: string; label: string; color: string; kind: "plain"; items: string[] };
-        const groups: (TagGroup | PlainGroup)[] = [];
-        for (const c of CATEGORIES) {
-          const items = byCat.get(c.id);
-          if (items?.length) groups.push({ id: c.id, label: c.label, color: c.color, kind: "tag", items });
-        }
+        const groups: (TagGroup | PlainGroup)[] = groupTagsByCategory(
+          [...tags, ...keywords].map((t) => ({ key: tagKey(t), label: t })),
+          tagOverrides,
+          tagCategories,
+        ).map((g) => ({ ...g, kind: "tag" as const }));
         // Literal hex (not a CSS var): these feed the `${color}22`/`${color}1f`
         // alpha-suffix trick below, which only works on a hex string.
         if (platformList.length) groups.push({ id: "platform", label: "Platforms", color: "#9A8F80", kind: "plain", items: platformList });
@@ -149,9 +151,10 @@ export default function LowerSections({ enriched, type }: { enriched: EnrichedIt
                     ? g.items.map((it) => (
                         // T9 (2026-07-29): admin-only inline category picker, hover-revealed —
                         // same pattern as insights/FacetSection's TagCategoryHoverPanel.
-                        // categoryId is the code-heuristic guess (categorizeTag, computed
-                        // above) — TagCategoryPicker itself prefers a live override over
-                        // this if one exists, so it's a fallback, not the source of truth.
+                        // categoryId is now the SAME resolved value the group heading uses
+                        // (override first, heuristic second), so the picker and the heading
+                        // it sits under can no longer disagree — which they did until
+                        // 2026-07-30, this section having called categorizeTag() directly.
                         <div key={it.key} className="relative group">
                           <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-30 hidden group-hover:flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <TagCategoryPicker

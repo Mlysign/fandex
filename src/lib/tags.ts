@@ -197,3 +197,86 @@ export function categorizeTag(key: string): string {
 
   return "other";
 }
+
+// ── Display grouping ──────────────────────────────────────────────────────────
+// Which heading a tag chip renders under. Split out of LowerSections (2026-07-30)
+// because that component called categorizeTag() directly and therefore ignored
+// tag_category_override entirely: a tag reassigned in /dev/scoring's tag table
+// showed its new category in the inline picker while still listing under its OLD
+// heading, for every viewer, on the same page.
+//
+// Two rules this encodes, both learned the hard way:
+//  1. An override WINS over the code heuristic. That's the bug above.
+//  2. The display order comes from the LIVE tag_category table, not the static
+//     CATEGORIES const. The const has 9 entries; the table has 10 (an admin
+//     created "People & Characters"), and the old `for (const c of CATEGORIES)`
+//     loop simply never emitted a group for an id it didn't know — so a tag
+//     overridden into an admin-made category vanished from the page rather than
+//     merely grouping wrong. Anything unresolvable now lands in `other` instead.
+export interface TagDisplayCategory {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export interface TagDisplayGroup extends TagDisplayCategory {
+  items: { key: string; label: string }[];
+}
+
+const FALLBACK_CATEGORY_ID = "other";
+
+// `categories` is the live list in display order (getTagCategories()). Static
+// CATEGORIES entries it omits are appended so a category can only ever be added
+// by the admin table, never silently removed by it.
+function displayOrder(categories: TagDisplayCategory[]): TagDisplayCategory[] {
+  const out = categories.map((c) => ({
+    id: c.id,
+    label: c.label || CATEGORY_LABELS[c.id] || c.id,
+    color: c.color || CATEGORY_COLORS[c.id] || "#9ca3af",
+  }));
+  const seen = new Set(out.map((c) => c.id));
+  for (const c of CATEGORIES) {
+    if (!seen.has(c.id)) out.push({ id: c.id, label: c.label, color: c.color });
+  }
+  if (!out.some((c) => c.id === FALLBACK_CATEGORY_ID)) {
+    out.push({ id: FALLBACK_CATEGORY_ID, label: CATEGORY_LABELS.other, color: CATEGORY_COLORS.other });
+  }
+  return out;
+}
+
+// tags: already keyed via tagKey() by the caller (keeping it out of here avoids a
+// tags.ts <-> facets.ts import cycle — facets.ts imports categorizeTag).
+// Deduped by key, first label wins. Only non-empty groups are returned.
+export function groupTagsByCategory(
+  tags: { key: string; label: string }[],
+  overrides: Record<string, string> | Map<string, string>,
+  categories: TagDisplayCategory[],
+): TagDisplayGroup[] {
+  const lookup = overrides instanceof Map
+    ? (k: string) => overrides.get(k)
+    : (k: string) => overrides[k];
+
+  const order = displayOrder(categories);
+  const known = new Set(order.map((c) => c.id));
+
+  const byCat = new Map<string, { key: string; label: string }[]>();
+  const seen = new Set<string>();
+  for (const t of tags) {
+    if (!t.key || seen.has(t.key)) continue;
+    seen.add(t.key);
+    const resolved = lookup(t.key) ?? categorizeTag(t.key);
+    // An override can point at a category that was since deleted. Bucket it
+    // rather than dropping the chip.
+    const cat = known.has(resolved) ? resolved : FALLBACK_CATEGORY_ID;
+    let arr = byCat.get(cat);
+    if (!arr) { arr = []; byCat.set(cat, arr); }
+    arr.push(t);
+  }
+
+  const groups: TagDisplayGroup[] = [];
+  for (const c of order) {
+    const items = byCat.get(c.id);
+    if (items?.length) groups.push({ ...c, items });
+  }
+  return groups;
+}

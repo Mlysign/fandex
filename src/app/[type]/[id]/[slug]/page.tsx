@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import ItemView from "@/components/item/ItemView";
+import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
 
 // P13 — THE item page: `/{type}/{id}/{slug}`. One url for everyone.
 //
@@ -100,9 +101,17 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
   // mapping IS stable: 307 would tell Google to keep indexing both urls.
   if (slug !== canonicalSlug) permanentRedirect(`/${type}/${canonicalId}/${canonicalSlug}`);
 
+  // The tag taxonomy is global, not per-viewer, so reading it here keeps the
+  // "server HTML never varies per viewer" guarantee while letting the client
+  // LowerSections group chips by the live admin override instead of the code
+  // heuristic. Both reads are cached + signature-invalidated in scoringConfig,
+  // and tag_category_override is a handful of rows.
+  const tagOverrides = Object.fromEntries(getTagCategoryOverrides());
+  const tagCategories = getTagCategories().map((c) => ({ id: c.id, label: c.label, color: c.color }));
+
   return (
     <div className="min-h-screen bg-surface text-text-primary">
-      <ItemView item={item} />
+      <ItemView item={item} tagOverrides={tagOverrides} tagCategories={tagCategories} />
     </div>
   );
 }

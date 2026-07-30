@@ -11,6 +11,7 @@ import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
 import BackButton from "@/components/ui/BackButton";
+import type { TagDisplayCategory } from "@/lib/tags";
 
 // P13 — THE item view. One page, one url, for everyone.
 //
@@ -23,7 +24,13 @@ import BackButton from "@/components/ui/BackButton";
 // client island that checks the session itself and swaps between a sign-in hook
 // and the real interactive controls. Nothing above it may depend on a session,
 // or the server HTML would vary per viewer and the SSR guarantee would break.
-export default function ItemView({ item }: { item: PublicEnrichedItem }) {
+export default function ItemView({ item, tagOverrides, tagCategories }: {
+  item: PublicEnrichedItem;
+  // Global tag taxonomy, read on the server (see LowerSections). Viewer-
+  // independent, so it doesn't compromise the SSR guarantee described above.
+  tagOverrides?: Record<string, string>;
+  tagCategories?: TagDisplayCategory[];
+}) {
   const [idx, setIdx] = useState(0);
 
   // The sections take an EnrichedItem. This is the ONE place that widens the
@@ -108,7 +115,7 @@ export default function ItemView({ item }: { item: PublicEnrichedItem }) {
         </div>
       </div>
 
-      <LowerSections enriched={enriched} type={item.type} />
+      <LowerSections enriched={enriched} type={item.type} tagOverrides={tagOverrides} tagCategories={tagCategories} />
     </main>
   );
 }
