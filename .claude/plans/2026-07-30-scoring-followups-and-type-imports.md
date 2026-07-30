@@ -220,7 +220,7 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
   - Depends on: none (run it **after** T1 and T2 so their edits are swept too, but it does not
     depend on their outcome)
 
-- [ ] **T4** — Root-cause Discover's scroll restoration on Back; fix only if proven
+- [x] **T4** — Root-cause Discover's scroll restoration on Back; fix only if proven
   - Files: `src/lib/usePersistedState.ts` (only if the cause is confirmed);
     `src/app/discover/DiscoverPageClient.tsx` (read-only unless the cause is there)
   - Detail: Reproduce in the browser: log in, load `/discover`, scroll to a known offset
@@ -266,4 +266,45 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
 
 ## Blockers log
 
+_(none — T4 resolved as not-reproducible rather than blocked; see the Session log.)_
+
 ## Session log
+
+**T4 (2026-07-30) — the scroll-restoration bug does not reproduce. It was a
+measurement artifact, and no code was changed.** Outcome (a) of the task's two,
+not (b).
+
+Measured on `/discover`, logged in, against the real dev server. Scroll to a
+known offset → click a card → Back → sample `window.scrollY` every 100ms for
+4.5s:
+
+| saved | @500ms | @1000ms | @2000ms | settled |
+|------:|-------:|--------:|--------:|--------:|
+| 1500  |     56 |      56 |    1500 |    1500 |
+
+**56 is exactly the number T14 recorded** — it is what the page reads *before*
+the restore fires, not where it ends up. Repeated at 600 / 2000 / 4000px via
+`history.back()` and once more through the real `BackButton`: **4 of 4 landed
+on the target exactly, delta 0px.** `sessionStorage` held the correct value
+throughout.
+
+Why the delay, from the instrumented trace: on Back the page returns at
+`t≈105ms` with `scrollHeight` 1326 (nothing rendered yet) and `scrollY` 56. The
+document reaches its full 6371px at `t≈1474ms` — `loadDefault()` re-fetches the
+whole saved browse depth on every mount — and the restore lands at `t≈1594ms`.
+`useScrollRestore` is gated on `!searchActive && !loading && items.length > 0`,
+so it cannot fire earlier than that by construction. T14's control test (native
+back showing the same 56) is consistent with this: both paths wait on the same
+refetch.
+
+So the hook is correct and was never the problem. `useScrollRestore` is
+untouched, which also means `/library` and the facet pages — the two other
+consumers, and the stated regression risk — carry no risk from this task.
+
+**One real thing is left behind, smaller and different from the reported bug:**
+for ~1.5s after Back the viewer sits at scroll 56 and then jumps to their old
+position. That is a visible wart, but it is a *data-loading* problem (Discover
+re-fetches its entire browse depth on mount) and not a scroll-restoration one —
+fixing it means caching the browse payload across navigation, not touching
+`useScrollRestore`. Recording it here rather than acting on it: it is outside
+this plan's scope and would be a materially different change.
