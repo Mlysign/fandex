@@ -1,4 +1,4 @@
-# Performance audit — 2026-07-30
+# Performance audit — 2026-07-30, updated 2026-07-31
 
 Measured against the real local `data/rr.db` (1,921 library items · 95 wishlist · 1,635 rated ·
 4,405 `media_items` · 6,054 `media_links`), logged in, `next dev` on port 3000. Harness:
@@ -14,12 +14,17 @@ node scripts/perf-probe.mjs --cookie "rr2_session=…"
 
 ## Headline: the biggest problem was payload, not CPU
 
-| Route | Before | After | Δ |
+| Route | Before (2026-07-30) | After list projection | After the shared cache (2026-07-31) |
 |---|--:|--:|--:|
-| `/api/library` | **38,868 KB** · 942 ms | **7,556 KB** · 578 ms | **−81% bytes**, −39% time |
-| `/api/calendar` | 1,660 KB · 95 ms | **346 KB** · 75 ms | **−79% bytes** |
-| item detail page (DOM) | 1,239 nodes · 2 `/api/detail` · 2 YouTube iframes | 723 nodes · 1 · 1 | **−42% nodes** |
-| `/api/home` | no cache, 3 provider calls per view | 30 min cache | warm 405 ms |
+| `/api/library` | **38,868 KB** · 942 ms | 7,556 KB · 578 ms | **7,560 KB · ~500 ms** |
+| `/api/calendar` | 1,660 KB · 95 ms | **346 KB** · 75 ms | 346 KB · ~85 ms |
+| item detail page (DOM) | 1,239 nodes · 2 `/api/detail` · 2 YouTube iframes | 723 nodes · 1 · 1 | unchanged |
+| `/api/home` | no cache, 3 provider calls per view | 30 min cache | unchanged, warm ~450–545 ms |
+
+The two fixes stack: the list-projection cut (§1) removed 31 MB of payload that was never the CPU
+cost; the shared facet cache (§4, added 2026-07-31) removed the redundant re-parse-and-re-merge work
+underneath what's left. `/api/calendar` barely moves on the cache alone — its wishlist (95 rows) was
+never big enough for the parse cost to dominate; `/api/library`'s 1,921 rows are where it shows.
 
 ### 1. `/api/library` shipped 30.7 MB of raw provider blobs — FIXED
 
@@ -62,57 +67,66 @@ latency, unavoidable) → warm 405 ms.
 
 ---
 
-## Measured but NOT fixed — specified for a separate reviewed pass
+## 4. The duplicate-parse sites — FIXED (the safe half), 2026-07-31
 
-Both of these are real and quantified. They're deferred because they touch the caches every
-surface reads, and getting one subtly wrong fails *silently* (stale facets, or an item missing from
-the pool) rather than loudly — the plan reserved that class of change for its own pass.
+`/api/library`, `/api/calendar`, `analyzeLibraryFacets` and `loadMembershipGroups` each
+independently `JSON.parse`d `raw_data` and called `mergeLinks()` + `extractFacets()` themselves for
+the same items, on every request — the duplicate-parse sites, precisely (an earlier draft of this
+doc said `buildProfile` parses too — it does **not**, it goes through the cached
+`getLibraryFacetAnalysis`):
 
-### A. The discovery cache re-parses 39 MB of JSON on the request path
-
-`buildCache()` ([discovery.ts:148](../src/lib/discovery.ts)) selects the whole pool ⟕ `media_links`
-and `JSON.parse`s every blob, synchronously, in the request:
-
-- **4,133 link rows / 39.0 MB of `raw_data`** per rebuild (2,531 pool items)
-
-…and it's invalidated far more often than the catalog actually changes:
-
-- `catalogSignature()` counts `POOL_WHERE`, which includes
-  `mi.id IN (SELECT media_item_id FROM user_item_state)` — so **any** wishlist / library / rating
-  write changes the signature and forces a full 39 MB re-parse
-- plus a 5-minute TTL, `tagAliasSignature()`, and explicit `invalidateDiscoveryCache()` calls
-
-**Fix, in two parts.** (i) A shared `BoundedCache<mediaItemId, {sig, facets, merged}>` keyed on the
-item's `MAX(last_synced)` + region, so a rebuild reuses per-item work instead of re-parsing
-everything. (ii) Split the pool signature: keep `browsed = 0` count/`MAX(updated_at)` as the catalog
-component and treat a newly-acted-on item as an incremental *add* rather than an invalidation.
-
-The duplicate-parse sites, precisely (an earlier draft of this doc said `buildProfile` parses too —
-it does **not**, it goes through the cached `getLibraryFacetAnalysis`):
-
-| site | parses |
+| site | parsed |
 |---|---|
-| `libraryAnalysis.ts:126` (`analyzeLibraryFacets`) | every library item's links |
-| `libraryAnalysis.ts:368` (`loadMembershipGroups`) | called **twice** — library, then watchlist |
-| `api/library/route.ts:72` | the same library rows again, independently |
-| `api/calendar/route.ts:59` | the wishlist rows again, independently |
-| `discovery.ts:163` (`buildCache`) | the whole pool — the 39 MB above |
+| `libraryAnalysis.ts` (`analyzeLibraryFacets`) | every library item's links |
+| `libraryAnalysis.ts` (`loadMembershipGroups`) | called **twice** — library, then watchlist |
+| `api/library/route.ts` | the same library rows again, independently |
+| `api/calendar/route.ts` | the wishlist rows again, independently |
 
-So one signed-in `/library` request parses the library's blobs at least **twice**, and a `/calendar`
-request parses the wishlist's twice.
+New `src/lib/facetCache.ts` caches the **derived** `{facets, merged}` per
+`(mediaItemId, MAX(last_synced), region, scoringConfigSignature())` — a caller checks freshness from
+a plain SQL column (no parse needed) and skips straight to the cached result on a hit. All four
+sites above now share it; a repeat `/library` visit with an unchanged library skips the parse
+entirely instead of redoing it.
 
-**The trap to test for:** a wishlist write must make the item appear in `find()` results
-*immediately*, not on the next TTL expiry. That needs an explicit test before this ships.
+**Cache the derived shapes, never the raw parse** — this was the explicit design constraint, not an
+afterthought. Caching parsed `raw_data` objects (rather than these small derived shapes) would trade
+a CPU problem for a memory one: parsed JS objects for 30 MB of JSON are several times that on the
+heap, on a container with real OOM history (`image-optimizer-native-memory`). `facets`+`merged` for
+the whole pool is on the order of a few MB.
 
-**Aliasing hazard on (i):** a shared parsed-`rawData` object is handed to callers that mutate it —
-`enrichMissingSources` in `/api/detail` does. Either freeze/clone on read or scope the cache to the
-derived `facets`/`merged` rather than the raw parse.
+Returns **raw** (unaliased, non-override) facets deliberately — only `analyzeLibraryFacets` applied
+tag-alias canonicalization + category-override resolution before; the routes and
+`loadMembershipGroups` called `extractFacets` raw and always have. Baking that resolution into the
+shared cache would have silently changed what `computeFandexScore` sees for callers that never asked
+for it — a scoring-behavior change, not a caching one. Every caller keeps its own existing
+post-processing (or lack of it) exactly as before.
 
-**Memory hazard on (i), and the reason to prefer the derived form:** the parsed JS objects for 30 MB
-of `raw_data` are several times that on the heap. Caching them would trade a CPU problem for a memory
-one, on a container this project has already had OOM trouble with (see
-`image-optimizer-native-memory`). The derived `facets` array is small — order 5 MB for the whole pool.
-**Cache facets/merged, never the raw parse.**
+One small, deliberate, strictly-widening side effect: `getMembershipSignal`'s original-language tally
+used to read straight off a link's raw TMDB blob (a trakt-only item with no tmdb link contributed
+nothing); it now reads `merged.originalLanguage` (mergeLinks' own tmdb-then-trakt priority), since the
+cache doesn't expose raw per-source blobs. Never narrows what worked before.
+
+6 tests cover cache-hit-on-unchanged-freshness, invalidate-on-bump, invalidate-on-live-config-write,
+mutation-safety (a caller mutating the returned array can't corrupt the next caller's read),
+raw-facets-not-post-processed, and per-region isolation.
+
+## Still open — the harder half, deliberately deferred to a supervised pass
+
+### A. The catalog pool cache is still invalidated far more often than it needs to be
+
+`buildCache()` ([discovery.ts](../src/lib/discovery.ts)) still rebuilds the WHOLE pool — 4,133 link
+rows / 39.0 MB of `raw_data` — from scratch on every rebuild, and `catalogSignature()` counts
+`POOL_WHERE`, which includes `mi.id IN (SELECT media_item_id FROM user_item_state)`: **any**
+wishlist/library/rating write still changes the signature and forces a full pool re-parse, even
+though the shared cache above means each individual item's re-derivation is now fast.
+
+**Fix:** split the pool signature — keep `browsed = 0` count/`MAX(updated_at)` as the catalog
+component, and treat a newly-acted-on item as an incremental *add* to the existing cache rather than
+a full invalidation. Reserved for a supervised pass, not this one: get it wrong and a newly
+wishlisted item can silently miss the pool until the next TTL expiry — a failure that's silent, not
+loud, which is exactly the class of change this batch's plan excluded from an unattended session.
+**The must-have test before it ships:** a wishlist write makes the item appear in `find()` results
+*immediately*, not on the next TTL expiry.
 
 ### B. DB inflation — the 2.5 GB prod question is still open
 

@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-31-perf-cache-compliance-and-sweep
 created: 2026-07-31
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -231,7 +231,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: none — this is the test.
   - Depends on: T2, T3, T4, T5, T6 (sweep what shipped)
 
-- [ ] **T8** — Update the docs and memory, then commit and push
+- [x] **T8** — Update the docs and memory, then commit and push
   - Files: `STATUS.md`, `TASKS.md`, `docs/performance-audit.md`, and the memory files under
     `~/.claude/projects/C--Users-n-mly-.../memory/` (`perf-audit-2026-07-30.md`,
     `item-detail-mockup-rebuild.md`, `tailwind-theme-tree-shaking.md`, plus `MEMORY.md` if a new file
@@ -257,4 +257,67 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
 
 ## Session log
 
-(Left empty by the planner. The work skill appends here.)
+All 8 tasks completed, no blockers. Committed per-task (one commit each, T1–T7; T8 is this
+closing commit) rather than in one batch, so a partial run would have left usable history.
+
+**T1** — prod probed (`curl https://fandex.org/api/health`), still Railway's edge 404, identical
+body to prior checks. Logged and moved on; steps 4–5 of the PR17 checklist still need the Railway
+console regardless of prod being back, so nothing in this run could have reached them anyway.
+
+**T2** — `LocaleToggle`/`LegalFooter` given `.tap-44-y`; `LegalFooter`'s wrap gap widened
+`gap-y-2`→`gap-y-8` (the two-16px-tall-links-in-adjacent-wrapped-rows overlap the plan called out).
+Verified at 375px (single row, no overlap) and 220px (wraps to two rows, 48px apart, no overlap).
+
+**T3** — JustWatch attribution line added under the provider rows, gated on
+`streamingProviders.length > 0`. Verified present on an item with providers, absent on one without.
+
+**T4** — `--color-media-*` moved from `@theme` to the plain `:root` block that already held the
+`-game/-movie/-show` duplicates (no `-media-` infix); confirmed both AGENTS.md's invariant and the
+`tailwind-theme-tree-shaking` memory still claimed the bug as live and corrected both.
+
+**T5** — new `src/lib/facetCache.ts`, wired into `analyzeLibraryFacets`, `loadMembershipGroups`,
+`/api/library`, `/api/calendar`. **Decision made under this task's authority, not pre-specified by
+the plan:** the cache returns RAW (unaliased, non-override) facets, never the alias/override-
+resolved shape — discovered mid-implementation that only `analyzeLibraryFacets` applies that
+post-processing today, and baking it into the shared cache would have silently changed what
+`computeFandexScore` sees on the two routes and `loadMembershipGroups`, none of which apply it
+today. Also surfaced and deliberately accepted: `getMembershipSignal`'s language tally now reads
+`merged.originalLanguage` instead of a raw TMDB-only blob read (the cache exposes no raw per-source
+data) — strictly widens what counts, verified it can't narrow anything that worked before.
+6 new tests. Measured: `/api/library` warm ~578ms → ~500ms on top of the 2026-07-30 payload cut.
+
+**T6** — new `src/lib/similarItems.ts` (pure, unit-tested IDF-weighted ranking), `GET
+/api/detail/similar` (public route, falls back to `facetCache.ts` for a non-pool item), and a
+`SimilarRail` client island mounted once. Verified live: exactly 1 fetch + 1 visible rail at both
+375px and 1280px, anon curl returns real cross-type results with `fandexScore: null` and no error.
+6 new ranking tests.
+
+**T7** — ran the `smoketest` skill scoped to what R1–R10 and T1–T6 shipped. Zero findings; logged
+as the project's 8th sweep (correcting the 2026-07-30 legal-batch entry's self-mislabeling as "7th"
+without renumbering its history). One investigation worth recording: a transient 2×-fetch reading
+on an item-detail page was chased down rather than logged as a finding — traced to a Fast-Refresh
+forced full reload (visible in the server log) coinciding with this session editing source files
+while the same page sat open in the browser pane. A clean fresh-navigate and a resize-only retry
+both reproduced the correct 1×/1×, so it was not logged as a regression.
+
+**T8** (this commit) — `docs/performance-audit.md` restructured: §4 (the shared cache) moved from
+"measured but NOT fixed" into a fixed section with real before/after numbers; §A (the pool-signature
+split) kept as the one remaining deferred item, now clearly distinguished from what shipped today.
+Three memory files updated (`perf-audit-2026-07-30`, `item-detail-mockup-rebuild`,
+`tailwind-theme-tree-shaking`) plus the `MEMORY.md` index. TASKS.md: added a `T#` section for this
+batch, archived the R# (2026-07-30) and F# (scoring-followups) sections into
+`docs/archive/history.md` to bring the file from 222 back to exactly 200 lines — both were fully
+done, and R# already had permanent records in git history + the plan file + memory. STATUS.md got
+a new dated entry.
+
+**Verification:** 485 tests (up from 473 at session start), typecheck clean, lint 0 errors (389
+pre-existing warnings, none new), production build clean with `/api/home`, `/api/detail/similar`,
+`/legal/[locale]/[doc]`, `/robots.txt` and `/sitemap.xml` all confirmed `ƒ (Dynamic)`.
+
+**Systems-level recommendation for a follow-up plan:** the pool-signature split
+(`docs/performance-audit.md` §A) is the one clearly-scoped item left over from the 2026-07-30 perf
+audit. It's well-specified (split `catalogSignature()`'s `POOL_WHERE`-derived component from the
+catalog component; treat a newly-acted-on item as an incremental cache add rather than a full
+invalidation) and has an explicit must-pass test already written down (a wishlist write must make
+the item appear in `find()` results immediately). Good candidate for the next supervised Opus
+session — deliberately not attempted here per the plan's own scope boundary.
