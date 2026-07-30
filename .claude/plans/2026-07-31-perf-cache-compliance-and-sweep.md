@@ -140,7 +140,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: none — static markup, verified in the browser pane.
   - Depends on: none
 
-- [ ] **T4** — Move `--color-media-*` out of `@theme` so the tokens actually resolve
+- [x] **T4** — Move `--color-media-*` out of `@theme` so the tokens actually resolve
   - Files: `src/app/globals.css`, `src/components/item/ItemView.tsx`, `AGENTS.md`, and the memory file
     `~/.claude/projects/C--Users-n-mly-.../memory/tailwind-theme-tree-shaking.md`
   - Detail: `--color-media-game/-movie/-show` sit in `@theme` and are only ever read through inline

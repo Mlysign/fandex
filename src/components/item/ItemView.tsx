@@ -165,11 +165,11 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
                 is ever announced. */}
             <div className="hidden lg:block space-y-2.5">
               <div className="inline-flex items-center gap-1.5">
-                {/* TYPE_COLORS, not var(--color-media-*): those tokens live in
-                    @theme, which Tailwind v4 tree-shakes when nothing references
-                    them through a utility class — so the var() resolves to empty
-                    and the dot disappears. Same trap the facet tokens hit; see
-                    globals.css's :root facet block. */}
+                {/* TYPE_COLORS, not var(--color-media-*) — either works today
+                    (2026-07-31: the media tokens were relocated out of @theme
+                    into a plain :root block, the same fix the facet tokens got,
+                    so the var() now resolves). Left on TYPE_COLORS since it was
+                    already correct and there's no reason to migrate. */}
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: TYPE_COLORS[item.type] }} />
                 <span className="font-mono text-eyebrow uppercase text-text-secondary">{item.type}</span>
               </div>

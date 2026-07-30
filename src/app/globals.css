@@ -66,12 +66,6 @@
   --color-warning-subtle: rgb(240 160 75 / 0.14);
   --color-danger-subtle:  rgb(229 103 76 / 0.14);
 
-  /* ---- Media-type accents (SHIPPING VALUES — do not retint) --------------
-     These ship today and other features depend on them. See 05-DELTA.md §(c). */
-  --color-media-game:  #4ade80;
-  --color-media-movie: #f59e0b;
-  --color-media-show:  #a78bfa;
-
   /* ---- Fandex Score badge ramp --------------------------------------------
      NOTE: these are the design's palette values, kept. The NUMERIC band
      cutoffs (>=80/65-79/<65) are NOT adopted — src/components/FandexScoreBadge.tsx
@@ -233,10 +227,13 @@
    no generated utility references, so declaring them up there emits nothing and
    every chip silently falls back to inherited text colour. Found the hard way:
    the first version of this put them in @theme, and `getPropertyValue()` returned
-   "" at runtime. `--color-media-game/-movie/-show` are in @theme and have the
-   SAME problem for the same reason — which is why components read TYPE_COLORS
-   from constants.ts instead of the token. Same rule as the named spacing steps
-   above: if it's only ever read through var(), it belongs in plain :root.
+   "" at runtime. `--color-media-game/-movie/-show` hit the exact same trap and
+   were relocated out of @theme for the same reason on 2026-07-31 (see the
+   "Media-type accents" block below) — components still read TYPE_COLORS from
+   constants.ts rather than the token, which is harmless now that the token
+   itself resolves, but there's no need to migrate them. Same rule as the named
+   spacing steps above: if it's only ever read through var(), it belongs in
+   plain :root.
 
    Contrast (AA, small text) verified against BOTH --color-surface and
    --color-surface-elevated: dark 5.6–9.7:1, light 5.0–6.8:1. Light-theme
@@ -248,15 +245,28 @@
   --color-facet-company: #C08152; /* developer / publisher / studio / network */
 }
 
-/* ---- Legacy provider/media brand hexes ----------------------------------
-   Pre-dates the token system above; still referenced as inline hex literals
-   throughout src/ (not via var()) rather than through these custom
-   properties. --color-game/-movie/-show duplicate --color-media-* 1:1 and
-   are superseded by it; --color-steam/-rawg/-trakt/-tmdb are provider marks
-   with no token equivalent. Kept as-is — a sweep to make components actually
-   reference tokens (media-type dots, provider badges) is H1.6d/e work, not
-   a token-layer change. */
+/* ---- Media-type accents + legacy provider brand hexes (SHIPPING VALUES —
+   do not retint) ------------------------------------------------------------
+   `--color-media-game/-movie/-show` MOVED HERE from `@theme` 2026-07-31 (they
+   used to sit alongside the other `@theme` colour tokens, ~line 68). They are
+   consumed ONLY as inline `style={{ background: 'var(--color-media-*)' }}`
+   values, never through a Tailwind utility class (`bg-media-game` etc. don't
+   exist) — and Tailwind v4 tree-shakes any `@theme` custom property that no
+   generated utility references, so they resolved to an EMPTY STRING at
+   runtime. `Logo.tsx`'s `var(--color-media-show, #a78bfa)` masked this with a
+   fallback; nothing else did. Same rule as the facet-class tokens below and
+   the named `--space-*` steps above: an inline-only token belongs in a plain
+   `:root` block, not `@theme`. See AGENTS.md's load-bearing invariants.
+
+   `--color-game/-movie/-show` (no `media-` infix) duplicate the three above
+   1:1 and predate them; `--color-steam/-rawg/-trakt/-tmdb` are provider marks
+   with no token equivalent. All are still referenced as inline hex literals
+   throughout src/ rather than through var() — a sweep to make components
+   actually reference these tokens is H1.6d/e work, not a token-layer change. */
 :root {
+  --color-media-game:  #4ade80;
+  --color-media-movie: #f59e0b;
+  --color-media-show:  #a78bfa;
   --color-game: #4ade80;
   --color-movie: #f59e0b;
   --color-show: #a78bfa;
