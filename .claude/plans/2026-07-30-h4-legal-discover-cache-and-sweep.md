@@ -288,7 +288,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none.
   - Depends on: none
 
-- [ ] **T9** — Smoke sweep, log-only
+- [x] **T9** — Smoke sweep, log-only
   - Files: `TASKS.md`, `smoketest.md`
   - Detail: Run the `/smoketest` skill's plan (`smoketest.md`) against the local dev server,
     logged in via `GET /api/dev/login`. **Cover the new legal surface** — all four docs in both

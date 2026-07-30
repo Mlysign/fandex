@@ -138,6 +138,16 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 
 ---
 
+## Smoke test — 2026-07-30 (ID `SM#`) — log-only pass, T9
+
+7th sweep, scoped per T9's own instruction to the two new surfaces this plan shipped: `/legal/{en,de}/{privacy,terms,support,imprint}` (T1/T3–T6) and Discover's browse cache (T7) — not a full re-run of the checklist. Observe-don't-fix; nothing below was touched.
+
+- **SM33** 🟡 — **`LocaleToggle` and `LegalFooter` links are undersized touch targets at 375px**, well under the app's own 44×44 `.tap-44` convention (checklist item 28) used everywhere else (`ActionCells`, `SubBar`). Measured via `getBoundingClientRect()`: `LocaleToggle`'s EN/DE links are **39×24px** (`/legal/*`, every doc), `LegalFooter`'s four links are **~45×16px** (`/profile`, bottom). Neither collides with a neighbour (checked pairwise), so this isn't the SM-era overlap failure mode — just genuinely small tap area on two brand-new components that never got the `.tap-44`/`.tap-44-y` treatment the rest of the app has.
+
+**Everything else checked, no findings:** all 8 legal-doc titles correct by hard load (`curl` + regex, per the SM26 convention); all 4 docs reachable anon (200, no session gate — correct, they're public); imprint's `noindex` and its exclusion from `sitemap.xml` (already pinned in T6, re-confirmed here); no horizontal overflow on either surface at 375px; zero console errors and zero server errors across every page visited, both viewports; Discover's search mode (16 results for "dragon", back to 94 on clearing) is unaffected by the new browse cache — confirms the two code paths (`items` vs `searchItems`/`webItems`) stay properly separated. One transient false alarm investigated and dismissed: a `curl` with a bogus `rr2_session` cookie value appeared to 404 once, but three immediate retries (including with response headers) all returned 200 — a dev-server compile race, not a reproducible bug, not logged as a finding.
+
+---
+
 ## Tag admin + score rework — 2026-07-29 (ID `T#`)
 
 Built per [.claude/plans/2026-07-29-tag-admin-and-score-rework.md](.claude/plans/2026-07-29-tag-admin-and-score-rework.md) — T1–T17 all done. New tag-admin table (replaces the Taxonomy panel) + an inline category picker on every tag chip app-wide; Fandex Score rebuilt as an unbounded raw sum over a top-N selection (5 tags-up/3 tags-down/3 people/2 companies, all tunable) instead of a divisor-damped mean, fixing both the narrow 40–80 range and the fact that a tag's "impact" used to depend on which item you looked at it from; a real `classWeight` bug in `/api/facet/mine` and a mean-vs-Bayesian-average mismatch in `facetDetail.ts` are both fixed so a tag's average now agrees everywhere it's shown; facet pages block on both library+catalog data before first paint instead of showing unscored cards; smart back buttons, a redesigned score-explainer tooltip, and a rate-quick-action clipping fix round it out.
