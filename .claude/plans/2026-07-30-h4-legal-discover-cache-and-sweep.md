@@ -135,7 +135,7 @@ them in order; do not skip ahead to the sweep.
 
 ## Tasks
 
-- [ ] **T1** — Build the `/legal` route infrastructure
+- [x] **T1** — Build the `/legal` route infrastructure
   - Files: `src/app/legal/[locale]/[doc]/page.tsx` (new),
     `src/lib/legal/content/en/*.ts` + `src/lib/legal/content/de/*.ts` (new),
     `src/lib/legal/types.ts` (new), `src/components/legal/LegalDoc.tsx` (new),

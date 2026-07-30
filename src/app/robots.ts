@@ -32,7 +32,10 @@ export const dynamic = "force-dynamic";
 // prevents INDEXING; Disallow prevents the FETCH, which is what costs money.
 // `?page=` never reaches SSR (pagination is client-side via the disallowed
 // /api/), so it needs no rule.
-const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/"];
+// H4.1 — /legal/ explicit rather than relying on the empty-ruleset default:
+// imprint's noindex (page.tsx) only works if crawlers can FETCH it to see the
+// tag, same reasoning as the P17 facet pages below.
+const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/", "/legal/"];
 // H1.6c IA restructure: /wishlist (was /dashboard), plus new authed /calendar
 // and /profile — all private, keep crawlers out. /dashboard stays listed (it now
 // 308-redirects to /wishlist, harmless to keep disallowing).

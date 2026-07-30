@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { BASE_URL } from "@/lib/baseUrl";
 import { listPublicItems } from "@/lib/detail/publicDetail";
 import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { LEGAL_LOCALES } from "@/lib/legal/types";
 
 // P13 — sitemap: the landing page plus one entry per public item page.
 //
@@ -25,6 +26,11 @@ import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 // items appear without a redeploy.
 export const dynamic = "force-dynamic";
 
+// H4.1 — indexable legal docs, both locales. `imprint` is deliberately
+// excluded: it's noindex (a placeholder pending H4.0's legal advice), and a
+// sitemap entry for a noindex page is contradictory — see page.tsx.
+const INDEXABLE_LEGAL_DOCS = ["privacy", "terms", "support"] as const;
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const landing: MetadataRoute.Sitemap = [
     {
@@ -33,6 +39,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1,
     },
+    ...LEGAL_LOCALES.flatMap((locale) =>
+      INDEXABLE_LEGAL_DOCS.map((doc) => ({
+        url: `${BASE_URL}/legal/${locale}/${doc}`,
+        changeFrequency: "yearly" as const,
+        priority: 0.3,
+      }))
+    ),
   ];
 
   // Soft launch (PUBLIC_ITEMS_INDEXABLE=false): pages stay readable + unfurlable,
