@@ -5,9 +5,9 @@
 
 import { query, get } from "@/lib/db";
 import { BoundedCache } from "@/lib/boundedCache";
-import { mergeLinks } from "@/lib/merge";
+import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
-import { extractFacets, facetId, type FacetKind, type FacetRole } from "@/lib/facets";
+import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
 import { getScoringConfig, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import type { MediaLink, MediaType } from "@/types";
@@ -95,6 +95,7 @@ interface ItemRow {
   source_id: string | null;
   raw_data: string | null;
   link_release_date: string | null;
+  last_synced: number | null;
 }
 
 // Personal 0-10 score: average across platforms, falling back to the canonical
@@ -107,7 +108,8 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   const rows = query<ItemRow>(
     `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
             ul.rating, ul.metadata, ul.status,
-            ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+            ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date,
+            ml.last_synced
      FROM user_library ul
      JOIN media_items mi ON mi.id = ul.media_item_id
      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
@@ -115,15 +117,18 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
     [userId]
   );
 
-  // Collapse (item ⋈ links) into one entry per media item.
-  const groups = new Map<string, { item: ItemRow; links: MediaLink[] }>();
+  // Collapse (item ⋈ links) into one entry per media item. `raw_data` stays an
+  // UNPARSED string here (2026-07-31 perf audit): getDerivedForItem below only
+  // JSON.parses it on an actual cache miss, so a repeat call for an unchanged
+  // library (the common case — most /library or /insights visits follow no
+  // mutation) skips the parse entirely instead of redoing it every time.
+  const groups = new Map<string, { item: ItemRow; rawLinks: RawLink[] }>();
   for (const r of rows) {
-    if (!groups.has(r.id)) groups.set(r.id, { item: r, links: [] });
+    if (!groups.has(r.id)) groups.set(r.id, { item: r, rawLinks: [] });
     if (r.source) {
-      groups.get(r.id)!.links.push({
-        id: "", mediaItemId: r.id, source: r.source as MediaLink["source"],
-        sourceId: r.source_id!, title: null, releaseDate: r.link_release_date,
-        rawData: JSON.parse(r.raw_data ?? "{}"), lastSynced: 0,
+      groups.get(r.id)!.rawLinks.push({
+        source: r.source as MediaLink["source"], sourceId: r.source_id!,
+        releaseDate: r.link_release_date, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
       });
     }
   }
@@ -149,7 +154,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   // since nothing routed them there.
   const tagOverrides = getTagCategoryOverrides();
 
-  for (const { item, links } of groups.values()) {
+  for (const { item, rawLinks } of groups.values()) {
     libraryIds.push(item.id);
     const rating = personalRating(item.rating, item.metadata);
     if (rating == null) continue; // unrated → no weight
@@ -159,7 +164,10 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
     byType[item.type] = (byType[item.type] ?? 0) + 1;
     if (item.status) byStatus[item.status] = (byStatus[item.status] ?? 0) + 1;
 
-    const merged = mergeLinks(links, item.type);
+    // This has always used the DEFAULT region (no region arg was ever passed
+    // to mergeLinks here) — Insights/taste stats aren't region-specific, so
+    // getDerivedForItem is called the same way, preserving that exactly.
+    const { facets: rawFacets, merged } = getDerivedForItem(item.id, rawLinks, item.type);
     items.push({
       id: item.id,
       type: item.type,
@@ -168,10 +176,10 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       releaseDate: item.release_date ?? merged.releaseDate,
       rating,
       community: representativeCommunity(merged.communityRatings),
-      sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
+      sources: rawLinks.map((l) => ({ source: l.source, sourceId: l.sourceId })),
     });
 
-    for (const f of applyTagAliases(extractFacets(links, item.type, merged), aliases)) {
+    for (const f of applyTagAliases(rawFacets, aliases)) {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
       const category = f.kind === "tag" ? (tagOverrides.get(f.key) ?? f.category) : f.category;
       const prom = f.prominence ?? 1; // Q30: 1 for everything except cast
@@ -346,26 +354,29 @@ interface MemberRow {
   id: string; type: MediaType;
   source: string | null; raw_data: string | null;
   link_release_date: string | null; source_id: string | null;
+  last_synced: number | null;
 }
 
 // One (item ⋈ links) load for a membership table, grouped per media item.
+// `raw_data` stays UNPARSED (2026-07-31 — same reasoning as analyzeLibraryFacets
+// above): getDerivedForItem only parses it on a cache miss.
 function loadMembershipGroups(userId: string, table: "user_library" | "user_watchlist") {
   const rows = query<MemberRow>(
-    `SELECT mi.id, mi.type, ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+    `SELECT mi.id, mi.type, ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date,
+            ml.last_synced
        FROM ${table} ut
        JOIN media_items mi ON mi.id = ut.media_item_id
        LEFT JOIN media_links ml ON ml.media_item_id = mi.id
       WHERE ut.user_id = ?`,
     [userId]
   );
-  const groups = new Map<string, { type: MediaType; links: MediaLink[] }>();
+  const groups = new Map<string, { type: MediaType; rawLinks: RawLink[] }>();
   for (const r of rows) {
-    if (!groups.has(r.id)) groups.set(r.id, { type: r.type, links: [] });
+    if (!groups.has(r.id)) groups.set(r.id, { type: r.type, rawLinks: [] });
     if (r.source) {
-      groups.get(r.id)!.links.push({
-        id: "", mediaItemId: r.id, source: r.source as MediaLink["source"],
-        sourceId: r.source_id!, title: null, releaseDate: r.link_release_date,
-        rawData: JSON.parse(r.raw_data ?? "{}"), lastSynced: 0,
+      groups.get(r.id)!.rawLinks.push({
+        source: r.source as MediaLink["source"], sourceId: r.source_id!,
+        releaseDate: r.link_release_date, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
       });
     }
   }
@@ -405,23 +416,30 @@ export function getMembershipSignal(userId: string): MembershipSignal {
   const languages = new Map<string, number>();
 
   const tally = (
-    groups: Map<string, { type: MediaType; links: MediaLink[] }>,
+    groups: Map<string, { type: MediaType; rawLinks: RawLink[] }>,
     bucket: "libCount" | "wishCount",
     langWeight: number
   ): number => {
     let count = 0;
-    for (const { type, links } of groups.values()) {
+    for (const [id, { type, rawLinks }] of groups.entries()) {
       count++;
-      const merged = mergeLinks(links, type);
-      for (const f of extractFacets(links, type, merged)) {
-        const id = facetId(f);
-        const ex = facets.get(id);
+      // This never applied tag aliases or category overrides, and still
+      // doesn't — extractFacets' RAW output, exactly as before this cache
+      // existed (see facetCache.ts's header comment on why that's by design).
+      const { facets: rawFacets, merged } = getDerivedForItem(id, rawLinks, type);
+      for (const f of rawFacets) {
+        const facetKey = facetId(f);
+        const ex = facets.get(facetKey);
         if (ex) ex[bucket]++;
-        else facets.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, libCount: 0, wishCount: 0, [bucket]: 1 } as MembershipFacet);
+        else facets.set(facetKey, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, libCount: 0, wishCount: 0, [bucket]: 1 } as MembershipFacet);
       }
-      // Original language (movies/shows only) from the TMDB blob.
-      const tmdb = links.find((l) => l.source === "tmdb")?.rawData;
-      const lang = tmdb?.original_language;
+      // Original language (movies/shows only). Was read straight off the TMDB
+      // blob only; now reads `merged.originalLanguage` (mergeLinks' own
+      // priority: tmdb, then trakt) since raw per-source blobs aren't exposed
+      // by the cache. Strictly widens coverage — a trakt-only item (no tmdb
+      // link) now contributes a language signal it never did before — never
+      // narrows it, so nothing that worked before can break.
+      const lang = merged.originalLanguage;
       if (typeof lang === "string" && lang) languages.set(lang, (languages.get(lang) ?? 0) + langWeight);
     }
     return count;

@@ -162,7 +162,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: none — verified by the runtime probe above.
   - Depends on: none
 
-- [ ] **T5** — Shared derived-facet cache (the safe half of the perf fix)
+- [x] **T5** — Shared derived-facet cache (the safe half of the perf fix)
   - Files: new `src/lib/facetCache.ts` + `src/lib/facetCache.test.ts`; edit
     `src/lib/libraryAnalysis.ts`, `src/app/api/library/route.ts`, `src/app/api/calendar/route.ts`
   - Detail: The same `raw_data` blobs are parsed by several call sites per request — see the table in

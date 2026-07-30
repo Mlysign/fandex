@@ -2,12 +2,11 @@ import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query } from "@/lib/db";
-import { mergeLinks } from "@/lib/merge";
+import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
-import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore } from "@/lib/discovery";
-import type { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
+import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
 
 export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
@@ -19,7 +18,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       SELECT
         mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
         uw.platform_sources, uw.added_at,
-        ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+        ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date, ml.last_synced
       FROM user_watchlist uw
       JOIN media_items mi ON mi.id = uw.media_item_id
       LEFT JOIN media_links ml ON ml.media_item_id = mi.id
@@ -31,8 +30,9 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
     const rows = query<any>(sql, params);
 
-    // Group rows by media_item id
-    const itemMap = new Map<string, { item: any; links: MediaLink[] }>();
+    // Group rows by media_item id. `raw_data` stays UNPARSED (2026-07-31 perf
+    // audit) — see /api/library and lib/facetCache.ts for the same fix.
+    const itemMap = new Map<string, { item: any; rawLinks: RawLink[] }>();
     for (const row of rows) {
       if (!itemMap.has(row.id)) {
         itemMap.set(row.id, {
@@ -45,19 +45,13 @@ export const GET = withUser(async (req: NextRequest, session) => {
             platformSources: JSON.parse(row.platform_sources ?? "[]"),
             addedAt: row.added_at,
           },
-          links: [],
+          rawLinks: [],
         });
       }
       if (row.source) {
-        itemMap.get(row.id)!.links.push({
-          id: "",
-          mediaItemId: row.id,
-          source: row.source,
-          sourceId: row.source_id,
-          title: null,
-          releaseDate: row.link_release_date,
-          rawData: JSON.parse(row.raw_data ?? "{}"),
-          lastSynced: 0,
+        itemMap.get(row.id)!.rawLinks.push({
+          source: row.source as MediaLink["source"], sourceId: row.source_id,
+          releaseDate: row.link_release_date, rawData: row.raw_data, lastSynced: row.last_synced ?? 0,
         });
       }
     }
@@ -66,12 +60,12 @@ export const GET = withUser(async (req: NextRequest, session) => {
     const country = getUserCountry(session.userId);
     const profile = buildProfile(session.userId);
     const enriched: EnrichedItem[] = [];
-    for (const { item, links } of itemMap.values()) {
+    for (const [id, { item, rawLinks }] of itemMap.entries()) {
       // Source filter
       if (sourceFilter && !item.platformSources.includes(sourceFilter)) continue;
 
-      const merged = mergeLinks(links, item.type, country);
-      const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
+      const { facets, merged } = getDerivedForItem(id, rawLinks, item.type, country);
+      const fx = computeFandexScore(facets, profile);
       // List projection, same as /api/library (2026-07-30 perf audit): drop
       // `sources[].data`, the raw provider blob per link, which no card or
       // calendar cell reads. Keep the identity pair for buildItemHref.
