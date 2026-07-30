@@ -179,7 +179,7 @@ them in order; do not skip ahead to the sweep.
   - Tests: none — a document.
   - Depends on: none
 
-- [ ] **T3** — Draft the privacy policy (EN + DE)
+- [x] **T3** — Draft the privacy policy (EN + DE)
   - Files: `src/lib/legal/content/en/privacy.ts`, `src/lib/legal/content/de/privacy.ts`
   - Detail: Fill in the real content. Required coverage: controller identity (**name + email
     only** — no postal address, per the standing H4.0 gate); the full data inventory derived
