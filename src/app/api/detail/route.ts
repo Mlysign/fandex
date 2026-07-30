@@ -4,7 +4,7 @@ import { get } from "@/lib/db";
 import { mergeLinks, explainMerge } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
 import { extractFacets } from "@/lib/facets";
-import { buildProfile, computeFandexScore, MIN_RATED_FOR_FANDEX_SCORE } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, invalidateDiscoveryCache, MIN_RATED_FOR_FANDEX_SCORE } from "@/lib/discovery";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
@@ -16,7 +16,7 @@ import { getPlatformStatus } from "@/lib/watchlistStatus";
 import {
   UUID_RE, SourceIds, readSourceIds, resolveBySourceIds, loadLinks,
   buildLiveLinks, ensureTmdbDetail, ensureGameDetail, enrichMissingSources,
-  applyOmdbScores,
+  applyOmdbScores, linksForScoring,
 } from "@/lib/detail/enrich";
 
 // ── Canonical detail resolver ─────────────────────────────────────────────────
@@ -54,9 +54,15 @@ export const GET = withUser(async (req: NextRequest, session) => {
     const dbSources = new Set(item ? links.map((l) => l.source) : []);
 
     // Older stored items predate the richer payloads — refresh their stored
-    // links in-memory so the new fields are always available.
+    // links in-memory so the new fields are always available. Both of these also
+    // WRITE the refreshed blob back (storeRefreshed), so the row heals once.
     const tmdbRefreshed = await ensureTmdbDetail(links, itemType);
-    await ensureGameDetail(links, itemType);
+    const gameRefreshed = await ensureGameDetail(links, itemType);
+    // ...but the heal writes media_links while the discovery cache's signature
+    // watches media_items, so without this the catalog-backed surfaces (Home,
+    // Library, facet pages) keep serving a score computed from the pre-heal row.
+    // POST /api/discover/scores already does exactly this after its own heal.
+    if (tmdbRefreshed || gameRefreshed) invalidateDiscoveryCache();
 
     // 3. Live-enrich any missing sources (always checks the other online DBs).
     const hasSources = new Set(links.map((l) => l.source));
@@ -65,12 +71,28 @@ export const GET = withUser(async (req: NextRequest, session) => {
     if (links.length === 0 && !item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // 4. Merge canonical metadata (region-aware release date + streaming, T22).
-    const merged = mergeLinks(links, itemType, getUserCountry(session.userId));
+    const country = getUserCountry(session.userId);
+    const merged = mergeLinks(links, itemType, country);
 
     // H5.3 — the Fandex Score + its breakdown. Works for a live (not-yet-persisted)
     // item too: extractFacets only needs links/type/merged, not a mediaItemId.
+    //
+    // 2026-07-30: the score is computed from the PERSISTED links, re-read after
+    // the heal above — not from `links`, which by now is a strictly different
+    // set. ensureTmdbDetail/ensureGameDetail mutate entries in place and
+    // enrichMissingSources PUSHES title-matched sources that are never written
+    // to the DB, so scoring `links` meant the detail page scored a facet set no
+    // other surface could see. Under T2's raw-sum aggregate that showed up as a
+    // measurable disagreement with Home/Library/facet pages for the same item.
+    // The visible metadata deliberately still comes from the live-enriched
+    // `links` above — freshness is what you want in the rendered fields; it's
+    // only the SCORE that has to agree with everyone else.
+    const scoredLinks = linksForScoring(mediaItemId, links);
+    const scoredFacets = scoredLinks === links
+      ? extractFacets(links, itemType, merged)
+      : extractFacets(scoredLinks, itemType, mergeLinks(scoredLinks, itemType, country));
     const fandexProfile = buildProfile(session.userId);
-    const fandex = computeFandexScore(extractFacets(links, itemType, merged), fandexProfile);
+    const fandex = computeFandexScore(scoredFacets, fandexProfile);
     const fandexColdStart = fandexProfile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE;
 
     // 5. Attach the user's wishlist + library state (empty when not in DB).

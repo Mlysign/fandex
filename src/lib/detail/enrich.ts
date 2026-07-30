@@ -190,6 +190,22 @@ export async function ensureGameDetail(links: MediaLink[], type: MediaType): Pro
   return refreshed;
 }
 
+// Which links the Fandex Score is computed from (2026-07-30). NOT the same set
+// the page renders: by the time /api/detail scores, its live array has been
+// mutated in place by the ensure*Detail heals AND had title-matched sources
+// PUSHED onto it by enrichMissingSources, which never writes them to the DB. So
+// scoring that array meant the detail page scored a facet set no other surface
+// could see, and disagreed with Home/Library/facet pages for the same item —
+// visible once T2's raw-sum aggregate stopped dividing facet count back out.
+//
+// Re-reading here rather than snapshotting before the heal is deliberate: the
+// heals persist, so this picks up the fresher data too. A live item (no uuid)
+// has nothing persisted to read and nothing to disagree with, so it keeps
+// scoring what it has.
+export function linksForScoring(mediaItemId: string | null, liveLinks: MediaLink[]): MediaLink[] {
+  return mediaItemId ? loadLinks(mediaItemId) : liveLinks;
+}
+
 export interface EnrichmentOutcome {
   source: Source;
   outcome: "already-linked" | "linked" | "no-match" | "not-configured" | "error" | "skipped-primary";

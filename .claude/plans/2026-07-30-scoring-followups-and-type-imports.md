@@ -174,7 +174,7 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
     the tag.
   - Depends on: none
 
-- [ ] **T2** — Make `/api/detail` score the persisted facets it just healed
+- [x] **T2** — Make `/api/detail` score the persisted facets it just healed
   - Files: `src/app/api/detail/route.ts` (and `src/lib/detail/enrich.ts` only if a helper needs
     to report whether it wrote)
   - Detail: Today `route.ts:73` scores `extractFacets(links, …)`, where `links` has been mutated
