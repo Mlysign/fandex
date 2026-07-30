@@ -59,6 +59,8 @@ Public facet/discover pages were persisting an unbounded pool of thin, browsed-o
   5. **Tidy stale WAL sidecar files** — via the Railway console: `ls -la /app/data/` → if `rr.db.tmp-shm` / `rr.db.tmp-wal` are still there dated **Jul 17** (i.e. untouched by the VACUUM), delete them. If they're gone or have a newer date, nothing to do — just note which.
   6. **Record + close out** — append a before/after entry to `docs/archive/history.md` (steps 1-5's actual readings vs the expected values above) and update the `prod-db-size-and-page-cache` memory file (not a repo doc — `~/.claude/projects/.../memory/prod-db-size-and-page-cache.md`) with the confirmed-stable outcome. Update this PR17 entry and STATUS.md's catalog-pool-blowup line from "unverified"/"blocked" to closed.
 
+**Readiness probes, no action possible until prod is back:** 2026-07-28 and 2026-07-30 both re-checked `https://fandex.org/api/health` — still `404 {"status":"error","code":404,"message":"Application not found"}`, identical body both times, so steps 1–3 above (the only ones reachable without the Railway console even once the site is back) remain untested. Steps 4–5 need the Railway console regardless and are out of reach for any unattended session.
+
 **Known accepted consequences:** public facet pages show fewer clickable titles for logged-out visitors and crawlers (the chosen trade for bounded growth), and pruned browsed items lose their public URLs.
 
 ---
@@ -164,7 +166,7 @@ Built per [.claude/plans/2026-07-30-scoring-followups-and-type-imports.md](.clau
 ## Remaining work (current)
 
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
-- **PR17** ⏸️ blocked until the Railway billing cycle resets (~2026-08-01) — see the catalog-pool-blowup section above. (Re-confirmed 2026-07-28: `https://fandex.org/api/health` still returns Railway's edge 404, `"Application not found"`.)
+- **PR17** ⏸️ blocked until the Railway billing cycle resets (~2026-08-01) — see the catalog-pool-blowup section above. (Re-confirmed 2026-07-30: `https://fandex.org/api/health` still returns Railway's edge 404, `"Application not found"` — same body as 2026-07-28, unchanged.)
 - **H3 monetization + H4 legal/compliance** 🟢 scoped, not started (H4.6/H4.7 done ahead of schedule).
 - **P18** ⬜ JustWatch clickable streaming links (UX/compliance, not monetization) — see "Open — carried forward" above.
 - Everything else (Phases 0–6, H1, H2, H5, the S# small-tasks batch, all audit findings, all QA/smoke-test/production-incident history, and the **mockup-gap closeout** — A1/B5/B6/B7/C8, decided AND built 2026-07-28) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.

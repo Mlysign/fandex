@@ -273,7 +273,7 @@ them in order; do not skip ahead to the sweep.
     refused, corrupt JSON treated as a miss.
   - Depends on: none
 
-- [ ] **T8** — PR17 readiness probe
+- [x] **T8** — PR17 readiness probe
   - Files: `TASKS.md`
   - Detail: `curl -s -o /dev/null -w "%{http_code}" https://fandex.org/api/health`. **If it
     404s** (expected — it has since 2026-07-22), record the date and status in the PR17 entry
