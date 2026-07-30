@@ -5,32 +5,32 @@ import type { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink, { facetHref } from "@/components/FacetLink";
 import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";
+import { facetChipStyle, nonFacetChipStyle } from "@/lib/facetPalette";
 import { tagKey } from "@/lib/facets";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
+import { SectionHeading } from "./primitives";
 
-// Q21 (2026-07-19) — one cast member, styled like a PosterCard but for a
-// person (portrait photo, no release date/rating). Used in a horizontal
-// scroll strip, the same pattern Insights uses for "items behind this bar"
-// (InsightsView.tsx's ItemCardRow: flex/overflow-x-auto/snap-x row of
-// w-28/32 shrink-0 cards).
+// One cast member — the mockup's `.castav` (04-pages/item-detail.html:151): a
+// 64px CIRCULAR portrait above the name and character, in a 74px column.
+//
+// 2026-07-30: was a portrait poster-style card (Q21, 2026-07-19) borrowed from
+// Insights' item rows. A 2:3 rectangle reads as "a title" everywhere else in this
+// app, so using it for a person made the cast strip look like a second content
+// rail. A circle reads as a person at any size, which is the whole reason the
+// mockup uses one.
 function CastCard({ name, character, profileUrl }: { name: string; character: string | null; profileUrl?: string | null }) {
   return (
-    <Link
-      href={facetHref("person", "cast", name)}
-      className="group block rounded-xl border border-border bg-surface-elevated hover:border-border-strong transition-all overflow-hidden"
-    >
-      <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "140%" }}>
+    <Link href={facetHref("person", "cast", name)} className="group block text-center">
+      <div className="relative w-16 h-16 mx-auto rounded-full overflow-hidden bg-surface-elevated border border-border group-hover:border-border-strong transition-colors">
         {profileUrl ? (
-          <Image src={profileUrl} alt={name} fill sizes="140px" className="object-cover" />
+          <Image src={profileUrl} alt={name} fill sizes="64px" className="object-cover" />
         ) : (
           /* H1.6f a11y: neutral-600 here was 1.48:1 on the placeholder well — see PosterCard. */
-          <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-neutral-500">{name?.[0] ?? "?"}</div>
+          <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-neutral-500">{name?.[0] ?? "?"}</div>
         )}
       </div>
-      <div className="px-2 py-1.5 space-y-0.5">
-        <p className="text-xs font-medium text-text-primary line-clamp-1">{name}</p>
-        {character && <p className="text-[11px] text-text-secondary line-clamp-1">{character}</p>}
-      </div>
+      <p className="text-caption font-semibold text-text-primary mt-2 line-clamp-2">{name}</p>
+      {character && <p className="text-[8.5px] text-text-secondary line-clamp-1">{character}</p>}
     </Link>
   );
 }
@@ -63,7 +63,7 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
       {/* Trailer */}
       {trailerKey ? (
         <section>
-          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Trailer</p>
+          <SectionHeading>Trailer</SectionHeading>
           <div className="relative w-full max-w-3xl rounded-xl overflow-hidden" style={{ paddingBottom: "min(56.25%, 480px)" }}>
             <iframe
               className="absolute inset-0 w-full h-full"
@@ -79,14 +79,14 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         </a>
       ) : null}
 
-      {/* Cast — horizontal scroll strip (Q21: matches the Insights "items
-          behind this bar" card-row pattern instead of a static photo grid) */}
+      {/* Cast — horizontal strip of circular portraits (the mockup's `.castav`
+          row). 74px columns, matching the mockup's own width. */}
       {(type === "movie" || type === "show") && cast.length > 0 && (
         <section>
-          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Cast</p>
+          <SectionHeading>Cast</SectionHeading>
           <div className="flex gap-3 overflow-x-auto pb-2 -mb-2 snap-x">
             {cast.map((c, i) => (
-              <div key={`${c.name}-${i}`} className="w-28 sm:w-32 shrink-0 snap-start">
+              <div key={`${c.name}-${i}`} className="w-[74px] shrink-0 snap-start">
                 <CastCard name={c.name} character={c.character} profileUrl={c.profileUrl} />
               </div>
             ))}
@@ -94,15 +94,33 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         </section>
       )}
 
-      {/* Where to watch */}
+      {/* Where to watch — the mockup's `.prov` ROWS (logo block · name +
+          availability · action), not the chip cloud this was until 2026-07-30. A
+          cloud of tiny logos gave no room for the availability line the mockup
+          shows and read as a tag list rather than a place to go. */}
       {streamingProviders.length > 0 && (
         <section>
-          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Where to watch</p>
-          <div className="flex flex-wrap gap-2">
+          <SectionHeading>Where to watch</SectionHeading>
+          <div>
             {streamingProviders.map((p) => (
-              <div key={p.providerId} className="flex items-center gap-1.5 bg-surface-elevated rounded-lg px-2.5 py-1.5">
-                {p.logoPath && <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={20} height={20} className="w-5 h-5 rounded" alt={p.name} />}
-                <span className="text-xs text-text-primary">{p.name}</span>
+              <div key={p.providerId} className="flex items-center gap-3 py-2.5 border-t border-border">
+                <div className="w-9 h-9 rounded-lg overflow-hidden bg-surface-elevated border border-border flex items-center justify-center shrink-0">
+                  {p.logoPath
+                    ? <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={36} height={36} className="w-9 h-9 object-cover" alt="" />
+                    : <span className="font-mono text-micro text-text-secondary">{p.name.slice(0, 3).toUpperCase()}</span>}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-body-sm font-semibold text-text-primary truncate">{p.name}</p>
+                </div>
+                {/* The mockup's second line ("Stream · included" / "Rent · from
+                    $4.99") is NOT rendered, deliberately. TMDB does group
+                    watch/providers by offer type, but normalize.ts collapses the
+                    buckets (`flatrate ?? free ?? ads ?? rent ?? buy`) and keeps
+                    only the winning list — so which bucket a provider came from
+                    is not in the stored projection. Surfacing it needs a
+                    normalize + re-projection pass, and inventing "Stream ·
+                    included" for a rent-only provider would be worse than
+                    omitting it. Logged rather than faked. */}
               </div>
             ))}
           </div>
@@ -112,7 +130,7 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
       {/* DLC / expansions / included content */}
       {dlc.length > 0 && (
         <section>
-          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">DLC &amp; expansions</p>
+          <SectionHeading>DLC &amp; expansions</SectionHeading>
           <div className="flex flex-wrap gap-1.5">
             {dlc.map((d) => (
               <span key={d} className="text-xs px-2 py-0.5 bg-surface-elevated rounded-full text-text-secondary">{d}</span>
@@ -128,21 +146,25 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         // override (tag_category_override) wins over categorizeTag()'s heuristic
         // — this section used to call the heuristic directly and so contradicted
         // the inline picker sitting on the very same chip.
-        type TagGroup = { id: string; label: string; color: string; kind: "tag"; items: { key: string; label: string }[] };
-        type PlainGroup = { id: string; label: string; color: string; kind: "plain"; items: string[] };
+        type TagGroup = { id: string; label: string; kind: "tag"; items: { key: string; label: string }[] };
+        type PlainGroup = { id: string; label: string; kind: "plain"; items: string[] };
         const groups: (TagGroup | PlainGroup)[] = groupTagsByCategory(
           [...tags, ...keywords].map((t) => ({ key: tagKey(t), label: t })),
           tagOverrides,
           tagCategories,
-        ).map((g) => ({ ...g, kind: "tag" as const }));
-        // Literal hex (not a CSS var): these feed the `${color}22`/`${color}1f`
-        // alpha-suffix trick below, which only works on a hex string.
-        if (platformList.length) groups.push({ id: "platform", label: "Platforms", color: "#9A8F80", kind: "plain", items: platformList });
-        if (gameModes.length) groups.push({ id: "mode", label: "Modes & perspective", color: "#9A8F80", kind: "plain", items: gameModes });
+        ).map((g) => ({ id: g.id, label: g.label, kind: "tag" as const, items: g.items }));
+        // 2026-07-30: the group's own `color` is deliberately dropped. Chip colour
+        // now comes from the facet CLASS (genre vs any other tag category — see
+        // lib/facetPalette.ts), so a category created in /dev/scoring gets a
+        // sensible colour without one being invented for it. Platforms/modes
+        // aren't facets at all (not scored, not navigable), so they stay neutral
+        // rather than claiming a fifth colour.
+        if (platformList.length) groups.push({ id: "platform", label: "Platforms", kind: "plain", items: platformList });
+        if (gameModes.length) groups.push({ id: "mode", label: "Modes & perspective", kind: "plain", items: gameModes });
         if (!groups.length) return null;
         return (
           <section>
-            <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Tags &amp; details</p>
+            <SectionHeading>Tags &amp; details</SectionHeading>
             <div className="space-y-2.5">
               {groups.map((g) => (
                 <div key={g.id} className="flex flex-wrap items-baseline gap-1.5">
@@ -163,11 +185,11 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
                               className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
                             />
                           </div>
-                          <FacetLink kind="tag" label={it.label} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={{ background: `${g.color}22`, color: g.color }} />
+                          <FacetLink kind="tag" label={it.label} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={facetChipStyle({ kind: "tag", category: g.id })} />
                         </div>
                       ))
                     : g.items.map((it) => (
-                        <span key={it} className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${g.color}1f`, color: g.color }}>{it}</span>
+                        <span key={it} className="text-xs px-2 py-0.5 rounded-full" style={nonFacetChipStyle()}>{it}</span>
                       ))}
                 </div>
               ))}
@@ -179,7 +201,7 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
       {/* Store links */}
       {storeLinks.length > 0 && (
         <section className="pt-2 border-t border-border">
-          <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Links</p>
+          <SectionHeading>Links</SectionHeading>
           <div className="flex flex-wrap gap-2">
             {storeLinks.map((l) => (
               <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 rounded-lg transition-colors" style={{ background: `${SOURCE_COLORS[l.source] ?? "#888"}18`, color: SOURCE_COLORS[l.source] ?? "#aaa" }}>

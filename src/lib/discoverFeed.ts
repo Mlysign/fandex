@@ -12,7 +12,10 @@ import { httpFetch } from "@/lib/http";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
-import { getTraktAnticipatedMovies, getTraktAnticipatedShows, traktConfigured } from "@/lib/sources/trakt";
+import {
+  getTraktAnticipatedMovies, getTraktAnticipatedShows,
+  getTraktTrendingMovies, getTraktTrendingShows, traktConfigured,
+} from "@/lib/sources/trakt";
 
 const TMDB_KEY = process.env.TMDB_API_KEY!;
 const RAWG_KEY = process.env.RAWG_API_KEY!;
@@ -261,6 +264,96 @@ export async function fetchTraktShowPage(page = 1): Promise<FeedCandidate[]> {
   const win = dateWindow("future");
   const entries = await getTraktAnticipatedShows(60, page);
   return entries.map((e) => traktToCandidate(e, "show", win)).filter((c): c is FeedCandidate => !!c);
+}
+
+// ── TRENDING (2026-07-30) ──────────────────────────────────────────
+// What's popular RIGHT NOW, released titles included. Everything above this line
+// is windowed to unreleased dates, which is why Home's "Popular" rail could only
+// ever show best-rated UPCOMING titles and never matched TMDB Trending / Trakt
+// Trending. These fetchers are the missing input.
+//
+// No date window at all, deliberately: "trending" is defined by current activity,
+// and filtering it to a release window is what broke the old rail. The one filter
+// kept is a poster/date sanity check at the ranking stage (rankCrossSourcePopularity
+// drops undated items, so an unreleased-and-undated trending entry still can't
+// land on a calendar).
+
+/** TMDB trending — `/trending/{movie,tv}/{day,week}`. Weekly is far less jumpy. */
+export async function fetchTmdbTrending(
+  type: "movie" | "show", page = 1, window: "day" | "week" = "week"
+): Promise<FeedCandidate[]> {
+  const path = type === "movie" ? "movie" : "tv";
+  const res = await httpFetch(
+    `https://api.themoviedb.org/3/trending/${path}/${window}?api_key=${TMDB_KEY}&page=${page}`
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  // The trending payload mixes movie and tv shapes when called on /all; we only
+  // ever call the typed endpoints, but guard anyway so a media_type mismatch
+  // can't produce a candidate labelled as the wrong type.
+  return (data.results ?? [])
+    .filter((r: any) => !r.media_type || r.media_type === path)
+    .map((m: any): FeedCandidate => ({
+      id: `tmdb-${type}-${m.id}`, rawId: m.id, source: "tmdb", type,
+      title: type === "movie" ? m.title : m.name,
+      releaseDate: (type === "movie" ? m.release_date : m.first_air_date) ?? null,
+      posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
+      overview: m.overview, ids: { tmdb: m.id },
+      raw: { source: "tmdb", sourceId: String(m.id), data: m },
+      genreNames: tmdbGenreNames(m.genre_ids, type),
+      originalLanguage: m.original_language ?? null,
+      voteCount: m.vote_count ?? 0,
+      voteAverage: typeof m.vote_average === "number" && m.vote_average > 0 ? m.vote_average : null,
+      popularity: typeof m.popularity === "number" ? m.popularity : null,
+    }));
+}
+
+/**
+ * Trakt trending. Keyed by TMDB id (same as the anticipated path) so it dedupes
+ * against the TMDB pool and picks up a poster on hydration — Trakt serves none.
+ *
+ * Unlike `traktToCandidate`, this keeps items regardless of release date and
+ * carries `watchers` as the popularity metric.
+ */
+export async function fetchTraktTrending(type: "movie" | "show", page = 1): Promise<FeedCandidate[]> {
+  if (!traktConfigured()) return [];
+  const entries = type === "movie"
+    ? await getTraktTrendingMovies(40, page)
+    : await getTraktTrendingShows(40, page);
+  const out: FeedCandidate[] = [];
+  for (const entry of entries) {
+    const m = entry.movie ?? entry.show ?? entry;
+    const tmdbId = m?.ids?.tmdb;
+    if (!tmdbId) continue;
+    out.push({
+      id: `tmdb-${type}-${tmdbId}`, rawId: tmdbId, source: "tmdb", type,
+      title: m.title,
+      releaseDate: m.released ?? m.first_aired?.split("T")[0] ?? null,
+      posterUrl: null, // filled by TMDB hydration / the TMDB duplicate winning dedupe
+      overview: m.overview,
+      ids: { tmdb: tmdbId, ...(m.ids?.trakt ? { trakt: m.ids.trakt } : {}) },
+      raw: m.ids?.trakt != null ? { source: "trakt", sourceId: String(m.ids.trakt), data: m } : null,
+      genreNames: (m.genres ?? []).filter((g: any): g is string => typeof g === "string"),
+      originalLanguage: m.language ?? null,
+      voteCount: m.votes ?? 0,
+      voteAverage: typeof m.rating === "number" && m.rating > 0 ? m.rating : null,
+      // Live watcher count — a genuine reach metric, on Trakt's own scale.
+      // rankCrossSourcePopularity normalizes it against Trakt's own median.
+      popularity: typeof entry.watchers === "number" ? entry.watchers : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Games have no trending endpoint anywhere. The honest equivalent is "released
+ * recently, ordered by how many people added it" — RAWG's `added` is exactly a
+ * reach metric, and a 60-day trailing window is what makes it *current* rather
+ * than an all-time chart.
+ */
+export async function fetchRawgTrendingGames(page = 1, days = 60): Promise<FeedCandidate[]> {
+  const win: DateRange = { gte: offsetISO(-days), lte: todayISO() };
+  return fetchGamePage(page, "past", win);
 }
 
 // Fetch the first `n` popularity pages of a source in parallel, flattened.

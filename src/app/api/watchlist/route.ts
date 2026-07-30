@@ -1,16 +1,16 @@
 import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
-import { get, query } from "@/lib/db";
-import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource, clearWatchlist } from "@/lib/matcher";
+import { get } from "@/lib/db";
+import { upsertMediaItem, upsertWatchlistEntry } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
 import { resolveMediaItemFromIds } from "@/lib/userState";
+import { removeFromWishlist } from "@/lib/wishlistRemove";
 import { sanitizePosterUrl } from "@/lib/posterUrl";
 import { parseJsonBody } from "@/lib/validate";
 import { WatchlistPostSchema, WatchlistDeleteSchema } from "@/lib/schemas";
 import { log, errorFields } from "@/lib/logger";
-import { SOURCES, sourcesForType } from "@/lib/sources/registry";
-import type { MediaType, Source } from "@/types";
+import { sourcesForType } from "@/lib/sources/registry";
 
 export const POST = withUser(async (req: NextRequest, session) => {
     const { type, title, releaseDate, posterUrl, ids, targetProvider } =
@@ -78,54 +78,16 @@ export const POST = withUser(async (req: NextRequest, session) => {
 
 export const DELETE = withUser(async (req: NextRequest, session) => {
     const body = await parseJsonBody(req, WatchlistDeleteSchema, { allowEmpty: true });
-    const source = body.source;
     // Prefer the explicit UUID; fall back to resolving it from source ids (a card
     // that never carried the local UUID). Nothing resolvable → nothing to remove.
     const mediaItemId: string | null = body.mediaItemId ?? resolveMediaItemFromIds(body.ids);
     if (!mediaItemId) return NextResponse.json({ ok: true });
 
-    // S7: scope the whole operation to the caller's own data. The platform
-    // write-back loop below acts on every link of `mediaItemId` using the
-    // caller's tokens — only proceed if this item is actually on THIS user's
-    // watchlist. Otherwise a caller could drive removals for items they never
-    // added. Not-on-your-watchlist → no-op (idempotent success).
-    const owned = get<{ n: number }>(
-      "SELECT 1 AS n FROM user_watchlist WHERE user_id = ? AND media_item_id = ? LIMIT 1",
-      [session.userId, mediaItemId]
-    );
-    if (!owned) return NextResponse.json({ ok: true });
-
-    const mediaItem = get<{ type: string }>("SELECT type FROM media_items WHERE id = ?", [mediaItemId]);
-    const itemType = (mediaItem?.type ?? null) as MediaType | null;
-
-    // ── Platform write-back removal via the MediaSource registry ──
-    // For each linked, writable provider (optionally narrowed to `source`),
-    // remove the item from that platform's wishlist through its adapter.
-    const links = query<{ source: string; source_id: string }>(
-      "SELECT source, source_id FROM media_links WHERE media_item_id = ?",
-      [mediaItemId]
-    );
-    for (const link of links) {
-      if (source && source !== link.source) continue;
-      const src = SOURCES[link.source as Source];
-      if (!src || !src.capabilities.wishlist.write) continue;
-      try {
-        const ctx = await src.context(session.userId);
-        if (!ctx?.token) continue;
-        await src.pushWishlist!(ctx, link.source_id, (itemType ?? src.mediaTypes[0]), false);
-        log.info("watchlist_writeback", { op: "remove", source: link.source, sourceId: link.source_id, mediaItemId });
-      } catch (e) { log.error("watchlist_writeback_failed", { op: "remove", source: link.source, mediaItemId, ...errorFields(e) }); }
-    }
-
-    // ── Local DB removal ──────────────────────────────────────────
-    // clearWatchlist clears every per-source user_item_state row (the truth)
-    // and rebuilds the cache from it — a raw `DELETE FROM user_watchlist`
-    // here previously deleted only the cache, leaving orphaned truth rows.
-    if (source) {
-      removeWatchlistSource(session.userId, mediaItemId, source as any);
-    } else {
-      clearWatchlist(session.userId, mediaItemId);
-    }
+    // The whole removal (S7 ownership gate, provider write-back, truth-table
+    // clear) lives in lib/wishlistRemove.ts since 2026-07-30 — /api/library's
+    // POST needs the same behaviour when a rating lands, and a second copy of a
+    // provider write-back loop is exactly how the two would drift.
+    await removeFromWishlist(session.userId, mediaItemId, { source: body.source });
 
     return NextResponse.json({ ok: true });
 });

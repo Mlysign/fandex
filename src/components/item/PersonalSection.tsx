@@ -226,7 +226,11 @@ export default function PersonalSection({
   // Anon still opens the same star popover (not just a flat CTA) — picking a
   // star stashes the H2c "rate" intent with that value instead of applying it
   // immediately, so a value chosen before signing in still lands after.
-  const onPickStar = (n: number) => {
+  //
+  // `n === null` is the picker's toggle-off (re-clicking your current rating).
+  // Unreachable for anon — they have no rating to clear — but the type carries
+  // through because `IntentAction` has always allowed a null value.
+  const onPickStar = (n: number | null) => {
     if (anon) requestAuth({ kind: "rate", value: n });
     else void handleRate(n);
     setPicking(false);

@@ -21,16 +21,27 @@ export interface CategoryDef {
 }
 
 // Display order. `meta` is auto-ignored noise; `other` is the catch-all.
+//
+// COLOURS ARE NO LONGER PER-CATEGORY (2026-07-30). These nine used to be nine
+// unrelated hues (green / amber / sky / teal / rose / violet / yellow / grey);
+// together with constants.ts's eight per-role ones that put 17 colours on a
+// gold-accented UI. Facets now render in one of FOUR gold-family colours chosen
+// by facet CLASS — src/lib/facetPalette.ts owns that, and nothing reads the
+// values below for display any more.
+//
+// They're kept because this array seeds `tag_category` (via scoringDefaults.ts →
+// migrations.ts) and the column is NOT NULL, so a fresh DB stores the same hex
+// the app renders. `genre` is the one category with its own colour.
 export const CATEGORIES: CategoryDef[] = [
-  { id: "genre",    label: "Genre",               color: "#4ade80" },
-  { id: "source",   label: "Source / Adaptation", color: "#f59e0b" },
-  { id: "setting",  label: "Setting",             color: "#38bdf8" },
-  { id: "artstyle", label: "Art Style",           color: "#2dd4bf" },
-  { id: "mood",     label: "Mood / Tone",         color: "#fb7185" },
-  { id: "theme",    label: "Theme / Plot",        color: "#a78bfa" },
-  { id: "audience", label: "Audience / Format",   color: "#facc15" },
-  { id: "other",    label: "Other",               color: "#9ca3af" },
-  { id: "meta",     label: "Meta / Noise",        color: "#6b7280", defaultIgnored: true },
+  { id: "genre",    label: "Genre",               color: "#C8A24B" },
+  { id: "source",   label: "Source / Adaptation", color: "#AC9A72" },
+  { id: "setting",  label: "Setting",             color: "#AC9A72" },
+  { id: "artstyle", label: "Art Style",           color: "#AC9A72" },
+  { id: "mood",     label: "Mood / Tone",         color: "#AC9A72" },
+  { id: "theme",    label: "Theme / Plot",        color: "#AC9A72" },
+  { id: "audience", label: "Audience / Format",   color: "#AC9A72" },
+  { id: "other",    label: "Other",               color: "#AC9A72" },
+  { id: "meta",     label: "Meta / Noise",        color: "#AC9A72", defaultIgnored: true },
 ];
 
 export const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(

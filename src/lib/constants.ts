@@ -24,19 +24,13 @@ export const SOURCE_COLORS: Record<Source | string, string> = {
   "igdb-critics": "#9147ff",
 };
 
-// Per-role accent colors + labels for people/company facets on the Insights page
-// (tags use CATEGORY_COLORS from tags.ts).
-export const ROLE_COLORS: Record<string, string> = {
-  director: "#f472b6",
-  writer: "#c084fc",
-  creator: "#818cf8",
-  cast: "#22d3ee",
-  developer: "#4ade80",
-  publisher: "#facc15",
-  studio: "#fb923c",
-  network: "#38bdf8",
-};
-
+// Per-role LABELS for people/company facets on the Insights page.
+//
+// The matching per-role COLOUR map (ROLE_COLORS: pink / purple / indigo / cyan /
+// green / yellow / orange / blue) was deleted 2026-07-30. Those 8 hues plus
+// tags.ts's 9 per-category ones were the "colour scheme is a bit messy" problem;
+// facets now take one of four gold-family colours by facet CLASS — see
+// src/lib/facetPalette.ts. Don't reintroduce a per-role or per-category palette.
 export const ROLE_LABELS: Record<string, string> = {
   director: "Directors",
   writer: "Writers",

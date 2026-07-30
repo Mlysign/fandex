@@ -36,20 +36,32 @@ const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
 const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
 const IDLE = "rgb(237 231 220 / 0.06)"; // matches the ghost-button hover fill
 
-export function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number) => void }) {
+// `onPick(null)` = REMOVE the rating. Re-clicking the star you're already rated
+// at is the toggle-off gesture (2026-07-30): the whole clear-a-rating backend
+// already existed and was simply unreachable — `/api/library` POST branches on
+// `rating === null` → `clearRating` per provider, `recordLibraryRating` nulls
+// the score while KEEPING the watched/played status, and `IntentAction` already
+// allowed `{kind:"rate", value:null}`. Every caller here just typed the callback
+// as `(n: number)`, so nothing could ever send it.
+export function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number | null) => void }) {
   const [hover, setHover] = useState(0);
   const shown = hover || rating || 0;
   return (
     <div className="flex items-center gap-0.5 bg-surface-overlay border border-border rounded-lg px-2 py-1.5 shadow-lg" onClick={stop} onMouseLeave={() => setHover(0)}>
-      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-        // S3 (2026-07-27): height-only (.tap-44-y), not full .tap-44 — 10 stars
-        // packed at gap-0.5 (2px) can't each claim 44px of WIDTH without
-        // overlapping their neighbours (would need ~22px of clearance per
-        // side); same tradeoff H1.6f accepted for SubBar's segmented
-        // view-toggle. Width stays the glyph's real size; height reaches 44px.
-        <button key={n} onMouseEnter={() => setHover(n)} onClick={(e) => { stop(e); onPick(n); }} title={`${n}/10`} aria-label={`Rate ${n} out of 10`}
-          className="tap-44-y text-lg leading-none px-0.5 transition-transform hover:scale-125" style={{ color: shown >= n ? ratingColor(shown) : "var(--color-neutral-600)" }}>★</button>
-      ))}
+      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+        const clears = rating === n;
+        return (
+          // S3 (2026-07-27): height-only (.tap-44-y), not full .tap-44 — 10 stars
+          // packed at gap-0.5 (2px) can't each claim 44px of WIDTH without
+          // overlapping their neighbours (would need ~22px of clearance per
+          // side); same tradeoff H1.6f accepted for SubBar's segmented
+          // view-toggle. Width stays the glyph's real size; height reaches 44px.
+          <button key={n} onMouseEnter={() => setHover(n)} onClick={(e) => { stop(e); onPick(clears ? null : n); }}
+            title={clears ? "Remove your rating" : `${n}/10`}
+            aria-label={clears ? "Remove your rating" : `Rate ${n} out of 10`}
+            className="tap-44-y text-lg leading-none px-0.5 transition-transform hover:scale-125" style={{ color: shown >= n ? ratingColor(shown) : "var(--color-neutral-600)" }}>★</button>
+        );
+      })}
     </div>
   );
 }
@@ -61,7 +73,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rated = typeof rating === "number" && rating > 0;
 
-  const pick = (n: number) => { rate(n); setPicking(false); };
+  const pick = (n: number | null) => { rate(n); setPicking(false); };
 
   // Dismiss the star picker on any click/tap outside the toolbar, or on
   // Escape (SM32: this used to only close on outside click, unlike the item

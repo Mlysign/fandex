@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ScoringConfigValues, TagCategoryConfig, Reason} from "./types";
 import { ROLE_ORDER } from "./types";
 import { ROLE_LABELS } from "@/lib/constants";
+import { facetColorVar } from "@/lib/facetPalette";
 
 interface PreviewResult {
   itemId: string;
@@ -145,7 +146,8 @@ export default function WeightsPanel({
           <div className="space-y-1.5">
             {draftCategories.map((c) => (
               <div key={c.id} className="flex items-center gap-3 text-sm">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                {/* Facet-class colour, same as the Taxonomy tab — see facetPalette.ts. */}
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: facetColorVar({ kind: "tag", category: c.id }) }} />
                 <span className="flex-1 min-w-0 truncate text-neutral-300">{c.label}</span>
                 <input
                   type="number" step="0.1" min="0"

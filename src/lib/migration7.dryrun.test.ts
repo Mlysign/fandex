@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import Database from "better-sqlite3";
-import { runMigrations } from "./migrations";
+import { runMigrations, MIGRATIONS } from "./migrations";
 import { PROJECTION_VERSION } from "./sources/project";
 
 // Migration DRY RUN against a COPY of the real database — the pre-deploy check.
@@ -102,8 +102,11 @@ describe.skipIf(!hasDb)("migrations on a live-DB copy", () => {
 
     runMigrations(db as any);
 
-    // Through whatever the latest migration version is — currently 10 (H5.6, tag_alias).
-    expect(db.pragma("user_version", { simple: true })).toBe(10);
+    // Through to the LAST migration in the list. Derived, not hard-coded: this
+    // assertion is about "the runner got to the end", and a literal here just
+    // fails every time a migration is added (it did, twice, at 11).
+    const latest = Math.max(...MIGRATIONS.map((m) => m.version));
+    expect(db.pragma("user_version", { simple: true })).toBe(latest);
     const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
     expect(cols.some((c) => c.name === "browsed")).toBe(true);
     // The migration must not add or drop items.

@@ -1,5 +1,10 @@
-// Cross-source, cross-type ranking for the calendar's "popular releases this
-// month" scope (2026-07-28).
+// Cross-source, cross-type popularity ranking.
+//
+// Built 2026-07-28 for the calendar's "popular releases this month" scope; since
+// 2026-07-30 it also ranks Home's "Popular right now" (trending) and "Upcoming"
+// rails. Nothing about the maths is month-specific — the function was renamed
+// from `rankPopularMonth` to say so — but the file keeps its name because
+// POPULAR_PER_MONTH and the calendar's tuning notes still live here.
 //
 // THE PROBLEM: each provider's popularity metric lives on its own scale. A
 // typical TMDB `popularity` is ~15, a typical RAWG `added` is ~300, a typical
@@ -61,7 +66,7 @@ function dedupeKey(c: FeedCandidate): string {
  * them in (each provider is already sorted by its own popularity), so pass each
  * source's results in provider order.
  */
-export function rankPopularMonth(
+export function rankCrossSourcePopularity(
   candidates: FeedCandidate[],
   limit: number = POPULAR_PER_MONTH
 ): FeedCandidate[] {

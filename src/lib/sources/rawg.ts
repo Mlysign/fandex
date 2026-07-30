@@ -226,3 +226,33 @@ export async function rateRawgGame(token: string, gameId: number, appRating: num
     throw new Error("RAWG rate failed: " + res.status + " " + text);
   }
 }
+
+// Write-back: CLEAR a game's rating (2026-07-30, the unrate fix).
+//
+// This is the mirror of rateRawgGame and it matters more than it looks: without
+// it, clearing a rating locally is undone by the next RAWG pull, because
+// pullLibrary reads the game's `user_rating` straight back off the profile. The
+// rating lives in a *review* (see above), so clearing it means deleting that
+// review — and RAWG gives us no "my review for game X" lookup, so we read the
+// game's review list and match on the user's own slug.
+//
+// Deliberately tolerant: a game with no review of ours is already un-rated, so
+// "nothing found" is success, not an error.
+export async function deleteRawgReview(token: string, gameId: number, userSlug: string): Promise<void> {
+  const list = await rawgGet(`/games/${gameId}/reviews`, { page_size: "40" }).catch(() => null);
+  const mine = (list?.results ?? []).find(
+    (r: any) => r?.user?.slug && String(r.user.slug).toLowerCase() === userSlug.toLowerCase()
+  );
+  if (!mine?.id) {
+    log.info("rawg_clear_rating_noop", { gameId, reason: "no review found for user" });
+    return;
+  }
+  const res = await httpFetch(`${BASE}/reviews/${mine.id}`, {
+    method: "DELETE",
+    headers: { "Token": "Token " + token },
+  });
+  // 404 = already gone; treat as success so a retry can't fail on its own success.
+  if (!res.ok && res.status !== 404) {
+    throw new Error("RAWG clear rating failed: " + res.status + " " + (await res.text()));
+  }
+}

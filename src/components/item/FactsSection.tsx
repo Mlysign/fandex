@@ -4,8 +4,18 @@ import FacetLink from "@/components/FacetLink";
 import { Fact } from "./primitives";
 import { fmtRuntime, fmtMoney, fmtDate } from "./format";
 
-// Credits (director / developer / publisher chips), the facts grid, next-episode
-// and awards lines — the read-only "facts" block of the item detail headline.
+// The facts block of the item detail page: credits (director / developer /
+// publisher) and everything else, as the mockup's key→value ROWS
+// (04-pages/item-detail.html:152 — `Director | Lena Marsh`, `Studio | Annapurna`).
+//
+// 2026-07-30: was a chip cloud for credits plus a `grid-cols-2 sm:grid-cols-3`
+// facts grid. Between them they were the biggest single source of the "very
+// jagged" web layout — two different internal rhythms stacked inside a column
+// that has its own, a ragged final grid row at most widths, and truncation with
+// no tooltip. Rows scale at every breakpoint and read as one list.
+//
+// Credits stay FacetLinks (they're navigable facets); only the presentation
+// changed.
 export default function FactsSection({ enriched, type }: { enriched: EnrichedItem | null; type: MediaType }) {
   const developer      = enriched?.developer ?? null;
   const publisher      = enriched?.publisher ?? null;
@@ -27,65 +37,59 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
   const playtimeHours  = enriched?.playtimeHours ?? null;
   const timeToBeat     = enriched?.timeToBeat ?? null;
 
+  const hasAny =
+    developer || publisher || director || runtimeMinutes || certification.length || status ||
+    network || seasonCount || episodeCount || collection || originalLanguage || country ||
+    budget || revenue || boxOffice || playtimeHours || timeToBeat != null ||
+    nextEpisode?.airDate || awards;
+  if (!hasAny) return null;
+
   return (
-    <>
-      {/* Dev / pub / director — chip UI (T13) */}
-      {(developer || publisher || director) && (
-        <div className="flex flex-wrap gap-1.5">
-          {director && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
-              <span className="text-text-secondary">{type === "show" ? "Creator" : "Director"}</span>
-              <FacetLink kind="person" role={type === "show" ? "creator" : "director"} label={director} className="text-text-primary hover:underline" />
-            </span>
-          )}
-          {developer && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
-              <span className="text-text-secondary">Developer</span>
-              <FacetLink kind="company" role="developer" label={developer} className="text-text-primary hover:underline" />
-            </span>
-          )}
-          {publisher && publisher !== developer && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-elevated border border-border">
-              <span className="text-text-secondary">Publisher</span>
-              <FacetLink kind="company" role="publisher" label={publisher} className="text-text-primary hover:underline" />
-            </span>
-          )}
-        </div>
+    <div>
+      {director && (
+        <Fact label={type === "show" ? "Creator" : "Director"}>
+          <FacetLink kind="person" role={type === "show" ? "creator" : "director"} label={director} className="hover:underline" />
+        </Fact>
       )}
-
-      {/* Facts grid */}
-      {(runtimeMinutes || certification.length || status || network || seasonCount || collection || originalLanguage || country || budget || revenue || boxOffice || playtimeHours || timeToBeat) && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 pt-1">
-          {certification.length > 0 && <Fact label="Rated">{certification.join(" · ")}</Fact>}
-          {runtimeMinutes && <Fact label="Runtime">{fmtRuntime(runtimeMinutes)}{type === "show" ? "/ep" : ""}</Fact>}
-          {status && <Fact label="Status">{status}</Fact>}
-          {network && <Fact label="Network">{network}</Fact>}
-          {type === "show" && (seasonCount || episodeCount) && (
-            <Fact label="Episodes">{seasonCount ? `${seasonCount} season${seasonCount > 1 ? "s" : ""}` : ""}{seasonCount && episodeCount ? " · " : ""}{episodeCount ? `${episodeCount} eps` : ""}</Fact>
-          )}
-          {collection && <Fact label={type === "game" ? "Franchise" : "Collection"}>{collection}</Fact>}
-          {originalLanguage && <Fact label="Language">{originalLanguage}</Fact>}
-          {country && <Fact label="Country">{country}</Fact>}
-          {playtimeHours && <Fact label="Avg playtime">{playtimeHours}h</Fact>}
-          {timeToBeat?.normally != null && <Fact label="Time to beat">{timeToBeat.normally}h</Fact>}
-          {budget && <Fact label="Budget">{fmtMoney(budget)}</Fact>}
-          {(boxOffice || revenue) && <Fact label="Box office">{boxOffice ?? fmtMoney(revenue!)}</Fact>}
-        </div>
+      {developer && (
+        <Fact label="Developer">
+          <FacetLink kind="company" role="developer" label={developer} className="hover:underline" />
+        </Fact>
       )}
-
-      {/* Next episode (returning shows) */}
+      {publisher && publisher !== developer && (
+        <Fact label="Publisher">
+          <FacetLink kind="company" role="publisher" label={publisher} className="hover:underline" />
+        </Fact>
+      )}
+      {network && <Fact label="Network">{network}</Fact>}
+      {certification.length > 0 && <Fact label="Rated">{certification.join(" · ")}</Fact>}
+      {runtimeMinutes && <Fact label="Runtime">{fmtRuntime(runtimeMinutes)}{type === "show" ? "/ep" : ""}</Fact>}
+      {status && <Fact label="Status">{status}</Fact>}
+      {type === "show" && (seasonCount || episodeCount) && (
+        <Fact label="Episodes">
+          {seasonCount ? `${seasonCount} season${seasonCount > 1 ? "s" : ""}` : ""}
+          {seasonCount && episodeCount ? " · " : ""}
+          {episodeCount ? `${episodeCount} eps` : ""}
+        </Fact>
+      )}
       {nextEpisode?.airDate && (
-        <p className="text-sm">
-          <span className="text-text-secondary">Next episode </span>
-          <span className="text-text-primary">
-            {nextEpisode.season != null && nextEpisode.episode != null ? `S${nextEpisode.season}E${nextEpisode.episode} · ` : ""}
-            {fmtDate(nextEpisode.airDate)}
-          </span>
-        </p>
+        <Fact label="Next episode">
+          {nextEpisode.season != null && nextEpisode.episode != null ? `S${nextEpisode.season}E${nextEpisode.episode} · ` : ""}
+          {fmtDate(nextEpisode.airDate)}
+        </Fact>
       )}
-
-      {/* Awards */}
-      {awards && <p className="text-sm" style={{ color: "var(--color-warning)" }}>🏆 {awards}</p>}
-    </>
+      {collection && <Fact label={type === "game" ? "Franchise" : "Collection"}>{collection}</Fact>}
+      {originalLanguage && <Fact label="Language">{originalLanguage}</Fact>}
+      {country && <Fact label="Country">{country}</Fact>}
+      {playtimeHours && <Fact label="Avg playtime">{playtimeHours}h</Fact>}
+      {timeToBeat?.normally != null && <Fact label="Time to beat">{timeToBeat.normally}h</Fact>}
+      {budget && <Fact label="Budget">{fmtMoney(budget)}</Fact>}
+      {(boxOffice || revenue) && <Fact label="Box office">{boxOffice ?? fmtMoney(revenue!)}</Fact>}
+      {awards && (
+        <Fact label="Awards" align="start">
+          <span style={{ color: "var(--color-warning)" }}>{awards}</span>
+        </Fact>
+      )}
+    </div>
   );
 }

@@ -4,8 +4,9 @@ import type { Reason } from "@/components/discovery/types";
 import { fandexScoreColor, matchStrength } from "@/components/FandexScoreBadge";
 import FacetLink from "@/components/FacetLink";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
-import { CATEGORY_COLORS, CATEGORY_LABELS } from "@/lib/tags";
-import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
+import { CATEGORY_LABELS } from "@/lib/tags";
+import { ROLE_LABELS } from "@/lib/constants";
+import { facetColorVar, facetChipStyle } from "@/lib/facetPalette";
 import { tagKey } from "@/lib/facets";
 
 // H5.3 — the detail-page Fandex Score panel (04-pages/item-detail.html:147/161/176,
@@ -26,8 +27,9 @@ import { tagKey } from "@/lib/facets";
 // clickable FacetLink styled like the "Tags & details" chips, not a static
 // row; (c) rendered as a floating overlay that doesn't push the page layout.
 
+// One of the four facet-class colours (lib/facetPalette.ts), not one of 17.
 function reasonColor(r: Reason): string {
-  return r.kind === "tag" ? (CATEGORY_COLORS[r.category ?? "other"] ?? "#888") : (ROLE_COLORS[r.role ?? ""] ?? "#888");
+  return facetColorVar(r);
 }
 function reasonGroupLabel(r: Reason): string {
   return r.kind === "tag" ? (CATEGORY_LABELS[r.category ?? "other"] ?? "Tag") : (ROLE_LABELS[r.role ?? ""] ?? "Person");
@@ -209,14 +211,14 @@ export default function FandexScoreSection({
                               <FacetLink
                                 kind="tag" label={r.label}
                                 className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
-                                style={{ background: `${c}22`, color: c }}
+                                style={facetChipStyle(r)}
                               />
                             </span>
                           ) : (
                             <FacetLink
                               kind={r.kind as "person" | "company"} role={r.role} label={r.label}
                               className="px-2 py-0.5 rounded-full transition-all hover:brightness-125"
-                              style={{ background: `${c}22`, color: c }}
+                              style={facetChipStyle(r)}
                             />
                           )
                         ) : (

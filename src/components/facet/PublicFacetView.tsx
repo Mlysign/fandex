@@ -6,6 +6,7 @@ import GroupedView from "@/components/GroupedView";
 import Menu from "@/components/ui/Menu";
 import BackButton from "@/components/ui/BackButton";
 import { useScrollRestore } from "@/lib/usePersistedState";
+import { facetChipStyle } from "@/lib/facetPalette";
 import type { MediaCardItem } from "@/components/cardItem";
 import type { PublicFacetPayload, PublicFacetItem, FacetSort } from "@/lib/detail/publicFacetDetail";
 import TagAdminControls from "./TagAdminControls";
@@ -259,7 +260,9 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel, isLo
         {prefix === "tag" && (initial.tagCategory || tagBundle) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             {initial.tagCategory && (
-              <span className="px-2 py-0.5 rounded-full" style={{ background: `${initial.tagCategory.color}22`, color: initial.tagCategory.color }}>
+              // Colour by facet class, not by the category's own stored colour
+              // (2026-07-30) — see lib/facetPalette.ts.
+              <span className="px-2 py-0.5 rounded-full" style={facetChipStyle({ kind: "tag", category: initial.tagCategory.id })}>
                 {initial.tagCategory.label}
               </span>
             )}

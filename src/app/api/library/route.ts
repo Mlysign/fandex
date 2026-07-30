@@ -11,6 +11,7 @@ import type { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
+import { removeFromWishlist } from "@/lib/wishlistRemove";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { parseJsonBody } from "@/lib/validate";
 import { LibraryPostSchema, LibraryDeleteSchema } from "@/lib/schemas";
@@ -80,6 +81,22 @@ export const GET = withUser(async (req: NextRequest, session) => {
     for (const { item, links } of itemMap.values()) {
       const merged = mergeLinks(links, item.type, country);
       const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
+
+      // ── LIST PROJECTION (2026-07-30 perf audit) ───────────────────────────
+      // `...merged` used to spread wholesale, which shipped `sources[].data` —
+      // the FULL raw provider blob for every link of every library item — to the
+      // browser. Measured on the real library: 36.5 MB of JSON, of which
+      // **`sources` alone was 30.7 MB**, for a list view that renders 300 cards
+      // and reads nothing from those blobs. `data` is dropped here; the detail
+      // page still gets it from /api/detail, which is the one surface that needs
+      // it. `{source, sourceId}` stays — buildItemHref and the quick actions
+      // resolve identity from it.
+      //
+      // Deliberately NOT dropping cast/images/description (a further ~2.7 MB):
+      // they're small per item and several surfaces read them off this payload.
+      // The blobs were the whole problem.
+      const { sources, ...rest } = merged;
+
       // `releaseDate` is the real release date (from the merged links) so the
       // "release" sort actually sorts by release. When the user watched/played it
       // is carried separately as `reviewedAt`.
@@ -87,7 +104,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
         id: item.id,
         type: item.type,
         platformSources: item.platformSources,
-        ...merged,
+        ...rest,
+        sources: (sources ?? []).map((s) => ({ source: s.source, sourceId: s.sourceId, data: {} })),
         rating: averageRating(item.ratings) ?? item.rating,
         ratings: item.ratings,
         review: item.review,
@@ -229,11 +247,28 @@ export const POST = withUser(async (req: NextRequest, session) => {
       reviewedAt: nowSec,
     });
 
+    // ── Rating an item takes it off the wishlist (2026-07-30) ─────────
+    // A wishlist is "want to watch/play"; a rating means you did. Keeping both
+    // left the same title on the wishlist forever. This must go through
+    // removeFromWishlist (not a local delete) so the removal reaches the
+    // providers too — they own the wishlist, and syncProvider would otherwise
+    // pull it straight back on the next sync. Never fatal: the rating itself has
+    // already been recorded above and must succeed regardless.
+    let wishlistRemoved = false;
+    if (rating != null) {
+      try {
+        wishlistRemoved = await removeFromWishlist(session.userId, mediaItemId);
+      } catch (e) {
+        log.error("library_rate_wishlist_remove_failed", { mediaItemId, ...errorFields(e) });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       mediaItemId,
       rating: canonicalRating,
       ratings: parseRatings(JSON.stringify(metadata)),
+      wishlistRemoved,
       ...(platformErrors.length > 0 && { warnings: platformErrors }),
     });
 });

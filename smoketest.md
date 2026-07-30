@@ -267,6 +267,56 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     `/ /discover /library /wishlist /calendar /profile /insights /settings /person/… /tag/…`.
     Found 2026-07-28: `/settings` → "Profile · Fandex", `/discover` → the root title.
 
+**F. Tag taxonomy round trip (added 2026-07-30, per user request)**
+
+Why this section exists: **two of the three most recent tag bugs were this exact path**, and
+nothing in the plan exercised it. A reassigned tag kept its OLD heading on the item page while the
+inline picker on the very same chip showed the new one (fixed 2026-07-30) — and the worse half of
+that fix: the display loop iterated the **static 9-entry `CATEGORIES` const** against a **live
+10-row `tag_category` table**, so a tag overridden into an admin-created category **vanished from
+the page entirely** rather than merely grouping wrong. Both are invisible to typecheck, lint and
+the whole test suite.
+
+Needs `/dev/scoring` access (`SCORING_ADMIN_USER_IDS` must include your userId — it's set locally).
+Do the whole thing including the revert; a half-run leaves the taxonomy dirty.
+
+38. **Create a category.** `/dev/scoring` → Taxonomy → type a LABEL only (e.g. "Smoke Test Cat")
+    and press Add. The id is DERIVED (T5 — typing a human label into a separate id field used to
+    400 and was the root cause of "my created categories are gone"). Assert: the row appears in the
+    list, and `fetch('/api/dev/scoring/categories')` includes it. There is **no colour picker** any
+    more (2026-07-30) — colour is per facet CLASS, not per category; the swatch shows the derived
+    class colour. A picker reappearing here is a regression.
+39. **Reassign a tag into it.** In the same tab's tag table, find a tag you know is on a real item
+    (`steampunk` and `cyberpunk` are both present in the local DB) and pick the new category from
+    its dropdown.
+40. **Facet page.** `/tag/steampunk` → the category chip shows the NEW label. Its colour must be
+    the shared tag gold (`rgb(172, 154, 114)`), NOT a per-category hue.
+41. **Item page — the pair that used to disagree.** Open an item carrying that tag (the facet page's
+    own grid is the fastest route). Assert BOTH: the chip lists under the **new** heading, AND the
+    hover-revealed `TagCategoryPicker` on that same chip shows the same category. Then the harder
+    half: **the chip must still exist at all** — an admin-created category id is not in the static
+    `CATEGORIES` const, which is what used to make it disappear. Cheap probe:
+    `[...document.querySelectorAll('a[href^="/tag/"]')].map(a=>a.textContent)` must still contain it.
+42. **Insights, without a restart.** `/insights` → a panel for the new category appears, containing
+    that tag. This is the cache assertion: `scoringConfigSignature()` folds the category +
+    override signatures in, so a write must bust BOTH `getLibraryFacetAnalysis`'s cache and
+    `buildProfile`'s. If the panel only appears after a server restart, that chain is broken.
+43. **Revert.** `DELETE /api/dev/scoring/categories?id=<id>` (or the row's Delete button). You do
+    NOT need to move the tag back first — **deleting a category cascades its overrides away**
+    (verified 2026-07-30: after deleting `smoke-test-cat`, `steampunk`'s override row was gone), so
+    the tag falls back to `categorizeTag()`'s heuristic on its own.
+44. **Reverse sweep — the half that gets skipped.** Re-check 40/41/42 and assert the taxonomy is
+    genuinely back where it started, not just "different":
+    - the chip is back under its ORIGINAL heading (`steampunk` → **Setting**, from the heuristic),
+    - `/api/insights`'s `tagCategories` no longer contains the deleted id (no orphan panel),
+    - `/api/dev/scoring/overrides` has no row for the tag.
+
+    **What this canNOT reach:** `groupTagsByCategory`'s `FALLBACK_CATEGORY_ID` → *Other* path, for
+    a tag whose override points at a category that no longer exists. The cascade above means the
+    admin UI can't produce that state, so the fallback is defence-in-depth against a hand-edited DB
+    or a race — not a step you can execute here. Don't log it as untested coverage; it's
+    unreachable by design.
+
 **E. Dedicated UI/UX evaluation (added 2026-07-18, per user request)**
 Run on the main surfaces (landing, Discover, item page, facet page, wishlist/library,
 Insights, Settings), desktop + mobile. Screenshot evidence for each finding.

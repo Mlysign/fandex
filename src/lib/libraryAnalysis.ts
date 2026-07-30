@@ -56,6 +56,19 @@ export interface RatedItem {
   sources: { source: string; sourceId: string }[]; // for buildItemHref on the few items sent to the client
 }
 
+// Your best-rated library item carrying a given facet. Home's "your
+// highest-rated <tag> item" highlight (2026-07-30) needs per-facet-per-item data,
+// which `facets` (aggregated) and `items` (facet-less) each half-answer.
+// Accumulated inside the SAME per-item facet loop that builds `facets`, so it
+// costs no extra query and no extra JSON.parse of raw_data.
+export interface TopFacetItem {
+  id: string;
+  title: string;
+  posterUrl: string | null;
+  rating: number;
+  type: MediaType;
+}
+
 export interface LibraryFacetAnalysis {
   facets: FacetStat[];         // sorted by avg desc, then count desc
   items: RatedItem[];          // rated items only
@@ -66,6 +79,7 @@ export interface LibraryFacetAnalysis {
   byType: Record<string, number>;
   byStatus: Record<string, number>;
   ratingValues: number[];      // every personal rating (for histogram/median)
+  topItemByFacet: Map<string, TopFacetItem>; // facetId → your best-rated item with it
 }
 
 interface ItemRow {
@@ -115,6 +129,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   }
 
   const statMap = new Map<string, FacetStat>();
+  const topItemByFacet = new Map<string, TopFacetItem>();
   const items: RatedItem[] = [];
   const libraryIds: string[] = [];
   const byType: Record<string, number> = {};
@@ -160,6 +175,20 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
       const category = f.kind === "tag" ? (tagOverrides.get(f.key) ?? f.category) : f.category;
       const prom = f.prominence ?? 1; // Q30: 1 for everything except cast
+
+      // Best-rated item per facet. Ties break on the FIRST seen so the result is
+      // stable across rebuilds (the query has no ORDER BY, but the grouping map
+      // preserves insertion order, so equal ratings keep a consistent winner).
+      const best = topItemByFacet.get(id);
+      if (!best || rating > best.rating) {
+        topItemByFacet.set(id, {
+          id: item.id,
+          title: item.title ?? merged.title ?? "",
+          posterUrl: item.poster_url ?? merged.posterUrl ?? null,
+          rating,
+          type: item.type,
+        });
+      }
       const st = statMap.get(id);
       if (st) {
         st.count++;
@@ -193,6 +222,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   return {
     facets, items, baseline, ratedItemCount,
     libraryItemCount: libraryIds.length, libraryIds, byType, byStatus, ratingValues,
+    topItemByFacet,
   };
 }
 
@@ -232,10 +262,47 @@ export function librarySignature(userId: string): string {
 // (platform/theme/artstyle/meta…), so without the category check a
 // platform tag like "steam" can win the slot.
 export function pickBestGenre(facets: FacetStat[], minCount: number): { label: string; ba: number } | null {
+  return pickBestTag(facets, "genre", minCount);
+}
+
+// The same narrowing for ANY tag category — Home's rotating highlights ask for
+// "your top setting", "your top mood", and so on (2026-07-30). Generalising
+// pickBestGenre rather than adding a parallel filter keeps the category check
+// (the thing SM11 was about) in one place.
+export function pickBestTag(
+  facets: FacetStat[], category: string, minCount: number
+): { label: string; ba: number; key: string; count: number } | null {
   const best = facets
-    .filter((f) => f.kind === "tag" && f.category === "genre" && f.count >= minCount)
+    .filter((f) => f.kind === "tag" && f.category === category && f.count >= minCount)
     .sort((x, y) => y.ba - x.ba)[0];
-  return best ? { label: best.label, ba: Math.round(best.ba * 10) / 10 } : null;
+  return best ? { label: best.label, ba: Math.round(best.ba * 10) / 10, key: best.key, count: best.count } : null;
+}
+
+/** Highest Bayesian-average facet of one kind+role (e.g. your best director). */
+export function pickBestByRole(
+  facets: FacetStat[], kind: FacetKind, role: string, minCount: number
+): FacetStat | null {
+  return facets
+    .filter((f) => f.kind === kind && f.role === role && f.count >= minCount)
+    .sort((x, y) => y.ba - x.ba)[0] ?? null;
+}
+
+/** Most-seen facet of one kind+role (volume, not quality). */
+export function pickMostSeenByRole(
+  facets: FacetStat[], kind: FacetKind, role: string, minCount: number
+): FacetStat | null {
+  return facets
+    .filter((f) => f.kind === kind && f.role === role && f.count >= minCount)
+    .sort((x, y) => y.count - x.count || y.ba - x.ba)[0] ?? null;
+}
+
+/** Most-seen tag within one category. */
+export function pickMostSeenTag(
+  facets: FacetStat[], category: string, minCount: number
+): FacetStat | null {
+  return facets
+    .filter((f) => f.kind === "tag" && f.category === category && f.count >= minCount)
+    .sort((x, y) => y.count - x.count || y.ba - x.ba)[0] ?? null;
 }
 
 export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {

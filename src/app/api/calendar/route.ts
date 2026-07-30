@@ -72,11 +72,16 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
       const merged = mergeLinks(links, item.type, country);
       const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
+      // List projection, same as /api/library (2026-07-30 perf audit): drop
+      // `sources[].data`, the raw provider blob per link, which no card or
+      // calendar cell reads. Keep the identity pair for buildItemHref.
+      const { sources, ...rest } = merged;
       enriched.push({
         id: item.id,
         type: item.type,
         platformSources: item.platformSources,
-        ...merged,
+        ...rest,
+        sources: (sources ?? []).map((s) => ({ source: s.source, sourceId: s.sourceId, data: {} })),
         fandexScore: fx?.score ?? null,
         fandexCenter: fx?.center ?? null,
       });

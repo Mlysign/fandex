@@ -42,7 +42,10 @@ interface HomeStats {
   libraryTotal: number;
   wishlistTotal: number;
   ratedTotal: number;
-  bestGenre: { label: string; ba: number } | null;
+  // 2026-07-30: `bestGenre` became a rotating `highlights` array (see
+  // lib/homeHighlights.ts). /profile only ever used the three counters, so it
+  // just declares the field it doesn't read rather than pretending it's absent.
+  highlights?: unknown[];
 }
 
 export default function ProfilePageClient() {

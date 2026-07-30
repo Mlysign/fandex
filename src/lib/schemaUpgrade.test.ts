@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import Database from "better-sqlite3";
-import { runMigrations } from "./migrations";
+import { runMigrations, MIGRATIONS } from "./migrations";
 
 // THE UPGRADE PATH — applying this schema to a database that already exists.
 //
@@ -78,9 +78,10 @@ describe("schema upgrade over an existing database", () => {
       runMigrations(db as any);
     }).not.toThrow();
 
-    // The migration must have actually landed (through whatever the latest
-    // migration version is — currently 10, H5.6's tag_alias table).
-    expect(db.pragma("user_version", { simple: true })).toBe(10);
+    // The migration must have actually landed — through to the LAST migration
+    // in the list, derived rather than hard-coded (a literal here fails on every
+    // added migration; it did, at 11).
+    expect(db.pragma("user_version", { simple: true })).toBe(Math.max(...MIGRATIONS.map((m) => m.version)));
     const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
     expect(cols.some((c) => c.name === "browsed")).toBe(true);
     // The pre-existing row belongs to the pool, not the browsed tail.

@@ -116,6 +116,27 @@ export async function getTraktAnticipatedShows(limit = 60, page = 1): Promise<an
   catch { return []; }
 }
 
+// TRENDING — what people are watching RIGHT NOW (2026-07-30). Distinct from
+// `anticipated` above in the way that matters for Home: anticipated is
+// unreleased-only, trending is dominated by titles that are OUT. Home's
+// "Popular" rail was built on upcoming-only data and therefore could never match
+// what Nils sees on Trakt's own Trending page, which is what he was comparing
+// against.
+//
+// Each entry is `{ watchers, movie|show: {...} }`. `watchers` (live viewers) is a
+// real per-item reach metric, which `anticipated` genuinely lacks — so unlike the
+// anticipated candidates, these can carry a `popularity` value for cross-source
+// ranking instead of a null.
+export async function getTraktTrendingMovies(limit = 40, page = 1): Promise<any[]> {
+  try { return (await traktGetPublic(`/movies/trending?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  catch { return []; }
+}
+
+export async function getTraktTrendingShows(limit = 40, page = 1): Promise<any[]> {
+  try { return (await traktGetPublic(`/shows/trending?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  catch { return []; }
+}
+
 export async function getTraktUserInfo(accessToken: string) {
   return traktGet("/users/me", accessToken);
 }

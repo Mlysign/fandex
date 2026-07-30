@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { SOURCE_COLORS } from "@/lib/constants";
+import { SectionHeading } from "./primitives";
 
 // Per-provider wishlist management ("Your wishlists") on the item detail page.
 export default function WishlistPanel({
@@ -14,7 +15,7 @@ export default function WishlistPanel({
 }) {
   return (
     <div className="pt-4 border-t border-border">
-      <p className="font-mono text-xs text-text-secondary uppercase tracking-wider mb-3">Your wishlists</p>
+      <SectionHeading>Your wishlists</SectionHeading>
       {loading ? (
         <p className="text-xs text-text-secondary">Loading…</p>
       ) : (

@@ -10,7 +10,8 @@ import type { PosterCardItem } from "@/components/PosterCard";
 import PosterCard from "@/components/PosterCard";
 import type { InsightsPayload, DivergenceItem, DecadeStat, FacetStat, InsightItem } from "./types";
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
-import { TYPE_COLORS, ROLE_COLORS } from "@/lib/constants";
+import { TYPE_COLORS } from "@/lib/constants";
+import { facetColorVar } from "@/lib/facetPalette";
 
 // Round a personal rating to the histogram's bucket (1..10 axis) so a clicked
 // bar matches the items that fed it. SM27: must use the SAME step the server
@@ -122,7 +123,7 @@ function MostWatchedColumn({ title, facets, baseline }: { title: string; facets:
         <div className="space-y-0.5">
           {facets.map((f) => (
             <StatBar key={`${f.role ?? ""}|${f.key}`} label={f.label} value={f.avg} count={f.count}
-              color={ROLE_COLORS[f.role ?? ""] ?? "#888"} baseline={baseline} href={buildFacetHref(f)} />
+              color={facetColorVar(f)} baseline={baseline} href={buildFacetHref(f)} />
           ))}
         </div>
       )}

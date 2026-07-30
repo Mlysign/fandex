@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rankPopularMonth } from "@/lib/popularMonth";
+import { rankCrossSourcePopularity } from "@/lib/popularMonth";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import { monthWindow, isPastWindow } from "@/lib/discoverFeed";
 
@@ -26,14 +26,14 @@ function bucket(source: string, type: string, popularities: number[], titlePrefi
   );
 }
 
-describe("rankPopularMonth — cross-source normalisation", () => {
+describe("rankCrossSourcePopularity — cross-source normalisation", () => {
   it("does not just rank by whichever provider uses bigger numbers", () => {
     // RAWG `added` is an order of magnitude above TMDB `popularity`, but every
     // RAWG game here is dead average for RAWG while one movie is a 10x outlier.
     const games = bucket("rawg", "game", [300, 300, 300, 300, 300, 300], "game");
     const movies = bucket("tmdb", "movie", [150, 15, 15, 15, 15, 15], "movie");
 
-    const top = rankPopularMonth([...games, ...movies], 1);
+    const top = rankCrossSourcePopularity([...games, ...movies], 1);
     expect(top).toHaveLength(1);
     expect(top[0].title).toBe("movie 0");
     expect(top[0].type).toBe("movie");
@@ -45,7 +45,7 @@ describe("rankPopularMonth — cross-source normalisation", () => {
     const movies = bucket("tmdb", "movie", [100, 90, 80, 70, 60, 50, 40, 30, 20, 5, 5, 5, 5, 5, 5], "movie");
     const shows = bucket("tmdb", "show", [10, 10, 10, 10, 10, 10], "show");
 
-    const ranked = rankPopularMonth([...movies, ...shows], 10);
+    const ranked = rankCrossSourcePopularity([...movies, ...shows], 10);
     const movieCount = ranked.filter((c) => c.type === "movie").length;
 
     expect(ranked).toHaveLength(10);
@@ -58,7 +58,7 @@ describe("rankPopularMonth — cross-source normalisation", () => {
     const games = bucket("rawg", "game", [50, 10, 10, 10, 10, 10], "game");
     const movies = bucket("tmdb", "movie", [50, 100, 100, 100, 100, 100], "movie");
 
-    const ranked = rankPopularMonth([...games, ...movies], 20);
+    const ranked = rankCrossSourcePopularity([...games, ...movies], 20);
     const gameIdx = ranked.findIndex((c) => c.title === "game 0");
     const movieIdx = ranked.findIndex((c) => c.title === "movie 0");
 
@@ -68,11 +68,11 @@ describe("rankPopularMonth — cross-source normalisation", () => {
   });
 });
 
-describe("rankPopularMonth — small buckets", () => {
+describe("rankCrossSourcePopularity — small buckets", () => {
   it("falls back to provider order when a bucket is under the median threshold", () => {
     // Only 3 shows — a median over 3 samples is noise, so provider order rules.
     const shows = bucket("tmdb", "show", [1, 900, 900], "show");
-    const ranked = rankPopularMonth(shows, 10);
+    const ranked = rankCrossSourcePopularity(shows, 10);
     expect(ranked.map((c) => c.title)).toEqual(["show 0", "show 1", "show 2"]);
   });
 
@@ -83,17 +83,17 @@ describe("rankPopularMonth — small buckets", () => {
     const shows = bucket("tmdb", "show", [5, 5, 5], "show");
     const movies = bucket("tmdb", "movie", [20, 20, 20, 20, 20, 20], "movie");
 
-    const ranked = rankPopularMonth([...shows, ...movies], 6);
+    const ranked = rankCrossSourcePopularity([...shows, ...movies], 6);
     expect(ranked.filter((c) => c.type === "show").length).toBeLessThanOrEqual(2);
   });
 });
 
-describe("rankPopularMonth — hygiene", () => {
+describe("rankCrossSourcePopularity — hygiene", () => {
   it("dedupes the same game arriving from RAWG and IGDB, keeping the first seen", () => {
     const rawg = candidate({ source: "rawg", type: "game", title: "Hollow Knight: Silksong", releaseDate: "2026-08-14", popularity: 900 });
     const igdb = candidate({ source: "igdb", type: "game", title: "Hollow  Knight:  Silksong", releaseDate: "2026-08-14", popularity: 900 });
 
-    const ranked = rankPopularMonth([rawg, igdb], 10);
+    const ranked = rankCrossSourcePopularity([rawg, igdb], 10);
     expect(ranked).toHaveLength(1);
     expect(ranked[0].source).toBe("rawg");
   });
@@ -102,13 +102,13 @@ describe("rankPopularMonth — hygiene", () => {
     const movie = candidate({ source: "tmdb", type: "movie", title: "Dune", releaseDate: "2026-08-14" });
     const game = candidate({ source: "rawg", type: "game", title: "Dune", releaseDate: "2026-08-14" });
     const sequel = candidate({ source: "tmdb", type: "movie", title: "Dune", releaseDate: "2026-08-21" });
-    expect(rankPopularMonth([movie, game, sequel], 10)).toHaveLength(3);
+    expect(rankCrossSourcePopularity([movie, game, sequel], 10)).toHaveLength(3);
   });
 
   it("drops undated items — they cannot be placed on a calendar", () => {
     const dated = candidate({ releaseDate: "2026-08-14" });
     const undated = candidate({ releaseDate: null });
-    const ranked = rankPopularMonth([dated, undated], 10);
+    const ranked = rankCrossSourcePopularity([dated, undated], 10);
     expect(ranked).toHaveLength(1);
     expect(ranked[0].releaseDate).toBe("2026-08-14");
   });
@@ -116,18 +116,18 @@ describe("rankPopularMonth — hygiene", () => {
   it("keeps an item whose provider reported no popularity number", () => {
     const withPop = bucket("tmdb", "movie", [10, 10, 10, 10, 10], "movie");
     const noPop = candidate({ source: "tmdb", type: "movie", title: "unknown", popularity: null });
-    const ranked = rankPopularMonth([...withPop, noPop], 10);
+    const ranked = rankCrossSourcePopularity([...withPop, noPop], 10);
     expect(ranked.map((c) => c.title)).toContain("unknown");
   });
 
   it("honours the limit and never returns more than asked", () => {
     const many = bucket("tmdb", "movie", Array.from({ length: 40 }, (_, i) => 40 - i), "movie");
-    expect(rankPopularMonth(many, 15)).toHaveLength(15);
-    expect(rankPopularMonth(many, 0)).toHaveLength(0);
+    expect(rankCrossSourcePopularity(many, 15)).toHaveLength(15);
+    expect(rankCrossSourcePopularity(many, 0)).toHaveLength(0);
   });
 
   it("returns an empty list for an empty month", () => {
-    expect(rankPopularMonth([], 15)).toEqual([]);
+    expect(rankCrossSourcePopularity([], 15)).toEqual([]);
   });
 });
 

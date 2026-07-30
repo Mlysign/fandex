@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { TagCategoryConfig } from "./types";
 import TagTable from "./TagTable";
 import { slugify } from "@/lib/slug";
+import { facetColorVar, tagCategoryHex } from "@/lib/facetPalette";
 
 const inputCls = "bg-neutral-950 border border-neutral-700 rounded-md px-2 py-1 text-sm text-neutral-100";
 
@@ -30,7 +31,7 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
   // separate lowercase-kebab id, and typing only a human label like "People &
   // Characters" into it 400'd — the category was never actually created).
   // `idOverride` stays null until the admin explicitly opts to hand-edit it.
-  const [newCat, setNewCat] = useState({ label: "", color: "#9ca3af" });
+  const [newCat, setNewCat] = useState({ label: "" });
   const [idOverride, setIdOverride] = useState<string | null>(null);
   const [editingId, setEditingId] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,11 +47,16 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
       const res = await fetch("/api/dev/scoring/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: effectiveId, label: newCat.label, color: newCat.color, weight: 1, ignored: false }),
+        // 2026-07-30: colour is DERIVED, not chosen. Facets render in one of
+        // four gold-family class colours (lib/facetPalette.ts), so a
+        // per-category picker here could only ever promise something the app
+        // no longer honours. The column is still written so the stored value
+        // matches what renders.
+        body: JSON.stringify({ id: effectiveId, label: newCat.label, color: tagCategoryHex(effectiveId), weight: 1, ignored: false }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Could not create category"); return; }
-      setNewCat({ label: "", color: "#9ca3af" });
+      setNewCat({ label: "" });
       setIdOverride(null);
       setEditingId(false);
       onChanged();
@@ -73,12 +79,16 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
     <section className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
       <h2 className="text-sm font-semibold text-neutral-200">Categories</h2>
       <p className="text-xs text-neutral-500">
-        Weight/ignored are edited in the Weights &amp; Tuning tab — this is id/label/color, and creating or removing a category.
+        Weight/ignored are edited in the Weights &amp; Tuning tab — this is id/label, and creating or removing a category.
+        Colour is not per-category: every tag renders in the shared tag colour, except <code>genre</code>, which gets the brand gold.
       </p>
       <div className="space-y-1.5">
         {categories.map((c) => (
           <div key={c.id} className="flex items-center gap-3 text-sm">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+            {/* The colour that actually renders app-wide (facet class), not the
+                stored tag_category.color — those can only differ if a row
+                predates 2026-07-30, and showing the stale one would mislead. */}
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: facetColorVar({ kind: "tag", category: c.id }) }} />
             <span className="w-28 shrink-0 text-neutral-500 font-mono text-xs truncate">{c.id}</span>
             <span className="flex-1 min-w-0 truncate text-neutral-300">{c.label}</span>
             <span className="text-xs text-neutral-600">{c.ignored ? "ignored" : `w=${c.weight}`}</span>
@@ -95,8 +105,6 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
           <input placeholder="Label (e.g. People & Characters)" value={newCat.label}
             onChange={(e) => setNewCat((c) => ({ ...c, label: e.target.value }))}
             className={`${inputCls} flex-1 min-w-0`} />
-          <input type="color" value={newCat.color} onChange={(e) => setNewCat((c) => ({ ...c, color: e.target.value }))}
-            className="w-9 h-8 rounded-md bg-neutral-950 border border-neutral-700" />
           <button onClick={addCategory} disabled={busy === "new" || !newCat.label || !effectiveId}
             className="px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-sm text-neutral-200 transition-colors disabled:opacity-50">
             Add

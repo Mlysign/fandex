@@ -23,14 +23,38 @@ export function ScoreBadge({ r }: { r: { source: string; label: string; score: n
     : inner;
 }
 
-// One labelled fact in the facts grid.
-export function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+// One fact ROW — the mockup's `.fact` (04-pages/item-detail.html:152): label left
+// in secondary, value right-aligned, hairline rule above.
+//
+// 2026-07-30: this used to be a stacked label-over-value cell inside a
+// `grid-cols-2 sm:grid-cols-3`. That grid is the main reason the page read as
+// "very jagged": at mid widths the last row was ragged, the columns had nothing
+// to do with the section rhythm above or below them, and a long value truncated
+// with no tooltip. Rows scale to any width and give the page ONE rhythm.
+//
+// `align` handles the Tags row, whose value is a wrapping chip cloud rather than
+// one line.
+export function Fact({
+  label, children, align = "center",
+}: {
+  label: string;
+  children: React.ReactNode;
+  align?: "center" | "start";
+}) {
   return (
-    <div className="min-w-0">
-      <p className="font-mono text-[11px] uppercase tracking-wider text-text-secondary">{label}</p>
-      <p className="text-sm text-text-primary truncate">{children}</p>
+    <div className={`flex justify-between gap-4 py-2.5 border-t border-border ${align === "start" ? "items-start" : "items-center"}`}>
+      <span className="text-caption text-text-secondary shrink-0">{label}</span>
+      <span className="text-body-sm text-text-primary text-right min-w-0">{children}</span>
     </div>
   );
+}
+
+// One section heading. Every lower section used a hand-rolled
+// `font-mono text-xs uppercase tracking-wider` <p> before 2026-07-30, so the
+// eyebrows drifted from the design's `text-eyebrow` token (9px/0.13em, accent)
+// used everywhere else. One component, one rhythm.
+export function SectionHeading({ children }: { children: React.ReactNode }) {
+  return <p className="font-mono text-eyebrow uppercase text-accent mb-3">{children}</p>;
 }
 
 // Per-platform rating chips shown under the stars.

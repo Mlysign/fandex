@@ -4,7 +4,7 @@ import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
 import {
   getRawgUserToPlay, getRawgUserToPlayAuth, getRawgUserPlayed,
-  addToRawgToPlay, removeFromRawgToPlay, markRawgBeaten, rateRawgGame,
+  addToRawgToPlay, removeFromRawgToPlay, markRawgBeaten, rateRawgGame, deleteRawgReview,
 } from "../rawg";
 import { METADATA } from "@/lib/metadata/registry";
 import { decryptNullable } from "@/lib/crypto";
@@ -70,6 +70,15 @@ export const rawgSource: MediaSource = {
   async pushRating(ctx, sourceId, _type, appRating) {
     if (!ctx.token) return;
     await rateRawgGame(ctx.token, parseInt(sourceId), appRating);
+  },
+
+  // The rating lives in a review, so clearing it deletes that review. Needs
+  // ctx.slug (RAWG has no "my review for game X" endpoint — see deleteRawgReview).
+  // Without this, a locally-cleared game rating came straight back on the next
+  // pull, since pullLibrary above reads `user_rating` off the profile.
+  async clearRating(ctx, sourceId) {
+    if (!ctx.token || !ctx.slug) return;
+    await deleteRawgReview(ctx.token, parseInt(sourceId), ctx.slug);
   },
 
   async pushStatus(ctx, sourceId) {

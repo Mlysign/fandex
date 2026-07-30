@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Library as LibraryIcon, Bookmark, Star, Trophy } from "lucide-react";
 import SignInDialog from "@/components/auth/SignInDialog";
 import Rail from "@/components/Rail";
 import Button from "@/components/ui/Button";
@@ -10,12 +9,14 @@ import SubBar from "@/components/SubBar";
 import PosterCard from "@/components/PosterCard";
 import Panel from "@/components/ui/Panel";
 import Eyebrow from "@/components/ui/Eyebrow";
-import StatTile from "@/components/ui/StatTile";
+import StatStrip from "@/components/ui/StatStrip";
+import HighlightPanel from "@/components/HighlightPanel";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
 import { buildItemHref } from "@/lib/itemUrl";
 import { usePersistedState } from "@/lib/usePersistedState";
+import type { Highlight } from "@/lib/homeHighlights";
 import type { MediaType } from "@/types";
 
 // H1.6e — the real Home: `/` is the public browse anchor of the H1 IA. Anon
@@ -30,10 +31,14 @@ interface HomeStats {
   libraryTotal: number;
   wishlistTotal: number;
   ratedTotal: number;
-  bestGenre: { label: string; ba: number } | null;
+  // 2026-07-30: replaces the single hard-wired `bestGenre` card. Two of seven
+  // generators, re-drawn daily — see lib/homeHighlights.ts.
+  highlights: Highlight[];
 }
 interface HomeData {
-  popular: any[];
+  // Was `popular` (best-RATED upcoming titles, which is not what popular means).
+  // Now genuinely trending, released titles included — see /api/home.
+  trending: any[];
   upcoming: any[];
   recommendation: any[];
   stats: HomeStats | null;
@@ -105,7 +110,7 @@ export default function HomePage() {
     ) : null;
   };
 
-  const hasAnyContent = !!(data && (data.popular.length || data.upcoming.length || data.recommendation.length));
+  const hasAnyContent = !!(data && (data.trending.length || data.upcoming.length || data.recommendation.length));
 
   return (
     <div className="min-h-screen">
@@ -141,20 +146,25 @@ export default function HomePage() {
           </Panel>
         )}
 
-        {/* Stats strip + best-genre card — signed-in only. */}
+        {/* Stats — signed-in only. Two rows since 2026-07-30: the three counters
+            combined into ONE segmented strip (the mockup's `.stat3`), then the
+            day's rotating highlight panels under it. The counters are the fixed
+            anchor; the highlights are the part that changes. */}
         {authed && data?.stats && (
-          <div className="flex flex-wrap gap-3">
-            <StatTile icon={<LibraryIcon className="w-3.5 h-3.5" aria-hidden />} label="Library" value={data.stats.libraryTotal} />
-            <StatTile icon={<Bookmark className="w-3.5 h-3.5" aria-hidden />} label="Wishlist" value={data.stats.wishlistTotal} />
-            <StatTile icon={<Star className="w-3.5 h-3.5" aria-hidden />} label="Rated" value={data.stats.ratedTotal} />
-            {data.stats.bestGenre && (
-              <Panel className="flex-1 min-w-[10rem] px-4 py-3">
-                <div className="flex items-center gap-1.5 text-text-secondary mb-1">
-                  <Trophy className="w-3.5 h-3.5" aria-hidden />
-                  <Eyebrow tone="secondary">Your top genre</Eyebrow>
-                </div>
-                <div className="font-serif text-serif-lg text-text-primary">{data.stats.bestGenre.label}</div>
-              </Panel>
+          <div className="space-y-3">
+            <StatStrip
+              cells={[
+                { label: "library", value: data.stats.libraryTotal },
+                { label: "wishlist", value: data.stats.wishlistTotal },
+                { label: "rated", value: data.stats.ratedTotal },
+              ]}
+            />
+            {data.stats.highlights.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {data.stats.highlights.map((h) => (
+                  <HighlightPanel key={h.kind} highlight={h} />
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -164,7 +174,7 @@ export default function HomePage() {
           <ErrorState title="Couldn't load Home" hint="Check your connection and try again." onRetry={load} />
         ) : loading ? (
           <div className="space-y-8">
-            <RailSkeleton title="Popular" />
+            <RailSkeleton title="Popular right now" />
             <RailSkeleton title="Upcoming" />
           </div>
         ) : !hasAnyContent ? (
@@ -175,7 +185,9 @@ export default function HomePage() {
         ) : (
           <div className="space-y-8">
             {rail("Recommended for you", data?.recommendation, "/discover", true)}
-            {rail("Popular", data?.popular, "/discover")}
+            {/* "Popular right now" per the mockup's own headline — and now
+                literally true: real provider trending, released titles included. */}
+            {rail("Popular right now", data?.trending, "/discover")}
             {rail("Upcoming", data?.upcoming, "/calendar")}
           </div>
         )}

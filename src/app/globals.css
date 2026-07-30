@@ -182,6 +182,13 @@
   --color-score-baseline: #6B6357;
   --color-score-low:      #B9741F;
 
+  /* Facet classes, darkened for light surfaces (the dark values sit at 2–3:1 on
+     white). Same four-way split; see the :root block below for the rationale. */
+  --color-facet-person:  #7A5C14;
+  --color-facet-genre:   #82631C;
+  --color-facet-tag:     #665A3F;
+  --color-facet-company: #8A5227;
+
   --shadow-sm: 0 1px 2px rgb(27 23 18 / 0.10);
   --shadow-md: 0 8px 24px -8px rgb(27 23 18 / 0.16);
   --shadow-lg: 0 20px 48px -16px rgb(27 23 18 / 0.20);
@@ -204,6 +211,41 @@
   --space-2xl: 24px;
   --space-3xl: 26px;
   --space-section: 44px; /* desktop section padding */
+}
+
+/* ---- Facet classes (2026-07-30) -------------------------------------------
+   FOUR colours for the whole facet taxonomy, all in the brand-gold family.
+   This replaces 17 unrelated hues: 8 arbitrary per-ROLE colours (pink / purple /
+   indigo / cyan / green / yellow / orange / blue, constants.ts's ROLE_COLORS)
+   plus 9 per-CATEGORY ones (tags.ts's CATEGORIES) — which is what made tag chips
+   read as confetti next to a gold-accented UI.
+
+   The axis is deliberately the facet CLASS, not the category: a per-category
+   colour is unmaintainable (an admin can create categories at runtime via
+   /dev/scoring, so the palette would need an entry for a category that doesn't
+   exist yet) and carried no meaning anyone could learn. Genre is the one category
+   split out on its own, because it's the facet users actually navigate by.
+   Mapping lives in src/lib/facetPalette.ts — do not re-derive it.
+
+   ⚠️ DELIBERATELY OUTSIDE @theme, and this is load-bearing. These are consumed
+   as inline `var(--color-facet-*)` (facetPalette.ts builds style objects), never
+   as a Tailwind utility class — and Tailwind v4 TREE-SHAKES @theme variables that
+   no generated utility references, so declaring them up there emits nothing and
+   every chip silently falls back to inherited text colour. Found the hard way:
+   the first version of this put them in @theme, and `getPropertyValue()` returned
+   "" at runtime. `--color-media-game/-movie/-show` are in @theme and have the
+   SAME problem for the same reason — which is why components read TYPE_COLORS
+   from constants.ts instead of the token. Same rule as the named spacing steps
+   above: if it's only ever read through var(), it belongs in plain :root.
+
+   Contrast (AA, small text) verified against BOTH --color-surface and
+   --color-surface-elevated: dark 5.6–9.7:1, light 5.0–6.8:1. Light-theme
+   overrides live in the [data-theme="light"] block above. */
+:root {
+  --color-facet-person:  #E0B15C; /* director / creator / writer / cast */
+  --color-facet-genre:   #C8A24B; /* genre tags — the brand gold itself */
+  --color-facet-tag:     #AC9A72; /* every OTHER tag category */
+  --color-facet-company: #C08152; /* developer / publisher / studio / network */
 }
 
 /* ---- Legacy provider/media brand hexes ----------------------------------

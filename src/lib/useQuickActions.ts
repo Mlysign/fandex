@@ -58,20 +58,35 @@ export function useQuickActions(item: QuickActionItem) {
 
   const identity = () => ({ type: item.type, title: item.title, releaseDate: item.releaseDate, posterUrl: item.posterUrl, ids: idsFromItem(item) });
 
-  async function rate(n: number) {
+  // `n === null` clears the rating (the star-picker's toggle-off). The item
+  // STAYS in the library as watched/played — that's what the server does
+  // (recordLibraryRating nulls the score and leaves `status` alone), and
+  // toggleWatched below is the separate "remove it entirely" verb.
+  async function rate(n: number | null) {
     const prev = rating;
     setRating(n);
-    setStatus((s) => s ?? (item.type === "game" ? "played" : "watched"));
+    if (n !== null) setStatus((s) => s ?? (item.type === "game" ? "played" : "watched"));
     setBusy(true);
     try {
       const res = await fetch("/api/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...identity(), rating: n }) });
       if (!res.ok) throw new Error();
       const d = await res.json();
       if (d.mediaItemId) mediaIdRef.current = d.mediaItemId;
+      // On a clear the server echoes `rating: null`, so only trust a number when
+      // one came back — otherwise the optimistic null would be overwritten.
       if (typeof d.rating === "number") setRating(d.rating);
+      // 2026-07-30: rating an item drops it off the wishlist (server-side, incl.
+      // the provider write-back). Reflect that locally and tell the list pages,
+      // same event the wishlist toggle fires.
+      if (d.wishlistRemoved) {
+        setWishlisted(false);
+        window.dispatchEvent(new CustomEvent<WishlistToggledDetail>(WISHLIST_TOGGLED_EVENT, {
+          detail: { id: mediaIdRef.current ?? item.id, onList: false },
+        }));
+      }
     } catch {
       setRating(prev); // revert on failure
-      toast("Couldn't save your rating. Please try again.", "error");
+      toast(n === null ? "Couldn't remove your rating. Please try again." : "Couldn't save your rating. Please try again.", "error");
     }
     setBusy(false);
   }

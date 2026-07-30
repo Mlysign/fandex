@@ -332,6 +332,30 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: "tag_category.color — collapse the 9-hue palette onto the 4 facet-class colours",
+    up: (db) => {
+      // 2026-07-30: facets render in four gold-family colours chosen by facet
+      // CLASS (src/lib/facetPalette.ts), so a per-category hex no longer drives
+      // anything. Nothing READS this column for display any more — this exists
+      // purely so an upgraded DB stores the same values a fresh one seeds from
+      // tags.ts's CATEGORIES. Without it, `data/rr.db`'s nine rows would keep
+      // the old green/amber/sky/teal/rose/violet/yellow/grey hexes forever and
+      // the two DBs would disagree on a column an admin panel can still show.
+      //
+      // Pure SQL, no schema change, one small table. Any category an admin
+      // created since H5.4 is covered by the same two rules (genre, or not).
+      //
+      // The hexes are written out rather than imported: facetPalette.ts is a
+      // client-ish module (it exists to be imported by components) and the
+      // standalone `node scripts/migrate.mjs` path must stay able to load this
+      // file — see the app-import rule at the top. Keep in sync with
+      // FACET_HEX.genre / FACET_HEX.tag.
+      db.prepare(`UPDATE tag_category SET color = ?, updated_at = strftime('%s','now') WHERE id = 'genre'`).run("#C8A24B");
+      db.prepare(`UPDATE tag_category SET color = ?, updated_at = strftime('%s','now') WHERE id <> 'genre'`).run("#AC9A72");
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

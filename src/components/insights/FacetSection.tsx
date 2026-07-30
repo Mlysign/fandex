@@ -2,8 +2,8 @@
 import { useMemo, useState } from "react";
 import StatBar from "./StatBar";
 import type { FacetStat, TagCategoryInfo } from "./types";
-import { CATEGORY_COLORS } from "@/lib/tags";
-import { ROLE_COLORS, ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS } from "@/lib/constants";
+import { facetColorVar } from "@/lib/facetPalette";
 import { buildFacetHref } from "@/lib/itemUrl";
 import TagCategoryPicker, { useTagAdminState } from "@/components/TagCategoryPicker";
 
@@ -125,29 +125,26 @@ export default function FacetSection({
       .slice(0, 50);
   }, [ofKind, q]);
 
-  const categoryColor = useMemo(
-    () => new Map((tagCategories ?? []).map((c) => [c.id, c.color])),
-    [tagCategories]
-  );
-
   // Grouped browse view (by category for tags, by role otherwise).
   const groups: Group[] = useMemo(() => {
     if (kind === "tag") {
       const cats = tagCategories?.length ? [...tagCategories].sort((a, b) => a.sortOrder - b.sortOrder) : [];
+      // 2026-07-30: the group colour is the facet CLASS colour (genre vs any
+      // other tag category), not the category row's own stored hex — see
+      // lib/facetPalette.ts for why a per-category palette can't hold.
       return cats.map((c) => ({
-        id: c.id, label: c.label, color: c.color,
+        id: c.id, label: c.label, color: facetColorVar({ kind: "tag", category: c.id }),
         facets: ofKind.filter((f) => f.category === c.id),
       }));
     }
     const roles = kind === "person" ? PERSON_ROLES : COMPANY_ROLES;
     return roles.map((r) => ({
-      id: r, label: ROLE_LABELS[r] ?? r, color: ROLE_COLORS[r] ?? "#888",
+      id: r, label: ROLE_LABELS[r] ?? r, color: facetColorVar({ kind, role: r }),
       facets: ofKind.filter((f) => f.role === r),
     }));
   }, [ofKind, kind, tagCategories]);
 
-  const colorOf = (f: FacetStat) =>
-    (f.kind === "tag" ? categoryColor.get(f.category ?? "other") ?? CATEGORY_COLORS[f.category ?? "other"] : ROLE_COLORS[f.role ?? ""]) ?? "#888";
+  const colorOf = (f: FacetStat) => facetColorVar(f);
 
   return (
     <section>
