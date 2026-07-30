@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-31-perf-cache-compliance-and-sweep
 created: 2026-07-31
-status: ready
+status: in_progress
 branch: current
 ---
 
