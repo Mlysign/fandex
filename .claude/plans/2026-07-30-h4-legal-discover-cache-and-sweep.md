@@ -163,7 +163,7 @@ them in order; do not skip ahead to the sweep.
     the test must fail if a translation is missing, not silently fall back to English.
   - Depends on: none
 
-- [ ] **T2** — Write the cookie/consent assessment record
+- [x] **T2** — Write the cookie/consent assessment record
   - Files: `docs/cookie-assessment.md` (new)
   - Detail: A **repo document, not a page** — H4.4 is explicitly "document, don't build".
     Enumerate every cookie the app actually sets, found by grepping the codebase (session
