@@ -84,11 +84,22 @@ and `JSON.parse`s every blob, synchronously, in the request:
 
 **Fix, in two parts.** (i) A shared `BoundedCache<mediaItemId, {sig, facets, merged}>` keyed on the
 item's `MAX(last_synced)` + region, so a rebuild reuses per-item work instead of re-parsing
-everything — also collapsing the **3× parse per signed-in request** (`analyzeLibraryFacets` over
-1,921 items, `getMembershipSignal` over library *and* watchlist separately, and `buildProfile`, each
-parsing the same blobs independently). (ii) Split the pool signature: keep `browsed = 0`
-count/`MAX(updated_at)` as the catalog component and treat a newly-acted-on item as an incremental
-*add* rather than an invalidation.
+everything. (ii) Split the pool signature: keep `browsed = 0` count/`MAX(updated_at)` as the catalog
+component and treat a newly-acted-on item as an incremental *add* rather than an invalidation.
+
+The duplicate-parse sites, precisely (an earlier draft of this doc said `buildProfile` parses too —
+it does **not**, it goes through the cached `getLibraryFacetAnalysis`):
+
+| site | parses |
+|---|---|
+| `libraryAnalysis.ts:126` (`analyzeLibraryFacets`) | every library item's links |
+| `libraryAnalysis.ts:368` (`loadMembershipGroups`) | called **twice** — library, then watchlist |
+| `api/library/route.ts:72` | the same library rows again, independently |
+| `api/calendar/route.ts:59` | the wishlist rows again, independently |
+| `discovery.ts:163` (`buildCache`) | the whole pool — the 39 MB above |
+
+So one signed-in `/library` request parses the library's blobs at least **twice**, and a `/calendar`
+request parses the wishlist's twice.
 
 **The trap to test for:** a wishlist write must make the item appear in `find()` results
 *immediately*, not on the next TTL expiry. That needs an explicit test before this ships.
@@ -96,6 +107,12 @@ count/`MAX(updated_at)` as the catalog component and treat a newly-acted-on item
 **Aliasing hazard on (i):** a shared parsed-`rawData` object is handed to callers that mutate it —
 `enrichMissingSources` in `/api/detail` does. Either freeze/clone on read or scope the cache to the
 derived `facets`/`merged` rather than the raw parse.
+
+**Memory hazard on (i), and the reason to prefer the derived form:** the parsed JS objects for 30 MB
+of `raw_data` are several times that on the heap. Caching them would trade a CPU problem for a memory
+one, on a container this project has already had OOM trouble with (see
+`image-optimizer-native-memory`). The derived `facets` array is small — order 5 MB for the whole pool.
+**Cache facets/merged, never the raw parse.**
 
 ### B. DB inflation — the 2.5 GB prod question is still open
 
