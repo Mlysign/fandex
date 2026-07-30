@@ -188,7 +188,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: `src/lib/facetCache.test.ts` — the four cases above.
   - Depends on: none
 
-- [ ] **T6** — "More like this" rail on the item detail page
+- [x] **T6** — "More like this" rail on the item detail page
   - Files: new `src/app/api/detail/similar/route.ts`, new
     `src/components/item/SimilarRail.tsx`; edit `src/components/item/ItemView.tsx`
   - Detail: The mockup draws this rail but marked the logic out of scope (05-DELTA b). It's cheap now:
