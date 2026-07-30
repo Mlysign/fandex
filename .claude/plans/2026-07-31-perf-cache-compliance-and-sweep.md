@@ -105,7 +105,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: none — this is an observation task.
   - Depends on: none
 
-- [ ] **T2** — SM33: give the legal tap targets a 44px hit area, and check the pairs
+- [x] **T2** — SM33: give the legal tap targets a 44px hit area, and check the pairs
   - Files: `src/components/legal/LocaleToggle.tsx`, `src/components/legal/LegalFooter.tsx`
   - Detail: Both are well under the app's own 44×44 convention — `LocaleToggle`'s EN/DE links measure
     **39×24**, `LegalFooter`'s four links **~45×16**. Add **`.tap-44-y`** (height-only) to the links
