@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-07-30-scoring-followups-and-type-imports
 created: 2026-07-30
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -244,7 +244,7 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
     test that merely asserts the current DOM behaviour.
   - Depends on: none
 
-- [ ] **T5** — Verify, document, commit, push
+- [x] **T5** — Verify, document, commit, push
   - Files: `STATUS.md`, `TASKS.md`, `docs/fandex-score.md` (only if T2 changes what it
     describes), this plan file
   - Detail: Run `npx tsc --noEmit`, `npm run lint` (0 errors), `npm test`. Stop the dev server,
@@ -269,6 +269,55 @@ Lint must end at **0 errors**. Tests must end at **>= 402 passing**, no failures
 _(none — T4 resolved as not-reproducible rather than blocked; see the Session log.)_
 
 ## Session log
+
+**Executed 2026-07-30. All 5 tasks complete, no blockers.** Run on Opus rather
+than the intended Sonnet — noted for cost, no effect on output.
+
+**T1 — item-page tag chips group by the live admin category** (`3587613`).
+`groupTagsByCategory()` in `tags.ts`; server page reads `getTagCategories()` +
+`getTagCategoryOverrides()` and threads them through `ItemView` as props, since
+`LowerSections` is a client component and the taxonomy is viewer-independent.
+Found while implementing, and *worse than the reported bug*: the group loop
+iterated the static 9-entry `CATEGORIES` against a live 10-row `tag_category`
+and emitted nothing for an unknown id, so a tag overridden into an admin-made
+category **disappeared from the page**. Verified live on *Onimusha: Way of the
+Sword* — "Role-playing (RPG)" moved Other → Genre, and a temporary
+`samurai → people-characters` override rendered under "People & Characters"
+(reverted after; the DB is back to its original 3 overrides). 9 tests.
+
+**T2 — /api/detail scores the persisted links** (`b7cf036`). The cause was not
+freshness: `enrichMissingSources` does `links.push(toMediaLink(...))` with **no
+DB write**, so the route scored facets no other surface could see.
+`linksForScoring()` re-reads `media_links` post-heal;
+`invalidateDiscoveryCache()` added after a heal (the heal writes `media_links`,
+the cache signature watches `media_items`). Measured by stashing the change and
+re-reading the same items logged in:
+
+| item | old detail | new detail | Home rail |
+|---|---:|---:|---:|
+| Hope | 68.2 | 65.9 | 65.9 |
+| David | 65.0 | 64.4 | 64.4 |
+| Detective Conan | 67.7 | 67.7 | 67.7 |
+| Spirited Away | 100.9 | 100.9 | 100.9 |
+
+**Hope's gap measured at exactly 2.3** — the figure `b32be50` logged. 12/12
+scoreable Home items now agree with their detail page to **0.00**. The residual
+the plan asked me to quantify: three items carry an unpersisted live-search
+trakt link, and those are precisely the ones that moved. Their facets no longer
+count — which is the deliberate trade, since they never counted anywhere else
+either. 4 tests.
+
+**T3 — consistent-type-imports as an error, repo swept** (`0b0a3f4`). 200
+violations / 142 files, `--fix`. Two unfixable (vitest's
+`importOriginal<typeof import("…")>()`) fixed by naming the modules in
+`import type * as` declarations rather than relaxing `disallowTypeAnnotations`.
+**`--fix` also mangled three `{/* eslint-disable-next-line … */}` JSX comments
+in `AuthOptions.tsx` into a bare `{ }`** — silently destroying the directives
+while looking inert. Caught by filtering the diff for non-import lines; that
+file was reverted wholesale (its diff contained nothing else). Proof the real
+failure mode is gone: `scripts/calibrate-fandex.mjs` now loads end to end
+through `alias-hooks`. Its suggested recalibration (K 25 → 5.6) was **not
+applied** — re-tuning score constants is out of scope for this plan.
 
 **T4 (2026-07-30) — the scroll-restoration bug does not reproduce. It was a
 measurement artifact, and no code was changed.** Outcome (a) of the task's two,
@@ -308,3 +357,37 @@ re-fetches its entire browse depth on mount) and not a scroll-restoration one �
 fixing it means caching the browse payload across navigation, not touching
 `useScrollRestore`. Recording it here rather than acting on it: it is outside
 this plan's scope and would be a materially different change.
+
+**T5 — verification, docs.**
+
+- `npx tsc --noEmit` — clean, zero errors.
+- `npm run lint` — **0 errors**, 371 warnings (all pre-existing `no-explicit-any`;
+  down from 383 only because the sweep merged some import lines).
+- `npm test` — **419 passed, 1 pre-existing skip, 55 files.** Baseline was 402.
+- `npm run build` (dev server stopped first) — compiled in 4.5s, all 61 routes.
+- Browser, logged in via `GET /api/dev/login`, re-run **after** the 145-file
+  sweep so the sweep itself is covered: tag chips group correctly on the item
+  page (`Role-playing (RPG)` under Genre, `samurai` back under Theme/Plot);
+  8/8 Home-rail scores match their detail page at delta 0.00; **zero console
+  errors and zero server errors**.
+- Docs: `TASKS.md` gains an `F#` section and marks 2 of the 2026-07-29 open
+  questions closed / 2 explicitly still parked (170 lines, under the 200-line
+  CI guard — no archiving needed). `STATUS.md` gains a matching digest entry and
+  the stale "T17 in progress" line is corrected. `docs/fandex-score.md` gains
+  **§3.5**, which pins the invariant this batch and the previous one both
+  enforce: the score is always computed from persisted `media_links`, never from
+  a list payload or a live-enriched array. `AGENTS.md` gains the
+  `consistent-type-imports` rule and the `eslint --fix` JSX-comment trap.
+
+**Systems-level recommendations, not acted on:**
+
+1. **`enrichMissingSources` writes nothing.** T2 works around it by scoring
+   persisted links, but the deeper question is whether a title-matched source
+   good enough to render should be good enough to persist. If it should, that is
+   a matcher/write-path change and belongs in the main loop under the thin-write
+   rule — not in a follow-up sweep.
+2. **Discover re-fetches its whole browse depth on every mount** (T4's leftover).
+   Caching the browse payload would remove the 1.5s post-Back scroll jump and a
+   burst of duplicate provider-backed requests.
+3. **`eslint --fix` is not safe to run broadly in this repo** without diffing for
+   non-import changes — recorded in AGENTS.md now.

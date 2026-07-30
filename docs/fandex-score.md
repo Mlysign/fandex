@@ -81,6 +81,19 @@ The existing `reasons[]` already carries `label / kind / role / category / contr
 
 Show top positive contributors, top negative contributors, and an explicit "ignored facets" line for transparency.
 
+### 3.5 Which facets get scored — one source, on every surface
+
+**Added 2026-07-30 (F2); the rule itself began with the 2026-07-29 facet-source fix.** The formula above only agrees with itself if every surface feeds it the *same* facets for the same item. Under the old weighted mean this barely mattered — the divisor pulled a thin facet set and a rich one back toward each other — but the raw sum in §3.3 makes score magnitude scale directly with how many facets are loaded, so the input is now part of the contract:
+
+> **The Fandex Score is always computed from an item's PERSISTED `media_links`.** Never from a provider list payload, and never from a live-enriched in-memory link array.
+
+Two ways that was violated, both fixed:
+
+- **Live feed paths** scored `listFacets()` — a provider list payload's *genres only*, missing credits, keywords and studios. Spirited Away read 65.8 on a Home rail against 101.5 on its detail page. Live paths now resolve each candidate to its catalog row (`catalogFacets()` in `liveDiscover.ts`), falling back to a direct `media_links` read for browsed-only rows that `POOL_WHERE` keeps out of the discovery cache. What genuinely needs a provider fetch is hydrated in the background via `POST /api/discover/scores`, behind a pending pip — a card shows *no* score rather than one known to be depressed.
+- **`/api/detail`** scored the array it had in hand, which by scoring time differs from the catalog in two ways: `ensureTmdbDetail`/`ensureGameDetail` mutate entries in place, and `enrichMissingSources` **pushes title-matched sources that are never written to the DB**. It now scores `linksForScoring()` — a re-read of `media_links` after the heal, which keeps the freshly-healed data and drops the in-memory-only sources. A live item with no uuid has nothing persisted and nothing to disagree with, so it is unchanged.
+
+Two consequences worth knowing. First, the heal writes `media_links` while the discovery cache's signature watches `media_items`, so **any path that heals a row must call `invalidateDiscoveryCache()`** or the catalog surfaces keep serving the pre-heal score — that was the residual 2.3-point gap on "Hope". Second, the *rendered metadata* on a detail page deliberately still comes from the live-enriched links: freshness is what you want in the visible fields, and only the score has to agree with everyone else.
+
 ## 4. Hard exclusions (enforced by test)
 
 The score must **never** read: community / cross-platform ratings (IMDb, Rotten Tomatoes, Steam, Metacritic), item popularity or `browsed` counts, or release date / recency. Add a regression test that mutates each of those fields on an item and asserts the score is **unchanged**. (Note: the current `scoreFacets()` is already pure-facet — but the Discover *sort* uses `communityAvg` as a tiebreaker; the visible **score** must not.)
