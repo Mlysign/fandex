@@ -123,7 +123,7 @@ Baseline to beat: **473 tests passing, 0 lint errors, typecheck clean.**
   - Tests: none — geometry, verified by measurement (see `smoketest.md` item 28 for the method).
   - Depends on: none
 
-- [ ] **T3** — Add the TMDB/JustWatch watch-provider attribution
+- [x] **T3** — Add the TMDB/JustWatch watch-provider attribution
   - Files: `src/components/item/LowerSections.tsx`
   - Detail: TMDB's watch-provider terms require crediting JustWatch as the source of that data, and
     we currently display the providers with no attribution at all — a live compliance gap. Add a

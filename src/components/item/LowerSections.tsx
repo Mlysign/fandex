@@ -124,6 +124,19 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
               </div>
             ))}
           </div>
+          {/* Required attribution (2026-07-31): TMDB's watch-provider data terms
+              require crediting JustWatch as the source, which nothing on this
+              page did. Pure markup, no data change — NOT the clickable P18
+              links (those need a PROJECTION_VERSION bump + a full re-projection,
+              deferred until prod is verified healthy post-outage). Scoped to
+              streamingProviders.length > 0 so an item with no availability
+              doesn't credit a source it never used. */}
+          <p className="font-mono text-meta text-text-secondary mt-2">
+            Streaming availability data by{" "}
+            <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer" className="hover:text-text-primary transition-colors underline decoration-dotted">
+              JustWatch
+            </a>
+          </p>
         </section>
       )}
 
