@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-02-h4-closeout-monetization-prep-and-sweep
 created: 2026-08-02
-status: ready
+status: in_progress
 branch: current
 ---
 
