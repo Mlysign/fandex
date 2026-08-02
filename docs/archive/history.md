@@ -1430,3 +1430,69 @@ The H4 epic itself stays live in TASKS.md (H4.0/H4.2 still open, gate H3 monetiz
 **One measurement worth recording, not a bug:** Discover's cold-cache paint took **58–60 seconds** independently for the browse grid, the games-section scroll-load, and the "Nolan" search (`GET /api/discover [200] in 58s` etc., from the server's own log) — ~~the already-documented, deliberately-deferred perf issue (`docs/performance-audit.md` §A, the catalog pool cache rebuilding 39 MB from scratch)~~, now pinned with concrete numbers. Once warm, subsequent loads were sub-second. **⚠️ Misattributed — corrected the same day (TASKS.md `G1`): it was RAWG being down (Cloudflare 522 × the retry ladder), not §A, which measures ~430 ms.**
 
 ---
+
+## Provider latency isolation + 10th sweep + H4 closeout — 2026-08-02 (IDs `G#`, `SM34`–`SM37`) — ✅ ALL CLOSED
+
+Archived from TASKS.md/STATUS.md 2026-08-02 during a doc-compression pass. Durable invariants from this batch live in AGENTS.md and [[provider-latency-isolation]] / [[anon-legal-reachability]]; this is the execution record.
+
+### `G1` ✅ — a dead provider stalled every browse request for a minute, and we had no way to see it
+
+RAWG was fully down (Cloudflare **522** after ~19.8 s — `https://rawg.io/` itself and an unauthenticated `api.rawg.io/api/games` equally, so not our key or quota) and `http.ts` retried each 5xx twice → ~60 s/call; `fetchPages` fires 5 RAWG pages under one `Promise.all` and `/api/home` reaches RAWG twice → a cold `/api/home` measured **2.2 minutes**. We had per-source *failure* isolation but no per-source *latency* isolation.
+
+Fixed with a per-host **circuit breaker** + a total-time **budget** in `src/lib/http.ts` (8 s on browse via `BROWSE_BUDGET_MS`, deliberately unbounded on sync/pull), plus `bestEffort()` in `discoverFeed.ts`. **Cold `/api/home` 2.2 min → 8.4 s, warm 0.39 s**, with Home still rendering games throughout (IGDB covered the category — the multi-source design working). `/api/health` now reports `openProviderCircuits` so the next outage does not need a manual curl per provider.
+
+**The breaker THROWS `ProviderUnavailableError` rather than returning a synthetic 503** — the convenient design (zero call-site changes) would have been read as `!res.ok` by the pull adapters and turned an outage into an empty library under the prune invariant. A test guards that specifically. Also closed a latent bug the 522s were hiding: a provider *timeout* would have 500'd `/api/discover` outright.
+
+### `G2` ✅ closed — RAWG stays a required source (Nils's call: leave as-is)
+
+The breaker made a dead RAWG cost ~8 s once rather than 60 s per request, and SM35/SM36 gave games a real second source on every surface — so the outage no longer costs enough to justify demoting a genuine catalog source that is also Nils's own account's login provider (a separate dependency from its catalog role).
+
+### `G3` ✅ — the browse budget now reaches the adapter-mediated fetchers
+
+Done via a browse-vs-sync distinction rather than a blanket change: `traktGetPublic` and `igdbQuery` take an **opt-in** budget passed only by their browse callers (the four Trakt anticipated/trending functions + `discoverIgdbUpcoming`), so enrichment — which shares those same helpers and would rather wait than lose an item's metadata — keeps the unbounded default. Hydration is bounded at its **call site** instead (`Promise.race`, 6 s in `liveDiscover.hydrateFacets`), because `fetchById` is shared with enrichment and hydration already has a defined fallback (the list-payload genres its `catch` always used). A test pins that a budget passed by one caller cannot leak into the next call through the same helper.
+
+### 10th smoke sweep — `SM34`–`SM37`, run during the real RAWG outage
+
+Run on the **production build** (`npm run start`, :3100) after SM34 made the dev server useless for these routes; logged in. The sweep's value was accidental: RAWG was genuinely down throughout, so the degraded-provider paths got exercised for real rather than simulated.
+
+**✅ SM35/SM36/SM37 all fixed + verified the same day (`10b93b9`)** against the still-live outage: games load-more 0 → 40 items, anon browse 0 → 40 games, Home's trending 0 → 2 games with all three rails rendering under the Games filter, Sync button's effective hit area 59×44 with zero neighbour overlap. Fixing SM35 surfaced a **third** RAWG-only site the sweep had not reached — `/api/discover`'s cold-start branch, the **anonymous/public** path — so a logged-out visitor lost games while a signed-in one did not. The dual-source pull now lives once in `discoverFeed.ts` (`fetchGamePageAllSources` / `fetchTrendingGames` / `dedupeGames`); `src/lib/discoverFeedSources.test.ts` pins "a games pull survives one source being down" (confirmed non-vacuous: reverting the fix fails 4 of 7).
+
+| ID | Sev | Type | Area | Finding |
+|----|:--:|:--:|------|---------|
+| SM35 | ✅ | data | Discover · games load-more | **Games "Load more" is RAWG-only → a dead control whenever RAWG is down.** `/api/discover?section=games&page=N` → `items: 0` (repeatable) while movies/shows return 20/19. In the UI: filter to Games, click "Load newer releases" → 11 s, **no new cards, no message, button stays enabled**, clickable forever. Cause: the section path calls `fetchGamePage` (RAWG) alone, whereas `personalizedFeed` pulls `fetchGamePage` **+ `fetchIgdbGamePage`** — which is why the *initial* browse still showed 18 IGDB games. Every other games surface degraded fine (calendar-popular 9 IGDB games; Home's Upcoming 10). |
+| SM36 | ✅ | ux | Home · Popular rail | **With the Games type filter on, the whole "Popular right now" rail silently disappears.** Only 2 of 3 rails render. Cause: games trending is RAWG-only (`fetchRawgTrendingGames`, a 60-day `-added` window) and IGDB has no trending equivalent, so `/api/home`'s `trending` came back `{movie:6, show:9}`. Vanishing beats erroring, but a rail disappearing with no explanation is indistinguishable from a bug. |
+| SM37 | ✅ | a11y | /library · Sync button | At 375px the **"Sync" button is 60×34px** — under the repo's own 44px convention, with no `.tap-44*` class. Same class as SM33. (The 1×1 "Skip to content" link is the standard visually-hidden skip-link pattern — correct, not a finding.) |
+| SM34 | 🔵 | env | dev server only | **Not a product bug — a `next dev` (Turbopack) hydration failure.** On a **hard load** of `/library` or `/wishlist`, the `<main>` subtree never hydrates: `Object.keys(main).filter(k=>k.startsWith('__react'))` is `[]` while `body`/`nav` have fibers, `init()`'s effect never runs, the only request is AppNav's `/api/auth/me`, and the SSR'd "Loading…" spinner sits forever with **zero console errors**. Client-side navigation to the same route works. **Ruled out:** this session's `http.ts`/`discoverFeed.ts` changes (reverted to `7c442b8`, reproduces) and stale `.next` (reproduces after `rm -rf .next`). **Production build is fine** — 300 cards, both fetches, `main` hydrated. Deliberately not fixed; discriminator recorded in `smoketest.md`. |
+
+**Held up well:** anon status codes + page titles for all 10 routes, `/dashboard` 308 → `/wishlist`, branded 404, `robots.txt` correct, sitemap 2,538 urls. Gated APIs all 401 (incl. `/api/calendar/popular` **before** validating its `month` param). Insights math reconciles exactly on four independent dimensions (1,635 four ways). **C8/SM21 tab regression fully passes.** `/library` first paint capped at **exactly 300** cards. Item detail: **exactly one `/api/detail`** (the second "detail" hit is `/api/detail/similar` — the 2026-07-30 double-mount fix holds) and one trailer iframe. **Fandex Score composes exactly**: center 67 + Σ13 real contributions 18.6 = 85.6 → 86 displayed, all 14 capped reasons at `contribution: 0`. Mobile 375px: no horizontal overflow, bottom nav 53px.
+
+**The circuit breaker verified against a real outage, not a mock:** `/api/health` reported `openProviderCircuits: {"api.rawg.io": {...}}` throughout, the log showed `provider_circuit_opened` after 3 failures then correct exponential re-open backoff (30 s → 60 s → 120 s), and the compact one-line skip log held across hundreds of skips.
+
+**Not covered, explicitly:** anon *client-side* behaviour (the SM8 Back test, sign-in dialog, anon "You" slot) — anon was cookie-less `curl` only this round. Also not re-run: section F's tag-taxonomy round trip and any live rating write.
+
+### H4 closeout — the two H4.10 findings, both fixed 2026-08-02
+
+- **Anon reachability of `/legal/*` — fixed.** Nils's call: put the links at the bottom of the **sign-in dialog**, exactly where the anonymous nav path terminates. New `LegalLinks.tsx` holds the one list + the SM33 tap-target handling; `LegalFooter` renders it too, so the two cannot drift. **Verified on a genuinely anonymous production build** (`127.0.0.1` is a separate cookie host from `localhost`, so no session — and Nils's own stayed untouched): nav "You" → dialog → "Imprint" → `/legal/en/imprint`, all four links at 44px effective height, single row, zero overlaps. Found and fixed a real bug while verifying: **`AppNav` never unmounts, so the dialog stayed open full-screen at z-index 110 over the page you had just navigated to** — it now closes at the point of navigation (an `onNavigate` prop, not a route-watching effect, since setState-in-effect is an eslint ERROR here).
+- **ToS / RAWG password transit — fixed.** Nils's call: add a sentence in EN **and** DE. Wording checked against `src/app/api/auth/rawg/route.ts` first — the password is used once for the RAWG login call and never stored (the old bcrypt hash was removed in S5); only the returned token is kept, encrypted. The sentence also names the alternative: connect one of the other three providers if you would rather Fandex never handled it.
+
+### Other items closed in the same batch
+
+- **`capped` treatment ✅ closed as correct-as-is** (Nils's call). Verified during the 10th sweep that the greying **and** the divider ("NOT COUNTED FOR THIS TITLE — OUTSIDE THE TOP MATCHES THIS ITEM SELECTS") both render, and that `center + Σ(non-capped contributions)` reproduces the headline exactly. It reads as "safely explained" rather than "confusingly excluded", and it is the only thing answering "why is this tag not counted".
+- **`data/` went 1,061 MB → 319 MB**, keeping the one pre-migration reference that exercises the widest upgrade span (uv 5 → 11).
+- **Backloggd answered:** its ToS says *"You agree to access the Website through the interface we provide"* and there is still no official API — parked on a ToS finding rather than a taste call.
+- **The local dev WAL's 48–57 MB** turned out to be a harmless dev-process-lifecycle artifact, fully reclaimed the instant a fresh connection opens (confirmed against a scratchpad copy). No code changed.
+- **`next dev` build-dir isolation** (`81493db`) — two concurrent `next dev` processes were corrupting each other's build output.
+
+### Archived STATUS.md session digests (2026-07-23 → 2026-08-02)
+
+The nine long-form session narratives that used to head STATUS.md were removed in the same compression pass. Each corresponds to a `.claude/plans/` file and a batch section already archived above or earlier in this file:
+
+- **2026-08-02** — eight open questions closed (this section).
+- **2026-08-02** — provider latency isolation + project-hygiene + 10th sweep (this section).
+- **2026-08-02** — H4 closeout, H3.8's Path B trigger, WAL investigation, clean 9th sweep (see the 9th-sweep section above).
+- **2026-07-31** — shared facet cache, "More like this" rail, TMDB attribution, SM33, 8th sweep.
+- **2026-07-30** — Home rails, rotating stats, 4-colour facet palette, item-detail rebuild, unrate, perf audit (`R1`–`R10`).
+- **2026-07-30** — H4 legal pages, Discover's browse cache, smoke sweep.
+- **2026-07-30** — scoring follow-ups + the type-import tech debt (`F#`).
+- **2026-07-29** — tag admin + Fandex Score rework (`T#`), incl. the same-day Spirited Away two-score follow-up.
+- **2026-07-28** — calendar sources + global layout order (`L#`), the SM18–SM32 closeout, and the mockup-gap closeout.

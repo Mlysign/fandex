@@ -429,195 +429,66 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
     eyeball the spread across a real library — a tight clump (e.g. everything 40–60) or a
     misleading center is a product finding even when each individual value is "correct".
 
-## Gotchas learned (2026-08-02, 10th run) — READ THE FIRST TWO BEFORE ANYTHING ELSE
+## Gotchas — grouped by when they bite you
 
-- **🚨 `/library` and `/wishlist` DO NOT HYDRATE on a hard load under `next dev` (Turbopack) — this is a
-  DEV-SERVER bug, not a product bug (SM34).** Symptom: a permanent "Loading…" spinner, 0 cards, **zero
-  console errors**, and the browser's Resource Timing showing exactly ONE request (`/api/auth/me`, which
-  is AppNav's — not MyStuffView's). It looks exactly like a catastrophic product regression and it is not.
-  **The 30-second test that tells them apart** — fibers are attached to hydrated DOM only:
+_Consolidated 2026-08-02 from three dated lists (2026-07-18, 07-28, 08-02). Contradictions between them were resolved in favour of the current rule; duplicates merged._
+
+### 🚨 Read these two before logging ANY finding
+
+- **`/library` and `/wishlist` DO NOT HYDRATE on a hard load under `next dev` (Turbopack) — a DEV-SERVER bug, not a product bug (SM34).** Symptom: permanent "Loading…" spinner, 0 cards, **zero console errors**, and exactly ONE request in Resource Timing (`/api/auth/me`, which is AppNav's — not MyStuffView's). It looks exactly like a catastrophic product regression and it is not. **The 30-second test** — fibers attach to hydrated DOM only:
   ```js
   const fk = el => Object.keys(el).filter(k => k.startsWith('__react')).length;
   ({ main: fk(document.querySelector('main')), nav: fk(document.querySelector('nav')) })
   ```
-  `nav: 2, main: 0` = the subtree never hydrated → dev-server artifact, **not a finding**.
-  Client-side navigation to the same route works fine (that path renders on the client, no hydration).
-  **So: verify `/library` and `/wishlist` on the PRODUCTION build before logging anything about them** —
-  `preview_stop` → `npm run build` → `preview_start {name:"prod"}` (:3100, already in launch.json) →
-  they work perfectly there (300 cards, both fetches, `main` hydrated). **Cookies ignore port**, so the
-  `rr2_session` minted on :3000 is sent to :3100 unchanged — you stay logged in across the switch, which
-  matters because `/api/dev/login` 404s under `NODE_ENV=production` and can't re-mint one there.
-  Already ruled out, don't re-investigate: stale `.next` (reproduces after `rm -rf .next` + restart) and
-  the 2026-08-02 `http.ts`/`discoverFeed.ts` changes (reverting them to `7c442b8` reproduces identically).
-- **Before blaming the app for anything slow or empty, check whether a PROVIDER is down.** RAWG was fully
-  down during this run (`https://rawg.io/` itself → Cloudflare **522** after ~19.8 s, so not our key).
-  Cheapest check, no browser: `curl -s -o /dev/null -w "%{http_code} %{time_total}\n" --max-time 45
-  https://rawg.io/` — or just read **`/api/health` → `openProviderCircuits`** (added 2026-08-02), which
-  names every host whose circuit breaker is currently open. `{}` = everything healthy.
-- **A provider outage is the best free test of the degraded paths — use it rather than working around it.**
-  What it surfaced this run: games load-more is RAWG-only (SM35) while the initial browse is dual-source,
-  and Home's Popular rail is RAWG-only for games (SM36). Worth re-checking deliberately whenever a
-  provider IS down: per media type, does every surface still have a second source?
-- **The Fandex Score breakdown does NOT sum to the headline if you scrape every `+N.N` off the page — and
-  that is correct.** Capped reasons (`contribution: 0`) render their **`impact`** in the same ±N.N format,
-  separated by a divider reading "NOT COUNTED FOR THIS TITLE — OUTSIDE THE TOP MATCHES THIS ITEM SELECTS".
-  Scraping naively gave 67 + 24.1 = 91.1 against a headline of 86; the real check is `center + Σ(reasons
-  where !capped)` = 67 + 18.6 = 85.6 → 86 ✓. Get it from `/api/detail`'s `fandexReasons` + `fandexCenter`
-  (authoritative, one call) rather than the DOM.
-- **`/api/detail/similar` is a DIFFERENT endpoint from `/api/detail`** — a substring filter on `/api/detail`
-  matches both and reads as the old double-mount bug. Filter exactly, or check `iframe` count instead.
-  Relatedly: "More like this" correctly does not render when the catalog yields only ~2 similar items
-  (sparse unreleased movies); it renders fine at 12. Not a finding.
-- **The dev server can die silently between phases of a long session** (observed twice this run — every
-  `curl` returns `000`). `preview_list` returning `[]` is the tell; just `preview_start` again.
+  `nav: 2, main: 0` = never hydrated → dev artifact, **not a finding**. Client-side navigation to the same route works fine. **So verify those two routes on the PRODUCTION build before logging anything:** `preview_stop` → `npm run build` → `preview_start {name:"prod"}` (:3100, already in launch.json) → 300 cards, both fetches, `main` hydrated. **Cookies ignore port**, so the `rr2_session` minted on :3000 is sent to :3100 unchanged — which matters because `/api/dev/login` 404s under `NODE_ENV=production` and can't re-mint there. Already ruled out, don't re-investigate: stale `.next`, and the 2026-08-02 `http.ts`/`discoverFeed.ts` changes.
+- **Before blaming the app for anything slow or empty, check whether a PROVIDER is down.** Read **`/api/health` → `openProviderCircuits`**, which names every host whose breaker is open (`{}` = all healthy). Or, no browser: `curl -s -o /dev/null -w "%{http_code} %{time_total}\n" --max-time 45 https://rawg.io/`. RAWG was fully down through the whole 10th run (Cloudflare 522 after ~19.8 s — theirs, not our key).
 
-## Gotchas learned (2026-07-28 run)
+### Discriminators — things that look like bugs and aren't
 
-- **`/api/auth/me` wraps the user as `{user:{userId,…}}` — the field is `userId`, NOT `id`.**
-  A probe reading `j.user.id` returns `undefined`, `JSON.stringify` drops the key, and the result
-  reads exactly like "anon". The 6th sweep spent its first probes believing it was logged out
-  while looking at an obviously authenticated Home. Always assert on `!!j.user`, or cross-check
-  with `fetch('/api/library').then(r=>r.status)` (200 = authed, 401 = anon).
-- **The anon side can be covered without touching the session** — `curl.exe` from PowerShell sends
-  no cookie, so status codes, redirects (`-D -` for `location:`), SSR HTML and API error shapes are
-  all reachable while staying logged in. What it CANNOT cover: anything client-side (the SM8 Back
-  test, the sign-in dialog, the anon "You" nav slot). Say so explicitly rather than implying a full
-  anon pass. To strip tags from SSR HTML in PS 5.1:
-  `[regex]::Replace($h,'<script[\s\S]*?</script>',' ')` then `[regex]::Replace($t,'<[^>]+>',"`n")`.
-- **`resize_window`'s `region` argument is ignored by `computer{action:"screenshot"}` and `zoom` in
-  the in-app pane** — both return the full viewport ("region crop not yet supported"). Don't build
-  a measurement on a cropped screenshot; read geometry via `javascript_tool` instead.
-- **Screenshot pixels ≠ viewport pixels at mobile.** After `resize_window {preset:"mobile"}`
-  (375×812) screenshots come back 563×1218 — a 1.5× factor. `computer` clicks take *screenshot*
-  coordinates, so scale before clicking.
-- **A `left_click` with `coordinate` fails until a screenshot has been taken in that viewport** —
-  "no screenshot dimensions cached". A `navigate` invalidates the cache, so re-screenshot after
-  every navigation before coordinate-clicking.
-- **`javascript_tool` DOES support top-level `await` in some calls and rejects it in others** —
-  the first call of a session failed with "await is only valid in async functions". Wrapping in
-  `new Promise(r=>setTimeout(…))` or `.then()` always works; prefer that.
-- **Consecutive `javascript_tool` calls share a scope** — re-declaring `const inp` in a later call
-  throws "Identifier already declared". Wrap every probe in `(function(){…})()`.
-- **`navigate`'s "navigated to <url>" line reports a stale URL** (usually the origin) and the tab
-  title in its footer can lag a redirect. Read `location.href` / `document.title` via
-  `javascript_tool` before concluding anything about where you landed — a made-up item uuid looked
-  like it had silently landed on Home when it had correctly rendered the branded 404.
-- **The dim numeric font makes 6 and 8 indistinguishable in screenshots** at small sizes — Settings'
-  "Watchlist items 96" read convincingly as 98. Confirm any number that matters via `innerText`.
+- **A provider outage is the best free test of the degraded paths — use it rather than working around it.** It surfaced SM35 (games load-more is RAWG-only while the initial browse is dual-source) and SM36 (Home's Popular rail is RAWG-only for games). Whenever a provider IS down, deliberately re-check: **per media type, does every surface still have a second source?**
+- **The Fandex Score breakdown does NOT sum to the headline if you scrape every `+N.N` off the page — and that's correct.** Capped reasons (`contribution: 0`) render their **`impact`** in the same ±N.N format, below a divider reading "NOT COUNTED FOR THIS TITLE…". Naive scraping gave 67 + 24.1 = 91.1 against a headline of 86; the real check is `center + Σ(reasons where !capped)` = 67 + 18.6 = 85.6 → 86 ✓. Take it from `/api/detail`'s `fandexReasons` + `fandexCenter`, not the DOM.
+- **`/api/detail/similar` is a DIFFERENT endpoint from `/api/detail`** — a substring filter matches both and reads as the old double-mount bug. Filter exactly, or count `iframe`s instead. Relatedly, "More like this" correctly doesn't render when the catalog yields only ~2 similar items (sparse unreleased movies); it renders fine at 12.
+- **Two `<nav aria-label="Primary">` in the DOM is CORRECT** — `AppNav` renders the desktop and mobile bars as a pair and hides one with `display:none`, removing it from the a11y tree. `find`/`read_page` still surface both. Investigated and dismissed 2026-07-27 — don't re-log.
+- **Wait ~8s, not 5, before judging an authed hub empty.** `/profile` fires `/api/home` + `/api/calendar` in parallel, both cold-compiled; at 5s it shows only its identity + link grid, which reads convincingly as "the rails were never built". They pop in late with **no skeleton** (that missing skeleton is itself a minor finding, logged once).
+- **Case-sensitivity + scroll position will fake a missing UI section.** A5's People/Titles group headers are `text-transform: uppercase` in CSS and sit above the post-search scroll position. A `/\bPeople\b/` probe on `innerText` plus an unscrolled screenshot made a working feature look broken. Scroll to top first, and prefer querying elements (`a[href^="/person/"]`) over matching rendered text.
+- **The dim numeric font makes 6 and 8 indistinguishable in screenshots** — "Watchlist items 96" read convincingly as 98. Confirm any number that matters via `innerText`.
+- **Q26 scroll-to-top is intentional** on Discover when switching to a non-date sort. Don't set a scroll position then change sort — the effect resets it and you measure nothing.
+- **Facet "Highest rated" ranking obscure titles first is SM3** (no vote damping), not a provider bug.
+- **Known 401 noise (SM6):** anon pages fire authed calls — `/api/detail`, `/api/facet/mine`, `POST /api/discover/find`. Don't re-log.
+- `GET /api/watchlist` is 405 (POST/DELETE only) — use `/api/library` as the auth probe.
+- Wishlist remove leaves the row until reload (SM1) — verify via network 200 + reload, not the UI.
+- Legacy facet redirect param is **`kind`**, not `type`: `/insights/facet?kind=person&key=…` → 308; wrong params fall back to `/insights` (intended).
+- View mode is **per-page** (`rr_view_discover` / `rr_view_library` / `rr_view_wishlist` via `useViewMode`). The *type* filter is still shared (`rr_type_filter` — SM2's real remaining half).
 
-## Gotchas learned (2026-07-18 run)
+### Auth state
 
-- **The preview browser keeps the httpOnly `rr2_session` cookie across sessions** — check
-  auth state FIRST (`fetch('/api/library')` → 200 = logged in, 401 = anon) before assuming
-  anon. JS cannot delete an httpOnly cookie; use the nav "Log out" button to go anon (this
-  bumps `session_epoch`, so re-mint tokens with the NEW epoch afterwards). Epoch is **3** as
-  of 2026-07-18.
-- If already logged in, run the logged-in sweep FIRST, then logout → anon (saves a mint).
-- `javascript_tool`: no top-level `await` (wrap in `Promise`/`.then`); no repeated
-  `const` names across calls (wrap in IIFE); `computer {action:"wait"}` requires `tabId`;
-  coordinate clicks need a prior screenshot AND screenshot pixels ≠ viewport pixels.
-- Set-Cookie inspection: PS 5.1 `Invoke-WebRequest` hides it on redirects — use
-  `curl.exe -s -o NUL -D -`.
-- Legacy facet redirect param is **`kind`** (not `type`): `/insights/facet?kind=person&key=…`
-  → 308; wrong params fall back to `/insights` (intended).
-- **Known 401 noise (SM6)**: anon pages fire authed calls — `/api/detail`, `/api/facet/mine`,
-  `POST /api/discover/find` (search then falls back to `GET /api/discover?q=`). Don't re-log.
-- `GET /api/watchlist` is 405 (POST/DELETE only); use `/api/library` as the auth probe.
-- Wishlist remove leaves the row until reload (SM1) — verify removal via network 200 +
-  reload, not the UI.
-- ~~View mode is a single global `rr_view_mode` key (SM2)~~ — **no longer true**: view mode is
-  per-page now (`rr_view_discover` / `rr_view_library` / `rr_view_wishlist` via `useViewMode`).
-  The *type* filter is still shared (`rr_type_filter`, SM2's real remaining half).
-- **NEVER run `npx next build` while the dev server is running** (cost real time on the
-  2026-07-27 run). It overwrites `.next` with production output and corrupts the running dev
-  server — routes start returning **404 HTML**, which then surfaces as a plausible-looking
-  product bug (`/api/auth/me` 404 → `/calendar` renders its "Couldn't load your calendar"
-  error state). If any route 404s unexpectedly mid-sweep: check the file still exists and
-  `git status` is clean, then `preview_stop` → `rm -rf .next` → `preview_start`. Build only
-  after stopping the preview.
-- **Clearing persisted UI state between probes:** `sessionStorage`/`localStorage` keys are all
-  `rr_`-prefixed, so
-  `Object.keys(sessionStorage).filter(k=>k.startsWith('rr_')).forEach(k=>sessionStorage.removeItem(k))`
-  (and the same for `localStorage`) gives a clean baseline. Worth doing before any
-  sort/filter/scroll test — a stale persisted query silently puts Discover in SEARCH mode and
-  you'll be measuring the wrong thing.
-- **Q26 scroll-to-top is intentional**: switching to a non-date sort on Discover jumps to the
-  top. Don't set a scroll position and then change sort — the effect will reset it and the
-  test measures nothing.
-- Anon Discover/facet cards are **non-linkable by design** (PR15/PR14 — no `<a>`, no action
-  bar), so "click an item then press Back" flows can't be tested anon there. Home's rails DO
-  have real links for items already in the catalog — use those for anon link-through tests.
-- Write tests: Steam is read-only; a game wishlist add/remove goes to RAWG (net-zero
-  verified safe 2026-07-18). Skip RATING writes — they create real reviews/ratings on the
-  user's platform accounts and clearing isn't obviously exposed; note as not-exercised.
-- Facet "Highest rated" ranking obscure titles first is SM3 (no vote damping), not a
-  provider bug.
-- **Tab titles: test them by HARD LOAD, never by clicking through the nav** (learned SM10). A
-  client-side nav is the one path where `usePageTitle` works, so a click-through check shows a
-  false pass on all 7 pages. `navigate` to the URL, wait, then read `document.title`.
-- **The dev server needs ~8s, not 5, for the fetch-heavy authed hubs** (`/profile` fires
-  `/api/home` + `/api/calendar` in parallel, both cold-compiled). At 5s `/profile` shows only its
-  identity + link grid, which reads convincingly as "the stats/Coming-up/Recommended rails were
-  never built" — they were; they just pop in late with **no skeleton**. Wait 8s before judging any
-  authed hub empty. (Corollary worth logging once: that missing skeleton is itself a minor finding.)
-- **Case-sensitivity + scroll position will fake a missing UI section.** A5's People/Titles group
-  headers are `text-transform: uppercase` in CSS, and the group sits above the default scroll
-  position after a search. A `/\bPeople\b/` probe on `innerText` plus an unscrolled screenshot
-  made a working feature look broken. Scroll to top and screenshot before concluding anything is
-  absent, and prefer querying for the elements (`a[href^="/person/"]`) over matching rendered text.
-- **Two `<nav aria-label="Primary">` in the DOM is CORRECT** — `AppNav` renders the desktop and
-  mobile bars as a pair and hides one with `display:none`, which removes it from the a11y tree.
-  `find`/`read_page` will still surface both and describe one as a "duplicate". Investigated and
-  dismissed 2026-07-27 — don't re-log it.
-- **`javascript_tool` blocks reads of anything it reads as a credential** — `getPropertyValue`
-  on a CSS custom property returned `[BLOCKED: Sensitive key]` purely because the surrounding
-  object key was named `accentToken`. Rename the variable (`brandAccent`) and it works. Not a
-  real block, just avoid `token`/`key`/`secret` in identifiers when probing styles.
-- **`resize_window` on a REAL connected Chrome browser (`claude-in-chrome` tools) cannot hit
-  arbitrary widths like 375/500/1280 — those are only reliably achievable in the sandboxed
-  in-app Browser pane (`mcp__Claude_Browser__resize_window`).** A real desktop Chrome window has
-  an OS/Chrome-imposed minimum width (measured 2026-07-27: ~606px was the narrowest achievable,
-  ~1034px the widest, on this machine) — asking for 375 silently clamps to whatever the window
-  manager allows, and `innerWidth` after the call may not match the requested value at all.
-  Always read `innerWidth`/`innerHeight` via `javascript_tool` right after a `resize_window` call
-  to confirm what you actually got, rather than trusting the tool's "successfully resized"
-  message. If a real 375px viewport matters (not just "narrow enough to hit the 2-column
-  breakpoint"), device emulation is needed, which these tools don't expose — note the
-  substitution rather than claim an exact width you didn't verify.
-- **Multiple Chrome browsers can be connected to one account** — if `list_connected_browsers`
-  ever shows more than one, a browser action mid-session can suddenly demand you call
-  `AskUserQuestion` to pick one (even after you were already successfully driving a tab). Ask,
-  then `select_browser` with the chosen deviceId — the existing tab/session state is preserved,
-  nothing is lost by the prompt.
-- **`.click()` via `javascript_tool` on a React-controlled element can read STALE state if you
-  check the DOM in the same synchronous script** — the click dispatches and React schedules the
-  re-render, but the very next line in the same script may run before that commit lands. Add a
-  small `await new Promise(r => setTimeout(r, 150))` between the click and the check (top-level
-  `await` works in `javascript_tool`), or use the `computer` tool's real click instead, which
-  goes through the actual browser event loop and doesn't have this race.
-- **`navigate` is intermittently denied by the safety classifier** for no reason tied to the
-  URL (same URL succeeds on a bare retry seconds later) — don't treat one blocked `navigate`
-  as a broken page; just retry once before investigating further. This is separate from the
-  cookie-mint block above, which is a hard, consistent block, not intermittent.
+- **Check auth FIRST — the pane is often already logged in.** `fetch('/api/library').then(r=>r.status)` → 200 authed, 401 anon. Both the in-app pane and `claude-in-chrome` can arrive authenticated; a session cookie persists across conversations.
+- **`/api/auth/me` wraps the user as `{user:{userId,…}}` — the field is `userId`, NOT `id`.** A probe reading `j.user.id` gets `undefined` and reads exactly like "anon". The 6th sweep spent its first probes believing it was logged out while looking at an obviously authenticated Home. Assert on `!!j.user`.
+- **To go anon, use `127.0.0.1` (see the Auth section above) — NEVER log out.** Logging out bumps `session_epoch` and ends the real session everywhere at once, recoverable only by a real OAuth round-trip. _(The 2026-07-18 list used to recommend the Log out button; that guidance is withdrawn.)_
+- **`curl.exe` from PowerShell sends no cookie**, so status codes, redirects (`-D -`), SSR HTML and API error shapes are reachable while staying logged in. It **cannot** cover anything client-side (the SM8 Back test, the sign-in dialog, the anon "You" slot) — say so explicitly rather than implying a full anon pass. Strip tags in PS 5.1 with `[regex]::Replace($h,'<script[\s\S]*?</script>',' ')` then `[regex]::Replace($t,'<[^>]+>',"`n")`.
 
-- **Both the in-app Browser pane AND `claude-in-chrome` can end up already authenticated**
-  (observed 2026-07-27) — a session cookie apparently persists across conversations in this
-  environment, not just in the "real Chrome" tool. Always `fetch('/api/auth/me')` to check
-  BEFORE assuming a fresh browser tab is anon, in either surface. If both are authenticated and
-  you need a genuine anon pass, do NOT log out to get it — that bumps `session_epoch` and ends
-  the real session in both places at once (same account, same token validity). Either ask the
-  user to test anon in a separate profile, or accept an authed-only pass and say so explicitly.
-- **Post-rebuild targeted check (2026-07-27):** after any change to `SubBar`, `PosterCard`,
-  `ActionCells`, or the two score badges, re-check ALL of Discover/Library/Wishlist/Calendar's
-  facet pages — they share these components, and a fix verified on one (e.g. Discover) can
-  still be broken on another with slightly different props (Library's extra "Hide rated" chip
-  broke the Filters-button layout — SM17 — even though Discover was clean).
+### Browser tooling quirks
 
-## Environment gotchas
+- **`javascript_tool`: wrap every probe in an IIFE** — consecutive calls share a scope, so re-declaring `const inp` throws "Identifier already declared". Top-level `await` works in some calls and not others; `.then()`/`new Promise` always works.
+- **`.click()` via `javascript_tool` on a React-controlled element reads STALE state in the same synchronous script** — the click dispatches but React's re-render hasn't committed. Add `await new Promise(r => setTimeout(r, 150))`, or use the `computer` tool's real click, which goes through the browser event loop and has no race.
+- **`javascript_tool` blocks reads of anything it reads as a credential** — `getPropertyValue` on a CSS custom property returned `[BLOCKED: Sensitive key]` purely because the surrounding object key was named `accentToken`. Rename the variable and it works. Avoid `token`/`key`/`secret` in identifiers when probing styles.
+- **Screenshot pixels ≠ viewport pixels at mobile.** After `resize_window {preset:"mobile"}` (375×812), screenshots come back 563×1218 — a 1.5× factor, and `computer` clicks take *screenshot* coordinates. Also: a coordinate `left_click` fails until a screenshot has been taken in that viewport, and `navigate` invalidates that cache.
+- **`resize_window`'s `region` is ignored** by `computer{action:"screenshot"}` and `zoom` in the in-app pane (full viewport returned). Read geometry via `javascript_tool` instead of measuring on a crop.
+- **`resize_window` on a REAL Chrome (`claude-in-chrome`) can't hit 375/500/1280** — a desktop window has an OS-imposed minimum (~606px narrowest, ~1034px widest on this machine); asking for 375 silently clamps. Always read `innerWidth` after resizing rather than trusting the success message. Arbitrary widths are only reliable in the sandboxed in-app pane.
+- **`navigate`'s "navigated to <url>" line reports a stale URL** and the footer title can lag a redirect. Read `location.href` / `document.title` via `javascript_tool` — a made-up uuid looked like it landed on Home when it had correctly rendered the branded 404.
+- **`navigate` is intermittently denied by the safety classifier** for reasons unrelated to the URL (the same URL succeeds on a bare retry). Retry once before investigating.
+- **The dev server can die silently between phases of a long session** (twice in the 10th run — every `curl` returns `000`). `preview_list` returning `[]` is the tell; just `preview_start` again.
+- **Tab titles: test by HARD LOAD, never by clicking through the nav** (SM10). Client-side nav is the one path where `usePageTitle` works, so a click-through check false-passes on all 7 pages.
+- **Multiple connected Chrome browsers** — if `list_connected_browsers` shows more than one, a mid-session action can suddenly demand an `AskUserQuestion` to pick. Ask, then `select_browser`; nothing is lost.
 
-- `.env` is loaded by Next dev automatically; JWT_SECRET is set there (don't print it).
+### Environment + write safety
+
+- **NEVER run `npx next build` while the dev server is running.** It overwrites `.next` with production output and corrupts the running dev server — routes start returning **404 HTML**, which surfaces as a plausible product bug (`/api/auth/me` 404 → `/calendar` shows "Couldn't load your calendar"). If a route 404s unexpectedly mid-sweep: confirm the file exists and `git status` is clean, then `preview_stop` → `rm -rf .next` → `preview_start`. Build only after stopping the preview.
+- **Clearing persisted UI state between probes:** all keys are `rr_`-prefixed — `Object.keys(sessionStorage).filter(k=>k.startsWith('rr_')).forEach(k=>sessionStorage.removeItem(k))` (and the same for `localStorage`). Do this before any sort/filter/scroll test; a stale persisted query silently puts Discover in SEARCH mode.
+- **Write tests:** Steam is read-only; a game wishlist add/remove goes to RAWG (net-zero verified safe 2026-07-18). **Skip RATING writes** — they create real reviews on the user's platform accounts and clearing isn't obviously exposed. Note as not-exercised.
+- **After any change to `SubBar`, `PosterCard`, `ActionCells`, or the two score badges, re-check ALL of Discover/Library/Wishlist/Calendar + facet pages** — they share these components, and a fix verified on one can still be broken on another with slightly different props (Library's extra "Hide rated" chip broke the Filters-button layout — SM17 — while Discover was clean).
+- Anon Discover/facet cards are **non-linkable by design** (PR14/PR15 — no `<a>`, no action bar), so "click then Back" flows can't be tested anon there. Home's rails DO have real links for catalog items — use those.
+- `.env` is loaded by Next dev automatically; `JWT_SECRET` is set there (don't print it).
 - Dev server compiles routes lazily — distinguish "slow first hit" from a real hang.
-- CSP is prod-only (dev keeps only frame-ancestors) — don't chase CSP issues locally.
-- OMDB key invalid + Letterboxd hidden (memory) — missing RT/IMDb scores on detail pages is a
-  KNOWN config gap, not a bug.
-- Steam CDN images for delisted games 404 — known noise, not a finding.
+- CSP is prod-only (dev keeps only `frame-ancestors`) — don't chase CSP issues locally.
+- **Known config gaps, not bugs:** OMDB key invalid (missing RT/IMDb scores on detail pages), Letterboxd hidden, Steam CDN images 404 for delisted games.

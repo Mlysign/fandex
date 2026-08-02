@@ -1,5 +1,10 @@
 # Archive directory
 
-This directory holds finished project history (`history.md`) — completed phases, resolved audit findings, closed bugs and QA findings. It is not live documentation.
+Finished project history. **Not live documentation** — nothing here is open.
 
-Read it only when you need the "why" behind a specific past decision — grep for the keyword you need, don't read the file end to end, and never load it wholesale into context "just in case" while planning new work. For what's currently open, use `TASKS.md` / `STATUS.md` at the repo root instead.
+- `history.md` — the main record: completed phases, resolved audit findings, closed bugs/QA/smoke findings, and every session batch through 2026-08-02.
+- `ui-overhaul.md` — H1's full working doc (IA lock, decisions ledger, per-phase changelog). H1 shipped 2026-07-27; the live design system is `docs/design/fandex-handoff/`.
+- `mockup-gap-audit.md` — the mockup-vs-live structural audit. Every item closed 2026-07-28.
+- `ui-overhaul-design-brief.md` — the H1.2 input brief handed to Claude Design.
+
+**Grep for the keyword you need — don't read these end to end, and never load one into context "just in case" while planning.** For what's currently open, use `TASKS.md` / `STATUS.md` at the repo root instead.

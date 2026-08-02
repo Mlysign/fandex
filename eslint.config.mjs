@@ -23,6 +23,16 @@ const eslintConfig = defineConfig([
     // touch or delete that worktree, which may be another session's own
     // in-progress work — it just stops lint from scanning it.
     ".claude/worktrees/**",
+    // 2026-08-02 — same class of bug, found by a doc-hygiene pass. `81493db`
+    // added `npm run dev:alt` (NEXT_DIST_DIR=.next-alt, port 3010) so two
+    // concurrent `next dev` processes stop corrupting each other's build, and
+    // gitignored the directory — but gitignoring is exactly what does NOT
+    // matter here, per the note above. The result: the moment anyone ran
+    // dev:alt, `npm run lint` scanned Turbopack's emitted chunks and reported
+    // ~735 errors (require() imports, @ts-ignore, module assignment,
+    // this-aliasing) against generated code, silently breaking the repo's
+    // standing "0 errors" bar. Any future alternate distDir needs a line here.
+    ".next-alt/**",
   ]),
   {
     rules: {

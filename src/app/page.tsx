@@ -21,7 +21,7 @@ import type { MediaType } from "@/types";
 
 // H1.6e — the real Home: `/` is the public browse anchor of the H1 IA. Anon
 // gets a compact sign-in hero + the same public Popular/Upcoming rails
-// (per ui-overhaul.md's IA table: "public browse — Popular / Upcoming /
+// (per docs/archive/ui-overhaul.md's IA table: "public browse — Popular / Upcoming /
 // Fandex Recommendation carousels"); Recommendation only ever renders for a
 // signed-in visitor with a real taste signal (cold-start accounts get
 // Popular/Upcoming same as anon, no invented "for you" row). Replaces the

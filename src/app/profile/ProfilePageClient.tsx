@@ -26,7 +26,7 @@ import LegalFooter from "@/components/legal/LegalFooter";
 //    (tracked/rated/wishlist) + a 4-row entry list (Insights/Wishlist/Your
 //    ratings/Settings, each icon+title+subtitle+chevron) + a full-width
 //    "Sign out" button. No rails, no recommendations.
-//  - ui-overhaul.md §4 (Nils's own Miro board): "stats + recent library adds
+//  - docs/archive/ui-overhaul.md §4 (Nils's own Miro board): "stats + recent library adds
 //    + upcoming wishlist + recommendations" — the carousel content actually
 //    built in H1.6e.
 // Nils's call: the mockup wins for the top of the page (literally, not

@@ -4,7 +4,7 @@ import { TriangleAlert, RefreshCw, RotateCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 // <ErrorState> — 03-components.md §15, NEW (several pages have no error
-// state today — see docs/ui-overhaul.md §4/H1.6f). Same frame as EmptyState
+// state today — see docs/archive/ui-overhaul.md §4/H1.6f). Same frame as EmptyState
 // but a danger-tinted icon tile and a "Try again" retry — never a dead end.
 
 interface ErrorStateProps {
