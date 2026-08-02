@@ -30,6 +30,14 @@ const CSP_RESOURCE_POLICY = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Two `next dev` processes on this repo share one Turbopack cache DB under
+  // `<distDir>/dev/cache/turbopack/` and delete each other's `.sst` files —
+  // which surfaces as a panic ("Failed to lookup task ids"/"Persisting failed")
+  // and a 500 on whichever route compiles next, NOT as a port conflict. When a
+  // second Claude session needs its own dev server, give it its own build dir:
+  //   NEXT_DIST_DIR=.next-alt npm run dev -- --port 3010   (see `dev:alt`)
+  // Unset everywhere else, so prod/CI/Docker keep the default `.next`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Self-host build: emit `.next/standalone` (a minimal server.js + only the
   // traced node_modules) so the Docker runtime image stays small and needs no
   // `npm install`. See Dockerfile. server.js honors PORT/HOSTNAME (Railway sets PORT).

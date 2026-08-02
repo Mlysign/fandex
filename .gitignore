@@ -15,6 +15,9 @@
 
 # next.js
 /.next/
+# Alternate build dir for a second concurrent `next dev` (npm run dev:alt) —
+# see the distDir comment in next.config.ts.
+/.next-alt/
 /out/
 
 # production
