@@ -107,7 +107,21 @@ export interface FindRequest {
 
 // ── Candidate cache (whole catalog, user-independent) ──────────────
 const CANDIDATE_TTL_MS = 5 * 60 * 1000;
-let _cache: { sig: string; aliasSig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number>; rawTagCounts: Map<string, { label: string; count: number }> } | null = null;
+// `sig` is the CONTENT signature and `memSig` the membership one — they're
+// separate so a wishlist/rating write can take getCache()'s incremental path
+// instead of forcing a full rebuild (§A). `vocabMap` and `actedIds` exist only
+// to make that patch possible: the sorted `vocab` array can't be updated
+// in place, and the diff needs last build's membership to compare against.
+let _cache: {
+  sig: string; memSig: string; actedSig: string; aliasSig: string; at: number;
+  vectors: DiscoveryVector[];
+  byId: Map<string, DiscoveryVector>;
+  vocab: VocabEntry[];
+  vocabMap: Map<string, VocabEntry>;
+  idf: Map<string, number>;
+  rawTagCounts: Map<string, { label: string; count: number }>;
+  actedIds: Set<string>;
+} | null = null;
 
 // ── The catalog POOL (H2b) ───────────────────────────────────────────────────
 //
@@ -134,11 +148,66 @@ export const POOL_WHERE = `(mi.browsed = 0 OR mi.id IN (SELECT media_item_id FRO
 // every browse would invalidate the cache and force a full rebuild — which
 // parses the raw_data of the entire catalog, on the request path, for a table
 // the browse didn't meaningfully change.
-function catalogSignature(): string {
+//
+// §A (2026-08-02) split this in two. It used to be COUNT + MAX(updated_at) over
+// POOL_WHERE, which unions in `user_item_state` — so wishlisting or rating a
+// BROWSED title changed the count and forced a full rebuild, even though the
+// catalog's content was byte-for-byte identical. Content and membership now
+// have separate signatures, and a membership-only change takes the incremental
+// path in getCache() instead of a rebuild.
+//
+// CONTENT: the browsed=0 catalog only. A membership write cannot move this —
+// it writes `user_item_state` and never touches `media_items` (only
+// upsertMediaItem does, matcher.ts) — which is what lets a promotion take the
+// incremental path.
+function contentSignature(): string {
+  const cat = get<{ n: number; mx: number }>(
+    `SELECT COUNT(*) n, COALESCE(MAX(updated_at),0) mx FROM media_items WHERE browsed = 0`
+  );
+  return `${cat?.n ?? 0}:${cat?.mx ?? 0}`;
+}
+
+// CONTENT of the acted-on browsed rows, which are in the pool too and CAN be
+// re-synced — `browsed` is set once at creation and never cleared (matcher.ts),
+// so an item stays browsed=1 even after a real sync enriches it. That happens
+// on the very first sync after you wishlist a browsed title, so it has to be
+// caught or the pool serves that item's thin pre-sync facets.
+//
+// This deliberately is NOT folded into contentSignature(): it's a MAX over a
+// SET THAT PROMOTION ITSELF CHANGES, so comparing it unconditionally would
+// make every promotion look like a content change and force the very rebuild
+// §A exists to avoid. (Measured: with it folded in, the incremental path was
+// unreachable — sabotaging the patch changed no test result.) getCache()
+// therefore compares it only when membership is unchanged, where it's a
+// like-for-like comparison; when membership DID change, the membership branch
+// runs first and restamps it.
+function actedContentSignature(): string {
+  const r = get<{ mx: number }>(
+    `SELECT COALESCE(MAX(mi.updated_at),0) mx FROM media_items mi
+     WHERE mi.browsed = 1 AND mi.id IN (SELECT media_item_id FROM user_item_state)`
+  );
+  return `${r?.mx ?? 0}`;
+}
+
+// MEMBERSHIP, as a cheap gate. Fetching the acted-on id list on every getCache()
+// would put a growing row-scan on the warm path, which is currently ~2 ms; this
+// aggregate is O(1)-ish and only differs when `user_item_state` actually
+// changed. MAX(rowid) covers inserts, COUNT covers deletes.
+function membershipSignature(): string {
   const r = get<{ n: number; mx: number }>(
-    `SELECT COUNT(*) n, COALESCE(MAX(mi.updated_at),0) mx FROM media_items mi WHERE ${POOL_WHERE}`
+    `SELECT COUNT(*) n, COALESCE(MAX(rowid),0) mx FROM user_item_state`
   );
   return `${r?.n ?? 0}:${r?.mx ?? 0}`;
+}
+
+// The browsed rows some user has acted on — i.e. exactly the items that join or
+// leave the pool WITHOUT a content change. Ids only, no blobs.
+function actedBrowsedIds(): Set<string> {
+  const rows = query<{ id: string }>(
+    `SELECT mi.id FROM media_items mi
+     WHERE mi.browsed = 1 AND mi.id IN (SELECT media_item_id FROM user_item_state)`
+  );
+  return new Set(rows.map((r) => r.id));
 }
 
 // NOTE: no `raw_data` — pass 1 reads metadata only (see buildCache()).
@@ -160,34 +229,33 @@ interface RawDataRow {
 // 32k default.
 const MISS_CHUNK = 400;
 
-// §A, closed 2026-08-02 — the pool rebuild no longer re-parses the whole catalog.
+/** A built vector plus its RAW (pre-alias) facets, which `rawTagCounts` needs. */
+interface PoolEntry { vector: DiscoveryVector; rawFacets: Facet[] }
+
+// §A, closed 2026-08-02 — the pool rebuild no longer re-parses the whole catalog,
+// and a membership write no longer triggers a rebuild at all.
 //
-// The rebuild itself still runs on every membership write, because
-// `catalogSignature()` counts POOL_WHERE and a wishlist/rating write genuinely
-// changes pool membership. What changed is the COST of that rebuild: pass 1
-// reads metadata + `last_synced` only (no raw_data), which is enough to build
-// each item's freshness key, and `raw_data` is then SELECTed in pass 2 for
-// CACHE MISSES ALONE. An unchanged item costs a map lookup — no SQL blob read,
-// no JSON.parse, no mergeLinks/extractFacets.
-//
-// Why not the originally-proposed incremental add (docs/archive/performance-audit.md §A
-// as written): that would have kept the cached pool and patched members into it,
-// so a bug there means an item silently missing from the pool until the 5-minute
-// TTL expires — a silent failure, which is exactly why it was deferred. Caching
-// the DERIVATION instead leaves membership recomputed from SQL every single
-// rebuild, so that failure mode does not exist here. Same saving, no new risk.
+// TWO PASSES, not one. Pass 1 reads metadata + a freshness token
+// (`last_synced`, `LENGTH(raw_data)`) with no blobs; `raw_data` is then SELECTed
+// in pass 2 for facetCache MISSES ALONE. An unchanged item costs a map lookup —
+// no SQL blob read, no JSON.parse, no mergeLinks/extractFacets.
 //
 // The cache is `facetCache`'s, shared with /api/library, /api/calendar,
 // analyzeLibraryFacets and loadMembershipGroups — so the pool warms those and
 // vice versa, rather than being a second copy of the same derivation.
-function buildCache() {
+//
+// `where`/`params` are parameterized so getCache()'s incremental path can build
+// entries for JUST the promoted ids through the exact same code — a promoted
+// item must be derived identically whether it arrived via a rebuild or a patch.
+function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
   const rows = query<VecRow>(
     `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url, mi.created_at,
             ml.source, ml.source_id, ml.release_date as link_release_date, ml.last_synced,
             LENGTH(ml.raw_data) as raw_len
      FROM media_items mi
      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
-     WHERE ${POOL_WHERE}`
+     WHERE ${where}`,
+    params
   );
 
   const groups = new Map<string, { row: VecRow; links: RawLink[]; maxSynced: number; rawLen: number }>();
@@ -231,7 +299,8 @@ function buildCache() {
       ? query<RawDataRow>(
           `SELECT ml.media_item_id, ml.source, ml.source_id, ml.release_date, ml.raw_data, ml.last_synced
            FROM media_links ml JOIN media_items mi ON mi.id = ml.media_item_id
-           WHERE ${POOL_WHERE}`
+           WHERE ${where}`,
+          params
         )
       : [];
     for (const r of rd) {
@@ -265,70 +334,174 @@ function buildCache() {
   // into one vocab entry (summed count) and itemsWithFacet(canonical) returns
   // items carrying any member spelling.
   const aliases = getTagAliases();
-  const vectors: DiscoveryVector[] = [];
-  const vocabMap = new Map<string, VocabEntry>();
-  // 2026-07-29 (T6, tag admin table): a byproduct of the SAME pass, not a
-  // second loop — the tag table's aka chips want each alias MEMBER's own
-  // pre-fold count/label (e.g. "rpg (42)"), which vocabMap can't answer since
-  // it's built from the POST-alias facets. Keyed by raw tag key (tags have no
-  // role, so the key alone is the identity — see facets.ts).
-  const rawTagCounts = new Map<string, { label: string; count: number }>();
+  const entries: PoolEntry[] = [];
   for (const [id, { row, links }] of groups) {
     // Both come from facetCache — `facets` there is always RAW extractFacets
     // output (that cache deliberately doesn't bake in alias/override
     // resolution), so the applyTagAliases step below is unchanged.
     const { merged, facets: rawFacets } = derivedById.get(id)!;
     const facets = applyTagAliases(rawFacets, aliases);
-    vectors.push({
-      id: row.id, type: row.type,
-      title: row.title ?? merged.title,
-      posterUrl: row.poster_url ?? merged.posterUrl,
-      backdropUrl: merged.backdropUrl,
-      releaseDate: row.release_date ?? merged.releaseDate,
-      year: extractYear(row.release_date ?? merged.releaseDate),
-      communityScore: representativeCommunity(merged.communityRatings),
-      communityAvg: averageCommunity(merged.communityRatings),
-      communityVotes: communityVotes(merged.communityRatings),
-      runtimeMinutes: merged.runtimeMinutes,
-      addedAt: row.created_at ?? 0,
-      sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
-      facets,
+    entries.push({
+      rawFacets,
+      vector: {
+        id: row.id, type: row.type,
+        title: row.title ?? merged.title,
+        posterUrl: row.poster_url ?? merged.posterUrl,
+        backdropUrl: merged.backdropUrl,
+        releaseDate: row.release_date ?? merged.releaseDate,
+        year: extractYear(row.release_date ?? merged.releaseDate),
+        communityScore: representativeCommunity(merged.communityRatings),
+        communityAvg: averageCommunity(merged.communityRatings),
+        communityVotes: communityVotes(merged.communityRatings),
+        runtimeMinutes: merged.runtimeMinutes,
+        addedAt: row.created_at ?? 0,
+        sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
+        facets,
+      },
     });
-    for (const f of facets) {
-      const fid = facetId(f);
-      const v = vocabMap.get(fid);
-      if (v) v.count++;
-      else vocabMap.set(fid, { kind: f.kind, role: f.role, key: f.key, label: f.label, count: 1 });
-    }
-    for (const f of rawFacets) {
-      if (f.kind !== "tag") continue;
-      const r = rawTagCounts.get(f.key);
-      if (r) r.count++;
-      else rawTagCounts.set(f.key, { label: f.label, count: 1 });
-    }
   }
-
-  // IDF: a facet on most items (Singleplayer, Action) is a weak signal; a rare
-  // one (steampunk, a specific director) is a strong, distinctive match. This is
-  // what stops generic high-frequency genres from dominating recommendations.
-  const N = vectors.length || 1;
-  const idf = new Map<string, number>();
-  for (const [id, e] of vocabMap.entries()) idf.set(id, Math.log((N + 1) / (e.count + 1)));
-
-  const byId = new Map(vectors.map((v) => [v.id, v]));
-  const vocab = [...vocabMap.values()].sort((a, b) => b.count - a.count);
-  return { vectors, byId, vocab, idf, rawTagCounts };
+  return entries;
 }
 
+/**
+ * Folds one entry's facets into the vocab counters. The full rebuild calls this
+ * for every entry; the incremental path calls it for the promoted ones only,
+ * which is why it has to be a shared function rather than an inlined loop —
+ * a patched pool must end up with the same counts a rebuild would produce.
+ */
+function foldEntry(
+  entry: PoolEntry,
+  vocabMap: Map<string, VocabEntry>,
+  // 2026-07-29 (T6, tag admin table): the tag table's aka chips want each alias
+  // MEMBER's own pre-fold count/label (e.g. "rpg (42)"), which vocabMap can't
+  // answer since it's built from the POST-alias facets. Keyed by raw tag key
+  // (tags have no role, so the key alone is the identity — see facets.ts).
+  rawTagCounts: Map<string, { label: string; count: number }>
+) {
+  for (const f of entry.vector.facets) {
+    const fid = facetId(f);
+    const v = vocabMap.get(fid);
+    if (v) v.count++;
+    else vocabMap.set(fid, { kind: f.kind, role: f.role, key: f.key, label: f.label, count: 1 });
+  }
+  for (const f of entry.rawFacets) {
+    if (f.kind !== "tag") continue;
+    const r = rawTagCounts.get(f.key);
+    if (r) r.count++;
+    else rawTagCounts.set(f.key, { label: f.label, count: 1 });
+  }
+}
+
+// IDF: a facet on most items (Singleplayer, Action) is a weak signal; a rare
+// one (steampunk, a specific director) is a strong, distinctive match. This is
+// what stops generic high-frequency genres from dominating recommendations.
+// Recomputed whole after an incremental patch: N moves when the pool grows, so
+// every entry's weight shifts slightly. It's a map walk with no parsing (~2 ms).
+function computeIdf(vocabMap: Map<string, VocabEntry>, poolSize: number): Map<string, number> {
+  const N = poolSize || 1;
+  const idf = new Map<string, number>();
+  for (const [id, e] of vocabMap.entries()) idf.set(id, Math.log((N + 1) / (e.count + 1)));
+  return idf;
+}
+
+const sortVocab = (vocabMap: Map<string, VocabEntry>) =>
+  [...vocabMap.values()].sort((a, b) => b.count - a.count);
+
+function buildCache() {
+  const entries = buildEntries(POOL_WHERE);
+  const vectors = entries.map((e) => e.vector);
+  const vocabMap = new Map<string, VocabEntry>();
+  const rawTagCounts = new Map<string, { label: string; count: number }>();
+  for (const e of entries) foldEntry(e, vocabMap, rawTagCounts);
+  return {
+    vectors,
+    byId: new Map(vectors.map((v) => [v.id, v])),
+    vocab: sortVocab(vocabMap),
+    vocabMap,
+    idf: computeIdf(vocabMap, vectors.length),
+    rawTagCounts,
+    actedIds: actedBrowsedIds(),
+  };
+}
+
+function rebuild(sig: string, memSig: string, aliasSig: string) {
+  _cache = { sig, memSig, aliasSig, actedSig: actedContentSignature(), at: Date.now(), ...buildCache() };
+  return _cache;
+}
+
+// How many promotions are worth patching in. Past this a rebuild is simpler and
+// not much slower, and it bounds how far a patch bug could ever propagate.
+const MAX_INCREMENTAL_ADDS = 50;
+
 function getCache() {
-  const sig = catalogSignature();
-  // H5.6: a bundle edit doesn't change the catalog (catalogSignature), so guard
-  // on the alias signature too — otherwise bundled vocab/vectors would stay stale
-  // until the 5-min TTL expired.
+  const sig = contentSignature();
+  // H5.6: a bundle edit doesn't change the catalog, so guard on the alias
+  // signature too — otherwise bundled vocab/vectors would stay stale until the
+  // 5-min TTL expired.
   const aliasSig = tagAliasSignature();
-  if (_cache && _cache.sig === sig && _cache.aliasSig === aliasSig && Date.now() - _cache.at < CANDIDATE_TTL_MS) return _cache;
-  const built = buildCache();
-  _cache = { sig, aliasSig, at: Date.now(), ...built };
+  if (!_cache || _cache.sig !== sig || _cache.aliasSig !== aliasSig || Date.now() - _cache.at >= CANDIDATE_TTL_MS) {
+    return rebuild(sig, membershipSignature(), aliasSig);
+  }
+
+  // Catalog content is unchanged. Membership might not be — and a membership
+  // change is the ONLY thing that can alter the pool without altering catalog
+  // content, which is the whole point of §A. Cheap aggregate first; the id list
+  // only when it moved.
+  const memSig = membershipSignature();
+  if (memSig === _cache.memSig) {
+    // Membership stable, so the acted-on browsed set is stable, so its content
+    // MAX is a like-for-like comparison — this is where a re-sync of an already
+    // promoted item gets caught. (Checked AFTER memSig on purpose: promotion
+    // moves both, and the membership branch must win.)
+    const actedSig = actedContentSignature();
+    if (actedSig !== _cache.actedSig) return rebuild(sig, memSig, aliasSig);
+    return _cache;
+  }
+
+  const acted = actedBrowsedIds();
+  const added: string[] = [];
+  for (const id of acted) if (!_cache.actedIds.has(id)) added.push(id);
+  let removed = 0;
+  for (const id of _cache.actedIds) if (!acted.has(id)) removed++;
+
+  // `user_item_state` changed but pool membership didn't (rating something you
+  // already own, say — it was in the pool via browsed=0 all along).
+  if (!added.length && !removed) {
+    _cache.memSig = memSig; _cache.actedIds = acted; _cache.actedSig = actedContentSignature();
+    return _cache;
+  }
+
+  // A removal needs the departing item's RAW facets to un-count its vocab and
+  // rawTagCounts contribution exactly, and the vector only carries POST-alias
+  // facets. Re-deriving them to save one rebuild isn't worth the second code
+  // path, so demotion — the rare direction — just rebuilds.
+  if (removed || added.length > MAX_INCREMENTAL_ADDS) return rebuild(sig, memSig, aliasSig);
+
+  const entries = buildEntries(`mi.id IN (${added.map(() => "?").join(",")})`, added);
+
+  // SELF-CHECK. This is what makes patching safe rather than a silent-failure
+  // risk: if the patched pool doesn't match what SQL says the pool is, throw the
+  // patch away and rebuild. A wrong patch costs one rebuild, never a wrong pool.
+  const poolCount = get<{ n: number }>(`SELECT COUNT(*) n FROM media_items mi WHERE ${POOL_WHERE}`)?.n ?? -1;
+  if (entries.length !== added.length || _cache.vectors.length + entries.length !== poolCount) {
+    return rebuild(sig, memSig, aliasSig);
+  }
+
+  for (const e of entries) {
+    _cache.vectors.push(e.vector);
+    _cache.byId.set(e.vector.id, e.vector);
+    foldEntry(e, _cache.vocabMap, _cache.rawTagCounts);
+  }
+  _cache.vocab = sortVocab(_cache.vocabMap);
+  _cache.idf = computeIdf(_cache.vocabMap, _cache.vectors.length);
+  _cache.actedIds = acted;
+  _cache.memSig = memSig;
+  // Restamped here, not compared: the promoted rows just joined the acted set,
+  // so the pre-patch value was computed over a different set.
+  _cache.actedSig = actedContentSignature();
+  // `at` deliberately NOT refreshed — the TTL measures staleness against the
+  // last full build, so a stream of promotions can't hold a stale pool open
+  // indefinitely.
   return _cache;
 }
 

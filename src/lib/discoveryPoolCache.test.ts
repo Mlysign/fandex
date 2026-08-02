@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
-import { upsertMediaItem, upsertWatchlistEntry } from "./matcher";
+import { upsertMediaItem, upsertWatchlistEntry, clearWatchlist } from "./matcher";
 import { persistDiscoverItems } from "./discoverPersist";
-import { getCatalogFacets, invalidateDiscoveryCache } from "./discovery";
+import {
+  find, getCatalogFacets, getCatalogIdf, getRawTagCounts, getTagVocab, invalidateDiscoveryCache,
+} from "./discovery";
 
 // 2026-08-02 — docs/archive/performance-audit.md §A. `buildCache` no longer re-parses
 // the whole pool: it reads metadata + a freshness token in pass 1 and SELECTs
@@ -82,5 +84,111 @@ describe("catalog pool — derived-cache freshness", () => {
 
     expect(directorOf(browsed)).toBe("Bong Joon-ho");
     expect(directorOf(owned)).toBe("Greta Gerwig");
+  });
+});
+
+// The INCREMENTAL path (§A's second half). A wishlist/rating write no longer
+// forces a full pool rebuild: content and membership have separate signatures,
+// and a membership-only change patches the promoted items into the cached pool.
+//
+// Crucially these tests must NOT call invalidateDiscoveryCache() after the
+// write — that nulls the cache and forces the rebuild, which is exactly the path
+// we are trying to avoid, and is why discoveryPool.test.ts (which invalidates
+// everywhere) can't cover this. Production doesn't invalidate on a membership
+// write either: no wishlist/rating route calls it.
+describe("catalog pool — incremental membership patch", () => {
+  const seedPool = () => {
+    const a = upsertMediaItem({
+      source: "tmdb", sourceId: "30", type: "movie", title: "Pooled A",
+      releaseDate: "2025-01-01", rawData: tmdb(30, "Pooled A", "Greta Gerwig"),
+    });
+    const b = upsertMediaItem({
+      source: "tmdb", sourceId: "31", type: "movie", title: "Pooled B",
+      releaseDate: "2025-01-01", rawData: tmdb(31, "Pooled B", "Ari Aster"),
+    });
+    const map = persistDiscoverItems([{
+      id: "tmdb-movie-32", type: "movie", title: "Browsed C", releaseDate: "2025-01-01",
+      raw: { source: "tmdb", sourceId: "32", data: tmdb(32, "Browsed C", "Bong Joon-ho") },
+    }]);
+    return { a, b, browsed: map.get("tmdb-movie-32")! };
+  };
+
+  // Everything the pool cache exposes, so a patched pool can be compared
+  // field-by-field against a from-scratch rebuild of the same DB state.
+  const snapshot = () => ({
+    titles: find(USER, { limit: 120 }).items.map((i) => i.title).sort(),
+    vocab: getTagVocab().map((v) => `${v.key}:${v.count}`).sort(),
+    idf: [...getCatalogIdf().entries()].map(([k, v]) => `${k}:${v.toFixed(6)}`).sort(),
+    rawTags: [...getRawTagCounts().entries()].map(([k, v]) => `${k}:${v.count}`).sort(),
+  });
+
+  it("promotes without a rebuild, and the patched pool equals a rebuilt one", () => {
+    const { browsed } = seedPool();
+    invalidateDiscoveryCache();
+    expect(snapshot().titles).toEqual(["Pooled A", "Pooled B"]); // warms the cache
+
+    upsertWatchlistEntry(USER, browsed, "tmdb"); // NO invalidate — the real path
+    const patched = snapshot();
+
+    expect(patched.titles).toEqual(["Browsed C", "Pooled A", "Pooled B"]);
+    expect(directorOf(browsed)).toBe("Bong Joon-ho");
+
+    // The real assertion: a patched pool is INDISTINGUISHABLE from a rebuilt
+    // one — same vocab counts, same IDF weights (N grew, so every weight
+    // shifted), same raw tag counts. A patch that forgot to fold the new item's
+    // facets in, or to recompute IDF, fails here while `titles` alone passes.
+    invalidateDiscoveryCache();
+    expect(patched).toEqual(snapshot());
+  });
+
+  it("demotes correctly too (falls back to a rebuild, still no invalidate)", () => {
+    const { browsed } = seedPool();
+    upsertWatchlistEntry(USER, browsed, "tmdb");
+    invalidateDiscoveryCache();
+    expect(snapshot().titles).toEqual(["Browsed C", "Pooled A", "Pooled B"]);
+
+    clearWatchlist(USER, browsed);
+    const afterRemoval = snapshot();
+
+    expect(afterRemoval.titles).toEqual(["Pooled A", "Pooled B"]);
+    invalidateDiscoveryCache();
+    expect(afterRemoval).toEqual(snapshot());
+  });
+
+  it("still rebuilds on a CONTENT change, which membership signatures can't see", () => {
+    const { a } = seedPool();
+    invalidateDiscoveryCache();
+    expect(directorOf(a)).toBe("Greta Gerwig");
+
+    // No membership write at all — only content moved. The content signature
+    // has to catch this on its own, or the pool serves the old derivation.
+    upsertMediaItem({
+      source: "tmdb", sourceId: "30", type: "movie", title: "Pooled A",
+      releaseDate: "2025-01-01", rawData: tmdb(30, "Pooled A", "Chloe Zhao"),
+    });
+    // `updated_at` is strftime('%s','now') — 1-second resolution — so a rewrite
+    // in the same second as the last build leaves MAX(updated_at) untouched and
+    // the pool legitimately keeps serving the cached vectors until the 5-minute
+    // TTL. That is PRE-EXISTING (the old single signature was also
+    // COUNT + MAX(updated_at)) and unchanged by the content/membership split.
+    // Stepping the clock forward is what a real second-later sync does.
+    run("UPDATE media_items SET updated_at = updated_at + 10 WHERE id = ?", [a]);
+
+    expect(directorOf(a)).toBe("Chloe Zhao");
+  });
+
+  it("acting on an ALREADY-pooled item changes nothing about the pool", () => {
+    const { a } = seedPool();
+    invalidateDiscoveryCache();
+    const before = snapshot();
+
+    // `a` is browsed=0, so it was in the pool already. This moves the
+    // membership signature (user_item_state grew) without moving pool
+    // membership — the patch must be a no-op, not a duplicate insert.
+    upsertWatchlistEntry(USER, a, "tmdb");
+    const after = snapshot();
+
+    expect(after).toEqual(before);
+    expect(after.titles).toEqual(["Pooled A", "Pooled B"]);
   });
 });

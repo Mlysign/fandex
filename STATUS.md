@@ -28,7 +28,7 @@ This stopped being a "wait it out" situation. **Action for Nils:** open the Rail
 
 Everything else is done. **H1, H2, H5, all five audit passes, all 10 smoke sweeps, every production incident, the full performance audit, and all of H4 except H4.0/H4.2.**
 
-**Performance is closed (2026-08-02).** The last item — the catalog pool re-parsing 39 MB on every wishlist/rating write — shipped: a pool rebuild is **408 → 156 ms** and a membership write's next `find()` **578 → 296 ms**. It also turned up a real correctness bug in the shared facet cache (a same-second re-sync could serve stale facets on four surfaces); fixed and pinned by a test. The audit is archived; the probes stay in `scripts/`.
+**Performance is closed (2026-08-02).** The last item — the catalog pool re-parsing 39 MB on every wishlist/rating write — is done in full: a promotion no longer rebuilds the pool at all, taking a membership write's next `find()` from **578 → 166 ms (−71%)**, ~18 ms over a warm `find()`. It also turned up a real correctness bug in the shared facet cache (a same-second re-sync could serve stale facets on four surfaces); fixed and pinned by a test. The audit is archived; the probes stay in `scripts/`.
 
 ## 🗺️ Roadmap
 

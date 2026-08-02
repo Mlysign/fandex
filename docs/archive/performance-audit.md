@@ -191,26 +191,58 @@ gone, which is the multi-source design working as intended.
 counts `POOL_WHERE`, which unions in `user_item_state`: any wishlist/library/rating write changes
 pool membership, so it forced a full re-parse.
 
-**Not the fix that was proposed here.** The original plan was to split the signature and treat a
-newly-acted-on item as an incremental *add* to the cached pool. That was rejected on review: its
-failure mode is an item silently missing from the pool until the TTL expires — which is precisely
-why it kept getting deferred. **What shipped instead caches the DERIVATION, not the membership.**
-Pool membership is still recomputed from SQL on every single rebuild, so that failure mode does not
-exist; only the per-item `JSON.parse` + `mergeLinks` + `extractFacets` is skipped, via the shared
-`facetCache` (§4) that four other surfaces already use.
+**Fixed in two stages, because the first stage only made the rebuild cheaper — it didn't stop it
+happening, which was §A's actual complaint.**
 
-`buildCache()` is now a two-pass read: **pass 1** selects metadata + a freshness token
-(`MAX(last_synced)`, `LENGTH(raw_data)`) with no blobs, **pass 2** selects `raw_data` for cache
-misses only. A rebuild after a membership write re-derives exactly the one item that changed.
+**Stage 1 — make a rebuild cheap.** `buildCache()` became a two-pass read: **pass 1** selects
+metadata + a freshness token (`MAX(last_synced)`, `LENGTH(raw_data)`) with no blobs, **pass 2**
+selects `raw_data` for cache misses only, via the shared `facetCache` (§4) four other surfaces
+already use — so the pool warms them and vice versa. Rebuild 408 → 156 ms.
 
-**Measured on the real 2,531-item pool** (`scripts/probe-pool.mjs`, same script both times):
+**Stage 2 — stop rebuilding on a membership write at all.** Phase timing showed where the remaining
+156 ms went: **~95 ms was pass-1 SQL and grouping** (4,146 link rows), only ~6 ms was derivation.
+A wishlist write shouldn't scan the pool at all. The single `catalogSignature()` — `COUNT` +
+`MAX(updated_at)` over `POOL_WHERE`, which unions in `user_item_state` — was what forced it, so it
+was split into a **content** signature (the `browsed = 0` catalog) and a **membership** one, and a
+membership-only change now patches the promoted items into the cached pool instead of rebuilding.
 
-| | before | after |
-|---|--:|--:|
-| pool rebuild after invalidate | 408 ms | **156 ms** (−62%) |
-| membership write → `find()` | 578 ms | **296 ms** (−49%) |
-| `find()` cold | 615 ms | **292 ms** (−53%) |
-| cold pool build, fresh process | 473 ms | 596 ms |
+**Not the incremental design this doc originally proposed.** That one kept the cached pool and
+patched members in with no verification, whose failure mode is an item silently missing from the
+pool until the TTL expires — precisely why it kept getting deferred. Three things make the shipped
+version safe instead:
+
+- **A self-check.** After patching, `cached vectors + patched = SELECT COUNT(*) over POOL_WHERE`, or
+  the patch is thrown away and a full rebuild runs. A wrong patch costs one rebuild, never a wrong
+  pool.
+- **Demotion just rebuilds.** Removing an item needs its RAW pre-alias facets to un-count `vocab`
+  and `rawTagCounts` exactly, and the vector only carries post-alias facets. Un-wishlisting is the
+  rare direction; it isn't worth a second code path.
+- **A bound.** More than 50 promotions at once → rebuild, so a patch bug can't propagate far.
+
+**Measured on the real 2,531-item pool** (`scripts/probe-pool.mjs`, same script throughout):
+
+| | before | stage 1 | stage 2 |
+|---|--:|--:|--:|
+| **membership write → `find()`** | 578 ms | 296 ms | **166 ms (−71%)** |
+| pool rebuild after invalidate | 408 ms | 156 ms | **132 ms** |
+| `find()` cold | 615 ms | 292 ms | **279 ms** |
+| `find()` warm | 164 ms | — | **148 ms** |
+| cold pool build, fresh process | 473 ms | 596 ms | 593 ms |
+
+A promotion now costs ~18 ms over a warm `find()` — effectively free.
+
+**⚠️ The trap that nearly shipped this as dead code.** The first version of the content signature
+folded in `MAX(updated_at)` over the *acted-on browsed* rows, to catch a re-sync of an already
+promoted item (`browsed` is set once at creation and never cleared, so such an item stays
+`browsed = 1` even after a real sync enriches it — which happens on the first sync after you
+wishlist a browsed title). But that is a MAX over **a set promotion itself changes**, so every
+promotion looked like a content change and rebuilt anyway. Every test still passed — because
+rebuilding is correct, just slow. **It was only caught by deliberately sabotaging the patch
+(deleting its fold step) and finding that no test failed.** The acted-content term is now compared
+only when membership is unchanged, where it's a like-for-like comparison; when membership did
+change, the membership branch runs first and restamps it. `discoveryPoolCache.test.ts` asserts a
+patched pool is **indistinguishable from a rebuilt one** — same vocab counts, same IDF weights, same
+raw tag counts — and that assertion is confirmed non-vacuous against the same sabotage.
 
 **The must-have test passes** (it did before too, and still must): a wishlist write puts the item in
 `find()` immediately — verified both directions, promote and demote, in `discoveryPool.test.ts` and
