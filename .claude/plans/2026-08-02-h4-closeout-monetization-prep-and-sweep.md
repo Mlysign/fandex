@@ -116,7 +116,7 @@ rationalise.
 
 ## Tasks
 
-- [ ] **T1** — Probe prod once; record that PR17 is still blocked (or, if it answers, run steps 1–3)
+- [x] **T1** — Probe prod once; record that PR17 is still blocked (or, if it answers, run steps 1–3)
   - Files: `TASKS.md` (the PR17 readiness-probe paragraph), `STATUS.md` and
     `docs/archive/history.md` only if prod is actually up
   - Detail: run `curl -s -o - -w "\n%{http_code}" https://fandex.org/api/health`. If the body is
