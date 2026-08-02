@@ -195,7 +195,6 @@ Closed two of the tag-admin batch's open questions (item-page tag-chip grouping,
 
 - **Android TWA:** P15 🔵 blocked on you building/signing the TWA; P16 ⬜ needs a live OAuth-in-TWA verification pass once P15 unblocks.
 - **PR17** ⏸️ blocked until Railway resumes — see the catalog-pool-blowup section above (re-confirmed down 2026-08-02).
-- **H3 monetization** 🟢 scoped; H3.8's Path B trigger defined 2026-08-02, pending your approval; H3.0/H3.3/H3.4/H3.9 not started. **H4 legal/compliance** — every sub-task done except **H4.0** (legal advice, needs Nils) + **H4.2** (Impressum, gated on H4.0).
-- **P18** 🔵 JustWatch clickable streaming links — TMDB attribution done 2026-07-31, clickable links deferred to after PR17.
-- **Provider latency isolation** — `G1`/`G2`/`G3` all ✅ closed 2026-08-02, along with the 10th sweep's `SM35`/`SM36`/`SM37`. Nothing open in this theme.
+- **H3 monetization** 🟢 scoped; H3.8's trigger defined 2026-08-02 but **explicitly NOT approved** (your call — don't read the numbers as settled); H3.0/H3.3/H3.4/H3.9 not started. **H4** — all done except **H4.0** (legal advice, needs Nils) + **H4.2** (gated on H4.0). **P18** 🔵 JustWatch clickable links deferred to after PR17 (attribution done 2026-07-31).
+- **Provider latency isolation** — `G1`/`G2`/`G3` and the 10th sweep's `SM35`/`SM36`/`SM37` all ✅ closed 2026-08-02. Nothing open in this theme. The only time-gated item left anywhere is `priorStrength`/role-weight re-tuning (needs a few weeks of scores; 4 days as of 2026-08-02).
 - Everything else (Phases 0–6, H1, H2, H5, the S# small-tasks batch, all audit findings, all QA/smoke-test/production-incident history, and the **mockup-gap closeout** — A1/B5/B6/B7/C8, decided AND built 2026-07-28) is done — see [docs/archive/history.md](docs/archive/history.md), or [STATUS.md](STATUS.md) for the live one-page digest.

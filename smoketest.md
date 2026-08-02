@@ -45,9 +45,32 @@ navigate  http://localhost:3000/api/dev/login     # sets rr2_session, redirects 
 navigate  http://localhost:3000/library           # …or any gated surface
 ```
 
-Confirm with `fetch('/api/auth/me')` → `user` non-null. To go anon again for the same
-sweep, clear the cookie in the browser (`document.cookie = "rr2_session=; path=/; max-age=0"`)
-or use a second tab — **do not hit `/api/auth/logout`**, see the warning below.
+Confirm with `fetch('/api/auth/me')` → `user` non-null. **Do not hit `/api/auth/logout`** to
+go anon, see the warning below (and JS can't clear an `httpOnly` cookie, so the
+`document.cookie = "rr2_session=; …"` recipe that used to be here never worked).
+
+### Going ANON without destroying the session (added 2026-08-02 — this finally works)
+
+**Use `127.0.0.1` instead of `localhost`.** Cookies are keyed by HOST STRING, so
+`127.0.0.1:3100` and `localhost:3100` are separate cookie jars: the first is genuinely
+logged out, the second keeps its session untouched. Both hosts pass `/api/dev/login`'s
+loopback gate, so you can hold both states at once in two tabs. This is what let the
+anon-only H4.10 fix be verified on the real anon path; before it, four sweeps in a row
+logged "anon client-side behaviour not covered".
+
+⚠️ **Production build only.** Under `next dev` nothing hydrates on `127.0.0.1` (the dev
+client is bound to `localhost`): zero React fibers on `body`/`nav`/`main`, no effects, no
+client fetches — so every client-rendered thing looks broken or absent. It produced a
+confidently WRONG reading first time (the anon "You" nav slot appeared to be a plain `<a>`,
+which would have "disproved" a real finding; on the prod build it's a `<button>`). Recipe:
+
+```
+preview_stop → npm run build → preview_start {name:"prod"}   # :3100
+navigate  http://127.0.0.1:3100/                             # genuinely anon
+```
+Sanity-check hydration before trusting anything client-side:
+`Object.keys(document.querySelector('main')).filter(k=>k.startsWith('__react')).length` — 0
+with a non-zero count on `nav` means not hydrated, not "the feature is missing".
 
 It works in the **in-app Browser pane**; no dependency on Nils's own Chrome. Three
 fail-closed gates (`NODE_ENV !== "production"` · loopback host · the env var names a user
