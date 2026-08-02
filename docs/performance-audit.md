@@ -139,8 +139,61 @@ loud, which is exactly the class of change this batch's plan excluded from an un
 | prod `rr.db` | ~2.5 GB (memory: `prod-db-size-and-page-cache`) |
 
 A 48 MB WAL against a 56 MB main file is the thing to look at first. Deferred with the rest of the
-schema-adjacent work: WAL/checkpoint tuning, a persisted facet-projection column, shrinking the
-`raw_data` projection, and `dbPrune` coverage of the browsed tail.
+schema-adjacent work: a persisted facet-projection column, shrinking the `raw_data` projection, and
+`dbPrune` coverage of the browsed tail. **The WAL/checkpoint half is now investigated — see below.**
+
+#### The local WAL, investigated 2026-08-02 (report-only, no change shipped)
+
+**The local WAL is real and larger than the table above shows — 57.2 MB as of this pass, unchanged
+since 2026-07-30 18:10 — but it's a dev-process-lifecycle artifact, not a stuck checkpoint or a real
+bug.** Investigated against a scratchpad COPY of `data/rr.db` + its `-wal`/`-shm` sidecars; the real
+files were never written to.
+
+**Measurements** (via the app's own diagnostic tooling — `walDiagnostics()`/`checkpointTruncate()` in
+`src/lib/dbPrune.ts`, built for the 2026-07-22 Litestream-checkpoint-stall incident, reused here rather
+than reinvented):
+- `page_size` = 4096, so SQLite's default `wal_autocheckpoint` (1000 pages, never overridden by
+  `db.ts`'s pragma block — confirmed by reading it: `journal_mode`, `foreign_keys`, `busy_timeout`,
+  `synchronous` only) is a **~4.12 MB** threshold.
+- The actual WAL was **57,181,512 bytes ≈ 13,879 frames — about 13.9× that threshold.**
+- **No node process was running at measurement time** (`tasklist | grep node` — empty), yet the real
+  `data/rr.db-wal` sat unchanged at that size for 3+ days. This alone rules out "a live process is
+  still writing" — nothing has touched it since whatever session last wrote to it ended.
+
+**The decisive test:** opened a fresh `better-sqlite3` connection, with the app's exact PRAGMA
+sequence, against the scratchpad copy of the exact same 57.2 MB WAL bytes. **The WAL was fully
+reclaimed to 0 the moment the connection opened** — before any query ran, before any explicit
+checkpoint call. A subsequent `PRAGMA wal_checkpoint(PASSIVE)` and `PRAGMA wal_checkpoint(TRUNCATE)`
+both confirmed `{busy: 0, log: 0, checkpointed: 0}` — there was nothing left to reclaim, and closing
+the connection afterward deleted the `-wal` file entirely (`fs.statSync` on it then threw `ENOENT`).
+
+**Diagnosis: dev artifact, not a real problem, and NOT the 2026-07-22 prod mechanism.** That incident
+was Litestream — a separate OS process — setting `wal_autocheckpoint = 0` on its own connection to
+take exclusive control of checkpointing, then stalling and holding a read lock that blocked every
+other connection's checkpoint progress too (`dbPrune.ts`'s own comment: *"walMb pinned at 60.7 across
+12 h... then at 130.3 for 200 s with zero writes"*). Two independent checks rule that mechanism out
+here: **(1) Litestream never runs in local dev at all** — it's gated behind `AWS_S3_BUCKET_NAME` in
+`docker-entrypoint.sh`, which only executes inside the Docker/Railway container, never under
+`npm run dev`; **(2)** the measured `wal_autocheckpoint` read back as SQLite's normal default (1000),
+not 0 — nothing forced it off. What's actually happening locally: a `next dev` session's `getDb()`
+singleton connection stays open for the whole session, accumulating writes across hours without a
+clean shutdown (Ctrl+C / closing the terminal doesn't reliably run `db.close()`), so SQLite never gets
+the "last connection closing" signal that would otherwise checkpoint+shrink the file. The WAL just
+sits at its session high-water mark between dev sessions — and, as the decisive test showed, gets
+fully reclaimed the instant a fresh connection opens.
+
+**Prod-affected: no**, for this specific mechanism — prod's WAL behavior is governed by Litestream
+(a materially different, already-diagnosed-and-tooled-for failure mode from the 2026-07-22 incident,
+not re-litigated here) rather than a `next dev` process lifecycle that doesn't exist in the Docker
+container.
+
+**The precise change, if this were ever worth shipping (it isn't — see below):** none to `db.ts`'s
+PRAGMA block; the default `wal_autocheckpoint` is already doing its job correctly. If Nils ever wants
+a smaller `data/rr.db-wal` between dev sessions purely for disk/OneDrive-sync-noise reasons, the
+already-built tool is `checkpointTruncate()` behind `/api/dev/prune` (same `SCORING_ADMIN_USER_IDS`
+gate as `/api/dev/dbsize`) — no new code needed, just run it after stopping the dev server. **Not
+recommending this as an action item**: 57 MB of local disk is not a real cost, and the file
+self-heals on the next connection regardless.
 
 ---
 

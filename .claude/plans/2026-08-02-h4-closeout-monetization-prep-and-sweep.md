@@ -238,7 +238,7 @@ rationalise.
   - Tests: none — this is a written decision.
   - Depends on: none
 
-- [ ] **T5** — Investigate the 48 MB local WAL; report only, change nothing
+- [x] **T5** — Investigate the 48 MB local WAL; report only, change nothing
   - Files: `docs/performance-audit.md` (append to §B, "DB inflation")
   - Detail: `docs/performance-audit.md` §B records a **48.4 MB `rr.db-wal` against a 55.9 MB main
     file** and calls it "the thing to look at first". Find out why, without fixing it.
