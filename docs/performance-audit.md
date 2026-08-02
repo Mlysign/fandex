@@ -283,5 +283,16 @@ The standing rule from that incident still applies to any future ramp: **`rss` c
 
 ## Housekeeping (local only, not prod)
 
-`data/` holds six stale `rr.db.bak*` snapshots totalling ~950 MB. Flagged, not deleted — several
-are pre-migration references the migration tests can rehearse against.
+~~`data/` holds six stale `rr.db.bak*` snapshots totalling ~950 MB.~~ **Resolved 2026-08-02
+(Nils's call: keep the newest pre-migration one, delete the rest).** `data/` is now **1,061 MB →
+319 MB**. Kept: `rr.db.bak-pre-h2b-20260717-081223` (`user_version = 5`, 2,511 items, 1,898 library
+rows, `integrity_check: ok`) plus its `-wal`/`-shm` sidecars — the rehearsal scripts copy those
+deliberately, since without the `-wal` any un-checkpointed commits are simply missing from the
+rehearsal. It's both the newest and the most useful: the live DB is at `user_version = 11`, so this
+one exercises the widest upgrade span (5 → 11) against a real production-shaped database, which is
+exactly the path [[fresh-db-tests-hide-upgrade-bugs]] warns green tests never take.
+
+Deleted (all superseded, each strictly older AND at an equal-or-lower schema version): `rr.db`
+(uv 0), `.bak-pre-d8` (uv 0), `.bak-pre-d1d5-20260614` (uv 3), `.bak-pre-d9-20260616` (uv 4),
+`.bak-pre-v5-20260616` (uv 5 — same version as the keeper but a month older). `data/backups/`
+was left alone: it holds a separate pre-drift-fix snapshot, not part of this set.

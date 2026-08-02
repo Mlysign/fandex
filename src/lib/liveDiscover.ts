@@ -113,6 +113,20 @@ interface Hydrated { facets: Facet[]; posterUrl: string | null }
 // results, but the cap prevents unbounded growth over long uptime (P2).
 const _facetCache = new BoundedCache<string, Hydrated>({ max: 3000 });
 
+// G3 (2026-08-02): hydration reaches the provider through `fetchById`, which is
+// SHARED with enrichment — so the budget can't go in the adapter the way it did
+// for the Trakt/IGDB browse queries (enrichment would rather wait than lose an
+// item's metadata). Bounding it at this call site instead is not a workaround
+// but the honest shape: hydration is an OPTIONAL upgrade to a browse feed that
+// already has a defined fallback — `listFacets(c)`, the list-payload genres —
+// and the catch below has always taken that path on failure. A slow provider now
+// takes the same path as a failing one instead of holding up the whole feed.
+//
+// The underlying request isn't cancelled (fetchById owns no signal we can pass);
+// it finishes into the void, and its own httpFetch timeout still bounds it. What
+// this removes is the CALLER's wait, which is what the user actually feels.
+const HYDRATE_TIMEOUT_MS = 6_000;
+
 async function hydrateFacets(c: FeedCandidate): Promise<Hydrated> {
   const ck = `${c.source}:${c.rawId}`;
   const cached = _facetCache.get(ck);
@@ -121,7 +135,10 @@ async function hydrateFacets(c: FeedCandidate): Promise<Hydrated> {
   let result: Hydrated = { facets: listFacets(c), posterUrl: c.posterUrl };
   try {
     const provider = METADATA[c.source as keyof typeof METADATA];
-    const link = await provider?.fetchById?.(String(c.rawId), c.type);
+    const link = await Promise.race([
+      provider?.fetchById?.(String(c.rawId), c.type),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), HYDRATE_TIMEOUT_MS)),
+    ]);
     if (link) {
       const ml: MediaLink = {
         id: "", mediaItemId: "", source: link.source, sourceId: link.sourceId,

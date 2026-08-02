@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import type { MediaType } from "@/types";
 import AuthOptions from "./AuthOptions";
+import LegalLinks from "@/components/legal/LegalLinks";
 
 // H2c — the in-page sign-in dialog. An anonymous viewer interacting with the real
 // rating / wishlist controls on an item page opens this instead of being bounced
@@ -57,6 +58,19 @@ export default function SignInDialog({
           </p>
         </div>
         <AuthOptions returnTo={returnTo} onAuthenticated={onAuthenticated} />
+        {/* H4.10 (2026-08-02) — the anonymous route to `/legal/*`. `AppNav`'s
+            "You" slot opens THIS dialog for a logged-out visitor rather than
+            linking to /profile, and /profile bounces anon to / before its footer
+            renders, so before this the legal pages were unreachable from the UI
+            for anyone not signed in. Putting them here makes the chain
+            nav → "You" → dialog → link a real two clicks. It also sits where a
+            reader most wants them: directly under the buttons that connect an
+            account. See LegalLinks for the full writeup. */}
+        <div className="pt-4 border-t border-neutral-700">
+          {/* onClose: AppNav owns this dialog and never unmounts, so without it
+              the dialog stays open on top of the page you just navigated to. */}
+          <LegalLinks onNavigate={onClose} />
+        </div>
       </div>
     </div>
   );

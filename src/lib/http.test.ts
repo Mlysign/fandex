@@ -111,6 +111,24 @@ describe("httpFetch budgetMs", () => {
     await httpFetch("https://x");
     expect(f).toHaveBeenCalledTimes(3);
   });
+
+  // G3 (2026-08-02) — the browse budget is opt-in PER CALLER inside the shared
+  // adapters (sources/trakt.ts, sources/igdb.ts), because those same helpers
+  // serve enrichment, which must keep the unbounded default: it would rather
+  // wait than lose an item's metadata. This pins the mechanism that makes the
+  // distinction possible — that a budget passed by one caller does not leak into
+  // the next call through the same helper.
+  it("applies budgetMs per call, never as sticky state", async () => {
+    const f = vi.fn().mockResolvedValue(resp(500));
+    vi.stubGlobal("fetch", f);
+    await httpFetch("https://per-call.test", { budgetMs: 50 }).catch(() => {});
+    const budgetedAttempts = f.mock.calls.length;
+    f.mockClear();
+    __resetBreakers();
+    await httpFetch("https://per-call.test"); // same host, no budget
+    expect(budgetedAttempts).toBeLessThan(3); // the budget cut the ladder short
+    expect(f).toHaveBeenCalledTimes(3);       // …and the next caller got the full one
+  });
 });
 
 // ── The circuit breaker ──────────────────────────────────────────────

@@ -23,6 +23,14 @@ const terms: LegalDocument = {
       heading: "Your account",
       body: [
         "You don't create a Fandex-specific password. You sign in by connecting a provider account (Trakt, Steam, TMDB or RAWG), and Fandex identifies you by that connection. You're responsible for keeping your provider account secure — Fandex has no separate credential to protect on its side.",
+        // H4.10 (2026-08-02): the sentence above described all four providers
+        // uniformly, which is not inaccurate but omits that RAWG is the one
+        // whose password actually passes through Fandex. Verified against
+        // src/app/api/auth/rawg/route.ts before wording this: the password is
+        // used once for the RAWG login call and never stored (the former
+        // bcrypt hash was removed in S5); only the returned session token is
+        // kept, encrypted at rest.
+        "One difference worth naming: Trakt, Steam and TMDB use a redirect-based sign-in, so your password is entered on their site and Fandex never sees it. RAWG has no such flow, so its connect form is hosted by Fandex and your RAWG password passes through Fandex's server to obtain a session token from RAWG. That password is used for that single request and is never stored — only the resulting RAWG token is kept, encrypted. If you'd rather Fandex never handled it at all, connect one of the other three providers instead.",
       ],
     },
     {

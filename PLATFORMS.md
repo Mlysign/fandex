@@ -140,11 +140,40 @@ extra matching work. If the goal is a single combined game wishlist across
 sources, Backloggd read access adds real value. The blocker is purely the access
 method (scrape vs official API), not data compatibility.
 
-Open questions before committing:
-- Does Backloggd expose a user's wishlist on a public profile (scrapeable), or is
-  it private/behind login? Confirm the wishlist specifically is readable.
-- Are we willing to depend on an unofficial scraper (breakage + ToS risk), or wait
-  for an official API? Their dev team is active but has announced none.
+**Both open questions investigated 2026-08-02 — verdict: PARKED, and the second
+question answers itself.**
+
+- **"Are we willing to depend on an unofficial scraper?"** — the deciding fact
+  isn't breakage risk, it's Backloggd's own Terms of Service, which state:
+  *"You agree to access the Website through the interface we provide."*
+  ([terms-of-service](https://backloggd.com/about/terms-of-service/), accessed
+  2026-08-02). There is no separate anti-bot or anti-scraping clause, but that
+  sentence covers it: a scraper is by definition not the provided interface. So
+  this isn't a "risk we could accept" — it's building on a documented ToS breach,
+  which matters much more now that H3/H4 make Fandex a commercial site than it
+  would have for a private hobby tool.
+- **No official API exists and none is announced.** Checked their public dev
+  updates through
+  [March 2026](https://backloggd.medium.com/developer-update-march-2026-09248137756f)
+  (accessed 2026-08-02): active development, but on bundles/editions/moderation —
+  no API roadmap item at all.
+- The two unofficial tools that exist are both immature and would be the whole
+  dependency: [Qewertyy/Backloggd-API](https://github.com/Qewertyy/Backloggd-API)
+  exposes a single generic `GET /user/:username` and documents no wishlist field,
+  and [BearTS/backloggd-go](https://github.com/BearTS/backloggd-go) self-describes
+  as "scraping their calls and scraping their website realtime" with ~14 commits
+  and no documented endpoints.
+- **"Is the wishlist publicly readable?" — still UNCONFIRMED**, and deliberately
+  not chased further: Backloggd does have a per-game Wishlist status and profiles
+  are social by design, but neither unofficial tool documents a wishlist endpoint,
+  and settling it means fetching a real person's profile page, which isn't worth
+  doing for a connector the ToS finding already parks. If the ToS position ever
+  changes (an official API, or explicit scraping permission), this is the one
+  thing left to check.
+
+**Verdict: park until an official API exists.** Revisit if Backloggd announces
+one — the data compatibility argument above is unchanged and still good, so this
+is a blocked-on-access decision, not a rejected-on-merit one.
 
 Note it adds no *metadata* we lack (IGDB already covers that) and overlaps the
 video-game space Steam and RAWG already handle. The unique value is the user's

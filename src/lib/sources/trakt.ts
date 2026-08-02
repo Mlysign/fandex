@@ -1,4 +1,5 @@
-import { httpFetch } from "@/lib/http";
+import type { HttpFetchInit } from "@/lib/http";
+import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 
 const BASE = "https://api.trakt.tv";
 const CLIENT_ID = process.env.TRAKT_CLIENT_ID!;
@@ -78,11 +79,21 @@ export function traktConfigured(): boolean {
   return !!CLIENT_ID;
 }
 
-async function traktGetPublic(endpoint: string) {
-  const res = await httpFetch(`${BASE}${endpoint}`, { headers: HEADERS });
+// `init` exists for ONE reason (G3, 2026-08-02): the four browse-feed callers
+// below pass `BROWSE_BUDGET_MS` so a Trakt outage costs a discover/home request
+// seconds instead of the full 20s × 3 retry ladder. It is deliberately opt-in
+// per caller rather than applied here, because this same helper also serves
+// `getTrakt*Summary` and `searchTraktPublic`, which run during ENRICHMENT — and
+// enrichment would rather wait than lose an item's metadata. Sync paths must
+// never inherit a browse budget.
+async function traktGetPublic(endpoint: string, init: HttpFetchInit = {}) {
+  const res = await httpFetch(`${BASE}${endpoint}`, { headers: HEADERS, ...init });
   if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
   return res.json();
 }
+
+/** The budget the browse-feed callers below use. See http.ts. */
+const BROWSE: HttpFetchInit = { budgetMs: BROWSE_BUDGET_MS };
 
 // idOrSlug accepts a numeric trakt id or a slug.
 export async function getTraktMovieSummary(idOrSlug: string): Promise<any | null> {
@@ -107,12 +118,12 @@ export async function searchTraktPublic(query: string, type: "movie" | "show", l
 // the discover feed needs to render + dedupe against TMDB). This is Trakt's
 // unique contribution: a crowd-anticipation ranking TMDB's popularity sort lacks.
 export async function getTraktAnticipatedMovies(limit = 60, page = 1): Promise<any[]> {
-  try { return (await traktGetPublic(`/movies/anticipated?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  try { return (await traktGetPublic(`/movies/anticipated?extended=full&limit=${limit}&page=${page}`, BROWSE)) ?? []; }
   catch { return []; }
 }
 
 export async function getTraktAnticipatedShows(limit = 60, page = 1): Promise<any[]> {
-  try { return (await traktGetPublic(`/shows/anticipated?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  try { return (await traktGetPublic(`/shows/anticipated?extended=full&limit=${limit}&page=${page}`, BROWSE)) ?? []; }
   catch { return []; }
 }
 
@@ -128,12 +139,12 @@ export async function getTraktAnticipatedShows(limit = 60, page = 1): Promise<an
 // anticipated candidates, these can carry a `popularity` value for cross-source
 // ranking instead of a null.
 export async function getTraktTrendingMovies(limit = 40, page = 1): Promise<any[]> {
-  try { return (await traktGetPublic(`/movies/trending?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  try { return (await traktGetPublic(`/movies/trending?extended=full&limit=${limit}&page=${page}`, BROWSE)) ?? []; }
   catch { return []; }
 }
 
 export async function getTraktTrendingShows(limit = 40, page = 1): Promise<any[]> {
-  try { return (await traktGetPublic(`/shows/trending?extended=full&limit=${limit}&page=${page}`)) ?? []; }
+  try { return (await traktGetPublic(`/shows/trending?extended=full&limit=${limit}&page=${page}`, BROWSE)) ?? []; }
   catch { return []; }
 }
 

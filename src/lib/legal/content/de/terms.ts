@@ -24,6 +24,9 @@ const terms: LegalDocument = {
       heading: "Ihr Konto",
       body: [
         "Sie legen kein Fandex-eigenes Passwort an. Sie melden sich an, indem Sie ein Anbieterkonto verknüpfen (Trakt, Steam, TMDB oder RAWG); Fandex identifiziert Sie über diese Verknüpfung. Für die Sicherheit Ihres Anbieterkontos sind Sie selbst verantwortlich — Fandex verwaltet keine eigenen Zugangsdaten dazu.",
+        // H4.10 (2026-08-02) — deutsche Entsprechung des EN-Absatzes; siehe dort
+        // für die Begründung und die geprüfte Code-Grundlage.
+        "Ein Unterschied sei ausdrücklich genannt: Trakt, Steam und TMDB nutzen eine weiterleitungsbasierte Anmeldung — Ihr Passwort geben Sie dort ein, Fandex bekommt es nie zu sehen. Für RAWG existiert kein solcher Weg; das Anmeldeformular wird deshalb von Fandex bereitgestellt, und Ihr RAWG-Passwort läuft über den Server von Fandex, um von RAWG ein Sitzungs-Token abzurufen. Das Passwort wird ausschließlich für diese eine Anfrage verwendet und nicht gespeichert — aufbewahrt wird nur das daraus resultierende RAWG-Token, verschlüsselt. Wenn Sie nicht möchten, dass Fandex Ihr Passwort überhaupt verarbeitet, verknüpfen Sie stattdessen einen der drei anderen Anbieter.",
       ],
     },
     {

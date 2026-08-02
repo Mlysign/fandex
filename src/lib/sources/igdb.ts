@@ -2,7 +2,7 @@
 // Auth is Twitch OAuth client-credentials (an APP token, no per-user data — IGDB
 // exposes only metadata via its public API). Used by the MetadataProvider layer.
 
-import { httpFetch } from "@/lib/http";
+import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const IGDB_BASE = "https://api.igdb.com/v4";
@@ -31,7 +31,18 @@ async function getToken(): Promise<string> {
 }
 
 // POST an Apicalypse query body to an IGDB endpoint.
-async function igdbQuery(endpoint: string, body: string): Promise<any[]> {
+//
+// `budgetMs` (G3, 2026-08-02) is opt-in per caller, not applied here: the
+// browse-feed query (`discoverIgdbUpcoming`) passes BROWSE_BUDGET_MS so an IGDB
+// outage costs a discover/home request seconds rather than the full retry
+// ladder, while `fetchById`/`getGameTimeToBeat`/`searchIgdbGames` — which run
+// during enrichment — keep the unbounded default. Enrichment would rather wait
+// than lose an item's metadata.
+//
+// NOTE the budget does NOT cover getToken() below: a token mint is a separate
+// request with its own timeout, and starving it would break the query outright
+// rather than bound it. Worst case is one token timeout plus the budget.
+async function igdbQuery(endpoint: string, body: string, budgetMs?: number): Promise<any[]> {
   const token = await getToken();
   const res = await httpFetch(`${IGDB_BASE}/${endpoint}`, {
     method: "POST",
@@ -42,6 +53,7 @@ async function igdbQuery(endpoint: string, body: string): Promise<any[]> {
       Accept: "application/json",
     },
     body,
+    ...(budgetMs != null ? { budgetMs } : {}),
   });
   if (!res.ok) throw new Error(`IGDB ${endpoint}: ${res.status}`);
   return res.json();
@@ -126,7 +138,11 @@ export async function discoverIgdbUpcoming(
       `${GAME_FIELDS} ` +
         `where first_release_date >= ${safeInt(gte, 0)} & first_release_date <= ${safeInt(lte, 0)} ` +
         `& version_parent = null & parent_game = null; ` +
-        `sort ${sortField} desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`
+        `sort ${sortField} desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`,
+      // G3: this is the browse-feed query — bound it. Every caller is a
+      // discover/home/calendar surface that already degrades to "IGDB
+      // contributed nothing this round".
+      BROWSE_BUDGET_MS
     );
   } catch { return []; }
 }
