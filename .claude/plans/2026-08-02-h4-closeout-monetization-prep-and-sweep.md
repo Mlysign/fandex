@@ -135,7 +135,7 @@ rationalise.
   - Tests: none — this is an observation task.
   - Depends on: none
 
-- [ ] **T2** — H4.10: the compliance review pass
+- [x] **T2** — H4.10: the compliance review pass
   - Files: `docs/compliance-review.md` (new), `TASKS.md`; plus narrowly-scoped corrections to
     `src/lib/legal/content/{en,de}/*.ts` and/or `docs/cookie-assessment.md` **only** where a
     checkable fact is wrong
