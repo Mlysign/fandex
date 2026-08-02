@@ -266,7 +266,7 @@ rationalise.
   - Tests: none — investigation only.
   - Depends on: none
 
-- [ ] **T6** — The 9th smoke sweep: full A–F re-run, log-only
+- [x] **T6** — The 9th smoke sweep: full A–F re-run, log-only
   - Files: `TASKS.md` (a new dated smoke-test section), `smoketest.md` (only if a step is stale)
   - Detail: run the **whole** flow checklist in `smoketest.md` — sections **A** (public/anonymous),
     **B** (API probes), **C** (logged-in), **D** (cross-cutting), **E** (the dedicated UI/UX

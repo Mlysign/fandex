@@ -172,6 +172,89 @@ See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-mig
 
 ---
 
+## Smoke test — 2026-08-02 (ID `SM#`) — 9th sweep, full A–F re-run, zero findings
+
+Unlike the 7th/8th sweeps (each scoped to one batch's new surface), this is a **full A–F
+checklist re-run** — this session shipped almost no user-facing change, so a scoped sweep
+would have checked nothing. Logged in via `/api/dev/login` (Ramses/RAWG identity, 1,921
+library items, 1,637 rated); never called `/api/auth/logout`. **Zero functional findings —
+every section held up**, though two things are worth recording precisely because they
+*looked* like findings before being run down.
+
+**A. Public/anonymous — all pass.** Home: rails + guest panel render, no stats strip, no
+Recommended rail, matches spec. Discover: anon search for "Nolan" returns Titles only — zero
+`People`/`Tags` groups, zero calls to `/api/discover/facets` (network-verified, not just
+absent from a screenshot). Item page (`SpongeBob SquarePants`): real star + Save controls
+render for anon; clicking a star opens the actual sign-in dialog ("Rate it, track it, don't
+lose it" + 4 provider options), not a redirect. Wrong-slug URL (right uuid) canonicalizes to
+the correct slug. Gated pages (`/library /wishlist /calendar /profile /insights /settings`)
+all shell-200 anonymously; `/dashboard` 308s to `/wishlist`. 404s (garbage item uuid, unknown
+person, unknown path) all return the branded 404. `robots.txt`/`sitemap.xml`
+(2,538 `<url>` entries)/`/api/health` all correct.
+
+**B. API probes — all pass, with one corrected assumption.** Gated JSON-body routes 401
+*before* parsing the body (confirmed on `/api/discover/find`, `/api/settings`,
+`/api/watchlist` — auth-before-validation, by design). Malformed JSON on `POST /api/watchlist`
+→ 400 `{"error":"Invalid or missing JSON body"}`; bad enum/missing fields → 400 with
+field-level Zod messages, no stack leak. **Correction to my own initial read:** malformed
+JSON on `POST /api/discover/find` returned 200 with a taste-profile payload, not 400 — looked
+like a bug at first glance, but `src/app/api/discover/find/route.ts:11` explicitly passes
+`{ allowEmpty: true }` to `parseJsonBody`, a documented S8 design choice (unparseable body →
+`{}` → "rank the whole catalog with no filters"). Not a finding — re-tested against a route
+without `allowEmpty` (`/api/watchlist`) to confirm the real 400 path still works.
+
+**C. Logged-in — all pass.** `/library` renders 2,014 titles, "Recently added" pre-selected,
+capped at exactly 300 cards on first paint (`IntersectionObserver` cap still holds), Fandex
+Score spread is wide (39–122 sampled, not clustered — H5's calibration still holds).
+**C8 tab-switch regression check:** clicking the Wishlist tab sets `?tab=wishlist` while
+`pathname` stays `/library`, `<h1>` tracks the active tab, `history.length` grows by exactly
++1 (not the `push`-trap's +2); pressing Back returns to the All tab with the query param
+dropped and `<h1>` back to "All" — the SM21/T10 fix (2026-07-28) is still solid four batches
+later. `/insights`: type tiles (916 movies + 241 shows + 480 games = 1,637) and the ratings
+histogram (4+71+63+115+139+315+281+385+99+165 = 1,637) both reconcile exactly against "1,637
+Rated items" — verified via each bar's `title` attribute, not a screenshot read (see the red
+herring below for why that distinction mattered this run). `/settings` renders all 4 connected
+providers + region + "Your data" section, page title correctly "Settings · Fandex" (not the
+old SM26 "Profile · Fandex" bug). `/calendar` renders August 2026 with today (Aug 2) ringed
+gold and all three source chips (Wishlist/Library/Popular) present. A5 typed search, logged
+in: searching "Nolan" returns 4 real `<a href="/person/...">` links — confirmed by DOM query,
+not text match (the People/Tags headers are `text-transform: uppercase`, so a case-sensitive
+`innerText` regex legitimately misses them — this is the known gotcha from the 2026-07-18 run,
+correctly avoided rather than re-triggered). **Not re-exercised, on purpose:** a live rating
+write (per the standing gotcha — RAWG/Trakt writes can't be cleanly undone, and unrate +
+wishlist-on-rate was already verified end-to-end 2 days ago in the 8th sweep with zero
+findings) and section F's tag-taxonomy round trip (also fully verified 2 days ago; re-running
+the create/reassign/revert cycle risks leaving live taxonomy dirty if interrupted, for a
+subsystem nothing in this batch touched).
+
+**D. Cross-cutting.** Console errors: zero across the entire sweep. Server logs: zero
+unexplained errors — the only two lines were my own deliberate `api_bad_request` validation
+probes (B section), correctly rejected by Zod. Mobile (375px) spot-check on `/library`: no
+overflow, `.tap-44`/`.tap-44-y` classes present and correctly scoped on both the type-filter
+buttons (`.tap-44`, full 44×44) and the status tabs (`.tap-44-y`, height-only — they sit
+side-by-side with no room to claim 44px of width, same reasoning as SubBar's segmented
+toggle), bottom nav renders with LIBRARY correctly active.
+
+**Two red herrings, investigated and dismissed — not findings:**
+1. **Home's `/api/home` appeared to fire 3× on first cold load.** Traced to React 19's
+   StrictMode dev-only double-invoke (mount→unmount→remount, dev-only, by design) — a clean
+   re-navigate to `/` fired exactly one request. Not the CSS-hidden-tree double-mount bug
+   from the 2026-07-30 rebuild; that mechanism is unconditional (dev and prod), this one only
+   ever showed up once per cold load and never repeated.
+2. **`POST /api/discover/find` returning 200 on malformed JSON** — see section B above;
+   confirmed intentional (`allowEmpty: true`), not a validation gap.
+
+**One measurement worth recording, not a bug:** Discover's cold-cache paint took **58–60
+seconds** for the browse grid, the games-section scroll-load, and the "Nolan" search, each
+independently (`GET /api/discover [200] in 58s`, `?section=games... in 58s`,
+`?q=Nolan in 60s`, all from the server's own request log). This is the already-documented,
+deliberately-deferred perf issue (`docs/performance-audit.md` §A — the catalog pool cache
+rebuilding the whole 39 MB pool from scratch on invalidation) — not new, but now pinned with
+concrete numbers from a genuinely cold local cache rather than the general description on
+file. Once warm, subsequent Discover loads in the same session were fast (sub-second).
+
+---
+
 ## Smoke test — 2026-07-31 (ID `SM#`) — clean sweep, T7
 
 This is the project's **8th** sweep, not the 7th — the 2026-07-30 legal-batch entry above mislabeled itself ("7th sweep, scoped per T9"); correcting the count once here rather than renumbering that entry's own history. Scoped per T7's own instruction to what the 2026-07-30 batch (`R1`–`R10`, `c36f602`) and this session's `T1`–`T6` shipped — not a full A–E re-run. Logged in via `/api/dev/login`; never called `/api/auth/logout`. **Zero findings — every area held up.**
