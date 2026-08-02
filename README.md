@@ -57,8 +57,10 @@ volume for the DB. (See `docs/archive/history.md` for the full rationale.)
 
 ## Deploy to Railway
 
-The repo ships a multi-stage [`Dockerfile`](Dockerfile) that builds Next's `standalone` output and
-runs it as a non-root user. Railway auto-detects and builds it.
+The repo ships a multi-stage [`Dockerfile`](Dockerfile) that builds Next's `standalone` output.
+Railway auto-detects and builds it. ⚠️ The runner deliberately **runs as root**: Railway mounts
+volumes owned by root, so a non-root user can't create `rr.db` on the mounted volume. Acceptable
+for a single-tenant app; non-root is a known hardening follow-up (see the comment in `Dockerfile`).
 
 1. **Push to GitHub** (Railway deploys from the repo).
 2. **New Project → Deploy from GitHub repo** → select this repo. Railway detects the `Dockerfile`.
@@ -83,9 +85,11 @@ and rebuilds from your connected accounts on first sync.
 
 ✅ **Done.** The Railway volume is a single copy, so **[Litestream](https://litestream.io)**
 continuously replicates `rr.db` to object storage with auto-restore on a fresh container
-(config: [`litestream.yml`](litestream.yml)). Note that `litestream.yml` sets no explicit
-`retention`, so the effective backup window is Litestream's default — nobody has confirmed
-the real figure, and H4.3 (privacy policy) must establish it before any doc quotes one.
+(config: [`litestream.yml`](litestream.yml)). `litestream.yml` sets no explicit `retention`, so
+the effective backup window is the default for the **v0.3.13** binary the `Dockerfile` installs:
+**24 hours** — confirmed during H4.3 against v0.3.13's own docs, not the current v0.5+ ones
+(different config schema entirely). The privacy policy quotes that same 24h figure as the true
+erasure horizon; if the pinned Litestream version ever changes, re-check both.
 
 ## Project docs
 
@@ -93,4 +97,7 @@ the real figure, and H4.3 (privacy policy) must establish it before any doc quot
 - `TASKS.md` — execution tracker (source of truth) for what's still open, incl. a one-paragraph summary of the (all-resolved) audit/review findings
 - `docs/archive/history.md` — everything finished: completed phases, resolved audit findings, closed bugs/QA findings (moved out of the working set 2026-07-18 to keep the active docs short — grep it, don't read it end to end)
 - `PLATFORMS.md` — platform integration capability reference
+- `smoketest.md` — the living exploratory-QA plan; findings land in `TASKS.md` as `SM#` entries
+- `.claude/plans/` — session plans written by one session and executed by another (the audit trail
+  of planned-vs-shipped); the only tracked path under `.claude/`
 - `AGENTS.md` — contributor/agent notes: this Next.js version has breaking changes (read the bundled docs), the project doc map, load-bearing data-model invariants, and model/agent-routing guidance

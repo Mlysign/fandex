@@ -387,7 +387,7 @@ TASKS.md only lists what's still open.
 | N2 🔶 | 🟠 | UX | Discover / Wishlist / Library | **FIXED for Wishlist + Library 2026-07-18** — two-part root cause: (1) GroupedView's today-scroll re-fired on every mount and beat the restore → new `autoScrollToToday` prop, off when `hasSavedScroll()`; (2) **the router's scroll-to-top on navigate-away fired one last scroll event that saved `0` over the real position** (why useScrollRestore never worked here) → pathname pin in the save listener (usePersistedState.ts). Verified: wishlist scroll 5000 survives item→Back. **Discover browse DONE TOO (2026-07-18, later same day):** browse depth (`pages`/`backPages`) mirrored to sessionStorage; `loadDefault` refetches that depth on mount (feed pages are server-cached + deterministic, capped at 10 pages/section) so the saved scroll lands on real content; today-scroll suppressed when a restore is pending. Verified: 55 items + scrollY 6000 + the exact clicked card restored on Back. **N2 fully closed.** ~~**Browse scroll position lost on Back.**~~ These pages auto-scroll to "today" on every (re)mount (Discover browse lands at scrollY ~9012 of ~14816). So scroll down to a future month → open an item → Back ⇒ you're dumped back at "today", not where you were. (Root of Q3.) Search-results mode is fine (starts at top). Fix: preserve/restore scroll on Back, or only auto-scroll-to-today on first mount, not on history restore. |
 
 ### Smoke test — 2026-07-18 (all 6 findings closed same day)
-Scope: full local sweep per [smoketest.md](smoketest.md) — logged-in flows (wishlist write round-trip, calendar view, insights, settings, facet overlay), logout, full anonymous surface (landing, discover incl. search, item page + H2c dialog/intent/guard, facets + sort/Load more, gated-page bounce, 404s, robots/sitemap/health), API error-shape probes, mobile viewport. **Overall healthy: zero console errors anywhere, server logs clean (known Steam-CDN 404 noise only).** Known Q/N findings re-confirmed where crossed (Q1, Q2, Q5, Q7, Q9, N3) — not re-logged. ID = `SM#`. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+Scope: full local sweep per [smoketest.md](../../smoketest.md) — logged-in flows (wishlist write round-trip, calendar view, insights, settings, facet overlay), logout, full anonymous surface (landing, discover incl. search, item page + H2c dialog/intent/guard, facets + sort/Load more, gated-page bounce, 404s, robots/sitemap/health), API error-shape probes, mobile viewport. **Overall healthy: zero console errors anywhere, server logs clean (known Steam-CDN 404 noise only).** Known Q/N findings re-confirmed where crossed (Q1, Q2, Q5, Q7, Q9, N3) — not re-logged. ID = `SM#`. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
 
 | ID | Sev | Type | Area | Finding (with repro) |
 |----|:--:|:--:|------|----------------------|
@@ -657,7 +657,7 @@ _Resolved with D2 in migration v3: `user_item_state(user,item,source,relation,st
 Per-platform ratings/status/review live as a JSON blob in `user_library.metadata`
 (`{ [source]: { rating, status, review, reviewedAt } }`), and `user_library.rating`
 is a **denormalized average cache** that every read path recomputes
-(`averageRating(parseRatings(metadata)) ?? row.rating` — see [ratings.ts](src/lib/ratings.ts), [libraryAnalysis.ts](src/lib/libraryAnalysis.ts:66)).
+(`averageRating(parseRatings(metadata)) ?? row.rating` — see [ratings.ts](../../src/lib/ratings.ts), [libraryAnalysis.ts](../../src/lib/libraryAnalysis.ts:66)).
 - **Why it matters:** the per-source ratings can't be queried/aggregated in SQL — every
   insight parses JSON in app code; the cache can drift from the blob; "clear a rating"
   is already a known un-propagated case.
@@ -674,14 +674,14 @@ _Resolved with D1: the four copy-paste twins now delegate to a single `setSource
 
 Both tables are `(id, user_id, media_item_id, platform_sources JSON, …, UNIQUE(user,media))`
 and their helpers are copy-paste twins: `upsertWatchlistEntry`/`removeWatchlistSource`
-vs `upsertLibraryEntry`/`removeLibrarySource` ([matcher.ts:181-302](src/lib/matcher.ts:181)).
+vs `upsertLibraryEntry`/`removeLibrarySource` ([matcher.ts:181-302](../../src/lib/matcher.ts:181)).
 - **Proposal:** either (a) unify into one `user_item(user_id, media_item_id, relation:
   'wishlist'|'library', …)` table, or (b) keep two tables but extract the shared
   `platform_sources` add/remove logic into one helper. (a) pairs naturally with D1.
 
 ### D3 🟡 S — Duplicated title-normalization with a hand-maintained invariant
 `db.ts` backfills `norm_title` with an **inline** normalizer and a comment that it
-"MUST stay in sync with `normalizeName()` in merge.ts" ([db.ts:157](src/lib/db.ts:157)).
+"MUST stay in sync with `normalizeName()` in merge.ts" ([db.ts:157](../../src/lib/db.ts:157)).
 Two copies of the same rule = a silent-duplicate-items bug waiting to happen if one drifts.
 - **Proposal:** move `normalizeName` into a tiny dependency-free module (e.g.
   `src/lib/normalize.ts`) and import it in both `db.ts` and `merge.ts`. Removes the invariant.
@@ -690,7 +690,7 @@ Two copies of the same rule = a silent-duplicate-items bug waiting to happen if 
 _Resolved: `src/lib/migrations.ts` exports an ordered `MIGRATIONS` list + `runMigrations(db)` (each migration in its own transaction, bumps `user_version`). Pure-SQL bodies so the identical list runs both in-process (`getDb()`) and standalone against the live DB (`scripts/migrate.mjs`). user_version 1 stays the inline norm baseline; migrations start at 2._
 
 `initDb()` does `CREATE TABLE IF NOT EXISTS` + a one-off `ALTER` + backfill inline
-([db.ts:137-164](src/lib/db.ts:137)). This worked for one column but won't scale to an
+([db.ts:137-164](../../src/lib/db.ts:137)). This worked for one column but won't scale to an
 evolving schema (and D1/D2 are real schema changes).
 - **Proposal:** a minimal versioned runner keyed on `PRAGMA user_version` — an ordered
   list of migration steps applied once. ~30 lines; makes D1/D2/future changes safe and
@@ -700,7 +700,7 @@ evolving schema (and D1/D2 are real schema changes).
 _Resolved (migration v2): indexed `media_external_ids(media_item_id, source, external_id)`. `remergeItem` rebuilds an item's ids from its links; `findMatchingItem` does an indexed (namespace,id) lookup + indexed conflict check instead of parse-all-candidates — and now merges across title-spelling differences when a cross-id proves identity. Live backfill (4000 rows) via pure-SQL `json_extract`._
 
 `findMatchingItem` loads every candidate link and `JSON.parse`s its `raw_data` to
-recover cross-ids ([matcher.ts:107-116](src/lib/matcher.ts:107)). The match path is the
+recover cross-ids ([matcher.ts:107-116](../../src/lib/matcher.ts:107)). The match path is the
 hot path during sync.
 - **Proposal:** persist extracted ids in an indexed `media_external_ids(media_item_id,
   source, external_id)` table (written by `extractCrossIds` at link time). Matching
@@ -708,7 +708,7 @@ hot path during sync.
   cleanly. Pairs with D4.
 
 ### D6 🟢 S — `libraryAnalysis` cache signature can miss edits
-The analysis cache key is `COUNT, MAX(reviewed_at), SUM(rating)` ([libraryAnalysis.ts:159](src/lib/libraryAnalysis.ts:159)).
+The analysis cache key is `COUNT, MAX(reviewed_at), SUM(rating)` ([libraryAnalysis.ts:159](../../src/lib/libraryAnalysis.ts:159)).
 Two offsetting rating edits (e.g. 7→8 and 8→7) leave count/sum/max unchanged → stale cache.
 - **Proposal:** include `MAX(rowid)`/a content hash, or bump an `updated_at` on every write.
   Low likelihood, easy fix.
@@ -720,7 +720,7 @@ Remaining edge case (out of scope): purely non-Latin titles (e.g. Cyrillic) stil
 rely on cross-id matching — unchanged from before._
 
 `normalizeName` removes `[^a-z0-9 ]` entirely, so "Spider-Man" → `spiderman` while
-"Spider Man" → `spider man` ([merge.ts:949](src/lib/merge.ts:949)). The two don't match, so the
+"Spider Man" → `spider man` ([merge.ts:949](../../src/lib/merge.ts:949)). The two don't match, so the
 same title formatted differently across sources can split into duplicate canonical items (cross-id
 matching saves most real cases, but title+year fallback misses these).
 - **Proposal:** replace hyphens/underscores/punctuation with a space before collapsing, so
@@ -740,7 +740,7 @@ catalog grows. Add `idx_library_media`, `idx_watchlist_media`.
 _Resolved: per-source normalizers live in `src/lib/sources/normalize.ts` (one `normalizeX(raw,type) → SourceNormalized` per source, in a registry). `merge.ts` is now pure priority/union policy over those partials — no `switch(source)` anywhere. Adding a source = one normalizer + its entry in each field's priority list; zero edits to the merge body. Locked by a 7-snapshot characterization test (full `mergeLinks`/`explainMerge`/`mergeForCanonical` over rich movie/game/show fixtures) proving byte-identical output. Follow-up (A5): co-locate each normalizer with its adapter and fold the priority lists onto `catalog.ts`._
 
 It's ~20 `extractX(source, data)` functions, each a `switch (source)` over all platforms
-([merge.ts:37-207+](src/lib/merge.ts:37): extractTitle/Description/ReleaseDate/Poster/Images/
+([merge.ts:37-207+](../../src/lib/merge.ts:37): extractTitle/Description/ReleaseDate/Poster/Images/
 Tags/Platforms/Metacritic/Developer/…). Adding a source = editing *every* switch; the logic
 for one platform is smeared across 20 places.
 - **Why it matters:** this is the single biggest "not modular" item. The `MetadataProvider`
@@ -754,7 +754,7 @@ for one platform is smeared across 20 places.
 ### A2 ✅ DONE (2026-06-14) — `initDb()` is manually called in 24 files
 _Resolved: schema setup runs implicitly in `getDb()` (private `ensureSchema`); all 24 manual `initDb()` calls + imports removed. `initDb()` kept as a deprecated alias for standalone scripts/tests._
 
-Every route re-invokes `initDb()` ([24 call sites](src/app/api)); a new route that forgets
+Every route re-invokes `initDb()` ([24 call sites](../../src/app/api)); a new route that forgets
 it fails at runtime.
 - **Proposal:** make initialization implicit — run schema setup once inside `getDb()` (guarded
   by the existing `_initialized` flag) so callers can't forget. Removes 24 redundant calls.
@@ -814,14 +814,14 @@ detail · A3 detail-split · A7 react-hooks) or is **NEW**.
 
 ### U1 🔴 — Quick actions (rate / wishlist) are hover-only → invisible on touch/mobile
 PosterCard + ListCard reveal the rate bar + wishlist button only on `group-hover`
-([PosterCard.tsx:77](src/components/PosterCard.tsx:77), [ListCard.tsx:70](src/components/ListCard.tsx:70)).
+([PosterCard.tsx:77](../../src/components/PosterCard.tsx:77), [ListCard.tsx:70](../../src/components/ListCard.tsx:70)).
 Touch devices have no hover, so on mobile/tablet you **cannot rate or wishlist from a card at all** —
 the app's core action is unreachable without opening the detail page. Same for the hover tooltip.
 - **Proposal:** show a compact always-visible affordance on touch (or a tap-to-reveal action row);
   detect coarse pointer. Feeds **T11**.
 
 ### U2 🔴 — Color-only encoding without text alternative (source dots; partial elsewhere)
-Wishlist providers render as bare colored dots (`SourceDots`, [ItemBadges.tsx:26](src/components/ItemBadges.tsx:26))
+Wishlist providers render as bare colored dots (`SourceDots`, [ItemBadges.tsx:26](../../src/components/ItemBadges.tsx:26))
 with no label/icon — meaningless to anyone who doesn't memorize the palette, and invisible to
 color-blind users. (Rating and type at least carry text.) T11 already wants source color-coding
 **removed** from cards; replace with explicit **wishlist (bookmark) + library (owned/watched) icons**
@@ -829,12 +829,12 @@ in the corner so state is legible without color. Feeds **T11**.
 
 ### U3 🟡 — Type indicator is inconsistent across views
 Card shows type only as a 0.5px bottom color **stripe** (no label/icon on the card face;
-[PosterCard.tsx:67](src/components/PosterCard.tsx:67)); list row shows a `TypeBadge` text chip;
+[PosterCard.tsx:67](../../src/components/PosterCard.tsx:67)); list row shows a `TypeBadge` text chip;
 calendar uses a 1.5px dot. T11 calls for a **type tag + icon** (game/movie/show) with color coding
 **consistently** everywhere. No type icons exist yet (only color). Feeds **T11**.
 
 ### U4 🔴 — Mobile navigation + tall sticky bar
-NavBar is a single flex row of 6 links + Log out ([NavBar.tsx](src/components/NavBar.tsx)) with no
+NavBar is a single flex row of 6 links + Log out ([NavBar.tsx](../../src/components/NavBar.tsx)) with no
 hamburger/overflow → wraps or clips on phones. And the now-unified `SubBar` stacks up to **4 rows**
 (type/source chips · facets · year+membership · search+sort+view) — always visible — which on a
 small screen eats most of the viewport before any results show.
@@ -880,7 +880,7 @@ and should **stay**. So "remove source color-coding" (T11) should be scoped to *
 not a global purge. Note for T11 scope.
 
 ### U11 🟢 — Native `confirm()` for disconnect; no undo
-Disconnect uses a blocking native `confirm()` ([settings/page.tsx:61](src/app/settings/page.tsx:61)) —
+Disconnect uses a blocking native `confirm()` ([settings/page.tsx:61](../../src/app/settings/page.tsx:61)) —
 jarring vs. the app's styled modals (the RAWG connect modal shows the house style). Use an in-app
 confirm dialog. NEW (polish).
 
@@ -903,7 +903,7 @@ breakpoint, so U4's mobile claims remain code-based; worth a real device/devtool
   1991→2027) the right-hand month scrubber becomes a tall, cramped single column of ~every month
   (`Nov 91, Jan 94, Jan 95, Feb 96, …` ↓ dozens). It's designed for the ~18-month browse timeline,
   not a multi-decade library. **Proposal:** group the nav by **year (or decade)** when the span is
-  large; only go month-granular within a short window. ([GroupedView.tsx](src/components/GroupedView.tsx) `MonthNav`). Feeds T11/T12.
+  large; only go month-granular within a short window. ([GroupedView.tsx](../../src/components/GroupedView.tsx) `MonthNav`). Feeds T11/T12.
 - **U15 🟡 NEW — game cover art (landscape) is forced into the 2:3 portrait card → ugly crops.**
   Movies/shows have true portrait posters, but games use **landscape** Steam/RAWG header art; the
   poster card (and the `/foryou` swipe card) `object-cover` it into a tall frame, slicing the title
@@ -1208,7 +1208,7 @@ the last login; **P3 JWT-secret fail-fast fixed 2026-06-18**.
 6. **S9 / S10 / S11 / S12 / S13** — polish + dependency hygiene.
 
 > Review doc — nothing applied beyond P3. Suggest reviewing Parts IV + V together, then executing the
-> combined go-live work (Phase 6 in [TASKS.md](TASKS.md)) in the recommended order.
+> combined go-live work (Phase 6 in [TASKS.md](../../TASKS.md)) in the recommended order.
 
 ## Bug tracker archive (both entries resolved)
 
@@ -1221,7 +1221,7 @@ This file is the **bug collection** — Claude reads/writes here.
 ## Data Bugs
 - ~~Merging wrong movies between databases~~ (Warriors of the Wind, item `17aa124c…`, tmdbId 81) — **NOT A BUG (investigated 2026-06-14).** The item has a single, correct TMDB link (id 81). TMDB itself returns `title: "Warriors of the Wind"` with `original_title: 風の谷のナウシカ` (Nausicaä) and `imdb_id: tt0087544` (Nausicaä) — i.e. one film, with TMDB serving an alternate English title for the configured language. No two movies were merged. → If the localized title is undesirable, that's a TMDB `language`/region concern tied to **T22** (country setting), not the matcher.
 - ~~Studio ratings in Insights missing a lot of data (Bethesda Softworks / Fallout 4)~~ — **investigated 2026-06-14; split in two:**
-  - **(A) display — FIXED:** Insights "Game studios" column filtered to `role==="developer"` only, so publishers (Bethesda Softworks publishes Fallout 4; dev is Bethesda Game Studios) never showed. [InsightsView.tsx](src/components/insights/InsightsView.tsx) `gameStudios` now includes both `developer` + `publisher` (matches the section subtitle).
+  - **(A) display — FIXED:** Insights "Game studios" column filtered to `role==="developer"` only, so publishers (Bethesda Softworks publishes Fallout 4; dev is Bethesda Game Studios) never showed. [InsightsView.tsx](../../src/components/insights/InsightsView.tsx) `gameStudios` now includes both `developer` + `publisher` (matches the section subtitle).
   - **(B) data coverage — root cause, → TASKS.md (D9):** only **3% of library games (24/713)** carry any developer/publisher in stored `raw_data`, vs 99% of movies/shows. Game sync persists *list* payloads (Steam owned-games = `appid/name/playtime`; RAWG list lacks `developers/publishers` — those are detail-endpoint-only). Needs the sync/enrich pipeline to fetch+persist game detail (or a backfill). Tracked as **D9**.
 
 ## Search Bar Bugs & improvements
@@ -1308,7 +1308,7 @@ Scope: 6th sweep, first one run **entirely logged in from the start** (the in-ap
 
 ## Calendar sources + global layout order — 2026-07-28 (ID `L#`) — ✅ ALL DONE
 
-Nils's feedback, built same session per [.claude/plans/2026-07-28-calendar-sources-and-layout-order.md](.claude/plans/2026-07-28-calendar-sources-and-layout-order.md). Two clusters:
+Nils's feedback, built same session per [.claude/plans/2026-07-28-calendar-sources-and-layout-order.md](../../.claude/plans/2026-07-28-calendar-sources-and-layout-order.md). Two clusters:
 
 - **L1** ✅ — **Calendar shows three sources, not one.** It was wishlist-only (`/api/calendar` reads `user_watchlist` and nothing else), so library items and anything you hadn't already found were invisible. Now Wishlist / Library / **Popular** behind a `ScopeFilter` chip row (`src/components/ui/ScopeFilter.tsx`), all three on by default, persisted as `rr_calendar_scopes`. Wishlist+Library reuse `mergeMyStuff` client-side (no server change); Popular is new — `GET /api/calendar/popular?month=YYYY-MM`, fetched lazily per visible month.
 - **L2** ✅ — **Month-scoped provider fetches + cross-source popularity ranking.** `dateWindow()` could only express "18 months forward/back", so `monthWindow()` + an optional `window` override were added to all four page fetchers (`discoverFeed.ts`), and `fetchIgdbGamePage`'s blanket `direction === "past"` bail became a per-window ranking choice (`hypes` ahead of release, `total_rating_count` after). Ranking lives in `src/lib/popularMonth.ts`: provider popularity metrics aren't comparable (TMDB ~15, RAWG ~300, IGDB ~5), so each candidate scores against the **median of its own source+type bucket** and the top 15 survive. **The type mix is deliberately uneven** — July 2026 came back 7 movies / 8 games / 0 shows, May 2026 10 games / 4 movies / 1 show. 16 unit tests in `popularMonth.test.ts`.
@@ -1325,7 +1325,7 @@ Nils's feedback, built same session per [.claude/plans/2026-07-28-calendar-sourc
 
 ## Scoring follow-ups + type-import tech debt — 2026-07-30 (ID `F#`) — ✅ ALL DONE
 
-Built per [.claude/plans/2026-07-30-scoring-followups-and-type-imports.md](.claude/plans/2026-07-30-scoring-followups-and-type-imports.md). Closes two of the four open questions above plus one systemic tech-debt item; the two parked scoring questions stay parked on purpose.
+Built per [.claude/plans/2026-07-30-scoring-followups-and-type-imports.md](../../.claude/plans/2026-07-30-scoring-followups-and-type-imports.md). Closes two of the four open questions above plus one systemic tech-debt item; the two parked scoring questions stay parked on purpose.
 
 - **F1** ✅ — **Item-page tag chips group by the live admin category, not the code heuristic.** `LowerSections` called `categorizeTag()` directly, so a tag reassigned in the admin table kept its OLD heading while the inline picker on that same chip showed the new one. Second, worse half found while fixing it: the group loop iterated the *static* `CATEGORIES` const (9 entries) against a live `tag_category` table of 10, emitting no group at all for an unknown id — a tag overridden into an admin-made category **vanished from the page** rather than grouping wrong. Grouping now lives in `groupTagsByCategory()` (`tags.ts`): override first, live table for display order, static entries appended so the admin table can only ever add a category, anything unresolvable bucketed to `other`. `LowerSections` is a client component, so the server page resolves the taxonomy and threads it down as props — viewer-independent, so the SSR guarantee is untouched. 9 tests.
 - **F2** ✅ — **`/api/detail` scores the persisted links, closing the freshness gap.** The cause was never really freshness: by scoring time the route's `links` array was a *different set* from the catalog — `ensureTmdbDetail`/`ensureGameDetail` mutate entries in place and `enrichMissingSources` **pushes title-matched sources that are never written to the DB**. `linksForScoring()` re-reads `media_links` for a stored item (keeping the healed data, dropping the in-memory-only sources); a live item with no uuid is unchanged. Also added the missing `invalidateDiscoveryCache()` after a heal — the heal writes `media_links` while the cache signature watches `media_items`, so catalog surfaces kept serving pre-heal scores. Measured before/after: **Hope 68.2 → 65.9 (the logged 2.3, gone), David 65.0 → 64.4**; 12/12 Home items now agree with their detail page to **0.00**. 4 tests.
@@ -1336,7 +1336,7 @@ Built per [.claude/plans/2026-07-30-scoring-followups-and-type-imports.md](.clau
 
 ## Home rails · rotating stats · facet palette · detail rebuild · unrate · perf — 2026-07-30 (ID `R#`) — ✅ ALL DONE
 
-Nils's six-cluster feedback, built same session per [.claude/plans/ethereal-wiggling-dijkstra.md](.claude/plans/ethereal-wiggling-dijkstra.md). Four of the six turned out to be different problems than they looked like from outside.
+Nils's six-cluster feedback, built same session per [.claude/plans/2026-07-30-home-rails-palette-detail-unrate-perf.md](../../.claude/plans/2026-07-30-home-rails-palette-detail-unrate-perf.md). Four of the six turned out to be different problems than they looked like from outside.
 
 - **R1** ✅ — **Home's "Popular" was never popular.** All three rails came from ONE page-1 pull of the providers' 18-month *future* window; "Popular" then re-sorted that by community vote **average**, making it "best-rated *unreleased* titles" — which is why it could never match TMDB Trending or Trakt Trending (both released-title, watch-activity lists) and why a fixed prefix of a fixed sort looked identical every day. Now `trending` comes from the real endpoints: `fetchTmdbTrending` (`/trending/{movie,tv}/week`, 2 pages), `fetchTraktTrending` (`/movies|shows/trending`, with `watchers` as its reach metric — `anticipated` genuinely has none), `fetchRawgTrendingGames` (60-day trailing `-added`, since games have no trending endpoint anywhere). Rail renamed **"Popular right now"**, which is the mockup's own headline. Verified live: 15/15 items released, 0 duplicates.
 - **R2** ✅ — **Upcoming now literally runs the calendar's algorithm**, not a lookalike. `candidatesForMonth` + its 6h cache moved out of the calendar route into `src/lib/popularMonthFeed.ts`; Home pulls **three** months through it (late in a month, one month has nothing future left), filters via the shared `upcomingFrom()` (SM18), and re-ranks with the same median-of-own-bucket normaliser. `rankPopularMonth` → **`rankCrossSourcePopularity`** (the maths was never month-specific). The month pool is ranked to depth 40, not 15, so Home has room to rotate — ranked-to-15 left it 13 candidates for a 15-slot rail, i.e. no rotation at all.
@@ -1350,7 +1350,7 @@ Nils's six-cluster feedback, built same session per [.claude/plans/ethereal-wigg
   - Not built, as the mockup itself says out of scope: the More-like-this rail. Not rendered, deliberately: the mockup's "Stream · included" line — `normalize.ts` collapses TMDB's offer buckets, so which bucket a provider came from isn't in the projection, and inventing it would be worse than omitting it.
 - **R7** ✅ — **Unrate was never wired, not broken.** The whole backend existed and was unreachable: `/api/library` POST already branched on `rating === null` → `clearRating`, `recordLibraryRating` already nulled the score while keeping `status`, `IntentAction` already allowed `{kind:"rate", value:null}`. Every caller just typed the callback `(n: number)`. Re-clicking your current star now clears it (`aria-label="Remove your rating"`). **The real gap:** TMDB and Trakt implement `clearRating`, **RAWG did not** — so a cleared *game* rating would have come straight back on the next pull, which reads `user_rating`. Added `deleteRawgReview()` (the rating lives in a review; RAWG has no "my review for game X" lookup, so it matches on the user's slug).
 - **R8** ✅ — **Rating an item removes it from the wishlist.** A local-only delete would be undone by the next sync — providers own the wishlist — so the removal path (write-back loop + `clearWatchlist` + S7 ownership gate) was extracted to `src/lib/wishlistRemove.ts` and is now called by both `/api/watchlist` DELETE and `/api/library` POST. Never fatal: the rating is recorded first and succeeds regardless. Verified live end to end: wishlist → rate 6 → `wishlistRemoved: true`, off the wishlist, in the library as watched → cleanup clean.
-- **R9** ✅ — **Perf audit + the safe wins** → [docs/performance-audit.md](docs/performance-audit.md), harness `scripts/perf-probe.mjs`. The headline was payload, not CPU: **`/api/library` was 38.9 MB**, of which **`sources[].data` — the full raw provider blob per link, per item — was 30.7 MB**, for a list view that renders 300 cards and reads none of it. List projection now drops it (identity pair kept for `buildItemHref`); same fix on `/api/calendar`. `/api/home` gained a 30 min public-rail cache (it's the one public route that calls providers).
+- **R9** ✅ — **Perf audit + the safe wins** → [docs/performance-audit.md](../../docs/performance-audit.md), harness `scripts/perf-probe.mjs`. The headline was payload, not CPU: **`/api/library` was 38.9 MB**, of which **`sources[].data` — the full raw provider blob per link, per item — was 30.7 MB**, for a list view that renders 300 cards and reads none of it. List projection now drops it (identity pair kept for `buildItemHref`); same fix on `/api/calendar`. `/api/home` gained a 30 min public-rail cache (it's the one public route that calls providers).
   - **`/api/library` 38,868 → 7,556 KB (−81%)**, 942 → 578 ms · **`/api/calendar` 1,660 → 346 KB (−79%)**
   - **Measured and specified but NOT built** (deferred to a reviewed pass — they fail silently, not loudly): the discovery cache re-parses **39.0 MB of JSON across 4,133 link rows** on the request path, and is invalidated by *any* wishlist/library write because `catalogSignature()` counts a `POOL_WHERE` that includes `user_item_state`; the same blobs are parsed **3×** per signed-in request. Also open: local WAL is **48.4 MB against a 56 MB main file**, and prod's 2.5 GB is still unexplained. Full evidence + the aliasing hazard in the doc.
 - **R10** ✅ — **Smoketest section F: the tag-taxonomy round trip** (`smoketest.md` steps 38–44). Two of the three most recent tag bugs were this exact path and nothing covered it. Ran end to end while writing it: create category → reassign `steampunk` → facet chip → **item page chip exists under the admin-created heading with the inline picker agreeing** (the vanish bug) → Insights panel with no restart → delete → back under *Setting*. Corrected one claim in the process: deleting a category **cascades its overrides away**, so `groupTagsByCategory`'s *Other* fallback is unreachable from the UI — documented as such rather than left as phantom untested coverage.
@@ -1415,7 +1415,7 @@ The H4 epic itself stays live in TASKS.md (H4.0/H4.2 still open, gate H3 monetiz
 ## Smoke test — 2026-08-02 (ID `SM#`) — 9th sweep, full A–F re-run, zero findings
 
 
-*(The 7th and 8th sweeps are both fully closed and archived → [docs/archive/history.md](docs/archive/history.md).)* Unlike those two (each scoped to one batch's new surface), this is a **full A–F checklist re-run** since this session shipped almost no user-facing change. Logged in via `/api/dev/login` (Ramses/RAWG identity, 1,921 library items, 1,637 rated); never called `/api/auth/logout`. **Zero functional findings — every section held up.**
+*(The 7th and 8th sweeps are both fully closed and archived → [docs/archive/history.md](../../docs/archive/history.md).)* Unlike those two (each scoped to one batch's new surface), this is a **full A–F checklist re-run** since this session shipped almost no user-facing change. Logged in via `/api/dev/login` (Ramses/RAWG identity, 1,921 library items, 1,637 rated); never called `/api/auth/logout`. **Zero functional findings — every section held up.**
 
 **A (public/anon), all pass:** Home rails+guest panel render correctly (no stats strip, no Recommended rail for anon); Discover anon search for "Nolan" returns Titles only, zero People/Tags groups, zero `/api/discover/facets` calls (network-verified); item page real star+Save controls for anon, clicking a star opens the sign-in dialog not a redirect; wrong-slug URL canonicalizes; gated pages shell-200 anon, `/dashboard` 308s; 404s branded; `robots.txt`/`sitemap.xml` (2,538 `<url>`)/`/api/health` correct.
 

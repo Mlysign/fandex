@@ -13,6 +13,32 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `smoketest.md` — the `/smoketest` living plan; findings land in `TASKS.md`.
 - `.claude/plans/` — session plans written by one session and executed by another (the audit trail of planned-vs-shipped). This is the one path under `.claude/` that is tracked.
 
+## Stack + commands
+
+Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind v4 · SQLite via `better-sqlite3` (synchronous, in-process, single file → **one always-on process, not serverless, not multi-instance**) · JWT sessions via `jose` · Vitest.
+
+| Task | Command |
+|---|---|
+| Dev server | `npm run dev` (:3000) — **never run `next build` while this is running** |
+| Tests | `npm test` · `npm run test:watch` |
+| Typecheck | `npx tsc --noEmit` |
+| Lint | `npm run lint` — 0 errors is the standing bar; warnings are `no-explicit-any` noise |
+| Build | `npm run build` |
+| Migrate a live DB | `node scripts/migrate.mjs` (the standalone path — see the invariant below) |
+
+Env vars: the authoritative table is in `README.md`; `src/lib/config.ts` fail-fasts at boot on the five required ones.
+
+## Repo map
+
+- `src/app/` — routes. `api/` holds 49 route handlers (`account auth calendar csp-report detail dev discover facet health home insights library search settings sync watchlist`); the rest are pages. Root-level `[type]/`, `person/`, `tag/`, `studio/` are the PUBLIC SEO surfaces (P13/P17) — a new root-level dynamic segment breaks a lint rule that gates CI.
+- `src/lib/` — 80 modules + 51 colocated `*.test.ts`, mostly flat. The load-bearing ones: `db.ts`/`migrations.ts` (schema), `matcher.ts` (identity + write paths), `merge.ts`/`facets.ts` (projection), `discovery.ts` (catalog pool, Fandex Score, ranking), `liveDiscover.ts` (provider-fed browse feed), `libraryAnalysis.ts` (taste profile), `session.ts` (auth), `http.ts` (every third-party call).
+  - `sources/` — per-provider fetch + normalize + project; `sources/adapters/` are the sync pull/push adapters (**the prune invariant lives here**).
+  - `sync/index.ts` — `syncProvider`, the one place that prunes.
+  - `detail/` — item + facet detail assembly, incl. the public (leak-boundary) variants.
+  - `metadata/`, `legal/` — provider registry, and the bilingual legal content tree.
+- `src/components/` — 73 components, grouped `auth discovery facet insights item legal ui`.
+- `scripts/` — standalone Node tooling (migrate, rehearsals, probes). These run under plain `node` via `alias-hooks.mjs`, which is why the `import type` rule below is load-bearing.
+
 ## Verifying anything behind a login
 
 `/library`, `/wishlist`, `/insights`, `/profile`, `/settings` and the item-detail personal block all `router.replace("/")` for anonymous visitors, so **none of them can be checked without a session.** Use **`GET /api/dev/login`** — it mints one for the `users.id` in `DEV_LOGIN_USER_ID` and redirects to `/`; the local `.env` already points at the real account. Works in the in-app browser pane.
