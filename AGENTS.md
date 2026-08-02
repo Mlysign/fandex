@@ -13,7 +13,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `docs/archive/history.md` — everything finished. **Grep it for a keyword** when you need the "why" behind a past decision; never read it end to end and never pull it into context for planning.
 - `PLATFORMS.md` — platform integration capability reference.
 - `smoketest.md` — the `/smoketest` living plan; findings land in `TASKS.md`.
-- `docs/` — live reference only: `fandex-score.md` (H5 design), `performance-audit.md` (**the only open perf items live here**), `monetization-legal.md` + `cookie-assessment.md` + `compliance-review.md` (H3/H4 legal), `design/fandex-handoff/` (the design system).
+- `docs/` — live reference only: `fandex-score.md` (H5 design), `monetization-legal.md` + `cookie-assessment.md` + `compliance-review.md` (H3/H4 legal), `design/fandex-handoff/` (the design system). **Performance work is closed** — the audit is archived; `scripts/perf-probe.mjs` + `scripts/probe-pool.mjs` are the starting point for any future pass, and **measure before optimising** (§A was mis-sized by 100× once).
 - `.claude/plans/` — executed session plans. **Forensic use only** — don't read one to find out what's open; that's `TASKS.md`.
 
 **Doc conventions (a 2026-08-02 compression pass restored these — please hold the line):** a section that is fully done moves to the archive **the same session**, leaving at most a one-line pointer. STATUS.md holds *state*, not a session-by-session changelog — that's what git log and the archive are for. CI warns when `TASKS.md` passes 200 lines; it has blown past it twice.

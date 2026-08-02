@@ -1,4 +1,10 @@
-# Performance audit — 2026-07-30, updated 2026-07-31
+# Performance audit — 2026-07-30 → 2026-08-02 · ✅ CLOSED
+
+> **Every item in this audit is resolved.** §A (the catalog pool rebuild) shipped 2026-08-02 and was
+> the last one; §B's prod half moved to PR17's checklist, since it can't be measured while prod is
+> down. **Archived — nothing here is open work.** The perf rules that outlived it live in
+> `AGENTS.md` and [[perf-audit-2026-07-30]]; the probes (`scripts/perf-probe.mjs`,
+> `scripts/probe-pool.mjs`) stay in the repo and are the right starting point for any future pass.
 
 Measured against the real local `data/rr.db` (1,921 library items · 95 wishlist · 1,635 rated ·
 4,405 `media_items` · 6,054 `media_links`), logged in, `next dev` on port 3000. Harness:
@@ -178,41 +184,82 @@ gone, which is the multi-source design working as intended.
 
 ---
 
-## Still open — the harder half, deliberately deferred to a supervised pass
+## ✅ A. The catalog pool rebuild — CLOSED 2026-08-02
 
-### A. The catalog pool cache is still invalidated far more often than it needs to be
+**The problem:** `buildCache()` ([discovery.ts](../src/lib/discovery.ts)) rebuilt the WHOLE pool —
+4,146 link rows / 39.2 MB of `raw_data` — from scratch on every rebuild, and `catalogSignature()`
+counts `POOL_WHERE`, which unions in `user_item_state`: any wishlist/library/rating write changes
+pool membership, so it forced a full re-parse.
 
-> **Sizing corrected 2026-08-02 — see the correction above.** This is a ~430 ms item, not
-> the 58 s it was once blamed for, and the "must-have test" below already passes. Still
-> worth doing; no longer urgent.
+**Not the fix that was proposed here.** The original plan was to split the signature and treat a
+newly-acted-on item as an incremental *add* to the cached pool. That was rejected on review: its
+failure mode is an item silently missing from the pool until the TTL expires — which is precisely
+why it kept getting deferred. **What shipped instead caches the DERIVATION, not the membership.**
+Pool membership is still recomputed from SQL on every single rebuild, so that failure mode does not
+exist; only the per-item `JSON.parse` + `mergeLinks` + `extractFacets` is skipped, via the shared
+`facetCache` (§4) that four other surfaces already use.
 
-`buildCache()` ([discovery.ts](../src/lib/discovery.ts)) still rebuilds the WHOLE pool — 4,133 link
-rows / 39.0 MB of `raw_data` — from scratch on every rebuild, and `catalogSignature()` counts
-`POOL_WHERE`, which includes `mi.id IN (SELECT media_item_id FROM user_item_state)`: **any**
-wishlist/library/rating write still changes the signature and forces a full pool re-parse, even
-though the shared cache above means each individual item's re-derivation is now fast.
+`buildCache()` is now a two-pass read: **pass 1** selects metadata + a freshness token
+(`MAX(last_synced)`, `LENGTH(raw_data)`) with no blobs, **pass 2** selects `raw_data` for cache
+misses only. A rebuild after a membership write re-derives exactly the one item that changed.
 
-**Fix:** split the pool signature — keep `browsed = 0` count/`MAX(updated_at)` as the catalog
-component, and treat a newly-acted-on item as an incremental *add* to the existing cache rather than
-a full invalidation. Reserved for a supervised pass, not this one: get it wrong and a newly
-wishlisted item can silently miss the pool until the next TTL expiry — a failure that's silent, not
-loud, which is exactly the class of change this batch's plan excluded from an unattended session.
-**The must-have test before it ships:** a wishlist write makes the item appear in `find()` results
-*immediately*, not on the next TTL expiry.
+**Measured on the real 2,531-item pool** (`scripts/probe-pool.mjs`, same script both times):
 
-### B. DB inflation — the 2.5 GB prod question is still open
+| | before | after |
+|---|--:|--:|
+| pool rebuild after invalidate | 408 ms | **156 ms** (−62%) |
+| membership write → `find()` | 578 ms | **296 ms** (−49%) |
+| `find()` cold | 615 ms | **292 ms** (−53%) |
+| cold pool build, fresh process | 473 ms | 596 ms |
+
+**The must-have test passes** (it did before too, and still must): a wishlist write puts the item in
+`find()` immediately — verified both directions, promote and demote, in `discoveryPool.test.ts` and
+against the real DB in the probe.
+
+**Two things found while building it, both worth knowing:**
+
+1. **`scoringConfigSignature()` costs 0.061 ms a call**, and the cache key was recomputing it per
+   item — ~307 ms of a cold 2,531-item rebuild, *more than the JSON.parse the cache exists to
+   avoid*. It's constant across a rebuild, so it's now computed once and passed down
+   (`derivedSignature()`). This was most of the win; the two-pass read alone was a wash.
+2. **🐛 `last_synced` alone was never a sufficient freshness token** — a latent correctness bug in
+   `facetCache` since it shipped 2026-07-31, on `/api/library`, `/api/calendar`,
+   `analyzeLibraryFacets` and `loadMembershipGroups`. `matcher.ts` writes it as
+   `strftime('%s','now')`, so **two writes to the same link inside one second are
+   indistinguishable** and the cache serves the first one's facets. That is not hypothetical:
+   enrichment writes straight after a sync upsert, and `/api/facet/mine` heals thin links before
+   scoring. The key now also carries `SUM(LENGTH(raw_data))` — no parse needed, plain SQL
+   `LENGTH()` — and `discoveryPoolCache.test.ts` pins it (confirmed non-vacuous: it fails without
+   the length component). `facetCache.test.ts`'s case (a) had asserted the *stale* value was
+   correct, on the stated premise that "production never mutates raw_data without bumping
+   last_synced". It does; that test was corrected.
+
+**The cold path is ~120 ms slower** (one extra metadata pass before the blob read). Accepted
+deliberately: it happens once per process, against −280 ms on every membership write, and in the
+real app the shared cache is usually already warm from `/api/library` or `/api/calendar` before
+Discover is ever hit — the probe's "cold" is an artificial worst case where nothing else has run.
+
+## B. DB inflation — the prod question, now tracked in PR17
 
 | | |
 |---|--:|
 | local `rr.db` | 55.9 MB |
-| local `rr.db-wal` | **48.4 MB** — checkpointing is not keeping up |
+| local `rr.db-wal` | 48.4 MB → **closed as a dev artifact**, see below |
 | `media_links` | 6,054 rows / 44.8 MB `raw_data` (**7.4 KB avg**) |
 | `media_items` | 4,405 rows, **1,879 of them `browsed`** |
-| prod `rr.db` | ~2.5 GB (memory: `prod-db-size-and-page-cache`) |
+| prod `rr.db` | ~2.5 GB (memory: [[prod-incidents]]) |
 
-A 48 MB WAL against a 56 MB main file is the thing to look at first. Deferred with the rest of the
-schema-adjacent work: a persisted facet-projection column, shrinking the `raw_data` projection, and
-`dbPrune` coverage of the browsed tail. **The WAL/checkpoint half is now investigated — see below.**
+**Both halves of §B are resolved as far as they can be here.** The local WAL is a dev-process
+artifact, not a bug (full investigation below). **The prod 2.5 GB question is unanswerable while
+prod is down** — every measurement it needs (`/api/dev/dbsize`, `/api/health`'s `cgroupMb`,
+Litestream snapshot state) requires a live deployment. It is therefore **no longer tracked as a perf
+item**: it is step 1 of PR17's post-outage checklist in `TASKS.md`, which has the expected values
+inline. Nothing about it is actionable before Railway resumes.
+
+The schema-adjacent ideas it was bundled with — a persisted facet-projection column, shrinking the
+`raw_data` projection, `dbPrune` coverage of the browsed tail — were never scoped or committed to,
+and are not open work. §A's fix removed the request-path cost that motivated them; if prod's size
+turns out to need attention, PR17's readings are the input for scoping it then.
 
 #### The local WAL, investigated 2026-08-02 (report-only, no change shipped)
 
@@ -290,7 +337,7 @@ rows, `integrity_check: ok`) plus its `-wal`/`-shm` sidecars — the rehearsal s
 deliberately, since without the `-wal` any un-checkpointed commits are simply missing from the
 rehearsal. It's both the newest and the most useful: the live DB is at `user_version = 11`, so this
 one exercises the widest upgrade span (5 → 11) against a real production-shaped database, which is
-exactly the path [[fresh-db-tests-hide-upgrade-bugs]] warns green tests never take.
+exactly the path [[db-migrations-and-testing]] warns green tests never take.
 
 Deleted (all superseded, each strictly older AND at an equal-or-lower schema version): `rr.db`
 (uv 0), `.bak-pre-d8` (uv 0), `.bak-pre-d1d5-20260614` (uv 3), `.bak-pre-d9-20260616` (uv 4),

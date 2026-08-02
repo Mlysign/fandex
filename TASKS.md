@@ -31,7 +31,7 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
 
 **Cannot run while deployments are paused** — the site 404s at Railway's edge, so no endpoint is reachable. Checklist pre-written 2026-07-27 so this is a one-shot run; every step has the literal command and expected value inline:
 
-1. **DB size** — open `https://fandex.org/api/dev/scoring` in a browser logged in as the admin user first (this and dbsize share the `SCORING_ADMIN_USER_IDS` gate — non-admins and a cookie-less `curl` both get a 404), then hit `https://fandex.org/api/dev/dbsize`. Expect top-level `fileMb` ≈ **36.5** and `tables.find(t => t.name === "media_items").rows` ≈ **2,012**.
+1. **DB size — also the answer to the old perf §B.** Open `https://fandex.org/api/dev/scoring` in a browser logged in as the admin user first (this and dbsize share the `SCORING_ADMIN_USER_IDS` gate — non-admins and a cookie-less `curl` both get a 404), then hit `https://fandex.org/api/dev/dbsize`. Expect top-level `fileMb` ≈ **36.5** and `tables.find(t => t.name === "media_items").rows` ≈ **2,012**. **If `fileMb` is anywhere near the old ~2.5 GB, that's the unexplained inflation resurfacing** — the performance audit's §B, which was archived precisely because it can't be measured while prod is down. The prune+VACUUM should have settled it; this reading is what confirms or reopens it.
 2. **Memory ramp is actually dead** — `curl https://fandex.org/api/health` (public). Read **`cgroupMb.fileMb`** **after several hours of uptime**, not right after a redeploy (a fresh process hasn't had time to re-ramp, so an early read looks healthy regardless). Expect a plateau in the low tens/hundreds of MB, not a climb toward 2,000 — **the plateau, not any single reading, is the proof.**
 3. **Sitemap + render** — `curl -s https://fandex.org/sitemap.xml | grep -c "<url>"` → ≈ **2,013**. Then load `https://fandex.org/` and confirm no console/server errors.
 4. **Litestream survived the VACUUM** — via the Railway shell: `litestream snapshots -config /etc/litestream.yml /app/data/rr.db`. **UNVERIFIED since the 2026-07-22 outage — don't skip.** Expect a generation newer than `18d8221abccc198d` (the pre-VACUUM one) and a bucket in the low tens of MB, consistent with a 36.5 MB DB. (It read 10.6 MB right after the VACUUM, down from a 13.9 GB peak — never confirmed as a stable new generation.)
@@ -96,7 +96,6 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
 
 ## Still open elsewhere
 
-- **Perf §A / §B** — [docs/performance-audit.md](docs/performance-audit.md). §A: the catalog pool cache re-parses the full pool on any membership write (~0.4 s — correctly re-sized after the 2026-08-02 misattribution, see below). §B: why prod's `rr.db` is 2.5 GB while local is ~49 MB. Both deliberately deferred to a supervised pass.
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now that the aggregate is a raw sum rather than a damped mean. **Time-gated:** revisit after a few weeks of real scores under the new formula (4 days as of 2026-08-02 — too soon; a re-tune now would fit noise).
 - **Platform integrations** — Hardcover / Open Library / AniList are chosen but not started. See [PLATFORMS.md](PLATFORMS.md).
 

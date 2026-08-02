@@ -23,7 +23,7 @@
 // REQUEST path, every time, for as long as the outage lasted. `fetchPages` fires
 // 5 RAWG pages under one `Promise.all`, and `/api/home` reaches RAWG twice, so a
 // cold `/api/home` measured **2.2 minutes** and a cold `/api/discover` 58–60 s.
-// (That 58 s had been recorded in docs/performance-audit.md as the catalog-pool
+// (That 58 s had been recorded in docs/archive/performance-audit.md as the catalog-pool
 // cache re-parsing 39 MB — it is not: a full pool rebuild measures ~430 ms.)
 //
 // The breaker turns "pay the full ladder on every call" into "pay it once, then

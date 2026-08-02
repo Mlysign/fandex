@@ -4,7 +4,7 @@ import { saveTagCategory } from "@/lib/scoringConfig";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 
 // 2026-07-31 — the "safe half" of the deferred discovery-cache perf fix
-// (docs/performance-audit.md §A): /api/library and /api/calendar each
+// (docs/archive/performance-audit.md §A): /api/library and /api/calendar each
 // independently JSON.parse + mergeLinks + extractFacets the same blobs
 // analyzeLibraryFacets/loadMembershipGroups already derive. This cache lets a
 // caller skip the parse entirely when an item's links haven't changed —
@@ -39,16 +39,30 @@ const directorOf = (d: ReturnType<typeof getDerivedForItem>) =>
   d.facets.find((f) => f.kind === "person" && f.role === "director")?.label;
 
 describe("getDerivedForItem", () => {
-  it("(a) is a real cache hit when last_synced is unchanged — stale content stays stale", () => {
+  it("(a) is a real cache hit when the whole freshness token is unchanged", () => {
     const id = "item-a";
     const first = getDerivedForItem(id, [tmdbLink("Ari Aster", 100)], MOVIE);
     expect(directorOf(first)).toBe("Ari Aster");
 
-    // Same lastSynced, DIFFERENT raw_data content. A real cache hit must
-    // ignore this — production never mutates raw_data without bumping
-    // last_synced, so this is purely a white-box probe of the cache boundary.
-    const second = getDerivedForItem(id, [tmdbLink("Jordan Peele", 100)], MOVIE);
+    // Same lastSynced AND same raw_data length ("Sam Raimi" is also 9 chars),
+    // different content. A real cache hit must ignore this — it's a white-box
+    // probe that this is a cache at all and not a silent re-derive.
+    const second = getDerivedForItem(id, [tmdbLink("Sam Raimi", 100)], MOVIE);
     expect(directorOf(second)).toBe("Ari Aster");
+  });
+
+  it("(a2) a same-second rewrite that changes raw_data LENGTH is not served stale", () => {
+    // The correction to this file's original premise (2026-08-02). It used to
+    // assert that stale content stays stale on an unchanged last_synced,
+    // reasoning that "production never mutates raw_data without bumping
+    // last_synced". It does: last_synced is strftime('%s','now'), so any
+    // sub-second follow-up write (enrichment straight after a sync upsert,
+    // /api/facet/mine healing a thin link) lands on the same value. The key
+    // now carries SUM(LENGTH(raw_data)) too, so that case is caught.
+    const id = "item-a2";
+    getDerivedForItem(id, [tmdbLink("Ari Aster", 100)], MOVIE);
+    const after = getDerivedForItem(id, [tmdbLink("Jordan Peele", 100)], MOVIE);
+    expect(directorOf(after)).toBe("Jordan Peele");
   });
 
   it("(b) bumping last_synced invalidates the entry", () => {

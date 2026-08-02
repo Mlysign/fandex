@@ -7,10 +7,11 @@
 
 import { query, get } from "@/lib/db";
 import { BoundedCache } from "@/lib/boundedCache";
-import { mergeLinks, extractYear } from "@/lib/merge";
+import { extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
-import { extractFacets, type Facet, facetId, type FacetRole, personKey, companyKey } from "@/lib/facets";
+import { getDerivedForItem, peekDerived, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
+import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
@@ -140,28 +141,123 @@ function catalogSignature(): string {
   return `${r?.n ?? 0}:${r?.mx ?? 0}`;
 }
 
+// NOTE: no `raw_data` — pass 1 reads metadata only (see buildCache()).
+// `raw_len` is LENGTH(raw_data), not the blob itself: half of facetCache's
+// freshness token, and the half that catches a same-second rewrite.
 interface VecRow {
   id: string; type: MediaType; title: string; release_date: string | null; poster_url: string | null;
-  created_at: number; source: string | null; source_id: string | null; raw_data: string | null; link_release_date: string | null;
+  created_at: number; source: string | null; source_id: string | null; link_release_date: string | null;
+  last_synced: number | null; raw_len: number | null;
 }
 
+interface RawDataRow {
+  media_item_id: string; source: string; source_id: string;
+  release_date: string | null; raw_data: string | null; last_synced: number | null;
+}
+
+// SQLite caps host parameters per statement (SQLITE_MAX_VARIABLE_NUMBER). Chunk
+// the miss list well under any build's limit rather than assuming the modern
+// 32k default.
+const MISS_CHUNK = 400;
+
+// §A, closed 2026-08-02 — the pool rebuild no longer re-parses the whole catalog.
+//
+// The rebuild itself still runs on every membership write, because
+// `catalogSignature()` counts POOL_WHERE and a wishlist/rating write genuinely
+// changes pool membership. What changed is the COST of that rebuild: pass 1
+// reads metadata + `last_synced` only (no raw_data), which is enough to build
+// each item's freshness key, and `raw_data` is then SELECTed in pass 2 for
+// CACHE MISSES ALONE. An unchanged item costs a map lookup — no SQL blob read,
+// no JSON.parse, no mergeLinks/extractFacets.
+//
+// Why not the originally-proposed incremental add (docs/archive/performance-audit.md §A
+// as written): that would have kept the cached pool and patched members into it,
+// so a bug there means an item silently missing from the pool until the 5-minute
+// TTL expires — a silent failure, which is exactly why it was deferred. Caching
+// the DERIVATION instead leaves membership recomputed from SQL every single
+// rebuild, so that failure mode does not exist here. Same saving, no new risk.
+//
+// The cache is `facetCache`'s, shared with /api/library, /api/calendar,
+// analyzeLibraryFacets and loadMembershipGroups — so the pool warms those and
+// vice versa, rather than being a second copy of the same derivation.
 function buildCache() {
   const rows = query<VecRow>(
     `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url, mi.created_at,
-            ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
+            ml.source, ml.source_id, ml.release_date as link_release_date, ml.last_synced,
+            LENGTH(ml.raw_data) as raw_len
      FROM media_items mi
      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
      WHERE ${POOL_WHERE}`
   );
 
-  const groups = new Map<string, { row: VecRow; links: MediaLink[] }>();
+  const groups = new Map<string, { row: VecRow; links: RawLink[]; maxSynced: number; rawLen: number }>();
   for (const r of rows) {
-    if (!groups.has(r.id)) groups.set(r.id, { row: r, links: [] });
+    let g = groups.get(r.id);
+    if (!g) { g = { row: r, links: [], maxSynced: 0, rawLen: 0 }; groups.set(r.id, g); }
     if (r.source) {
-      groups.get(r.id)!.links.push({
-        id: "", mediaItemId: r.id, source: r.source as MediaLink["source"], sourceId: r.source_id!,
-        title: null, releaseDate: r.link_release_date, rawData: JSON.parse(r.raw_data ?? "{}"), lastSynced: 0,
+      g.links.push({
+        source: r.source as MediaLink["source"], sourceId: r.source_id!,
+        releaseDate: r.link_release_date, rawData: null, lastSynced: r.last_synced ?? 0,
       });
+      g.maxSynced = Math.max(g.maxSynced, r.last_synced ?? 0);
+      g.rawLen += r.raw_len ?? 0;
+    }
+  }
+
+  // Pass 1: what's already derived? `peekDerived` needs no raw_data.
+  // The config signature is constant across the whole rebuild but costs
+  // 0.061 ms a call — recomputing it per item was ~307 ms of a cold rebuild.
+  const sig = derivedSignature();
+  const derivedById = new Map<string, Derived>();
+  const missIds: string[] = [];
+  for (const [id, g] of groups) {
+    const hit = peekDerived(id, g.maxSynced, g.rawLen, undefined, sig);
+    if (hit) derivedById.set(id, hit);
+    else missIds.push(id);
+  }
+
+  // Pass 2: raw_data for misses only.
+  if (missIds.length) {
+    const rawByItem = new Map<string, RawDataRow[]>();
+    // Chunked `IN (?,?,…)` is much cheaper than a full scan for a handful of
+    // misses and much MORE expensive when nearly everything misses — measured
+    // on the real 2,531-item pool: a cold rebuild (every item a miss) went
+    // 473 ms -> 989 ms on the chunked path alone, while the bulk join stayed
+    // flat. So pick per rebuild. Cold start and a projection-version bump take
+    // the bulk path; the membership write this whole fix targets takes the
+    // chunked one, where the miss list is one item.
+    const bulk = missIds.length > groups.size / 2;
+    const rd = bulk
+      ? query<RawDataRow>(
+          `SELECT ml.media_item_id, ml.source, ml.source_id, ml.release_date, ml.raw_data, ml.last_synced
+           FROM media_links ml JOIN media_items mi ON mi.id = ml.media_item_id
+           WHERE ${POOL_WHERE}`
+        )
+      : [];
+    for (const r of rd) {
+      const list = rawByItem.get(r.media_item_id);
+      if (list) list.push(r); else rawByItem.set(r.media_item_id, [r]);
+    }
+    for (let i = 0; !bulk && i < missIds.length; i += MISS_CHUNK) {
+      const chunk = missIds.slice(i, i + MISS_CHUNK);
+      const part = query<RawDataRow>(
+        `SELECT media_item_id, source, source_id, release_date, raw_data, last_synced
+         FROM media_links WHERE media_item_id IN (${chunk.map(() => "?").join(",")})`,
+        chunk
+      );
+      for (const r of part) {
+        const list = rawByItem.get(r.media_item_id);
+        if (list) list.push(r); else rawByItem.set(r.media_item_id, [r]);
+      }
+    }
+    for (const id of missIds) {
+      const g = groups.get(id)!;
+      const rawLinks: RawLink[] = (rawByItem.get(id) ?? []).map((r) => ({
+        source: r.source as MediaLink["source"], sourceId: r.source_id,
+        releaseDate: r.release_date, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
+      }));
+      // getDerivedForItem populates the shared cache as a side effect.
+      derivedById.set(id, getDerivedForItem(id, rawLinks, g.row.type, undefined, sig));
     }
   }
 
@@ -177,9 +273,11 @@ function buildCache() {
   // it's built from the POST-alias facets. Keyed by raw tag key (tags have no
   // role, so the key alone is the identity — see facets.ts).
   const rawTagCounts = new Map<string, { label: string; count: number }>();
-  for (const { row, links } of groups.values()) {
-    const merged = mergeLinks(links, row.type);
-    const rawFacets = extractFacets(links, row.type, merged);
+  for (const [id, { row, links }] of groups) {
+    // Both come from facetCache — `facets` there is always RAW extractFacets
+    // output (that cache deliberately doesn't bake in alias/override
+    // resolution), so the applyTagAliases step below is unchanged.
+    const { merged, facets: rawFacets } = derivedById.get(id)!;
     const facets = applyTagAliases(rawFacets, aliases);
     vectors.push({
       id: row.id, type: row.type,
@@ -197,10 +295,10 @@ function buildCache() {
       facets,
     });
     for (const f of facets) {
-      const id = facetId(f);
-      const v = vocabMap.get(id);
+      const fid = facetId(f);
+      const v = vocabMap.get(fid);
       if (v) v.count++;
-      else vocabMap.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, count: 1 });
+      else vocabMap.set(fid, { kind: f.kind, role: f.role, key: f.key, label: f.label, count: 1 });
     }
     for (const f of rawFacets) {
       if (f.kind !== "tag") continue;

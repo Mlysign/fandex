@@ -24,10 +24,11 @@ This stopped being a "wait it out" situation. **Action for Nils:** open the Rail
 | 🔵 | **H4.0 — legal advice on the Impressum** | **You.** Gates H4.2, which gates all of H3. |
 | ⏸️ | **H4.2 — Impressum content** | H4.0. Route + noindex + placeholder already live. |
 | 🟢 | **H3 — monetization** | H4.0/H4.2. Scoped + model locked; H3.0/H3.3/H3.4/H3.9 not started. H3.8's trigger is **defined but explicitly NOT approved** — don't read those numbers as settled. |
-| 🟢 | **Perf §A / §B** | Nothing — deliberately deferred. §A = the catalog pool cache's over-eager invalidation (~0.4 s, correctly re-sized after the 2026-08-02 misattribution). §B = why prod's `rr.db` is 2.5 GB. See [docs/performance-audit.md](docs/performance-audit.md). |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; it's been 4 days as of 2026-08-02. |
 
-Everything else is done. **H1, H2, H5, all five audit passes, all 10 smoke sweeps, every production incident, and all of H4 except H4.0/H4.2.**
+Everything else is done. **H1, H2, H5, all five audit passes, all 10 smoke sweeps, every production incident, the full performance audit, and all of H4 except H4.0/H4.2.**
+
+**Performance is closed (2026-08-02).** The last item — the catalog pool re-parsing 39 MB on every wishlist/rating write — shipped: a pool rebuild is **408 → 156 ms** and a membership write's next `find()` **578 → 296 ms**. It also turned up a real correctness bug in the shared facet cache (a same-second re-sync could serve stale facets on four surfaces); fixed and pinned by a test. The audit is archived; the probes stay in `scripts/`.
 
 ## 🗺️ Roadmap
 

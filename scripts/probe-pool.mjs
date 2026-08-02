@@ -1,4 +1,4 @@
-// The catalog-pool rebuild probe (docs/performance-audit.md §A).
+// The catalog-pool rebuild probe (docs/archive/performance-audit.md §A).
 //
 // Answers two questions the request-path timings can't separate: how expensive
 // is ONE full `buildCache()`, and what is the SHAPE of that cost — SQL read vs
