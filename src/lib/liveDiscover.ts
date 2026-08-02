@@ -26,7 +26,7 @@ import { METADATA } from "@/lib/metadata/registry";
 import type {
   FeedCandidate, RawPayload} from "@/lib/discoverFeed";
 import { fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
-  fetchIgdbGamePage, fetchTraktMoviePage, fetchTraktShowPage,
+  fetchIgdbGamePage, fetchTraktMoviePage, fetchTraktShowPage, dedupeGames,
 } from "@/lib/discoverFeed";
 import type { MediaLink, MediaType } from "@/types";
 
@@ -321,20 +321,10 @@ function dedupeById(cands: FeedCandidate[]): FeedCandidate[] {
   return out;
 }
 
-// Games: RAWG and IGDB use independent ids, so the same title would appear
-// twice — dedupe by normalized title + release year. First (RAWG) wins; IGDB
-// only adds titles RAWG's window missed.
-function dedupeGames(cands: FeedCandidate[]): FeedCandidate[] {
-  const seen = new Set<string>();
-  const out: FeedCandidate[] = [];
-  for (const c of cands) {
-    const key = `${normalizeName(c.title ?? "")}|${extractYear(c.releaseDate) ?? "?"}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(c);
-  }
-  return out;
-}
+// Games dedup (RAWG vs IGDB, by normalized title + year) moved to
+// discoverFeed.ts and is imported above — SM35/SM36 needed the same rule in the
+// section-pagination and trending paths, and three copies of an identity rule is
+// how those two surfaces drifted apart in the first place.
 
 // ── Public: the personalized browse feed ───────────────────────────
 // Returns client-shaped discover items (taste-selected, NOT yet date-sorted —

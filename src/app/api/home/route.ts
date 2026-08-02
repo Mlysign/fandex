@@ -12,7 +12,7 @@ import { personalizedFeed, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import {
-  fetchTmdbTrending, fetchTraktTrending, fetchRawgTrendingGames,
+  fetchTmdbTrending, fetchTraktTrending, fetchTrendingGames,
 } from "@/lib/discoverFeed";
 import { candidatesForMonth, monthKey, nextMonthKey } from "@/lib/popularMonthFeed";
 import { rankCrossSourcePopularity } from "@/lib/popularMonth";
@@ -139,7 +139,11 @@ async function trendingPool(region: string): Promise<FeedCandidate[]> {
     fetchTmdbTrending("show", 1).catch(() => []),
     fetchTraktTrending("movie", 1).catch(() => []),
     fetchTraktTrending("show", 1).catch(() => []),
-    fetchRawgTrendingGames(1).catch(() => []),
+    // SM36: was fetchRawgTrendingGames — RAWG only. During the 2026-08-02 RAWG
+    // outage this returned [], so the rail had zero games and, with the Games
+    // type filter on, the entire "Popular right now" section disappeared from
+    // Home with no explanation. fetchTrendingGames pulls IGDB alongside it.
+    fetchTrendingGames(1).catch(() => []),
   ]);
   void region; // trending isn't region-scoped upstream; kept in the cache key
   // TMDB before Trakt — see dedupeById.

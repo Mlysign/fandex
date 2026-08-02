@@ -10,6 +10,7 @@
 import type { MediaType, Source } from "@/types";
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import { log } from "@/lib/logger";
+import { normalizeName, extractYear } from "@/lib/merge";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -418,6 +419,71 @@ export function fetchTraktTrending(type: "movie" | "show", page = 1): Promise<Fe
 export async function fetchRawgTrendingGames(page = 1, days = 60): Promise<FeedCandidate[]> {
   const win: DateRange = { gte: offsetISO(-days), lte: todayISO() };
   return fetchGamePage(page, "past", win);
+}
+
+// ── Games are a TWO-SOURCE medium — treat them as one (SM35/SM36, 2026-08-02) ──
+//
+// RAWG and IGDB both cover games, and `personalizedFeed` has always pulled both.
+// Nothing else did. So when RAWG went down (2026-08-02), the surfaces that pulled
+// RAWG *alone* lost the whole media type while the ones that pulled both carried
+// on unaffected:
+//   · `/api/discover?section=games` (the load-more path) returned `[]` forever
+//     while the INITIAL browse right above it still showed 18 IGDB games — SM35;
+//   · Home's "Popular right now" rail lost every game, so with the Games type
+//     filter on, the entire rail vanished from the page — SM36.
+// Both were one `fetchGamePage` call that should have been a pair. These two
+// helpers are that pair, defined ONCE so a third caller can't drift again — the
+// bug was never the outage, it was having the dual-source pull in one place and
+// the single-source pull in two others.
+
+// Games: RAWG and IGDB use independent ids, so the same title would appear twice
+// — dedupe by normalized title + release year. First wins, so pass RAWG first;
+// IGDB only adds titles RAWG's window missed. (Moved here from liveDiscover.ts,
+// which now imports it: one definition, since it's the identity rule for every
+// games pull, not just the feed's.)
+export function dedupeGames(cands: FeedCandidate[]): FeedCandidate[] {
+  const seen = new Set<string>();
+  const out: FeedCandidate[] = [];
+  for (const c of cands) {
+    const key = `${normalizeName(c.title ?? "")}|${extractYear(c.releaseDate) ?? "?"}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
+/**
+ * One page of games from EVERY source that has them (SM35). Use this anywhere a
+ * games list is wanted; `fetchGamePage` alone is the RAWG primitive and pulling
+ * it directly is what caused SM35.
+ *
+ * The two sources paginate independently (both 40/page), so page N here is
+ * RAWG's page N plus IGDB's page N, deduped — a deeper page, not an offset one.
+ * That matches how `personalizedFeed` already combines them.
+ */
+export async function fetchGamePageAllSources(
+  page = 1, direction: Direction = "future", window?: DateRange
+): Promise<FeedCandidate[]> {
+  const [rawg, igdb] = await Promise.all([
+    fetchGamePage(page, direction, window),
+    fetchIgdbGamePage(page, direction, window),
+  ]);
+  return dedupeGames([...rawg, ...igdb]);
+}
+
+/**
+ * Trending games from both sources (SM36). IGDB has no trending endpoint either,
+ * but it doesn't need one: `fetchIgdbGamePage` over a PAST window already sorts
+ * by `total_rating_count` (see `isPastWindow` at its call site), which is the
+ * same "recently out, most engaged-with" definition RAWG's `-added` gives — so
+ * the two are genuinely comparable inputs to one rail rather than a fallback of
+ * convenience. `rankCrossSourcePopularity` then normalizes each against its own
+ * source's median, which is what makes mixing them honest.
+ */
+export async function fetchTrendingGames(page = 1, days = 60): Promise<FeedCandidate[]> {
+  const win: DateRange = { gte: offsetISO(-days), lte: todayISO() };
+  return fetchGamePageAllSources(page, "past", win);
 }
 
 // Fetch the first `n` popularity pages of a source in parallel, flattened.

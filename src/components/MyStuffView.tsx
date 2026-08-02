@@ -298,7 +298,12 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
           <button
             onClick={sync}
             disabled={isBusy}
-            className="flex-shrink-0 text-sm px-3 py-1.5 bg-surface-elevated hover:bg-surface-overlay rounded-lg disabled:opacity-40 transition-colors border border-border-strong text-text-secondary hover:text-text-primary whitespace-nowrap"
+            // SM37: the visible pill is 60×34, under the 44px minimum. Height-only
+            // expansion (.tap-44-y) is the right variant here — the button is
+            // already 60px wide, so only the height was short, and claiming extra
+            // WIDTH would push its transparent hit area into the header controls
+            // beside it. See globals.css for the two constraints on this class.
+            className="tap-44-y flex-shrink-0 text-sm px-3 py-1.5 bg-surface-elevated hover:bg-surface-overlay rounded-lg disabled:opacity-40 transition-colors border border-border-strong text-text-secondary hover:text-text-primary whitespace-nowrap"
           >
             {autoSyncing ? <span className="animate-pulse">Syncing…</span> : syncing ? "Syncing…" : "Sync"}
           </button>

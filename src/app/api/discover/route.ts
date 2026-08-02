@@ -10,7 +10,7 @@ import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd"
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import type { Direction } from "@/lib/discoverFeed";
-import { fetchGamePage, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
+import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
 
@@ -173,7 +173,10 @@ export async function GET(req: NextRequest) {
     if (section) {
       const direction: Direction = searchParams.get("direction") === "past" ? "past" : "future";
       let results: any[] = [];
-      if (section === "games")  results = await fetchGamePage(page, direction);
+      // SM35: games come from RAWG *and* IGDB. This used to call fetchGamePage
+      // (RAWG only), so a RAWG outage made "Load more" a silent dead control on
+      // the games section while the initial browse above still showed IGDB games.
+      if (section === "games")  results = await fetchGamePageAllSources(page, direction);
       if (section === "movies") results = await fetchMoviePage(page, direction, region);
       if (section === "shows")  results = await fetchShowPage(page, direction);
       // Q15/Q16: always decorate with community stats (+ Fandex Score when
@@ -193,8 +196,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ items: annotate(persist(sortByDate(personalized))) });
     }
 
+    // SM35 again, and this is the ANONYMOUS/cold-start path — the public one.
+    // It had the same RAWG-only games pull, so a logged-in user with a taste
+    // signal kept seeing IGDB games (personalizedFeed pulls both) while a
+    // logged-out visitor's browse lost the whole category.
     const [games, movies, shows] = await Promise.all([
-      fetchGamePage(1, "future"),
+      fetchGamePageAllSources(1, "future"),
       fetchMoviePage(1, "future", region),
       fetchShowPage(1, "future"),
     ]);
