@@ -97,7 +97,30 @@ Big post-launch initiatives added _2026-07-15_. Epic **H**.
 - **H3.0** ⬜ · High · first (you) · ~0k — **Confirm the upkeep baseline:** actual Railway monthly bill + domain + any other recurring costs. One number, goes in this file.
 - **H3.3** ⬜ · Med · after H4.2 · ~10k — **Donations rail:** Ko-fi and/or GitHub Sponsors + a modest "Support Fandex" link (/profile footer, next to the H4.1 legal links). No tracking, no cookies → banner-neutral.
 - **H3.4** ⬜ · Med · after H4.2 · ~30k — **Affiliate implementation:** shared `buildStoreLink()` helper (normalize.ts ×4 sites, ItemView.tsx:102, RAWG passthrough rewrite), program signups — GMG/Humble/Fanatical/Amazon PartnerNet **+ gray-market (Eneba/Instant Gaming/Kinguin — decided in, note reputational + key-provenance risk)**, affiliate-link labeling per H4.9 ("Werbung"/affiliate disclosure), cookie-banner check per H4.4 (some programs set click-cookies). **Gates: H4.0 + H4.2 live.**
-- **H3.8** ⬜ · High · define now, execute at threshold (you+Claude) · ~5k now — **Path B trigger:** define the user/traffic threshold that unlocks ads + freemium (suggestion: sustained active users where a 2–5% conversion at ~1–2 €/mo clears ~200 €/mo — roughly 1k+ actives — OR pageviews clear an ad network's minimum, e.g. Monumetric's 10k/mo). Add a simple metric to watch (weekly active users from session data). At threshold: revisit ads (H3.6, parked) + one-time unlock (H3.7, parked) + TMDB commercial license/Trakt approval/freemium build, sunset "under the radar" status.
+- **H3.8** 🔵 defined 2026-08-02, execute at threshold — **Path B trigger.** Two independent arms with different metrics and different numbers — **decided, pending your approval before either is treated as final:**
+  - **Ads arm → pageviews, 10,000/mo (Monumetric's stated minimum, TASKS.md's own H3 recon).** No revenue-vs-cost arithmetic needed — Monumetric doesn't require covering a fixed license fee the way freemium does. A second, better-RPM tier exists at 50k+ pv/mo (Freestar/Mediavine, $15–40+ RPM vs Monumetric's $10–20) — not a separate hard gate, just worth re-checking which network fits once past 10k.
+  - **Freemium arm → weekly active users, corrected to account for TMDB's $149/mo commercial license, which the original "roughly 1k+ actives" estimate didn't net out.** At 2–5% conversion / 1–2€/mo (the original range), actives needed to clear **just** the license cost (≈€137 at current FX, no margin left):
+
+    | conversion | price | actives to clear €137/mo |
+    |--|--|--|
+    | 2% | 1€ | 6,850 |
+    | 2% | 2€ | 3,425 |
+    | 5% | 1€ | 2,740 |
+    | 5% | 2€ | 1,370 |
+
+    Even the best-case cell (1,370) is above the original "roughly 1k+" napkin figure once the license is actually subtracted rather than ignored. **Trigger set at 3,500 sustained WAU** — clears the license with real margin (€157.5/mo) at a *conservative* 3%/1.50€ combo rather than the table's optimistic corner, leaving room for Trakt's separate case-by-case commercial approval (no published fee found, but not assumed free) and normal churn.
+  - **The metric, checked against the live schema:** no page-view/session log exists, and `users.last_seen_at` is a false friend — it's updated **only** on a RAWG login or Steam OAuth callback (`src/app/api/auth/rawg/route.ts:72`, `.../steam/callback/route.ts:65`), never on an ordinary revisit via an existing 30-day session cookie, and never at all for TMDB/Trakt logins. It undercounts badly. The best signal **computable today** is "touched library/wishlist/rating in the last 7 days" — verified working against the real DB:
+    ```sql
+    SELECT COUNT(DISTINCT user_id) wau FROM (
+      SELECT user_id, added_at ts FROM user_library WHERE added_at >= :weekAgo
+      UNION ALL SELECT user_id, reviewed_at FROM user_library WHERE reviewed_at >= :weekAgo
+      UNION ALL SELECT user_id, added_at FROM user_watchlist WHERE added_at >= :weekAgo
+      UNION ALL SELECT user_id, added_at FROM user_item_state WHERE added_at >= :weekAgo
+      UNION ALL SELECT user_id, reviewed_at FROM user_item_state WHERE reviewed_at >= :weekAgo
+    )
+    ```
+    Caveat: this only counts users who took a write action (rate/wishlist/mark-watched) — a pure browser (calendar/discover/detail pages, no interaction) isn't captured by anything in the schema today. **Scoped follow-up, not built here:** make `users.last_seen_at` a real signal by touching it in `getSession()`/`withUser()` on every authenticated request, rate-limited to once per calendar day per user to avoid write amplification on a hot path — small, named, not attempted this session.
+  - At either threshold: revisit ads (H3.6, parked) + one-time unlock (H3.7, parked) + TMDB commercial license / Trakt approval / freemium build, sunset "under the radar" status.
 - **H3.9** ⬜ · High · before either stream ships · ~5k — **Monetization go-live checklist:** H4.0/H4.2 live on every route, affiliate labeling correct, cookie-banner state matches actual cookies set, H4.3/H4.5 docs match reality (declare affiliate data flows), gray-market shops clearly labeled as such.
 
 **Est. total for v1 launch scope: ~40–45k** (H3.3, H3.4, H3.8, H3.9). Ads (H3.6) and one-time unlock (H3.7) numbered but parked — revisit at H3.8 threshold, ~40k combined when picked back up. **JustWatch clickable links are still happening — just as a UX feature, not a monetization play; moved to P18 (see "Open — carried forward" above), no revenue-share negotiation planned.** Suggested order: **H4.0/H4.1/H4.2 first (now critical path)** → H3.0 + H3.8-definition → H3.4 (revenue core) → H3.3 → H3.9 gate check.

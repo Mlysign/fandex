@@ -217,7 +217,7 @@ rationalise.
   - Tests: none — this is a research document.
   - Depends on: none
 
-- [ ] **T4** — H3.8: write down the Path B trigger and how it gets measured
+- [x] **T4** — H3.8: write down the Path B trigger and how it gets measured
   - Files: `TASKS.md` (expand the existing H3.8 entry in place)
   - Detail: turn H3.8's parenthetical suggestion into a decided, written-down trigger. Two halves:
     **(a) The threshold.** TASKS.md's own starting point: "sustained active users where a 2–5%
