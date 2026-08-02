@@ -184,7 +184,7 @@ rationalise.
     test — if `npx vitest run` drops below 485, fix the test to match the corrected fact.
   - Depends on: none
 
-- [ ] **T3** — H4.9: the monetization legal one-pager
+- [x] **T3** — H4.9: the monetization legal one-pager
   - Files: `docs/monetization-legal.md` (new), `TASKS.md` (H4.9 entry → ✅ + pointer)
   - Detail: a decision-ready one-pager scoped to the **locked v1 model — donations + affiliate links
     only** (TASKS.md's H3 section, decided 2026-07-18). Do not re-litigate the model; research what
