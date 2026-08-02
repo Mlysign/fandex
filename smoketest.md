@@ -211,6 +211,33 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     density): the title box was still only 132px, so titles wrapped to 2 lines (`line-clamp-2`, T13)
     instead — expect ~30-36 chars now, not a fixed-width truncation. Screenshot at mobile.
 
+**G. Provider-degradation checks (added 2026-08-02, 10th run)**
+
+Why this section exists: the app has per-source *failure* isolation everywhere, which made everyone assume
+a dead provider was handled. It is — for *correctness*. The 10th run (during a real RAWG outage) found two
+surfaces that quietly lose a whole media type instead, and a third that had cost 60 s/request until `G1`.
+
+45. **Is anything down right now?** `curl -s http://localhost:3000/api/health` → read `openProviderCircuits`.
+    `{}` = all healthy. If a host is listed, sections 46–48 are live-testable for free; if not, they can be
+    forced by temporarily pointing a provider key at a bad value (don't commit it) or simply skipped.
+46. **Per media type, does every surface still have a second source?** With one provider down, check the
+    type it owns across ALL of: Home's three rails (each type filter separately — SM36 was only visible
+    with the Games chip selected), Discover's initial browse, Discover's **load-more per section** (SM35 —
+    the initial browse being fine does NOT clear this, they use different code paths), `/api/calendar/popular`,
+    and `/profile`'s Coming up. Cheap probes:
+    ```
+    curl -s ".../api/discover"                       # by-source mix of the initial browse
+    curl -s ".../api/discover?section=games&page=2"  # the load-more path, separately
+    curl -s ".../api/home"                           # trending / upcoming / recommendation, per type
+    curl -s ".../api/calendar/popular?month=YYYY-MM"
+    ```
+47. **A load-more that returns nothing must not stay an enabled, silent button.** Click it in the UI and
+    assert the control either disables, shows an end-state, or says why — SM35's stays clickable forever.
+48. **The breaker itself:** the server log should show `provider_circuit_opened` once (not per request),
+    then `provider_circuit_reopened` with a DOUBLING `openMs` (30 s → 60 s → 120 s, capped at 5 min), and
+    the per-skip lines must stay one line each with **no stack trace** (a stack per skip floods the log —
+    it fired hundreds of times in one run). Re-check after any change to `http.ts` or `discoverFeed.ts`.
+
 **D. Cross-cutting**
 20. Back-button spot checks on any NEW surface (full deep-dive already done — N1/N2/N3 known).
     **Targeted regression test for SM8 (added 2026-07-27), run ANON:** from `/discover`, click a
@@ -378,6 +405,48 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
 34. **Distribution sanity, logged-in** (missed Q19): for personalized numbers (Fandex Score),
     eyeball the spread across a real library — a tight clump (e.g. everything 40–60) or a
     misleading center is a product finding even when each individual value is "correct".
+
+## Gotchas learned (2026-08-02, 10th run) — READ THE FIRST TWO BEFORE ANYTHING ELSE
+
+- **🚨 `/library` and `/wishlist` DO NOT HYDRATE on a hard load under `next dev` (Turbopack) — this is a
+  DEV-SERVER bug, not a product bug (SM34).** Symptom: a permanent "Loading…" spinner, 0 cards, **zero
+  console errors**, and the browser's Resource Timing showing exactly ONE request (`/api/auth/me`, which
+  is AppNav's — not MyStuffView's). It looks exactly like a catastrophic product regression and it is not.
+  **The 30-second test that tells them apart** — fibers are attached to hydrated DOM only:
+  ```js
+  const fk = el => Object.keys(el).filter(k => k.startsWith('__react')).length;
+  ({ main: fk(document.querySelector('main')), nav: fk(document.querySelector('nav')) })
+  ```
+  `nav: 2, main: 0` = the subtree never hydrated → dev-server artifact, **not a finding**.
+  Client-side navigation to the same route works fine (that path renders on the client, no hydration).
+  **So: verify `/library` and `/wishlist` on the PRODUCTION build before logging anything about them** —
+  `preview_stop` → `npm run build` → `preview_start {name:"prod"}` (:3100, already in launch.json) →
+  they work perfectly there (300 cards, both fetches, `main` hydrated). **Cookies ignore port**, so the
+  `rr2_session` minted on :3000 is sent to :3100 unchanged — you stay logged in across the switch, which
+  matters because `/api/dev/login` 404s under `NODE_ENV=production` and can't re-mint one there.
+  Already ruled out, don't re-investigate: stale `.next` (reproduces after `rm -rf .next` + restart) and
+  the 2026-08-02 `http.ts`/`discoverFeed.ts` changes (reverting them to `7c442b8` reproduces identically).
+- **Before blaming the app for anything slow or empty, check whether a PROVIDER is down.** RAWG was fully
+  down during this run (`https://rawg.io/` itself → Cloudflare **522** after ~19.8 s, so not our key).
+  Cheapest check, no browser: `curl -s -o /dev/null -w "%{http_code} %{time_total}\n" --max-time 45
+  https://rawg.io/` — or just read **`/api/health` → `openProviderCircuits`** (added 2026-08-02), which
+  names every host whose circuit breaker is currently open. `{}` = everything healthy.
+- **A provider outage is the best free test of the degraded paths — use it rather than working around it.**
+  What it surfaced this run: games load-more is RAWG-only (SM35) while the initial browse is dual-source,
+  and Home's Popular rail is RAWG-only for games (SM36). Worth re-checking deliberately whenever a
+  provider IS down: per media type, does every surface still have a second source?
+- **The Fandex Score breakdown does NOT sum to the headline if you scrape every `+N.N` off the page — and
+  that is correct.** Capped reasons (`contribution: 0`) render their **`impact`** in the same ±N.N format,
+  separated by a divider reading "NOT COUNTED FOR THIS TITLE — OUTSIDE THE TOP MATCHES THIS ITEM SELECTS".
+  Scraping naively gave 67 + 24.1 = 91.1 against a headline of 86; the real check is `center + Σ(reasons
+  where !capped)` = 67 + 18.6 = 85.6 → 86 ✓. Get it from `/api/detail`'s `fandexReasons` + `fandexCenter`
+  (authoritative, one call) rather than the DOM.
+- **`/api/detail/similar` is a DIFFERENT endpoint from `/api/detail`** — a substring filter on `/api/detail`
+  matches both and reads as the old double-mount bug. Filter exactly, or check `iframe` count instead.
+  Relatedly: "More like this" correctly does not render when the catalog yields only ~2 similar items
+  (sparse unreleased movies); it renders fine at 12. Not a finding.
+- **The dev server can die silently between phases of a long session** (observed twice this run — every
+  `curl` returns `000`). `preview_list` returning `[]` is the tell; just `preview_start` again.
 
 ## Gotchas learned (2026-07-28 run)
 
