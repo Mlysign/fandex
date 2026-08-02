@@ -8,7 +8,8 @@
 // `liveDiscover.ts` (wide multi-page pull → re-rank).
 
 import type { MediaType, Source } from "@/types";
-import { httpFetch } from "@/lib/http";
+import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
+import { log } from "@/lib/logger";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -26,6 +27,36 @@ const todayISO = () => new Date().toISOString().split("T")[0];
 const offsetISO = (days: number) => new Date(Date.now() + days * 86400000).toISOString().split("T")[0];
 
 export type Direction = "future" | "past";
+
+// ── Best-effort browse fetches (2026-08-02) ──────────────────────────────────
+// Every fetcher in this file feeds a BROWSE surface (discover / home / the
+// calendar's popular chip). All of them are already best-effort by design —
+// `if (!res.ok) return []` — but only against a returned error status. A THROW
+// (a timeout, a network error, or http.ts's circuit breaker refusing a call to a
+// host that's down) went straight past that guard: `fetchPages` collects these
+// under one `Promise.all`, so a single throwing source rejected the whole feed
+// and 500'd the route. During the 2026-08-02 RAWG outage the 522s kept that
+// hidden — a 522 is a *response*, so `!res.ok` caught it, and the cost showed up
+// as latency (60 s/call) rather than an error.
+//
+// `bestEffort` makes the degradation explicit and uniform: one dead source means
+// that source contributes nothing this round, which is exactly what the ranking
+// stage downstream already handles. It is scoped to THIS file on purpose — the
+// sync/pull adapters must keep throwing (AGENTS.md, the prune invariant).
+//
+// Logged WITHOUT a stack, deliberately: during an outage this fires once per
+// page per source (5 pages × 2 sources × several routes), and `errorFields`'
+// full stack turns a provider being down into tens of thousands of lines of
+// identical noise. The stack adds nothing here — the interesting event (which
+// host, and that it's now being skipped) is logged once by the breaker itself.
+async function bestEffort<T>(source: string, fn: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await fn();
+  } catch (e) {
+    log.warn("discover_feed_source_skipped", { source, error: e instanceof Error ? e.message : String(e) });
+    return [];
+  }
+}
 
 /** An explicit provider date range, overriding the direction-derived one. */
 export interface DateRange { gte: string; lte: string }
@@ -102,13 +133,14 @@ export interface FeedCandidate {
   popularity: number | null;
 }
 
-export async function fetchGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+async function rawgGamePage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
   // Order by popularity (`-added`) within the window so notable games surface
   // first; the personalized feed re-ranks, the client date-sorts for display.
   const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.rawg.io/api/games?key=${RAWG_KEY}` +
-      `&dates=${gte},${lte}&ordering=-added&page_size=40&page=${page}`
+      `&dates=${gte},${lte}&ordering=-added&page_size=40&page=${page}`,
+    { budgetMs: BROWSE_BUDGET_MS }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -130,14 +162,19 @@ export async function fetchGamePage(page = 1, direction: Direction = "future", w
   }));
 }
 
-export async function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY, window?: DateRange): Promise<FeedCandidate[]> {
+export function fetchGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+  return bestEffort("rawg", () => rawgGamePage(page, direction, window));
+}
+
+async function tmdbMoviePage(page: number, direction: Direction, region: string, window?: DateRange): Promise<FeedCandidate[]> {
   // `discover` with a release-date window sorted by popularity. With `region` set,
   // TMDB filters by + returns that country's release date (T22).
   const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${region}` +
-      `&release_date.gte=${gte}&release_date.lte=${lte}&page=${page}`
+      `&release_date.gte=${gte}&release_date.lte=${lte}&page=${page}`,
+    { budgetMs: BROWSE_BUDGET_MS }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -155,12 +192,17 @@ export async function fetchMoviePage(page = 1, direction: Direction = "future", 
   }));
 }
 
-export async function fetchShowPage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+export function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY, window?: DateRange): Promise<FeedCandidate[]> {
+  return bestEffort("tmdb", () => tmdbMoviePage(page, direction, region, window));
+}
+
+async function tmdbShowPage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
   const { gte, lte } = window ?? dateWindow(direction);
   const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&first_air_date.gte=${gte}` +
-      `&first_air_date.lte=${lte}&page=${page}`
+      `&first_air_date.lte=${lte}&page=${page}`,
+    { budgetMs: BROWSE_BUDGET_MS }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -178,6 +220,10 @@ export async function fetchShowPage(page = 1, direction: Direction = "future", w
   }));
 }
 
+export function fetchShowPage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+  return bestEffort("tmdb", () => tmdbShowPage(page, direction, window));
+}
+
 // IGDB upcoming games (second game source). Covers/genres/themes come straight
 // off the list payload, so these score + render without hydration.
 //
@@ -188,7 +234,7 @@ export async function fetchShowPage(page = 1, direction: Direction = "future", w
 // pick the ranking from the window instead of refusing to answer — a past month
 // ranks by how many people ended up rating the game. Only the direction-derived
 // path (which spans 18 months back, all of it stale) still no-ops.
-export async function fetchIgdbGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+async function igdbGamePage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
   if (!igdbConfigured()) return [];
   if (!window && direction === "past") return [];
   const win = window ?? dateWindow(direction);
@@ -222,6 +268,10 @@ export async function fetchIgdbGamePage(page = 1, direction: Direction = "future
   }));
 }
 
+export function fetchIgdbGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
+  return bestEffort("igdb", () => igdbGamePage(page, direction, window));
+}
+
 // Trakt "anticipated" → candidates keyed by their TMDB id (source "tmdb") so they
 // dedupe against the TMDB discover pool and get a poster + full facets when
 // hydrated (Trakt itself serves no images). Window-filtered to upcoming, like
@@ -252,18 +302,22 @@ function traktToCandidate(entry: any, type: MediaType, win: { gte: string; lte: 
   };
 }
 
-export async function fetchTraktMoviePage(page = 1): Promise<FeedCandidate[]> {
-  if (!traktConfigured()) return [];
-  const win = dateWindow("future");
-  const entries = await getTraktAnticipatedMovies(60, page);
-  return entries.map((e) => traktToCandidate(e, "movie", win)).filter((c): c is FeedCandidate => !!c);
+export function fetchTraktMoviePage(page = 1): Promise<FeedCandidate[]> {
+  return bestEffort("trakt", async () => {
+    if (!traktConfigured()) return [];
+    const win = dateWindow("future");
+    const entries = await getTraktAnticipatedMovies(60, page);
+    return entries.map((e) => traktToCandidate(e, "movie", win)).filter((c): c is FeedCandidate => !!c);
+  });
 }
 
-export async function fetchTraktShowPage(page = 1): Promise<FeedCandidate[]> {
-  if (!traktConfigured()) return [];
-  const win = dateWindow("future");
-  const entries = await getTraktAnticipatedShows(60, page);
-  return entries.map((e) => traktToCandidate(e, "show", win)).filter((c): c is FeedCandidate => !!c);
+export function fetchTraktShowPage(page = 1): Promise<FeedCandidate[]> {
+  return bestEffort("trakt", async () => {
+    if (!traktConfigured()) return [];
+    const win = dateWindow("future");
+    const entries = await getTraktAnticipatedShows(60, page);
+    return entries.map((e) => traktToCandidate(e, "show", win)).filter((c): c is FeedCandidate => !!c);
+  });
 }
 
 // ── TRENDING (2026-07-30) ──────────────────────────────────────────
@@ -279,12 +333,13 @@ export async function fetchTraktShowPage(page = 1): Promise<FeedCandidate[]> {
 // land on a calendar).
 
 /** TMDB trending — `/trending/{movie,tv}/{day,week}`. Weekly is far less jumpy. */
-export async function fetchTmdbTrending(
-  type: "movie" | "show", page = 1, window: "day" | "week" = "week"
+async function tmdbTrending(
+  type: "movie" | "show", page: number, window: "day" | "week"
 ): Promise<FeedCandidate[]> {
   const path = type === "movie" ? "movie" : "tv";
   const res = await httpFetch(
-    `https://api.themoviedb.org/3/trending/${path}/${window}?api_key=${TMDB_KEY}&page=${page}`
+    `https://api.themoviedb.org/3/trending/${path}/${window}?api_key=${TMDB_KEY}&page=${page}`,
+    { budgetMs: BROWSE_BUDGET_MS }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -308,6 +363,13 @@ export async function fetchTmdbTrending(
     }));
 }
 
+/** TMDB trending — `/trending/{movie,tv}/{day,week}`. Weekly is far less jumpy. */
+export function fetchTmdbTrending(
+  type: "movie" | "show", page = 1, window: "day" | "week" = "week"
+): Promise<FeedCandidate[]> {
+  return bestEffort("tmdb", () => tmdbTrending(type, page, window));
+}
+
 /**
  * Trakt trending. Keyed by TMDB id (same as the anticipated path) so it dedupes
  * against the TMDB pool and picks up a poster on hydration — Trakt serves none.
@@ -315,7 +377,8 @@ export async function fetchTmdbTrending(
  * Unlike `traktToCandidate`, this keeps items regardless of release date and
  * carries `watchers` as the popularity metric.
  */
-export async function fetchTraktTrending(type: "movie" | "show", page = 1): Promise<FeedCandidate[]> {
+export function fetchTraktTrending(type: "movie" | "show", page = 1): Promise<FeedCandidate[]> {
+  return bestEffort("trakt", async () => {
   if (!traktConfigured()) return [];
   const entries = type === "movie"
     ? await getTraktTrendingMovies(40, page)
@@ -343,6 +406,7 @@ export async function fetchTraktTrending(type: "movie" | "show", page = 1): Prom
     });
   }
   return out;
+  });
 }
 
 /**

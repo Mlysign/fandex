@@ -110,9 +110,81 @@ cache doesn't expose raw per-source blobs. Never narrows what worked before.
 mutation-safety (a caller mutating the returned array can't corrupt the next caller's read),
 raw-facets-not-post-processed, and per-region isolation.
 
+---
+
+## ⚠️ Correction (2026-08-02): the 58–60 s Discover load was NEVER this file's §A
+
+The 9th smoke sweep recorded a cold Discover paint of **58–60 s** and attributed it to
+§A below ("the catalog pool cache rebuilding 39 MB from scratch"). **That attribution is
+wrong.** Measured directly against the real `data/rr.db` (`scripts/probe-pool.mjs`):
+
+| | |
+|---|--:|
+| full `buildCache()` — the entire §A cost | **~430 ms** |
+| — SQL read incl. all 39.1 MB of `raw_data` | 98 ms |
+| — `JSON.parse` of every blob | 131 ms |
+| — `mergeLinks` + `extractFacets` + vocab/idf | ~200 ms |
+| a membership write → promotion visible in `find()` | ~570 ms, and **already immediate** |
+
+§A is a ~0.4 s item. The 58 s was **RAWG being down**: `https://rawg.io/` itself returned
+Cloudflare **522** after ~19.8 s on every path, and `http.ts` retried each 5xx twice, so one
+call cost `20 + 20 + 20 ≈ 60 s`. `fetchPages` fires 5 RAWG pages under one `Promise.all`,
+and `/api/home` reaches RAWG twice — a cold `/api/home` measured **2.2 minutes**.
+
+Note also that §A's stated must-have test ("a wishlist write makes the item appear in
+`find()` immediately, not on the next TTL expiry") **already passes today** — verified both
+directions (promote and demote) by the probe. The pool signature counts `POOL_WHERE`, so a
+membership write does force a full rebuild, but that rebuild is 0.4 s, not a stall. §A
+therefore stays open as a genuine-but-small optimisation, not a user-visible problem.
+
+### Fixed instead: per-provider latency isolation (2026-08-02)
+
+We had per-source *failure* isolation (every adapter try/catches) but no per-source
+*latency* isolation, so one dead provider stalled every browse request for a minute,
+every time, for the whole outage. Three changes, all in the shared HTTP layer:
+
+1. **A per-host circuit breaker** (`src/lib/http.ts`) — 3 consecutive hard failures
+   (network error / 5xx; never a 4xx or 429) opens the host for 30 s, doubling to a 5 min
+   ceiling while a half-open probe keeps failing. While open, `httpFetch` **throws
+   `ProviderUnavailableError` without touching the network**.
+2. **A total-time budget** (`budgetMs`) across all attempts, so retries can't outrun it.
+   Browse paths pass `BROWSE_BUDGET_MS` (8 s); **sync/pull keeps the old unbounded
+   behaviour deliberately** — it runs off the request path and would rather wait.
+3. **`bestEffort()` in `discoverFeed.ts`** — the browse fetchers already degraded on a
+   returned error status (`if (!res.ok) return []`) but a *throw* went straight past that
+   into `fetchPages`' `Promise.all`, rejecting the whole feed. (A latent pre-existing bug:
+   a RAWG *timeout* would have 500'd `/api/discover` even before the breaker existed. The
+   522s hid it — a 522 is a response, so `!res.ok` caught it.)
+
+**The breaker throws; it never fabricates a Response.** Returning a synthetic 503 would
+have needed zero call-site changes — and would have been read as `!res.ok` by the pull
+adapters too, turning an outage into an empty library under **the prune invariant**
+(AGENTS.md). A test asserts the throw specifically for this reason.
+
+Measured with RAWG still down, cold process each time:
+
+| route | before | after |
+|---|--:|--:|
+| `/api/home` cold | **2.2 min** | **8.4 s** |
+| `/api/home` warm | — | 0.39 s |
+| `/api/discover` cold | 58–60 s | 0.14 s (shared caches warmed by home) |
+
+`/api/health` now reports `openProviderCircuits` (host → `{openForMs, failures}`; `{}` when
+everything looks healthy) — diagnosing this outage took a manual curl against each provider
+in turn, and that answer belongs in the probe we already have.
+
+Home still rendered games throughout the outage: IGDB covers the category when RAWG is
+gone, which is the multi-source design working as intended.
+
+---
+
 ## Still open — the harder half, deliberately deferred to a supervised pass
 
 ### A. The catalog pool cache is still invalidated far more often than it needs to be
+
+> **Sizing corrected 2026-08-02 — see the correction above.** This is a ~430 ms item, not
+> the 58 s it was once blamed for, and the "must-have test" below already passes. Still
+> worth doing; no longer urgent.
 
 `buildCache()` ([discovery.ts](../src/lib/discovery.ts)) still rebuilds the WHOLE pool — 4,133 link
 rows / 39.0 MB of `raw_data` — from scratch on every rebuild, and `catalogSignature()` counts

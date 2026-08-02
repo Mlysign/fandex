@@ -5,6 +5,7 @@ import {
   readDbFootprint,
   readProcessRss,
 } from "@/lib/containerMemory";
+import { providerBreakerSnapshot } from "@/lib/http";
 
 // Reads live process/cgroup state — must never be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -54,6 +55,12 @@ export async function GET() {
     cgroupMb: readCgroupMemory(),
     processes: readProcessRss(),
     dbFilesMb: readDbFootprint(),
+    // Third-party hosts whose circuit breaker is currently OPEN (2026-08-02).
+    // `{}` = every provider looks healthy. This exists because diagnosing the
+    // RAWG outage that motivated the breaker took a manual curl against each
+    // provider in turn — the answer belongs in the probe we already have.
+    // Host names only, never a key or a URL with one in it.
+    openProviderCircuits: providerBreakerSnapshot(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }
