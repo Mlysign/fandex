@@ -208,7 +208,7 @@ Do not land below it.
     `PRUNE_ON_BOOT=0` skip, the tight-volume skip, and the happy path.
   - Depends on: none
 
-- [ ] **T7** — `omdbConfigured()` short-circuit
+- [x] **T7** — `omdbConfigured()` short-circuit
   - Files: `src/lib/sources/omdb.ts`, `src/lib/detail/enrich.ts`
   - Detail: `omdb.ts:4` does a bare `process.env.OMDB_API_KEY!` with no guard,
     so with the key currently invalid every movie/show detail read still makes

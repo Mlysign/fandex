@@ -4,7 +4,7 @@ import { linkSourceToItem } from "@/lib/matcher";
 import { extractYear } from "@/lib/merge";
 import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import type { OmdbResult } from "@/lib/sources/omdb";
-import { fetchOmdbScores, fetchOmdbByImdbId } from "@/lib/sources/omdb";
+import { fetchOmdbScores, fetchOmdbByImdbId, omdbConfigured } from "@/lib/sources/omdb";
 import { METADATA, metadataForType } from "@/lib/metadata/registry";
 import type { MetaLink } from "@/lib/metadata/types";
 
@@ -260,6 +260,7 @@ export async function enrichMissingSources(
 // EnrichedItem is structurally assignable, so /api/detail passes its own item.
 export async function applyOmdbScores(item: PublicEnrichedItem): Promise<void> {
   if (item.type === "game") return;
+  if (!omdbConfigured()) return; // no key configured — skip the call entirely, not just the fetch
   try {
     let scores: OmdbResult;
     if (item.imdbId) {

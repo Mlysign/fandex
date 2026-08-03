@@ -3,6 +3,15 @@ import { BoundedCache } from "@/lib/boundedCache";
 
 const API_KEY = process.env.OMDB_API_KEY!;
 
+// OMDB is optional — same pattern as igdbConfigured()/traktConfigured(). Prod
+// currently has an INVALID (not unset) key (see PLATFORMS.md), which this
+// can't detect without a network round-trip; what it catches is the unset
+// case, so a caller can skip the call entirely instead of relying on
+// omdbGet()'s internal short-circuit.
+export function omdbConfigured(): boolean {
+  return !!API_KEY;
+}
+
 export interface OmdbResult {
   imdbID: string | null;
   imdbRating: number | null;
@@ -49,7 +58,7 @@ function parse(data: any): OmdbResult {
 const _omdbCache = new BoundedCache<string, OmdbResult>({ max: 5000, ttlMs: 24 * 60 * 60 * 1000 });
 
 async function omdbGet(params: Record<string, string>): Promise<OmdbResult> {
-  if (!API_KEY) return EMPTY;
+  if (!omdbConfigured()) return EMPTY;
   const cacheKey = new URLSearchParams(params).toString();
   const cached = _omdbCache.get(cacheKey);
   if (cached) return cached;
