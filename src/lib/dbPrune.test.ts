@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import fs from "fs";
 import { initDb, run, get } from "./db";
 import {
   previewPrune, runPrune, prunableIds, orphanCheck, walDiagnostics,
-  startPruneJob, pruneJobState,
+  startPruneJob, pruneJobState, bootPrune,
 } from "./dbPrune";
 
 // PR16 — the prune is the only operation in this repo that deletes production
@@ -209,6 +210,92 @@ describe("startPruneJob — paced background prune", () => {
     expect(count("SELECT COUNT(*) n FROM user_library")).toBe(1);
     expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
   }, 20000);
+});
+
+// bootPrune — the boot-time prune added 2026-08-03. Runs under VITEST/NODE_ENV
+// "test" by default, which is its OWN skip branch, so most of these tests
+// stub those two vars off to reach the code past that guard. fs.statfsSync is
+// a shared module object (unlike a same-module function like volumeInfo,
+// which a same-file closure call can't be spied through), so it's the
+// reliable seam for simulating unknown/tight disk space.
+describe("bootPrune — boot-time prune of the browsed tail", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("skips under the test environment (the default in this very test run)", async () => {
+    const outcome = await bootPrune();
+    expect(outcome).toEqual({ skipped: true, reason: "test_env" });
+  });
+
+  it("skips when PRUNE_ON_BOOT=0, even outside the test environment", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("PRUNE_ON_BOOT", "0");
+    const outcome = await bootPrune();
+    expect(outcome).toEqual({ skipped: true, reason: "disabled_by_env" });
+  });
+
+  it("skips when PRUNE_ON_BOOT=false (case-insensitive)", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("PRUNE_ON_BOOT", "FALSE");
+    const outcome = await bootPrune();
+    expect(outcome.skipped).toBe(true);
+  });
+
+  it("is ON by default: unset PRUNE_ON_BOOT does not skip", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("PRUNE_ON_BOOT", "");
+    addItem("boot-junk", 1);
+
+    const outcome = await bootPrune();
+    expect(outcome.skipped).toBe(false);
+  });
+
+  it("skips and logs when free space can't be determined", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.spyOn(fs, "statfsSync").mockImplementation(() => { throw new Error("no such device"); });
+
+    const outcome = await bootPrune();
+    expect(outcome).toEqual({ skipped: true, reason: "volume_unknown", freeMb: null });
+  });
+
+  it("skips and logs when free space is below the floor", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.spyOn(fs, "statfsSync").mockReturnValue({
+      bavail: 10, bsize: 1024 * 1024, blocks: 1000,
+    } as unknown as fs.StatsFs); // ~10 MB free, well under the 300 MB floor
+
+    const outcome = await bootPrune();
+    expect(outcome.skipped).toBe(true);
+    if (outcome.skipped) {
+      expect(outcome.reason).toBe("volume_tight");
+      expect(outcome.freeMb).toBeLessThan(300);
+    }
+  });
+
+  it("happy path: prunes the browsed tail with the conservative boot settings, never touches user rows", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "development");
+    addItem("owned", 0);
+    addLibrary("owned");
+    for (let i = 0; i < 3; i++) addItem(`boot-junk-${i}`, 1);
+
+    const outcome = await bootPrune();
+
+    expect(outcome.skipped).toBe(false);
+    if (!outcome.skipped) {
+      expect(outcome.deleted).toBe(3);
+      expect(outcome.libraryRowsAfter).toBe(outcome.libraryRowsBefore);
+    }
+    expect(count("SELECT COUNT(*) n FROM media_items")).toBe(1);
+  });
+
 });
 
 // The test DB is :memory:, which cannot use WAL — so these pin the CONTRACT

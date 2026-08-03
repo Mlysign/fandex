@@ -175,6 +175,67 @@ export function runPrune(opts: { batchSize?: number; budgetMs?: number } = {}): 
   return result;
 }
 
+// ── Boot-time prune (2026-08-03) ─────────────────────────────────────────────
+//
+// PR13-PR15 stopped the browsed-tail growth at the write side; nothing ever
+// reclaimed it going forward, so it regrows between manual /api/dev/prune
+// runs. This calls the SAME bounded runPrune() the dev endpoint uses — small
+// batches, a hard wall-clock budget, the user-row-touched alarm from above —
+// on every server boot, since Fandex is one always-on process (not
+// serverless), so "on boot" already means "roughly daily" under a normal
+// deploy cadence.
+//
+// Deliberately conservative, not the aggressive settings PR16's original
+// cleanup used: batchSize 1000 / budgetMs 5000 (vs. runPrune's own defaults
+// of 5000 / 20000) so a routine boot prune is a blip, not a multi-second
+// delay before the process starts serving. NEVER calls runVacuum() — VACUUM
+// rewrites the whole file and invalidates the Litestream replica generation;
+// that stays a deliberate, on-demand /api/dev/prune action.
+const BOOT_PRUNE_FREE_MB_FLOOR = 300; // matches startPruneJob's own floor minimum
+
+function isTestEnv(): boolean {
+  return process.env.NODE_ENV === "test" || !!process.env.VITEST;
+}
+
+function bootPruneDisabledByEnv(): boolean {
+  return ["0", "false"].includes((process.env.PRUNE_ON_BOOT ?? "").trim().toLowerCase());
+}
+
+export type BootPruneOutcome =
+  | { skipped: true; reason: "test_env" | "disabled_by_env" | "volume_unknown" | "volume_tight"; freeMb?: number | null }
+  | ({ skipped: false } & PruneResult);
+
+/**
+ * Run one bounded prune pass at boot. Never throws — a prune failure must
+ * never take the server down, so every branch (including runPrune itself, via
+ * the caller's `.catch`) degrades to a logged skip/failure instead.
+ *
+ * Async, and its DB work is deferred one tick past the call via `setImmediate`,
+ * so calling this from instrumentation.ts's `register()` without awaiting lets
+ * that promise resolve — and Next's boot sequence continue — before the
+ * (synchronous, better-sqlite3) delete loop actually runs.
+ */
+export async function bootPrune(): Promise<BootPruneOutcome> {
+  if (isTestEnv()) return { skipped: true, reason: "test_env" };
+  if (bootPruneDisabledByEnv()) return { skipped: true, reason: "disabled_by_env" };
+
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  const freeMb = volumeInfo().freeMb;
+  if (freeMb == null) {
+    log.info("boot_prune_skipped", { reason: "volume_unknown" });
+    return { skipped: true, reason: "volume_unknown", freeMb: null };
+  }
+  if (freeMb < BOOT_PRUNE_FREE_MB_FLOOR) {
+    log.info("boot_prune_skipped", { reason: "volume_tight", freeMb, floorMb: BOOT_PRUNE_FREE_MB_FLOOR });
+    return { skipped: true, reason: "volume_tight", freeMb };
+  }
+
+  const result = runPrune({ batchSize: 1000, budgetMs: 5000 });
+  log.info("boot_prune_complete", result);
+  return { skipped: false, ...result };
+}
+
 // ── Paced background prune (PR16, 2026-07-22) ───────────────────────────────
 //
 // Deleting rows grows the WAL and Litestream's shadow WAL faster than a burst

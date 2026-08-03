@@ -185,7 +185,7 @@ Do not land below it.
   - Tests: none — covered by T7's manual verification
   - Depends on: T4
 
-- [ ] **T6** — Boot-time prune of the browsed tail
+- [x] **T6** — Boot-time prune of the browsed tail
   - Files: `src/lib/dbPrune.ts`, `src/instrumentation.ts`
   - Detail: Add an exported `bootPrune()` to `dbPrune.ts` that (1) returns
     immediately if `process.env.NODE_ENV === "test"` or `process.env.VITEST`,
@@ -290,5 +290,7 @@ Do not land below it.
   - Depends on: T1-T10
 
 ## Blockers log
+
+(none — see Session log for a real-DB side effect worth flagging, not a blocker)
 
 ## Session log
