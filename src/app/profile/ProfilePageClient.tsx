@@ -5,6 +5,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import {
   TrendingUp, Bookmark, Star, Settings as SettingsIcon, ChevronRight,
+  Heart, ExternalLink,
 } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
 import { resetSessionProbe } from "@/lib/sessionProbe";
@@ -18,6 +19,7 @@ import ErrorState from "@/components/ui/ErrorState";
 import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
 import LegalFooter from "@/components/legal/LegalFooter";
+import { SUPPORT_URL, hasSupportLink, supportLabel } from "@/components/legal/SupportLink";
 
 // 2026-07-27 (Nils, mockup-vs-live pass) — the hub is a MERGE of two source
 // documents that turned out to describe different pages:
@@ -107,12 +109,29 @@ export default function ProfilePageClient() {
   const name = me?.displayName ?? "You";
   const handle = name.toLowerCase().replace(/\s+/g, "");
 
-  const entries = [
+  const entries: {
+    href: string; label: string; hint: string;
+    Icon: typeof TrendingUp; external?: boolean;
+  }[] = [
     { href: "/insights", label: "Insights", hint: "Your taste in numbers", Icon: TrendingUp },
     { href: "/wishlist", label: "Wishlist", hint: stats ? `${stats.wishlistTotal} saved` : "", Icon: Bookmark },
     { href: "/library", label: "Your ratings", hint: stats ? `${stats.ratedTotal} titles` : "", Icon: Star },
     { href: "/settings", label: "Settings", hint: "Account, theme, privacy", Icon: SettingsIcon },
   ];
+
+  // H3.3 (2026-08-03) — the donations entry, last in the list so it sits after
+  // the things people actually came here to do, and only when a url is
+  // configured. It's the one EXTERNAL row, which is why `entries` grew an
+  // `external` flag: next/link would client-side-route to an off-site url.
+  if (hasSupportLink()) {
+    entries.push({
+      href: SUPPORT_URL!,
+      label: supportLabel("en"),
+      hint: "Help cover the running costs",
+      Icon: Heart,
+      external: true,
+    });
+  }
 
   return (
     <div className="min-h-screen">
@@ -157,22 +176,35 @@ export default function ProfilePageClient() {
 
         {/* Entry list — icon · title+subtitle · chevron, each a full-row link. */}
         <nav aria-label="Your pages" className="divide-y divide-border border-y border-border">
-          {entries.map(({ href, label, hint, Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 py-3.5 hover:bg-surface-elevated transition-colors duration-base -mx-1 px-1"
-            >
-              <span className="flex-none w-9 h-9 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary">
-                <Icon className="w-4 h-4" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-label text-text-primary">{label}</span>
-                {hint && <span className="block text-caption text-text-secondary truncate mt-0.5">{hint}</span>}
-              </span>
-              <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" aria-hidden />
-            </Link>
-          ))}
+          {entries.map(({ href, label, hint, Icon, external }) => {
+            const rowClass = "flex items-center gap-3 py-3.5 hover:bg-surface-elevated transition-colors duration-base -mx-1 px-1";
+            const inner = (
+              <>
+                <span className="flex-none w-9 h-9 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary">
+                  <Icon className={`w-4 h-4 ${external ? "text-accent" : ""}`} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-label text-text-primary">{label}</span>
+                  {hint && <span className="block text-caption text-text-secondary truncate mt-0.5">{hint}</span>}
+                </span>
+                {external
+                  ? <ExternalLink className="w-4 h-4 text-text-secondary shrink-0" aria-hidden />
+                  : <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" aria-hidden />}
+              </>
+            );
+            // A chevron promises "another page in this app"; the donations row
+            // leaves the site, so it gets the external-link glyph and a real
+            // <a>. next/link on an off-site href would try to client-side route.
+            return external ? (
+              <a key={href} href={href} target="_blank" rel="noopener noreferrer" className={rowClass}>
+                {inner}
+              </a>
+            ) : (
+              <Link key={href} href={href} className={rowClass}>
+                {inner}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Sign out — full-width secondary, per the mockup's `.btn.sec`. */}

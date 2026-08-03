@@ -39,6 +39,34 @@ const support: LegalDocument = {
         "The more specific, the faster it can actually get looked at: what you were doing, what you expected, what happened instead, and — if it's about a specific title — which one.",
       ],
     },
+    // H3.3, 2026-08-03. Deliberately the LAST section: the page's job is help
+    // and contact, and a page that asks for money above the support address
+    // reads as a pitch.
+    //
+    // NO CONCRETE COST FIGURE (Nils, 2026-08-03). A number would need revisiting
+    // every time Railway's bill moves, and going stale on a page about money is
+    // worse than being vague — "it costs money to keep running" is true
+    // indefinitely and needs no maintenance.
+    // Wording rules this section follows, both of which protect something real:
+    //   * "no perks, no tiers" is not modesty — a donation with consideration
+    //     becomes a taxable supply, and it's a much stronger "commercial use"
+    //     reading against TMDB's non-commercial-only free tier.
+    //   * it names running costs rather than promising features, so it can't be
+    //     read as taking payment for a roadmap.
+    {
+      heading: "Supporting Fandex financially",
+      body: [
+        "Fandex is free, has no ads, and doesn't sell or share your data — none of that is planned to change. It does cost money to keep running, though: hosting, the domain, and the services it pulls data from all come out of pocket.",
+        {
+          rich: [
+            "If you'd like to help cover that, there's a donation page at ",
+            { href: "https://ko-fi.com/nilsmlynarek", label: "ko-fi.com/nilsmlynarek", external: true },
+            ". It's genuinely optional.",
+          ],
+        },
+        "What a donation does not do: there are no supporter tiers, no perks, no features behind a paywall, and no early access. Everyone gets the same Fandex. A donation covers running costs and nothing else — it buys goodwill and server bills, not a say in what gets built.",
+      ],
+    },
   ],
 };
 

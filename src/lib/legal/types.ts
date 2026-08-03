@@ -16,7 +16,43 @@ export function isLegalDocId(v: string): v is LegalDocId {
   return (LEGAL_DOCS as readonly string[]).includes(v);
 }
 
-export type LegalBlock = string | { list: string[] };
+/**
+ * A block of text that must NOT appear in the server-rendered HTML — base64 of
+ * the UTF-8 string, newline-separated for multi-line values. Rendered
+ * client-side only by `ProtectedText`; see that component for what this does
+ * and does not protect against.
+ *
+ * Regenerate with:
+ *   node -e "console.log(Buffer.from('line1\nline2','utf8').toString('base64'))"
+ */
+export type LegalProtectedBlock = { protected: string };
+
+/** An inline link inside a paragraph. `external` opens in a new tab. */
+export interface LegalLink {
+  href: string;
+  label: string;
+  external?: boolean;
+}
+
+/**
+ * A paragraph mixing plain text and inline links — the parts are concatenated
+ * in order, so write the surrounding spacing into the strings themselves.
+ *
+ * Exists because the plain-string block can't hold a link and the CSP rules out
+ * `dangerouslySetInnerHTML` (H4.1's original decision, unchanged). Added
+ * 2026-08-03 for the Ko-fi link in the support page's donation section.
+ */
+export type LegalRichBlock = { rich: (string | LegalLink)[] };
+
+export type LegalBlock = string | { list: string[] } | LegalProtectedBlock | LegalRichBlock;
+
+export function isProtectedBlock(b: LegalBlock): b is LegalProtectedBlock {
+  return typeof b === "object" && "protected" in b;
+}
+
+export function isRichBlock(b: LegalBlock): b is LegalRichBlock {
+  return typeof b === "object" && "rich" in b;
+}
 
 export interface LegalSection {
   heading: string;

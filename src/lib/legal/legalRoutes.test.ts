@@ -47,6 +47,28 @@ describe("legal content registry — completeness", () => {
     expect(keys.size).toBe(routes.length);
   });
 
+  // H4.2/H3.3 — every doc is currently placeholder-free, so this passes at
+  // 0 === 0 and costs nothing. It is kept for the NEXT draft: the realistic
+  // mistake when a legal doc is written in two locales is filling one and
+  // forgetting the other. German is the legally operative imprint, so a filled
+  // DE + unfilled EN looks correct on the page a German regulator would read
+  // while leaving "[PLACEHOLDER: street and house number]" live for everyone
+  // else. Both imprints and both support pages went through exactly that
+  // draft→filled cycle on 2026-08-03 with this test watching.
+  it("placeholders are filled in BOTH locales or NEITHER, never one", () => {
+    const count = (doc: ReturnType<typeof getLegalDocument>) =>
+      JSON.stringify(doc).match(/\[(PLACEHOLDER|PLATZHALTER)/g)?.length ?? 0;
+
+    for (const doc of LEGAL_DOCS) {
+      const en = count(getLegalDocument("en", doc));
+      const de = count(getLegalDocument("de", doc));
+      expect(
+        en === 0,
+        `${doc}: EN has ${en} placeholder(s) and DE has ${de} — fill both or neither`
+      ).toBe(de === 0);
+    }
+  });
+
   it("the same doc id has DIFFERENT body text across locales (real translation, not a copy)", () => {
     // Title alone isn't a safe signal — "Support" is standard usage in German
     // too, so a title-only check would false-positive on a real, correctly

@@ -39,6 +39,28 @@ const support: LegalDocument = {
         "Je konkreter, desto schneller kann sich das tatsächlich jemand ansehen: was Sie gemacht haben, was Sie erwartet haben, was stattdessen passiert ist — und, falls es einen bestimmten Titel betrifft, welchen.",
       ],
     },
+    // H3.3, 2026-08-03. Bewusst OHNE konkrete Kostenangabe (Nils) — eine Zahl
+    // müsste bei jeder Änderung der Railway-Rechnung nachgezogen werden, und
+    // veraltete Angaben sind auf einer Seite über Geld schlimmer als eine
+    // unspezifische Formulierung. Bewusst der LETZTE Abschnitt und bewusst
+    // ohne Gegenleistung:
+    // eine Spende mit Gegenleistung wäre eine steuerbare Leistung und zugleich
+    // ein deutlich stärkeres Argument für "kommerzielle Nutzung" gegenüber der
+    // ausschließlich nicht-kommerziellen TMDB-Gratisstufe.
+    {
+      heading: "Fandex finanziell unterstützen",
+      body: [
+        "Fandex ist kostenlos, zeigt keine Werbung und verkauft oder teilt Ihre Daten nicht — daran soll sich nichts ändern. Der Betrieb kostet trotzdem Geld: Hosting, Domain und die Dienste, aus denen die Daten stammen, gehen alle auf eigene Rechnung.",
+        {
+          rich: [
+            "Wer dabei helfen möchte, findet eine Spendenseite unter ",
+            { href: "https://ko-fi.com/nilsmlynarek", label: "ko-fi.com/nilsmlynarek", external: true },
+            ". Das ist ausdrücklich freiwillig.",
+          ],
+        },
+        "Was eine Spende nicht bewirkt: Es gibt keine Unterstützerstufen, keine Vorteile, keine Funktionen hinter einer Bezahlschranke und keinen früheren Zugang. Alle bekommen dasselbe Fandex. Eine Spende deckt Betriebskosten — sie kauft weder Vorrang noch Mitsprache darüber, was als Nächstes gebaut wird.",
+      ],
+    },
   ],
 };
 

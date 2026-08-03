@@ -4,6 +4,7 @@ import type { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { BoundedCache } from "@/lib/boundedCache";
 import { POOL_WHERE } from "@/lib/discovery";
+import { decorateItemLinks } from "@/lib/affiliate";
 import type {
   PublicEnrichedItem} from "./enrich";
 import { loadLinks, ensureTmdbDetail,
@@ -82,6 +83,19 @@ export async function loadPublicDetail(
     ...mergeLinks(links, row.type, region),
   };
   await applyOmdbScores(enriched);
+
+  // H3.4 — affiliate decoration, the public half of the pair with /api/detail.
+  // Safe to sit INSIDE the cached value: affiliate tags are global config, not
+  // per-viewer state, so two visitors with the same cache key still see
+  // identical bytes and the leak boundary above is unaffected. Both calls are
+  // no-ops while MONETIZATION_ENABLED is off (H3's H4.0→H4.2 legal gate).
+  //
+  // Anonymous visitors get the commercial links too, which is deliberate: §5a
+  // UWG's labeling duty is what makes that lawful, not hiding them — and the
+  // marker is rendered from the same flags set here.
+  const decorated = decorateItemLinks(enriched.storeLinks, enriched.title, row.type);
+  enriched.storeLinks = decorated.storeLinks;
+  if (decorated.buyLinks.length) enriched.buyLinks = decorated.buyLinks;
 
   _detailCache.set(cacheKey, enriched);
   return enriched;

@@ -42,6 +42,18 @@ const eslintConfig = defineConfig([
       // genuinely actionable errors — react-hooks correctness, etc. — aren't
       // drowned out in lint output.
       "@typescript-eslint/no-explicit-any": "warn",
+      // 2026-08-03 — an ERROR, because this failure mode is invisible to every
+      // other check in the repo. A `// comment` in JSX CHILDREN position is not
+      // a comment; it is a text node, and it renders. It happened here for real:
+      // `LegalLinks` had a long `//` block sitting legally in `return ( … )`
+      // ahead of the root element, and wrapping that return in a fragment moved
+      // it into children position — the entire SM33 tap-target note rendered as
+      // a paragraph in the site footer. tsc passed, 540 tests passed, lint
+      // passed, `next build` passed; it took a human looking at the page.
+      // This is the SECOND JSX-comment incident here (see AGENTS.md on
+      // `eslint --fix` destroying three `{/* eslint-disable */}` directives in
+      // AuthOptions.tsx), which is what makes it worth a rule rather than care.
+      "react/jsx-no-comment-textnodes": "error",
       // An ERROR, not a style preference: it guards a real load-time crash.
       // Node's native type-stripping (what scripts/alias-hooks.mjs relies on for
       // every rehearse-*.mjs / calibrate-*.mjs) only erases syntactically

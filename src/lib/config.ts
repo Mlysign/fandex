@@ -11,6 +11,15 @@ interface EnvSpec {
   name: string;
   required: boolean;
   note?: string;
+  /**
+   * Optional AND expected to be absent — registered here for documentation, but
+   * never warned about. The monetization vars (H3) are the case this exists
+   * for: unset is the CORRECT production state until H4.2's Impressum ships, so
+   * warning about all eleven on every boot would be noise pointing the wrong
+   * way and would train the reader to skip the block that also reports a
+   * genuinely missing provider key.
+   */
+  quiet?: boolean;
 }
 
 const ENV: EnvSpec[] = [
@@ -30,6 +39,24 @@ const ENV: EnvSpec[] = [
   // P15 — Android TWA Digital Asset Links (only needed once you ship the Android app).
   { name: "TWA_PACKAGE_NAME", required: false, note: "Android TWA package name for /.well-known/assetlinks.json (P15)" },
   { name: "TWA_CERT_FINGERPRINT", required: false, note: "Android signing-cert SHA-256(s) for assetlinks.json (P15); comma-separate multiple" },
+  // H3 — monetization. All optional and all inert by default; see lib/affiliate.ts.
+  // MONETIZATION_ENABLED is the master switch and MUST stay unset until H4.2's
+  // Impressum is live (the first affiliate link makes the site commercial under
+  // §5 DDG). Deliberately NOT listed as "required" — the correct production
+  // value is "absent", so a boot warning about it would be noise pointing the
+  // wrong way.
+  { name: "MONETIZATION_ENABLED", required: false, quiet: true, note: "H3 master kill switch; leave UNSET until H4.2's Impressum is live" },
+  { name: "AFFILIATE_AMAZON_TAG", required: false, quiet: true, note: "Amazon PartnerNet associate tag (marketplace-specific)" },
+  { name: "AFFILIATE_AMAZON_HOST", required: false, quiet: true, note: "Amazon marketplace host; defaults to amazon.de" },
+  { name: "AFFILIATE_HUMBLE_PARTNER", required: false, quiet: true, note: "Humble Store partner id" },
+  { name: "AFFILIATE_GOG_LINK", required: false, quiet: true, note: "GOG network deep-link template; must contain {url}" },
+  { name: "AFFILIATE_GMG_LINK", required: false, quiet: true, note: "Green Man Gaming deep-link template; must contain {url}" },
+  { name: "AFFILIATE_FANATICAL_LINK", required: false, quiet: true, note: "Fanatical deep-link template; must contain {url}" },
+  { name: "AFFILIATE_ENEBA_LINK", required: false, quiet: true, note: "Eneba deep-link template (gray market); must contain {url}" },
+  { name: "AFFILIATE_INSTANT_GAMING_LINK", required: false, quiet: true, note: "Instant Gaming deep-link template (gray market); must contain {url}" },
+  { name: "AFFILIATE_KINGUIN_LINK", required: false, quiet: true, note: "Kinguin deep-link template (gray market); must contain {url}" },
+  { name: "NEXT_PUBLIC_SUPPORT_URL", required: false, quiet: true, note: "H3.3 donations link (Ko-fi / GitHub Sponsors); build-time inlined" },
+  { name: "NEXT_PUBLIC_SUPPORT_LABEL", required: false, quiet: true, note: "H3.3 donations link label; defaults to 'Support Fandex'" },
 ];
 
 function fmt(specs: EnvSpec[]): string {
@@ -43,6 +70,7 @@ export function validateEnv(): void {
 
   for (const spec of ENV) {
     if (process.env[spec.name]) continue;
+    if (spec.quiet) continue;
     (spec.required ? missingRequired : missingOptional).push(spec);
   }
 

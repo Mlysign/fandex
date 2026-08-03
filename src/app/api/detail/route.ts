@@ -9,6 +9,7 @@ import { buildProfile, computeFandexScore, invalidateDiscoveryCache, MIN_RATED_F
 import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
+import { decorateItemLinks } from "@/lib/affiliate";
 // The catalog-enrichment half lives in lib/detail/enrich.ts, shared with the
 // PUBLIC page (/{type}/{uuid}/{slug}) so the two can't drift apart — the public
 // page previously had its own thinner path and silently rendered far less. What
@@ -133,6 +134,17 @@ export const GET = withUser(async (req: NextRequest, session) => {
       fandexScore: fandex?.score ?? null,
     };
     await applyOmdbScores(enriched);
+
+    // H3.4 — affiliate decoration. Applied HERE and in lib/detail/publicDetail.ts,
+    // the only two places store links reach a viewer; deliberately not in
+    // normalize.ts (would bake tags into stored projections and need a
+    // full-catalog re-projection to change one) nor in mergeLinks() (hot path
+    // for facetCache/discovery/libraryAnalysis, none of which render a link).
+    // Both calls are no-ops while MONETIZATION_ENABLED is off, which is H3's
+    // H4.0→H4.2 legal gate expressed as code.
+    const decorated = decorateItemLinks(enriched.storeLinks, enriched.title, itemType);
+    enriched.storeLinks = decorated.storeLinks;
+    if (decorated.buyLinks.length) enriched.buyLinks = decorated.buyLinks;
 
     // 6. Provider wishlist status (shared helper — same shape everywhere).
     const { platforms, onAnyList } = getPlatformStatus(session.userId, mediaItemId, itemType);

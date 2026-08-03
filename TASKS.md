@@ -10,10 +10,12 @@
 ## ⚠️ Needs Nils — nothing else is blocked on anything but these
 
 1. **Railway dashboard** — prod has been down since 2026-07-22 and the billing reset didn't fix it. Check for a manual resume / current usage. Unblocks PR17 → P18, and gets ~2 weeks of committed work actually live. (See STATUS.md.)
-2. **H4.0 — legal advice on the Impressum**: whether/when Fandex needs one, and how to satisfy the "ladungsfähige Anschrift" without publishing your home address (a c/o at a trusted person is valid if mail reliably arrives; a P.O. box is not; paid services ~3–15 €/mo are the fallback). **Gates H4.2, which gates all of H3.**
-3. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
-4. **H3.0 — confirm the upkeep baseline**: the actual Railway monthly bill + domain + any other recurring cost. One number; it goes in the H3 section below.
-5. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
+2. **Review the Impressum** — content complete 2026-08-03, no placeholders left (H4.0's advice was "a standard imprint, nothing special"). Read `/legal/de/imprint`; the German version is the operative one. Once you're happy, H4.2 closes and **all of H3 unblocks**.
+3. **Set `NEXT_PUBLIC_SUPPORT_URL=https://ko-fi.com/nilsmlynarek` on Railway** — it's in the local `.env` already, and the link is live in all three surfaces locally. `NEXT_PUBLIC_*` is build-time inlined, so it needs a **redeploy**, not just an env change. Still open: the monthly-running-cost placeholder on the support page (that's H3.0's number). On Ko-fi itself: **no tiers, no perks, no memberships** — a donation with consideration is a taxable supply and a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
+4. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
+5. **H3.0 — confirm the upkeep baseline**: the actual Railway monthly bill + domain + any other recurring cost. One number; it goes in the H3 section below.
+6. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
+7. **Sign up for the affiliate programs** — **PARKED 2026-08-03 until Railway is back** (your call). Every program reviews the site URL on the application, so applying while fandex.org 404s buys a rejection, and reapplying is worse than a first application. Sequence once prod is up: **GOG first** (the only merchant the catalog already product-links), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a 180-day/3-qualifying-sale clock that closes the account if missed, and Amazon is the only movie/show coverage. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md).
 
 ---
 
@@ -44,22 +46,19 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
 
 ---
 
-## H3 — Monetization 🟢 scoped, model locked 2026-07-18
+## H3 — Monetization 🔵 v1 built 2026-08-03; donations live, affiliate dark
 
-**Goal:** revenue covers upkeep (Railway, domain, third-party APIs). **Hard gate: H4.0 + H4.2 must ship before any monetization goes live** — the first affiliate link makes the site commercial under §5 DDG.
+**Goal:** revenue covers upkeep (Railway, domain, third-party APIs).
 
 **The economics pivot on TMDB, not on hosting.** Upkeep is small (Railway Hobby $5/mo + usage, domain ~€10/yr, all APIs currently €0) — but TMDB's free API is **non-commercial only** and commercial use is **$149/mo**. So "commercial" multiplies upkeep ~10× overnight; any paid model must clear ~$155/mo before netting a cent. Trakt requires case-by-case approval for monetizing apps. RAWG is safe (free commercially to 20k req/mo + 100k MAU, no redistribution). **Donations are the gray zone** — TMDB doesn't say whether donation-funded counts as commercial.
 
-**Affiliate reality check:** game keys — GMG ~5%, Humble 10%, Fanatical ~5% first-time/2% returning; movies/shows — Amazon PartnerNet (Blu-ray/DVD 6%, Prime Video Channels bounties; new 180-day rules from 2026-04-14). At current traffic that's plausibly **tens of €/mo — it does not clear the $149/mo TMDB license.**
+**MODEL DECISION (locked 2026-07-18): v1 = donations + affiliate links (incl. gray-market key shops) only.** Ads and the one-time ad-free unlock are **deferred, not cancelled** — parked as Path B alongside freemium, all triggered by H3.8. **Consciously accepted risk:** Fandex monetizes on the free TMDB/Trakt tiers ("under the radar"). Failure mode is **API-key revocation without notice**, not a fine. **Do NOT contact TMDB/Trakt about commercial terms while under the radar.**
 
-**Implementation reality (verified in code):** there are **no JustWatch links** (`project.ts:68` drops them deliberately) and streaming providers render as **non-clickable badges** (`LowerSections.tsx:69-81`). The only real store CTA is **Steam** (`normalize.ts:342`, `ItemView.tsx:102`) — and **Steam has no affiliate program**. RAWG store rows pass through verbatim (`normalize.ts:382`). There is no central link-builder; an affiliate hook means a shared `buildStoreLink()` called from ~5 inline sites.
+**Built 2026-08-03 — H3.3 ✅ (donations, live) · H3.4 ✅ (affiliate, DARK behind `MONETIZATION_ENABLED`) · H3.9 ✅ (go-live checklist).** Full write-ups → [archive](docs/archive/history.md), grep `H3 monetization v1`. Operating instructions → [docs/monetization-go-live.md](docs/monetization-go-live.md). **The one thing to know before touching any of it:** the catalog's store rows are Steam/PSN/GOG/Xbox/Nintendo/Epic/itch.io and only **GOG** is affiliate-capable, so `affiliate.ts` has *two* mechanisms — a rewriter for GOG-shaped links and `buildBuyLinks()` synthesizing per-title search links for the merchants we have programs with. → [[monetization-h3]]
 
-**MODEL DECISION (locked 2026-07-18): v1 = donations + affiliate links (incl. gray-market key shops) only.** Ads and the one-time ad-free unlock are **deferred, not cancelled** — parked as Path B alongside freemium, all triggered by H3.8. Rationale: neither needs a consent banner, the compliance surface stays small, and ad RPMs are near-zero below a few thousand pageviews/mo anyway. **Consciously accepted risk:** Fandex monetizes on the free TMDB/Trakt tiers ("under the radar"). Failure mode is **API-key revocation without notice**, not a fine — the local DB keeps synced data but ingestion/enrichment breaks. **Do NOT contact TMDB/Trakt about commercial terms while under the radar.**
-
-**Tasks:**
-- **H3.0** ⬜ · High · **you** · ~0k — confirm the upkeep baseline (see "Needs Nils" above).
-- **H3.3** ⬜ · Med · after H4.2 · ~10k — **Donations rail:** Ko-fi and/or GitHub Sponsors + a "Support Fandex" link next to the legal links. No cookies → banner-neutral.
-- **H3.4** ⬜ · Med · after H4.2 · ~30k — **Affiliate implementation:** shared `buildStoreLink()` (normalize.ts ×4, `ItemView.tsx:102`, RAWG passthrough rewrite), program signups (GMG/Humble/Fanatical/Amazon PartnerNet **+ gray-market Eneba/Instant Gaming/Kinguin — decided in, with noted reputational + key-provenance risk**), affiliate labeling per [docs/monetization-legal.md](docs/monetization-legal.md), and a cookie-banner re-check (some programs set click-cookies). **Gates: H4.0 + H4.2 live.**
+**Still open:**
+- **H3.0** ⬜ · High · **you** · ~0k — confirm the upkeep baseline (see "Needs Nils" above). Feeds the support page, which deliberately carries no cost figure.
+- **Affiliate program signups** ⏸️ — parked on Railway (see "Needs Nils" #7); every program reviews the applicant site.
 - **H3.8** 🔵 **defined 2026-08-02, explicitly NOT approved** — **Path B trigger**, two arms with different metrics:
   - **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20) — not a second gate, just worth re-checking which network fits.
   - **Freemium → 3,500 sustained weekly-active users.** The old "roughly 1k+ actives" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€, leaving room for Trakt's separate approval and normal churn.
@@ -74,23 +73,20 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
     )
     ```
     It counts only users who took a write action — a pure browser isn't captured by anything in the schema. **Scoped, not built:** make `last_seen_at` real by touching it in `getSession()`/`withUser()` once per calendar day per user (rate-limited to avoid write amplification on a hot path).
-- **H3.9** ⬜ · High · before either stream ships · ~5k — **Go-live checklist:** H4.0/H4.2 live on every route, affiliate labeling correct, cookie-banner state matches the cookies actually set, H4.3/H4.5 declare affiliate data flows, gray-market shops clearly labeled.
 
-**Est. ~40–45k for v1.** Order: **H4.0 → H4.2** → H3.0 → H3.4 → H3.3 → H3.9.
+**What's left before affiliate revenue exists:** Railway back → sign up (GOG first, **Amazon last** — its 180-day/3-sale clock closes the account if missed) → set the env vars → flip `MONETIZATION_ENABLED` → run the post-go-live cookie check. All of it is in the go-live doc.
 
 ---
 
-## H4 — Legal & compliance 🟢 all done except two
+## H4 — Legal & compliance ✅ CLOSED 2026-08-03
 
-**Goal:** meet EU/German requirements (operator is DE-based). §5 DDG mandates an Impressum for anything beyond purely private use (fines to €50k, §33 DDG); GDPR governs the data already stored. Locked 2026-07-18: **Claude drafts, Nils reviews** (not-a-lawyer caveat accepted); **bilingual EN + DE**; **no postal address anywhere until H4.0**.
+**Nothing open.** H4.0 (advice: a standard imprint suffices) and H4.2 (Impressum written, filled, live in DE + EN) closed the epic. Full write-ups → [archive](docs/archive/history.md), grep `H3 monetization v1`. Live reference docs: [docs/compliance-review.md](docs/compliance-review.md) · [docs/cookie-assessment.md](docs/cookie-assessment.md) · [docs/monetization-legal.md](docs/monetization-legal.md).
 
-**Why the starting position is favourable:** identity-less users (no email or real name — only provider IDs, display names, avatars, encrypted tokens), essential-only cookies, zero analytics/tracking, no third-party embeds. **A cookie banner is not needed today** — §25 TDDDG's strictly-necessary exemption covers all three cookies; a privacy-policy notice suffices. ⚠️ **Any analytics, affiliate tracking or ad script triggers the banner requirement** (equal-prominence Accept/Reject) — a hard guard on H3.
+**Three standing guards this epic leaves behind — read before touching the legal surface, monetization, or anything claimed "reachable":**
 
-- **H4.0** ⬜ · High · **you** · ~0k — obtain the legal advice (see "Needs Nils"). Gates *publishing* the Impressum, not drafting it.
-- **H4.2** ⏸️ · High · **critical path** · ~10k — **Impressum (DE + EN):** §5 DDG content (name, serviceable address per H4.0, email + a second fast contact channel) and the §18 Abs. 2 MStV responsible-person line. When it ships: `noindex` + address rendered as image/JS-inserted (the duty is availability to visitors, not crawlers). **Do not build before H4.0's advice is in.** Route, `noindex` and sitemap exclusion are already live with an empty placeholder — only the §5 content is gated.
-- **H4.1 / H4.3–H4.10** ✅ all done — legal page infra, privacy policy, cookie assessment, ToS, account deletion + export, support page, monetization legal prep, compliance review. Write-ups in the archive; live reference docs: [docs/compliance-review.md](docs/compliance-review.md), [docs/cookie-assessment.md](docs/cookie-assessment.md), [docs/monetization-legal.md](docs/monetization-legal.md).
-
-**⚠️ The reachability trap this epic taught (2026-08-02):** H4.1 put the legal links at the bottom of `/profile`, reasoning that `AppNav` makes `/profile` reachable from anywhere. True logged-in, **false for anonymous visitors** — `AppNav`'s "You" slot is a `<button>` opening `SignInDialog` when `authed === false`, and `/profile` bounces anon to `/` before the footer renders. So no anonymous visitor could reach any `/legal/*` page at all. Fixed by putting the links **in the sign-in dialog**, where the anon nav path actually terminates (`LegalLinks.tsx` is the one shared list, so the two can't drift). Full detail → [[anon-legal-reachability]].
+1. **A cookie banner is not needed today** — §25 TDDDG's strictly-necessary exemption covers all three cookies. ⚠️ **Any analytics, affiliate *tracking script*, or ad script triggers the banner requirement** (equal-prominence Accept/Reject). H3.4's links are plain outbound `<a href>`s specifically to stay inside the exemption; a Fandex-hosted `/out?url=` redirect or click pixel would break it. → [docs/cookie-assessment.md](docs/cookie-assessment.md)
+2. **"The nav reaches it" is a different claim per auth state.** H4.1 put the legal links on `/profile` alone, reasoning `AppNav` reaches `/profile` from anywhere — true logged-in, false for anon ("You" is a `<button>` opening `SignInDialog`, and `/profile` bounces anon to `/`). No anonymous visitor could reach any `/legal/*` page. Now in the sign-in dialog *and* on every legal page. → [[anon-legal-reachability]]
+3. **The Impressum stays `noindex, nofollow, noarchive, nosnippet` + out of `sitemap.ts`** now that it carries a real home address. Those directives, not `ProtectedText`'s client-side assembly, are what crawlers actually honour.
 
 ---
 
@@ -101,9 +97,11 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
 
 ---
 
-## Recently closed (2026-08-02) — pointers only
+## Recently closed (2026-08-03) — pointers only
 
-- **G1/G2/G3 — provider latency isolation.** A dead RAWG stalled every browse request for ~2.2 minutes; fixed with a per-host circuit breaker + browse budget in `http.ts`. **The breaker THROWS rather than returning a synthetic 503** — a fake 503 would read as `!res.ok` to the pull adapters and turn an outage into an empty library under the prune invariant. G2 closed (RAWG stays). G3 closed (browse budget reaches the Trakt/IGDB adapters via opt-in, so enrichment keeps its unbounded budget). → [[provider-latency-isolation]]
-- **10th smoke sweep (SM34–SM37),** run during the real RAWG outage — which was the useful part. SM35/36/37 all fixed + verified against the live outage. Found a **third** RAWG-only path the sweep hadn't reached (`/api/discover`'s cold-start branch — the *anonymous* one). SM34 deliberately not fixed: a `next dev` Turbopack hydration artifact, production unaffected — recorded in [smoketest.md](smoketest.md) with a 30-second discriminator.
-- **⚠️ Correction:** the 9th sweep blamed a 58–60 s cold Discover load on the catalog pool cache. **Misattributed** — the pool rebuild is ~430 ms (`scripts/probe-pool.mjs`); it was the RAWG outage all along. **Measure before optimising.**
-- **Eight open questions closed** across the docs (anon legal reachability, ToS/RAWG password transit, G2, G3, `capped`, `data/` 1,061 → 319 MB, Backloggd, H3.8 definition).
+Everything below is fully written up in [docs/archive/history.md](docs/archive/history.md) — grep `H3 monetization v1`. Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
+
+- **H3 v1 built** — donations live, affiliate layer dark behind `MONETIZATION_ENABLED`, go-live checklist written. → [[monetization-h3]]
+- **H4 epic closed** — H4.0's advice in, Impressum written + filled in both locales.
+- **⚠️ A `//` comment rendered as visible page text** after a `return` was wrapped in a fragment. tsc, 540 tests, lint and build all passed; a human spotted it. `react/jsx-no-comment-textnodes` is now an eslint ERROR. → [[jsx-comment-in-children-renders]]
+- **Logged, not fixed (yours):** `--color-accent` in light theme measures **4.47:1** on `--color-surface` — just under AA for body text, while the token's comment claims 4.5:1+. App-wide, not specific to the new links. `#856619` clears it.

@@ -41,6 +41,12 @@ missing.
 | `OMDB_API_KEY` | ⬚ | Rotten Tomatoes / IMDb scores |
 | `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
 | `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
+| `MONETIZATION_ENABLED` | ⬚ | **H3 master kill switch — leave UNSET.** `1`/`true` turns on every affiliate link on the site. The first one makes Fandex commercial under §5 DDG, so this must not be set until H4.2's Impressum is live. See [docs/monetization-go-live.md](docs/monetization-go-live.md). |
+| `AFFILIATE_AMAZON_TAG` / `AFFILIATE_AMAZON_HOST` | ⬚ | Amazon PartnerNet associate tag (marketplace-specific) and marketplace host (defaults `amazon.de`) |
+| `AFFILIATE_HUMBLE_PARTNER` | ⬚ | Humble Store partner id (a `?partner=` value) |
+| `AFFILIATE_GOG_LINK` / `AFFILIATE_GMG_LINK` / `AFFILIATE_FANATICAL_LINK` | ⬚ | Affiliate-network deep-link templates — paste the one your network gives you, with a destination placeholder. **`{url}`** substitutes percent-encoded (Partnerize/Impact); **`{urlRaw}`** substitutes verbatim (Adtraction, which is GOG's network, appends it last). A template with neither is ignored rather than sending traffic to a bare homepage. |
+| `AFFILIATE_ENEBA_LINK` / `AFFILIATE_INSTANT_GAMING_LINK` / `AFFILIATE_KINGUIN_LINK` | ⬚ | Same template format, for the gray-market key resellers (labeled "key reseller" in the UI) |
+| `NEXT_PUBLIC_SUPPORT_URL` / `NEXT_PUBLIC_SUPPORT_LABEL` | ⬚ | H3.3 donations link (Ko-fi / GitHub Sponsors) shown next to the legal links; label defaults to `Donate`. **Build-time inlined** — changing it needs a rebuild. Not gated by `MONETIZATION_ENABLED`; a donation link isn't a commercial communication. |
 | `SCORING_ADMIN_USER_IDS` | ⬚ | Comma-separated `users.id` allowlist for `/dev/scoring`. Unset = nobody (fails closed) |
 | `DEV_LOGIN_USER_ID` | ⬚ | **Local dev only.** A `users.id` that `GET /api/dev/login` mints a session for, so the logged-in pages are reachable without an OAuth round-trip. 404s unless `NODE_ENV !== "production"` *and* the host is loopback. Leave unset unless testing. |
 

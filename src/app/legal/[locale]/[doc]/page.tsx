@@ -34,9 +34,16 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   return {
     title: content.title,
     alternates: { canonical, languages },
-    // imprint is a placeholder until H4.0 (legal advice) lands — it must not
-    // be indexed or listed in the sitemap while it says "coming soon".
-    ...(doc === "imprint" ? { robots: { index: false, follow: false } } : {}),
+    // The imprint carries the operator's real postal address (H4.2,
+    // 2026-08-03), so it stays out of search entirely — it is also excluded
+    // from sitemap.ts. `index: false` alone is not enough: without `noarchive`
+    // a cached copy can outlive the page, and without `nosnippet` the address
+    // can surface in a result excerpt for a query that matches it. These
+    // directives, not the client-side assembly in ProtectedText, are what
+    // well-behaved crawlers actually honour.
+    ...(doc === "imprint"
+      ? { robots: { index: false, follow: false, noarchive: true, nosnippet: true } }
+      : {}),
   };
 }
 

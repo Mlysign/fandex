@@ -1397,7 +1397,7 @@ Two of the four open questions this batch left behind closed 2026-07-30 (`/api/d
 
 ## H4 legal/compliance sub-tasks — done, full write-ups
 
-The H4 epic itself stays live in TASKS.md (H4.0/H4.2 still open, gate H3 monetization), but every *completed* sub-task's full write-up lives here — TASKS.md keeps only a one-line pointer per item.
+**The H4 epic is fully closed as of 2026-08-03** — H4.0 and H4.2, the last two open items, are written up in the 2026-08-03 section at the end of this file. Every sub-task's full write-up lives here; TASKS.md keeps only a one-line pointer.
 
 - **H4.1** ✅ 2026-07-30 — **Legal page infrastructure.** `/legal/{en,de}/{privacy,terms,support,imprint}` — distinct URLs per locale (not a client toggle), `alternates.languages` hreflang, `force-dynamic` (the `robots.ts`/SM7 trap applies here too — canonical URLs come from `BASE_URL`). Content is a typed structure (`LegalDocument`), no markdown/`dangerouslySetInnerHTML` given the enforced CSP. `LegalFooter` sits at the bottom of `/profile` only, per the locked decision — verified live that the two-click rule actually holds at the time (`AppNav`'s bottom-nav "You" slot reaches `/profile` from every page in one click for a LOGGED-IN visitor — H4.10, 2026-08-02, found this doesn't hold for anon; see that entry). The public-anon-reachability verify-item is satisfied by construction: these routes carry no session gate at all.
 - **H4.3** ✅ 2026-07-30 — **Datenschutzerklärung / privacy policy (DE + EN).** Controller identity (name + email only, per the H4.0 gap — still open); full data inventory mapped to the live schema's six user-scoped tables; recipients/transfers section grounded in checking each provider adapter's actual `push*`/`pull*` functions (TMDB/Trakt/RAWG are genuinely bidirectional, Steam read-only, IGDB metadata-only — not assumed symmetric); **the Litestream backup-retention window is a confirmed number, not a placeholder**: v0.3.13 (pinned in the Dockerfile) with no `retention` key set defaults to **24h**, verified against the version-specific docs (not the current v0.5+ LTX-era ones, which use a different config schema and default entirely). Two `TODO(H4.3)` markers left deliberately rather than guessed — the exact transfer-basis mechanism per US provider, and the specific competent supervisory authority — both genuinely need facts outside this repo, still open pending H4.0.
@@ -1482,6 +1482,72 @@ Run on the **production build** (`npm run start`, :3100) after SM34 made the dev
 - **Backloggd answered:** its ToS says *"You agree to access the Website through the interface we provide"* and there is still no official API — parked on a ToS finding rather than a taste call.
 - **The local dev WAL's 48–57 MB** turned out to be a harmless dev-process-lifecycle artifact, fully reclaimed the instant a fresh connection opens (confirmed against a scratchpad copy). No code changed.
 - **`next dev` build-dir isolation** (`81493db`) — two concurrent `next dev` processes were corrupting each other's build output.
+
+---
+
+## H3 monetization v1 (built dark) + H4.0/H4.2 closeout — 2026-08-03 — ✅ ALL CLOSED
+
+**The day's shape:** H3's whole v1 was built behind a kill switch, then H4.0's advice came in mid-session ("a standard imprint, nothing special"), which unblocked H4.2 → which unblocked the donations half of H3 to actually go live. Affiliate links stay dark pending program signups, which are parked on Railway.
+
+### H3.4 — affiliate layer (`src/lib/affiliate.ts`, 31 tests)
+
+**Three departures from the scope TASKS.md had carried since 2026-07-18, each forced by something found while building:**
+
+1. **A pure URL-rewriter would have earned nothing.** The scope was "a shared `buildStoreLink()` called from ~5 inline sites". Measured against the live `data/rr.db` first (400 RAWG game links): every store row rendered is Steam 291 · PSN 118 · **GOG 109** · Xbox 86 · Nintendo 76 · App Store 50 · Epic 47 · itch.io 34 · Google Play 34. Only **GOG** is affiliate-capable; Steam has none (TASKS.md already knew this) and the console/mobile storefronts don't either. Meanwhile *every* program H3.4 had chosen — Amazon, GMG, Humble, Fanatical, Eneba, Instant Gaming, Kinguin — appears **zero times** in the data. Hence a second half: `buildBuyLinks()` synthesizes per-title **search** links to the merchants we do have programs with. That's where any revenue comes from; the rewriter only covers the GOG-shaped case. A merchant with a real product row is deduped out of the search list (`decorateItemLinks()`), since a tagged product page beats a search page.
+2. **Decoration happens at the two DETAIL boundaries** (`/api/detail/route.ts`, `lib/detail/publicDetail.ts`) — never in `normalize.ts` (would bake tags into stored projections, so changing one tag needs a `PROJECTION_VERSION` bump + full-catalog re-projection — *the exact op that took prod down 2026-07-22*) and never in `mergeLinks()` (hot for facetCache/discovery/libraryAnalysis, renders no links, snapshot-tested). A tag change now takes effect on the next request, free.
+3. **Affiliate networks are `{url}` templates in env, not hardcoded builders.** Amazon (`?tag=`) and Humble (`?partner=`) are confirmed query-param programs and are implemented directly; the other five run through networks (Partnerize/Admitad/FlexOffers/MyLead) whose link format is only visible inside an account. **Two placeholders, because networks disagree on encoding:** `{url}` percent-encodes (Partnerize, Impact); `{urlRaw}` substitutes verbatim (**Adtraction — GOG's network — documents a raw url appended last**). Supporting only `{url}` would have made the first program signed up a coin flip between "works" and "silently sends every click to a url the network can't parse". A template with neither placeholder is refused rather than emitted.
+
+**The kill switch is the legal gate as code.** `MONETIZATION_ENABLED` defaults off; with it off, `buildStoreLink` returns its input byte-identical, `buildBuyLinks` returns `[]`, and no commercial markup renders at all. Accepts `1`/`true` only — a typo fails **closed**. Verified in the browser in both states: with it off the item page is byte-identical; with it on, 8 sponsored links, `Ad` marker + `rel="sponsored"` on each, GOG's product row rewritten, **Steam untouched**, disclosure per section.
+
+**Disclosure per `docs/monetization-legal.md` §1's defensible minimum, both halves shipped:** a per-link `Ad` marker (`aria-label="affiliate link"`, never a tooltip-only) *and* a section-level notice, on any block containing affiliate links. Gray-market shops additionally labeled "key reseller" and sorted after the authorized retailers. §5a UWG's "directly apparent from context" carve-out is deliberately not relied on.
+
+**Cookie exemption intact by construction:** every link is a direct outbound `<a href>`; no Fandex-hosted `/out?url=` redirect, no click pixel — which also matches Amazon's own anti-redirect policy. §25 TDDDG unaffected; **still needs the real post-go-live cookie check** in the checklist.
+
+### H3.3 — donations rail (live)
+
+`SupportLink.tsx` is the one component; three surfaces stay in sync: the **footer** (a bordered heart pill *above* the legal row — as a fifth inline entry it read as another legal obligation and vanished), the **sign-in dialog** (so the anonymous path gets it), and the **`/profile` entry list** (last row, the only external one — real `<a target="_blank">` and an external-link glyph, since a chevron promises another page in this app). Live at `https://ko-fi.com/nilsmlynarek` via `NEXT_PUBLIC_SUPPORT_URL`; unset renders nothing anywhere. **Not behind `MONETIZATION_ENABLED`** — a donation link is not a commercial communication under §5 DDG, sets no cookie, needs no label. Plain link only, never Ko-fi's widget (third-party scripts/cookies would break the §25 TDDDG exemption; the CSP would block it anyway). Support-page copy deliberately promises **no tiers, no perks, no paywalled features** — a donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier. **No concrete cost figure** (Nils's call): a number goes stale every time the Railway bill moves.
+
+**Naming churn worth recording:** "Support Fandex" → "Donate" → back to "Support Fandex". Inline in the legal row it collided with the existing "Support" link (the `/legal/*/support` page); once it became a visually distinct pill, the collision was resolved the other way — by renaming the **nav label** to "Contact"/"Kontakt" (the doc's own title is unchanged).
+
+### H3.9 — `docs/monetization-go-live.md`
+
+Ordered pre-flight. **Signup order matters and is now recorded with reasons: GOG first** (only merchant already product-linked; 6% net, 7-day cookie; apply via `affiliate@gog.com` or Adtraction), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a **180-day / 3-qualifying-sales-from-3-separate-checkouts clock that closes the account if missed**, and Amazon is the only movie/show coverage. Also: **every program reviews the applicant site**, so nothing can be applied for while fandex.org 404s — which is why signups are parked on Railway, not on H4.2.
+
+### H4.0 ✅ + H4.2 ✅ — the Impressum
+
+**H4.0 answered:** a standard imprint suffices, nothing special. **H4.2 written and filled**, DE + EN, zero placeholders: one address block headed with **both** §5 DDG and §18 Abs. 2 MStV (same person, same address — two sections printed it twice), email contact, §36 VSBG statement, content/links/copyright boilerplate. German is the operative version.
+
+**Three deliberate departures from the old H4.2 plan:**
+- **No EU ODR/OS-Plattform link.** Shut down **2025-07-20**, Reg. (EU) 524/2013 repealed by Reg. (EU) 2024/3228 — the duty to link it is gone. Any template older than mid-2025 still carries it. **Do not "restore" it.**
+- **No VAT section** (Nils). §27a UStG only requires a USt-IdNr. *if one exists*. Bring it back if one is ever issued.
+- **Email as the only contact channel**, no phone (Nils). §5 DDG names the email address explicitly; EuGH C-298/07 expects a second route but accepts any channel allowing prompt efficient communication, which `/legal/*/support` describes. Adding a phone number is the easy remedy if challenged.
+
+**Address obfuscation — what it is and isn't.** Nils asked for the address to be unreadable to crawlers after being advised against image/JS rendering; implemented as `ProtectedText.tsx` (base64 in the payload, assembled client-side). **Verified by `curl`: "Konkordiastr", "Mlynarek", "40219", "Düsseldorf" are all absent from the server HTML in both locales**, and not greppable in the JS bundle. It stops naive regex harvesters and nothing else — **any headless-browser scraper defeats it in seconds**. What actually keeps it out of search is `noindex, nofollow, noarchive, nosnippet` (strengthened from bare `noindex`) plus the sitemap exclusion. Once mounted it is real selectable text in an `<address>` — no CSS reversal, no bidi override, no character splitting. **Residual, knowingly accepted: a JS-disabled visitor sees a fallback line pointing at hello@fandex.org instead of the address** — the one genuine §5 DDG exposure. A `<noscript>` fallback was considered and rejected: it would hand the plaintext straight back to the harvesters it's meant to stop.
+
+### Legal-surface infrastructure changes (all four docs)
+
+- **`LegalFooter` now renders on every legal page**, not just `/profile`. Landing on `/legal/en/privacy` from a search result or the sign-in dialog used to be a dead end — which matters more here than ordinary navigation, given the BGH two-click rule and this epic's own anon-reachability trap.
+- **`LegalLinks` is locale-aware.** H4.1 hardcoded `/legal/en/…`, invisible while the footer only lived on `/profile`; putting it on the legal pages made it obvious — standing on `/legal/de/imprint`, every footer link threw you back to English. Still no locale *detection*: the caller passes the locale it already knows, everything else keeps defaulting to `en`.
+- **Two new `LegalBlock` variants**, both because the enforced CSP rules out `dangerouslySetInnerHTML`: `{ protected }` (client-only text, above) and `{ rich }` (a paragraph mixing text and inline links — added for the Ko-fi link; reusable for privacy/terms).
+- **New test guard:** placeholders must be filled in **both** locales or neither. German is the operative imprint, so a filled DE + unfilled EN looks right on the page a regulator reads while leaving `[PLACEHOLDER: street and house number]` live for everyone else.
+
+### ⚠️ The bug that passed every automated check — `react/jsx-no-comment-textnodes` now an ERROR
+
+Wrapping `LegalLinks`' `return ( … )` in a fragment silently moved a long `//` comment block from **JS position** (legal, invisible) into **JSX children position**, where `//` is not a comment — it is a text node. The entire SM33 tap-target note rendered as a visible paragraph in the site footer, on every page carrying it.
+
+**`npx tsc --noEmit` clean · 540 tests passing · `npm run lint` 0 errors · `npm run build` clean.** It is valid JSX. Nils caught it by looking at the page and sending a screenshot.
+
+Fixed, and `react/jsx-no-comment-textnodes` is now an **error** in `eslint.config.mjs` — verified by writing a probe file containing the exact bug and confirming eslint rejects it, then sweeping all of `src` (no other instances). **Second JSX-comment incident here**, after `eslint --fix` destroying three `{/* eslint-disable */}` directives in `AuthOptions.tsx` — both fail silently and only show up in rendered output. → [[jsx-comment-in-children-renders]]
+
+### Measurement note — don't read computed colours mid-transition
+
+Checking the Ko-fi link's contrast in light theme first measured `rgb(200,162,75)` on a light background = **2.14:1**, which looks like a serious a11y failure. It was `transition-colors` animating: the colour was read mid-transition. Measured across two separate calls, the settled value is the correct `#8A6A1E` light-theme accent.
+
+**One real finding from that detour, logged not fixed (pre-existing, app-wide, Nils's call):** `--color-accent` in the `[data-theme="light"]` block measures **4.47:1** on `--color-surface` — marginally under WCAG AA's 4.5:1 for body text, while the token's own comment at `globals.css:166` claims "4.5:1+ as text on light". Affects every `text-accent` on a light background (`not-found.tsx`, Insights, `AppNav` active state), not just this link. `#856619` would clear it and is visually indistinguishable.
+
+### Verification + env
+
+Standing bar held throughout: **540 tests · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean**, `/legal/[locale]/[doc]` still `ƒ (Dynamic)`. Every browser check ran against the real dev server; two temporary `.env.local` files (fake affiliate creds, then a placeholder Ko-fi url) were used and deleted — neither ever entered the repo. **12 new env vars**, all optional and all `quiet: true` in `config.ts` (a new flag: unset is the *correct* production state for the monetization block, so warning about eleven of them on every boot would be noise pointing the wrong way).
 
 ### Archived STATUS.md session digests (2026-07-23 → 2026-08-02)
 

@@ -35,8 +35,45 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
   );
 }
 
+// ── Affiliate disclosure (H3.4 / §5a UWG) ────────────────────────────────────
+//
+// docs/monetization-legal.md's "defensible minimum" is TWO things, and both are
+// implemented here: a small persistent marker on every affiliate link, plus a
+// one-line page-level notice. It deliberately does not rely on §5a's
+// "commercial intent directly apparent from context" carve-out — German courts
+// have no settled test for when that applies, and labeling is far cheaper than
+// finding out. H4.0's lawyer still confirms whether the marker alone would
+// suffice; until then we ship both.
+//
+// Rendered inline and visible by default — never a tooltip, never a footnote.
+
+/** The per-link marker. Small, but never hidden. */
+function AffiliateMark() {
+  return (
+    <span
+      className="font-mono text-micro uppercase tracking-wide px-1 py-px rounded border border-current opacity-70"
+      /* The visual is tiny, so the accessible name carries the full word — a
+         screen-reader user gets "affiliate link", not the letters "ad". */
+      aria-label="affiliate link"
+      title="Affiliate link — Fandex may earn a commission"
+    >
+      Ad
+    </span>
+  );
+}
+
+/** The section-level notice that accompanies any block containing affiliate links. */
+function BuyDisclosure() {
+  return (
+    <p className="font-mono text-meta text-text-secondary mt-2">
+      Links marked <span className="uppercase">Ad</span> are affiliate links — Fandex may earn a
+      commission on a purchase, at no extra cost to you.
+    </p>
+  );
+}
+
 // The stacked lower-detail sections: trailer, cast, where-to-watch, DLC, the
-// combined tags/keywords/modes/platforms block, and store links.
+// combined tags/keywords/modes/platforms block, where-to-buy, and store links.
 export default function LowerSections({ enriched, type, tagOverrides = {}, tagCategories = [] }: {
   enriched: EnrichedItem | null;
   type: MediaType;
@@ -57,6 +94,7 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
   const platformList    = enriched?.platforms ?? [];
   const gameModes       = enriched?.gameModes ?? [];
   const storeLinks      = enriched?.storeLinks ?? [];
+  const buyLinks        = enriched?.buyLinks ?? [];
 
   return (
     <div className="mt-10 space-y-8">
@@ -211,17 +249,64 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         );
       })()}
 
+      {/* Where to buy — H3.4's synthesized affiliate rows. Empty (so this whole
+          section is absent) unless MONETIZATION_ENABLED is on AND a program is
+          configured, which is how the commercial surface stays dark until
+          H4.2's Impressum ships. Every row here is an affiliate link by
+          construction, so the marker is unconditional rather than per-row. */}
+      {buyLinks.length > 0 && (
+        <section className="pt-2 border-t border-border">
+          <SectionHeading>Where to buy</SectionHeading>
+          <div className="flex flex-wrap gap-2">
+            {buyLinks.map((l) => (
+              <a
+                key={l.programId}
+                href={l.url}
+                target="_blank"
+                /* `sponsored` is the rel Google requires on a paid link; without
+                   it these read as ordinary editorial links. */
+                rel="sponsored noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-surface-elevated border border-border text-text-primary hover:border-border-strong transition-colors"
+              >
+                {l.label}
+                {l.grayMarket && (
+                  /* Not a legal requirement — an honesty one. These resell keys
+                     bought elsewhere; provenance isn't guaranteed and support is
+                     the buyer's problem. TASKS.md H3.4 decided them IN with that
+                     risk noted, so the risk is named where it's taken. */
+                  <span className="font-mono text-micro text-text-secondary">key reseller</span>
+                )}
+                <AffiliateMark />
+              </a>
+            ))}
+          </div>
+          <BuyDisclosure />
+        </section>
+      )}
+
       {/* Store links */}
       {storeLinks.length > 0 && (
         <section className="pt-2 border-t border-border">
           <SectionHeading>Links</SectionHeading>
           <div className="flex flex-wrap gap-2">
             {storeLinks.map((l) => (
-              <a key={l.name} href={l.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 rounded-lg transition-colors" style={{ background: `${SOURCE_COLORS[l.source] ?? "#888"}18`, color: SOURCE_COLORS[l.source] ?? "#aaa" }}>
+              <a
+                key={l.name}
+                href={l.url}
+                target="_blank"
+                rel={l.affiliate ? "sponsored noopener noreferrer" : "noopener noreferrer"}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors"
+                style={{ background: `${SOURCE_COLORS[l.source] ?? "#888"}18`, color: SOURCE_COLORS[l.source] ?? "#aaa" }}
+              >
                 {l.name} →
+                {l.affiliate && <AffiliateMark />}
               </a>
             ))}
           </div>
+          {/* The section-level notice rides on the rewritten rows only — an
+              un-monetized Links block must not claim a commercial relationship
+              it doesn't have. */}
+          {storeLinks.some((l) => l.affiliate) && <BuyDisclosure />}
         </section>
       )}
     </div>

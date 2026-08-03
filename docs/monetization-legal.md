@@ -1,5 +1,19 @@
 # Monetization legal prep (H4.9)
 
+> **Update 2026-08-03 — H3.3/H3.4/H3.9 are implemented** (dark, behind
+> `MONETIZATION_ENABLED`). This document's research still stands; what changed
+> is that its checklist items now have code behind them. Two were closed in the
+> build: **§1's "defensible minimum" is fully implemented** (per-link marker
+> *and* page-level notice, plus `rel="sponsored"`), and **§2's per-program
+> mechanism check is closed for Amazon and Humble** — both confirmed
+> query-parameter programs, neither needing a redirect. The other five run
+> through affiliate networks whose link format is only visible inside an
+> account, so they're configured as `{url}` templates rather than guessed at;
+> that item stays open until signup, by necessity. §1's remaining question (is
+> the page-level notice legally required, or just good practice?) still needs
+> H4.0 — but both are shipped, so the answer can only relax the requirement.
+> Operational sequence → [monetization-go-live.md](monetization-go-live.md).
+
 **A document, not a page** — same convention as `cookie-assessment.md` (H4.4) and
 `docs/compliance-review.md` (H4.10). This is checklist-level research to make H3.4
 (affiliate implementation) decision-ready, not legal advice, and not a substitute for

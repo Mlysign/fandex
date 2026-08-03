@@ -57,6 +57,33 @@ export interface CommunityRating {
   url?: string | null;
 }
 
+// H3.4 — a merchant Fandex can earn a commission from. The registry, the url
+// builders and the kill switch all live in `lib/affiliate.ts`; only the shapes
+// carried on EnrichedItem are here, so that module can import them without a
+// cycle back through this file.
+export type AffiliateProgramId =
+  | "amazon"
+  | "humble"
+  | "gog"
+  | "gmg"
+  | "fanatical"
+  | "eneba"
+  | "instantGaming"
+  | "kinguin";
+
+/**
+ * A synthesized "buy this title" link. Affiliate by construction — it exists for
+ * no other reason — so every one of these MUST carry an advertising marker when
+ * rendered (§5a UWG). `grayMarket` flags the key resellers, which are labeled
+ * additionally and sorted after the authorized retailers.
+ */
+export interface BuyLink {
+  programId: AffiliateProgramId;
+  label: string;
+  url: string;
+  grayMarket: boolean;
+}
+
 // Enriched item returned to the client
 export interface EnrichedItem {
   id: string;
@@ -132,7 +159,14 @@ export interface EnrichedItem {
   keywords?: string[];
   trailerYoutubeKey: string | null;
   steamTrailerUrl: string | null;
-  storeLinks: { name: string; url: string; source: Source }[];
+  // `affiliate` is stamped by lib/affiliate.ts at the DETAIL boundary only — it
+  // is never projected or merged, so a tag change needs no re-projection. When
+  // true the row MUST render the §5a UWG advertising marker.
+  storeLinks: { name: string; url: string; source: Source; affiliate?: boolean }[];
+  // H3.4 — synthesized per-title affiliate search links (see lib/affiliate.ts).
+  // Absent unless MONETIZATION_ENABLED is on AND a program is configured, which
+  // is what keeps the commercial surface dark until H4.2's Impressum ships.
+  buyLinks?: BuyLink[];
   streamingProviders: { name: string; logoPath: string | null; providerId: number }[];
   links: { label: string; url: string }[];
   // Raw source data for the detail panel
