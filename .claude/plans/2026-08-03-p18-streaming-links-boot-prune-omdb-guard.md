@@ -139,7 +139,7 @@ Do not land below it.
     version 0 stays at 0.
   - Depends on: T1
 
-- [ ] **T3** — Run the standalone migration path against a DB copy
+- [x] **T3** — Run the standalone migration path against a DB copy
   - Files: none (verification only)
   - Detail: `cp data/rr.db <scratchpad>/rr-migrationtest.db`, point `DB_PATH` at
     the copy, run `node scripts/migrate.mjs`. This is the second apply path and
