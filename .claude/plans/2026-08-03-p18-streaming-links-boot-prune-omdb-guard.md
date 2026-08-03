@@ -258,7 +258,7 @@ Do not land below it.
   - Tests: none — this IS the test
   - Depends on: T3, T5
 
-- [ ] **T10** — Update the docs and memory to match reality
+- [x] **T10** — Update the docs and memory to match reality
   - Files: `TASKS.md`, `STATUS.md`, `docs/archive/history.md`, and the memory
     directory's `MEMORY.md` + relevant note files
   - Detail: In `TASKS.md`, close P18 and **correct the record** — its stated

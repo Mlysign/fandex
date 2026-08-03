@@ -19,13 +19,16 @@ This stopped being a "wait it out" situation. **Action for Nils:** open the Rail
 | | Item | Blocked on |
 |--|------|--|
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
-| ⏸️ | **PR17 — post-outage verification** | Prod being back. One-shot checklist is pre-written in TASKS.md, every expected value inline. |
-| ⏸️ | **P18 — JustWatch clickable links** | PR17. Attribution shipped 2026-07-31; the links need a full-catalog re-projection (the same heavy op that caused the outage). |
+| ⏸️ | **PR17 — post-outage verification** | Prod being back. One-shot checklist is pre-written in TASKS.md, every expected value inline — now also reads the cache-contraction drift counts (see below). |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |
 
 Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit passes, all 10 smoke sweeps, every production incident, and the full performance audit.**
+
+**P18 closed 2026-08-03.** "Where to watch" rows are clickable + show an offer-type line, via TMDB's own per-region link and the existing lazy self-heal path — not the JustWatch Content Partner API or a full-catalog re-projection TASKS.md previously (incorrectly) had it blocked on. Same session: a **boot-time prune of the browsed tail, default ON** (`PRUNE_ON_BOOT=0` to disable — see below), `omdbConfigured()`, and cache-contraction drift counts in `/api/dev/dbsize`. → [archive](docs/archive/history.md), grep `P18 streaming links`.
+
+**⚠️ New default behavior worth knowing before the next prod deploy:** every server boot now runs a bounded prune of browsed-only catalog rows nobody acted on (small batches, 5s budget, skips if free space is low, never VACUUMs). Verified safe against the real local DB — `user_library`/`user_watchlist` counts were unchanged before/after — but it IS an unattended delete path, and it will fire for real the first time it runs against prod's own accumulated tail post-outage. Set `PRUNE_ON_BOOT=0` on Railway first if you'd rather run PR17's verification before anything auto-deletes.
 
 **H3 v1 landed 2026-08-03.** Donations are **live** (Ko-fi, in the footer, the sign-in dialog and the `/profile` list). The affiliate layer is **built and dark** behind `MONETIZATION_ENABLED`, which defaults off — H3's legal gate expressed as code. H3.8's Path B trigger stays **defined but explicitly NOT approved**.
 
