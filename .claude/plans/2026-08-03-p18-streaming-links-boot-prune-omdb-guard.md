@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-03-p18-streaming-links-boot-prune-omdb-guard
 created: 2026-08-03
-status: ready
+status: in_progress
 branch: current
 ---
 
