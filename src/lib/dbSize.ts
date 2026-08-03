@@ -36,6 +36,19 @@ export type DbSizeReport = {
   freePct: number | null;
   /** Cheap tier: per-table row counts. */
   tables: TableRowCount[];
+  /**
+   * Cache-contraction PREP (2026-08-03) — NOT a trigger for anything, just a
+   * reading. `user_library` / `user_watchlist` are caches rebuilt from
+   * `user_item_state` on every write (matcher.ts's rebuildCaches); migration
+   * 3's "expand-then-contract" never contracted, so they still exist. Both
+   * should be 0 if `user_item_state` is a strict superset, which is the
+   * precondition dbPrune.ts's predicate ALREADY assumes for one of its four
+   * clauses. Measured 0/0 on the dev DB (2026-08-03); this is what lets PR17
+   * confirm the same on prod without a bespoke query. A non-zero reading here
+   * means dropping the cache tables is NOT yet safe — see dbPrune.ts:14-26.
+   */
+  libRowsWithoutState: number | null;
+  wishRowsWithoutState: number | null;
   /** Deep tier: exact bytes per table/index from dbstat. null unless ?deep=1. */
   bytesByObject: TableBytes[] | null;
   deepError: string | null;
@@ -101,6 +114,28 @@ export function readDbSize(opts: { deep?: boolean } = {}): DbSizeReport {
     tables = [];
   }
 
+  let libRowsWithoutState: number | null = null;
+  let wishRowsWithoutState: number | null = null;
+  try {
+    libRowsWithoutState = get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM user_library l
+        WHERE NOT EXISTS (
+          SELECT 1 FROM user_item_state u
+           WHERE u.user_id = l.user_id AND u.media_item_id = l.media_item_id AND u.relation = 'library'
+        )`,
+    )?.n ?? null;
+    wishRowsWithoutState = get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM user_watchlist w
+        WHERE NOT EXISTS (
+          SELECT 1 FROM user_item_state u
+           WHERE u.user_id = w.user_id AND u.media_item_id = w.media_item_id AND u.relation = 'wishlist'
+        )`,
+    )?.n ?? null;
+  } catch {
+    libRowsWithoutState = null;
+    wishRowsWithoutState = null;
+  }
+
   let bytesByObject: TableBytes[] | null = null;
   let deepError: string | null = null;
   if (opts.deep) {
@@ -131,6 +166,8 @@ export function readDbSize(opts: { deep?: boolean } = {}): DbSizeReport {
     freeMb,
     freePct,
     tables,
+    libRowsWithoutState,
+    wishRowsWithoutState,
     bytesByObject,
     deepError,
   };

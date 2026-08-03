@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { readDbSize } from "./dbSize";
 
@@ -49,6 +49,12 @@ describe("readDbSize", () => {
     expect(shallow.deepError).toBeNull();
   });
 
+  it("reports both cache-contraction drift counts in the cheap tier", () => {
+    const r = readDbSize();
+    expect(r.libRowsWithoutState).not.toBeNull();
+    expect(r.wishRowsWithoutState).not.toBeNull();
+  });
+
   it("returns per-object bytes when deep, or records why not", () => {
     const r = readDbSize({ deep: true });
 
@@ -70,5 +76,84 @@ describe("readDbSize", () => {
     const totalPct = r.bytesByObject.reduce((a, o) => a + o.pct, 0);
     expect(totalPct).toBeGreaterThan(95);
     expect(totalPct).toBeLessThan(105);
+  });
+});
+
+// Cache-contraction PREP (2026-08-03) — NOT the contraction itself. Migration
+// 3's expand-then-contract never contracted user_library/user_watchlist, which
+// stayed caches rebuilt from user_item_state on every write (matcher.ts's
+// rebuildCaches). Measured drift on the real dev DB was 0/0 — these prove the
+// query genuinely DETECTS a real mismatch (not just "runs without throwing",
+// which the smoke test above already covers), so PR17 can trust a 0/0 reading
+// off prod through the same /api/dev/dbsize cheap tier before anyone drops
+// the tables (dbPrune.ts:14-26 already assumes this superset invariant for
+// one of its four prune-safety clauses).
+describe("libRowsWithoutState / wishRowsWithoutState — detects real drift", () => {
+  const USER = "u-dbsize-drift";
+
+  function addItem(id: string) {
+    run(
+      "INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'movie', ?, ?)",
+      [id, id, id],
+    );
+  }
+  const addState = (id: string, relation: "library" | "wishlist") =>
+    run(
+      "INSERT INTO user_item_state (id, user_id, media_item_id, source, relation) VALUES (?, ?, ?, 'tmdb', ?)",
+      [`${id}-st-${relation}`, USER, id, relation],
+    );
+  const addLibraryRow = (id: string) =>
+    run(
+      "INSERT INTO user_library (id, user_id, media_item_id) VALUES (?, ?, ?)",
+      [`${id}-lib`, USER, id],
+    );
+  const addWatchlistRow = (id: string) =>
+    run(
+      "INSERT INTO user_watchlist (id, user_id, media_item_id) VALUES (?, ?, ?)",
+      [`${id}-wl`, USER, id],
+    );
+
+  beforeEach(() => {
+    run("DELETE FROM media_items");
+    run("DELETE FROM users");
+    run("INSERT INTO users (id) VALUES (?)", [USER]);
+  });
+
+  it("reads 0/0 when user_item_state is a strict superset (the healthy case)", () => {
+    addItem("consistent-item");
+    addLibraryRow("consistent-item");
+    addState("consistent-item", "library");
+
+    const r = readDbSize();
+    expect(r.libRowsWithoutState).toBe(0);
+    expect(r.wishRowsWithoutState).toBe(0);
+  });
+
+  it("detects a user_library row with no matching user_item_state row", () => {
+    addItem("orphan-library-cache");
+    addLibraryRow("orphan-library-cache");
+    // deliberately no addState() call — this IS the drift
+
+    const r = readDbSize();
+    expect(r.libRowsWithoutState).toBe(1);
+    expect(r.wishRowsWithoutState).toBe(0);
+  });
+
+  it("detects a user_watchlist row with no matching user_item_state row", () => {
+    addItem("orphan-watchlist-cache");
+    addWatchlistRow("orphan-watchlist-cache");
+
+    const r = readDbSize();
+    expect(r.libRowsWithoutState).toBe(0);
+    expect(r.wishRowsWithoutState).toBe(1);
+  });
+
+  it("does not cross-count relations: a wishlist state row does not cover a library cache row", () => {
+    addItem("wrong-relation");
+    addLibraryRow("wrong-relation");
+    addState("wrong-relation", "wishlist"); // wrong relation for the library row above
+
+    const r = readDbSize();
+    expect(r.libRowsWithoutState).toBe(1);
   });
 });

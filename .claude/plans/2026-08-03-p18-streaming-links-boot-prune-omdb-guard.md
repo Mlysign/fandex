@@ -224,7 +224,7 @@ Do not land below it.
     path when configured.
   - Depends on: none
 
-- [ ] **T8** — Cache-contraction PREP: drift assertion + prod-readable drift counts
+- [x] **T8** — Cache-contraction PREP: drift assertion + prod-readable drift counts
   - Files: `src/lib/dbSize.ts`, plus a new test beside `src/lib/userItemState.test.ts`
   - Detail: `user_library` / `user_watchlist` are caches rebuilt from
     `user_item_state` (`matcher.ts:309 rebuildCaches`), and the contraction half
