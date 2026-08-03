@@ -49,8 +49,8 @@ to a new platform/media type.
 
 | Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Hardcover | book (+ audiobook format) | Connectable + Metadata | ⬜ To do ⚠️ | **personal token only — no OAuth (verified 2026-08-03)** | R/W | R | R/W | R/W | yes | Best books connector; modern free GraphQL API. **⚠️ Auth gate FAILED:** no third-party OAuth exists (open feature request only), tokens expire annually **on a shared Jan 1 reset**, and there is no app-level credential — which gates the metadata role too. Buildable only as paste-your-token. See deep dive before starting. |
-| Open Library | book | Metadata (+ light write) | ⬜ To do | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. |
+| Hardcover | book (+ audiobook format) | Connectable + Metadata | ⏸️ **Parked 2026-08-03** | personal token only — no OAuth | R/W | R | R/W | R/W | yes | Technically the best books connector, but **parked on its usage terms**, same call as Backloggd: the API is documented as *"only for offline use"*, reachable *"from localhost or APIs"*, with site allowlisting *"a way down the line"*. Also: no OAuth, tokens expire on a shared Jan 1 reset, no app-level credential (which gates the metadata role too), writes undocumented. See deep dive. |
+| Open Library | book | Metadata (+ light write) | ⏸️ Postponed with books | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. Nothing blocks it — it's postponed only because `book` as a media type is (2026-08-03), and it isn't worth the type's cost on its own. |
 | AniList | anime, manga | Connectable + Metadata | ⬜ To do | oauth | R/W | R | R/W | R | yes | Full write mutations; extends the show model. |
 | Google Books | book | Metadata | ❔ To evaluate | apikey / oauth | W | R | | | | Bookshelf write is dated; secondary metadata only. |
 | StoryGraph | book | Connectable | ❔ To evaluate | | | | | | | No official API; only a fragile unofficial cookie scraper. |
@@ -68,13 +68,48 @@ to a new platform/media type.
 Hardcover, Open Library, and Literal all model an audiobook as an edition of the
 same book with a format flag. Adding a `book` media type plus a format facet
 (ebook / physical / audiobook) covers audiobooks with no separate integration.
-Do not build Audible/Libro.fm connectors.
+Do not build Audible/Libro.fm connectors. (Still true, and still the right shape —
+but `book` itself is postponed as of 2026-08-03, so this is guidance for whenever
+books are revived, not a live plan.)
 
 ## Priority
 
-1. **Books** — Hardcover (connectable) + Open Library (metadata). Biggest gap, cleanest write API, includes audiobooks as a format.
-2. **Anime / manga** — AniList. Low-friction extension of the show model.
+**Books are POSTPONED as a media type (Nils, 2026-08-03)** — the connector half
+parked on Hardcover's usage terms (see deep dive), and a `book` type with no
+connector and no settled catalog source isn't worth the surface it costs. Open
+Library alone remains viable whenever books are revived; nothing about it is
+blocked, it just isn't worth doing on its own right now.
+
+1. **Anime / manga** — AniList. Now the lead candidate: proper OAuth, full write
+   mutations, and it extends the existing show model rather than adding a type.
+2. **Books** — ⏸️ postponed. Revive via Open Library (metadata, no auth), and
+   revisit Hardcover only if it ships OAuth + the site allowlist its docs promise.
 3. **Later phase** — music, podcasts, board games.
+
+### What adding a media type actually costs (measured 2026-08-03)
+
+Sized against the real code while evaluating books, so the next type-adding
+proposal doesn't have to re-derive it. **A naive grep badly overstates this** —
+72 files match a media-type literal, but most are provider-internal (`"movie" |
+"tv"` for TMDB/Trakt API shapes) or tests. The genuine app-level enumeration
+points are ~10:
+
+`types/index.ts` (the `MediaType` union) · `lib/schemas.ts:12` (`zMediaType`, the
+validation gate) · `lib/constants.ts:4` (`TYPE_COLORS`) · `lib/publicUrl.ts:30`
+(`PUBLIC_TYPES` → SEO routes + sitemap) · `components/ui/TypeFilter.tsx:25` and
+`components/SubBar.tsx:94` (filter defaults) · `lib/insights.ts:124` and
+`components/insights/InsightsView.tsx:166` (histograms) · `lib/affiliate.ts`
+(one array + three unions) · `app/api/search/route.ts:13`.
+
+Two findings that matter more than the count:
+
+- **No migration is needed.** `media_items.type` is plain indexed TEXT with **no
+  CHECK constraint** (`db.ts:112`), so a new type stores fine on an existing DB.
+  This removes `migrations.ts` — and its two-apply-path trap — from the job.
+- **TypeScript will not help you.** There is exactly **one** `Record<MediaType,
+  …>` in the codebase (`constants.ts:4`). Every other site matches on a literal,
+  so adding a member to the union **compiles clean everywhere** while silently
+  doing nothing in the other nine. Budget for finding them by hand, not by `tsc`.
 
 ## Adding a connectable platform
 
@@ -112,10 +147,15 @@ Two risks before committing:
   removed `_eq` title search for performance). Rate limiting is informal: space
   writes to ~1/sec, concurrent writes to one list error.
 
-#### ✅ The auth question, verified 2026-08-03 — answer: **there is no third-party OAuth**
+#### ⏸️ VERDICT 2026-08-03: **PARKED — same reasoning as Backloggd.** Books are postponed as a media type.
 
-The gate above was checked before writing any code. It fails, and two further
-facts turned up that change the shape of the integration:
+The gate above was checked before writing any code. It failed, and the deciding
+factor turned out not to be OAuth at all but Hardcover's own stated usage terms
+(see finding 4). Decision by Nils, 2026-08-03: **park Hardcover, and postpone
+`book` as a media type entirely.** Revisit if Hardcover ships OAuth + a site
+allowlist, which their docs say they intend to.
+
+The gate fails, and four facts turned up that change the shape of the integration: 
 
 1. **No OAuth, and none shipped.** The only documented credential is a personal
    Bearer token the user copies from `hardcover.app/account/api`. OAuth for
@@ -137,13 +177,33 @@ facts turned up that change the shape of the integration:
    and should be kept private"*. That is the same class of finding that parked
    Backloggd, and it matters more now that H3/H4 make Fandex commercial.
 
-**Consequence for the plan:** Hardcover cannot be a low-friction connector today,
-and cannot cleanly be the books *database* provider either. Both roles want an
-app-level credential that does not exist. This does not rule Hardcover out — a
-paste-your-token connector is buildable, and RAWG already ships `auth:
-"credentials"` so the pattern exists — but it is a materially worse deal than
-the ⬜ To-do row was chosen under, and the annual synchronised expiry is a real
-operational cost. **Decide the auth model before building the adapter.**
+4. **⛔ The deciding fact — their stated usage terms exclude a hosted site.**
+   The same docs page says the API is *"only for offline use at this time"*,
+   that *"you can only access this API from localhost or APIs"*, and that
+   allowlisting specific sites is something they *"hope to"* offer but that is
+   *"a way down the line"*. Alongside: *"You own your data. This means you can't
+   use the API to access and use someone else's data."* Fandex is exactly the
+   case not yet provided for — a hosted, multi-user site. This is the **same
+   shape of finding that parked Backloggd**: not a breakage risk we could choose
+   to accept, but building against what the provider says its interface is for,
+   which matters more now that H3/H4 make Fandex commercial.
+
+**Other constraints found (recorded so a future session doesn't re-derive them):**
+60 requests/minute · 30 s query timeout · `_like`/`_ilike`/`_regex`/`_similar`
+operators are **disabled**, so title matching must go through their
+Typesense-backed `search` query (rich: `isbns`, `genres`, `moods`,
+`contribution_types`, `featured_series`, `rating`, `has_audiobook`/`has_ebook`,
+`description`, cover `image`) · reads are `user_books(where: {user_id, status_id})`,
+confirming the 1/2/3/5 status mapping above · **writes are NOT documented** in
+any guide (no mutations page, no `user_books` schema page) — the `insert_user_book`
+claim is the maintainer's word, unverified · a documented max query depth of 3
+that their own example query appears to exceed, so it needs empirical checking ·
+*"we may reset tokens without notice while in beta"* on top of the annual expiry.
+
+**Consequence:** Hardcover cannot be a low-friction connector today, and cannot
+cleanly be the books *database* provider either — both roles want an app-level
+credential that does not exist. Combined with finding 4, **it is parked.**
+If it is ever revived, the remaining open question is whether writes work at all.
 
 ### BoardGameGeek — verdict: metadata/read-only only
 
