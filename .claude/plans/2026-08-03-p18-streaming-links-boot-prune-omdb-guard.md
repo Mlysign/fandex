@@ -242,7 +242,7 @@ Do not land below it.
   - Tests: the drift assertion described above
   - Depends on: none
 
-- [ ] **T9** — Verify P18 in the running app, logged in
+- [x] **T9** — Verify P18 in the running app, logged in
   - Files: none (verification only)
   - Detail: Start the dev server, sign in via `GET /api/dev/login` (the local
     `.env` already points at the real account — do **not** hand-mint a JWT and
