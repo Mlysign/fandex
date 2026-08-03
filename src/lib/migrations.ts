@@ -356,6 +356,41 @@ export const MIGRATIONS: Migration[] = [
       db.prepare(`UPDATE tag_category SET color = ?, updated_at = strftime('%s','now') WHERE id <> 'genre'`).run("#AC9A72");
     },
   },
+  {
+    version: 12,
+    name: "media_links.projection_version — pre-stamp non-TMDB rows to v3 (P18)",
+    up: (db) => {
+      // PROJECTION_VERSION went 2 → 3 (project.ts, P18): watch/providers now
+      // keeps the per-region JustWatch `link` + which bucket won (`offerType`).
+      // Only projectTmdb() changed — projectRawg/projectTrakt/projectIgdb/
+      // projectSteam are untouched by v3.
+      //
+      // Deliberately NOT migration 7's shape. That one re-projects STORED
+      // raw_data in place (JSON.parse + projectRawData + JSON.stringify per
+      // row) because the v0→v2 jump changed what every source's projection
+      // keeps. This jump only changed TMDB's, so re-running the same heavy
+      // per-row transform on RAWG/IGDB/Steam/Trakt rows would cost real time
+      // and WAL growth for a version bump those rows don't need — a smaller,
+      // cheaper op is genuinely available here, migration 7 didn't have one.
+      //
+      // Instead: advance every non-TMDB row that is CURRENTLY AT v2 straight
+      // to v3. Plain integer column, no JSON touched, no blob rewritten, no
+      // network call. Rows at v2 have their source's full current projection
+      // already stored (v3 didn't change their shape), so stamping them v3
+      // is just "this row's projection is not behind" — the honest reading of
+      // an explicit version stamp per H2a's design.
+      //
+      // Rows below v2 (0 or 1) are left untouched: they are genuinely stale
+      // for an EARLIER reason and must keep refetching on next detail read.
+      // TMDB rows at v2 are also left untouched: their v3 detail (the JustWatch
+      // link + offerType) is not in the stored blob to recover locally — that's
+      // exactly why ensureTmdbDetail's existing lazy, network-backed refetch
+      // path is what heals them, one detail view at a time, not this migration.
+      db.prepare(
+        `UPDATE media_links SET projection_version = 3 WHERE source != 'tmdb' AND projection_version = 2`
+      ).run();
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

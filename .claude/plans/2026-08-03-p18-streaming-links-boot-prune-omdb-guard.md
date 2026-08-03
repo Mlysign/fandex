@@ -122,7 +122,7 @@ Do not land below it.
     and `offerType` survive projection, and that non-curated regions are still dropped.
   - Depends on: none
 
-- [ ] **T2** — Migration 12: pre-stamp non-TMDB rows forward (metadata only, no blob rewrite)
+- [x] **T2** — Migration 12: pre-stamp non-TMDB rows forward (metadata only, no blob rewrite)
   - Files: `src/lib/migrations.ts`
   - Detail: Add migration `version: 12`, named for what it does. Body is exactly
     one statement in shape:
