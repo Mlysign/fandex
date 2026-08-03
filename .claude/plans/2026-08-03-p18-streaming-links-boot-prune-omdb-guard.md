@@ -166,7 +166,7 @@ Do not land below it.
     availability in a kept region.
   - Depends on: T1
 
-- [ ] **T5** — Make the "Where to watch" rows clickable and render the offer-type line
+- [x] **T5** — Make the "Where to watch" rows clickable and render the offer-type line
   - Files: `src/components/item/LowerSections.tsx`
   - Detail: Wrap each provider row in a direct outbound
     `<a href={regionLink} target="_blank" rel="noopener noreferrer">` — a plain

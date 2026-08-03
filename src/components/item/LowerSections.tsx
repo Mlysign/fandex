@@ -35,6 +35,20 @@ function CastCard({ name, character, profileUrl }: { name: string; character: st
   );
 }
 
+// P18 — the mockup's second provider line ("Stream · included" / "Rent"). TMDB
+// gives the bucket (flatrate/free/ads/rent/buy) a region's providers came
+// from, not a price, so this labels the bucket rather than inventing one.
+function offerTypeLabel(offerType: string | null): string | null {
+  switch (offerType) {
+    case "flatrate": return "Stream · included";
+    case "free": return "Stream · free";
+    case "ads": return "Stream · free with ads";
+    case "rent": return "Rent";
+    case "buy": return "Buy";
+    default: return null;
+  }
+}
+
 // ── Affiliate disclosure (H3.4 / §5a UWG) ────────────────────────────────────
 //
 // docs/monetization-legal.md's "defensible minimum" is TWO things, and both are
@@ -88,6 +102,11 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
   const steamTrailerUrl = enriched?.steamTrailerUrl ?? null;
   const cast            = enriched?.cast ?? [];
   const streamingProviders = enriched?.streamingProviders ?? [];
+  // P18: one JustWatch link + offer type for the WHOLE picked region, shared
+  // by every provider row below — not per provider (see merge.ts).
+  const streamingLink      = enriched?.streamingLink ?? null;
+  const streamingOfferType = enriched?.streamingOfferType ?? null;
+  const streamingOfferLabel = offerTypeLabel(streamingOfferType);
   const dlc             = enriched?.dlc ?? [];
   const tags            = enriched?.tags ?? [];
   const keywords        = enriched?.keywords ?? [];
@@ -140,33 +159,43 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         <section>
           <SectionHeading>Where to watch</SectionHeading>
           <div>
-            {streamingProviders.map((p) => (
-              <div key={p.providerId} className="flex items-center gap-3 py-2.5 border-t border-border">
-                <div className="w-9 h-9 rounded-lg overflow-hidden bg-surface-elevated border border-border flex items-center justify-center shrink-0">
-                  {p.logoPath
-                    ? <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={36} height={36} className="w-9 h-9 object-cover" alt="" />
-                    : <span className="font-mono text-micro text-text-secondary">{p.name.slice(0, 3).toUpperCase()}</span>}
+            {streamingProviders.map((p) => {
+              const rowContent = (
+                <>
+                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-surface-elevated border border-border flex items-center justify-center shrink-0">
+                    {p.logoPath
+                      ? <Image src={`https://image.tmdb.org/t/p/w45${p.logoPath}`} width={36} height={36} className="w-9 h-9 object-cover" alt="" />
+                      : <span className="font-mono text-micro text-text-secondary">{p.name.slice(0, 3).toUpperCase()}</span>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm font-semibold text-text-primary truncate">{p.name}</p>
+                    {streamingOfferLabel && <p className="text-meta text-text-secondary">{streamingOfferLabel}</p>}
+                  </div>
+                </>
+              );
+              const rowClass = "flex items-center gap-3 py-2.5 border-t border-border";
+              // streamingLink is null for a row that hasn't healed to v3 yet
+              // (ensureTmdbDetail refetches it on the next detail view) — a
+              // plain, non-interactive row until then, never a dead link.
+              return streamingLink ? (
+                <a
+                  key={p.providerId}
+                  href={streamingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${rowClass} hover:bg-surface-elevated transition-colors`}
+                >
+                  {rowContent}
+                </a>
+              ) : (
+                <div key={p.providerId} className={rowClass}>
+                  {rowContent}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-body-sm font-semibold text-text-primary truncate">{p.name}</p>
-                </div>
-                {/* The mockup's second line ("Stream · included" / "Rent · from
-                    $4.99") is NOT rendered, deliberately. TMDB does group
-                    watch/providers by offer type, but normalize.ts collapses the
-                    buckets (`flatrate ?? free ?? ads ?? rent ?? buy`) and keeps
-                    only the winning list — so which bucket a provider came from
-                    is not in the stored projection. Surfacing it needs a
-                    normalize + re-projection pass, and inventing "Stream ·
-                    included" for a rent-only provider would be worse than
-                    omitting it. Logged rather than faked. */}
-              </div>
-            ))}
+              );
+            })}
           </div>
           {/* Required attribution (2026-07-31): TMDB's watch-provider data terms
-              require crediting JustWatch as the source, which nothing on this
-              page did. Pure markup, no data change — NOT the clickable P18
-              links (those need a PROJECTION_VERSION bump + a full re-projection,
-              deferred until prod is verified healthy post-outage). Scoped to
+              require crediting JustWatch as the source. Scoped to
               streamingProviders.length > 0 so an item with no availability
               doesn't credit a source it never used. */}
           <p className="font-mono text-meta text-text-secondary mt-2">
