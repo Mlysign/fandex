@@ -46,7 +46,17 @@ export interface SourceNormalized {
   streamingProviders?: { name: string; logoPath: string | null; providerId: number }[];
   // T22: full per-region maps so merge can pick the user's country. Streaming for
   // every region TMDB returns; release dates per region (movies).
-  streamingByRegion?: Record<string, { name: string; logoPath: string | null; providerId: number }[]>;
+  // P18 (2026-08-03): each region also carries its JustWatch title-page `link`
+  // and which bucket won (`offerType`) — one of each per REGION, not per
+  // provider, since that's the shape project.ts v3 stores.
+  streamingByRegion?: Record<
+    string,
+    {
+      providers: { name: string; logoPath: string | null; providerId: number }[];
+      link: string | null;
+      offerType: string | null;
+    }
+  >;
   releaseDatesByRegion?: Record<string, string>;
   // tmdb-only facts
   budget?: number | null;
@@ -144,21 +154,34 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
 
   // Full per-region streaming map (merge picks the user's country — T22). The
   // legacy DE-first `streamingProviders` is kept for the debug explainer.
+  // P18: `offerType` is DERIVED from which bucket is populated — a genuine
+  // TMDB response never sends an `offerType` field itself, only project.ts's
+  // v3 projection writes one. Deriving it here the same structural way (same
+  // flatrate/free/ads/rent/buy priority order as project.ts's
+  // PROVIDER_PRIORITY) keeps normalize(original) === normalize(projected):
+  // reading a stored `region.offerType` instead would only ever be present on
+  // an already-projected blob, and would read as null on every genuine
+  // original payload — a false mismatch, not a real loss. `link`, by
+  // contrast, IS a real field TMDB sends, so it's read as-is; project.ts
+  // keeps it verbatim.
   out.streamingByRegion = (() => {
     const results = d["watch/providers"]?.results;
     if (!results) return undefined;
-    const map: Record<string, { name: string; logoPath: string | null; providerId: number }[]> = {};
+    const map: NonNullable<SourceNormalized["streamingByRegion"]> = {};
     for (const [iso, region] of Object.entries<any>(results)) {
-      const providers = region?.flatrate ?? region?.free ?? region?.ads ?? region?.rent ?? region?.buy ?? [];
-      if (providers.length) {
-        map[iso] = providers.map((p: any) => ({ name: p.provider_name, logoPath: p.logo_path ?? null, providerId: p.provider_id }));
-      }
+      const key = (["flatrate", "free", "ads", "rent", "buy"] as const).find((k) => region?.[k]?.length);
+      if (!key) continue;
+      map[iso] = {
+        providers: region[key].map((p: any) => ({ name: p.provider_name, logoPath: p.logo_path ?? null, providerId: p.provider_id })),
+        link: region?.link ?? null,
+        offerType: key,
+      };
     }
     return Object.keys(map).length ? map : undefined;
   })();
   out.streamingProviders = (() => {
     const m = out.streamingByRegion;
-    return m ? (m.DE ?? m.US ?? m[Object.keys(m)[0]]) : [];
+    return m ? (m.DE ?? m.US ?? m[Object.keys(m)[0]]).providers : [];
   })();
 
   // Per-region release dates (movies) — TMDB carries different theatrical/digital

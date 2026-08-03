@@ -1875,6 +1875,8 @@ exports[`mergeLinks characterization > game: steam + rawg + igdb 1`] = `
       "url": "https://igdb.com/games/cyberpunk-2077",
     },
   ],
+  "streamingLink": null,
+  "streamingOfferType": null,
   "streamingProviders": [],
   "tagline": null,
   "tags": [
@@ -2230,6 +2232,8 @@ exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
       "url": "https://letterboxd.com/film/inception/",
     },
   ],
+  "streamingLink": null,
+  "streamingOfferType": "flatrate",
   "streamingProviders": [
     {
       "logoPath": "/nf.jpg",
@@ -2412,6 +2416,8 @@ exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
       "url": "https://www.imdb.com/title/tt0903747/",
     },
   ],
+  "streamingLink": null,
+  "streamingOfferType": null,
   "streamingProviders": [],
   "tagline": null,
   "tags": [

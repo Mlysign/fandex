@@ -150,7 +150,7 @@ Do not land below it.
   - Tests: none — this IS the test
   - Depends on: T2
 
-- [ ] **T4** — Surface `link` + `offerType` through normalize and the types
+- [x] **T4** — Surface `link` + `offerType` through normalize and the types
   - Files: `src/lib/sources/normalize.ts`, `src/types/index.ts`
   - Detail: `streamingByRegion` currently maps a region to a bare provider
     array. Extend each region's value to carry the JustWatch `link` and the

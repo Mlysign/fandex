@@ -126,7 +126,12 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   const storeLinks = allStoreLinks.filter((l, i) => allStoreLinks.findIndex((x) => x.name === l.name) === i);
 
   // ── Streaming providers (TMDB) ────────────────────────────────
-  const streamingProviders = pickRegion(tmdb?.streamingByRegion, region) ?? [];
+  // P18: link + offerType are per-REGION, so they ride along with whichever
+  // region pickRegion selects for the user's country — not per-provider.
+  const streamingRegion = pickRegion(tmdb?.streamingByRegion, region);
+  const streamingProviders = streamingRegion?.providers ?? [];
+  const streamingLink = streamingRegion?.link ?? null;
+  const streamingOfferType = streamingRegion?.offerType ?? null;
 
   // ── TMDB credits + keywords (with letterboxd director fallback) ──
   const director = pickField(["tmdb", "letterboxd"], norm, "director");
@@ -191,6 +196,8 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
     steamTrailerUrl,
     storeLinks,
     streamingProviders,
+    streamingLink,
+    streamingOfferType,
     links,
     sources,
   };

@@ -168,6 +168,11 @@ export interface EnrichedItem {
   // is what keeps the commercial surface dark until H4.2's Impressum ships.
   buyLinks?: BuyLink[];
   streamingProviders: { name: string; logoPath: string | null; providerId: number }[];
+  // P18 — one JustWatch title-page link + winning offer bucket for the picked
+  // region (streamingProviders' region), not per provider. Null when there's
+  // no availability, or when the stored link/normalize predates P18 (v3).
+  streamingLink: string | null;
+  streamingOfferType: string | null;
   links: { label: string; url: string }[];
   // Raw source data for the detail panel
   sources: { source: Source; sourceId: string; data: Record<string, any> }[];
