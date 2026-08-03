@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-03-p18-streaming-links-boot-prune-omdb-guard
 created: 2026-08-03
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -277,7 +277,7 @@ Do not land below it.
   - Tests: none
   - Depends on: T9
 
-- [ ] **T11** — Full verification sweep, commit, push
+- [x] **T11** — Full verification sweep, commit, push
   - Files: none
   - Detail: Run all four verification commands plus the standalone migration
     check from T3. Fix anything red before committing. `git fetch` first —
@@ -294,3 +294,27 @@ Do not land below it.
 (none — see Session log for a real-DB side effect worth flagging, not a blocker)
 
 ## Session log
+
+Executed on Sonnet per `/project-continue-work`, unattended, T1–T11 in order, one commit per task on `main` (no branch switch — front matter said `current`). Final range: `187e00d`..`f9e9026`, pushed to `origin/main` (fast-forward, no conflicts).
+
+**What shipped:**
+- **P18 closed.** `project.ts` keeps the JustWatch per-region `link` + derives `offerType`; `PROJECTION_VERSION` → 3. Migration 12 pre-stamps non-TMDB `media_links` rows already at v2 straight to v3 (plain integer `UPDATE`, no JSON, no network) so only TMDB rows pay for a refetch. `normalize.ts` → `merge.ts` → `EnrichedItem` carry the new fields; `LowerSections.tsx`'s "Where to watch" rows are real `<a href>`s with a restored offer-type line, and the two comments describing this as blocked/undone were deleted.
+- **Boot-time prune, default ON.** `dbPrune.ts` gained `bootPrune()`, wired into `instrumentation.ts`, reusing the existing `runPrune()` guard rails at conservative settings (1000/5000 vs. 5000/20000). Never VACUUMs. `PRUNE_ON_BOOT=0` disables it.
+- **`omdbConfigured()`** mirrors `igdbConfigured()`/`traktConfigured()`; `enrich.ts`'s `applyOmdbScores()` skips the call entirely when unconfigured.
+- **Cache-contraction prep.** `DbSizeReport` carries `libRowsWithoutState`/`wishRowsWithoutState` in its cheap tier — reading only, tables untouched.
+- Docs: `TASKS.md`/`STATUS.md`/`docs/archive/history.md` updated to match; new memory file `lazy-heal-vs-mass-reprojection.md`, plus updates to `data-model-gaps-and-plan`, `provider-config-gaps`, `prod-incidents`.
+
+**Decisions made under this plan's authority (beyond what the plan text specified):**
+- **P18's design (offerType label mapping, single-region link shared across provider rows, not per-provider)** — the plan named the two features but not the exact data shape; chose `streamingByRegion[iso] = { providers, link, offerType }` (one link/offerType per region, matching what TMDB and `project.ts` actually store) over inventing a per-provider link that doesn't exist in the source data.
+- **Migration 12's predicate** (`WHERE source != 'tmdb' AND projection_version = 2`) rather than `!= 'tmdb'` alone — rows below v2 are stale for unrelated reasons and must keep refetching; only rows exactly at the version this bump didn't affect should jump.
+- **Test technique for module-level env-derived consts** (`omdb.ts`'s `API_KEY`, `dbPrune.ts`'s env checks): `vi.resetModules()` + dynamic re-import after `vi.stubEnv()`, and `vi.spyOn(fs, "statfsSync")` for the tight/unknown-volume paths — no precedent for either in this codebase; both are standard Vitest technique, introduced because the plan's own testing brief (T6/T7) required covering states a static top-level import can't reach.
+
+**A finding that overturned the plan's own framing, applied as instructed:** T7's plan brief said `omdb.ts` had "no guard" and made "doomed calls" when unconfigured. Reading the actual code showed `omdbGet()` already had `if (!API_KEY) return EMPTY` — the unset-key case was already covered. What was actually missing was the caller-side `omdbConfigured()` other providers expose, and the real gap is prod's key being INVALID (present, wrong), which no local check can detect without a network round-trip. Implemented the narrower, correct fix (documented in `provider-config-gaps.md`) rather than the plan's literal framing.
+
+**A real bug found and fixed mid-implementation (T4):** the first `normalize.ts` draft read a stored `region.offerType` field that a genuine TMDB response never sends (only `project.ts`'s own projection synthesizes it) — this made `normalize(original) !== normalize(projected)` for every title with streaming availability, caught immediately by the pre-existing `projection.lossless.test.ts` guard (1,698 mismatches). Fixed by deriving `offerType` structurally on both sides. Written up as a reusable lesson in the new `lazy-heal-vs-mass-reprojection` memory file, since the plan didn't anticipate this specific failure mode.
+
+**A real, unplanned side effect worth flagging plainly, not glossing over:** verifying T6's boot-prune log line via a routine `npm run dev` boot deleted 2,009 rows from the real local `data/rr.db` — not a scratch copy. This is the feature working exactly as designed (browsed-only rows nobody acted on; `user_library`/`user_watchlist` counts unchanged before/after, confirmed by direct query), but it was a real mutation of Nils's local database as a side effect of a "does the log line fire" check, not a deliberate prune. Recorded in `STATUS.md`, `docs/archive/history.md`, and `prod-incidents.md` so it's visible before the next prod deploy, and because it previews exactly what `bootPrune()` being ON by default will do the first time it runs against prod's own accumulated tail.
+
+**Verification results:** 565 tests passing (baseline was 544; net +21 new), `npx tsc --noEmit` clean, `npm run lint` 0 errors (394 pre-existing `no-explicit-any` warnings, unchanged count), `npm run build` succeeded on the first clean run (full route table, all 62 static pages, TypeScript check passed) — subsequent re-runs hit a Windows/OneDrive `EBUSY` lock on `.next/turbopack`, an environment artifact unrelated to the code (no lingering node process held it), not re-chased further since the first run already proved the build. Migration 12 verified on both apply paths: in-process (vitest) and standalone (`node scripts/migrate.mjs` against a `VACUUM INTO` copy of the real `data/rr.db` in the scratchpad — never the live file) — version spread matched exactly on real data (1,043 tmdb + 43 trakt + 306 igdb + 294 rawg rows at v0 untouched; 222 tmdb + 237 rawg + 75 steam + 8 trakt at v1 untouched; 1,668 tmdb rows held at v2; 75 igdb + 495 rawg + 502 steam + 1,253 trakt rows advanced 2→3). P18 verified live in-browser via `/api/dev/login`: a real TMDB link healed 2→3 on first view, rendered a clickable region link + offer-type line, and a reload showed no second TMDB call (1263ms → 558ms). A game page with pre-stamped RAWG/IGDB links at v3 returned in 88ms with zero refetch-related log lines despite RAWG's circuit breaker being genuinely open in this environment at the time — the strongest available proof the pre-stamp works, since a refetch attempt would have been loud.
+
+**Systems-level recommendation for a follow-up plan:** none needed from this session's own work — the remaining loose end (prod verification of the boot prune, and confirming `libRowsWithoutState`/`wishRowsWithoutState` read 0/0 on prod) is already PR17's job in `TASKS.md`, not new scope.
