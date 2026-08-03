@@ -49,7 +49,12 @@ import { COUNTRIES } from "@/lib/countries";
 // to add to a keep-list here), but existing stored rows still lack the field
 // outright, so the version bump is what makes ensureGameDetail() treat them
 // as stale and refetch.
-export const PROJECTION_VERSION = 2;
+// v3 (2026-08-03, P18): watch/providers now keeps the per-region JustWatch
+// `link` plus which bucket won (`offerType`) so "Where to watch" rows can be
+// clickable and show a stream/rent/buy line. Only TMDB rows are affected —
+// migration 12 pre-stamps every non-TMDB row forward to v3 directly (a plain
+// integer UPDATE, no re-projection), so games don't pay for a TMDB-only change.
+export const PROJECTION_VERSION = 3;
 
 // The only countries `users.country` can be set to (validated by
 // normalizeCountry), so region data outside this set is unreachable by design.
@@ -67,17 +72,22 @@ function pick<T extends object>(o: T | null | undefined, keys: string[]): any {
 }
 
 // `watch/providers` is the single biggest field even AFTER region-filtering
-// (62% of the projected blob), so it gets trimmed three ways — all verified
+// (62% of the projected blob), so it gets trimmed two ways — both verified
 // lossless by the probe:
 //
 //  1. non-curated regions dropped (unreachable — see KEPT_REGIONS)
-//  2. `link` dropped (an ~87-char JustWatch URL per region that nothing reads)
-//  3. only the ONE array normalize can select is kept. normalize takes the first
+//  2. only the ONE array normalize can select is kept. normalize takes the first
 //     non-empty of `flatrate ?? free ?? ads ?? rent ?? buy`, so for any region
 //     the other four are unreachable — and rent/buy are usually the longest.
 //
-// (3) bakes normalize's priority into storage: if that order changes, bump
+// (2) bakes normalize's priority into storage: if that order changes, bump
 // PROJECTION_VERSION so rows re-fetch.
+//
+// `link` (the per-region JustWatch title-page URL) and the WINNING bucket's
+// name are both kept as of v3 (P18) — `offerType` is what turns the flatrate
+// vs rent vs buy choice into a "Stream · included" / "Rent" line client-side,
+// and `link` is what makes a "Where to watch" row navigable. This was
+// previously dropped as "nothing reads it"; P18 is what reads it.
 const PROVIDER_PRIORITY = ["flatrate", "free", "ads", "rent", "buy"] as const;
 
 function projectWatchProviders(results: any): any {
@@ -89,6 +99,8 @@ function projectWatchProviders(results: any): any {
     if (!key) continue; // normalize skips regions with no providers anyway
     out[iso] = {
       [key]: region[key].map((p: any) => pick(p, ["provider_id", "provider_name", "logo_path"])),
+      offerType: key,
+      link: region.link,
     };
   }
   return out;

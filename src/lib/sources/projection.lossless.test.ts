@@ -93,3 +93,37 @@ describe.skipIf(!hasDb)("H2a projection is lossless w.r.t. normalize()", () => {
     expect(failures.length, `losses:\n${failures.slice(0, 10).join("\n")}`).toBeLessThanOrEqual(ACCEPTED_MISMATCHES);
   });
 });
+
+// P18 (2026-08-03, v3): watch/providers now keeps `link` + the winning bucket
+// name (`offerType`) per region instead of dropping them. Synthetic payload so
+// this runs in CI (no data/rr.db needed), unlike the catalog check above.
+describe("projectRawData v3 keeps watch/providers link + offerType", () => {
+  it("keeps link and offerType for curated regions, drops non-curated ones", () => {
+    const curated = Array.from(KEPT)[0];
+    const nonCurated = "ZZ"; // not a real ISO code, guaranteed absent from KEPT
+
+    const raw = {
+      id: 1,
+      "watch/providers": {
+        results: {
+          [curated]: {
+            link: "https://www.justwatch.com/us/movie/example",
+            flatrate: [{ provider_id: 8, provider_name: "Netflix", logo_path: "/x.jpg" }],
+          },
+          [nonCurated]: {
+            link: "https://www.justwatch.com/zz/movie/example",
+            rent: [{ provider_id: 2, provider_name: "Apple TV", logo_path: "/y.jpg" }],
+          },
+        },
+      },
+    };
+
+    const projected = projectRawData("tmdb", raw) as any;
+    const region = projected["watch/providers"].results[curated];
+
+    expect(region.link).toBe(raw["watch/providers"].results[curated].link);
+    expect(region.offerType).toBe("flatrate");
+    expect(region.flatrate).toEqual(raw["watch/providers"].results[curated].flatrate);
+    expect(projected["watch/providers"].results[nonCurated]).toBeUndefined();
+  });
+});

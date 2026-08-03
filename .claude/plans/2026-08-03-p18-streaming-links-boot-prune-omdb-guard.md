@@ -103,7 +103,7 @@ Do not land below it.
 
 ## Tasks
 
-- [ ] **T1** — Keep the JustWatch region link + offer type in the projection; bump `PROJECTION_VERSION` to 3
+- [x] **T1** — Keep the JustWatch region link + offer type in the projection; bump `PROJECTION_VERSION` to 3
   - Files: `src/lib/sources/project.ts`
   - Detail: In `projectWatchProviders`, stop discarding the per-region `link`
     (currently dropped as trim #2, "an ~87-char JustWatch URL per region that
