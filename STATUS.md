@@ -53,7 +53,7 @@ Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit pa
 
 ## ✅ Quality bar (as of 2026-08-03)
 
-540 tests · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
+544 tests · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
 
 ---
 _✅ done · 🔵 needs input / in progress · ⏸️ blocked · 🟢 later · 🔴 broken_

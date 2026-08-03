@@ -40,10 +40,40 @@ export const SESSION_COOKIE = "rr2_session";
 // outstanding token of a deleted account verifying happily (a first-generation
 // token carries se=0 and would match the fallback exactly). getSession() treats
 // null as "no valid session", which is what erasure has to mean.
-function currentEpoch(userId: string): number | null {
-  const row = get<{ session_epoch: number }>("SELECT session_epoch FROM users WHERE id = ?", [userId]);
+function userSessionRow(userId: string): { epoch: number; lastSeenAt: number } | null {
+  const row = get<{ session_epoch: number; last_seen_at: number }>(
+    "SELECT session_epoch, last_seen_at FROM users WHERE id = ?",
+    [userId]
+  );
   if (!row) return null;
-  return row.session_epoch ?? 0;
+  return { epoch: row.session_epoch ?? 0, lastSeenAt: row.last_seen_at ?? 0 };
+}
+
+const SECONDS_PER_DAY = 86_400;
+
+// H3.8 metric plumbing. `users.last_seen_at` used to be written ONLY by the RAWG
+// and Steam auth callbacks, so it never moved for a TMDB/Trakt user and never
+// moved at all for an ordinary revisit on an existing 30-day cookie — it was a
+// false friend that undercounted activity badly. Stamping it here covers every
+// authenticated request instead, because this is the one funnel they all pass
+// through (requireSession/withUser both land on getSession).
+//
+// Rate-limited to one write per user per UTC day: getSession() runs on a hot
+// path, often several times per render, and an unconditional UPDATE would turn
+// every authenticated read into a write. The freshness check itself is free —
+// the epoch lookup already reads the row, so this rides along on that SELECT
+// rather than adding one.
+//
+// Deliberately best-effort: a metric must never be able to fail a login, so a
+// write error is swallowed. Worst case we lose one day's stamp for one user.
+function touchLastSeen(userId: string, lastSeenAt: number): void {
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.floor(lastSeenAt / SECONDS_PER_DAY) === Math.floor(now / SECONDS_PER_DAY)) return;
+  try {
+    run("UPDATE users SET last_seen_at = ? WHERE id = ?", [now, userId]);
+  } catch {
+    // Non-fatal by design — see above.
+  }
 }
 
 export function bumpSessionEpoch(userId: string): void {
@@ -53,7 +83,7 @@ export function bumpSessionEpoch(userId: string): void {
 export async function createSession(user: SessionUser): Promise<string> {
   // At sign time the users row always exists (it was just created/looked up by
   // the auth route), so the ?? 0 is only a type-level fallback.
-  return new SignJWT({ ...user, se: currentEpoch(user.userId) ?? 0 })
+  return new SignJWT({ ...user, se: userSessionRow(user.userId)?.epoch ?? 0 })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("30d")
     .setIssuedAt()
@@ -69,9 +99,12 @@ export async function getSession(): Promise<SessionUser | null> {
     const user = payload as unknown as SessionUser & { se?: number };
     // Reject tokens revoked by an epoch bump since they were issued — and tokens
     // belonging to a user who no longer exists (deleted account, see above).
-    const epoch = currentEpoch(user.userId);
-    if (epoch === null) return null;
-    if ((payload.se as number | undefined ?? 0) !== epoch) return null;
+    const row = userSessionRow(user.userId);
+    if (row === null) return null;
+    if ((payload.se as number | undefined ?? 0) !== row.epoch) return null;
+    // Only after the token is fully validated — a revoked or forged token must
+    // not be able to stamp activity on someone else's account.
+    touchLastSeen(user.userId, row.lastSeenAt);
     return user;
   } catch {
     return null;

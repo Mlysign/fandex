@@ -49,7 +49,7 @@ to a new platform/media type.
 
 | Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Hardcover | book (+ audiobook format) | Connectable + Metadata | ⬜ To do | token (OAuth TBC) | R/W | R | R/W | R/W | yes | Best books connector; modern free GraphQL API. Doubles as books database provider. Risk: multi-user auth flow unconfirmed (see deep dive). |
+| Hardcover | book (+ audiobook format) | Connectable + Metadata | ⬜ To do ⚠️ | **personal token only — no OAuth (verified 2026-08-03)** | R/W | R | R/W | R/W | yes | Best books connector; modern free GraphQL API. **⚠️ Auth gate FAILED:** no third-party OAuth exists (open feature request only), tokens expire annually **on a shared Jan 1 reset**, and there is no app-level credential — which gates the metadata role too. Buildable only as paste-your-token. See deep dive before starting. |
 | Open Library | book | Metadata (+ light write) | ⬜ To do | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. |
 | AniList | anime, manga | Connectable + Metadata | ⬜ To do | oauth | R/W | R | R/W | R | yes | Full write mutations; extends the show model. |
 | Google Books | book | Metadata | ❔ To evaluate | apikey / oauth | W | R | | | | Bookshelf write is dated; secondary metadata only. |
@@ -111,6 +111,39 @@ Two risks before committing:
 - **Stability.** Still self-described as early-access; schema shifts (they already
   removed `_eq` title search for performance). Rate limiting is informal: space
   writes to ~1/sec, concurrent writes to one list error.
+
+#### ✅ The auth question, verified 2026-08-03 — answer: **there is no third-party OAuth**
+
+The gate above was checked before writing any code. It fails, and two further
+facts turned up that change the shape of the integration:
+
+1. **No OAuth, and none shipped.** The only documented credential is a personal
+   Bearer token the user copies from `hardcover.app/account/api`. OAuth for
+   third-party app login exists **only as an open feature request** on
+   [Hardcover's public roadmap](https://roadmap.hardcover.app/feature-requests)
+   (accessed 2026-08-03). The roadmap's `developer api` post is marked
+   **Released (2023-12-23)** — that is the personal-token GraphQL API, *not*
+   OAuth; don't read the "Released" label as settling this question.
+2. **⚠️ Tokens expire annually AND reset on January 1st** (per the official
+   [getting-started docs](https://docs.hardcover.app/api/getting-started/)).
+   Not a rolling per-user year — a **synchronised** expiry, so every connected
+   user's book sync breaks on the same day. The prune invariant holds (a 401
+   makes the pull throw, so nothing gets wiped), but the failure is fleet-wide
+   and annual, and re-onboarding means every user manually re-pasting a token.
+3. **There is no app-level credential at all** — which gates the *metadata* role
+   too, not just the connectable one. Serving catalog reads from one
+   Fandex-owned token means using a personal account token as a shared app key,
+   against the docs' own instruction that tokens *"are not meant to be shared
+   and should be kept private"*. That is the same class of finding that parked
+   Backloggd, and it matters more now that H3/H4 make Fandex commercial.
+
+**Consequence for the plan:** Hardcover cannot be a low-friction connector today,
+and cannot cleanly be the books *database* provider either. Both roles want an
+app-level credential that does not exist. This does not rule Hardcover out — a
+paste-your-token connector is buildable, and RAWG already ships `auth:
+"credentials"` so the pattern exists — but it is a materially worse deal than
+the ⬜ To-do row was chosen under, and the annual synchronised expiry is a real
+operational cost. **Decide the auth model before building the adapter.**
 
 ### BoardGameGeek — verdict: metadata/read-only only
 

@@ -9,7 +9,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-import { initDb, run } from "./db";
+import { initDb, run, get } from "./db";
 import { createSession, getSession, bumpSessionEpoch } from "./session";
 
 initDb();
@@ -74,5 +74,49 @@ describe("session revocation (S4)", () => {
     expect((await getSession())?.userId).toBe(USER); // valid at epoch 0
     bumpSessionEpoch(USER);
     expect(await getSession()).toBeNull(); // …but revoked once the epoch moves
+  });
+});
+
+const lastSeen = () =>
+  get<{ last_seen_at: number }>("SELECT last_seen_at FROM users WHERE id = ?", [USER])!.last_seen_at;
+const setLastSeen = (ts: number) => run("UPDATE users SET last_seen_at = ? WHERE id = ?", [ts, USER]);
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+describe("last_seen_at activity stamp (H3.8 metric)", () => {
+  it("stamps a stale last_seen_at on a valid session", async () => {
+    setLastSeen(nowSec() - 3 * 86_400);
+    cookieState.token = await createSession(base);
+    expect(await getSession()).not.toBeNull();
+    expect(lastSeen()).toBeGreaterThanOrEqual(nowSec() - 5);
+  });
+
+  it("writes at most once per UTC day (the hot-path guard)", async () => {
+    // Earlier today: already stamped, so a second visit must NOT write again.
+    // getSession() runs several times per render — without this guard every
+    // authenticated read would become a write.
+    const earlierToday = nowSec() - 60;
+    setLastSeen(earlierToday);
+    cookieState.token = await createSession(base);
+    await getSession();
+    await getSession();
+    expect(lastSeen()).toBe(earlierToday);
+  });
+
+  it("stamps again once the day rolls over", async () => {
+    setLastSeen(nowSec() - 86_400);
+    cookieState.token = await createSession(base);
+    await getSession();
+    expect(lastSeen()).toBeGreaterThanOrEqual(nowSec() - 5);
+  });
+
+  it("does not stamp for a revoked token", async () => {
+    // The stamp must sit AFTER epoch validation: a token someone logged out of
+    // must not be able to report its owner as active.
+    const stale = nowSec() - 3 * 86_400;
+    cookieState.token = await createSession(base);
+    bumpSessionEpoch(USER);
+    setLastSeen(stale);
+    expect(await getSession()).toBeNull();
+    expect(lastSeen()).toBe(stale);
   });
 });

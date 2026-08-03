@@ -163,10 +163,17 @@
   --color-text-on-accent: #FFFFFF;
   --color-text-on-media:  #1B1712;
 
-  --color-accent:        #8A6A1E; /* darker gold — 4.5:1+ as text on light */
+  /* Darker gold. Measured on --color-surface (#F5F1E8): 4.76:1, clears AA for
+     body text. The previous #8A6A1E measured 4.48:1 — under the bar, while its
+     own comment claimed 4.5:1+. Re-measure, don't trust the comment, if this
+     hue moves again.
+     ⚠️ Two known gaps this does NOT close, both deliberate (they change the
+     design, not just the value): --color-accent-hover sits at 3.47:1, and
+     accent text on --color-surface-inset (#ECE6DA) is 4.32:1. */
+  --color-accent:        #856619;
   --color-accent-hover:  #9E7C2C;
   --color-accent-active: #74561A;
-  --color-accent-subtle: rgb(138 106 30 / 0.12);
+  --color-accent-subtle: rgb(133 102 25 / 0.12);
 
   --color-danger:  #C0442C;
   --color-success: #1F8F5B;
