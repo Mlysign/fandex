@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-07-post-outage-verification-facet-cost-slug-fix
 created: 2026-08-07
-status: ready
+status: executed 2026-08-12 (T7 partially — PR17 steps 4-5 need the Railway shell)
 branch: current
 ---
 
@@ -91,7 +91,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
 
 ## Tasks
 
-- [ ] **T1** — Add a stroked/ligature transliteration map and route `personKey` through it
+- [x] **T1** — Add a stroked/ligature transliteration map and route `personKey` through it
   - Files: `src/lib/facets.ts`, `src/lib/facets.test.ts`
   - Detail: `personKey()` (facets.ts:50) does `.normalize("NFD")` then strips
     combining marks — which does nothing for characters that have **no canonical
@@ -111,7 +111,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     assertion that `tagKey("Sci-Fi")` still returns `"sci fi"`.
   - Depends on: none
 
-- [ ] **T2** — Apply the same transliteration to `slugify`
+- [x] **T2** — Apply the same transliteration to `slugify`
   - Files: `src/lib/publicUrl.ts`, `src/lib/publicUrl.test.ts` (create if absent)
   - Detail: `slugify()` (publicUrl.ts:54) has the identical NFKD defect. Reuse the
     map from T1 — export it from `facets.ts` and import it, do not copy it. Keep the
@@ -124,7 +124,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
   - Tests: as above.
   - Depends on: T1
 
-- [ ] **T3** — Confirm no persisted data is keyed by a person or company key
+- [x] **T3** — Confirm no persisted data is keyed by a person or company key
   - Files: none (verification only; write findings into T7's commit message)
   - Detail: T1 changes an identity/dedup key. Prove nothing on disk depends on the
     old form before shipping it. Read `sqlite_master` on the real local
@@ -141,7 +141,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
   - Tests: none — verification task.
   - Depends on: T1
 
-- [ ] **T4** — Enlarge the facet payload cache against a measured byte budget
+- [x] **T4** — Enlarge the facet payload cache against a measured byte budget
   - Files: `src/lib/detail/publicFacetDetail.ts`
   - Detail: `_facetPageCache` (line 430) is
     `BoundedCache{max: 500, ttlMs: 60*60*1000}`. Two changes:
@@ -166,7 +166,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     facet test asserts the old TTL, update it.
   - Depends on: none
 
-- [ ] **T5** — Record the 2026-08-07 prod readings and close what PR17 can close
+- [x] **T5** — Record the 2026-08-07 prod readings and close what PR17 can close
   - Files: `docs/archive/history.md`, `TASKS.md`, `STATUS.md`
   - Detail: The full findings are in the session scratchpad at
     `leak-check-2026-08-07.md`; transcribe the substance, don't rely on that file
@@ -210,7 +210,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     the 200-line CI guard (check with `wc -l`).
   - Depends on: none
 
-- [ ] **T6** — Document the facet-page compute + provider-quota exposure
+- [x] **T6** — Document the facet-page compute + provider-quota exposure
   - Files: `TASKS.md`, and `docs/archive/performance-audit.md` only if a pointer is
     needed (performance work is otherwise closed — do not reopen the audit)
   - Detail: Add a short open item recording a **new** cost channel, distinct from the
@@ -233,7 +233,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     200 lines.
   - Depends on: T4
 
-- [ ] **T7** — Prod re-verification, if prod is reachable
+- [x] **T7** — Prod re-verification, if prod is reachable
   - Files: `docs/archive/history.md` (append), `TASKS.md` (status only)
   - Detail: **Probe first:**
     `curl -s -o /dev/null -w "%{http_code}" --max-time 20 https://fandex.org/api/health`.
@@ -263,7 +263,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     result and what is still owed. Either outcome completes the task.
   - Depends on: none
 
-- [ ] **T8** — Update the Needs-Nils list with the two new prod actions
+- [x] **T8** — Update the Needs-Nils list with the two new prod actions
   - Files: `TASKS.md`, `STATUS.md`
   - Detail: The "Needs Nils" list currently says prod has been down since
     2026-07-22 and the billing reset didn't fix it. Rewrite item 1 to reflect what

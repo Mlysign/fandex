@@ -1598,3 +1598,118 @@ Migration 3's "expand-then-contract" for `user_library`/`user_watchlist` never c
 ### Verification
 
 565 → (T4–T8 added tests along the way) 565 tests passing at commit time, `npx tsc --noEmit` clean, `npm run lint` 0 errors (394 pre-existing `no-explicit-any` warnings, unchanged), `npm run build` not yet re-run this session (dev-server verification only — see the go-live checklist before the next deploy). Migration 12 verified on BOTH apply paths: in-process (vitest) and standalone (`node scripts/migrate.mjs` against a real `VACUUM INTO` copy of `data/rr.db` in the scratchpad, never the live file) — version spread matched exactly: v0/v1 rows untouched, TMDB v2 rows untouched, RAWG/IGDB/Steam/Trakt v2 rows all advanced to v3.
+
+---
+
+## PR17 post-outage verification — 2026-08-12 (steps 1–3 CLOSED, 4–5 still owed)
+
+Prod was reachable and stable for this whole session (`uptime` 24,921 s → 25,544 s and climbing monotonically, ~7 h at first contact). That is the first window long enough to settle the questions PR17 had been blocked on since 2026-07-22. The 2026-08-07 session caught a ~32-minute window and got partial readings; these supersede them.
+
+### Step 1 — DB size and row counts (CLOSED, expected values met)
+
+`GET /api/dev/dbsize`, read through Nils's logged-in admin browser (a cookie-less `curl` returns **401**, not the 404 TASKS.md claimed — corrected there).
+
+| Metric | Expected (2026-07-27) | 2026-08-07 | **2026-08-12** |
+|---|---|---|---|
+| `fileMb` | ≈36.5 | 37.2 | **37.7 → 38.1** |
+| `pageCount` | — | 9,512 | **9,741** |
+| `freelistCount` | — | 3 | **1** |
+| `media_items` | ≈2,012 | 2,141 | **2,267** |
+| `media_links` | — | 4,098 | **4,225** |
+| `media_external_ids` | — | 4,102 | **4,237** |
+| `user_library` | 1,912 | 1,912 | **1,912** |
+| `user_watchlist` | 96 | 96 | **96** |
+| `user_item_state` | 2,337 | 2,337 | **2,337** |
+| `libRowsWithoutState` | 0 | 0 | **0** |
+| `wishRowsWithoutState` | 0 | 0 | **0** |
+
+**The old ~2.5 GB inflation is settled, not resurfacing** — 38 MB against a 2,487 MB peak. The performance audit's §B, archived because it could not be measured while prod was down, is answered. `libRowsWithoutState`/`wishRowsWithoutState` at **0/0** means the precondition for ever dropping the `user_library`/`user_watchlist` cache tables is **met** on prod, not just on dev.
+
+### The decisive leak test, re-run and re-confirmed
+
+Row counts alone don't prove a write gate holds; **replaying the traffic that broke it does.** 15 anonymous Googlebot-UA requests across 12 tag pages, 2 person pages and 1 studio page — the exact shape that caused the 2026-07-22 blowup, ~60 titles per page, so ~900 thin rows if the gate were broken:
+
+```
+media_items         2267 -> 2267
+media_links         4225 -> 4225
+media_external_ids  4237 -> 4237
+```
+
+**Byte-identical. PR13–PR15's logged-in write gate holds in production.** (`fileMb` 37.7 → 38.1 and `pageCount` 9,741 → 9,742 over the same interval is SQLite file bookkeeping, not row growth — the row counts are what the test turns on.)
+
+That also settles the +126 `media_items` since 2026-08-07: with the gate demonstrably holding under a replayed crawl, it is the owner's own synced/logged-in-browsed rows (`users` = 1, and a logged-in browse writes `browsed=1` by design), not crawler growth.
+
+### Step 2 — the memory ramp is dead (CLOSED)
+
+This is the step that needed hours of uptime; a fresh process cannot prove a plateau, which is why 2026-08-07's ~31-minute window left it PARTIAL. Sampled `/api/health` every 5 minutes across ~7 h of uptime, spanning a deliberate crawl load and 17 facet-payload builds:
+
+| uptime | rss | cgroup `currentMb` | `anonMb` | **`fileMb`** |
+|---|---|---|---|---|
+| 24,921 | 282 | 389 | 294 | 74 |
+| 24,944 | 460 | 569 | 466 | 74 |
+| 25,088 | 328 | 446 | 348 | 75 |
+| 25,244 | 332 | 450 | 354 | 76 |
+| 25,544 | 313 | 378 | 281 | 76 |
+
+**`fileMb` is FLAT at 74–76 MB — a plateau, not a climb toward 2,000.** That is the proof the 2026-07-22 ramp is dead at the root: page cache is bounded by the file it caches, and the file is now 38 MB instead of 2.5 GB. `anonMb` falls across the window (466 → 281) as V8 GCs, against a `limitMb` of 7,629. The plateau, not any single reading, is the evidence — and this is the first time a window was long enough to see one.
+
+### Step 3 — sitemap + render (CLOSED, matches 2026-08-07 exactly)
+
+`sitemap.xml` → **2,019** `<url>` entries = 972 movie + 758 game + 282 show + 6 legal + 1 root. The 6 legal are `{en,de}×{privacy,terms,support}` with the **imprint correctly absent**, as the H4 guard requires. `robots.txt` serves real content (no `localhost:3000`), so the SM7 build-vs-runtime-env trap is still fixed. `/` returns 200 in 0.11 s.
+
+### Steps 4–5 — STILL OWED (Railway shell only)
+
+Unchanged and unreachable from any session: `litestream snapshots -config /etc/litestream.yml /app/data/rr.db` (the replica generation has been **UNVERIFIED since the 2026-07-22 VACUUM** — this is the one genuinely load-bearing gap left, because Litestream is the only recovery path; Railway's own volume backups are Pro-plan-only), and `ls -la /app/data/` to clear the stale Jul-17 `rr.db.tmp-shm`/`rr.db.tmp-wal` sidecars. **PR17 stays open until these run.**
+
+### WAL high-water: 340.8 MB, static (not a stall)
+
+`walMb` read **340.8 in every sample**, across the crawl load and the facet builds, with `shadowWalMb` small and moving (2.6 → 3.8 MB, vs 129.4 MB on 2026-08-07 — Litestream is shipping and expiring normally). Per the 2026-07-22 correction, a SQLite WAL does not shrink on an ordinary checkpoint; it is reused in place at its high-water mark. **Static under write load means checkpoints ARE landing** — this is a reusable high-water file, not the checkpoint stall that was misdiagnosed once already. It is still ~340 MB of billed volume for a 38 MB DB; `POST /api/dev/prune {"action":"wal-truncate"}` is the safe reclaim (a `busy: 1` reply is expected and normal, not a failure). Not run this session — it is a prod write and needs Nils's admin session.
+
+## The facet-page compute + provider-quota exposure (NEW, still open)
+
+Found while verifying, and **distinct from the row leak PR13–PR16 closed** — that one was about writing unbounded thin ROWS; this is about COMPUTE and third-party quota on read. Re-measured cold on prod 2026-08-12, and it reproduces the 2026-08-07 numbers almost exactly:
+
+| page | 2026-08-07 | **2026-08-12** | warm |
+|---|---|---|---|
+| `/tag/telepathy` | 59.2 s | **59.8 s** | 0.16 s |
+| `/tag/action` | 14.5 s | **12.6 s** | 0.16 s |
+| `/tag/sci-fi` | 12.8 s | **11.9 s** | 0.14 s |
+| `/tag/comedy` | 6.4 s | **6.9 s** | — |
+| `/tag/mystery` | 7.4 s | **5.2 s** | — |
+| `/tag/romance` | 5.3 s | **5.1 s** | — |
+| `/tag/thriller` | 4.9 s | **4.9 s** | — |
+
+`openProviderCircuits` was `{}` throughout, so **that 59.8 s is genuine render cost, not a dead provider** — the distinction [[provider-latency-isolation]] exists to make. Cause: all three facet routes are `force-dynamic` (no route cache) and `buildPublicFacetDetail` fans out to providers per build (studio = up to 8 TMDB discover calls; tag = TMDB + RAWG + IGDB). `robots.txt` **allows** `/person/` `/tag/` `/studio/`, and the slug surface — every person credited across ~2,000 titles — vastly exceeds any affordable cache, so a crawl sweep runs at a near-100% miss rate. **This is a compute AND a third-party quota exposure: RAWG's free tier is 20k req/mo.** It is exactly the 2026-07-20 lesson ("any NEW public SSR surface will re-run its full cost per crawler hit") still live on the facet pages.
+
+**Not proven to be the original cost driver** — it is live exposure found while verifying something else, and the row leak is separately confirmed fixed.
+
+### Mitigation shipped: the facet payload cache, sized against measured bytes
+
+`_facetPageCache` in `publicFacetDetail.ts`: **TTL 1 h → 24 h**, **`max` 500 → 3,000**. The TTL is the bigger share of the win and costs zero extra bytes; it is safe because `scoringConfigSignature()` is already folded into the cache key, so an admin tag/bundle edit still busts it immediately rather than waiting out the TTL.
+
+`max` was sized against a **real measurement**, not a multiple — `BoundedCache` bounds entry COUNT, not bytes, which is why it was deliberately 500 where the tiny-value caches beside it are 5,000, and a blind 500→5,000 could have added several hundred MB and re-created the very ramp above. Measured `JSON.stringify(payload).length` over 17 real prod payloads via `GET /api/facet` (6 person, 6 tag, 5 studio): min 1,533 B, median ~14,151 B, **p95/max 19,385 B**. Tag and studio payloads cluster tightly at ~14 KB because `FACET_PAGE_SIZE` caps them at 60 items; person payloads run larger (bio + longer filmography). JSON length understates live heap, so budgeting against retained size at a conservative 2.5×: `150,000,000 / (19,385 × 2.5) = 3,094` → **3,000**, ≈145 MB against the Dockerfile's `--max-old-space-size=1536`. The arithmetic is in the code comment so it isn't re-derived. **T4 mitigates this; it does not eliminate it** — the slug surface is still far larger than 3,000 entries, and the key includes page + sort + persist, so one facet can occupy several entries.
+
+Rejected alternatives, recorded so they aren't relitigated: making the facet routes non-`force-dynamic` (re-creates PR14's auth-state caching hazard), and `Disallow`ing the facet paths in `robots.txt` (throws away the P17 SEO surface the pages exist for).
+
+## Non-ASCII person slugs hard-404 — fixed
+
+`personKey()` and `slugify()` both did `.normalize("NFD"/"NFKD")` then stripped combining marks — which does **nothing** for characters that have no canonical decomposition. "ø" (U+00F8) is not "o" + anything and "ß" is not "s" + anything, so NFD left them untouched and the following `[^a-z0-9]` strip **deleted** them:
+
+```
+personKey("Lisa Tønne")  ->  "lisa t nne"   (slug /person/lisa-t-nne)
+personKey("Łukasz Żal")  ->  "ukasz zal"    (leading letter gone entirely)
+```
+
+Because a facet has no database row — `facetUrl.ts` addresses it **by** its normalized key — this is not a cosmetic wart: the page looks the mangled name up against the provider and hard-404s. Verified against the live TMDB API: `lisa t nne` returns 0 results, `lisa tonne` returns 4, including "Lisa Tønne".
+
+Fixed with a transliteration map in a new leaf module `src/lib/translit.ts`, applied **after** the combining-mark strip and **before** the `[^a-z0-9]` strip in `personKey()`, and after `.toLowerCase()` in `slugify()`. `companyKey()` is built on `personKey()` and inherits it. The map covers the scripts that actually appear in credits: Scandinavian (ø æ), Polish (ł), German (ß), Icelandic (þ ð), Vietnamese (đ), Turkish (ı), Maltese (ħ), Sami (ŋ ŧ), French (œ).
+
+Placed in its own zero-import module rather than exported from `facets.ts`: both `facets.ts` (which pulls in `tags.ts`) and `publicUrl.ts` (a leaf imported widely, including by client components) need it, so it sits below both instead of coupling them in either direction.
+
+**`tagKey()` is deliberately excluded, and this is the load-bearing part.** Tag keys are **persisted** — `tag_category_override.tag_key` (84 rows on prod) and `tag_alias.{alias_key,canonical_key}` are keyed by them — so transliterating them would silently orphan those rows. Person and company keys are runtime-only, which is exactly what makes them safe to change. A regression test asserts `tagKey` stays byte-identical, including that stroked letters survive verbatim.
+
+**Proved safe before shipping** by reading `sqlite_master` on the real local `data/rr.db` read-only and checking every column of all 13 tables: the only key-shaped persisted columns are the three `tagKey`-derived ones above. No table stores a person or company key, and no TEXT/JSON column (`user_library.metadata`, `user_identities.metadata`, `media_links.raw_data`, `user_item_state`) carries a facet-key-shaped field. Nothing on disk depends on the old form.
+
+### Verification
+
+**576 tests passing** (565 + 11 new), `npx tsc --noEmit` clean, `npm run lint` **0 errors** (394 pre-existing `no-explicit-any` warnings, unchanged), `npm run build` clean — route table still shows `/legal/[locale]/[doc]`, `robots.txt`, `sitemap.xml` and all three facet routes as `ƒ (Dynamic)`, so the build-vs-runtime-env guard is intact.

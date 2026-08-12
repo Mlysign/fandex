@@ -9,13 +9,16 @@
 
 ## ⚠️ Needs Nils — nothing else is blocked on anything but these
 
-1. **Railway dashboard** — prod has been down since 2026-07-22 and the billing reset didn't fix it. Check for a manual resume / current usage. Unblocks PR17, and gets ~2 weeks of committed work actually live. (See STATUS.md.)
-2. **Review the Impressum** — content complete 2026-08-03, no placeholders left (H4.0's advice was "a standard imprint, nothing special"). Read `/legal/de/imprint`; the German version is the operative one. Once you're happy, H4.2 closes and **all of H3 unblocks**.
-3. **Set `NEXT_PUBLIC_SUPPORT_URL=https://ko-fi.com/nilsmlynarek` on Railway** — it's in the local `.env` already, and the link is live in all three surfaces locally. `NEXT_PUBLIC_*` is build-time inlined, so it needs a **redeploy**, not just an env change. Still open: the monthly-running-cost placeholder on the support page (that's H3.0's number). On Ko-fi itself: **no tiers, no perks, no memberships** — a donation with consideration is a taxable supply and a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
-4. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
-5. **H3.0 — confirm the upkeep baseline**: the actual Railway monthly bill + domain + any other recurring cost. One number; it goes in the H3 section below.
-6. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
-7. **Sign up for the affiliate programs** — **PARKED 2026-08-03 until Railway is back** (your call). Every program reviews the site URL on the application, so applying while fandex.org 404s buys a rejection, and reapplying is worse than a first application. Sequence once prod is up: **GOG first** (the only merchant the catalog already product-links), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a 180-day/3-qualifying-sale clock that closes the account if missed, and Amazon is the only movie/show coverage. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md).
+1. **PR17 steps 4–5 — the Railway shell.** Prod is **back up** (2026-08-12, stable across a ~7 h window) and steps 1–3 are now CLOSED with real readings — see the archive. Two things still need a shell nobody but you can open: (a) `litestream snapshots -config /etc/litestream.yml /app/data/rr.db` — **the replica generation has been UNVERIFIED since the 2026-07-22 VACUUM, and Litestream is the only recovery path** (Railway's own volume backups are Pro-plan-only); expect a generation newer than `18d8221abccc198d` and a bucket in the low tens of MB. (b) `ls -la /app/data/` — delete `rr.db.tmp-shm`/`rr.db.tmp-wal` if still dated Jul 17.
+2. **Set `PRUNE_ON_BOOT=0` on Railway** — the boot prune is an unattended delete path that has now already fired against prod at least once (prod booted with it default-ON). Nothing broke — `user_library` 1912 and `user_watchlist` 96 are unchanged — but it stays the likely cause of the 340.8 MB WAL high-water, and it should be off until (1a) confirms Litestream's generation is healthy.
+3. **Reclaim the WAL high-water** — `POST /api/dev/prune {"action":"wal-truncate"}` from your logged-in admin browser: ~340 MB of billed volume for a 38 MB DB. **A `busy: 1` reply is expected and normal**, not a failure (Litestream holds a read lock over frames it hasn't shipped). Do not fall back to any other `action`.
+4. **Watch whether prod STAYS up.** It served ~32 min on 2026-08-07 then was un-routed at the edge; this session it has been stable ~7 h. The app never crashed either time (`uptime` climbed monotonically), so both events read as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this is stably up for days, not hours** — every program reviews the applicant URL and a 404 buys a rejection.
+5. **Review the Impressum** — content complete 2026-08-03, no placeholders left (H4.0's advice was "a standard imprint, nothing special"). Read `/legal/de/imprint`; the German version is the operative one. Once you're happy, H4.2 closes and **all of H3 unblocks**.
+6. **Set `NEXT_PUBLIC_SUPPORT_URL=https://ko-fi.com/nilsmlynarek` on Railway** — it's in the local `.env` already, and the link is live in all three surfaces locally. `NEXT_PUBLIC_*` is build-time inlined, so it needs a **redeploy**, not just an env change. Still open: the monthly-running-cost placeholder on the support page (that's H3.0's number). On Ko-fi itself: **no tiers, no perks, no memberships** — a donation with consideration is a taxable supply and a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
+7. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
+8. **H3.0 — confirm the upkeep baseline**: the actual Railway monthly bill + domain + any other recurring cost. One number; it goes in the H3 section below.
+9. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
+10. **Sign up for the affiliate programs** — **still PARKED** (your call, 2026-08-03), now on prod being **stably** up rather than up at all — see #4. Every program reviews the site URL on the application, so applying during an un-routed window buys a rejection, and reapplying is worse than a first application. Sequence once that holds: **GOG first** (the only merchant the catalog already product-links), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a 180-day/3-qualifying-sale clock that closes the account if missed, and Amazon is the only movie/show coverage. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md).
 
 ---
 
@@ -27,22 +30,32 @@
 
 ---
 
-## PR17 — post-outage verification ⏸️
+## PR17 — post-outage verification 🔵 steps 1–3 CLOSED 2026-08-12, 4–5 owed
 
-Context: public facet/discover pages were persisting an unbounded pool of thin `browsed`-only rows (crawler traffic × 60/page), ballooning `rr.db` to 2.5 GB and causing the Railway usage-limit outage. **PR13–PR16 are done** (gate the writes to logged-in users, prune + VACUUM the tail) — full incident writeup in the archive. Only verification remains.
+Context: public facet/discover pages were persisting an unbounded pool of thin `browsed`-only rows (crawler traffic × 60/page), ballooning `rr.db` to 2.5 GB and causing the Railway usage-limit outage. **PR13–PR16 are done.** Full readings → [archive](docs/archive/history.md), grep `PR17 post-outage verification`.
 
-**Cannot run while deployments are paused** — the site 404s at Railway's edge, so no endpoint is reachable. Checklist pre-written 2026-07-27 so this is a one-shot run; every step has the literal command and expected value inline:
+**The leak is CONFIRMED FIXED in production.** Steps 1–3 ran against a stable ~7 h prod window on 2026-08-12:
 
-1. **DB size — also the answer to the old perf §B.** Open `https://fandex.org/api/dev/scoring` in a browser logged in as the admin user first (this and dbsize share the `SCORING_ADMIN_USER_IDS` gate — non-admins and a cookie-less `curl` both get a 404), then hit `https://fandex.org/api/dev/dbsize`. Expect top-level `fileMb` ≈ **36.5** and `tables.find(t => t.name === "media_items").rows` ≈ **2,012**. **If `fileMb` is anywhere near the old ~2.5 GB, that's the unexplained inflation resurfacing** — the performance audit's §B, which was archived precisely because it can't be measured while prod is down. The prune+VACUUM should have settled it; this reading is what confirms or reopens it. **Also record `libRowsWithoutState`/`wishRowsWithoutState`** from the same cheap-tier response (added 2026-08-03) — 0/0 on prod is the precondition for ever dropping the `user_library`/`user_watchlist` cache tables; a non-zero reading means that stays off the table.
-2. **Memory ramp is actually dead** — `curl https://fandex.org/api/health` (public). Read **`cgroupMb.fileMb`** **after several hours of uptime**, not right after a redeploy (a fresh process hasn't had time to re-ramp, so an early read looks healthy regardless). Expect a plateau in the low tens/hundreds of MB, not a climb toward 2,000 — **the plateau, not any single reading, is the proof.**
-3. **Sitemap + render** — `curl -s https://fandex.org/sitemap.xml | grep -c "<url>"` → ≈ **2,013**. Then load `https://fandex.org/` and confirm no console/server errors.
-4. **Litestream survived the VACUUM** — via the Railway shell: `litestream snapshots -config /etc/litestream.yml /app/data/rr.db`. **UNVERIFIED since the 2026-07-22 outage — don't skip.** Expect a generation newer than `18d8221abccc198d` (the pre-VACUUM one) and a bucket in the low tens of MB, consistent with a 36.5 MB DB. (It read 10.6 MB right after the VACUUM, down from a 13.9 GB peak — never confirmed as a stable new generation.)
-5. **Tidy stale WAL sidecars** — `ls -la /app/data/`; if `rr.db.tmp-shm` / `rr.db.tmp-wal` are still dated **Jul 17** (untouched by the VACUUM), delete them. Otherwise just note which.
-6. **Close out** — append the actual readings vs. the expected values to `docs/archive/history.md`, update the `prod-incidents` memory file with the confirmed-stable outcome, and flip this section + STATUS.md to closed.
+1. ✅ **DB size** — `fileMb` **37.7** (expected ≈36.5, old peak 2,487), `media_items` **2,267**, `user_library` **1,912** / `user_watchlist` **96** / `user_item_state` **2,337** all unchanged. **`libRowsWithoutState` 0 / `wishRowsWithoutState` 0** — the precondition for dropping the `user_library`/`user_watchlist` cache tables is **met on prod**. The perf audit's §B inflation question is answered, not reopened. *(Doc correction: a cookie-less `curl` to `/api/dev/dbsize` returns **401**, not the 404 this file used to claim — don't misread a 401 as the gate misbehaving.)*
+   **The decisive test:** 15 anonymous Googlebot-UA requests across 12 tag + 2 person + 1 studio page (~900 thin rows if the gate were broken) left `media_items` 2267→2267, `media_links` 4225→4225, `media_external_ids` 4237→4237 — **byte-identical.** Row counts alone never proved the gate; replaying the traffic that broke it does.
+2. ✅ **Memory ramp is dead** — `cgroupMb.fileMb` **flat at 74–76 MB** across 5 samples spanning ~7 h of uptime and a deliberate crawl load, against `limitMb` 7,629. A plateau, not a climb toward 2,000. `anonMb` fell 466→281 as V8 GC'd. This is the first window long enough to show a plateau (2026-08-07's was ~31 min, which is why it stayed PARTIAL).
+3. ✅ **Sitemap + render** — **2,019** `<url>`s (972 movie + 758 game + 282 show + 6 legal + 1 root), imprint correctly absent, `robots.txt` serving real content (SM7 trap still fixed), `/` 200 in 0.11 s.
+4. ⏸️ **Litestream survived the VACUUM** — Railway shell: `litestream snapshots -config /etc/litestream.yml /app/data/rr.db`. **STILL UNVERIFIED since 2026-07-22 — the one load-bearing gap left**, because Litestream is the only recovery path (Railway volume backups are Pro-only). Expect a generation newer than `18d8221abccc198d` and a bucket in the low tens of MB.
+5. ⏸️ **Tidy stale WAL sidecars** — `ls -la /app/data/`; delete `rr.db.tmp-shm`/`rr.db.tmp-wal` if still dated **Jul 17**.
 
-**Readiness probes:** 2026-07-28, 07-30, 07-31 and 08-02 all got the identical `404 {"status":"error","code":404,"message":"Application not found"}`. Steps 4–5 need the Railway console regardless and are out of reach for any unattended session.
+**WAL note:** `walMb` read **340.8 in every sample**, static under write load, with `shadowWalMb` small and moving (2.6→3.8, vs 129.4 on 08-07). Static ≠ stalled — a SQLite WAL is reused in place at its high-water mark, so this is a reusable file, not the checkpoint stall misdiagnosed once already. Reclaim via `POST /api/dev/prune {"action":"wal-truncate"}` (Needs Nils #3).
 
 **Accepted consequences of the fix:** public facet pages show fewer clickable titles to logged-out visitors and crawlers (the chosen trade for bounded growth), and pruned browsed items lose their public URLs.
+
+---
+
+## Facet-page compute + provider-quota exposure ⬜ NEW, open
+
+**Distinct from the row leak PR13–PR16 closed** — that was unbounded thin ROW WRITES; this is COMPUTE and third-party quota on READ. Measured cold on prod (2026-08-12, reproducing 08-07 almost exactly): `/tag/telepathy` **59.8 s**, `/tag/action` 12.6 s, `/tag/sci-fi` 11.9 s, `/tag/comedy` 6.9 s, `/tag/mystery` 5.2 s, `/tag/romance` 5.1 s, `/tag/thriller` 4.9 s; warm repeats **0.13–0.16 s**. `openProviderCircuits` was `{}` throughout, so that 59.8 s is **genuine render cost, not a dead provider**.
+
+Cause: all three facet routes are `force-dynamic` and `buildPublicFacetDetail` fans out per build (studio = up to 8 TMDB discover calls; tag = TMDB + RAWG + IGDB). `robots.txt` allows `/person/ /tag/ /studio/` and the slug surface (every person across ~2,000 titles) vastly exceeds any affordable cache → near-100% miss rate under a crawl sweep. **Compute AND quota exposure: RAWG's free tier is 20k req/mo.** Exactly the 2026-07-20 lesson ("any NEW public SSR surface re-runs its full cost per crawler hit"), still live here.
+
+**Mitigated, not eliminated (2026-08-12):** `_facetPageCache` TTL **1 h → 24 h** (zero extra bytes; `scoringConfigSignature()` is in the key so admin edits still bust it immediately) and `max` **500 → 3,000**, sized against 17 measured prod payloads (p95 19,385 B) at a 2.5× heap factor against a 150 MB budget ≈ 145 MB. Arithmetic is in the code comment. **Still open** because the slug surface far exceeds 3,000 entries and the key includes page+sort+persist. Rejected: dropping `force-dynamic` (re-creates PR14's auth-state caching hazard) and `Disallow`ing the facets (throws away the P17 SEO surface). **Not proven** to be the original cost driver — live exposure found while verifying.
 
 ---
 
@@ -100,9 +113,17 @@ Context: public facet/discover pages were persisting an unbounded pool of thin `
 
 ---
 
-## Recently closed (2026-08-03) — pointers only
+## Recently closed — pointers only
 
-Everything below is fully written up in [docs/archive/history.md](docs/archive/history.md) — grep `H3 monetization v1`. Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
+Everything below is fully written up in [docs/archive/history.md](docs/archive/history.md). Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
+
+**2026-08-12** — grep `PR17 post-outage verification`:
+
+- **PR17 steps 1–3 closed against live prod** — the 2026-07-22 leak is confirmed fixed (byte-identical crawl replay), the memory ramp is dead (`fileMb` flat 74–76 MB over ~7 h), `rr.db` is 37.7 MB. Steps 4–5 still need the Railway shell. → [[prod-incidents]]
+- **⚠️ Non-ASCII person slugs hard-404'd** — `personKey`/`slugify` used NFD/NFKD + combining-mark stripping, which does **nothing** for `ø å æ ł ß đ ð þ` (no canonical decomposition), so the next `[^a-z0-9]` strip deleted them: `"Lisa Tønne"` → `/person/lisa-t-nne`, 0 TMDB results. Fixed via a transliteration map in the new `src/lib/translit.ts`. **`tagKey` deliberately excluded — its keys are persisted.** → [[unicode-normalization-lossy-slugs]]
+- **Facet payload cache enlarged** — TTL 1 h → 24 h, `max` 500 → 3,000, sized against 17 measured prod payloads rather than a blind multiple. See the open item above.
+
+**2026-08-03** — grep `H3 monetization v1`:
 
 - **P18 closed** — clickable streaming rows + offer-type line, via the existing lazy self-heal path, not a re-projection. Plus a default-ON boot-time prune of the browsed tail, `omdbConfigured()`, and cache-contraction drift counts in `/api/dev/dbsize` (tables still untouched, gated on PR17). → [archive](docs/archive/history.md), grep `P18 streaming links`.
 - **H3 v1 built** — donations live, affiliate layer dark behind `MONETIZATION_ENABLED`, go-live checklist written. → [[monetization-h3]]
