@@ -15,6 +15,15 @@ describe("slugify", () => {
     expect(slugify("Spider-Man: Into the Spider-Verse")).toBe("spider-man-into-the-spider-verse");
   });
 
+  it("transliterates stroked/ligature letters rather than hyphenating them", () => {
+    // NFKD has no decomposition for these, so the [^a-z0-9] replace used to turn
+    // each into a separator: "Tønne" → "t-nne". → translit.ts
+    expect(slugify("Lisa Tønne")).toBe("lisa-tonne");
+    expect(slugify("Straße")).toBe("strasse");
+    expect(slugify("Łódź")).toBe("lodz");
+    expect(slugify("Mænd & Høns")).toBe("maend-hons");
+  });
+
   it("keeps contractions whole", () => {
     expect(slugify("Don't Look Up")).toBe("dont-look-up");
     expect(slugify("Don’t Look Up")).toBe("dont-look-up"); // typographic apostrophe

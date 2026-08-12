@@ -9,6 +9,7 @@
 
 import type { MediaLink, MediaType, Source } from "@/types";
 import { categorizeTag } from "@/lib/tags";
+import { transliterate } from "@/lib/translit";
 
 export type FacetKind = "tag" | "person" | "company";
 export type PersonRole = "director" | "writer" | "creator" | "cast";
@@ -41,17 +42,30 @@ export function facetId(f: { kind: FacetKind; role?: FacetRole; key: string }): 
 
 // Tags aren't normalized across sources ("Sci-Fi" vs "sci fi") — collapse to a
 // stable key: lowercase, hyphens/underscores/whitespace runs → single spaces.
+//
+// Deliberately NOT transliterated like personKey/companyKey below. Tag keys are
+// PERSISTED (`tag_category_override`, `tag_alias` are keyed by them), so
+// changing this normalizer would silently orphan those rows. → translit.ts
 export function tagKey(t: string): string {
   return t.toLowerCase().replace(/[-_\s]+/g, " ").trim();
 }
 
 // People: lowercase, strip diacritics + punctuation, collapse whitespace, so
 // "Hideo Kojima" / "Bong Joon-ho" dedup cleanly across sources.
+//
+// `transliterate` runs AFTER the combining-mark strip and BEFORE the
+// `[^a-z0-9]` strip — that ordering is the whole point. NFD handles letters
+// that decompose; transliterate handles the ones that don't ("ø" "ß" "ł"),
+// which the strip below would otherwise DELETE rather than fold. See
+// translit.ts: this key is also the public URL identity, so a dropped letter
+// is a hard 404, not a cosmetic wart.
 export function personKey(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // strip combining diacritical marks
+  return transliterate(
+    name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, ""), // strip combining diacritical marks
+  )
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

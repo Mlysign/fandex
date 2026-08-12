@@ -1,4 +1,5 @@
 import type { MediaType } from "@/types";
+import { transliterate } from "@/lib/translit";
 
 // P13 — public, shareable, crawlable item URLs: `/{type}/{uuid}/{slug}`
 //
@@ -47,15 +48,22 @@ const COMBINING_MARKS = new RegExp("[\\u0300-\\u036f]", "g");
 // Title → URL slug. Decomposes then strips accents so "Amélie" → "amelie"
 // rather than "amlie".
 //
+// `transliterate` covers the letters NFKD does NOT decompose ("ø" "ß" "ł"),
+// which the `[^a-z0-9]` replace below would otherwise turn into a hyphen —
+// "Tønne" → "t-nne". It only maps Latin stroked/ligature letters, so the
+// non-Latin behaviour documented below is unchanged. → translit.ts
+//
 // Always returns a non-empty string: a title that is pure punctuation or
 // non-Latin script (e.g. "君の名は。") would otherwise slugify to "", producing
 // a `//` path that no longer matches the 3-segment route. The slug is cosmetic
 // — the UUID resolves the page — so "untitled" is a safe floor.
 export function slugify(title: string): string {
-  const s = title
-    .normalize("NFKD")
-    .replace(COMBINING_MARKS, "")
-    .toLowerCase()
+  const s = transliterate(
+    title
+      .normalize("NFKD")
+      .replace(COMBINING_MARKS, "")
+      .toLowerCase(),
+  )
     .replace(/['’]/g, "")  // keep contractions whole: "don't" → "dont"
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
