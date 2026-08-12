@@ -6,9 +6,11 @@ _Last updated: 2026-08-12._
 
 ---
 
-## 🟢 Prod is BACK — and the leak is confirmed fixed
+## 🟢 Prod is BACK, deployed, and the leak is confirmed fixed
 
-fandex.org is **up and serving** (2026-08-12, stable across a ~7 h window and counting). It was down from **2026-07-22** on a Railway compute-usage pause, and served only a ~32-minute window on 2026-08-07 before being un-routed again.
+fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It was down from **2026-07-22** on a Railway compute-usage pause, and served only a ~32-minute window on 2026-08-07.
+
+**⚠️ The last blocker was CI, not billing — learn this one.** Railway auto-deploy has **Wait for CI ON**, so a red CI silently blocks every deploy. On 2026-08-12 the `npm audit` job began failing against an *unchanged* dependency tree (a nanoid advisory published after the last green run), and pushes stopped reaching prod — `uptime` climbed straight through them with no restart. Fixed by a lockfile-only bump; the deploy fired **automatically** the moment CI went green. **If a push doesn't seem to reach prod, check `gh run list --workflow=ci.yml` before suspecting Railway.** Everything committed since 2026-07-22 — H1, the mockup rebuild, PR13–PR16, the legal pages, Score calibration, the circuit breaker, all of H3/H4, P18 — is now live for the first time.
 
 **The 2026-07-22 root cause is now verified dead in production**, not just in theory:
 
