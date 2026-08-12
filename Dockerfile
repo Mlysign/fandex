@@ -20,6 +20,23 @@ RUN npm ci
 
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# ⚠️ A `NEXT_PUBLIC_*` var read by a CLIENT component must be present HERE, at
+# `npm run build` — Next inlines it into the client bundle as a literal, so a
+# value that only exists at runtime is baked in as `undefined` forever. Railway
+# passes service variables to a Dockerfile build only for names declared as ARG,
+# so adding the variable in the dashboard is NOT enough on its own: it must also
+# be listed below, or the client bundle silently ships without it.
+#
+# The failure is asymmetric and that is what makes it hard to spot: a SERVER
+# component reading the same var works fine (it reads real `process.env` at
+# runtime), so the feature looks half-live. Bit `NEXT_PUBLIC_SUPPORT_URL` on
+# 2026-08-12 — `/legal/*/support` rendered the Ko-fi link while the sign-in
+# dialog and `/profile` did not. `NEXT_PUBLIC_BASE_URL` never hit this because
+# nothing reads it client-side; it is deliberately NOT listed here.
+ARG NEXT_PUBLIC_SUPPORT_URL
+ENV NEXT_PUBLIC_SUPPORT_URL=$NEXT_PUBLIC_SUPPORT_URL
+
 RUN npm run build
 
 # ── Runner ───────────────────────────────────────────────────────────────────
