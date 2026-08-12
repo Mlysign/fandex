@@ -1650,8 +1650,19 @@ This is the step that needed hours of uptime; a fresh process cannot prove a pla
 | 25,088 | 328 | 446 | 348 | 75 |
 | 25,244 | 332 | 450 | 354 | 76 |
 | 25,544 | 313 | 378 | 281 | 76 |
+| 25,844 | 324 | 379 | 292 | 76 |
+| 26,145 | — | — | 292 | **57** |
+| 26,445 | — | — | 292 | **25** |
 
-**`fileMb` is FLAT at 74–76 MB — a plateau, not a climb toward 2,000.** That is the proof the 2026-07-22 ramp is dead at the root: page cache is bounded by the file it caches, and the file is now 38 MB instead of 2.5 GB. `anonMb` falls across the window (466 → 281) as V8 GCs, against a `limitMb` of 7,629. The plateau, not any single reading, is the evidence — and this is the first time a window was long enough to see one.
+**`fileMb` held flat at 74–76 MB and then FELL to 57 and 25 as the kernel
+reclaimed** — a plateau followed by reclaim, not a climb toward 2,000. That is the
+proof the 2026-07-22 ramp is dead at the root, and the reclaim half is the
+stronger half: it directly demonstrates the memory is reclaimable page cache
+rather than anything retained. Page cache is bounded by the file it caches, and
+the file is now 38 MB instead of 2.5 GB. `anonMb` falls across the window
+(466 → 292) as V8 GCs, against a `limitMb` of 7,629. The plateau, not any single
+reading, is the evidence — and this is the first time a window was long enough to
+see one.
 
 ### Step 3 — sitemap + render (CLOSED, matches 2026-08-07 exactly)
 
