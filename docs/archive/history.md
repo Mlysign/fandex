@@ -1724,3 +1724,40 @@ Placed in its own zero-import module rather than exported from `facets.ts`: both
 ### Verification
 
 **576 tests passing** (565 + 11 new), `npx tsc --noEmit` clean, `npm run lint` **0 errors** (394 pre-existing `no-explicit-any` warnings, unchanged), `npm run build` clean — route table still shows `/legal/[locale]/[doc]`, `robots.txt`, `sitemap.xml` and all three facet routes as `ƒ (Dynamic)`, so the build-vs-runtime-env guard is intact.
+
+### PR17 steps 4–5 — CLOSED 2026-08-12 by a real restore drill
+
+Run through the Railway console. **The restore drill is the part that matters** — it had been "recommended" since June and never done, and it is the only thing that proves a backup is *recoverable* rather than merely *present*. Do it this way again.
+
+```
+litestream snapshots  -> s3  18d8221abccc198d  index 12051  10,900,846 B  2026-08-12T09:25:34Z
+litestream generations -> lag 6m39s  start 2026-08-12T08:25:37Z  end 2026-08-12T15:55:49Z
+litestream restore -o /tmp/restore-test.db  -> RESTORE_OK (snapshot 12051 + WAL 12051..12064)
+PRAGMA integrity_check -> ok
+```
+
+Restored copy vs live, same container:
+
+| table | restored | live |
+|---|---|---|
+| `user_library` | **1912** | **1912** |
+| `user_watchlist` | **96** | **96** |
+| `user_item_state` | **2337** | **2337** |
+| `users` | **1** | **1** |
+| `user_identities` | **4** | **4** |
+| `media_items` `browsed=0` | **1994** | **1994** |
+| `media_items` `browsed=1` | 740 | 18 |
+
+Every user table and every *real* catalog row is byte-exact. The single divergence is disposable `browsed=1` thin rows, because the restore point (`maxUpdated` 15:54:57Z) predates that boot's prune (live `maxUpdated` 16:01:26Z) — a ~6.5 min gap matching the reported 6m39s lag exactly. **Backups are proven recoverable.**
+
+**A stated expectation in TASKS.md was wrong and is corrected.** It said to expect a generation *newer* than `18d8221abccc198d`. The generation is **still `18d8221abccc198d`** — and that is the better outcome, not a failure. A *new* generation would mean the replication lineage BROKE and the pre-break history became unreachable; instead the VACUUM was absorbed inside the existing generation, so the lineage has been continuous since 2026-07-21. The `start` timestamp tracking the last boot rather than July is just the configured 24 h retention expiring old segments. **Generalize: for Litestream, generation CONTINUITY is the healthy signal; a new generation ID is the thing to investigate.**
+
+Stale sidecars deleted: `rr.db.tmp-shm` (32 KB) and `rr.db.tmp-wal` (0 B), both Jul 17 17:26. Verified orphans first — their parent `rr.db.tmp` does not exist, and nothing held them open.
+
+### `wal-truncate` cannot reclaim the high-water — a corrected belief
+
+Attempted twice; both returned `busy: 1` with `walMbBefore` 340.8 → `walMbAfter` 340.8. A `wal-probe` (PASSIVE) run between them returned `busy: 0`, `logFrames` 241, `pendingFrames` 241, `pendingMb` 1.
+
+So PASSIVE checkpointing works fine — it is **TRUNCATE specifically** that requires exclusive WAL access, and Litestream's persistent read lock denies it. That lock is exactly what makes the replica trustworthy, so this is designed behaviour, not a fault. But the previous framing of `wal-truncate` as "the safe reclaim" was **half right and misleading**: it is safe, and it reclaims nothing while Litestream is running. Don't keep retrying it, and don't reach for another `action` as a fallback.
+
+The 340.8 MB file holds only ~9–241 frames — a high-water mark, not data. **No action needed:** volume is 4,614 MB with 4,086 MB free (12% used), `hasRoomToVacuum: true`, and Railway bills volumes on provisioned size.

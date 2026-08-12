@@ -21,7 +21,9 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 → full readings in [the archive](docs/archive/history.md), grep `PR17 post-outage verification`.
 
-**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** ⚠️ **Litestream's replica generation has been UNVERIFIED since the 2026-07-22 VACUUM** and it is the only recovery path — that needs the Railway shell. Also `PRUNE_ON_BOOT=0` (the unattended delete path has now fired against prod at least once; nothing broke, user rows unchanged) and a `wal-truncate` to reclaim ~340 MB of billed volume for a 38 MB DB.
+- **Backups are PROVEN, not just present** — a full restore drill on 2026-08-12 (the one recommended since June and never run) restored the replica to a scratch file: `integrity_check` **ok**, every user table exact, and every real (`browsed=0`) catalog row exact at **1994**. Replication lag 6m39s. **PR17 is CLOSED.**
+
+**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** just **`NEXT_PUBLIC_SUPPORT_URL` on Railway** — the last infrastructure action, and the only one a session can't do (the harness blocks writing to a service settings form). `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. The 340 MB WAL high-water **cannot** be reclaimed while Litestream runs (`busy: 1`, tried twice) and needs no action — the volume is 12% used.
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this holds for days, not hours** — every program reviews the applicant site.
 
@@ -30,7 +32,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | | Item | Blocked on |
 |--|------|--|
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
-| 🔵 | **PR17 — post-outage verification** | **Steps 1–3 CLOSED 2026-08-12.** Steps 4–5 need the **Railway shell**: Litestream's replica generation (unverified since the VACUUM) + stale Jul-17 WAL sidecars. |
+| ✅ | **PR17 — post-outage verification** | **CLOSED 2026-08-12**, all five steps. Backups proven by a real restore drill. |
 | ⬜ | **Facet-page compute + RAWG quota** | Nobody — open work. Cold `/tag/telepathy` renders in **59.8 s** on prod; crawl sweeps run at a near-100% cache miss. Cache enlarged 2026-08-12 (mitigates, doesn't eliminate). |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
