@@ -26,7 +26,15 @@ visual language) are in scope for the sweep.
   or local DB access — rely on `read_console_messages`/`read_network_requests` + reading actual
   response bodies (status codes alone aren't enough, see SM7). The `/api/dev/login` shortcut
   below is **localhost-only by design** (it 404s when `NODE_ENV=production` and for any
-  non-loopback host), so a live run is anon-only by construction. Useful trick when another Claude
+  non-loopback host).
+  - ⚠️ **"A live run is anon-only by construction" was WRONG — corrected 2026-08-12 (11th run).**
+    `/api/dev/login` is indeed unavailable on prod, but **Nils's own Chrome (`claude-in-chrome`)
+    holds a live prod `rr2_session`, including the `SCORING_ADMIN_USER_IDS` admin gate.** That
+    makes a live run **fully two-state**, and it is the best setup this plan has ever had:
+    **the in-app pane is genuinely anon** (fresh sandbox, no cookie) **and Chrome is logged in**,
+    simultaneously, with no `127.0.0.1` trick and no logout risk. Probe Chrome with
+    `fetch('/api/library').then(r=>r.status)` → 200. It also reaches `/api/dev/dbsize` and
+    `/api/dev/prune` on prod, which is the only way to read prod row counts. Useful trick when another Claude
   session already has `next dev` running in this folder and blocks a fresh `preview_start`:
   `preview_start({url: "http://localhost:3000"})` (or the live URL) still opens a plain browser
   tab pointed at it — that bypasses the "server already running" conflict entirely since it's
@@ -261,6 +269,30 @@ surfaces that quietly lose a whole media type instead, and a third that had cost
     the per-skip lines must stay one line each with **no stack trace** (a stack per skip floods the log —
     it fired hundreds of times in one run). Re-check after any change to `http.ts` or `discoverFeed.ts`.
 
+**H. Anon linkability + score sanity (added 2026-08-12, 11th run — both produced findings)**
+
+49. **Count clickable ITEMS on every public surface, anon.** Not "does it render" — does it
+    *link*. On `/`, `/discover` and a facet page, run
+    `document.querySelectorAll('a[href^="/movie/"],a[href^="/game/"],a[href^="/show/"]').length`
+    **and** `document.querySelectorAll('[role="button"]').length`. The 11th run found **0 and 0
+    on all three** (SM38) while the same components render 300 real links logged in — so a
+    poster-count or "it looks fine" check passes straight through this. Also assert the reverse
+    direction still works: an item page must still link OUT (`grep -o '/person/[a-z0-9-]*'` → ~9,
+    `/tag/` → ~8). The failure mode is a **one-directional link graph**, which no single-page
+    check can see.
+50. **Fandex Score distribution, logged in** (plan item 34, made concrete). Two-call recipe from
+    the Chrome gotcha above: fetch `/api/library`, then report
+    `min / p10 / p50 / p90 / max`, `below0`, `above100` over `fandexScore`. 11th run: **−362.3 /
+    −74 / 93.4 / 301.1 / 557.4, with 21% below 0 and 47% above 100** (SM39). A badge that reads
+    `0–100` while two thirds of the library falls outside it is a finding even though every
+    individual value is "correct" under the raw-sum formula.
+51. **After ANY `NEXT_PUBLIC_*` env change, verify a CLIENT surface, not just a server one.**
+    Next inlines these at build time and Railway only forwards a variable into a Dockerfile build
+    if it is declared as `ARG`. The failure is asymmetric and reads as success: the server-rendered
+    page shows the value while every client component shows nothing. Check a client surface
+    (the sign-in dialog) *and* a server one (`/legal/en/support`), or grep the loaded chunks:
+    `[...document.querySelectorAll('script[src]')].map(s=>s.src)` → fetch each → search for the value.
+
 **D. Cross-cutting**
 20. Back-button spot checks on any NEW surface (full deep-dive already done — N1/N2/N3 known).
     **Targeted regression test for SM8 (added 2026-07-27), run ANON:** from `/discover`, click a
@@ -470,6 +502,15 @@ _Consolidated 2026-08-02 from three dated lists (2026-07-18, 07-28, 08-02). Cont
 ### Browser tooling quirks
 
 - **`javascript_tool`: wrap every probe in an IIFE** — consecutive calls share a scope, so re-declaring `const inp` throws "Identifier already declared". Top-level `await` works in some calls and not others; `.then()`/`new Promise` always works.
+- **In `claude-in-chrome` (NOT the in-app pane) `javascript_tool` returns `{}` for ANY async result** — an `async` IIFE and a bare `new Promise` both resolve to an empty object, so every `fetch` probe silently reads as "no data" rather than erroring. Cost several round trips on the 11th run. **Recipe: split it in two calls** — fire the async work and stash it, then read it synchronously:
+  ```js
+  // call 1
+  window.__probe='pending'; fetch('/api/library').then(r=>r.json())
+    .then(j=>{ window.__probe=JSON.stringify(/* summarise here */); }); 'started'
+  // call 2
+  window.__probe
+  ```
+  Summarise **inside** the page (percentiles, counts) — never return a 1,900-item payload.
 - **`.click()` via `javascript_tool` on a React-controlled element reads STALE state in the same synchronous script** — the click dispatches but React's re-render hasn't committed. Add `await new Promise(r => setTimeout(r, 150))`, or use the `computer` tool's real click, which goes through the browser event loop and has no race.
 - **`javascript_tool` blocks reads of anything it reads as a credential** — `getPropertyValue` on a CSS custom property returned `[BLOCKED: Sensitive key]` purely because the surrounding object key was named `accentToken`. Rename the variable and it works. Avoid `token`/`key`/`secret` in identifiers when probing styles.
 - **Screenshot pixels ≠ viewport pixels at mobile.** After `resize_window {preset:"mobile"}` (375×812), screenshots come back 563×1218 — a 1.5× factor, and `computer` clicks take *screenshot* coordinates. Also: a coordinate `left_click` fails until a screenshot has been taken in that viewport, and `navigate` invalidates that cache.

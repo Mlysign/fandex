@@ -33,6 +33,8 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 |--|------|--|
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | ✅ | **PR17 — post-outage verification** | **CLOSED 2026-08-12**, all five steps. Backups proven by a real restore drill. |
+| 🟠 | **SM38 — anon surface has zero clickable items** | Nobody — open. Home, Discover and facet pages render posters but **0** item links for logged-out visitors (300 when logged in). Item pages link *out* to facets, so the graph is one-directional: **items → facets, facets ↛ items**. Anon visitors can't open anything from the two main browse pages; crawlers dead-end. |
+| 🟠 | **SM39 — Fandex Score renders far outside 0–100** | Time (the re-tune below). Across 1,773 real items: min **−362.3**, median 93.4, max **557.4**; 21% below 0, 47% above 100. The Godfather shows **−59** on its card today. |
 | ⬜ | **Facet-page compute + RAWG quota** | Nobody — open work. Cold `/tag/telepathy` renders in **59.8 s** on prod; crawl sweeps run at a near-100% cache miss. Cache enlarged 2026-08-12 (mitigates, doesn't eliminate). |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
@@ -71,6 +73,10 @@ Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit pa
 ## ✅ Quality bar (as of 2026-08-12)
 
 **576 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
+
+**Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
+
+**11th smoke sweep (2026-08-12, live prod, both auth states)** → findings `SM38`–`SM42` in [TASKS.md](TASKS.md). Ran during a genuine RAWG outage, which re-verified the three 2026-08-02 single-source games bugs as **fixed** under the exact condition that exposed them.
 
 ---
 _✅ done · 🔵 needs input / in progress · ⏸️ blocked · 🟢 later · 🔴 broken_

@@ -1601,7 +1601,7 @@ Migration 3's "expand-then-contract" for `user_library`/`user_watchlist` never c
 
 ---
 
-## PR17 post-outage verification — 2026-08-12 (steps 1–3 CLOSED, 4–5 still owed)
+## PR17 post-outage verification — 2026-08-12 (steps 1–3; steps 4–5 closed later the same day, see below)
 
 Prod was reachable and stable for this whole session (`uptime` 24,921 s → 25,544 s and climbing monotonically, ~7 h at first contact). That is the first window long enough to settle the questions PR17 had been blocked on since 2026-07-22. The 2026-08-07 session caught a ~32-minute window and got partial readings; these supersede them.
 
@@ -1670,7 +1670,7 @@ see one.
 
 ### Steps 4–5 — STILL OWED (Railway shell only)
 
-Unchanged and unreachable from any session: `litestream snapshots -config /etc/litestream.yml /app/data/rr.db` (the replica generation has been **UNVERIFIED since the 2026-07-22 VACUUM** — this is the one genuinely load-bearing gap left, because Litestream is the only recovery path; Railway's own volume backups are Pro-plan-only), and `ls -la /app/data/` to clear the stale Jul-17 `rr.db.tmp-shm`/`rr.db.tmp-wal` sidecars. **PR17 stays open until these run.**
+Not reachable in *this* pass (they need the Railway console): `litestream snapshots` and the stale Jul-17 `rr.db.tmp-*` sidecars. **Both ran later the same day — see "PR17 steps 4–5" below, which closes PR17 entirely.**
 
 ### WAL high-water: 340.8 MB, static (not a stall)
 
