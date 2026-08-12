@@ -427,7 +427,40 @@ export interface PublicFacetRef { kind: FacetKind; key: string; label?: string |
 // cached and served back to a logged-in viewer, or vice versa, until the TTL
 // clears. Same shape of bug the scoringConfigSignature line above already
 // guards against, just for a different input.
-const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 500, ttlMs: 60 * 60 * 1000 });
+//
+// ── SIZING (2026-08-12) — do not raise either number without re-measuring ────
+// Why it matters: measured COLD on prod, `/tag/telepathy` took 59.2 s (07-08)
+// and 59.8 s (08-12) to render, `/tag/action` ~12-14 s, warm repeats 0.13-0.22 s.
+// `openProviderCircuits` was `{}` throughout, so that is genuine fan-out cost,
+// not a dead provider. All three facet routes are `force-dynamic`, robots.txt
+// allows /person/ /tag/ /studio/, and the slug surface (every person credited
+// across ~2,000 titles) is far larger than any cache we can afford — so a crawl
+// sweep runs at a near-100% miss rate. That is a compute AND a third-party
+// QUOTA exposure: RAWG's free tier is 20k req/mo.
+//
+// TTL 1 h -> 24 h. This is the bigger share of the win and costs ZERO extra
+// bytes. Safe because scoringConfigSignature() is already folded into the key,
+// so an admin tag/bundle edit still busts it immediately rather than waiting
+// out the TTL. The cost is that provider-sourced pool data on a public page can
+// be up to 24 h stale, which is the right trade for an SEO surface.
+//
+// max 500 -> 3000, against a ~150 MB budget:
+//   Measured `JSON.stringify(payload).length` over 17 real prod payloads via
+//   GET /api/facet (6 person, 6 tag, 5 studio): min 1,533 B (studio/naughty dog),
+//   median ~14,151 B, p95/max 19,385 B (person/steven spielberg). Tag and studio
+//   payloads cluster tightly at ~14 KB because FACET_PAGE_SIZE caps them at 60
+//   items; person payloads run larger (bio + longer filmography).
+//   BoundedCache bounds ENTRY COUNT, not bytes — that is why this is deliberately
+//   not the 5000 the small-value caches beside it use. JSON length also
+//   UNDERSTATES live heap (property names, boxed numbers, string headers), so
+//   budget against retained size, not the wire form: at a conservative 2.5x,
+//   150,000,000 / (19,385 * 2.5) = 3,094 -> 3,000.
+//   Headroom check: 3,000 * 19,385 * 2.5 ~= 145 MB against the Dockerfile's
+//   --max-old-space-size=1536. The 2026-07-22 memory ramp is why a ceiling
+//   exists at all; a blind 500->5000 could have added several hundred MB.
+//   Note the key includes page + sort + persist, so one facet can occupy several
+//   entries — 3,000 entries is fewer than 3,000 distinct facets.
+const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 3000, ttlMs: 24 * 60 * 60 * 1000 });
 
 // Build the public payload for one facet page. Provider-sourced; persisted
 // thin for linkability ONLY when `persist` is true (PR14 — see the module
