@@ -2,6 +2,7 @@ import { get } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
 import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
+import { crossLinkGame } from "../crossLink";
 import {
   getSteamWishlistIds, getSteamOwnedGames, getSteamAppDetails,
   getSteamTagMap, resolveTagNames, extractSteamDate,
@@ -61,19 +62,10 @@ export const steamSource: MediaSource = {
     }));
   },
 
-  // Cross-enrich a Steam game with its RAWG link by exact-name match. Wishlist
-  // only — owned libraries can be huge, so the legacy sync skipped it there too.
-  async enrich(item, mediaItemId, kind) {
-    if (kind !== "wishlist") return;
-    try {
-      const link = await METADATA.rawg?.searchByTitle?.(item.title, "game");
-      if (link) {
-        linkSourceToItem(mediaItemId, {
-          source: "rawg", sourceId: link.sourceId, type: "game",
-          title: link.title, releaseDate: link.releaseDate, rawData: link.rawData,
-        });
-      }
-      await new Promise((r) => setTimeout(r, 150));
-    } catch { /* enrichment optional */ }
+  // Same shared cross-link as the RAWG adapter — one rule ("a game carries every
+  // game catalog's link"), one implementation. This half used to fetch only RAWG
+  // and only for wishlists; see crossLink.ts for why both halves were wrong.
+  async enrich(item, mediaItemId, _kind, budget) {
+    await crossLinkGame(mediaItemId, item.title, { releaseDate: item.releaseDate, budget });
   },
 };

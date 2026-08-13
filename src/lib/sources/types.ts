@@ -1,4 +1,5 @@
 import type { MediaType, Source } from "@/types";
+import type { CrossLinkBudget } from "./crossLink";
 
 // ── MediaSource adapter contract ──────────────────────────────────────────────
 //
@@ -100,8 +101,18 @@ export interface MediaSource {
   removeFromLibrary?(ctx: SourceContext, sourceId: string, type: MediaType): Promise<void>;
 
   // Cross-enrich a freshly-persisted item with secondary source links (e.g.
-  // Trakt/Letterboxd → TMDB, Steam ↔ RAWG). `kind` lets the adapter skip
-  // expensive name-search enrichment for large library pulls while keeping the
-  // cheap id-based TMDB enrichment everywhere — matching the legacy behavior.
-  enrich?(item: PulledItem, mediaItemId: string, kind: "wishlist" | "library"): Promise<void>;
+  // Trakt/Letterboxd → TMDB, and every game → the other game catalogs).
+  //
+  // `kind` used to be how the game adapters skipped expensive name searches on
+  // large library pulls — they returned early unless it was a wishlist, so
+  // nothing anyone actually PLAYED was ever cross-linked. That is now handled
+  // properly by `budget`: an item that already has its links costs one indexed
+  // SELECT and no network call, and the allowance bounds the rest. `kind` stays
+  // because adapters may still legitimately want to treat the two differently.
+  enrich?(
+    item: PulledItem,
+    mediaItemId: string,
+    kind: "wishlist" | "library",
+    budget?: CrossLinkBudget,
+  ): Promise<void>;
 }

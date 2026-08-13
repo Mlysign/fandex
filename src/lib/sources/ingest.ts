@@ -1,6 +1,7 @@
 import type { MediaType } from "@/types";
 import type { MediaSource, PulledItem, CrossIds } from "./types";
 import { upsertMediaItem, upsertWatchlistEntry, upsertLibraryEntry } from "@/lib/matcher";
+import type { CrossLinkBudget } from "./crossLink";
 
 // Shared atoms for turning a provider's PulledItem into local DB state. Used by
 // BOTH the bulk sync (loop over all items) and the single-item refresh (find one
@@ -19,16 +20,20 @@ export function persistPulled(src: MediaSource, item: PulledItem): string {
   });
 }
 
-export async function ingestWishlistItem(userId: string, src: MediaSource, item: PulledItem): Promise<string> {
+export async function ingestWishlistItem(
+  userId: string, src: MediaSource, item: PulledItem, budget?: CrossLinkBudget
+): Promise<string> {
   const mediaItemId = persistPulled(src, item);
-  if (src.enrich) await src.enrich(item, mediaItemId, "wishlist");
+  if (src.enrich) await src.enrich(item, mediaItemId, "wishlist", budget);
   upsertWatchlistEntry(userId, mediaItemId, src.id);
   return mediaItemId;
 }
 
-export async function ingestLibraryItem(userId: string, src: MediaSource, item: PulledItem): Promise<string> {
+export async function ingestLibraryItem(
+  userId: string, src: MediaSource, item: PulledItem, budget?: CrossLinkBudget
+): Promise<string> {
   const mediaItemId = persistPulled(src, item);
-  if (src.enrich) await src.enrich(item, mediaItemId, "library");
+  if (src.enrich) await src.enrich(item, mediaItemId, "library", budget);
   upsertLibraryEntry(userId, mediaItemId, src.id, {
     status: item.status ?? undefined,
     rating: item.rating ?? null,

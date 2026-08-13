@@ -4,6 +4,7 @@ import type { MediaSource } from "@/lib/sources/types";
 import { SOURCES, getSource } from "@/lib/sources/registry";
 import { ingestWishlistItem, ingestLibraryItem } from "@/lib/sources/ingest";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
+import { crossLinkBudget } from "@/lib/sources/crossLink";
 
 // Wall-clock budget for a single sync request (P6). The full ~1,700-item
 // Trakt+Steam+TMDB sync in ONE request spiked memory past Railway's 512 MB and
@@ -13,6 +14,11 @@ import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
 // via SYNC_BUDGET_MS; a single provider always runs to completion (≥1 provider
 // of progress per request), so this bounds latency without stalling.
 export const DEFAULT_SYNC_BUDGET_MS = 25_000;
+
+// Title searches one provider pass may spend giving games their missing catalog
+// links. ~30 covers a normal sync (a handful of genuinely new titles, three
+// sources each) without letting a never-backfilled catalog run for minutes.
+export const MAX_CROSS_LINK_SEARCHES_PER_PASS = 30;
 
 export function syncBudgetMs(): number {
   const raw = Number(process.env.SYNC_BUDGET_MS);
@@ -82,13 +88,21 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
   let wishlist = 0;
   let library = 0;
 
+  // One allowance for this provider's whole pass. Cross-linking a game to the
+  // catalogs it's missing (Steam especially — it's the tag source) is per-item
+  // and search-based, so an un-backfilled catalog could otherwise turn a routine
+  // sync into hundreds of title searches. Items that already have their links
+  // cost one indexed SELECT and never touch it, so in steady state this is
+  // untouched; `scripts/backfill-game-crosslinks.ts` does the bulk pass.
+  const budget = crossLinkBudget(MAX_CROSS_LINK_SEARCHES_PER_PASS);
+
   // ── Wishlist ──
   if (src.capabilities.wishlist.read && src.pullWishlist) {
     try {
       const items = await src.pullWishlist(ctx);
       const syncedIds = new Set<string>();
       for (const item of items) {
-        await ingestWishlistItem(userId, src, item);
+        await ingestWishlistItem(userId, src, item, budget);
         syncedIds.add(item.sourceId);
       }
       pruneWatchlist(userId, src.id, syncedIds);
@@ -106,7 +120,7 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
       const items = await src.pullLibrary(ctx);
       const syncedIds = new Set<string>();
       for (const item of items) {
-        await ingestLibraryItem(userId, src, item);
+        await ingestLibraryItem(userId, src, item, budget);
         syncedIds.add(item.sourceId);
       }
       pruneLibrary(userId, src.id, syncedIds);

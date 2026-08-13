@@ -2,6 +2,7 @@ import { get } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
 import type { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
+import { crossLinkGame } from "../crossLink";
 import {
   getRawgUserToPlay, getRawgUserToPlayAuth, getRawgUserPlayed,
   addToRawgToPlay, removeFromRawgToPlay, markRawgBeaten, rateRawgGame, deleteRawgReview,
@@ -86,20 +87,13 @@ export const rawgSource: MediaSource = {
     await markRawgBeaten(ctx.token, parseInt(sourceId));
   },
 
-  // Cross-enrich a RAWG game with its Steam link by exact-name match. Only for
-  // wishlist pulls — owned/played libraries can be huge, so we skip the (slow)
-  // per-item Steam search there, matching the legacy sync.
-  async enrich(item, mediaItemId, kind) {
-    if (kind !== "wishlist") return;
-    try {
-      const link = await METADATA.steam?.searchByTitle?.(item.title, "game");
-      if (link) {
-        linkSourceToItem(mediaItemId, {
-          source: "steam", sourceId: link.sourceId, type: "game",
-          title: link.title, releaseDate: link.releaseDate, rawData: link.rawData,
-        });
-      }
-      await new Promise((r) => setTimeout(r, 200));
-    } catch { /* enrichment optional */ }
+  // Give the game every catalog link it's missing — Steam above all, since it's
+  // the tag source (see crossLink.ts). Runs for LIBRARY pulls too, which is the
+  // fix: this used to `return` unless kind === "wishlist", so nothing anyone
+  // actually played was ever cross-linked, and 473 of 1,090 catalog games had no
+  // Steam link at all. Safe to run everywhere now because an item that already
+  // has its links costs one indexed SELECT, and `budget` bounds the rest.
+  async enrich(item, mediaItemId, _kind, budget) {
+    await crossLinkGame(mediaItemId, item.title, { releaseDate: item.releaseDate, budget });
   },
 };
