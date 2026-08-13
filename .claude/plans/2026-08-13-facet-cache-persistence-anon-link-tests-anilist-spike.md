@@ -140,7 +140,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
     asserting zero provider calls, and one asserting a failed build is not persisted.
   - Depends on: T2
 
-- [ ] **T4** — Verify the cache against real data and a real crawl shape
+- [x] **T4** — Verify the cache against real data and a real crawl shape
   - Files: none (verification; record findings in T8's commit message)
   - Detail: Production build only (`npm run build` then `preview_start {name:"prod"}`,
     port 3100 — stop any dev server FIRST). Using the real local `data/rr.db`: hit ~10
