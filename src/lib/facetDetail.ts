@@ -452,12 +452,6 @@ export interface MembershipFilterIn { library?: string; wishlist?: string; rated
 export const extTitleKey = (t: { title: string; releaseDate: string | null }) =>
   `${normalizeName(t.title ?? "")}|${extractYear(t.releaseDate) ?? "?"}`;
 
-export async function buildExternalCandidates(
-  userId: string, ref: FacetRefIn, membership?: MembershipFilterIn
-): Promise<FacetDetailItem[]> {
-  return (await buildExternalSets(userId, [ref], membership));
-}
-
 /**
  * Resolve the external candidate set for EVERY include-facet and return only the
  * titles present in all of them.

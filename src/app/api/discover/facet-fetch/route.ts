@@ -21,7 +21,7 @@ import { FacetFetchSchema } from "@/lib/schemas";
 // existing local pool (a big anime library, say), every slot got consumed by
 // titles the user already owns, so the hide-library/hide-wishlist filter had
 // nothing left to let through even though the provider search itself found
-// real new candidates. buildExternalCandidates skips that merge entirely:
+// real new candidates. buildExternalSets skips that merge entirely:
 // external-only, filtered by membership directly against user state.
 export const POST = withUser(async (req: NextRequest, session) => {
   const body = await parseJsonBody(req, FacetFetchSchema);
