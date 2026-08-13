@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-12._
+_Last updated: 2026-08-13._
 
 ---
 
@@ -36,6 +36,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | ✅ | **SM38 — anon surface had zero clickable items** | **FIXED 2026-08-12.** The anon branches now run the existing read-only `lookupExistingUuids` instead of returning an empty map. Verified on a real catalog: Discover 0 → **32** links, `/tag/action` 40, `/studio/a24` 26, Home 14 — and a Googlebot crawl still wrote **zero** rows. |
 | 🟠 | **SM39 — Fandex Score renders far outside 0–100** | **You** — deliberately not "fixed": the unbounded range is pinned by two dated tests and a clamp would break the breakdown's additivity. The remedy is the re-tune below. Across 1,773 real items: min **−362.3**, median 93.4, max **557.4**; 21% below 0, 47% above 100. The Godfather shows **−59** on its card today. |
 | ✅ | **Facet-page compute + RAWG quota** | **Closed 2026-08-13** by a persisted SQLite L2. Verified across a full restart: `/tag/western` **63.17 s → 0.092 s**, zero provider calls warm. Also corrected the premise — the "59.8 s render" was 93% a dead RAWG, not inherent cost. |
+| 🟡 | **Advanced search's Fandex Score (SM43–45)** | **Fixed and deployed 2026-08-13**, in three parts: the local path's pending flag (SM43), a latency budget on the heal loop (SM44 — 66.3 s → 4.1 s with RAWG down), and the actual cause of the report, the *database-results* half carrying no score fields at all (SM45). **Four follow-ups are yours** — thin-writing tag results, a browse budget on `facet-fetch` (**18.8 s** on prod today, and it's shared with the public facet pages), and cross-linking IGDB for the RAWG-only game rows. → [TASKS.md](TASKS.md) |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |

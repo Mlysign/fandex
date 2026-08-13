@@ -132,6 +132,27 @@ What it involves, so the next Opus session doesn't re-derive it:
 
 ---
 
+## 2026-08-13 — "no result showed a Fandex Score" (SM43 → SM45)
+
+| ID | Sev | Area | Finding |
+|----|:--:|------|---------|
+| SM43 | ✅ **FIXED** (`f625440`) | advanced search | `/api/discover/find` returned `fandexScore: null` for a thin row **without** `fandexPending`, so `PosterCard` never registered with the heal hook and the badge vanished. Wired the flag. |
+| SM44 | ✅ **FIXED** (`3c2d0ff`) | `/api/discover/scores` | **The heal loop had no latency budget.** MAX_IDS bounds call COUNT, not duration: with RAWG down (522 in 19.7 s × 3 attempts ≈ 60 s/call) a 24-game batch measured **66.3 s** on one half-open probe, ~3 min on a cold process. Now **4.1 s** for the same shape. Whole-request budget + a per-call cap (≤¼ of it) so one dead provider can't starve a healthy one behind it; a host that times out is written off for the rest of the request. An unhealed id returns **deferred**, not `null` — the client caches null as final, so answering null would have left those cards blank until a reload. → [[provider-latency-isolation]] |
+| SM45 | ✅ **FIXED** (`3c283bb`) | `/api/discover/facet-fetch` | **This, not SM44, is what Nils actually saw.** The "More from the databases" half of advanced search — the half a TAG filter lands in — carried **no fandex fields at all**. Measured on prod for his exact query (`deckbuilding` + `tower defense`): 69 results, **0 scored, 0 pending**; 29 with an empty badge slot, 40 silently showing a *community* score in the Fandex slot. SM43 fixed the local `find()` path right beside it. `fandexForPage()` is now the one shared classifier. |
+
+**⚠️ Read this before trusting SM44's diagnosis.** The T0→T3 timings **confirm the mechanism** (66.3 s → 4.1 s, measured) but **not that it caused the report**: re-run on prod after deploying, `find()` produces **zero** `fandexPending` items across every sort and filter tried, so the heal route wasn't being exercised by advanced search at all. SM44 is a real bug worth fixing on its own merits — it would have bitten the moment the pool went thin — but SM45 is the answer to the question Nils asked.
+
+**Still open here — your call:**
+
+1. **A tag search's results are mostly NOT in the catalog**, so SM45 leaves them unscored (scoring an unstored item means asking `/api/discover/scores` a question it can only answer "no" to). The browse feed solves this with a discover-time **thin write**; facet-fetch does none. Do we thin-write them too? That changes what a tag search *costs*, so it isn't a quiet fix.
+2. **`/api/discover/facet-fetch` has no browse budget** — measured **18.8 s on prod / 68.3 s locally** with RAWG down. Exactly SM44's shape on a different route: `tmdbJson`/`rawgJson` in `facetDetail.ts` call `httpFetch` with no `budgetMs`. Note they're **shared with `publicFacetDetail.ts`**, so this also touches the public SEO facet pages (which is where the 59.8 s `/tag/telepathy` render came from). → [[facet-cache-and-provider-latency-masking]]
+3. **Games' thin rows are mostly RAWG-only** — 20 of 24 sampled thin game rows have no IGDB link at all, so while RAWG is down nothing can heal them and they show no Fandex Score. **Your call was to fix the root cause: cross-link IGDB** (a backfill giving games their real second source), rather than fall back to a depressed number. Not started. `scripts/backfill-game-detail.ts` is the starting point.
+4. **T4 progressive reveal — already built, nothing to do.** `DiscoverPageClient.runSearch` paints local `find()` results first and folds `webItems` in when they land ("Show local results immediately" is the existing comment), the empty state is gated on `!webLoading` so an intermediate never reads as "No results", and there's a "Pulling more from the databases…" affordance. What's left is (2) above — the wait is real latency, not a missing loading state.
+
+**Also found:** standalone `node` can't import `src/lib/http.ts` — `ProviderUnavailableError`'s constructor uses TypeScript **parameter properties**, which Node's strip-only type removal rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). Same class as the `import type` rule in AGENTS.md: any `scripts/*.mjs` that reaches a provider path dies on it. Not fixed (a one-line constructor rewrite; nobody needs it yet).
+
+---
+
 ## Still open elsewhere
 
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now that the aggregate is a raw sum rather than a damped mean. **Time-gated:** revisit after a few weeks of real scores under the new formula (4 days as of 2026-08-02 — too soon; a re-tune now would fit noise).

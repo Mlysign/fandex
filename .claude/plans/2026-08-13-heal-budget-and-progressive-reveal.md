@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-13-heal-budget-and-progressive-reveal
 created: 2026-08-13
-status: ready
+status: executed
 branch: current
 ---
 
@@ -232,4 +232,62 @@ npm run build     # never while `npm run dev` is running
 
 ## Blockers log
 
+- **T0's standalone probe couldn't run at all.** Plain `node` cannot import `src/lib/http.ts`:
+  `ProviderUnavailableError`'s constructor uses TypeScript **parameter properties**, which
+  Node's strip-only type removal rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). Same class as
+  the `import type` rule in AGENTS.md. Worked around by measuring through the dev server.
+
 ## Session log
+
+**T0 — baseline (RAWG confirmed down: 522 in 19.70 s; prod `openProviderCircuits: {}` but
+uptime was 129 s, so the breakers were simply fresh).** Logged in via `/api/dev/login`,
+`POST /api/discover/scores` with 24 thin game uuids:
+
+| condition | wall clock |
+|---|---|
+| breaker half-open at batch start (one probe paid) | **66.3 s** |
+| breaker fully open at batch start | 4.3 s |
+| same ids again, now healed | 0.48 s / 0.07 s |
+| cold process (breaker closed, derived: 3 × 60 s before it latches) | ~3 min |
+
+**T1/T2 — shipped as `3c2d0ff`.** `healLinks()` + `HealBudget` (whole-request deadline **and**
+a per-call cap ≤¼ of it, because with only the deadline the first dead call starves every
+healthy provider behind it); `isProviderCircuitOpen()` in `http.ts`, read-only, never consumes
+the half-open probe; hosts derived from each source module's BASE. A timed-out host is written
+off for the rest of the request, a *throwing* one is not (`rawgGet` throws on a 404 — one bad
+id must not blacklist a provider). Deferred is a real third state on both sides, with a
+capped exponential backoff client-side. 5 route tests + 6 hook tests + 1 breaker test.
+
+**One design change the live run forced:** `incomplete` first meant "any stale link went
+unrefreshed", which deferred every game whose IGDB link had just healed but whose RAWG link
+was dead — measured 22 of 24 deferred, strictly worse than before. It now means **"no fresh
+link at all"**: games are a two-provider medium, so a dead RAWG beside a live IGDB still
+scores. After: **4.1 s**.
+
+**T3 — deployed, CI green, prod `uptime` reset confirmed.** And then the correction:
+
+> **Re-running Nils's exact query on prod, `find()` returns ZERO `fandexPending` items** —
+> across every sort and filter tried, games and all types. The heal route was not being
+> exercised by advanced search at all. SM44 is a real bug and the 66.3 s → 4.1 s is real, but
+> it is **not** what Nils hit.
+
+**What he actually hit (SM45, shipped `3c283bb`).** `DiscoverPageClient.runSearch` calls
+`/api/discover/facet-fetch` for the "More from the databases" half — the half a TAG filter
+lands in — and `FacetDetailItem` carried **no fandex fields at all**. Prod, his exact query:
+69 results, **0 scored, 0 pending**; 29 with an empty badge slot and 40 quietly showing a
+*community* score in the Fandex slot. Fixed by extracting `fandexForPage()` as the one shared
+classifier. Verified on the `christopher nolan` facet: 11 of 19 results now score
+(Oppenheimer 78.9) where none could before.
+
+**T4 — already built, nothing to do.** `runSearch` paints local results first ("Show local
+results immediately" is the existing comment), folds `webItems` in when they land, gates the
+empty state on `!webLoading` so an intermediate never reads as "No results", and shows
+"Pulling more from the databases…". Nils picked scope (a); (a) and (c) both already exist.
+The remaining pain is real latency, not a missing affordance: **`facet-fetch` measured 18.8 s
+on prod / 68.3 s locally** with RAWG down, and has no `budgetMs` — SM44's shape on another
+route, and its `tmdbJson`/`rawgJson` are shared with `publicFacetDetail.ts`, so a fix there
+also touches the public SEO facet pages. Logged, not done.
+
+**T5 — Nils's calls this session:** T4 scope = (a); and for RAWG-only thin game rows, **fix
+the root cause by cross-linking IGDB** rather than falling back to a depressed score (20 of
+24 sampled thin game rows have no IGDB link at all). Both logged in TASKS.md.
