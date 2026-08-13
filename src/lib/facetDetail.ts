@@ -15,16 +15,18 @@
 // represents hits and inflates the crowd average.
 
 import { BoundedCache } from "@/lib/boundedCache";
-import { httpFetch } from "@/lib/http";
+import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import type { DiscoveryVector } from "@/lib/discovery";
 import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { fandexForPage } from "@/lib/liveDiscover";
+import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
-import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
+import { discoverIgdbByTags, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
 import type { FacetRole } from "@/lib/facets";
+import { tagKey } from "@/lib/facets";
 import type { MediaType } from "@/types";
 
 const TMDB = process.env.TMDB_API_KEY;
@@ -99,6 +101,13 @@ interface ExtTitle {
   posterUrl: string | null;
   vote: number | null;
   votes: number;
+  // The provider LIST payload this was built from (2026-08-13). Carried so an
+  // external candidate can be thin-written like a browse-feed item — which is
+  // what gives it a uuid, and therefore a Fandex Score and a heal path.
+  // `persistDiscoverItems` refuses anything without it, which is exactly why
+  // advanced search's database results were unscoreable: the payload was
+  // dropped here, three lines from where the provider handed it to us.
+  raw?: any;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -117,17 +126,33 @@ function ageFrom(birthday: string | null, deathday: string | null): number | nul
 
 // Exported so the public facet layer (publicFacetDetail.ts) shares the exact same
 // TMDB/RAWG plumbing (key handling, error swallowing) instead of duplicating it.
+//
+// Both pass BROWSE_BUDGET_MS (2026-08-13). Every caller of these two is a browse
+// path — advanced search's database results and the public facet pages — and
+// every one of them already degrades to "this source contributed nothing this
+// round" via the `catch` right here. Without a budget they paid the full retry
+// ladder per call: with RAWG down, `facet-fetch` measured **66.1 s on prod** for
+// a two-tag query, and the public `/tag/*` pages were the source of the 59.8 s
+// render once blamed on the cache. This is the same fix SM44 made to the heal
+// loop, one route over — per-source FAILURE isolation is not per-source LATENCY
+// isolation, and a `try/catch` around a provider call only buys the first.
 export async function tmdbJson(path: string): Promise<any | null> {
   if (!TMDB) return null;
   try {
-    const r = await httpFetch(`https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`);
+    const r = await httpFetch(
+      `https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`,
+      { budgetMs: BROWSE_BUDGET_MS }
+    );
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
 export async function rawgJson(path: string): Promise<any | null> {
   if (!RAWG) return null;
   try {
-    const r = await httpFetch(`https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`);
+    const r = await httpFetch(
+      `https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`,
+      { budgetMs: BROWSE_BUDGET_MS }
+    );
     return r.ok ? await r.json() : null;
   } catch { return null; }
 }
@@ -161,6 +186,7 @@ function tmdbCredit(c: any): ExtTitle {
     posterUrl: c.poster_path ? `https://image.tmdb.org/t/p/w500${c.poster_path}` : null,
     vote: typeof c.vote_average === "number" ? c.vote_average : null,
     votes: c.vote_count ?? 0,
+    raw: c,
   };
 }
 function rawgGame(g: any): ExtTitle {
@@ -171,6 +197,7 @@ function rawgGame(g: any): ExtTitle {
     posterUrl: g.background_image || null,
     vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // RAWG rating is 0-5
     votes: g.ratings_count ?? 0,
+    raw: g,
   };
 }
 function igdbGame(g: any): ExtTitle {
@@ -181,6 +208,7 @@ function igdbGame(g: any): ExtTitle {
     posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
     vote: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null, // 0-100 → 0-10
     votes: g.total_rating_count ?? 0,
+    raw: g,
   };
 }
 
@@ -241,9 +269,20 @@ async function rawgEntityTitles(role: string, id: number): Promise<ExtTitle[]> {
   return out;
 }
 
-// Tags: a popularity + recency sample from TMDB (genre or keyword) and RAWG
-// (genre or tag). A genre/tag's full catalog is the whole platform, so we sample.
-async function tagTitles(key: string): Promise<ExtTitle[]> {
+// Tags: a popularity + recency sample from TMDB (genre or keyword), RAWG (genre
+// or tag) and IGDB. A tag's full catalog is the whole platform, so we sample.
+//
+// 2026-08-13 — takes ALL the active tag keys and ANDs them AT THE PROVIDER,
+// rather than sampling each tag separately and intersecting afterwards. That
+// distinction is the whole ballgame: each pull is ~40 rows out of a tag with
+// thousands, so intersecting two samples came back empty even when matching
+// games obviously exist (measured: `deckbuilding` 29, `tower defense` 40,
+// intersection **0**). Asking the provider for the conjunction samples FROM the
+// intersection instead. Each source expresses it differently, and a source that
+// cannot express it contributes NOTHING rather than a wider set — a partial AND
+// is indistinguishable from a correct one in the results, which is worse than
+// an empty section.
+async function tagTitles(keys: string[]): Promise<ExtTitle[]> {
   const out: ExtTitle[] = [];
   const seen = new Set<string>();
   const pushTmdb = (media: "movie" | "tv", results: any[] | undefined) => {
@@ -254,26 +293,53 @@ async function tagTitles(key: string): Promise<ExtTitle[]> {
   };
   const reqs: Promise<void>[] = [];
 
-  const movieGid = tmdbGenreId(key, "movie");
-  const tvGid = tmdbGenreId(key, "show");
-  if (movieGid != null || tvGid != null) {
-    if (movieGid != null) for (const sort of ["popularity.desc", "primary_release_date.desc"]) for (const page of TAG_PAGES)
-      reqs.push(tmdbJson(`/discover/movie?with_genres=${movieGid}&sort_by=${sort}&vote_count.gte=10&include_adult=false&page=${page}`).then((d) => pushTmdb("movie", d?.results)));
-    if (tvGid != null) for (const sort of ["popularity.desc", "first_air_date.desc"]) for (const page of TAG_PAGES)
-      reqs.push(tmdbJson(`/discover/tv?with_genres=${tvGid}&sort_by=${sort}&vote_count.gte=10&page=${page}`).then((d) => pushTmdb("tv", d?.results)));
-  } else {
-    const kwId = await resolveTmdbKeywordId(key);
-    if (kwId) {
-      for (const [media, recency] of [["movie", "primary_release_date.desc"], ["tv", "first_air_date.desc"]] as const) {
-        for (const sort of ["popularity.desc", recency]) for (const page of TAG_PAGES)
-          reqs.push(tmdbJson(`/discover/${media}?with_keywords=${kwId}&sort_by=${sort}&vote_count.gte=10&page=${page}`).then((d) => pushTmdb(media, d?.results)));
-      }
+  // TMDB: comma-joined values are AND within `with_genres`/`with_keywords`, and
+  // the two params AND with each other, so ONE query expresses the whole filter.
+  // A key that resolves to neither a genre nor a keyword can't be expressed at
+  // all — and dropping it would quietly turn "A and B" into "A", a wider result
+  // set wearing a narrower filter's label — so TMDB sits the round out instead.
+  for (const [media, recency] of [["movie", "primary_release_date.desc"], ["tv", "first_air_date.desc"]] as const) {
+    const type: MediaType = media === "tv" ? "show" : "movie";
+    const genreIds: number[] = [];
+    const keywordIds: number[] = [];
+    let expressible = true;
+    for (const key of keys) {
+      const gid = tmdbGenreId(key, type);
+      if (gid != null) { genreIds.push(gid); continue; }
+      const kwId = await resolveTmdbKeywordId(key);
+      if (kwId) keywordIds.push(kwId); else { expressible = false; break; }
     }
+    if (!expressible) continue;
+    const params = [
+      genreIds.length ? `with_genres=${genreIds.join(",")}` : "",
+      keywordIds.length ? `with_keywords=${keywordIds.join(",")}` : "",
+    ].filter(Boolean).join("&");
+    if (!params) continue;
+    const adult = media === "movie" ? "&include_adult=false" : "";
+    for (const sort of ["popularity.desc", recency]) for (const page of TAG_PAGES)
+      reqs.push(tmdbJson(`/discover/${media}?${params}&sort_by=${sort}&vote_count.gte=10${adult}&page=${page}`)
+        .then((d) => pushTmdb(media, d?.results)));
   }
-  const gslug = rawgGenreSlug(key);
-  const rawgParam = gslug ? `genres=${gslug}` : `tags=${rawgTagSlug(key)}`;
+
+  // RAWG: send every key it can address, then VERIFY each result carries all of
+  // them. The verification is the load-bearing half — RAWG's comma semantics for
+  // `genres`/`tags` are OR in some places and undocumented in others, and its
+  // list payloads already include the full `genres[]`/`tags[]` arrays, so
+  // checking is free and makes correctness independent of what the query did.
+  const rawgParams = [
+    keys.map(rawgGenreSlug).every(Boolean) ? `genres=${keys.map(rawgGenreSlug).join(",")}` : "",
+    keys.map(rawgGenreSlug).some((s) => !s) ? `tags=${keys.map(rawgTagSlug).join(",")}` : "",
+  ].filter(Boolean).join("&");
+  const carriesAllKeys = (g: any) => {
+    const owned = new Set<string>([
+      ...(g.genres ?? []).map((x: any) => tagKey(String(x.name ?? ""))),
+      ...(g.tags ?? []).map((x: any) => tagKey(String(x.name ?? ""))),
+    ]);
+    return keys.every((k) => owned.has(tagKey(k)));
+  };
   for (const ordering of ["-added", "-released"]) for (const page of TAG_PAGES)
-    reqs.push(rawgJson(`/games?${rawgParam}&ordering=${ordering}&page_size=20&page=${page}`).then((d) => pushRawg(d?.results)));
+    reqs.push(rawgJson(`/games?${rawgParams}&ordering=${ordering}&page_size=20&page=${page}`)
+      .then((d) => pushRawg((d?.results ?? []).filter((g: any) => keys.length === 1 || carriesAllKeys(g)))));
 
   // Q27 (2026-07-19): IGDB alongside RAWG — a tag like "anime" is a real IGDB
   // theme/keyword but not a RAWG genre, and IGDB's game catalog covers titles
@@ -283,7 +349,7 @@ async function tagTitles(key: string): Promise<ExtTitle[]> {
   // since the two sources use independent ids) — RAWG and IGDB race in the
   // same Promise.all, so dedup can't run until both have actually landed.
   let igdbGames: any[] = [];
-  if (igdbConfigured()) reqs.push(discoverIgdbByTag(key, 40).then((results) => { igdbGames = results; }));
+  if (igdbConfigured()) reqs.push(discoverIgdbByTags(keys, 40).then((results) => { igdbGames = results; }));
 
   await Promise.all(reqs);
 
@@ -358,7 +424,7 @@ export async function buildFacetDetail(userId: string, ref: FacetRefIn): Promise
   }
 
   // tag
-  const ext = await tagTitles(ref.key);
+  const ext = await tagTitles([ref.key]);
   return assemble(userId, ref, null, ext.length ? "sample" : "catalog", catVectors, ext.length ? ext : null);
 }
 
@@ -374,9 +440,70 @@ export async function buildFacetDetail(userId: string, ref: FacetRefIn): Promise
 // skip catVectors, filter by membership directly against user state.
 export interface MembershipFilterIn { library?: string; wishlist?: string; rated?: string }
 
+/**
+ * The identity an external title is matched by ACROSS facet pulls — normalized
+ * title + year, not source id.
+ *
+ * Ids can't do it: a game can come back from RAWG under one facet and from IGDB
+ * under another, with unrelated ids, and intersecting on those would drop the
+ * very titles that match both. This is the same key `tagTitles` already uses to
+ * dedupe RAWG against IGDB, for the same reason.
+ */
+export const extTitleKey = (t: { title: string; releaseDate: string | null }) =>
+  `${normalizeName(t.title ?? "")}|${extractYear(t.releaseDate) ?? "?"}`;
+
 export async function buildExternalCandidates(
   userId: string, ref: FacetRefIn, membership?: MembershipFilterIn
 ): Promise<FacetDetailItem[]> {
+  return (await buildExternalSets(userId, [ref], membership));
+}
+
+/**
+ * Resolve the external candidate set for EVERY include-facet and return only the
+ * titles present in all of them.
+ *
+ * 2026-08-13 — this used to be a UNION, done in the route by concatenating each
+ * facet's set. So with `deckbuilding` + `tower defense` active, the local half
+ * (`find()`, which ANDs) returned **0** and the database half returned **69**
+ * OR'd results — StarCraft and Doom 3 under a filter neither of them matches.
+ * One filter, two contradictory readings, and the half that obeyed the user
+ * contributed nothing. Nils's call (2026-08-13): AND, matching the local half,
+ * accepting that a narrow pair of tags may legitimately return very little.
+ */
+export async function buildExternalSets(
+  userId: string, refs: FacetRefIn[], membership?: MembershipFilterIn
+): Promise<FacetDetailItem[]> {
+  if (!refs.length) return [];
+
+  // TAGS are ANDed at the provider, in ONE pull for all of them — see
+  // tagTitles. Intersecting separate per-tag samples afterwards returns nothing:
+  // each sample is ~40 rows out of thousands, so two of them rarely overlap even
+  // when plenty of titles carry both tags.
+  const tags = refs.filter((r) => r.kind !== "person" && r.kind !== "company");
+  const others = refs.filter((r) => r.kind === "person" || r.kind === "company");
+
+  // People and companies each resolve to ONE entity with a bounded, complete set
+  // (a filmography, a studio's catalog), so those are exhaustive rather than
+  // sampled and intersecting them afterwards is both correct and the only option
+  // — there is no provider query for "directed by X and produced by Y".
+  const sets = await Promise.all([
+    ...(tags.length ? [tagTitles(tags.map((t) => t.key))] : []),
+    ...others.map((r) => externalTitlesFor(r)),
+  ]);
+  if (!sets.length) return [];
+  if (sets.some((s) => !s.length)) return []; // an empty set ANDs to nothing
+
+  const [first, ...rest] = sets;
+  const external = rest.length
+    ? first.filter((t) => {
+        const k = extTitleKey(t);
+        return rest.every((s) => s.some((o) => extTitleKey(o) === k));
+      })
+    : first;
+  return finishExternalCandidates(userId, external, membership);
+}
+
+async function externalTitlesFor(ref: FacetRefIn): Promise<ExtTitle[]> {
   let external: ExtTitle[] = [];
   if (ref.kind === "person") {
     const id = resolvePersonTmdbId(ref.role ?? "cast", ref.key);
@@ -393,9 +520,37 @@ export async function buildExternalCandidates(
       if (rid != null) external = await rawgEntityTitles(ref.role, rid);
     }
   } else {
-    external = await tagTitles(ref.key);
+    external = await tagTitles([ref.key]);
   }
+  return external;
+}
+
+function finishExternalCandidates(
+  userId: string, external: ExtTitle[], membership?: MembershipFilterIn
+): FacetDetailItem[] {
   if (!external.length) return [];
+
+  // Give every candidate a catalog row BEFORE anything else looks at it
+  // (2026-08-13). This is the same insert-only, `browsed=1`, projection-version-0
+  // thin write the browse feed has always done — driven by a payload a provider
+  // already returned to one of OUR queries, never by a caller-supplied id — and
+  // it is the whole unlock: a uuid is what makes an item scoreable, heal-able and
+  // linkable. Without it the database half of advanced search could only ever
+  // show a community rating, because there was nothing to hang a score on.
+  //
+  // Authed-only by construction: /api/discover/facet-fetch is `withUser`, and the
+  // anonymous facet surface goes through publicFacetDetail.ts, which keeps its
+  // own lookup-only branch (PR13–15's "an anonymous request writes nothing").
+  const persistable = external
+    .filter((t) => t.raw && t.title)
+    .map((t) => ({
+      id: `${t.source}-${t.type}-${t.sourceId}`,
+      type: t.type,
+      title: t.title,
+      releaseDate: t.releaseDate,
+      raw: { source: t.source, sourceId: t.sourceId, data: t.raw },
+    }));
+  try { persistDiscoverItems(persistable); } catch { /* live-only this round */ }
 
   const extMap = resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId })));
   const state = getUserStateMap(userId, [...new Set(extMap.values())]);
@@ -439,7 +594,8 @@ export async function buildExternalCandidates(
   // Only items with a real local row are eligible: `/api/discover/scores` heals
   // by media_items.id, so flagging a purely-external candidate pending would ask
   // a question that route can only answer "no" to — a guaranteed-wasted round
-  // trip and a spinner that resolves to nothing.
+  // trip and a spinner that resolves to nothing. Since the thin write above, that
+  // is nearly all of them; the exceptions are titles with no payload to store.
   const scoreable = out.filter((it) => local.has(it.id));
   const fandex = fandexForPage(
     scoreable.map((it) => ({

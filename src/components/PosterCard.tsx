@@ -121,10 +121,18 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
               role="status"
               aria-label="Working out your Fandex Score"
             />
-          ) : shownScore != null && (
-            fandexScore != null
-              ? <FandexScoreBadge score={fandexScore} center={fandexCenter} variant="inline" />
-              : <CommunityScoreBadge score={item.communityScore} variant="inline" />
+          ) : fandexScore != null ? (
+            <FandexScoreBadge score={fandexScore} center={fandexCenter} variant="inline" />
+          ) : item.fandexPending ? null : (
+            // Nothing at all once we ASKED for a Fandex Score and came back
+            // empty-handed (Nils, 2026-08-13). The community rating is still the
+            // right thing in this slot for a viewer who was never going to get a
+            // Fandex Score — anonymous (per D-E above) or cold-start — but for a
+            // signed-in viewer whose item simply couldn't be scored yet, a "/10"
+            // sitting where a taste match belongs reads as one. That is exactly
+            // how a screen full of un-scoreable results looked like the feature
+            // had silently reverted.
+            shownScore != null && <CommunityScoreBadge score={item.communityScore} variant="inline" />
           )}
         </div>
 

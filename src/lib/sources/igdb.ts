@@ -159,16 +159,37 @@ export async function discoverIgdbUpcoming(
 // second sanitizer, since the `*` wildcard delimiters below are ours, not the
 // caller's.
 export async function discoverIgdbByTag(query: string, limit = 40): Promise<any[]> {
+  return discoverIgdbByTags([query], limit);
+}
+
+/**
+ * The same pull for SEVERAL tags at once, ANDed — a game must carry every one.
+ *
+ * 2026-08-13: advanced search used to fetch each tag separately and intersect
+ * the results afterwards. That cannot work here: each pull is a `limit 40`
+ * SAMPLE of a tag that may have thousands of games, so intersecting two samples
+ * is empty almost by construction even when games carrying both tags plainly
+ * exist (measured: `deckbuilding` 29 hits, `tower defense` 40 hits, intersection
+ * **0**). Pushing the AND into the query samples FROM the intersection instead,
+ * which is what the `&` operator is there for.
+ */
+export async function discoverIgdbByTags(queries: string[], limit = 40): Promise<any[]> {
   if (!igdbConfigured()) return [];
-  const safe = sanitizeApicalypseSearch(query);
-  if (!safe) return [];
+  const safe = queries.map((q) => sanitizeApicalypseSearch(q)).filter(Boolean);
+  // An unusable term would silently widen an AND into a narrower-looking OR.
+  if (!safe.length || safe.length !== queries.length) return [];
+  const clauses = safe
+    .map((s) => `(themes.name ~ *"${s}"* | keywords.name ~ *"${s}"* | genres.name ~ *"${s}"*)`)
+    .join(" & ");
   try {
     return await igdbQuery(
       "games",
       `${GAME_FIELDS} ` +
-        `where (themes.name ~ *"${safe}"* | keywords.name ~ *"${safe}"* | genres.name ~ *"${safe}"*) ` +
-        `& version_parent = null & parent_game = null; ` +
-        `sort total_rating_count desc; limit ${safeInt(limit, 40)};`
+        `where ${clauses} & version_parent = null & parent_game = null; ` +
+        `sort total_rating_count desc; limit ${safeInt(limit, 40)};`,
+      // Browse path (advanced search + the public facet pages), same as
+      // discoverIgdbUpcoming above: degrade rather than pay the retry ladder.
+      BROWSE_BUDGET_MS
     );
   } catch { return []; }
 }
