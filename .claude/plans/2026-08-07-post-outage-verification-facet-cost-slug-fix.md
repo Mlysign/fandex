@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-07-post-outage-verification-facet-cost-slug-fix
 created: 2026-08-07
-status: executed 2026-08-12 (T7 partially — PR17 steps 4-5 need the Railway shell)
+status: complete
 branch: current
 ---
 
@@ -285,7 +285,7 @@ land below it. Never run `npm run build` while `npm run dev` is running.
     evidence rather than the stale "billing reset didn't fix it" framing.
   - Depends on: T5
 
-- [ ] **T9** — Quality bar, memory update, commit and push
+- [x] **T9** — Quality bar, memory update, commit and push
   - Files: memory dir
     `C:\Users\n-mly\.claude\projects\C--Users-n-mly-OneDrive-Documente-09-Projects-Personal-ReleaseCalendar-releaseradar2\memory\`
   - Detail: Run all four verification commands and get them green. Then:
