@@ -274,7 +274,10 @@ export default function ProfilePageClient() {
         {/* H4.1 — the ONE legal footer in the whole app, here per the locked
             2026-07-18 decision (BGH two-click rule; /profile is reachable
             from everywhere via H1's nav). */}
-        <LegalFooter />
+        {/* SM41: the donations row is already in `entries` above, with a hint
+            line the footer copy doesn't have. Without this the page renders
+            "Support Fandex" twice, a few hundred pixels apart. */}
+        <LegalFooter showSupport={false} />
       </main>
     </div>
   );

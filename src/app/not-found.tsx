@@ -1,5 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+
+// SM40 (2026-08-12): without this the 404 inherited the ROOT layout title
+// ("Fandex — your index of every game, movie & show"), so a broken link looked
+// like the homepage in the tab, in history and in a bookmark. The body was
+// branded correctly and the status really was 404 — only the title was wrong,
+// which is why every status-code check passed over it. SM26 swept titles across
+// the real routes; this boundary sits outside that route list (same reason the
+// H1.6f token sweep missed it, per the comment below).
+export const metadata: Metadata = {
+  // Bare — the root layout's `template: "%s · Fandex"` appends the suffix.
+  // Writing it out here yields "Page not found · Fandex · Fandex".
+  title: "Page not found",
+  // A 404 must never be indexed, whatever path produced it.
+  robots: { index: false, follow: true },
+};
 
 // Q13 — branded 404 (was Next's default unbranded page). Server component:
 // renders for unknown routes AND every notFound() call (bad item uuids,

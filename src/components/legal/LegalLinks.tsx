@@ -51,8 +51,19 @@ export default function LegalLinks({
   className = "",
   onNavigate,
   locale = "en",
+  showSupport = true,
 }: {
   className?: string;
+  /**
+   * SM41 (2026-08-12) — let a caller that ALREADY offers the donations link
+   * suppress this one. Only `/profile` needs it: H3.3 put "Support Fandex" in
+   * its own link grid (with the "Help cover the running costs" hint), and this
+   * component adds a second copy directly below, so the page shipped the same
+   * ask twice. Both placements are individually correct — `/profile` is just
+   * the one surface that has both. Defaults to `true`, so the sign-in dialog
+   * and the legal pages are unaffected.
+   */
+  showSupport?: boolean;
   /** Which locale's docs to link to. Defaults to "en", H4.1's original behaviour. */
   locale?: LegalLocale;
   /**
@@ -75,7 +86,7 @@ export default function LegalLinks({
           own 44px target, so the wrapped-row overlap fix below still only has
           to reason about the legal links. Renders nothing when the url is
           unset. */}
-      <SupportLink locale={locale} onNavigate={onNavigate} className="mb-6" />
+      {showSupport && <SupportLink locale={locale} onNavigate={onNavigate} className="mb-6" />}
 
       {/* SM33 (2026-07-30, fixed 2026-07-31): the four links measured ~45×16 at
           375px. `.tap-44-y` expands each to a 44px hit height, but that alone

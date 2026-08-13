@@ -154,8 +154,16 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
    kind of thing a status-code-only check misses.
 
 **B. API probes (curl or fetch, both auth states)**
-10. `/api/discover` anon GET/POST happy path; malformed JSON body → 400 not 500 (S8 zod).
-11. Gated APIs anon (`/api/library`, `/api/watchlist` POST, `/api/settings`) → 401, error shape sane.
+10. `/api/discover` anon **GET** happy path; malformed JSON body → 400 not 500 (S8 zod).
+    **Corrected 2026-08-12 (SM42): `POST /api/discover` is 405** — the route is GET-only now, so
+    the old "GET/POST" wording made the malformed-body probe test nothing. Send the malformed body
+    to a route that actually accepts POST.
+11. Gated APIs anon → 401 with a sane error shape. **Use `/api/library` and `/api/insights`** —
+    both verified 401 on 2026-08-12. **Not `/api/settings` (405) and not `GET /api/watchlist`
+    (405)**: those verbs aren't routed, so a 405 comes back before any auth check and the probe
+    proves nothing about the gate. `POST /api/watchlist` with junk correctly returns **401**, i.e.
+    auth is checked before validation — that ordering is right, so don't read the absence of a 400
+    as missing validation.
 12. Junk input: watchlist POST with bad posterUrl (S12), bad enum values → 400.
 
 **C. Logged-in (minted cookie — or, much better, see below)**

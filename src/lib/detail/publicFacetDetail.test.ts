@@ -136,8 +136,38 @@ describe("buildPublicFacetDetail — persist gate (PR14)", () => {
 
     expect(payload).not.toBeNull();
     expect(persistDiscoverItems).not.toHaveBeenCalled();
-    // Non-linkable is the documented fallback, not an error state.
+    // Non-linkable for a title with NO existing row — this describes a cold
+    // catalog, not "anon can never link". See the next test for the other half.
     expect(payload!.items.every((i) => i.linkable === false)).toBe(true);
+  });
+
+  // SM38 (2026-08-12). The anon branch used to return an empty uuid map, so the
+  // whole logged-out surface rendered inert — 0 clickable items against 2,012
+  // real rows in prod. It now runs the READ-ONLY `lookupExistingUuids`. Both
+  // halves matter and this test pins them together: an already-known title
+  // becomes linkable, AND the write path is still never called.
+  it("links an already-known title for an anon build, still without writing (SM38)", async () => {
+    const { buildPublicFacetDetail } = await import("./publicFacetDetail");
+    const { persistDiscoverItems } = await import("@/lib/discoverPersist");
+    // Only media_links is read by the lookup; the uuid needn't resolve further.
+    run("INSERT INTO media_items (id, type, title) VALUES ('uuid-known', 'movie', 'Mock Movie')");
+    run(
+      `INSERT INTO media_links (id, media_item_id, source, source_id, raw_data)
+       VALUES ('link-1', 'uuid-known', 'tmdb', '101', '{}')`
+    );
+
+    // A DIFFERENT key from the tests above on purpose: `_facetPageCache` is
+    // module-level with a 24 h TTL, so reusing "action" returns the payload
+    // built before the INSERT and this asserts nothing.
+    const payload = await buildPublicFacetDetail({ kind: "tag", key: "thriller" }, { persist: false });
+
+    expect(payload).not.toBeNull();
+    expect(persistDiscoverItems).not.toHaveBeenCalled(); // the gate still holds
+    const known = payload!.items.find((i) => i.id === "uuid-known");
+    expect(known, "the pre-existing tmdb:101 row should resolve to its uuid").toBeDefined();
+    expect(known!.linkable).toBe(true);
+    // The rawg title has no row, so it stays inert — the gate is per-item.
+    expect(payload!.items.some((i) => i.linkable === false)).toBe(true);
   });
 
   it("writes when persist is true (real session)", async () => {

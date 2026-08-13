@@ -3,7 +3,7 @@
 // releases route became the THIRD copy (it was already duplicated verbatim in
 // api/discover/route.ts and api/home/route.ts).
 
-import { persistDiscoverItems } from "@/lib/discoverPersist";
+import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 
 /**
@@ -15,16 +15,29 @@ import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
  *
  * 1. `raw` is the provider list payload used to write the row. It exists for
  *    persistence only and must never be serialized to a client (H2a).
- * 2. The write is session-gated (PR15). Unconditional persistence on a public,
- *    crawlable route is what grew media_items to ~676k rows. An anonymous
- *    caller keeps its synthetic composite id and gets `linkable: false`, which
- *    PosterCard/ListCard already render inert.
+ * 2. The WRITE is session-gated (PR15). Unconditional persistence on a public,
+ *    crawlable route is what grew media_items to ~676k rows. An anonymous caller
+ *    never writes.
+ *
+ * The anonymous branch still RESOLVES, though — it runs the read-only
+ * `lookupExistingUuids` so a title that already has a row links to it. Until
+ * 2026-08-12 it returned an empty map instead, which meant every card on the
+ * entire logged-out surface (Home, Discover, facet pages) rendered inert: 0
+ * clickable items against 2,012 real catalog rows, and crawlers dead-ended
+ * (SM38). Only genuine first-sightings stay `linkable: false` now.
+ *
+ * This does NOT weaken the gate: the lookup is a plain SELECT, so an anonymous
+ * request still writes exactly nothing.
  */
 export function persistDiscoverBatch<T extends { id: string; raw?: unknown }>(
   items: T[],
   userId: string | null
 ): Omit<T, "raw">[] {
-  const idMap = userId && items.length ? persistDiscoverItems(items as any) : new Map<string, string>();
+  const idMap = !items.length
+    ? new Map<string, string>()
+    : userId
+      ? persistDiscoverItems(items as any)
+      : lookupExistingUuids(items as any);
   return items.map(({ raw: _raw, ...it }) => {
     const uuid = idMap.get(it.id);
     return (uuid ? { ...it, id: uuid } : { ...it, linkable: false }) as Omit<T, "raw">;

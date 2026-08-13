@@ -39,7 +39,7 @@ import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@
 import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
 import type { PersistableItem } from "@/lib/discoverPersist";
-import { persistDiscoverItems } from "@/lib/discoverPersist";
+import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
 import { getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { getTagCategories, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import { categorizeTag } from "@/lib/tags";
@@ -524,25 +524,29 @@ export async function buildPublicFacetDetail(
   const community = crowdAvg(sorted);
 
   // Persist the page's slice thin so each title links to its item page — but
-  // ONLY for a real session (PR14). An anon/crawler build skips the write
-  // entirely; `uuidByKey` stays empty, and every item below falls back to its
-  // existing `linkable: false` rendering. No lookup-only fallback for items
-  // some OTHER logged-in viewer already persisted, on purpose: keeping this
-  // branch a flat "write or don't" is what makes it easy to verify zero writes
-  // happen for an anonymous build (see publicFacetDetail.test.ts).
+  // ONLY for a real session (PR14). An anon/crawler build never WRITES.
+  //
+  // It does still RESOLVE: `lookupExistingUuids` is a plain SELECT, so a title
+  // some logged-in viewer already persisted links normally for anonymous
+  // visitors too. This branch used to be a flat "write or don't" — chosen so
+  // "zero writes for an anon build" was trivially verifiable — but the cost was
+  // that EVERY card on the logged-out surface rendered inert (SM38, 2026-08-12):
+  // 0 clickable items against 2,012 real rows, so anon visitors could not open
+  // anything and crawlers dead-ended on every facet page. The zero-write
+  // guarantee is unchanged and still asserted in publicFacetDetail.test.ts —
+  // it just no longer costs the whole public link graph.
   const start = page * FACET_PAGE_SIZE;
   const slice = sorted.slice(start, start + FACET_PAGE_SIZE);
-  let uuidByKey = new Map<string, string>();
-  if (persist) {
-    const persistable: PersistableItem[] = slice
-      .filter((t) => t.raw && t.title)
-      .map((t) => ({
-        id: `${t.source}:${t.sourceId}`,
-        type: t.type, title: t.title, releaseDate: t.releaseDate,
-        raw: { source: t.source as any, sourceId: t.sourceId, data: t.raw },
-      }));
-    uuidByKey = persistDiscoverItems(persistable);
-  }
+  const persistable: PersistableItem[] = slice
+    .filter((t) => t.raw && t.title)
+    .map((t) => ({
+      id: `${t.source}:${t.sourceId}`,
+      type: t.type, title: t.title, releaseDate: t.releaseDate,
+      raw: { source: t.source as any, sourceId: t.sourceId, data: t.raw },
+    }));
+  const uuidByKey = persist
+    ? persistDiscoverItems(persistable)
+    : lookupExistingUuids(persistable);
 
   const items: PublicFacetItem[] = slice.map((t) => {
     const uuid = uuidByKey.get(`${t.source}:${t.sourceId}`);

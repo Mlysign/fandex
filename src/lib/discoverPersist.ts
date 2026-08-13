@@ -47,7 +47,13 @@ export interface PersistableItem {
 // crawler traffic (2026-07-20) nearly every facet/discover slice is
 // already-known items, so this turns the hot path into a plain SELECT and
 // leaves the write transaction for genuine first-sightings only.
-function lookupExistingUuids(items: PersistableItem[]): Map<string, string> {
+// Exported 2026-08-12 (SM38) so the ANONYMOUS branches of `persistDiscoverBatch`
+// and `buildPublicFacetDetail` can resolve already-known items without writing.
+// Those branches previously returned an empty map, which made every card on the
+// whole logged-out surface non-linkable — see [[anon-surface-has-no-item-links]].
+// Safe by construction: this function only ever SELECTs, so the PR13–PR15 "an
+// anonymous request writes nothing" guarantee is untouched.
+export function lookupExistingUuids(items: PersistableItem[]): Map<string, string> {
   const out = new Map<string, string>();
   const bySource = new Map<string, PersistableItem[]>();
   for (const it of items) {

@@ -10,12 +10,18 @@ import LegalLinks from "./LegalLinks";
 // visitors and fails for anonymous ones, so `SignInDialog` now renders the same
 // links. The list and its tap-target/wrap handling live in `LegalLinks` so the
 // two call sites can't drift apart.
-export default function LegalFooter({ locale }: { locale?: LegalLocale } = {}) {
+export default function LegalFooter({
+  locale,
+  showSupport = true,
+}: { locale?: LegalLocale; showSupport?: boolean } = {}) {
   return (
     <footer className="mt-10 pt-6 border-t border-border">
       {/* `locale` is passed only by the legal pages, which know theirs. /profile
-          omits it and keeps H4.1's "en" default. */}
-      <LegalLinks locale={locale} />
+          omits it and keeps H4.1's "en" default.
+          `showSupport` is passed false by /profile only — see SM41 in
+          LegalLinks: that page already carries the donations row in its own
+          link grid, so the default would render the same ask twice. */}
+      <LegalLinks locale={locale} showSupport={showSupport} />
     </footer>
   );
 }
