@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-13-facet-cache-persistence-anon-link-tests-anilist-spike
 created: 2026-08-13
-status: in_progress
+status: complete
 branch: current
 ---
 
@@ -209,7 +209,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: none.
   - Depends on: none
 
-- [ ] **T8** — Quality bar, docs, memory, commit and push
+- [x] **T8** — Quality bar, docs, memory, commit and push
   - Files: `STATUS.md`, `TASKS.md`, `smoketest.md`, memory dir
     `C:\Users\n-mly\.claude\projects\C--Users-n-mly-OneDrive-Documente-09-Projects-Personal-ReleaseCalendar-releaseradar2\memory\`
   - Detail: Run all four verification commands green. Then:
@@ -234,3 +234,23 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
 ## Blockers log
 
 ## Session log
+
+**Completed 2026-08-13. All 8 tasks done; no blockers.**
+
+**What shipped:** a two-layer cache for the public facet pages — the existing in-process BoundedCache as L1, plus a persisted SQLite L2 (, ). Both share one key, so  and  guard L2 exactly as they guard L1. Plus five regression tests pinning SM38 for , the AniList terms verdict in PLATFORMS.md, and a not-delegable write-up of the cache-table drop.
+
+**The finding that outranks the feature (T1).** The 59.8 s facet render this plan was written around is **not inherent cost**: of 's 250,746 ms of provider work, **234,409 ms (93%) was 12 calls to api.rawg.io returning Cloudflare 522s**, breaker open. TMDB's 9 calls totalled 726 ms, and person/company pages were already 64–159 ms cold. This is the **third** time a dead provider has been mistaken for an app-side perf problem here (perf §A; the 58 s Discover load). The cache still ships, but justified by **third-party quota** — one tag build can spend 12 RAWG calls against a 20k req/mo free tier — not by latency. TASKS.md, STATUS.md and a new memory file all say so explicitly, because the unqualified "59.8 s" outlived its context and became a justification.
+
+**Verification.** L2 proven across a full server restart, which is the only thing it exists for:  63.17 s → 0.092 s,  59.35 s → 0.017 s, zero provider calls warm, anon write gate byte-identical (2531/4147/4158). Confirmed again **on production** after deploy: 60.36 s → 0.194 s, and 36 anon item links on  (SM38 still fixed). 593 tests, tsc clean, lint 0 errors, build clean.
+
+**Decisions made under the plan's authority:**
+- The table went in 's schema block, not  — a new table with its own index is additive and valid against an old schema. Verified on both apply paths against a copy of the real DB.
+- Failure tests provoke a real error (dropping the table) rather than mocking: the module destructures / at import, so a  would pass while testing nothing.
+- Added  as a seam — without it there is no way to assert L2 behaviour, since L1 answers every second request.
+
+**Defect found and fixed after the fact:**  shipped with nothing calling it, so the table only ever grew — caught when prod's  moved 37.2 → 45 post-deploy. Now wired into  alongside the boot prune, deferred and bounded, deliberately **not** gated behind  (that switch guards unattended deletion of catalog rows a user might reach; this only drops already-unreadable cache entries). An unbounded table fed by crawler traffic is exactly what took prod down on 2026-07-22.
+
+**Recommendations for a follow-up plan:**
+- The true steady-state cost of a *tag* page is still unmeasured — RAWG has been down for every measurement. Re-run  once  is  and RAWG answers, before anyone concludes tag pages are inherently slow.
+-  is auth-gated and was never covered by any anon sweep.
+- SM39 (Fandex Score renders −362 to +557) remains Nils's call, deliberately untouched.
