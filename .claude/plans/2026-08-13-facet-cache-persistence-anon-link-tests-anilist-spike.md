@@ -237,20 +237,62 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
 
 **Completed 2026-08-13. All 8 tasks done; no blockers.**
 
-**What shipped:** a two-layer cache for the public facet pages — the existing in-process BoundedCache as L1, plus a persisted SQLite L2 (, ). Both share one key, so  and  guard L2 exactly as they guard L1. Plus five regression tests pinning SM38 for , the AniList terms verdict in PLATFORMS.md, and a not-delegable write-up of the cache-table drop.
+**What shipped:** a two-layer cache for the public facet pages — the existing
+in-process `BoundedCache` as L1, plus a persisted SQLite L2 (`facet_page_cache`,
+`src/lib/facetCacheStore.ts`). Both share one key, so `persist` and
+`scoringConfigSignature()` guard L2 exactly as they guard L1. Plus five
+regression tests pinning SM38 for `persistDiscoverBatch`, the AniList terms
+verdict in PLATFORMS.md, and a not-delegable write-up of the cache-table drop.
 
-**The finding that outranks the feature (T1).** The 59.8 s facet render this plan was written around is **not inherent cost**: of 's 250,746 ms of provider work, **234,409 ms (93%) was 12 calls to api.rawg.io returning Cloudflare 522s**, breaker open. TMDB's 9 calls totalled 726 ms, and person/company pages were already 64–159 ms cold. This is the **third** time a dead provider has been mistaken for an app-side perf problem here (perf §A; the 58 s Discover load). The cache still ships, but justified by **third-party quota** — one tag build can spend 12 RAWG calls against a 20k req/mo free tier — not by latency. TASKS.md, STATUS.md and a new memory file all say so explicitly, because the unqualified "59.8 s" outlived its context and became a justification.
+**The finding that outranks the feature (T1).** The 59.8 s facet render this plan
+was written around is **not inherent cost**: of `/tag/telepathy`'s 250,746 ms of
+provider work, **234,409 ms (93%) was 12 calls to `api.rawg.io` returning
+Cloudflare 522s**, breaker open. TMDB's 9 calls totalled 726 ms, and
+person/company pages were already 64–159 ms cold. This is the **third** time a
+dead provider has been mistaken for an app-side performance problem here (perf
+§A; the 58 s Discover load). The cache still ships, but justified by
+**third-party quota** — one tag build can spend 12 RAWG calls against a
+20k req/mo free tier — not by latency. TASKS.md, STATUS.md and a new memory file
+all say so explicitly, because the unqualified "59.8 s" outlived its context and
+became the justification for a piece of work.
 
-**Verification.** L2 proven across a full server restart, which is the only thing it exists for:  63.17 s → 0.092 s,  59.35 s → 0.017 s, zero provider calls warm, anon write gate byte-identical (2531/4147/4158). Confirmed again **on production** after deploy: 60.36 s → 0.194 s, and 36 anon item links on  (SM38 still fixed). 593 tests, tsc clean, lint 0 errors, build clean.
+**Verification.** L2 proven across a full server restart, the only thing it
+exists for: `/tag/western` 63.17 s → 0.092 s, `/tag/history` 59.35 s → 0.017 s,
+zero provider calls on the warm pass, anon write gate byte-identical
+(2531/4147/4158). Confirmed again **on production** after deploy: 60.36 s →
+0.194 s, and 36 anon item links on `/tag/action` (SM38 still fixed). 593 tests,
+tsc clean, lint 0 errors, build clean.
 
 **Decisions made under the plan's authority:**
-- The table went in 's schema block, not  — a new table with its own index is additive and valid against an old schema. Verified on both apply paths against a copy of the real DB.
-- Failure tests provoke a real error (dropping the table) rather than mocking: the module destructures / at import, so a  would pass while testing nothing.
-- Added  as a seam — without it there is no way to assert L2 behaviour, since L1 answers every second request.
+- The table went in `db.ts`'s schema block, not `migrations.ts` — a new table
+  with its own index is additive and valid against an old pre-migration schema.
+  Verified on both apply paths against a copy of the real `data/rr.db`:
+  `scripts/migrate.mjs` runs clean (and correctly does not create it), while the
+  in-process boot path creates table and index with user rows untouched.
+- Failure tests provoke a REAL error (dropping the table) rather than mocking:
+  `facetCacheStore.ts` destructures `query`/`run` at import time, so a
+  `vi.spyOn` on the db module object is never seen by the bound references and
+  would pass while testing nothing.
+- Added `_resetFacetPageCacheForTests()` as a seam — without it there is no way
+  to assert L2 behaviour at all, since L1 answers every second request.
 
-**Defect found and fixed after the fact:**  shipped with nothing calling it, so the table only ever grew — caught when prod's  moved 37.2 → 45 post-deploy. Now wired into  alongside the boot prune, deferred and bounded, deliberately **not** gated behind  (that switch guards unattended deletion of catalog rows a user might reach; this only drops already-unreadable cache entries). An unbounded table fed by crawler traffic is exactly what took prod down on 2026-07-22.
+**Defect found and fixed after the fact:** `sweepFacetCache` shipped in T2 with
+nothing calling it, so `facet_page_cache` only ever grew — caught when prod's
+`dbMb` moved 37.2 → 45 right after the deploy. Now wired into
+`src/instrumentation.ts` alongside the boot prune, deferred off the boot tick and
+bounded to 2,000 rows per pass. Deliberately **not** gated behind
+`PRUNE_ON_BOOT`: that switch exists so an unattended delete of CATALOG rows a
+user might still reach can be turned off, whereas this only drops cache entries
+`readFacetCache` already treats as misses. An unbounded table fed by crawler
+traffic is precisely what took prod down on 2026-07-22.
 
 **Recommendations for a follow-up plan:**
-- The true steady-state cost of a *tag* page is still unmeasured — RAWG has been down for every measurement. Re-run  once  is  and RAWG answers, before anyone concludes tag pages are inherently slow.
--  is auth-gated and was never covered by any anon sweep.
-- SM39 (Fandex Score renders −362 to +557) remains Nils's call, deliberately untouched.
+- **The true steady-state cost of a TAG page is still unmeasured** — `api.rawg.io`
+  was returning 522s for every measurement in this session. Re-run
+  `scripts/probe-facet-cost.ts` once `openProviderCircuits` is `{}` *and* RAWG
+  actually answers, before anyone concludes tag pages are inherently slow.
+- `/api/calendar/popular` is auth-gated (401 anon) and has never been covered by
+  an anonymous sweep.
+- SM39 (the Fandex Score rendering −362.3 to +557.4) remains open and is
+  deliberately untouched — it is Nils's call, and clamping would break two dated
+  design tests plus the breakdown's additivity.
