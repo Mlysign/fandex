@@ -35,7 +35,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | ✅ | **PR17 — post-outage verification** | **CLOSED 2026-08-12**, all five steps. Backups proven by a real restore drill. |
 | ✅ | **SM38 — anon surface had zero clickable items** | **FIXED 2026-08-12.** The anon branches now run the existing read-only `lookupExistingUuids` instead of returning an empty map. Verified on a real catalog: Discover 0 → **32** links, `/tag/action` 40, `/studio/a24` 26, Home 14 — and a Googlebot crawl still wrote **zero** rows. |
 | 🟠 | **SM39 — Fandex Score renders far outside 0–100** | **You** — deliberately not "fixed": the unbounded range is pinned by two dated tests and a clamp would break the breakdown's additivity. The remedy is the re-tune below. Across 1,773 real items: min **−362.3**, median 93.4, max **557.4**; 21% below 0, 47% above 100. The Godfather shows **−59** on its card today. |
-| ⬜ | **Facet-page compute + RAWG quota** | Nobody — open work. Cold `/tag/telepathy` renders in **59.8 s** on prod; crawl sweeps run at a near-100% cache miss. Cache enlarged 2026-08-12 (mitigates, doesn't eliminate). |
+| ✅ | **Facet-page compute + RAWG quota** | **Closed 2026-08-13** by a persisted SQLite L2. Verified across a full restart: `/tag/western` **63.17 s → 0.092 s**, zero provider calls warm. Also corrected the premise — the "59.8 s render" was 93% a dead RAWG, not inherent cost. |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |
@@ -72,7 +72,7 @@ Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit pa
 
 ## ✅ Quality bar (as of 2026-08-12)
 
-**576 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
+**593 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
