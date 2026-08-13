@@ -20,6 +20,7 @@ import type { DiscoveryVector } from "@/lib/discovery";
 import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
+import { fandexForPage } from "@/lib/liveDiscover";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
@@ -49,6 +50,13 @@ export interface FacetDetailItem {
   rating: number | null;
   communityScore: number | null; // 0-100
   sources: { source: string; sourceId: string }[];
+  // SM45 (2026-08-13) — optional because only buildExternalCandidates (the
+  // advanced-search supplement) fills them in; the facet DETAIL page builds the
+  // same item shape and doesn't show a Fandex badge. Absent → no badge, which is
+  // what every caller rendered before this existed.
+  fandexScore?: number | null;
+  fandexCenter?: number | null;
+  fandexPending?: boolean;
 }
 
 export interface PersonMeta {
@@ -393,6 +401,7 @@ export async function buildExternalCandidates(
   const state = getUserStateMap(userId, [...new Set(extMap.values())]);
 
   const seen = new Set<string>();
+  const local = new Set<string>(); // ids that resolved to a real media_items row
   const out: FacetDetailItem[] = [];
   for (const t of external) {
     const mid = extMap.get(`${t.source}:${t.sourceId}`);
@@ -417,6 +426,35 @@ export async function buildExternalCandidates(
       platformSources: st?.platformSources ?? [], onWatchlist: inWl, libraryStatus: st?.libraryStatus ?? null,
       rating: st?.rating ?? null, sources: [{ source: t.source, sourceId: t.sourceId }],
     });
+    if (mid) local.add(mid); // === the item's id, since id is `mid ?? key`
+  }
+
+  // SM45 — score the page. This is the half of advanced search a TAG filter
+  // actually lands in, and it carried no fandex fields at all: 69 results for
+  // Nils's `deckbuilding` + `tower defense` query came back with 0 scored and 0
+  // pending, so 29 of them rendered a completely empty badge slot and the other
+  // 40 silently showed a COMMUNITY score in the place the Fandex Score belongs.
+  // SM43 fixed the local find() path beside this one and left this untouched.
+  //
+  // Only items with a real local row are eligible: `/api/discover/scores` heals
+  // by media_items.id, so flagging a purely-external candidate pending would ask
+  // a question that route can only answer "no" to — a guaranteed-wasted round
+  // trip and a spinner that resolves to nothing.
+  const scoreable = out.filter((it) => local.has(it.id));
+  const fandex = fandexForPage(
+    scoreable.map((it) => ({
+      id: it.id,
+      type: it.type,
+      ids: Object.fromEntries(it.sources.map((s) => [s.source, s.sourceId])),
+    })),
+    userId
+  );
+  for (const it of scoreable) {
+    const fx = fandex.get(it.id);
+    if (!fx) continue;
+    it.fandexScore = fx.score;
+    it.fandexCenter = fx.center;
+    it.fandexPending = fx.pending;
   }
   return out;
 }

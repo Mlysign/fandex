@@ -203,7 +203,17 @@ const isDeep = (facets: Facet[]) => facets.some((f) => f.kind !== "tag");
 // One feed page's worth of direct media_links reads (see `catalogFacets`).
 const DIRECT_LINK_READ_CAP = 60;
 
-function catalogFacets(candidates: FeedCandidate[]): Map<string, Facet[]> {
+// The minimum a thing needs to be scoreable off the catalog: an id to key the
+// answer by, a type, and whatever provider ids we know it by. Deliberately NOT
+// FeedCandidate — /api/discover/facet-fetch's external candidates are a
+// different shape and were silently going unscored for want of this (SM45).
+export interface FandexTarget {
+  id: string;
+  type: MediaType;
+  ids?: Record<string, number | string | null>;
+}
+
+function catalogFacets(candidates: FandexTarget[]): Map<string, Facet[]> {
   const out = new Map<string, Facet[]>();
   if (!candidates.length) return out;
 
@@ -252,8 +262,41 @@ function catalogFacets(candidates: FeedCandidate[]): Map<string, Facet[]> {
   return out;
 }
 
-const candidateTypeOf = (candidates: FeedCandidate[], id: string): MediaType | null =>
+const candidateTypeOf = (candidates: FandexTarget[], id: string): MediaType | null =>
   candidates.find((c) => c.id === id)?.type ?? null;
+
+/**
+ * The Fandex Score for a page of items, keyed by item id — the ONE copy of
+ * "score it now if the catalog row is deep enough, otherwise flag it pending
+ * and let the client heal it".
+ *
+ * SM45 (2026-08-13): extracted from decorateSection because a second surface
+ * needed it and didn't have it. `/api/discover/facet-fetch` — the "More from
+ * the databases" half of advanced search, and the half a TAG filter actually
+ * lands in — carried no fandex fields at all, so every result from it rendered
+ * with no score and no way to ask for one. That is the symptom SM43 was
+ * reported for and only half-fixed: SM43 wired the LOCAL find() path, this is
+ * the external one beside it. Same lesson as the two-source games pull — one
+ * correct copy, not one correct copy plus a surface that quietly lacks it.
+ */
+export function fandexForPage(
+  items: FandexTarget[],
+  userId: string | null
+): Map<string, { score: number | null; center: number | null; pending: boolean }> {
+  const out = new Map<string, { score: number | null; center: number | null; pending: boolean }>();
+  // No profile → no score at all (anonymous / cold start), and nothing to
+  // resolve later, so never pending. With a profile: a deep catalog row scores
+  // now; a thin one is deliberately left UNSCORED and flagged, so the client
+  // can hydrate it rather than render a number we know is depressed.
+  const rawProfile = userId ? buildProfile(userId) : null;
+  const catalog = rawProfile ? catalogFacets(items) : new Map<string, Facet[]>();
+  for (const item of items) {
+    const deep = catalog.get(item.id);
+    const fx = rawProfile && deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+    out.set(item.id, { ...fx, pending: !!rawProfile && !deep });
+  }
+  return out;
+}
 
 async function rankType(
   candidates: FeedCandidate[],
@@ -383,19 +426,13 @@ export function decorateSection<T extends FeedCandidate>(
   candidates: T[],
   userId: string | null
 ): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null; fandexCenter: number | null; fandexPending: boolean })[] {
-  const rawProfile = userId ? buildProfile(userId) : null;
-  const catalog = rawProfile ? catalogFacets(candidates) : new Map<string, Facet[]>();
+  const fandex = fandexForPage(candidates, userId);
   return candidates.map((c) => {
-    const deep = catalog.get(c.id);
-    // No profile → no score at all (anonymous / cold start), and nothing to
-    // resolve later, so never pending. With a profile: a deep catalog row
-    // scores now; a thin one is deliberately left UNSCORED and flagged, so the
-    // client can hydrate it rather than render a number we know is depressed.
-    const fx = rawProfile && deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+    const fx = fandex.get(c.id)!;
     return {
       ...c, ...communityStatsOf(c),
       fandexScore: fx.score, fandexCenter: fx.center,
-      fandexPending: !!rawProfile && !deep,
+      fandexPending: fx.pending,
     };
   });
 }

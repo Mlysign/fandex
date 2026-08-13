@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "./db";
 import { upsertMediaItem, upsertLibraryEntry } from "./matcher";
 import { buildProfile, computeFandexScore, invalidateDiscoveryCache } from "./discovery";
-import { decorateSection } from "./liveDiscover";
+import { decorateSection, fandexForPage } from "./liveDiscover";
 import type { Facet } from "./facets";
 import { extractFacets } from "./facets";
 import type { FeedCandidate } from "./discoverFeed";
@@ -141,5 +141,67 @@ describe("live-feed scoring reads the catalog's facets, not the provider's list 
 
     expect(decorated.fandexScore).toBeNull();
     expect(decorated.fandexPending).toBe(false);
+  });
+});
+
+// SM45 (2026-08-13) — the classification above is now shared, because a second
+// surface needed it and silently did without.
+//
+// `/api/discover/facet-fetch` is the "More from the databases" half of advanced
+// search, and the half a TAG filter actually lands in. Its items carried NO
+// fandex fields at all, so a tag search returned results with an empty badge
+// slot and no way to ask for a score — measured on prod the day this was
+// written: 69 results for `deckbuilding` + `tower defense`, **0 scored, 0
+// pending**. SM43 had wired the local find() path right next to it.
+//
+// So these pin the shared helper directly, on the shape that surface uses
+// (`sources[]`, not a FeedCandidate). A test that only covered decorateSection
+// passed throughout — it was passing before SM43 too.
+describe("fandexForPage — the one classifier both discover surfaces use (SM45)", () => {
+  it("scores a deep catalog row and flags a thin one, keyed by item id", () => {
+    seedLibraryWithSignal();
+    const deepId = upsertMediaItem({
+      source: "tmdb", sourceId: "1234", type: "movie", title: "Ada's Newest",
+      releaseDate: "2020-01-01", rawData: deepTmdb(1234, "Ada's Newest"),
+    });
+    // Genres only — exactly what a discover-time thin write leaves behind.
+    const thinId = upsertMediaItem({
+      source: "tmdb", sourceId: "4321", type: "movie", title: "Thin Row",
+      releaseDate: "2020-01-01",
+      rawData: { id: 4321, title: "Thin Row", genres: [{ name: "Drama" }] },
+    });
+    invalidateDiscoveryCache();
+
+    const out = fandexForPage([
+      { id: deepId, type: "movie", ids: { tmdb: "1234" } },
+      { id: thinId, type: "movie", ids: { tmdb: "4321" } },
+    ], USER);
+
+    expect(out.get(deepId)!.score).not.toBeNull();
+    expect(out.get(deepId)!.pending).toBe(false);
+    // Not a depressed number — no number, plus the flag that gets it healed.
+    expect(out.get(thinId)!.score).toBeNull();
+    expect(out.get(thinId)!.pending).toBe(true);
+  });
+
+  it("never flags anything pending for a signed-out viewer", () => {
+    seedLibraryWithSignal();
+    const id = upsertMediaItem({
+      source: "tmdb", sourceId: "1234", type: "movie", title: "Ada's Newest",
+      releaseDate: "2020-01-01", rawData: deepTmdb(1234, "Ada's Newest"),
+    });
+    invalidateDiscoveryCache();
+
+    const out = fandexForPage([{ id, type: "movie", ids: { tmdb: "1234" } }], null);
+
+    expect(out.get(id)!.score).toBeNull();
+    expect(out.get(id)!.pending).toBe(false);
+  });
+
+  it("answers for every id it was given, so a caller can't silently drop one", () => {
+    seedLibraryWithSignal();
+    const ids = ["a", "b", "c"];
+    const out = fandexForPage(ids.map((id) => ({ id, type: "movie" as const })), USER);
+    expect([...out.keys()].sort()).toEqual(ids);
   });
 });
