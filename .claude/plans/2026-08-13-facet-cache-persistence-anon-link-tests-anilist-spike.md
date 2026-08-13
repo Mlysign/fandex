@@ -85,7 +85,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
 
 ## Tasks
 
-- [ ] **T1** — Measure where the facet render time actually goes, before changing anything
+- [x] **T1** — Measure where the facet render time actually goes, before changing anything
   - Files: `scripts/probe-facets.ts` (exists — extend it rather than writing a new probe)
   - Detail: This repo has been burned twice by optimising before measuring (perf §A was
     mis-sized by 100×; the 58 s Discover load was blamed on the pool cache for days and
