@@ -20,8 +20,8 @@
 //
 // Env: DB_PATH (defaults to ./data/rr.db) + STEAM_API_KEY / RAWG_API_KEY /
 // TWITCH_* for the searches. MUTATES the database — back it up first.
-import { query } from "@/lib/db";
-import { crossLinkGame, GAME_SOURCES } from "@/lib/sources/crossLink";
+import { GAME_SOURCES } from "@/lib/sources/crossLink";
+import { surveyGameCrossLinks, runCrossLinkBatch } from "@/lib/sources/crossLinkBackfill";
 import type { Source } from "@/types";
 
 const args = process.argv.slice(2);
@@ -37,64 +37,39 @@ const sourceArg = (() => {
 })();
 const wanted: readonly Source[] = sourceArg ? [sourceArg] : GAME_SOURCES;
 
-interface Row { id: string; title: string; release_date: string | null; sources: string }
-
 async function main() {
-  // One row per game with its linked sources, so the "what's missing" decision
-  // is made here rather than N queries deep.
-  const rows = query<Row>(
-    `SELECT mi.id, mi.title, mi.release_date,
-            (SELECT GROUP_CONCAT(ml.source) FROM media_links ml WHERE ml.media_item_id = mi.id) AS sources
-       FROM media_items mi
-      WHERE mi.type = 'game'
-      ORDER BY mi.title`
-  );
-
-  const needing = rows.filter((r) => {
-    const have = new Set((r.sources ?? "").split(",").filter(Boolean));
-    return wanted.some((s) => !have.has(s));
-  });
-
-  const missingBySource: Record<string, number> = {};
-  for (const r of needing) {
-    const have = new Set((r.sources ?? "").split(",").filter(Boolean));
-    for (const s of wanted) if (!have.has(s)) missingBySource[s] = (missingBySource[s] ?? 0) + 1;
-  }
-
-  console.log(`games in catalog:        ${rows.length}`);
-  console.log(`missing at least one:    ${needing.length}`);
-  console.log(`missing links by source:`, missingBySource);
+  // Same survey the /api/dev/crosslink route reports, so a local dry run and a
+  // prod one can't disagree about what's missing.
+  const survey = surveyGameCrossLinks(wanted);
+  console.log(`games in catalog:        ${survey.totalGames}`);
+  console.log(`missing at least one:    ${survey.needing}`);
+  console.log(`missing links by source:`, survey.missingBySource);
   console.log(`targeting:               ${wanted.join(", ")}`);
 
   if (dryRun) {
-    console.log("\n--dry-run — no writes. First 10 that would be searched:");
-    for (const r of needing.slice(0, 10)) {
-      const have = new Set((r.sources ?? "").split(",").filter(Boolean));
-      console.log(`  ${r.title.slice(0, 50).padEnd(52)} has[${[...have].join(",")}] → needs[${wanted.filter((s) => !have.has(s)).join(",")}]`);
-    }
+    console.log("\n--dry-run — no writes, no network calls.");
     return;
   }
 
-  const work = limit > 0 ? needing.slice(0, limit) : needing;
-  console.log(`\nprocessing ${work.length}${limit > 0 ? ` (--limit ${limit})` : ""}…\n`);
+  const total = limit > 0 ? Math.min(limit, survey.needing) : survey.needing;
+  console.log(`\nprocessing ${total}${limit > 0 ? ` (--limit ${limit})` : ""}…\n`);
 
-  const addedBySource: Record<string, number> = {};
-  let touched = 0;
-  for (let i = 0; i < work.length; i++) {
-    const r = work[i];
-    // No budget: this IS the bulk pass, and it paces itself between searches.
-    const added = await crossLinkGame(r.id, r.title, { sources: wanted, releaseDate: r.release_date });
-    if (added.length) {
-      touched++;
-      for (const s of added) addedBySource[s] = (addedBySource[s] ?? 0) + 1;
-      console.log(`  [${i + 1}/${work.length}] ${r.title.slice(0, 48).padEnd(50)} +${added.join(",")}`);
-    } else if ((i + 1) % 25 === 0) {
-      console.log(`  [${i + 1}/${work.length}] …`);
-    }
-  }
+  let done = 0;
+  const result = await runCrossLinkBatch({
+    sources: wanted,
+    maxItems: limit > 0 ? limit : Number.MAX_SAFE_INTEGER,
+    // No wall-clock budget: this IS the bulk pass, run from a terminal, and it
+    // paces itself between searches. The route is the one that needs a deadline.
+    onProgress: (title, added) => {
+      done++;
+      if (added.length) console.log(`  [${done}/${total}] ${title.slice(0, 48).padEnd(50)} +${added.join(",")}`);
+      else if (done % 25 === 0) console.log(`  [${done}/${total}] …`);
+    },
+  });
 
-  console.log(`\ndone — ${touched} games gained links`);
-  console.log(`links added by source:`, addedBySource);
+  console.log(`\ndone — ${result.itemsLinked} games gained links (${result.itemsProcessed} visited)`);
+  console.log(`links added by source:`, result.addedBySource);
+  if (result.remaining > 0) console.log(`still to visit: ${result.remaining} (re-run to continue)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

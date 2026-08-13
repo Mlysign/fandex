@@ -85,11 +85,19 @@ export async function crossLinkGame(
     try {
       const link = await provider.searchByTitle(title, "game", { year });
       if (link) {
-        linkSourceToItem(mediaItemId, {
+        // linkSourceToItem returns the item the link is ACTUALLY on. A
+        // (source, source_id) pair is unique, so if another catalog row already
+        // claims this appid — a duplicate entry, or two different titles that
+        // both title-match the same store page — it stays there and OUR item
+        // gains nothing. Counting that as success over-reported the first real
+        // run by 8 (249 claimed vs 241 link rows created), and would have made
+        // the backfill look complete while those games stayed unlinked.
+        const attachedTo = linkSourceToItem(mediaItemId, {
           source, sourceId: link.sourceId, type: "game",
           title: link.title, releaseDate: link.releaseDate, rawData: link.rawData,
         });
-        added.push(source);
+        if (attachedTo === mediaItemId) added.push(source);
+        else log.info("cross_link_claimed_elsewhere", { source, sourceId: link.sourceId, mediaItemId, attachedTo });
       }
     } catch (e) {
       log.warn("cross_link_failed", { source, mediaItemId, ...errorFields(e) });
