@@ -1,7 +1,7 @@
 ---
 plan_id: 2026-08-13-facet-cache-persistence-anon-link-tests-anilist-spike
 created: 2026-08-13
-status: ready
+status: in_progress
 branch: current
 ---
 
