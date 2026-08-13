@@ -156,7 +156,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: none — verification task.
   - Depends on: T3
 
-- [ ] **T5** — Pin the anon link graph for Home and Discover (SM38 regression)
+- [x] **T5** — Pin the anon link graph for Home and Discover (SM38 regression)
   - Files: `src/lib/annotateDiscover.test.ts` (create if absent)
   - Detail: 2026-08-12 fixed SM38 — the whole logged-out surface rendered zero clickable
     items because the anon branches returned an empty uuid map. Only the FACET half got a
