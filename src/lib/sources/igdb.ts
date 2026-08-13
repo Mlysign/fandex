@@ -6,6 +6,9 @@ import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const IGDB_BASE = "https://api.igdb.com/v4";
+// See RAWG_HOST in sources/rawg.ts — the breaker is keyed by host, so it's
+// derived from the base URL rather than restated.
+export const IGDB_HOST = new URL(IGDB_BASE).host;
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 

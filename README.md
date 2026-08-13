@@ -41,6 +41,7 @@ missing.
 | `OMDB_API_KEY` | ⬚ | Rotten Tomatoes / IMDb scores |
 | `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
 | `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
+| `HEAL_BUDGET_MS` | ⬚ | Per-request wall-clock budget for `/api/discover/scores`' heal loop (default 10 000). Ids it can't heal in time come back as `deferred`, not scored |
 | `MONETIZATION_ENABLED` | ⬚ | **H3 master kill switch — leave UNSET.** `1`/`true` turns on every affiliate link on the site. The first one makes Fandex commercial under §5 DDG, so this must not be set until H4.2's Impressum is live. See [docs/monetization-go-live.md](docs/monetization-go-live.md). |
 | `AFFILIATE_AMAZON_TAG` / `AFFILIATE_AMAZON_HOST` | ⬚ | Amazon PartnerNet associate tag (marketplace-specific) and marketplace host (defaults `amazon.de`) |
 | `AFFILIATE_HUMBLE_PARTNER` | ⬚ | Humble Store partner id (a `?partner=` value) |

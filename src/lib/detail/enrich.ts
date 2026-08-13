@@ -7,6 +7,10 @@ import type { OmdbResult } from "@/lib/sources/omdb";
 import { fetchOmdbScores, fetchOmdbByImdbId, omdbConfigured } from "@/lib/sources/omdb";
 import { METADATA, metadataForType } from "@/lib/metadata/registry";
 import type { MetaLink } from "@/lib/metadata/types";
+import { isProviderCircuitOpen } from "@/lib/http";
+import { TMDB_HOST } from "@/lib/sources/tmdb";
+import { RAWG_HOST } from "@/lib/sources/rawg";
+import { IGDB_HOST } from "@/lib/sources/igdb";
 
 // ── Shared detail-enrichment pipeline ────────────────────────────────────────
 //
@@ -122,8 +126,7 @@ export async function buildLiveLinks(
   return links;
 }
 
-// Refresh a stored movie/show's TMDB link in-memory when it predates the
-// current fetch shape. Returns whether the stored data was replaced.
+// ── Heal: refresh stored links that predate the current fetch shape ──────────
 //
 // H2a — this USED to sniff fields ("no external_ids/keywords → old blob →
 // refetch"). Sniffing is fundamentally incompatible with the raw_data
@@ -131,19 +134,224 @@ export async function buildLiveLinks(
 // read as stale and stampede TMDB with ~1,472 refetches. Staleness is now the
 // EXPLICIT `projection_version` stamp — the only honest signal, since it says
 // what shape a row was written in rather than guessing from its contents.
+
+// The links a heal would refresh, per media type. TMDB carries movies/shows;
+// games are the two-provider medium (IGDB + RAWG) and heal both. The `rawData`
+// guard on the game links is deliberate and predates this — a game link with no
+// blob has nothing to refresh in place.
+type HealProvider = "tmdb" | "igdb" | "rawg";
+
+function healableLinks(links: MediaLink[], type: MediaType): { link: MediaLink; provider: HealProvider }[] {
+  const out: { link: MediaLink; provider: HealProvider }[] = [];
+  if (type === "movie" || type === "show") {
+    const tmdb = links.find((l) => l.source === "tmdb");
+    if (tmdb) out.push({ link: tmdb, provider: "tmdb" });
+  } else if (type === "game") {
+    for (const provider of ["igdb", "rawg"] as const) {
+      const link = links.find((l) => l.source === provider);
+      if (link && link.rawData) out.push({ link, provider });
+    }
+  }
+  return out;
+}
+
+const isStale = (l: MediaLink) => (l.projectionVersion ?? 0) < PROJECTION_VERSION;
+
+// The host each provider's fetches actually go to. Imported from the source
+// modules rather than restated, because http.ts's circuit breaker is keyed by
+// host and a typo here would silently disable the check.
+const PROVIDER_HOST: Record<"tmdb" | "igdb" | "rawg", string> = {
+  tmdb: TMDB_HOST,
+  igdb: IGDB_HOST,
+  rawg: RAWG_HOST,
+};
+
+export interface HealOutcome {
+  /** At least one stale link was refetched and persisted — the catalog improved. */
+  healed: boolean;
+  /**
+   * A refresh was needed, could not be done (provider circuit open, or the
+   * fetch didn't land inside the budget), and the item is left with NO
+   * up-to-date link at all. Anything derived from it is therefore PROVISIONAL:
+   * the caller must report "not yet", never a number computed from a row it
+   * knows is thin, and never a final "no".
+   *
+   * Note the "no up-to-date link AT ALL" part. Games are a two-provider medium,
+   * so a dead RAWG next to a live IGDB still leaves real facets to score from —
+   * deferring those would trade a 66 s stall for a permanently missing badge,
+   * which is the same complaint wearing different clothes. Only an item with
+   * nothing fresh on it is genuinely unscoreable-for-now.
+   *
+   * This is also the distinction the old boolean return could not make at all:
+   * `false` meant both "nothing needed doing" and "the provider is down", which
+   * is how a dead RAWG turned into cards that were permanently score-less
+   * rather than pending.
+   */
+  incomplete: boolean;
+}
+
+type FetchOutcome =
+  | { kind: "fresh"; meta: MetaLink }
+  // The provider answered and has no such item — refetching will never help.
+  | { kind: "miss" }
+  // Threw (including the breaker's ProviderUnavailableError). Cheap and already
+  // failure-isolated; worth asking again later, but it says nothing about latency.
+  | { kind: "unavailable" }
+  // Didn't land inside the budget. This is the EXPENSIVE outcome and the only
+  // one that writes the host off for the rest of the request — a throw can be
+  // one bad id (rawgGet throws on a 404), a timeout is the provider itself.
+  | { kind: "timeout" };
+
+const TIMED_OUT = Symbol("heal-timed-out");
+
+/**
+ * A per-REQUEST heal budget. Create one per request and pass it to every
+ * healLinks call in that request; omit it entirely (the default) for the
+ * unbounded behavior every caller had before, which is what /api/detail and the
+ * sync-shaped paths still want.
+ *
+ * Two bounds, because either alone is insufficient:
+ *  - `deadlineAt` caps the WHOLE request, so 24 slow-but-alive calls can't
+ *    add up to minutes;
+ *  - `perCallMs` caps ONE call, so the first dead provider can't swallow the
+ *    entire budget and starve every later item — including the items on a
+ *    healthy provider sitting behind it in the same batch.
+ * And `down` remembers hosts that already timed out here, so the second, third
+ * and twenty-fourth game in a batch cost nothing at all rather than `perCallMs`
+ * each. http.ts's breaker needs three hard failures to latch; within one request
+ * one timeout is already enough evidence to stop paying.
+ */
+export interface HealBudget {
+  deadlineAt: number;
+  perCallMs: number;
+  down: Set<string>;
+}
+
+// >10× a measured healthy fetchById (~180 ms for an IGDB heal), so a merely slow
+// provider still completes, while a dead one is written off after ONE call
+// instead of once per item.
+export const DEFAULT_HEAL_CALL_MS = 2_500;
+
+// …and never more than this share of the whole budget, whatever the constant
+// says. Without it a small total (a test, or a tuned-down HEAL_BUDGET_MS) lets
+// the FIRST dead call spend everything, and the healthy provider sitting behind
+// it in the same batch gets deferred for no reason — the exact starvation the
+// per-call cap exists to prevent.
+const MAX_CALL_SHARE = 4;
+
+export function createHealBudget(totalMs: number, perCallMs = DEFAULT_HEAL_CALL_MS): HealBudget {
+  return {
+    deadlineAt: Date.now() + totalMs,
+    perCallMs: Math.min(perCallMs, totalMs / MAX_CALL_SHARE),
+    down: new Set(),
+  };
+}
+
+// Fetch one stale link's fresh blob, giving up after `budgetMs`.
+//
+// Giving up does NOT cancel the request — it can't; `fetchById` owns its own
+// abort signal (httpFetch's per-attempt timeout). So the in-flight call is left
+// to finish and, if it eventually lands, still PERSISTED: the heal is a backfill
+// that only has to succeed once ever, and throwing away a result we already paid
+// for would make an outage's recovery slower for no benefit. The request-local
+// `link.rawData` is deliberately NOT mutated on that late path — the caller has
+// already scored without it and must not see the object change underneath it.
+async function fetchFresh(
+  provider: "tmdb" | "igdb" | "rawg",
+  link: MediaLink,
+  type: MediaType,
+  budgetMs: number
+): Promise<FetchOutcome> {
+  const pending = METADATA[provider]?.fetchById?.(link.sourceId, type);
+  if (!pending) return { kind: "miss" };
+
+  // Attached NOW, so a rejection that arrives after we stop waiting is already
+  // handled and can never surface as an unhandled rejection.
+  const settled: Promise<FetchOutcome> = pending.then(
+    (meta): FetchOutcome => (meta ? { kind: "fresh", meta } : { kind: "miss" }),
+    (): FetchOutcome => ({ kind: "unavailable" })
+  );
+  if (!Number.isFinite(budgetMs)) return settled;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), Math.max(budgetMs, 0));
+  });
+  const winner = await Promise.race([settled, expiry]);
+  clearTimeout(timer);
+  if (winner !== TIMED_OUT) return winner;
+
+  void settled.then((late) => { if (late.kind === "fresh") storeRefreshed(link, type, late.meta); });
+  return { kind: "timeout" };
+}
+
+/**
+ * Refresh every stale link on an item, and report whether anything that needed
+ * refreshing was left un-refreshed.
+ *
+ * `budget` is opt-in, and omitting it means unbounded — exactly the behavior
+ * every existing caller had. Latency-sensitive callers pass one; the
+ * detail/sync-shaped callers keep waiting, because they would rather be slow
+ * than lose an item's metadata. That mirrors the split http.ts already draws
+ * with `budgetMs`, one layer up: per-source FAILURE isolation is not per-source
+ * LATENCY isolation, and a loop that awaits an enricher per item is a provider
+ * path however it is named.
+ */
+export async function healLinks(
+  links: MediaLink[],
+  type: MediaType,
+  budget?: HealBudget
+): Promise<HealOutcome> {
+  const out: HealOutcome = { healed: false, incomplete: false };
+  const healable = healableLinks(links, type);
+  // Fresh BEFORE we start — a second provider already at the current projection
+  // version means this item is scoreable whatever happens below.
+  let anyFresh = healable.some(({ link }) => !isStale(link));
+  let missed = false;
+
+  for (const { link, provider } of healable.filter(({ link }) => isStale(link))) {
+    const host = PROVIDER_HOST[provider];
+    // Already known down — across requests (the breaker) or within this one.
+    // Skip without paying anything, and SAY SO: the call would fail fast either
+    // way, but the caller can't tell a fast failure from a clean no-op, and
+    // that ambiguity is what left cards permanently blank.
+    if (isProviderCircuitOpen(host) || budget?.down.has(host)) { missed = true; continue; }
+
+    let callMs = Infinity;
+    if (budget) {
+      const left = budget.deadlineAt - Date.now();
+      if (left <= 0) { missed = true; continue; }
+      callMs = Math.min(left, budget.perCallMs);
+    }
+
+    const result = await fetchFresh(provider, link, type, callMs);
+    if (result.kind === "fresh") {
+      link.rawData = result.meta.rawData;
+      storeRefreshed(link, type, result.meta);
+      out.healed = true;
+      anyFresh = true;
+    } else if (result.kind === "timeout") {
+      missed = true;
+      budget?.down.add(host);
+    } else if (result.kind === "unavailable") {
+      missed = true;
+    }
+    // "miss" is a settled answer — the provider has no such item, so there is
+    // nothing to come back for and the caller may treat what it has as final.
+  }
+
+  out.incomplete = missed && !anyFresh;
+  return out;
+}
+
+// Refresh a stored movie/show's TMDB link in-memory when it predates the
+// current fetch shape. Returns whether the stored data was replaced.
+//
+// Kept as-is for the callers that only care whether something changed
+// (/api/detail, /api/facet/mine) — they run unbounded, exactly as before.
 export async function ensureTmdbDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
   if (type !== "movie" && type !== "show") return false;
-  const tmdb = links.find((l) => l.source === "tmdb");
-  if (!tmdb || (tmdb.projectionVersion ?? 0) >= PROJECTION_VERSION) return false;
-  try {
-    const fresh = await METADATA.tmdb?.fetchById?.(tmdb.sourceId, type);
-    if (fresh) {
-      tmdb.rawData = fresh.rawData;
-      storeRefreshed(tmdb, type, fresh);
-      return true;
-    }
-  } catch { /* keep stored data */ }
-  return false;
+  return (await healLinks(links, type)).healed;
 }
 
 // Persist a blob we just refetched because the stored one was stale, so the row
@@ -174,21 +382,7 @@ function storeRefreshed(link: MediaLink, type: MediaType, fresh: MetaLink): void
 // permanently stale. Now keyed on the explicit projection_version stamp.
 export async function ensureGameDetail(links: MediaLink[], type: MediaType): Promise<boolean> {
   if (type !== "game") return false;
-  let refreshed = false;
-  const stale: { link: MediaLink; provider: "igdb" | "rawg" }[] = [];
-  for (const provider of ["igdb", "rawg"] as const) {
-    const link = links.find((l) => l.source === provider);
-    if (link && link.rawData && (link.projectionVersion ?? 0) < PROJECTION_VERSION) {
-      stale.push({ link, provider });
-    }
-  }
-  for (const { link, provider } of stale) {
-    try {
-      const fresh = await METADATA[provider]?.fetchById?.(link.sourceId, type);
-      if (fresh) { link.rawData = fresh.rawData; storeRefreshed(link, type, fresh); refreshed = true; }
-    } catch { /* keep stored data */ }
-  }
-  return refreshed;
+  return (await healLinks(links, type)).healed;
 }
 
 // Which links the Fandex Score is computed from (2026-07-30). NOT the same set

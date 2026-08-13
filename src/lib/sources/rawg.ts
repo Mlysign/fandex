@@ -2,6 +2,10 @@ import { httpFetch } from "@/lib/http";
 import { log } from "@/lib/logger";
 
 const BASE = "https://api.rawg.io/api";
+// Derived, not written out again: http.ts's circuit breaker is keyed by HOST, so
+// a caller asking "is RAWG already known-down?" must use the same string this
+// module's requests do. Hard-coding it a second time is how the two drift.
+export const RAWG_HOST = new URL(BASE).host;
 const KEY = process.env.RAWG_API_KEY!;
 
 async function rawgGet(endpoint: string, params: Record<string, string> = {}) {

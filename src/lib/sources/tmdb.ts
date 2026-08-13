@@ -1,6 +1,9 @@
 import { httpFetch } from "@/lib/http";
 
 const BASE = "https://api.themoviedb.org/3";
+// See RAWG_HOST in sources/rawg.ts — the breaker is keyed by host, so it's
+// derived from BASE rather than restated.
+export const TMDB_HOST = new URL(BASE).host;
 const KEY = process.env.TMDB_API_KEY!;
 
 async function tmdbGet(endpoint: string, params: Record<string, string> = {}) {

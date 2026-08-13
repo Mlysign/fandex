@@ -21,6 +21,19 @@ const MAX_PER_REQUEST = 24;
 // One frame's worth of card mounts, so a whole rail coalesces into one call.
 const DEBOUNCE_MS = 80;
 
+// 2026-08-13 (SM44) — the route can now answer "not yet" for an id it couldn't
+// heal inside its budget (a provider is down or slow). That is NOT the same as
+// "no score", and treating it as one is what would turn the latency fix into a
+// regression: a null is cached forever, so one unlucky batch during an outage
+// would leave those cards permanently blank until a full reload.
+//
+// Deferred ids are retried with exponential backoff, then given up on. The cap
+// is the point: a multi-hour provider outage must not become a client-side poll
+// loop, so after the last attempt the id settles as "no score" (spinner stops,
+// card looks like any other unscoreable one) and a reload asks again.
+const RETRY_BASE_MS = 4_000;
+const MAX_RETRIES = 3; // → retried at +4s, +12s, +28s, then settled
+
 export interface PendingScore { score: number; center: number | null }
 
 // id → resolved score, or null for "asked, and the answer is genuinely no
@@ -29,11 +42,40 @@ export interface PendingScore { score: number; center: number | null }
 const resolved = new Map<string, PendingScore | null>();
 const waiting = new Set<string>();
 const listeners = new Map<string, Set<(v: PendingScore | null) => void>>();
+// Deferred ids waiting out their backoff. Kept out of `resolved` (so they stay
+// pending, not final) AND out of `waiting` (so they aren't re-sent immediately),
+// which means `request()` has to consult this too or a re-mounting card would
+// walk straight past the backoff.
+const retrying = new Map<string, ReturnType<typeof setTimeout>>();
+const attempts = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight = false;
 
 function emit(id: string, v: PendingScore | null) {
   for (const fn of listeners.get(id) ?? []) fn(v);
+}
+
+function settle(id: string, v: PendingScore | null) {
+  resolved.set(id, v);
+  emit(id, v);
+}
+
+function scheduleFlush() {
+  if (!timer) timer = setTimeout(flush, DEBOUNCE_MS);
+}
+
+// "Ask again later." No emit: the card stays in its pending treatment, which is
+// the honest rendering of "we're still trying".
+function deferRetry(id: string) {
+  const n = (attempts.get(id) ?? 0) + 1;
+  attempts.set(id, n);
+  if (n > MAX_RETRIES) { settle(id, null); return; }
+  const delay = RETRY_BASE_MS * 2 ** (n - 1);
+  retrying.set(id, setTimeout(() => {
+    retrying.delete(id);
+    waiting.add(id);
+    scheduleFlush();
+  }, delay));
 }
 
 async function flush() {
@@ -51,29 +93,65 @@ async function flush() {
       body: JSON.stringify({ ids: batch }),
     });
     if (res.ok) {
-      const data: { scores?: Record<string, PendingScore | null> } = await res.json();
+      const data: {
+        scores?: Record<string, PendingScore | null>;
+        deferred?: string[];
+        skipped?: string[];
+      } = await res.json();
+      // Both mean "we did not answer for this id" — over MAX_IDS, or out of
+      // heal budget. Neither is an answer to cache.
+      const askAgain = new Set([...(data.deferred ?? []), ...(data.skipped ?? [])]);
       for (const id of batch) {
-        const v = data.scores?.[id] ?? null;
-        resolved.set(id, v);
-        emit(id, v);
+        if (askAgain.has(id)) { deferRetry(id); continue; }
+        settle(id, data.scores?.[id] ?? null);
       }
+    } else if (res.status >= 500) {
+      // Our own outage, not an answer — same treatment as deferred.
+      for (const id of batch) deferRetry(id);
     } else {
-      // Don't strand a spinner on a failed request — settle as "no score".
-      for (const id of batch) { resolved.set(id, null); emit(id, null); }
+      // 4xx (expired session, bad request): retrying won't change it. Don't
+      // strand a spinner — settle as "no score".
+      for (const id of batch) settle(id, null);
     }
   } catch {
-    for (const id of batch) { resolved.set(id, null); emit(id, null); }
+    // Network failure — worth one more try, bounded by the same cap.
+    for (const id of batch) deferRetry(id);
   } finally {
     inFlight = false;
     // Anything that arrived mid-flight (or came back in `skipped`) goes next.
-    if (waiting.size > 0 && !timer) timer = setTimeout(flush, DEBOUNCE_MS);
+    if (waiting.size > 0) scheduleFlush();
   }
 }
 
 function request(id: string) {
-  if (resolved.has(id) || waiting.has(id)) return;
+  if (resolved.has(id) || waiting.has(id) || retrying.has(id)) return;
   waiting.add(id);
-  if (!timer) timer = setTimeout(flush, DEBOUNCE_MS);
+  scheduleFlush();
+}
+
+/**
+ * Subscribe to one id's score, requesting it if nobody has yet. Returns an
+ * unsubscribe.
+ *
+ * Deliberately outside the hook: the batching + deferred-retry machinery is
+ * where this module's contract lives, and keeping it callable without a
+ * renderer is what lets it be tested directly (the suite runs in `node`, not
+ * jsdom).
+ */
+export function subscribePendingScore(id: string, onResolved: (v: PendingScore | null) => void): () => void {
+  let set = listeners.get(id);
+  if (!set) { set = new Set(); listeners.set(id, set); }
+  set.add(onResolved);
+  request(id);
+  return () => {
+    set.delete(onResolved);
+    if (set.size === 0) listeners.delete(id);
+  };
+}
+
+/** Whether this id has a final answer cached. */
+export function hasResolvedScore(id: string): boolean {
+  return resolved.has(id);
 }
 
 /**
@@ -108,16 +186,7 @@ export function usePendingFandexScore(id: string | undefined, pending: boolean |
       return;
     }
 
-    const onResolved = () => bump((n) => n + 1);
-    let set = listeners.get(id);
-    if (!set) { set = new Set(); listeners.set(id, set); }
-    set.add(onResolved);
-    request(id);
-
-    return () => {
-      set.delete(onResolved);
-      if (set.size === 0) listeners.delete(id);
-    };
+    return subscribePendingScore(id, () => bump((n) => n + 1));
   }, [id, active, settled]);
 
   return { score, loading: !settled };
@@ -128,6 +197,9 @@ export function __resetPendingScoreCache() {
   resolved.clear();
   waiting.clear();
   listeners.clear();
+  attempts.clear();
+  for (const t of retrying.values()) clearTimeout(t);
+  retrying.clear();
   if (timer) { clearTimeout(timer); timer = null; }
   inFlight = false;
 }

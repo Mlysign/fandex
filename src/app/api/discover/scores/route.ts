@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { extractFacets } from "@/lib/facets";
 import { buildProfile, computeFandexScore, invalidateDiscoveryCache } from "@/lib/discovery";
-import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
+import { loadLinks, healLinks, createHealBudget } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
 import type { MediaType } from "@/types";
@@ -32,12 +32,39 @@ import type { MediaType } from "@/types";
 //     title-searches every other provider for a not-yet-linked source — fine
 //     for one item on its own page, multiplicative across a feed. Same line
 //     /api/facet/mine drew, for the same reason.
+//
+// 2026-08-13 (SM44) — and a LATENCY guard, which the cost guards above did not
+// give us. MAX_IDS bounds the number of calls, not their duration: with RAWG
+// down (Cloudflare 522, ~19.8 s × 3 attempts ≈ 60 s per call) a 24-game batch
+// measured **66 s** on one half-open probe, and ~3 min on a cold process before
+// the breaker latched. The client's fetch simply hangs for all of it and no
+// badge ever paints — which is exactly the "the score is missing while I'm
+// searching" report this route was supposed to fix. See the deferred contract
+// below; the general rule is in AGENTS.md ("per-source FAILURE isolation is not
+// per-source LATENCY isolation") and it applies here even though this reads as
+// a scoring endpoint: any route that awaits an enricher in a loop IS a provider
+// path.
 export const dynamic = "force-dynamic";
 
 // One rail's worth. The client batches its visible pending cards; anything
 // beyond this is dropped rather than silently truncated into a partial answer
 // the caller can't distinguish (the response says which ids were skipped).
 const MAX_IDS = 24;
+
+// Whole-REQUEST wall clock for the heal loop — not http.ts's per-call
+// BROWSE_BUDGET_MS, which wouldn't bound this: one request makes up to 48
+// provider calls (24 games × IGDB + RAWG), so a per-call budget of 8 s still
+// admits minutes in aggregate. 10 s is ~2× a measured healthy batch (4.3 s for
+// 24 IGDB heals), so nothing that would have finished gets cut off, while a dead
+// provider costs one budget instead of one ladder per item.
+export const DEFAULT_HEAL_BUDGET_MS = 10_000;
+
+// Overridable like SYNC_BUDGET_MS, and for the same reason — a test must not sit
+// through the real budget to prove the route gives up.
+export function healBudgetMs(): number {
+  const raw = Number(process.env.HEAL_BUDGET_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_HEAL_BUDGET_MS;
+}
 
 export const POST = withUser(async (req: NextRequest, session) => {
   let body: unknown;
@@ -58,6 +85,16 @@ export const POST = withUser(async (req: NextRequest, session) => {
 
   const profile = buildProfile(session.userId);
   const scores: Record<string, { score: number; center: number } | null> = {};
+  // The THIRD state, and the easiest thing here to get wrong. `scores[id] =
+  // null` means "asked, and the answer is genuinely no score" — the client
+  // caches that as FINAL and stops the spinner forever. An item we simply
+  // couldn't heal in time is not that: scoring it from links we know are stale
+  // would hand back a depressed number (the exact thing `fandexPending` exists
+  // to avoid), and calling it null would make it permanently unscoreable in the
+  // client's module cache until a reload. So it goes here instead, and is
+  // deliberately ABSENT from `scores` — a deferred id must never also be a null.
+  const deferred: string[] = [];
+  const budget = createHealBudget(healBudgetMs());
   let healed = false;
 
   for (const id of ids) {
@@ -66,16 +103,17 @@ export const POST = withUser(async (req: NextRequest, session) => {
     const item = get<{ type: MediaType }>("SELECT type FROM media_items WHERE id = ?", [id]);
     if (!item) { scores[id] = null; continue; }
 
-    // Both no-op unless the row is genuinely stale, and persist when they do.
-    const a = await ensureTmdbDetail(links, item.type);
-    const b = await ensureGameDetail(links, item.type);
-    if (a || b) healed = true;
+    // No-ops (and costs nothing) unless the row is genuinely stale; persists
+    // when it heals. The shared budget means the first dead provider is written
+    // off for the rest of the loop, so a healthy source later in the same batch
+    // still heals, and past the deadline it stops calling providers at all — an
+    // item with nothing stale still scores either way, needing no provider.
+    const heal = await healLinks(links, item.type, budget);
+    if (heal.healed) healed = true;
+    if (heal.incomplete) { deferred.push(id); continue; }
 
     const merged = mergeLinks(links, item.type);
     const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
-    // A null here is honest and final: this item has too little metadata to
-    // score even after healing (or the profile is cold). The client stops
-    // showing a spinner for it rather than retrying forever.
     scores[id] = fx ? { score: fx.score, center: fx.center } : null;
   }
 
@@ -86,5 +124,5 @@ export const POST = withUser(async (req: NextRequest, session) => {
   // again.
   if (healed) invalidateDiscoveryCache();
 
-  return NextResponse.json({ scores, skipped });
+  return NextResponse.json({ scores, skipped, deferred });
 });

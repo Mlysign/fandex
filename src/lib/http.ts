@@ -147,6 +147,27 @@ function recordFailure(host: string, wasProbe: boolean, reason: string) {
   }
 }
 
+/**
+ * Is this host's breaker OPEN right now — i.e. do we already know that a call
+ * to it will fail without being made?
+ *
+ * Read-only: it never opens, closes, or consumes the half-open probe, so asking
+ * cannot change what the next real call does. It exists so a caller that would
+ * otherwise start a doomed request can skip it and report "unavailable"
+ * HONESTLY, rather than discovering the outage by catching a throw and then
+ * being unable to tell that outcome apart from "nothing needed doing" (see
+ * healLinks in detail/enrich.ts — that ambiguity is what turned a dead provider
+ * into a permanently score-less card).
+ *
+ * Note it stays false during the half-open window: the probe is how the breaker
+ * recovers, so it must not be skipped. A caller that can't afford to pay for one
+ * needs a deadline too, not just this check.
+ */
+export function isProviderCircuitOpen(host: string): boolean {
+  const b = _breakers.get(host);
+  return !!b && b.openUntil > Date.now();
+}
+
 /** Open breakers, for /api/health. Empty object = every provider looks healthy. */
 export function providerBreakerSnapshot(): Record<string, { openForMs: number; failures: number }> {
   const now = Date.now();

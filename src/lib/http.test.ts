@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { httpFetch, ProviderUnavailableError, providerBreakerSnapshot, __resetBreakers } from "./http";
+import { httpFetch, ProviderUnavailableError, providerBreakerSnapshot, isProviderCircuitOpen, __resetBreakers } from "./http";
 
 // P8: httpFetch must behave like fetch on success, retry only idempotent
 // requests on transient failures, and never retry writes or 429s.
@@ -186,6 +186,29 @@ describe("provider circuit breaker", () => {
     f.mockResolvedValue(resp(200));
     expect((await httpFetch("https://flaky.test")).status).toBe(200);
     expect(f).toHaveBeenCalled(); // not short-circuited
+  });
+
+  // SM44 — callers that would otherwise start a doomed request ask this first,
+  // so they can report "unavailable" instead of catching a throw they can't tell
+  // apart from "nothing needed doing" (detail/enrich.ts's healLinks).
+  it("isProviderCircuitOpen answers without opening, closing, or consuming a probe", async () => {
+    const f = vi.fn().mockResolvedValue(resp(500));
+    vi.stubGlobal("fetch", f);
+
+    expect(isProviderCircuitOpen("asking.test")).toBe(false); // never seen — not "open"
+    for (let i = 0; i < 3; i++) await httpFetch("https://asking.test");
+    expect(isProviderCircuitOpen("asking.test")).toBe(true);
+
+    // Asking is read-only: the next real call still fails fast for the same
+    // reason it would have, and asking again hasn't changed the window.
+    f.mockClear();
+    isProviderCircuitOpen("asking.test");
+    await expect(httpFetch("https://asking.test")).rejects.toBeInstanceOf(ProviderUnavailableError);
+    expect(f).not.toHaveBeenCalled();
+    expect(isProviderCircuitOpen("asking.test")).toBe(true);
+
+    // A different host is unaffected — it's per-host, like the breaker itself.
+    expect(isProviderCircuitOpen("other.test")).toBe(false);
   });
 
   it("reports open circuits for /api/health, and closes them on recovery", async () => {
