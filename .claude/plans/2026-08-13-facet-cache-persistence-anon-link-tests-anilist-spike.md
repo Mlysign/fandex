@@ -102,7 +102,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: none — measurement task.
   - Depends on: none
 
-- [ ] **T2** — Add a persisted facet-payload cache table
+- [x] **T2** — Add a persisted facet-payload cache table
   - Files: `src/lib/db.ts`, `src/lib/facetCacheStore.ts` (new), `src/lib/facetCacheStore.test.ts` (new)
   - Detail: Append to `db.ts`'s `CREATE TABLE IF NOT EXISTS` block (NOT `migrations.ts`):
     a table `facet_page_cache` with `key TEXT PRIMARY KEY`, `payload TEXT NOT NULL`,

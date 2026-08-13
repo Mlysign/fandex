@@ -186,6 +186,24 @@ function ensureSchema(db: Database.Database) {
       error TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sync_log_user ON sync_log(user_id, provider);
+
+    -- Persisted L2 for the public facet payload cache (2026-08-13).
+    -- Why it is here and not in migrations.ts: a BRAND-NEW table is additive and
+    -- idempotent, so it is valid against an old pre-migration schema, which is
+    -- exactly what this block must stay. The rule it must not break is the other
+    -- one: a column added by a migration needs its index in that same migration.
+    -- A new table carrying its own index here is the documented-safe pattern.
+    --
+    -- Not user-scoped on purpose: buildPublicFacetDetail never takes a userId,
+    -- so nothing personal can land here. Note the corollary for GDPR erasure --
+    -- deleteAccount() finds personal tables by a column literally named
+    -- user_id, and this table deliberately has none, so it is correctly skipped.
+    CREATE TABLE IF NOT EXISTS facet_page_cache (
+      key TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_facet_page_cache_created ON facet_page_cache(created_at);
   `);
 
   // ── Lightweight migrations for existing databases ──────────────
