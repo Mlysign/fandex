@@ -1,4 +1,4 @@
-import { httpFetch } from "@/lib/http";
+import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import { log } from "@/lib/logger";
 
 const STEAM_API = "https://api.steampowered.com";
@@ -159,6 +159,88 @@ export async function getSteamTagMap(): Promise<Record<number, string>> {
 
 export function resolveTagNames(tagIds: number[], tagMap: Record<number, string>): string[] {
   return tagIds.map((id) => tagMap[id]).filter(Boolean).slice(0, 8);
+}
+
+/** Tests only — the tag map is module-global and would leak across cases. */
+export function __resetSteamTagCache() { tagCache = {}; }
+
+/** Steam tag NAME → id, case-insensitively. Null when Steam has no such tag. */
+export async function steamTagId(name: string): Promise<number | null> {
+  const map = await getSteamTagMap();
+  const want = name.trim().toLowerCase();
+  for (const [id, label] of Object.entries(map)) {
+    if (label.toLowerCase() === want) return Number(id);
+  }
+  return null;
+}
+
+// ── Tag search (2026-08-13) ───────────────────────────────────────
+//
+// Steam is by far the best TAG vocabulary for games — it has "Deckbuilding",
+// "Tower Defense" and "Roguelike Deckbuilder" as first-class tags, where IGDB's
+// keyword list matched a handful of obscure indies and TMDB/RAWG had nothing.
+// Measured against the live API: Tower Defense 4,080 games · Deckbuilding 4,515
+// · **both together 277** (Overdungeon, ORX, Necronator: Dead Wrong). Those 277
+// are the answer to a query the other three providers returned ZERO for.
+//
+// ⚠️ `filters.tagids` is silently IGNORED — it returns HTTP 200 and the entire
+// catalog (260,878 records) for every query, so a naive attempt looks like it
+// works. The real filter is `tagids_must_match`, a list of GROUPS: OR within a
+// group, AND between groups. That AND is exactly what the search needs, and it
+// is why the tags go in one group each.
+//
+// `sort: 2` is a measured choice, not a guess — of sorts 0–5 it is the only one
+// that surfaces the well-known titles; the rest return alphabetical or
+// shovelware (sort 0 and 3 both lead with untranslated asset flips).
+//
+// Undocumented, like `IStoreBrowseService/GetItems` already used above: same
+// host, same key, same class of dependency — but it can change without notice.
+export async function searchSteamByTags(tagNames: string[], limit = 40): Promise<any[]> {
+  if (!API_KEY || !tagNames.length) return [];
+  const ids = await Promise.all(tagNames.map((n) => steamTagId(n)));
+  // A tag Steam doesn't know can't be expressed, and dropping it would quietly
+  // widen "A and B" into "A" — a wider set wearing a narrower filter's label.
+  if (ids.some((id) => id == null)) return [];
+
+  const input = {
+    query: {
+      start: 0,
+      count: Math.min(limit, 100),
+      sort: 2,
+      filters: {
+        type_filters: { include_games: true },
+        tagids_must_match: ids.map((id) => ({ tagids: [id] })),
+      },
+    },
+    context: { language: "english", country_code: "DE", steam_realm: 1 },
+    data_request: {
+      include_release: true,
+      include_basic_info: true,
+      include_short_description: true,
+      include_platforms: true,
+      include_ratings: true,
+      include_tag_count: 20,
+      include_reviews: true,
+      include_assets: true,
+    },
+  };
+  try {
+    const res = await httpFetch(
+      `${STEAM_API}/IStoreQueryService/Query/v1/?key=${API_KEY}&input_json=${encodeURIComponent(JSON.stringify(input))}`,
+      { budgetMs: BROWSE_BUDGET_MS }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items: any[] = data.response?.store_items ?? [];
+    // Resolve tag ids to names on the way out, exactly as the metadata provider
+    // does, so a stored row from this path carries the same `resolvedTags` the
+    // merge already unions into an item's tags.
+    const tagMap = await getSteamTagMap();
+    for (const item of items) {
+      if (item.tagids) item.resolvedTags = resolveTagNames(item.tagids, tagMap);
+    }
+    return items;
+  } catch { return []; }
 }
 
 // Extract a YYYY-MM-DD release date from a Steam store item, if available.

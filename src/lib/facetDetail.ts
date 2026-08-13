@@ -24,6 +24,7 @@ import { fandexForPage } from "@/lib/liveDiscover";
 import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTags, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
+import { searchSteamByTags, extractSteamDate } from "@/lib/sources/steam";
 import { normalizeName, extractYear } from "@/lib/merge";
 import type { FacetRole } from "@/lib/facets";
 import { tagKey } from "@/lib/facets";
@@ -93,7 +94,7 @@ export interface FacetDetailPayload {
 
 // Normalized external title (crowd vote on a 0-10 scale).
 interface ExtTitle {
-  source: "tmdb" | "rawg" | "igdb";
+  source: "tmdb" | "rawg" | "igdb" | "steam";
   sourceId: string;
   type: MediaType;
   title: string;
@@ -200,6 +201,28 @@ function rawgGame(g: any): ExtTitle {
     raw: g,
   };
 }
+// A Steam store item, from the tag search. `resolvedTags` is already attached by
+// searchSteamByTags, so a row persisted from here carries the same tag names the
+// merge unions into an item's tags (TAG_SOURCES includes "steam") — meaning a
+// game found this way is scoreable on Steam's vocabulary, not just findable.
+function steamGame(item: any): ExtTitle {
+  const appid = item.appid ?? item.id;
+  const capsule = item.assets?.asset_url_format && item.assets?.library_capsule
+    ? `https://shared.fastly.steamstatic.com/store_item_assets/${item.assets.asset_url_format.replace("${FILENAME}", item.assets.library_capsule)}`
+    : null;
+  const pct = item.reviews?.summary_filtered?.percent_positive;
+  return {
+    source: "steam", sourceId: String(appid), type: "game",
+    title: item.name || "Untitled",
+    releaseDate: extractSteamDate(item),
+    posterUrl: capsule ?? (appid ? `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg` : null),
+    // Steam reports % positive, not a 0-10 score — rescale to the shared scale.
+    vote: typeof pct === "number" && pct > 0 ? pct / 10 : null,
+    votes: item.reviews?.summary_filtered?.review_count ?? 0,
+    raw: { ...item, appid },
+  };
+}
+
 function igdbGame(g: any): ExtTitle {
   return {
     source: "igdb", sourceId: String(g.id), type: "game",
@@ -351,18 +374,38 @@ async function tagTitles(keys: string[]): Promise<ExtTitle[]> {
   let igdbGames: any[] = [];
   if (igdbConfigured()) reqs.push(discoverIgdbByTags(keys, 40).then((results) => { igdbGames = results; }));
 
+  // STEAM (2026-08-13) — the best tag vocabulary there is for games, and the
+  // reason this pull exists at all for a query like `deckbuilding` + `tower
+  // defense`: TMDB, RAWG and IGDB together returned ZERO for that pair, Steam
+  // returns 277. It expresses the conjunction natively (`tagids_must_match`), so
+  // no post-filter is needed here — see searchSteamByTags.
+  let steamGames: any[] = [];
+  reqs.push(searchSteamByTags(keys, 40).then((results) => { steamGames = results; }));
+
   await Promise.all(reqs);
 
-  const rawgTitleYears = new Set(
-    out.filter((t) => t.source === "rawg").map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
+  // Dedupe the game sources against each other by normalized title + release
+  // year — they use independent ids, so that key is the only thing that spans
+  // them (same key liveDiscover's dedupeGames uses for exactly this). RAWG lands
+  // first as the incumbent, then IGDB, then Steam; each is checked against
+  // everything already accepted, so a title present in all three appears once.
+  const titleYears = new Set(
+    out.map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
   );
+  const acceptGame = (key: string, title: string, date: string | null, build: () => ExtTitle) => {
+    if (seen.has(key)) return;
+    const dupeKey = `${normalizeName(title ?? "")}|${extractYear(date) ?? "?"}`;
+    if (titleYears.has(dupeKey)) return;
+    seen.add(key);
+    titleYears.add(dupeKey);
+    out.push(build());
+  };
   for (const g of igdbGames) {
-    const k = `game:igdb:${g.id}`;
-    if (seen.has(k)) continue;
-    const dupeKey = `${normalizeName(g.name ?? "")}|${extractYear(igdbReleaseDate(g)) ?? "?"}`;
-    if (rawgTitleYears.has(dupeKey)) continue;
-    seen.add(k);
-    out.push(igdbGame(g));
+    acceptGame(`game:igdb:${g.id}`, g.name ?? "", igdbReleaseDate(g), () => igdbGame(g));
+  }
+  for (const s of steamGames) {
+    const appid = s.appid ?? s.id;
+    acceptGame(`game:steam:${appid}`, s.name ?? "", extractSteamDate(s), () => steamGame(s));
   }
   return out;
 }

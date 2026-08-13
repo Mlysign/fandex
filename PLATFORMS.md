@@ -35,7 +35,7 @@ to a new platform/media type.
 | Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Trakt.tv | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | yes | Rating and watched history are separate. |
-| Steam | game | Connectable | ✅ Implemented | openid | R | R | | | | Read-only; wishlist pull only. |
+| Steam | game | Connectable + Metadata | ✅ Implemented | openid | R | R | | | | Read-only; wishlist pull only. **Also the best TAG source for games** — see below. |
 | RAWG | game | Connectable | ✅ Implemented | credentials | R/W | R | R/W | | yes | No review text. |
 | TMDB | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | | No watched concept; library = rated items. |
 | Letterboxd | movie | Connectable | 🔵 Hidden | oauth | R/W | R | R/W | R | yes | Hidden until a working API key exists. |
@@ -44,6 +44,37 @@ to a new platform/media type.
 | Rotten Tomatoes | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | Critic score, also sourced from OMDB (`Ratings[Source="Rotten Tomatoes"]`) — **inherits the OMDB key gap below**. |
 | Metacritic | movie, show, game | Metadata | ✅ Implemented | | | | R | | | Critic score. |
 | OMDB | movie, show | Metadata | ✅ Implemented ⚠️ | apikey | | | R | | | Feeds IMDb rating, box office, awards. **⚠️ Config, not code: the `OMDB_API_KEY` is currently invalid, so no IMDb/RT scores actually land in prod.** Check this before debugging a missing rating. |
+
+#### Steam as a game TAG source (2026-08-13)
+
+Steam has by far the best tag vocabulary for games, and it is now what makes a
+multi-tag game search work at all. Measured live: `Tower Defense` **4,080**
+games · `Deckbuilding` **4,515** · **both together 277**. The same pair returns
+**zero** from TMDB, RAWG and IGDB combined — IGDB's keyword list matches a handful
+of obscure indies and the other two have no such tag.
+
+- **Search:** `IStoreQueryService/Query/v1` with **`tagids_must_match`** — a list
+  of groups that OR within and **AND between**, which is exactly the shape a
+  multi-tag filter needs. Tag names resolve via the existing `GetTagList` map.
+- **⚠️ `filters.tagids` is silently IGNORED.** It answers HTTP 200 with the whole
+  catalog (260,878 records) for every query, so three different tag combinations
+  come back byte-identical and all of them look like they worked. A test pins the
+  correct key for exactly this reason.
+- **`sort: 2`** is measured, not guessed — of sorts 0–5 it is the only one that
+  surfaces real titles; the rest are alphabetical or lead with asset flips.
+- **Tags were already scored, before any of this.** `normalizeSteam` sets
+  `out.tags = d.resolvedTags` and `mergeLinks`' `TAG_SOURCES` already lists
+  `steam`, so a Steam link's tags have always reached `extractFacets` and the
+  Fandex Score. What was missing was only *search* — tags existed on the ~495
+  linked games and nowhere else.
+- **Terms:** `IStoreQueryService` is **undocumented** — it is what the store
+  front-end uses — but it sits on `api.steampowered.com` behind the existing
+  `STEAM_API_KEY`, the same class of dependency as `IStoreBrowseService/GetItems`
+  (already used for app details) and rather safer than `searchSteamByName`, which
+  scrapes store HTML. It can change without notice. **Re-read Steam's API terms
+  on commercial use before flipping `MONETIZATION_ENABLED`** — not a blocker
+  while the site is non-commercial, but it is the kind of clause that parked both
+  Backloggd and Hardcover.
 
 ### Candidates (to do / to evaluate / rejected)
 
