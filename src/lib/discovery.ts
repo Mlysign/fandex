@@ -948,6 +948,13 @@ export interface DiscoverResultItem {
   reasons: Reason[];
   fandexScore: number | null;
   fandexCenter: number | null;
+  /**
+   * True when this row could not be scored but the user HAS enough signal for a
+   * score to exist — the card should ask `/api/discover/scores` to heal and
+   * score it. Mirrors the flag liveDiscover.ts already sets; without it here,
+   * advanced search rendered permanently blank badges (2026-08-13).
+   */
+  fandexPending: boolean;
 }
 
 export interface FindResult {
@@ -998,7 +1005,15 @@ export function find(userId: string, req: FindRequest): FindResult {
   const score10 = (v: DiscoveryVector) => (v.communityAvg == null ? null : v.communityAvg / 10);
   const prior = ratingPrior(scored.map(({ v }) => ({ score10: score10(v), votes: v.communityVotes })));
   const bayes = (v: DiscoveryVector) => bayesRating(score10(v), v.communityVotes, prior);
-  const fandexUsable = sort === "fandexScore" && rawProfile.ratedItemCount >= MIN_RATED_FOR_FANDEX_SCORE;
+  // Two DIFFERENT questions that used to share one answer, split 2026-08-13:
+  //  - `profileUsable` — has this user enough signal for a score to mean
+  //    anything? Governs whether an unscored card may ask for one.
+  //  - `fandexUsable` — should the SORT use it? Additionally requires that the
+  //    user actually chose that sort.
+  // Conflating them is what hid the badge: with sort=Popularity the old flag was
+  // false, so nothing downstream believed a score was available at all.
+  const profileUsable = rawProfile.ratedItemCount >= MIN_RATED_FOR_FANDEX_SCORE;
+  const fandexUsable = sort === "fandexScore" && profileUsable;
   scored.sort((a, b) => {
     switch (sort) {
       case "releaseDate": return cmpDate(a.v.releaseDate, b.v.releaseDate); // cmpDate defaults to desc (newest first)
@@ -1026,6 +1041,21 @@ export function find(userId: string, req: FindRequest): FindResult {
       rating: st?.rating ?? null,
       sources: v.sources, score, reasons,
       fandexScore, fandexCenter,
+      // 2026-08-13 — the advanced-search path was never connected to the lazy
+      // heal. `fandexPending` was set ONLY in liveDiscover.ts, so a filtered
+      // search (/api/discover/find -> this function) returned fandexScore: null
+      // for any row too thin to score and the card had no way to ask for one:
+      // PosterCard registers with usePendingFandexScore only when this flag is
+      // set. Unreleased titles have no communityScore to fall back on either, so
+      // the badge vanished entirely — and tag filters make it worse, because a
+      // thin browsed row's tags are the one thing it DOES have, so it matches
+      // tag queries readily and then scores blank.
+      //
+      // Same condition liveDiscover uses: only pend when a profile exists to
+      // score against, or a cold-start user would spin forever on a question
+      // that has no answer. `/api/discover/scores` heals the row and answers,
+      // and a genuine "still no score" comes back as null, which is final.
+      fandexPending: fandexScore == null && profileUsable,
     };
   });
 
