@@ -115,6 +115,19 @@ Scope: anon (sandbox pane) + logged-in (Nils's Chrome, real prod session) agains
 
 ---
 
+## Drop the `user_library` / `user_watchlist` cache tables ⬜ NOT STARTED · **not delegable**
+
+**The precondition is MET.** Migration 3's "expand-then-contract" never contracted: both tables are caches rebuilt from `user_item_state` by `matcher.ts`'s `rebuildCaches`. Dropping them was gated on `libRowsWithoutState` / `wishRowsWithoutState` reading **0/0 on prod**, and they do (confirmed 2026-08-12, and again post-redeploy).
+
+**⚠️ Do NOT delegate this to a background or low-effort session, and do not let a plan hand it to Sonnet.** It touches `migrations.ts` *and* `matcher.ts`'s write paths — AGENTS.md's two named "main loop at full effort" areas. The failure mode is silent user-data loss, and **every DB test starts from a fresh database, so none of them exercise the upgrade path production actually takes**. Green tests would prove nothing here. Written up 2026-08-13 during a session that deliberately declined to execute it.
+
+What it involves, so the next Opus session doesn't re-derive it:
+- A real migration in `migrations.ts` dropping both tables, plus removing `rebuildCaches`'s writes and every read path that still selects from them (`/api/library`, `/api/calendar`, `libraryAnalysis`, `loadMembershipGroups` are the known consumers — grep before trusting that list).
+- **Verification that actually counts:** run `node scripts/migrate.mjs` against a **copy of the real prod-shaped `data/rr.db`**, not a fresh one, and compare `user_library` / `user_watchlist` / `user_item_state` counts and a sample of rows before and after. The standalone path resolves neither the `@/*` alias nor extensionless specifiers, so an import mistake surfaces only there.
+- Take a Litestream snapshot reading first. Backups are now proven restorable (PR17 step 4), which is exactly the safety net this op needs.
+
+---
+
 ## Still open elsewhere
 
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now that the aggregate is a raw sum rather than a damped mean. **Time-gated:** revisit after a few weeks of real scores under the new formula (4 days as of 2026-08-02 — too soon; a re-tune now would fit noise).

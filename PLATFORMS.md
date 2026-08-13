@@ -51,7 +51,7 @@ to a new platform/media type.
 |---|---|---|---|---|---|---|---|---|---|---|
 | Hardcover | book (+ audiobook format) | Connectable + Metadata | ⏸️ **Parked 2026-08-03** | personal token only — no OAuth | R/W | R | R/W | R/W | yes | Technically the best books connector, but **parked on its usage terms**, same call as Backloggd: the API is documented as *"only for offline use"*, reachable *"from localhost or APIs"*, with site allowlisting *"a way down the line"*. Also: no OAuth, tokens expire on a shared Jan 1 reset, no app-level credential (which gates the metadata role too), writes undocumented. See deep dive. |
 | Open Library | book | Metadata (+ light write) | ⏸️ Postponed with books | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. Nothing blocks it — it's postponed only because `book` as a media type is (2026-08-03), and it isn't worth the type's cost on its own. |
-| AniList | anime, manga | Connectable + Metadata | ⬜ To do | oauth | R/W | R | R/W | R | yes | Full write mutations; extends the show model. |
+| AniList | anime, manga | Connectable + Metadata | ⚠️ Needs Nils | oauth | R/W | R | R/W | R | yes | Capability is fine (OAuth2 shipped, 90 req/min, documented writes). Gated on one TERMS clause barring use in competing list/tracker services — see the deep dive. |
 | Google Books | book | Metadata | ❔ To evaluate | apikey / oauth | W | R | | | | Bookshelf write is dated; secondary metadata only. |
 | StoryGraph | book | Connectable | ❔ To evaluate | | | | | | | No official API; only a fragile unofficial cookie scraper. |
 | MyAnimeList | anime, manga | Connectable | ❔ To evaluate | oauth | R/W | R | R/W | | yes | Alternative / secondary id source to AniList. |
@@ -80,8 +80,12 @@ connector and no settled catalog source isn't worth the surface it costs. Open
 Library alone remains viable whenever books are revived; nothing about it is
 blocked, it just isn't worth doing on its own right now.
 
-1. **Anime / manga** — AniList. Now the lead candidate: proper OAuth, full write
-   mutations, and it extends the existing show model rather than adding a type.
+1. **Anime / manga** — AniList. Capability-ready (OAuth2 shipped, 90 req/min,
+   documented write mutations, extends the show model rather than adding a type)
+   but **⚠️ gated on a TERMS clause, not on engineering** — its API is barred from
+   "competing noncomplementary services of the same nature… Anime/Manga
+   list/tracker services". The **metadata-only** half is unaffected and could ship
+   independently. See the deep dive at the bottom of this file.
 2. **Books** — ⏸️ postponed. Revive via Open Library (metadata, no auth), and
    revisit Hardcover only if it ships OAuth + the site allowlist its docs promise.
 3. **Later phase** — music, podcasts, board games.
@@ -271,3 +275,59 @@ is a blocked-on-access decision, not a rejected-on-merit one.
 Note it adds no *metadata* we lack (IGDB already covers that) and overlaps the
 video-game space Steam and RAWG already handle. The unique value is the user's
 Backloggd wishlist/logs, nothing else.
+
+---
+
+### AniList — verdict: ⚠️ NEEDS NILS (a terms question, not a technical one)
+
+Evaluated 2026-08-13. **Terms first, capabilities second** — that ordering is
+what this file exists to enforce, and it is what parked both Backloggd and
+Hardcover. AniList passes on capability and stalls on one clause.
+
+**The deciding clause, quoted verbatim** ([Terms of Use](https://docs.anilist.co/guide/terms-of-use)):
+
+> "Prohibited from use within competing noncomplementary services of the same
+> nature. This includes, but is not limited to Anime/Manga list/tracker services."
+
+Fandex **is** a list/tracker service. It is cross-medium rather than anime-specific,
+so the honest reading turns entirely on "noncomplementary" and "of the same
+nature", and that is a judgement about intent that the docs do not resolve. Two
+defensible readings:
+
+- *Complementary:* Fandex indexes games/movies/shows and would let a user pull
+  their existing AniList list in alongside — it drives traffic to AniList and
+  competes for nothing, since we would not host anime lists as a destination.
+- *Same nature:* the moment anime entries are tracked in Fandex, it is a tracker
+  containing anime, and the clause names trackers explicitly.
+
+**This is the same shape of risk as TMDB/Trakt, and it interacts badly with them.**
+H3's standing decision is to stay *under the radar* on the free TMDB/Trakt tiers
+and specifically **not** to ask about commercial terms. AniList is the opposite
+case: its terms invite contact (`contact@anilist.co`), and asking is the only way
+to resolve the clause — but asking also creates a written record of what Fandex
+is, which is exactly what the under-the-radar posture avoids elsewhere. **That
+trade is Nils's call, not a session's.**
+
+**Everything else is genuinely good** — this is not a Hardcover-style dead end:
+
+| Question | Answer |
+|---|---|
+| Hosted, multi-user third-party client? | **Yes.** No allowlisting, no localhost-only restriction (Hardcover's blocker). |
+| Commercial / donation-funded use? | **Free below $150/mo revenue**; above that needs a commercial licence via `contact@anilist.co`. Fandex is at €0, so the threshold is not live. |
+| Rate limit | **90 req/min**, with `X-RateLimit-Limit` / `X-RateLimit-Remaining` headers; exceeding it costs a 1-minute timeout. Comfortable — and far better documented than most. |
+| Third-party OAuth, shipped? | **Yes**, OAuth2 authorization-code grant. Not the "promised but not shipped" state that killed Hardcover. |
+| App-level credential for metadata-only? | **Yes** — the public GraphQL endpoint serves media queries unauthenticated, so the *metadata* role needs no user login. This is the half that could ship independently of the tracker question. |
+| Write mutations documented? | **Yes** — `SaveMediaListEntry` and friends are first-class in the docs, unlike Hardcover's entirely undocumented writes. |
+
+**Two further prohibitions to design against if it ever proceeds:** using the API
+"as a backup or data storage service" and "hoarding or mass collection of data"
+are both explicitly banned. Fandex's thin-write/catalog-pool pattern — which
+persists provider rows locally — is precisely the shape those clauses target, so
+an AniList integration could **not** reuse `persistDiscoverItems` the way the
+TMDB/RAWG paths do. That is a real architectural constraint, not a footnote.
+
+**Recommended next step:** if Nils wants anime, the low-risk half is
+**metadata-only** (unauthenticated queries, no user lists, no local hoarding),
+which sidesteps the tracker clause entirely. The connectable/tracker half should
+not start until the clause is resolved. **Do not open an adapter on the strength
+of "the OAuth works" — that was the exact mistake Hardcover taught.**

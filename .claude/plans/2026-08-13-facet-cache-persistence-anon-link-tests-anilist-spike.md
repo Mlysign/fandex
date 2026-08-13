@@ -173,7 +173,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: this task IS the test.
   - Depends on: none
 
-- [ ] **T6** — Settle AniList's USAGE TERMS before anything else about it
+- [x] **T6** — Settle AniList's USAGE TERMS before anything else about it
   - Files: `PLATFORMS.md`
   - Detail: AniList is the lead platform candidate. **Terms first, capabilities second** —
     that ordering is the repo's own hard-won lesson: Hardcover was verified on auth and
@@ -191,7 +191,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: none — research task.
   - Depends on: none
 
-- [ ] **T7** — Write up the cache-table drop; DO NOT EXECUTE IT
+- [x] **T7** — Write up the cache-table drop; DO NOT EXECUTE IT
   - Files: `TASKS.md`
   - Detail: `libRowsWithoutState` / `wishRowsWithoutState` both read **0/0 on prod**
     (2026-08-12), which was the stated precondition for dropping the `user_library` /
