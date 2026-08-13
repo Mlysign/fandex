@@ -121,7 +121,7 @@ below it. **Never run `npm run build` while `npm run dev` is running** — it ov
   - Tests: `src/lib/facetCacheStore.test.ts` as above.
   - Depends on: T1
 
-- [ ] **T3** — Make `buildPublicFacetDetail` read through the persisted cache
+- [x] **T3** — Make `buildPublicFacetDetail` read through the persisted cache
   - Files: `src/lib/detail/publicFacetDetail.ts`
   - Detail: Keep the existing in-memory `BoundedCache` as the L1 (it is faster and its
     sizing comment is current). Add the SQLite store as L2: on a miss, check L2 before

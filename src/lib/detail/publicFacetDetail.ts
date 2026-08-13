@@ -40,6 +40,7 @@ import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from
 import { normalizeName, extractYear } from "@/lib/merge";
 import type { PersistableItem } from "@/lib/discoverPersist";
 import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
+import { readFacetCache, writeFacetCache } from "@/lib/facetCacheStore";
 import { getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { getTagCategories, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import { categorizeTag } from "@/lib/tags";
@@ -460,7 +461,52 @@ export interface PublicFacetRef { kind: FacetKind; key: string; label?: string |
 //   exists at all; a blind 500->5000 could have added several hundred MB.
 //   Note the key includes page + sort + persist, so one facet can occupy several
 //   entries — 3,000 entries is fewer than 3,000 distinct facets.
-const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 3000, ttlMs: 24 * 60 * 60 * 1000 });
+const FACET_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 3000, ttlMs: FACET_CACHE_TTL_MS });
+
+// ── L2: the SAME cache, persisted (2026-08-13) ──────────────────────────────
+// L1 above dies with the process and is bounded by heap; the slug surface is far
+// larger than 3,000 entries, so a crawl sweep misses it almost every time and a
+// restart throws away everything. L2 (`facet_page_cache` in SQLite) fixes both.
+//
+// WHAT THE MEASUREMENT ACTUALLY SAID (scripts/probe-facet-cost.ts, 2026-08-13) —
+// this corrects the number that motivated the work. Cold, real local DB:
+//   tag/telepathy   total 60,259ms   fan-out 99%   local  643ms   23 calls
+//   person/c.nolan  total     64ms   fan-out 96%   local    3ms    3 calls
+//   company/a24     total    159ms   fan-out 98%   local    3ms   14 calls
+// Fan-out dominates every kind — but of tag's 250,746ms of provider WORK,
+// 234,409ms (93%) was 12 calls to api.rawg.io returning Cloudflare 522s at
+// ~19.5s each, with its breaker open. TMDB's 9 calls totalled 726ms. So
+// "/tag/telepathy renders in 59.8s" is a DEAD PROVIDER, not inherent cost, and
+// person/company pages are already fast cold. Do not re-justify this cache with
+// the 60s figure; that is the mistake AGENTS.md records twice (perf §A, and the
+// 58s Discover load blamed on the pool cache for days).
+//
+// The justification that survives measurement is THIRD-PARTY QUOTA: one tag
+// build can spend 12 RAWG calls against a 20k req/mo free tier, and a crawl
+// sweep over the long tail is what burns it. Latency insulation is a bonus.
+//
+// Both layers share one key, so `persist` and scoringConfigSignature() guard L2
+// exactly as they guard L1 (PR14). L2 stores the serialized payload; a parse
+// failure is treated as a miss rather than an error.
+/**
+ * Clear L1 only, leaving the persisted L2 intact — the shape of a process
+ * restart. Test seam: without it there is no way to assert the thing this
+ * change exists for, since L1 would answer every second request.
+ */
+export function _resetFacetPageCacheForTests(): void {
+  _facetPageCache.clear();
+}
+
+function readFacetL2(cacheKey: string): PublicFacetPayload | null {
+  const raw = readFacetCache(cacheKey, FACET_CACHE_TTL_MS);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PublicFacetPayload;
+  } catch {
+    return null;
+  }
+}
 
 // Build the public payload for one facet page. Provider-sourced; persisted
 // thin for linkability ONLY when `persist` is true (PR14 — see the module
@@ -475,6 +521,13 @@ export async function buildPublicFacetDetail(
   const cacheKey = `${ref.kind}:${ref.key}:${page}:${sort}:${persist ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
   const cachedPayload = _facetPageCache.get(cacheKey);
   if (cachedPayload) return cachedPayload;
+  // L2 before the fan-out. A hit re-populates L1 so the next request on this
+  // process skips the DB read too.
+  const persisted = readFacetL2(cacheKey);
+  if (persisted) {
+    _facetPageCache.set(cacheKey, persisted);
+    return persisted;
+  }
   const key = ref.key;
   let pool: PoolTitle[] = [];
   let person: PersonMeta | null = null;
@@ -590,7 +643,11 @@ export async function buildPublicFacetDetail(
     sort, tagCategory, tagBundle, bayesCommunityAvg,
   };
   // A payload degraded by a provider failure must not be pinned for the TTL —
-  // the next request should retry the fan-out instead.
-  if (!buildFailed) _facetPageCache.set(cacheKey, payload);
+  // the next request should retry the fan-out instead. This matters more for L2
+  // than L1: a restart clears L1, but a persisted failure would outlive it.
+  if (!buildFailed) {
+    _facetPageCache.set(cacheKey, payload);
+    writeFacetCache(cacheKey, JSON.stringify(payload));
+  }
   return payload;
 }

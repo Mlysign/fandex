@@ -170,6 +170,46 @@ describe("buildPublicFacetDetail — persist gate (PR14)", () => {
     expect(payload!.items.some((i) => i.linkable === false)).toBe(true);
   });
 
+  // T3 (2026-08-13) — the persisted L2. The point of the whole change is that a
+  // payload survives a process restart, so the assertion that matters is "zero
+  // provider calls on the second build with L1 empty".
+  it("serves from the SQLite L2 with ZERO provider calls after L1 is cleared", async () => {
+    const { buildPublicFacetDetail } = await import("./publicFacetDetail");
+    const { tmdbJson, rawgJson } = await import("@/lib/facetDetail");
+
+    const first = await buildPublicFacetDetail({ kind: "tag", key: "western" }, { persist: false });
+    expect(first).not.toBeNull();
+    const callsAfterCold = (tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length;
+    expect(callsAfterCold).toBeGreaterThan(0); // it really did fan out
+
+    // Simulate a restart: L1 is in-process, L2 is the DB row that outlives it.
+    const { _resetFacetPageCacheForTests } = await import("./publicFacetDetail");
+    _resetFacetPageCacheForTests();
+    (tmdbJson as any).mockClear();
+    (rawgJson as any).mockClear();
+
+    const second = await buildPublicFacetDetail({ kind: "tag", key: "western" }, { persist: false });
+    expect(second).not.toBeNull();
+    expect((tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length).toBe(0);
+    expect(second!.items.length).toBe(first!.items.length);
+  });
+
+  it("does not persist a payload degraded by a provider failure", async () => {
+    const { buildPublicFacetDetail, _resetFacetPageCacheForTests } = await import("./publicFacetDetail");
+    const { tmdbJson, rawgJson } = await import("@/lib/facetDetail");
+    (tmdbJson as any).mockRejectedValueOnce(new Error("tmdb down"));
+    (rawgJson as any).mockRejectedValueOnce(new Error("rawg down"));
+
+    await buildPublicFacetDetail({ kind: "tag", key: "documentary" }, { persist: false });
+    _resetFacetPageCacheForTests();
+    (tmdbJson as any).mockClear();
+    (rawgJson as any).mockClear();
+
+    // A cached failure would serve 0 calls; a correctly-uncached one retries.
+    await buildPublicFacetDetail({ kind: "tag", key: "documentary" }, { persist: false });
+    expect((tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length).toBeGreaterThan(0);
+  });
+
   it("writes when persist is true (real session)", async () => {
     const { buildPublicFacetDetail } = await import("./publicFacetDetail");
     const { persistDiscoverItems } = await import("@/lib/discoverPersist");
