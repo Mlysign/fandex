@@ -11,9 +11,12 @@ import { TYPE_COLORS } from "@/lib/constants";
 import { TypeIcon } from "@/components/Badges";
 import Tooltip from "@/components/Tooltip";
 import EmptyState from "@/components/ui/EmptyState";
-import Sheet from "@/components/ui/Sheet";
 import ActionCells from "@/components/ActionCells";
+import Rail from "@/components/Rail";
+import PosterCard from "@/components/PosterCard";
+import type { MediaCardItem } from "@/components/cardItem";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { scrollBehavior } from "@/lib/scrollBehavior";
 import { upcomingFrom } from "@/lib/upcoming";
 
 // CalendarView accepts any item that has the minimum required fields.
@@ -81,81 +84,6 @@ function ItemMeta({ item, size = 11 }: { item: CalendarItem; size?: number }) {
   );
 }
 
-function OverflowList({ items, onSelect, onClose }: { items: CalendarItem[]; onSelect: (item: CalendarItem) => void; onClose: () => void }) {
-  return (
-    <>
-      {items.map((item) => (
-        <button
-          key={item.id}
-          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-elevated transition-colors duration-fast text-left"
-          onClick={() => { onClose(); onSelect(item); }}
-        >
-          {item.posterUrl && (
-            <Image src={item.posterUrl} alt={item.title} width={32} height={24} className="w-8 h-6 rounded-sm object-cover flex-shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-caption font-medium text-text-primary truncate">{item.title}</p>
-            <div className="mt-0.5"><ItemMeta item={item} /></div>
-          </div>
-        </button>
-      ))}
-    </>
-  );
-}
-
-// The day's full item list. On desktop it's a popover anchored under the cell.
-// On mobile it can't be: since the mobile density pass (2026-07-28) a day cell
-// is ~50px wide, and a 220px-min popover anchored inside one overhangs the grid
-// (and the viewport, for the last column). Below 768px the same list opens in
-// the shared bottom <Sheet> instead. Exactly ONE of the two renders — same rule
-// as SubBar's advanced filters, for the same reason.
-function OverflowDrawer({
-  items,
-  dateLabel,
-  onSelect,
-  onClose,
-  isDesktop,
-}: {
-  items: CalendarItem[];
-  dateLabel: string;
-  onSelect: (item: CalendarItem) => void;
-  onClose: () => void;
-  isDesktop: boolean;
-}) {
-  if (!isDesktop) {
-    return (
-      <Sheet open onClose={onClose} title={dateLabel} className="pb-3">
-        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-          <span className="font-mono text-meta text-text-secondary">{dateLabel}</span>
-          <button onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary">
-            <X className="w-3.5 h-3.5" aria-hidden />
-          </button>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          <OverflowList items={items} onSelect={onSelect} onClose={onClose} />
-        </div>
-      </Sheet>
-    );
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface-overlay border border-border-strong rounded-xl shadow-2xl overflow-hidden min-w-[220px]">
-        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-          <span className="font-mono text-meta text-text-secondary">{dateLabel}</span>
-          <button onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary">
-            <X className="w-3.5 h-3.5" aria-hidden />
-          </button>
-        </div>
-        <div className="max-h-64 overflow-y-auto">
-          <OverflowList items={items} onSelect={onSelect} onClose={onClose} />
-        </div>
-      </div>
-    </>
-  );
-}
-
 function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelect: (item: CalendarItem) => void }) {
   const [hovered, setHovered] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -182,14 +110,18 @@ function CalendarCell({
   day,
   dayItems,
   onSelect,
+  onOpenDay,
+  selected,
   isDesktop,
 }: {
   day: Date;
   dayItems: CalendarItem[];
   onSelect: (item: CalendarItem) => void;
+  /** MB8 — open this day's carousel below the grid. `yyyy-MM-dd`. */
+  onOpenDay: (dateStr: string) => void;
+  selected: boolean;
   isDesktop: boolean;
 }) {
-  const [showOverflow, setShowOverflow] = useState(false);
   const [singleHovered, setSingleHovered] = useState(false);
   const singleRef = useRef<HTMLDivElement>(null);
   const singleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,14 +131,35 @@ function CalendarCell({
   // link; three would clip. Desktop's 128px still fits three.
   const VISIBLE = isDesktop ? 3 : 2;
   const overflow = dayItems.length > VISIBLE;
+  // MB8: a day with more than one release opens the carousel below the grid.
+  // A single-release day still goes straight to the item — a one-card carousel
+  // would be a worse version of the click you already made.
+  const multi = dayItems.length > 1;
 
   return (
     <div
       className={`h-20 md:h-32 rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
         today ? "ring-2 ring-accent ring-inset" : ""
-      } ${single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"}`}
+      } ${selected ? "ring-2 ring-accent" : ""} ${
+        single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"
+      }`}
       style={single ? { borderColor: `${TYPE_COLORS[single.type] ?? "#888"}44` } : undefined}
     >
+      {/* The cell-wide open target for a multi-release day, UNDER the content
+          (z-0 vs the content's z-10) so the individual title buttons on desktop
+          still take their own clicks. On mobile those titles are 10px tall and
+          effectively unhittable, so nearly every tap lands here — which is the
+          point. A real <button>, so it's keyboard- and screen-reader-reachable
+          rather than a click handler on a div. */}
+      {multi && (
+        <button
+          type="button"
+          onClick={() => onOpenDay(format(day, "yyyy-MM-dd"))}
+          aria-label={`${format(day, "MMMM d")} — show all ${dayItems.length} releases`}
+          aria-expanded={selected}
+          className="absolute inset-0 z-0 rounded-sm md:rounded-md cursor-pointer"
+        />
+      )}
       {single && single.posterUrl && (
         <>
           <Image
@@ -257,23 +210,15 @@ function CalendarCell({
               <HoverableCalendarItem key={item.id} item={item} onSelect={onSelect} />
             ))}
             {overflow && (
-              <div className="relative mt-auto">
-                <button
-                  className="font-mono text-[10px] text-text-secondary hover:text-text-primary transition-colors duration-fast"
-                  onClick={(e) => { e.stopPropagation(); setShowOverflow(true); }}
-                >
-                  +{dayItems.length - VISIBLE} more
-                </button>
-                {showOverflow && (
-                  <OverflowDrawer
-                    items={dayItems}
-                    dateLabel={format(day, "MMMM d")}
-                    onSelect={onSelect}
-                    onClose={() => setShowOverflow(false)}
-                    isDesktop={isDesktop}
-                  />
-                )}
-              </div>
+              /* Now opens the same day carousel the cell does, rather than the
+                 old popover/bottom-sheet. Kept as its own control because it
+                 carries the COUNT, which the bare cell doesn't. */
+              <button
+                className="relative z-10 mt-auto self-start font-mono text-[10px] text-text-secondary hover:text-text-primary transition-colors"
+                onClick={(e) => { e.stopPropagation(); onOpenDay(format(day, "yyyy-MM-dd")); }}
+              >
+                +{dayItems.length - VISIBLE} more
+              </button>
             )}
           </div>
         ) : null}
@@ -394,11 +339,23 @@ function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (ite
 
 export default function CalendarView({ items, onSelect, onVisibleMonthChange, mode = "month" }: CalendarViewProps) {
   const [calMonth, setCalMonth] = useState(new Date());
+  // MB8: the open day, as `yyyy-MM-dd`. A string, not a Date — two Dates for the
+  // same day are never ===, so the cell's `selected` check would silently never
+  // match and the highlight would never appear.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const dayRailRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     onVisibleMonthChange?.(calMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calMonth]);
+
+  // Changing month must drop the open day: its rail would otherwise keep showing
+  // titles from a month no longer on screen, with no cell highlighted anywhere.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedDay(null);
   }, [calMonth]);
 
   const monthStart    = startOfMonth(calMonth);
@@ -407,6 +364,17 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
   const startPad      = getDay(monthStart);
   const groups        = groupByDate(items);
   const isCurrentMonth = isSameMonth(calMonth, new Date());
+
+  const selectedDayItems = selectedDay ? (groups[selectedDay] ?? []) : [];
+  const selectedDayLabel = selectedDay ? format(parseISO(selectedDay), "EEEE, MMMM d") : "";
+
+  // Bring the rail into view when a day is opened. Without this the rail can
+  // land below the fold on a tall month and the tap reads as doing nothing —
+  // the same "I thought nothing happened" failure MB6 fixed on Insights.
+  useEffect(() => {
+    if (!selectedDay) return;
+    dayRailRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
+  }, [selectedDay]);
 
   const monthItemCount = days.reduce((acc, day) => acc + (groups[format(day, "yyyy-MM-dd")]?.length ?? 0), 0);
 
@@ -504,11 +472,44 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
                       day={day}
                       dayItems={dayItems}
                       onSelect={onSelect}
+                      onOpenDay={setSelectedDay}
+                      selected={selectedDay === dateStr}
                       isDesktop={isDesktop}
                     />
                   );
                 })}
               </div>
+
+              {/* MB8 (2026-08-14) — Nils: "when clicking a day with multiple
+                  entries, I want them to open in a carousel below the month
+                  view." This replaces the popover/bottom-sheet the "+N more"
+                  link used to open. Below the grid rather than over it, so the
+                  month stays readable while you browse the day — the popover
+                  covered the following week and the sheet covered everything.
+                  Full PosterCards, so a day's titles get the same artwork,
+                  score and quick actions they have everywhere else; the cell's
+                  own 10px text lines never could. */}
+              {selectedDayItems.length > 0 && (
+                <div ref={dayRailRef} className="mt-5 pt-5 border-t border-border scroll-mt-24">
+                  <Rail
+                    title={selectedDayLabel}
+                    action={
+                      <button
+                        onClick={() => setSelectedDay(null)}
+                        aria-label="Close this day"
+                        className="tap-44 inline-flex items-center gap-1 text-label text-text-secondary hover:text-text-primary transition-colors"
+                      >
+                        Close
+                        <X className="w-3.5 h-3.5" aria-hidden />
+                      </button>
+                    }
+                  >
+                    {selectedDayItems.map((item) => (
+                      <PosterCard key={item.id} item={item as MediaCardItem} onSelect={() => onSelect(item)} />
+                    ))}
+                  </Rail>
+                </div>
+              )}
             </>
           )}
         </>

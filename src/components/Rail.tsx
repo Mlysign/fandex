@@ -21,11 +21,19 @@ export interface RailProps {
   forYou?: boolean;
   /** "See all" link in the header, e.g. to a full listing page. */
   seeAllHref?: string;
+  /**
+   * Arbitrary control in the header's trailing slot, where `seeAllHref` would
+   * go. For rails that are dismissible or otherwise interactive rather than a
+   * gateway to a listing page — Calendar's day rail (MB8) uses it for Close.
+   * Takes precedence over `seeAllHref`; passing both is a call-site mistake, so
+   * the action wins rather than the two stacking up in one corner.
+   */
+  action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }
 
-export default function Rail({ title, forYou, seeAllHref, children, className = "" }: RailProps) {
+export default function Rail({ title, forYou, seeAllHref, action, children, className = "" }: RailProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [hovering, setHovering] = useState(false);
 
@@ -44,12 +52,14 @@ export default function Rail({ title, forYou, seeAllHref, children, className = 
             </span>
           )}
         </div>
-        {seeAllHref && (
+        {action ? (
+          <div className="shrink-0">{action}</div>
+        ) : seeAllHref ? (
           <Link href={seeAllHref} className="inline-flex items-center gap-1 text-label text-text-secondary hover:text-text-primary transition-colors shrink-0">
             See all
             <ArrowRight className="w-3.5 h-3.5" aria-hidden />
           </Link>
-        )}
+        ) : null}
       </div>
 
       <div
