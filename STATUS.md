@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-14._
+_Last updated: 2026-08-14 (deployed)._
 
 ---
 
@@ -23,7 +23,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 - **Backups are PROVEN, not just present** — a full restore drill on 2026-08-12 (the one recommended since June and never run) restored the replica to a scratch file: `integrity_check` **ok**, every user table exact, and every real (`browsed=0`) catalog row exact at **1994**. Replication lag 6m39s. **PR17 is CLOSED.**
 
-**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** nothing on the infrastructure side — the Ko-fi variable landed 2026-08-12 and donations are live. What is left is judgement, not plumbing: the Impressum review, H3.0's upkeep number, the affiliate signups (parked on prod staying up), the TWA build, and **SM39** (the Fandex Score range). `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. The 340 MB WAL high-water **cannot** be reclaimed while Litestream runs (`busy: 1`, tried twice) and needs no action — the volume is 12% used.
+**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** nothing on the infrastructure side. What is left is judgement, not plumbing: the Impressum review, H3.0's upkeep number, the affiliate signups (parked on prod staying up), the TWA build, and **two prod sweeps** — `POST /api/dev/scoring/wikidata` (franchises) and `POST /api/dev/crosslink` (games). `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. The 340 MB WAL high-water **cannot** be reclaimed while Litestream runs (`busy: 1`, tried twice) and needs no action — the volume is 12% used.
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this holds for days, not hours** — every program reviews the applicant site.
 
@@ -34,7 +34,8 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | ✅ | **PR17 — post-outage verification** | **CLOSED 2026-08-12**, all five steps. Backups proven by a real restore drill. |
 | ✅ | **SM38 — anon surface had zero clickable items** | **FIXED 2026-08-12.** The anon branches now run the existing read-only `lookupExistingUuids` instead of returning an empty map. Verified on a real catalog: Discover 0 → **32** links, `/tag/action` 40, `/studio/a24` 26, Home 14 — and a Googlebot crawl still wrote **zero** rows. |
-| 🟠 | **SM39 — Fandex Score renders far outside 0–100** | **You, two decisions — diagnosed 2026-08-14 and it is mostly NOT the formula.** Prod's numbers (min −362, max 557, 68% outside) are reproduced by the *local* library at **K≈50**, while local's calibrated config scores **28–121**. `scoring_config` is seeded `INSERT OR IGNORE` and the stored blob wins over the code default, so every recalibration since has missed prod. Confirm with `GET /api/dev/scoring` on prod; fix with a `PUT` (no deploy). A smaller range problem survives it — symmetric K against an off-center 66.8. → [TASKS.md](TASKS.md) |
+| ✅ | **SM39 — Fandex Score rendered far outside 0–100** | **FIXED 2026-08-14.** Not the formula: prod ran a hand-tuned config (`K_up 30 · K_down 20`) that reproduced the report almost exactly when fed back through the real library. Fixed by fitting **only the two gains** → 2.5/4, every taste decision untouched: 77.1% → 0.9% outside. A residual ~1% and the badge's 0–100 claim are a design call → [TASKS.md](TASKS.md). |
+| 🔵 | **Franchise / IP scoring — LIVE, needs one sweep on prod** | **Shipped + deployed 2026-08-14.** A fourth facet kind, an admin editor (bundle + attach/detach + title suggestions), and Wikidata. **You:** run `POST /api/dev/scoring/wikidata` `{"maxItems":150}` until `remaining` is 0 (**1,761 eligible on prod, ~12 calls**), then tune the `ip` weight. → [TASKS.md](TASKS.md) |
 | ✅ | **Facet-page compute + RAWG quota** | **Closed 2026-08-13** by a persisted SQLite L2. Verified across a full restart: `/tag/western` **63.17 s → 0.092 s**, zero provider calls warm. Also corrected the premise — the "59.8 s render" was 93% a dead RAWG, not inherent cost. |
 | 🟡 | **Advanced search's Fandex Score (SM43–45)** | **Fixed and deployed 2026-08-13**, in three parts: the local path's pending flag (SM43), a latency budget on the heal loop (SM44 — 66.3 s → 4.1 s with RAWG down), and the actual cause of the report, the *database-results* half carrying no score fields at all (SM45). **SM46–SM48 then rebuilt the database half to the spec Nils gave.** External results are thin-written so they get a uuid, a score and a heal path; multiple tags are ANDed **at the provider** rather than intersected afterwards (which returned 0 — two ~40-row samples of huge tags rarely overlap); a missing Fandex Score renders blank instead of a community `/10` standing in for it; **Steam joined as the games tag source** (it has `Deckbuilding` and `Tower Defense`; TMDB+RAWG+IGDB together return zero for that pair, Steam returns 277); and games now cross-link to every catalog on ingest, not just on wishlist adds. A browse budget took `facet-fetch` from **66.1 s → 6–9 s**. **⚠️ Prod's catalog is NOT backfilled** — that needs `POST /api/dev/crosslink`. → [TASKS.md](TASKS.md) |
 | 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
@@ -66,16 +67,18 @@ Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit pa
 | SEO — public item pages (P13) + facet pages (P17) | ✅ live + fully indexed |
 | **H1** — UI/UX overhaul (mobile-first) | ✅ 2026-07-27. Direction 2a "Ticket · Calm". Design system → [docs/design/fandex-handoff/](docs/design/fandex-handoff/) |
 | **H2** — data-model hardening | ✅ |
-| **H5** — Fandex Score | ✅ 2026-07-27 incl. calibration. Design → [docs/fandex-score.md](docs/fandex-score.md) |
+| **H5** — Fandex Score | ✅ 2026-07-27 incl. calibration; **franchise/IP added 2026-08-14** (§3.6). Design → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
 | **H3** — monetization | 🔵 v1 built 2026-08-03 — donations live, affiliate dark → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🔵 needs the TWA build |
 
 ## ✅ Quality bar (as of 2026-08-12)
 
-**593 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean. **This is the standing bar — don't land work below it.**
+**665 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
+
+**Dependencies are current as of 2026-08-14** — all four open Dependabot PRs merged after a full local bar *plus* a real JWT sign/verify round-trip, because `jose` is the session library and the suite never exercises a live token. Now on `next` 16.3.0, `react` 19.2.8, `jose` 6.2.8, `@types/node` 26, with CI on `actions/checkout@v7` + `setup-node@v7`. `npm audit` 0 vulnerabilities.
 
 **11th smoke sweep (2026-08-12, live prod, both auth states)** → findings `SM38`–`SM42` in [TASKS.md](TASKS.md). Ran during a genuine RAWG outage, which re-verified the three 2026-08-02 single-source games bugs as **fixed** under the exact condition that exposed them.
 
