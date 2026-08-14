@@ -1,6 +1,7 @@
 "use client";
 import { format } from "date-fns";
 import type { CommunityRating } from "@/types";
+import { SOURCE_LABELS } from "@/lib/constants";
 import { ScoreBadge, RatingsBreakdown } from "./primitives";
 
 type PersonalRating = { source: string; rating: number };
@@ -11,7 +12,7 @@ type PersonalRating = { source: string; rating: number };
 // Fandex Score panel (PersonalSection) — this section only ever displays.
 export default function RatingsSection({
   hasScores, communityRatings, steamReview,
-  personalRating, personalRatings, libraryStatus, reviewedAt, review,
+  personalRating, personalRatings, libraryStatus, libraryStatusSources = [], reviewedAt, review,
 }: {
   hasScores: boolean;
   communityRatings: CommunityRating[];
@@ -19,6 +20,8 @@ export default function RatingsSection({
   personalRating: number | null;
   personalRatings: PersonalRating[];
   libraryStatus: string | null;
+  /** Which connected account(s) report that status. See EnrichedItem. */
+  libraryStatusSources?: string[];
   reviewedAt: number | null;
   review: string | null;
 }) {
@@ -43,8 +46,17 @@ export default function RatingsSection({
       {(libraryStatus || hasPersonal || review) && (
         <div className="flex items-center gap-3 flex-wrap">
           {libraryStatus && (
-            <span className="text-xs px-2 py-1 rounded-full bg-surface-elevated text-text-secondary capitalize">
-              ✓ {libraryStatus}
+            /* MB15 (2026-08-14, Nils): this badge said a bare "✓ Owned" and
+               named no source. Directly under it sits "Your wishlists", whose
+               first row for a game is Steam with a "View on Steam →" link — so
+               the page read as "you own this on Steam" for a title whose
+               ownership actually came from RAWG. The status now carries the
+               account that reports it. `capitalize` is scoped to the status
+               word only: applying it to the whole badge would render "Rawg". */
+            <span className="text-xs px-2 py-1 rounded-full bg-surface-elevated text-text-secondary">
+              <span className="capitalize">✓ {libraryStatus}</span>
+              {libraryStatusSources.length > 0 &&
+                ` on ${libraryStatusSources.map((s) => SOURCE_LABELS[s] ?? s).join(" · ")}`}
               {reviewedAt && (() => { try { return ` · ${format(new Date(reviewedAt * 1000), "MMM d, yyyy")}`; } catch { return ""; } })()}
             </span>
           )}

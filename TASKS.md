@@ -42,7 +42,7 @@
 
 ---
 
-## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🔵 8 of 15 open
+## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🔵 7 of 15 open
 
 Nils's notes from using the app on his phone. Structural ones apply to web too. **No device access from a Claude session** — verification is the browser pane at 375×812 (touch emulation), so anything genuinely touch-only (long-press, swipe inertia) still needs an eyeball on the real device.
 
@@ -63,7 +63,8 @@ Nils's notes from using the app on his phone. Structural ones apply to web too. 
 - **MB11** ⬜ Med — **"More like this" on every item.** *Not* the diagnosis it looked like: `/api/detail/similar` returns real results for The Odyssey (**Troy, Ulysses**) and `SimilarRail` hides the rail below 3. So the fix is a provider fallback (TMDB `/recommendations`) when the local catalog is too thin — **which puts a provider call on a public route, so it needs a cache and a budget** (see the facet-page quota lesson above). **Decision needed** before building.
 - **MB13** ⬜ Med — **detail hero should BE the gallery.** Merge `DetailHero` + `MediaGallery` on mobile: swipe through poster + images with dots, keeping the scrim, back/share and title overlay.
 - **MB14** ⬜ **LARGE, own session, needs a decision** — **per-episode watched tracking for shows**, collapsed by season, mark-season-as-seen, Showly as the UX reference. **No episode data model exists** (only episode *counts* in `merge.ts`/`normalize.ts`). Needs: a seasons/episodes schema + a `user_episode_state` table (**the owning column must literally be named `user_id`** or GDPR erasure silently skips it), TMDB season/episode fetch + storage, and a Trakt watched-episode pull. **Open question: should marking an episode seen PUSH BACK to Trakt, or stay local?**
-- **MB15** ⬜ **Partly diagnosed** — "Fandex says I own Gothic 1 Remake on Steam." The local DB says the ownership came from **RAWG**, not Steam: `user_item_state.source = 'rawg'`, `user_library.platform_sources = ["rawg"]`, `status = 'owned'`, written by `rawg.ts:62` mapping RAWG's own `user_game.status === "owned"`. The item *also* carries a Steam `media_link` (appid 1297900), which is the likely source of the wrong attribution. **Need: where does the UI say "Steam"?** — a screenshot would settle it in one step.
+- **MB15** ✅ **FIXED 2026-08-14 — and the data was right all along.** The library-status badge rendered a bare `✓ Owned` naming no source, and the very next block is "Your wishlists", whose first row for a game is **Steam @Ramses · View on Steam →**. Adjacency did the rest. The ownership actually came from **RAWG**: `user_item_state.source='rawg'`, `platform_sources=["rawg"]`, and Steam reports nothing for that item (checked directly — no `steam` row joins appid 1297900). `getRawgUserPlayed` asks RAWG only for `owned,playing,beaten,dropped`, so **Nils's RAWG account genuinely lists it as owned** — if that's wrong, it's wrong in RAWG. Fixed by adding `libraryStatusSources` (the library row's own sources, **not** the `platformSources` union, which folds in the watchlist and would answer "Steam" for an item Steam merely wishlists) through the leak boundary; the badge now reads **"✓ Owned on RAWG"**. Verified on the live page.
+  - Noted, not fixed: `rawg.ts:62` collapses `playing`/`beaten`/`dropped` all into `"played"`. Lossy, but not what was reported.
 
 ---
 

@@ -137,6 +137,13 @@ export interface EnrichedItem {
   reviewedAt?: number | null;    // unix seconds
   addedAt?: number | null;       // unix seconds — when the user added it (H1.6f, "Recently added" sort)
   libraryStatus?: string | null; // watched | played | owned
+  // WHICH of the viewer's connected accounts reports that status (MB15,
+  // 2026-08-14). The badge used to render a bare "✓ Owned" directly above the
+  // "Your wishlists" list, whose first row for a game is Steam — so Nils read
+  // "you own Gothic 1 Remake on Steam" off a page where the ownership had
+  // actually come from RAWG. Distinct from `platformSources`, which unions the
+  // watchlist and library rows and so cannot answer "who says I own this".
+  libraryStatusSources?: Source[];
   // H5.3 — personalized taste-match (0-100), from the rated-library profile.
   // null when cold-start (too few rated items) or this item matches none of
   // the user's profile facets. Absent entirely for a logged-out viewer.

@@ -298,6 +298,7 @@ export default function PersonalSection({
         personalRating={anon ? null : (item.rating ?? null)}
         personalRatings={anon ? [] : (item.ratings ?? [])}
         libraryStatus={anon ? null : (item.libraryStatus ?? null)}
+        libraryStatusSources={anon ? [] : (item.libraryStatusSources ?? [])}
         reviewedAt={anon ? null : (item.reviewedAt ?? null)}
         review={anon ? null : (item.review ?? null)}
       />

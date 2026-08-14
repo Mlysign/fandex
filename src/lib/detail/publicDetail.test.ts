@@ -76,7 +76,10 @@ describe("loadPublicDetail — catalog only", () => {
     const pub = (await loadPublicDetail(id))!;
 
     // The owner's own take must never reach an anonymous reader.
-    for (const key of ["rating", "ratings", "review", "reviewedAt", "libraryStatus", "platformSources"]) {
+    for (const key of [
+      "rating", "ratings", "review", "reviewedAt",
+      "libraryStatus", "libraryStatusSources", "platformSources",
+    ]) {
       expect(pub, `public payload must not carry "${key}"`).not.toHaveProperty(key);
     }
     // Belt-and-braces: the review text must not appear anywhere in the payload.

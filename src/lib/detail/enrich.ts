@@ -36,7 +36,8 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // supplies `platformSources: []` at the boundary where it hands off to them.
 export type PublicEnrichedItem = Omit<
   EnrichedItem,
-  "rating" | "ratings" | "review" | "reviewedAt" | "libraryStatus" | "platformSources"
+  | "rating" | "ratings" | "review" | "reviewedAt"
+  | "libraryStatus" | "libraryStatusSources" | "platformSources"
 >;
 
 export interface SourceIds {

@@ -129,6 +129,11 @@ export const GET = withUser(async (req: NextRequest, session) => {
           review: libraryRow.review,
           reviewedAt: libraryRow.reviewed_at,
           libraryStatus: libraryRow.status,
+          // MB15: the library row's OWN sources, deliberately not the
+          // `platformSources` union above — that one folds in the watchlist
+          // row, so it would happily answer "Steam" for an item Steam only has
+          // on a wishlist while RAWG is what reports it owned.
+          libraryStatusSources: JSON.parse(libraryRow.platform_sources ?? "[]") as Source[],
         };
       })() : {}),
       fandexScore: fandex?.score ?? null,
