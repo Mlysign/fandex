@@ -113,7 +113,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
     if (heal.incomplete) { deferred.push(id); continue; }
 
     const merged = mergeLinks(links, item.type);
-    const fx = computeFandexScore(extractFacets(links, item.type, merged), profile);
+    const fx = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id });
     scores[id] = fx ? { score: fx.score, center: fx.center } : null;
   }
 

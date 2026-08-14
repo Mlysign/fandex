@@ -21,6 +21,7 @@ import { resolveMediaIdsBySource } from "@/lib/userState";
 import { loadLinks } from "@/lib/detail/enrich";
 import type { Facet } from "@/lib/facets";
 import { extractFacets, tagKey } from "@/lib/facets";
+import { applyIpFacets } from "@/lib/ipAlias";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
 import type {
@@ -234,7 +235,13 @@ function catalogFacets(candidates: FandexTarget[]): Map<string, Facet[]> {
       const mid = idMap.get(`${source}:${String(sid)}`);
       if (!mid) continue;
       const facets = getCatalogFacets(mid);
-      if (facets && isDeep(facets)) { out.set(c.id, facets); break; }
+      // Franchise resolution needs the MEDIA id, and this map is keyed by
+      // CANDIDATE id — `mid` only exists inside this loop, so the resolve has
+      // to happen here rather than at the fandexFor() call sites downstream,
+      // which would otherwise pass a candidate id and silently find no
+      // overrides. The pooled branch is already resolved by buildCache;
+      // applyIpFacets is idempotent, so re-running it costs a no-op.
+      if (facets && isDeep(facets)) { out.set(c.id, applyIpFacets(facets, mid)); break; }
       // In the catalog table but NOT in the discovery cache: POOL_WHERE keeps
       // browsed-only rows out of it (H2b), and roughly half a feed page is
       // exactly that — rows whose links are already fully enriched
@@ -254,7 +261,7 @@ function catalogFacets(candidates: FandexTarget[]): Map<string, Facet[]> {
     if (!links.length) continue;
     const type = candidateTypeOf(candidates, candidateId);
     if (!type) continue;
-    const facets = extractFacets(links, type, mergeLinks(links, type));
+    const facets = applyIpFacets(extractFacets(links, type, mergeLinks(links, type)), mediaItemId);
     // Still shallow → genuinely thin, and only a provider fetch can fix it.
     // Leave it out so it's classified pending and healed asynchronously.
     if (isDeep(facets)) out.set(candidateId, facets);

@@ -65,7 +65,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       if (sourceFilter && !item.platformSources.includes(sourceFilter)) continue;
 
       const { facets, merged } = getDerivedForItem(id, rawLinks, item.type, country);
-      const fx = computeFandexScore(facets, profile);
+      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id });
       // List projection, same as /api/library (2026-07-30 perf audit): drop
       // `sources[].data`, the raw provider blob per link, which no card or
       // calendar cell reads. Keep the identity pair for buildItemHref.

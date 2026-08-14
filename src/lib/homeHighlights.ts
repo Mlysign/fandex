@@ -192,7 +192,7 @@ function recommendFor(
   let best: { title: string; href: string; score: number; posterUrl: string | null } | null = null;
   for (const v of candidates) {
     if (ctx.known.has(v.id)) continue;
-    const fx = computeFandexScore(v.facets, ctx.profile);
+    const fx = computeFandexScore(v.facets, ctx.profile, undefined, { mediaItemId: v.id });
     if (!fx) continue;
     if (!best || fx.score > best.score) {
       best = {

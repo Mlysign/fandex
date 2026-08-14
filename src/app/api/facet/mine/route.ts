@@ -50,7 +50,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
   const profile = buildProfile(session.userId);
   const fandexById: Record<string, number> = {};
   for (const v of itemsWithFacet({ kind: kind as FacetKind, role: undefined, key })) {
-    const sc = computeFandexScore(v.facets, profile)?.score;
+    const sc = computeFandexScore(v.facets, profile, undefined, { mediaItemId: v.id })?.score;
     if (sc != null) fandexById[v.id] = sc;
   }
 
@@ -86,7 +86,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       await ensureTmdbDetail(links, item.type);
       await ensureGameDetail(links, item.type);
       const merged = mergeLinks(links, item.type);
-      const sc = computeFandexScore(extractFacets(links, item.type, merged), profile)?.score;
+      const sc = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id })?.score;
       if (sc != null) fandexById[id] = sc;
     }
   }

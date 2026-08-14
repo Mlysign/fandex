@@ -77,7 +77,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const [id, { item, rawLinks }] of itemMap.entries()) {
       const { facets, merged } = getDerivedForItem(id, rawLinks, item.type, country);
-      const fx = computeFandexScore(facets, profile);
+      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id });
 
       // ── LIST PROJECTION (2026-07-30 perf audit) ───────────────────────────
       // `...merged` used to spread wholesale, which shipped `sources[].data` —

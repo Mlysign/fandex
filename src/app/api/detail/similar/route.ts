@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     // might also like" strip. Quick actions (rate/wishlist) still work from
     // here — `sources` carries real provider ids for identity resolution.
     const items = ranked.map(({ vector }) => {
-      const fx = profile ? computeFandexScore(vector.facets, profile) : null;
+      const fx = profile ? computeFandexScore(vector.facets, profile, undefined, { mediaItemId: vector.id }) : null;
       return {
         id: vector.id, type: vector.type, title: vector.title,
         posterUrl: vector.posterUrl, releaseDate: vector.releaseDate,

@@ -15,6 +15,7 @@ import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/li
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
+import { applyIpFacets, getIpAliases, getItemIpOverrides } from "@/lib/ipAlias";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import type { ScoringConfigValues } from "@/lib/scoringDefaults";
 import type { MediaLink, MediaType } from "@/types";
@@ -334,13 +335,21 @@ function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
   // into one vocab entry (summed count) and itemsWithFacet(canonical) returns
   // items carrying any member spelling.
   const aliases = getTagAliases();
+  // 2026-08-14: the franchise layer resolves here too, and unlike tags it also
+  // needs the item id — an item_ip_override attaches or detaches a franchise on
+  // ONE item. Both maps are fetched once for the whole build rather than
+  // per-item, matching how `aliases` is threaded below.
+  const ipAliases = getIpAliases();
+  const ipOverrides = getItemIpOverrides();
   const entries: PoolEntry[] = [];
   for (const [id, { row, links }] of groups) {
     // Both come from facetCache — `facets` there is always RAW extractFacets
     // output (that cache deliberately doesn't bake in alias/override
     // resolution), so the applyTagAliases step below is unchanged.
     const { merged, facets: rawFacets } = derivedById.get(id)!;
-    const facets = applyTagAliases(rawFacets, aliases);
+    const facets = applyIpFacets(applyTagAliases(rawFacets, aliases), id, {
+      aliases: ipAliases, overrides: ipOverrides,
+    });
     entries.push({
       rawFacets,
       vector: {
@@ -769,12 +778,29 @@ interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: numbe
 // selection instead of the persisted ones — pass the SAME override object
 // given to buildProfile so K/selection and the role/category weights that
 // produced `profile` stay consistent with each other.
-export function computeFandexScore(facets: Facet[], profile: Profile, configOverride?: ScoringConfigValues): FandexScoreResult | null {
+export function computeFandexScore(
+  facets: Facet[],
+  profile: Profile,
+  configOverride?: ScoringConfigValues,
+  opts?: { mediaItemId?: string | null }
+): FandexScoreResult | null {
   if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
   const cfg = configOverride ?? getScoringConfig();
 
+  // 2026-08-14 — franchise resolution happens HERE, not at the nine
+  // extractFacets() call sites, because this is the one function every scoring
+  // surface funnels through. The profile learned its ip facets under canonical
+  // keys (analyzeLibraryFacets/buildCache resolve them), so an unresolved item
+  // key would simply fail to match `profile.w` and the franchise would vanish
+  // from the score with nothing to show for it — which is precisely how tag
+  // bundling drifted on the four per-item paths.
+  //
+  // No id means a live candidate with no catalog row: it can't have a per-item
+  // override, but its provider-supplied franchise still gets aliased.
+  const resolved = applyIpFacets(facets, opts?.mediaItemId);
+
   const matched: FandexContrib[] = [];
-  for (const f of facets) {
+  for (const f of resolved) {
     const id = facetId(f);
     const w = profile.w.get(id);
     const meta = profile.meta.get(id);
@@ -1001,7 +1027,7 @@ export function find(userId: string, req: FindRequest): FindResult {
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
     const s = scoreFacets(v.facets, profile.w, idf);
-    const fx = computeFandexScore(v.facets, rawProfile);
+    const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id });
     scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null });
   }
 

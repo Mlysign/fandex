@@ -94,7 +94,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       ? extractFacets(links, itemType, merged)
       : extractFacets(scoredLinks, itemType, mergeLinks(scoredLinks, itemType, country));
     const fandexProfile = buildProfile(session.userId);
-    const fandex = computeFandexScore(scoredFacets, fandexProfile);
+    const fandex = computeFandexScore(scoredFacets, fandexProfile, undefined, { mediaItemId });
     const fandexColdStart = fandexProfile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE;
 
     // 5. Attach the user's wishlist + library state (empty when not in DB).

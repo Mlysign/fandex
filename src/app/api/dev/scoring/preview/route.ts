@@ -45,7 +45,7 @@ export const POST = withScoringAdmin(async (req: NextRequest, session) => {
 
   const categoryWeights = new Map(body.categoryWeights.map((c) => [c.id, { weight: c.weight, ignored: c.ignored }]));
   const profile = buildProfile(session.userId, { config: body.config, categoryWeights });
-  const result = computeFandexScore(facets, profile, body.config);
+  const result = computeFandexScore(facets, profile, body.config, { mediaItemId: itemRow.id });
 
   return NextResponse.json({
     itemId: itemRow.id,

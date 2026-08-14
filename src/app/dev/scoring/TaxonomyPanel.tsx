@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { TagCategoryConfig } from "./types";
 import TagTable from "./TagTable";
+import FranchisePanel from "./FranchisePanel";
 import { slugify } from "@/lib/slug";
 import { facetColorVar, tagCategoryHex } from "@/lib/facetPalette";
 
@@ -21,6 +22,7 @@ export default function TaxonomyPanel({
     <div className="space-y-6">
       <CategoryList categories={categories} onChanged={onChanged} />
       <TagTable categories={categories} onChanged={onChanged} />
+      <FranchisePanel onChanged={onChanged} />
     </div>
   );
 }

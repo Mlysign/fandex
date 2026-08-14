@@ -7,6 +7,7 @@
 import { get, query, run } from "@/lib/db";
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from "@/lib/scoringDefaults";
 import { tagAliasSignature } from "@/lib/tagAlias";
+import { ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
 
 export interface TagCategoryConfig {
   id: string;
@@ -170,6 +171,13 @@ export function invalidateScoringConfigCaches(): void {
 export function scoringConfigSignature(): string {
   // tagAliasSignature (H5.6) folds in here so buildProfile's cache — keyed on
   // librarySignature|scoringConfigSignature — busts when a tag bundle changes,
-  // even though the library itself didn't.
-  return `${configSignature()}|${categorySignature()}|${overrideSignature()}|${tagAliasSignature()}`;
+  // even though the library itself didn't. The two ip signatures (2026-08-14)
+  // are here for exactly the same reason: bundling two franchises, or attaching
+  // one to an item by hand, changes every affected score while leaving the
+  // library untouched. Without them the admin edit appears to do nothing until
+  // something unrelated invalidates the cache.
+  return [
+    configSignature(), categorySignature(), overrideSignature(),
+    tagAliasSignature(), ipAliasSignature(), itemIpOverrideSignature(),
+  ].join("|");
 }

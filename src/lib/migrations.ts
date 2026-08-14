@@ -391,6 +391,50 @@ export const MIGRATIONS: Migration[] = [
       ).run();
     },
   },
+  {
+    version: 13,
+    name: "ip_alias + item_ip_override — franchise bundling and per-item corrections",
+    up: (db) => {
+      // 2026-08-14. Two brand-new tables (like migrations 9 and 10) — table +
+      // its own index together in this same migration, never split across two,
+      // per the db.ts schema-block invariant.
+      //
+      // ip_alias mirrors tag_alias exactly, for the same reason: providers name
+      // one franchise several ways ("metal gear solid" and "metal gear" arrive
+      // as two facets with 5 rated titles each). Chains are flattened on write
+      // so canonicalIpKey() is a single lookup.
+      //
+      // item_ip_override fixes the DATA, not the naming: TMDB has no collection
+      // concept for shows and IGDB covers only games, so nothing links Andor to
+      // Star Wars. An 'add' row attaches an item to a franchise; a 'remove' row
+      // detaches a wrong one. Deliberately GLOBAL, not user-scoped — it corrects
+      // catalog metadata, exactly like tag_category_override.
+      //
+      // ⚠️ It must NOT gain a `user_id` column. That column name is what
+      // account erasure keys on (src/lib/account.ts reads sqlite_master for it),
+      // so naming one here would make GDPR deletion drop everyone's franchise
+      // corrections. Nothing personal belongs in this table.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ip_alias (
+          alias_key     TEXT PRIMARY KEY,        -- member spelling, e.g. "metal gear solid"
+          canonical_key TEXT NOT NULL,           -- bundle canonical, e.g. "metal gear"
+          updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ip_alias_canonical ON ip_alias(canonical_key);
+
+        CREATE TABLE IF NOT EXISTS item_ip_override (
+          media_item_id TEXT NOT NULL,
+          ip_key        TEXT NOT NULL,           -- normalized via ipKey()
+          label         TEXT NOT NULL,           -- display label for an 'add'
+          mode          TEXT NOT NULL,           -- 'add' | 'remove'
+          updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (media_item_id, ip_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_item_ip_override_item ON item_ip_override(media_item_id);
+        CREATE INDEX IF NOT EXISTS idx_item_ip_override_key ON item_ip_override(ip_key);
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

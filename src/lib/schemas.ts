@@ -202,6 +202,19 @@ export const ScoringPreviewSchema = z.object({
   itemId: z.string().optional(),
 });
 
+// POST /api/dev/scoring/franchises — one franchise correction per call.
+// A discriminated union so each action carries exactly the fields it needs and
+// no others: `attach` takes a free-text label (normalized through ipKey on the
+// way in), while `detach`/`clear` address an EXISTING facet by its key.
+export const FranchiseActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("bundle"), alias: z.string().min(1), canonical: z.string().min(1) }),
+  z.object({ action: z.literal("unbundle"), alias: z.string().min(1) }),
+  z.object({ action: z.literal("dissolve"), canonical: z.string().min(1) }),
+  z.object({ action: z.literal("attach"), mediaItemId: z.string().min(1), label: z.string().min(1).max(200) }),
+  z.object({ action: z.literal("detach"), mediaItemId: z.string().min(1), ipKey: z.string().min(1), label: z.string().max(200).optional() }),
+  z.object({ action: z.literal("clear"), mediaItemId: z.string().min(1), ipKey: z.string().min(1) }),
+]);
+
 // POST /api/dev/scoring/aliases — bundle member tag spellings under one canonical.
 export const TagAliasPostSchema = z.object({
   canonical: z.string().min(1),

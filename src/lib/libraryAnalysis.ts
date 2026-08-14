@@ -9,6 +9,7 @@ import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
+import { applyIpFacets, getIpAliases, getItemIpOverrides } from "@/lib/ipAlias";
 import { getScoringConfig, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import type { MediaLink, MediaType } from "@/types";
 
@@ -146,6 +147,13 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   // facets — so all bundled spellings accumulate into one FacetStat (one merged
   // count/sum → one Bayesian average across the whole bundle).
   const aliases = getTagAliases();
+  // 2026-08-14: the franchise layer resolves here for the same reason — this is
+  // where a facet's Bayesian average is LEARNED, so an attached franchise
+  // (item_ip_override) has to be present or the item never counts toward it,
+  // and a bundled one has to be canonical or the two spellings keep two
+  // separate averages. Fetched once for the loop, like `aliases`.
+  const ipAliases = getIpAliases();
+  const ipOverrides = getItemIpOverrides();
   // Q31 (2026-07-19): an admin-reassigned tag (tag_category_override) must win
   // over categorizeTag()'s code heuristic HERE too — buildProfile() already
   // resolves it this way for scoring, but Insights was still showing every
@@ -179,7 +187,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       sources: rawLinks.map((l) => ({ source: l.source, sourceId: l.sourceId })),
     });
 
-    for (const f of applyTagAliases(rawFacets, aliases)) {
+    for (const f of applyIpFacets(applyTagAliases(rawFacets, aliases), item.id, { aliases: ipAliases, overrides: ipOverrides })) {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
       const category = f.kind === "tag" ? (tagOverrides.get(f.key) ?? f.category) : f.category;
       const prom = f.prominence ?? 1; // Q30: 1 for everything except cast
