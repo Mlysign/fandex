@@ -1864,3 +1864,114 @@ and `Disallow`ing the facets (throws away the P17 SEO surface).
 
 **Reassess only if** a crawl sweep shows the 24 h TTL is too short, or if RAWG's
 latency stops masking the true steady-state tag cost.
+
+## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes): the 13 shipped
+
+Nils tested the app on his phone and sent 15 notes; 13 shipped the same day. Two
+remained open (MB7, MB14) and stay in TASKS.md. Verification throughout was the
+in-app browser pane at 375×812 with touch emulation — **a Claude session has no
+access to the physical device**, so anything genuinely touch-only (long-press
+feel, swipe inertia) still wants an eyeball on real hardware.
+
+- **MB1** — nav slot "Library" → **"Wishlist"** + Bookmark glyph. It already
+  hrefed `/wishlist`; only the label and the icon lied about the destination.
+  `match()` still covers `/library` so the tab strip keeps the slot lit.
+- **MB2** — **auto-hiding list header** (`lib/useHideOnScroll.ts`). `SubBar`
+  retracts past 64px of scroll-down and returns on ANY upward flick. The two
+  thresholds are deliberately asymmetric (4px up vs 8px down): an upward flick
+  IS the request to see the controls again, and making it symmetric is what
+  makes these headers feel stubborn. Verified `top: 0 → −159` and back on a 50px
+  scroll up.
+- **MB3** — settings connected-accounts overflow: the action group couldn't
+  wrap, so Disconnect ran off the card at 375px. Verified right edge 282 vs card
+  351, no document x-overflow.
+- **MB4** — **the rate popover was clipped by the carousel.** `<Rail>`'s
+  `overflow-x-auto` establishes a clipping box on BOTH axes, so no z-index could
+  have saved an `absolute` popover. `StarPicker` now portals to `document.body`
+  and positions off the trigger's viewport rect, flipping above near the bottom
+  edge. **The outside-click handler had to learn about the portal** — the picker
+  is no longer a descendant of `rootRef`, so the old `contains()` check would
+  have closed it on every star tap.
+- **MB5** — **card explainer on long-press, in a bottom sheet.** A touch tap
+  synthesises `mouseenter`, which started PosterCard's 350ms hover-intent timer
+  — so touching a quick-action button popped the tooltip as a side effect.
+  Hover-intent is now gated on `(hover: hover)` (a width breakpoint gets a
+  touchscreen laptop wrong in both directions); touch gets a 500ms press that
+  opens the same content in `<Sheet>`. Details that matter: >10px of travel
+  cancels the press (both axes — rails scroll horizontally); a `longPressed` ref
+  swallows the click touch fires after pointerup, or the sheet opens and the
+  card navigates away underneath it; `onContextMenu` is suppressed or the
+  browser's own long-press menu races ours. Tooltip's content was split out as
+  `<TooltipBody>` so the popover and the sheet cannot drift.
+- **MB6** — **Insights facet rows had no tap feedback.** Two distinct misses: no
+  PRESS state (all feedback was `hover:`, which a phone does not have) and no
+  PENDING state (facet pages are `force-dynamic`). Fixed with `active:` +
+  `touch-manipulation` + `ui/NavPendingBar` on Next 16's `useLinkStatus`.
+  Verified across all 86 facet links; the bar lights ~120ms after the tap.
+- **MB8** — **a calendar day's releases open in a carousel below the month**,
+  replacing the "+N more" popover/sheet. Below rather than over is the point:
+  the popover covered the following week and the sheet covered everything. The
+  open day is tracked as `yyyy-MM-dd`, **not a Date** — two Dates for the same
+  day are never `===`, so the `selected` check would silently never match.
+- **MB9** — **the recommended rail barely rotated.** Three compounding causes,
+  none a bug alone: `keepTop = 3` pinned most of a phone-visible rail,
+  `pickWeighted` bias 4 was steeply front-loaded, and the seed moved once per
+  UTC day. **THE LESSON: re-seeding does not produce turnover** — independent
+  draws from a front-loaded ranking overlap heavily however good the RNG is.
+  Turnover is now structural (`rotateRailFresh`): one weighted hand per 6-hour
+  epoch, dealt round-robin (not in contiguous blocks — those would hand slot 0
+  the best titles and slot 3 the dregs) into disjoint shares. Measured on the
+  real feed: **47 distinct titles over 5 periods, was ~15.** A rejected design is
+  recorded in the code because it looks obviously right: "exclude what the
+  previous slot drew" needs unbounded recursion, and its own unit test caught the
+  truncated version still repeating 3 of 15.
+- **MB10** — **store links render as brand marks**, not `name →` chips. The old
+  chips were tinted by the SOURCE the link was derived from, so an IGDB-sourced
+  Steam link rendered in IGDB's purple. Marks come from `simple-icons` but are
+  EXTRACTED AT BUILD TIME into `src/lib/brandMarks.ts`
+  (`scripts/gen-brand-marks.mjs`) — the package holds 3,453 icons and we need 11.
+  RAWG and "Official site" have no mark and keep a visible text label.
+- **MB11** — **"More like this" tops up from the provider** when the local
+  catalog is too thin. NOT the diagnosis it looked like: the route already
+  returned Troy and Ulysses for The Odyssey, and `SimilarRail` hides a rail under
+  three items. TMDB `/recommendations` then `/similar` (behavioural first — it is
+  better where it has data and empty for exactly the obscure titles that needed
+  fixing), IGDB `similar_games` for games, behind a persisted cache because this
+  is a public surface. **Anon write gate verified: 4 Googlebot-UA requests
+  including ones where the top-up fired changed
+  `media_items`/`media_links`/`media_external_ids` by ZERO.**
+- **MB12** — **"Where to watch" always renders for movies/shows**, saying either
+  "not released yet" or "not available in your region" instead of the section
+  silently vanishing. Games keep the gate; Links is their equivalent.
+- **MB13** — **the mobile hero IS the gallery**: a native scroll-snap carousel
+  with dots, replacing a lead-image hero plus a separate gallery further down.
+  **The part worth keeping:** hiding the desktop gallery with `hidden lg:block`
+  was NOT enough — at 375px, inside a `display:none` subtree, it still downloaded
+  ALL 14 of its images, and `loading="lazy"` does not help (Chrome fetches lazy
+  images in a display:none container). The reverse held too. Both trees are now
+  gated on `useMediaQuery`, and **3 images load where 22 did**. AGENTS.md's "CSS
+  visibility is not conditional rendering" in its image-bandwidth form rather
+  than the double-mount form.
+- **MB15** — **"Fandex says I own Gothic 1 Remake on Steam."** The data was right
+  and the page was misleading: the badge said a bare "✓ Owned" naming no source,
+  directly above "Your wishlists → Steam @Ramses · View on Steam →". Ownership
+  came from **RAWG** (`user_item_state.source='rawg'`); Steam reports nothing for
+  that item. Fixed by carrying `libraryStatusSources` — the library row's OWN
+  sources, deliberately not the `platformSources` union, which folds in the
+  watchlist and would answer "Steam" for an item Steam merely wishlists.
+
+**Also found while measuring, spawned separately:** the Tailwind utilities
+`duration-base|fast|slow|instant` and `ease-standard|…` **generate no CSS at
+all** — Tailwind v4 has no `--duration-*`/`--ease-*` theme namespace, so ~32 call
+sites across 10 files silently animate at the built-in 150ms default. The tokens
+resolve fine, which is why nothing ever looked broken. Third instance of the
+`@theme` family already in AGENTS.md, with a different mechanism (unknown utility
+namespace rather than tree-shaking).
+
+**And a pre-existing bug the hero work surfaced:** the item page's desktop-only
+text "Back" button had been rendering on MOBILE since 038fc9e (2026-07-29).
+`buttonClasses()` hard-codes `inline-flex` and appends the caller's classes after
+it, but **Tailwind resolves competing utilities by the order rules land in the
+stylesheet, not by their order in the class attribute** — so `hidden
+lg:inline-flex` lost. `buttonClasses` now drops its own display utility when the
+caller brought an unprefixed one.

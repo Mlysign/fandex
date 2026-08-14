@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-14 (deployed)._
+_Last updated: 2026-08-14 (Nils's mobile-testing batch: 13 of 15 shipped)._
 
 ---
 
@@ -31,6 +31,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 | | Item | Blocked on |
 |--|------|--|
+| 🟡 | **MB — Nils's mobile-testing batch (15 notes)** | **13 shipped + verified 2026-08-14.** Two left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look) and **MB14** (per-episode show tracking with two-way Trakt sync — **designed, deliberately not started**: it touches `migrations.ts` AND a sync adapter, so it wants a session with room to verify against a real DB copy). → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | ✅ | **PR17 — post-outage verification** | **CLOSED 2026-08-12**, all five steps. Backups proven by a real restore drill. |
 | ✅ | **SM38 — anon surface had zero clickable items** | **FIXED 2026-08-12.** The anon branches now run the existing read-only `lookupExistingUuids` instead of returning an empty map. Verified on a real catalog: Discover 0 → **32** links, `/tag/action` 40, `/studio/a24` 26, Home 14 — and a Googlebot crawl still wrote **zero** rows. |
@@ -72,9 +73,9 @@ Everything else is done. **H1, H2, H4 (closed 2026-08-03), H5, all five audit pa
 | **H3** — monetization | 🔵 v1 built 2026-08-03 — donations live, affiliate dark → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🔵 needs the TWA build |
 
-## ✅ Quality bar (as of 2026-08-12)
+## ✅ Quality bar (as of 2026-08-14)
 
-**665 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**677 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
