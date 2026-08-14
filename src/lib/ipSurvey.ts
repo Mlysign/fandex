@@ -16,8 +16,14 @@ export interface FranchiseMember {
   mediaItemId: string;
   title: string | null;
   type: string;
-  /** true when this item is here because of an item_ip_override, not provider data */
-  manual: boolean;
+  /**
+   * Where this membership came from. Three values, not a boolean: once Wikidata
+   * could attach a franchise, a bare `manual` flag labelled all 407 of its rows
+   * "attached by hand" in the admin panel, which is both wrong and the opposite
+   * of useful — provenance is exactly what you want to see when deciding
+   * whether to trust a row.
+   */
+  source: "provider" | "manual" | "wikidata";
 }
 
 export interface FranchiseRow {
@@ -80,7 +86,7 @@ export function surveyFranchises(): FranchiseRow[] {
     const row = touch(key, r.name);
     if (row.seen.has(r.id)) continue;
     row.seen.add(r.id);
-    row.members.push({ mediaItemId: r.id, title: r.title, type: r.type, manual: false });
+    row.members.push({ mediaItemId: r.id, title: r.title, type: r.type, source: "provider" });
   }
 
   // Hand-attached membership — the only way a show is ever in a franchise.
@@ -97,7 +103,7 @@ export function surveyFranchises(): FranchiseRow[] {
       if (row.seen.has(mediaItemId)) continue;
       row.seen.add(mediaItemId);
       const t = titles.get(mediaItemId);
-      row.members.push({ mediaItemId, title: t?.title ?? o.label, type: t?.type ?? "?", manual: true });
+      row.members.push({ mediaItemId, title: t?.title ?? o.label, type: t?.type ?? "?", source: o.source });
     }
   }
 

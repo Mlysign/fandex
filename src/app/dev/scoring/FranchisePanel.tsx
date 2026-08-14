@@ -17,7 +17,13 @@ import { useCallback, useEffect, useState } from "react";
 const inputCls = "bg-neutral-950 border border-neutral-700 rounded-md px-2 py-1 text-sm text-neutral-100";
 const btnCls = "px-2 py-1 rounded-md bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors disabled:opacity-50";
 
-interface Member { mediaItemId: string; title: string | null; type: string; manual: boolean }
+interface Member { mediaItemId: string; title: string | null; type: string; source: "provider" | "manual" | "wikidata" }
+
+const SOURCE_LABEL: Record<Member["source"], string> = {
+  provider: "",
+  manual: "attached by hand",
+  wikidata: "via Wikidata",
+};
 interface Franchise { key: string; label: string; members: Member[]; types: string[]; aliases: string[] }
 interface Suggestion { mediaItemId: string; title: string; type: string; ipKey: string; ipLabel: string; match: "exact" | "prefix" }
 interface SearchHit { id: string; title: string; type: string }
@@ -222,12 +228,19 @@ function FranchiseRow({
                 <span className="text-neutral-400 truncate">
                   <span className="text-[10px] uppercase text-neutral-600 mr-2">{m.type}</span>
                   {m.title ?? m.mediaItemId}
-                  {m.manual && <span className="text-[10px] text-neutral-600 ml-2">attached by hand</span>}
+                  {m.source !== "provider" && (
+                    <span className="text-[10px] text-neutral-600 ml-2">{SOURCE_LABEL[m.source]}</span>
+                  )}
                 </span>
                 <button
                   className={btnCls}
                   disabled={busy === `m-${m.mediaItemId}`}
-                  onClick={() => void (m.manual
+                  // An override-derived row is CLEARED (delete the row); a
+                  // provider-derived one is DETACHED (write a 'remove'), since
+                  // deleting nothing would just let the next read re-derive it.
+                  // Clearing a wikidata row lets a later sweep re-attach it —
+                  // detach it instead if you want the removal to stick.
+                  onClick={() => void (m.source !== "provider"
                     ? act({ action: "clear", mediaItemId: m.mediaItemId, ipKey: f.key }, `m-${m.mediaItemId}`)
                     : act({ action: "detach", mediaItemId: m.mediaItemId, ipKey: f.key, label: f.label }, `m-${m.mediaItemId}`))}
                 >
