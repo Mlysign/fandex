@@ -12,6 +12,7 @@ import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
 import SimilarRail from "./SimilarRail";
 import BackButton from "@/components/ui/BackButton";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { TagDisplayCategory } from "@/lib/tags";
 
 // P13 — THE item view. One page, one url, for everyone.
@@ -51,6 +52,9 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
   tagCategories?: TagDisplayCategory[];
 }) {
   const [idx, setIdx] = useState(0);
+  // `lg` — matches the Tailwind breakpoint the two-column layout switches at,
+  // so the gallery appears exactly when its column does.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // The sections take an EnrichedItem. This is the ONE place that widens the
   // public type, and it's where the per-user fields are explicitly empty.
@@ -135,9 +139,17 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
       {/* Mobile hero — full-bleed, so it sits OUTSIDE the page gutter. It carries
           its own back + share controls, which is why the BackButton below is
           desktop-only. */}
-      <div className="lg:hidden">
-        <DetailHero image={imgs[0] ?? null} meta={{ type: item.type, title: item.title, metaParts }} />
-      </div>
+      {/* `lg:hidden` AND the isDesktop gate, and both are needed. The CSS class
+          keeps the hero from flashing on a desktop first paint (the hook
+          necessarily reports false until it has mounted); the gate is what
+          actually stops the browser downloading 8 of its 13 images into a
+          display:none subtree once we know we're on desktop. Exactly one image
+          tree — this one or the gallery below — exists at any width. */}
+      {!isDesktop && (
+        <div className="lg:hidden">
+          <DetailHero images={imgs} meta={{ type: item.type, title: item.title, metaParts }} />
+        </div>
+      )}
 
       {/* ONE content tree for both breakpoints.
           The first version of this rebuild rendered a `lg:hidden` mobile tree and
@@ -151,12 +163,27 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
         <BackButton fallbackHref="/discover" className="hidden lg:inline-flex mb-4" />
 
         <div className="lg:grid lg:grid-cols-[minmax(0,380px)_1fr] lg:gap-10 lg:items-start">
-          {/* Gallery: sticky left column on desktop. On mobile the hero already
-              shows the lead image, so this only earns its place when there are
-              more — and then it sits under the hero, thumbnails next to art. */}
-          <div className={`${imgs.length > 1 ? "" : "hidden"} lg:block lg:sticky lg:top-24 mb-6 lg:mb-0`}>
-            <MediaGallery images={imgs} idx={Math.min(idx, Math.max(0, imgs.length - 1))} setIdx={setIdx} title={item.title} />
-          </div>
+          {/* Gallery: sticky left column, DESKTOP ONLY since 2026-08-14. The
+              mobile hero above is now the swipeable gallery itself (MB13), so
+              rendering this under it would put the same images on the page
+              twice. Desktop keeps the thumbnail-strip version: there's no swipe
+              on a mouse, and the two-column layout has room for a persistent
+              strip that a 3:4 phone hero doesn't.
+
+              GATED ON useMediaQuery, NOT `hidden lg:block` — and that is
+              load-bearing, not style. Measured on this very page at 375px:
+              inside a `display:none` subtree the gallery still downloaded ALL
+              14 of its images, on top of the hero's own. `loading="lazy"`
+              doesn't save you either; Chrome fetches lazy images in a
+              display:none container. This is AGENTS.md's "CSS visibility is not
+              conditional rendering" invariant, in its image-bandwidth form
+              rather than the double-mount form the item page hit in July.
+              The hook's own doc comment names this exact case. */}
+          {isDesktop && (
+            <div className="lg:sticky lg:top-24 mb-6 lg:mb-0">
+              <MediaGallery images={imgs} idx={Math.min(idx, Math.max(0, imgs.length - 1))} setIdx={setIdx} title={item.title} />
+            </div>
+          )}
 
           <div className={`min-w-0 ${SECTION_GAP}`}>
             {/* Desktop title block. The mobile title lives in the hero scrim, so
