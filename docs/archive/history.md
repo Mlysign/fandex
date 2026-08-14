@@ -2013,9 +2013,19 @@ were reverted to the short names, and `ui/Sheet`'s hardcoded
 → 0.2s (186 nodes on `/`), `.duration-fast` → 0.12s (13 nodes on `/calendar`),
 `.duration-slow` → 0.32s, `.ease-decelerate` → `cubic-bezier(0,0,0,1)`; all four
 rules also present in the production stylesheet after `npm run build`.
-`duration-instant` and the three unused `ease-*` correctly emit nothing — Tailwind
-is scan-based, so a token with no source call site has no rule, and a class
+Tailwind is scan-based, so a token with no call site has no rule, and a class
 injected at runtime was never scanned and can't be tested that way.
+
+**A tail that surprised the session:** prod's stylesheet came back with SIX rules,
+not the four the local build produced — `duration-instant` and `ease-standard`
+appeared even though nothing in `src/` uses them. Cause: `@import "tailwindcss"`
+carries no `@source` scope, so the scanner walks the whole project (minus
+gitignored paths) and extracts candidates from **markdown prose** — writing the
+class names into `AGENTS.md` and this file generated the rules. ~200 bytes, and
+the tokens are real, so it was left alone. But: don't read "the rule exists in
+prod" as proof a component uses it, and expect documentation to move the CSS
+output. Scoping the scanner with `@source "./src"` would stop it and is a
+deliberate build change nobody has needed yet.
 
 **Why nothing caught it:** `tsc` clean, `npm run lint` 0 errors, 677 tests green,
 `next build` clean — an unrecognized utility class is not an error in any tool in
