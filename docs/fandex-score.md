@@ -96,7 +96,23 @@ Both signatures fold into `scoringConfigSignature()`, so an admin edit invalidat
 
 **Title-match suggestions** (`suggestFranchisesByTitle`) are the only automatic show signal: an item whose title exactly matches, or is prefixed by, a franchise the catalog already knows. 31 candidates on the real catalog. Guarded at **4 chars for exact** and **2 words for prefix** — without that the show "X" matched the "X Collection" key, which it did. Never auto-applied; each is accepted or skipped by hand. **The Mandalorian is correctly not suggested** — it has no title signal, which is why the hand-attach exists.
 
-**Measured dead ends, so nobody re-checks them:** TMDB carries franchise names on **2 of 387** show keyword payloads, and has no collection concept for series at all. The open automatic option is **Wikidata `P179` (part of the series)** — free, keyless, reachable from an IMDb or TMDB id, and the only thing that would find The Mandalorian *and* fix the metal-gear split at the source. Not built.
+**Measured dead ends, so nobody re-checks them:** TMDB carries franchise names on **2 of 387** show keyword payloads, and has no collection concept for series at all.
+
+#### 3.6.2 Wikidata (2026-08-14) — the third source, and the one that knows about shows
+
+Free, keyless, one SPARQL request per 50 items. `src/lib/sources/wikidata.ts` + the resumable sweep behind `POST /api/dev/scoring/wikidata`.
+
+**The property differs per medium, and both were measured, not assumed.** The obvious pick is `P179` "part of the series" — and for **films and shows it is wrong**: Star Wars (1977) carries both `Star Wars` and `Star Wars original trilogy` under P179, so a sub-series pollutes the facet. `P8345` "media franchise" is clean there. **Games are the reverse**: not one of five sampled Steam titles had P8345 at all, while P179 returned Metal Gear, The Witcher, Half-Life, Portal, Fallout. So: films/shows join on IMDb id (`P345`) → **P8345**; games on Steam app id (`P1733`) → **P179**.
+
+**Labels need `wikibase:language "en,mul,en-gb"`.** Plain `"en"` returns the bare QID for any entity without an English label, which is common for series items — Half-Life, Portal, Fallout and The Last of Us all came back as `Q752241`/`Q7231475`/`Q167835`/`Q28062624`. They carry `mul` labels. Anything still QID-shaped after the fallback is dropped rather than stored as a franchise name.
+
+**Provenance is load-bearing.** `item_ip_override.source` is `manual` or `wikidata`, and `setItemIpOverride`'s upsert carries a `WHERE` clause so **a wikidata write can never overwrite a manual row** — otherwise the next sweep would silently undo a hand correction and the panel would look like it ignored the click. The reverse is allowed.
+
+**The sweep is driven off `wikidata_ip_checked` — what we ASKED — never off "what still has no franchise".** That second shape is the trap SM48's cross-link backfill hit: the items a provider genuinely doesn't know stay missing forever, so the sweep never drains.
+
+**Wikidata throttles, and finding that out was useful.** Firing 250-item batches back to back timed out and tripped the circuit breaker within seconds. Ten consecutive failed calls recorded **zero** rows — the throw-don't-swallow contract holding under a real outage, which is exactly what stops an outage being written down as "Wikidata says no". Fixed with a 1.2 s pause between queries; the sweep then drained all 2,295 eligible items in 11 batches with no failures.
+
+**Result on the real catalog:** 584 items found a franchise → **321 games, 165 movies, 98 shows**. Star Wars spans 11 movies + 6 shows. Links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek, Cyberpunk: Edgerunners → Cyberpunk. Franchises with an opinion 319 → **461**; items whose score moves 516 → **713 of 1,903**.
 
 ### 3.4 Explainability payload
 

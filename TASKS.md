@@ -121,7 +121,13 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 3. ⬜ **Tune `ip`** once you've seen it live. Default 1.3 (peer with `director`, which you have at 4). `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what any value does to real titles first.
 4. ⬜ **Optionally re-fit the gains.** Franchises widened the tails slightly (0.9% → 1.7% outside 0–100); the fitting pair moves 2.5/4 → **2.4/3.8**. Marginal.
 
-**⬜ Wikidata P179 — the remaining phase, NOT started.** Title matching is the only automatic show signal today and it structurally cannot find The Mandalorian or bare Andor. Wikidata's `part of the series` is a real cross-media franchise graph, free and keyless, reachable from an IMDb id (`P345`) or TMDB id — it would cover those *and* fix the metal-gear split at the source. Cost: a new provider integration, so it needs the `http.ts` breaker/budget treatment and a lazy heal path, not a mass sweep. **Measured dead ends, don't re-check them:** TMDB keywords carry franchise names on 2 of 387 show payloads, and TMDB has no collection concept for series at all.
+**✅ Wikidata shipped 2026-08-14** (`313a830`) — **the shows gap is closed.** `POST /api/dev/scoring/wikidata` (admin, bounded + resumable, repeat until `remaining` is 0). On the local catalog: 2,295 items asked, **584 found, 605 attachments — 321 games, 165 movies, 98 shows.** Star Wars now spans 11 movies + 6 shows (The Mandalorian, Andor, Obi-Wan Kenobi…), plus links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek.
+
+- ⬜ **Run it against prod** — same shape as `/api/dev/crosslink`; prod's catalog is untouched. Repeat `POST {"maxItems":150}` until `remaining` is 0 (~15 calls).
+- **Property per medium, both measured — don't "simplify" to one.** Films/shows: IMDb `P345` → **`P8345`** (P179 there also returns sub-series like "Star Wars original trilogy"). Games: Steam `P1733` → **`P179`** (P8345 is absent on games entirely).
+- **Labels need `en,mul,en-gb`.** Plain `"en"` returns bare QIDs for the Half-Life/Portal/Fallout/Last of Us series — they carry `mul` labels. Anything still QID-shaped is dropped.
+- **A wikidata write never overwrites a `manual` one** (`item_ip_override.source`, enforced in the upsert's WHERE) — otherwise a re-sweep would undo your corrections.
+- **Measured dead ends, don't re-check:** TMDB keywords carry franchise names on 2 of 387 show payloads; TMDB has no collection concept for series.
 
 ---
 
