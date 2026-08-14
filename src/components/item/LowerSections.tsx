@@ -2,12 +2,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { EnrichedItem, MediaType } from "@/types";
-import { SOURCE_COLORS } from "@/lib/constants";
 import FacetLink, { facetHref } from "@/components/FacetLink";
 import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";
 import { facetChipStyle, nonFacetChipStyle } from "@/lib/facetPalette";
 import { tagKey } from "@/lib/facets";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
+import StoreLink from "./StoreLink";
 import { SectionHeading } from "./primitives";
 
 // One cast member — the mockup's `.castav` (04-pages/item-detail.html:151): a
@@ -337,23 +337,17 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         </section>
       )}
 
-      {/* Store links */}
+      {/* Store links — brand marks, not `name →` chips (2026-08-14). See
+          item/StoreLink.tsx for why the logo replaced the text pill and why the
+          marks are desaturated until hover. */}
       {storeLinks.length > 0 && (
         <section className="pt-2 border-t border-border">
           <SectionHeading>Links</SectionHeading>
           <div className="flex flex-wrap gap-2">
             {storeLinks.map((l) => (
-              <a
-                key={l.name}
-                href={l.url}
-                target="_blank"
-                rel={l.affiliate ? "sponsored noopener noreferrer" : "noopener noreferrer"}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors"
-                style={{ background: `${SOURCE_COLORS[l.source] ?? "#888"}18`, color: SOURCE_COLORS[l.source] ?? "#aaa" }}
-              >
-                {l.name} →
+              <StoreLink key={l.name} link={l}>
                 {l.affiliate && <AffiliateMark />}
-              </a>
+              </StoreLink>
             ))}
           </div>
           {/* The section-level notice rides on the rewritten rows only — an
