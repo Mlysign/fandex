@@ -40,6 +40,10 @@ export const ROLE_LABELS: Record<string, string> = {
   publisher: "Publishers",
   studio: "Studios",
   network: "Networks",
+  // Singular on purpose: an item belongs to ONE franchise, so this label reads
+  // as a row heading in the score breakdown ("Franchise — Star Wars"), unlike
+  // the plural group headings above.
+  ip: "Franchise",
 };
 
 export const SOURCE_LABELS: Record<Source | string, string> = {

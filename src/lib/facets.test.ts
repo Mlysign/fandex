@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tagKey, personKey, companyKey, facetId } from "./facets";
+import { tagKey, personKey, companyKey, ipKey, facetId, extractFacets } from "./facets";
 
 // A person/company key is the PUBLIC URL IDENTITY (facetUrl.ts addresses a facet
 // by its key — there is no database row to resolve). So a normalizer that drops
@@ -80,5 +80,82 @@ describe("facetId", () => {
     expect(facetId({ kind: "person", role: "director", key: "bong joon ho" }))
       .toBe("person|director|bong joon ho");
     expect(facetId({ kind: "tag", key: "sci fi" })).toBe("tag||sci fi");
+  });
+});
+
+describe("ipKey", () => {
+  // THE WHOLE POINT of this normalizer: TMDB suffixes its movie collections
+  // while IGDB's game franchises are bare, so without peeling the trailing word
+  // the movie and the game land on two different facets and the cross-media
+  // franchise signal — the entire reason the ip facet exists — silently
+  // doesn't happen. Both real spellings, taken from the live catalog.
+  it("folds TMDB's collection suffix onto IGDB's bare franchise name", () => {
+    expect(ipKey("Star Wars Collection")).toBe(ipKey("Star Wars"));
+    expect(ipKey("Star Wars Collection")).toBe("star wars");
+    expect(ipKey("The Chronicles of Narnia Collection")).toBe("the chronicles of narnia");
+    expect(ipKey("How to Train Your Dragon Collection")).toBe("how to train your dragon");
+  });
+
+  it("peels the other franchise words too", () => {
+    expect(ipKey("Alien Anthology")).toBe("alien");
+    expect(ipKey("The Dark Knight Trilogy")).toBe("the dark knight");
+    expect(ipKey("Marvel Cinematic Universe")).toBe("marvel");
+  });
+
+  it("keeps a bare IGDB franchise untouched", () => {
+    expect(ipKey("Fallout")).toBe("fallout");
+    expect(ipKey("Grand Theft Auto")).toBe("grand theft auto");
+    expect(ipKey("S.T.A.L.K.E.R.")).toBe("s t a l k e r");
+  });
+
+  it("never strips down to nothing", () => {
+    expect(ipKey("Collection")).toBe("collection");
+    expect(ipKey("Universe")).toBe("universe");
+  });
+});
+
+describe("extractFacets — franchise / IP", () => {
+  const link = (source: string, rawData: unknown) =>
+    ({ id: "", mediaItemId: "m", source, sourceId: "1", title: null, releaseDate: null, rawData, lastSynced: 0 }) as never;
+
+  it("reads a TMDB movie collection and an IGDB franchise onto the SAME facet", () => {
+    const movie = extractFacets(
+      [link("tmdb", { belongs_to_collection: { id: 10, name: "Star Wars Collection" } })],
+      "movie",
+      {}
+    ).filter((f) => f.kind === "ip");
+    const game = extractFacets(
+      [link("igdb", { franchises: [{ id: 1, name: "Star Wars" }] })],
+      "game",
+      {}
+    ).filter((f) => f.kind === "ip");
+
+    expect(movie).toHaveLength(1);
+    expect(game).toHaveLength(1);
+    expect(movie[0].key).toBe("star wars");
+    expect(facetId(movie[0])).toBe(facetId(game[0])); // the cross-media join
+    expect(movie[0].role).toBe("ip");
+    expect(movie[0].label).toBe("Star Wars Collection"); // display keeps the source spelling
+  });
+
+  it("emits nothing when neither provider knows a franchise", () => {
+    const facets = extractFacets(
+      [link("tmdb", { belongs_to_collection: null }), link("igdb", {})],
+      "movie",
+      {}
+    );
+    expect(facets.filter((f) => f.kind === "ip")).toHaveLength(0);
+  });
+
+  it("dedupes the same franchise arriving from both providers at once", () => {
+    const facets = extractFacets(
+      [
+        link("tmdb", { belongs_to_collection: { id: 10, name: "Star Wars Collection" } }),
+        link("igdb", { franchises: [{ name: "Star Wars" }, { name: "Star Wars" }] }),
+      ],
+      "game",
+      {}
+    );
+    expect(facets.filter((f) => f.kind === "ip")).toHaveLength(1);
   });
 });

@@ -1,7 +1,15 @@
 // SM39 — how far outside 0-100 does the Fandex Score actually land, and which
 // knob fixes it? Read-only companion to scripts/calibrate-fandex.mjs.
 //
-// Usage: node scripts/probe-score-range.mjs <source-db-path> [userId]
+// Usage: node scripts/probe-score-range.mjs <source-db-path> [userId] [--config <json>]
+//
+// `--config` takes a file holding a GET /api/dev/scoring response verbatim
+// (`{config, categories, …}`) and scores THAT against this database instead of
+// the local stored row. This is how you answer "what is production actually
+// doing?" without a shell on the Railway volume — the config is small, the
+// library is what's expensive to move, so bring the config to the data. It was
+// added for SM39, where prod turned out to be running a hand-tuned config
+// (director 4, C 2, K 30/20) that no local measurement could have predicted.
 //
 // Why a SECOND script rather than a flag on the calibrator: the two target
 // different things and would fight each other. calibrate-fandex.mjs solves for
@@ -29,9 +37,17 @@ import { resolve } from "./alias-hooks.mjs";
 
 registerHooks({ resolve });
 
-const sourcePath = process.argv[2];
+const argv = process.argv.slice(2);
+const configFlag = argv.indexOf("--config");
+const configPath = configFlag >= 0 ? argv.splice(configFlag, 2)[1] : null;
+
+const sourcePath = argv[0];
 if (!sourcePath || !fs.existsSync(sourcePath)) {
-  console.error("usage: node scripts/probe-score-range.mjs <source-db-path> [userId]");
+  console.error("usage: node scripts/probe-score-range.mjs <source-db-path> [userId] [--config <json>]");
+  process.exit(1);
+}
+if (configPath && !fs.existsSync(configPath)) {
+  console.error(`--config file not found: ${configPath}`);
   process.exit(1);
 }
 
@@ -52,7 +68,7 @@ const { mergeLinks } = await import("../src/lib/merge.ts");
 const { extractFacets } = await import("../src/lib/facets.ts");
 const { getUserCountry } = await import("../src/lib/userCountry.ts");
 
-const userId = process.argv[3] ?? get("SELECT id FROM users ORDER BY created_at LIMIT 1")?.id;
+const userId = argv[1] ?? get("SELECT id FROM users ORDER BY created_at LIMIT 1")?.id;
 if (!userId) {
   console.error("No users in this database.");
   process.exit(1);
@@ -81,12 +97,29 @@ for (const row of rows) {
 }
 
 const country = getUserCountry(userId);
-const liveConfig = getScoringConfig();
+
+// --config wins over the local row, and brings its own category weights: those
+// live in `tag_category`, NOT in the config blob, so reading only `config` from
+// a /api/dev/scoring response reproduces the wrong thing. buildProfile's
+// `categoryWeights` override (H5.4's live-preview path) is what applies them.
+const imported = configPath ? JSON.parse(fs.readFileSync(configPath, "utf8")) : null;
+const baseConfig = imported?.config ?? getScoringConfig();
+const categoryWeights = imported?.categories
+  ? new Map(imported.categories.map((c) => [c.id, { weight: c.weight, ignored: !!c.ignored }]))
+  : undefined;
+
 console.log(`Library: ${itemMap.size} items for user ${userId}`);
-console.log(`Live stored config: K_up ${liveConfig.mappingConstantUp} · K_down ${liveConfig.mappingConstantDown} · C ${liveConfig.priorStrength} · topN ${liveConfig.topTagsPositive}/${liveConfig.topTagsNegative}/${liveConfig.topPeople}/${liveConfig.topCompanies}\n`);
+console.log(
+  `${imported ? `Imported config (${configPath})` : "Live stored config"}: ` +
+  `K_up ${baseConfig.mappingConstantUp} · K_down ${baseConfig.mappingConstantDown} · ` +
+  `C ${baseConfig.priorStrength} · topN ${baseConfig.topTagsPositive}/${baseConfig.topTagsNegative}/${baseConfig.topPeople}/${baseConfig.topCompanies} · ` +
+  `director ${baseConfig.roleWeights.director}\n`
+);
+
+const profileFor = (cfg) => buildProfile(userId, { config: cfg, categoryWeights });
 
 function scores(cfg) {
-  const profile = buildProfile(userId, { config: cfg });
+  const profile = profileFor(cfg);
   const out = [];
   for (const { type, links } of itemMap.values()) {
     const merged = mergeLinks(links, type, country);
@@ -129,24 +162,33 @@ const HEAD = "config".padEnd(34) + "   min   p10 median   p90   max  <0     >100
 // Note this lands ASYMMETRIC by construction whenever the center isn't 50 —
 // which is Q19's design intent (center = your own mean rating), and is why a
 // single shared K cannot fit both tails at once.
-console.log("── Step 1 · rawSum shape and the range-fitting K, per priorStrength ──\n");
-const C_VALUES = [5, 8, 12, 20, 30, 50];
-const fits = new Map();
-for (const C of C_VALUES) {
-  const cfg = { ...liveConfig, priorStrength: C, mappingConstantUp: 1, mappingConstantDown: 1 };
-  const s = scores(cfg);
-  const profile = buildProfile(userId, { config: cfg });
-  const c = profile.baseline * 10;
+const round1 = (x) => Math.round(x * 10) / 10;
+
+// Returns `cfg` with the two gains replaced by the pair that puts the 0.5th and
+// 99.5th percentile exactly on 0 and 100. Everything else — role weights,
+// category weights, top-N — is left alone, which is the point: those encode
+// taste, the gains are only the ruler they're printed on.
+function fitGains(cfg) {
+  const s = scores({ ...cfg, mappingConstantUp: 1, mappingConstantDown: 1 });
+  const c = profileFor(cfg).baseline * 10;
   const rHi = pct(s, 0.995) - c;
   const rLo = pct(s, 0.005) - c;
-  const kUp = (100 - c) / rHi;
-  const kDown = rLo < 0 ? c / -rLo : Infinity;
-  fits.set(C, { kUp, kDown, c, spread: pct(s, 0.9) - pct(s, 0.1) });
+  return {
+    ...cfg,
+    mappingConstantUp: round1(rHi > 0 ? (100 - c) / rHi : cfg.mappingConstantUp),
+    mappingConstantDown: round1(rLo < 0 ? c / -rLo : cfg.mappingConstantDown),
+    _center: c,
+    _spread: pct(s, 0.9) - pct(s, 0.1),
+  };
+}
+
+console.log("── Step 1 · rawSum shape and the range-fitting gains, per priorStrength ──\n");
+for (const C of [2, 5, 8, 12, 20, 30]) {
+  const f = fitGains({ ...baseConfig, priorStrength: C });
   console.log(
-    `C=${String(C).padStart(2)}  center ${c.toFixed(1)}  ` +
-    `rawSum p0.5 ${rLo.toFixed(2).padStart(7)}  p99.5 ${rHi.toFixed(2).padStart(6)}  ` +
-    `p10-p90 spread ${(pct(s, 0.9) - pct(s, 0.1)).toFixed(2).padStart(5)}  →  ` +
-    `fits 0-100 at K_up ${kUp.toFixed(1)} / K_down ${kDown.toFixed(1)}`
+    `C=${String(C).padStart(2)}  center ${f._center.toFixed(1)}  ` +
+    `rawSum p10-p90 spread ${f._spread.toFixed(2).padStart(6)}  →  ` +
+    `fits 0-100 at K_up ${f.mappingConstantUp} / K_down ${f.mappingConstantDown}`
   );
 }
 
@@ -154,35 +196,20 @@ for (const C of C_VALUES) {
 console.log(`\n── Step 2 · candidate configs (real scores, ${itemMap.size} items) ──\n`);
 console.log(HEAD);
 
+const TIGHT_TOPN = { topTagsPositive: 3, topTagsNegative: 2, topPeople: 2, topCompanies: 1 };
 const CANDIDATES = [
-  ["A · live stored (today)", { ...liveConfig }],
-  ["B · asymmetric K, C unchanged", { ...liveConfig, mappingConstantUp: round1(fits.get(5).kUp), mappingConstantDown: round1(fits.get(5).kDown) }],
-  ["C · C=12 + asymmetric K", { ...liveConfig, priorStrength: 12, mappingConstantUp: round1(fits.get(12).kUp), mappingConstantDown: round1(fits.get(12).kDown) }],
-  ["D · C=20 + asymmetric K", { ...liveConfig, priorStrength: 20, mappingConstantUp: round1(fits.get(20).kUp), mappingConstantDown: round1(fits.get(20).kDown) }],
-  ["E · tighter topN (3/2/2/1)", { ...liveConfig, topTagsPositive: 3, topTagsNegative: 2, topPeople: 2, topCompanies: 1 }],
-  ["F · E + asymmetric K", null], // filled below — needs its own rawSum fit
-  ["G · prod's suspected stale K=25", { ...liveConfig, mappingConstantUp: 25, mappingConstantDown: 25 }],
-  ["H · prod's suspected stale K=50", { ...liveConfig, mappingConstantUp: 50, mappingConstantDown: 50 }],
+  ["A · as loaded", baseConfig],
+  ["B · gains fitted, nothing else", fitGains(baseConfig)],
+  ["C · C=5 + fitted gains", fitGains({ ...baseConfig, priorStrength: 5 })],
+  ["D · C=12 + fitted gains", fitGains({ ...baseConfig, priorStrength: 12 })],
+  ["E · tighter topN, gains as loaded", { ...baseConfig, ...TIGHT_TOPN }],
+  ["F · tighter topN + fitted gains", fitGains({ ...baseConfig, ...TIGHT_TOPN })],
 ];
 
-function round1(x) { return Math.round(x * 10) / 10; }
-
-for (const entry of CANDIDATES) {
-  let [label, cfg] = entry;
-  if (label.startsWith("F")) {
-    const base = { ...liveConfig, topTagsPositive: 3, topTagsNegative: 2, topPeople: 2, topCompanies: 1 };
-    const probe = scores({ ...base, mappingConstantUp: 1, mappingConstantDown: 1 });
-    const c = buildProfile(userId, { config: base }).baseline * 10;
-    cfg = {
-      ...base,
-      mappingConstantUp: round1((100 - c) / (pct(probe, 0.995) - c)),
-      mappingConstantDown: round1(c / -(pct(probe, 0.005) - c)),
-    };
-    label = `F · tighter topN + asym K (${cfg.mappingConstantUp}/${cfg.mappingConstantDown})`;
-  }
-  if (label.startsWith("B") || label.startsWith("C") || label.startsWith("D")) {
-    label += ` (${cfg.mappingConstantUp}/${cfg.mappingConstantDown})`;
-  }
+for (const [name, cfg] of CANDIDATES) {
+  const label = name.startsWith("A") || name.startsWith("E")
+    ? name
+    : `${name} (${cfg.mappingConstantUp}/${cfg.mappingConstantDown})`;
   console.log(line(label, scores(cfg)));
 }
 

@@ -171,6 +171,7 @@ export const ScoringConfigPutSchema = z.object({
   topTagsNegative: z.number().int().min(0),
   topPeople: z.number().int().min(0),
   topCompanies: z.number().int().min(0),
+  topIps: z.number().int().min(0),
 });
 
 // POST /api/dev/scoring/categories — create/edit one tag_category row.

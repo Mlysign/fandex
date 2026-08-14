@@ -9,6 +9,7 @@ export interface ScoringConfigValues {
   topTagsNegative: number;
   topPeople: number;
   topCompanies: number;
+  topIps: number;
 }
 
 export interface TagCategoryConfig {
@@ -33,4 +34,4 @@ export interface Reason {
 // Roles shown in the Weights panel. "tag" is a vestigial key in scoring_config
 // (buildProfile never actually reads roleWeights.tag — tag facets weight by
 // their CATEGORY, not a role), so it's deliberately left out here.
-export const ROLE_ORDER = ["director", "creator", "writer", "cast", "developer", "publisher", "studio", "network"];
+export const ROLE_ORDER = ["director", "creator", "writer", "cast", "developer", "publisher", "studio", "network", "ip"];

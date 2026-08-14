@@ -802,17 +802,22 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   const tags = matched.filter((c) => c.f.kind === "tag");
   const people = matched.filter((c) => c.f.kind === "person");
   const companies = matched.filter((c) => c.f.kind === "company");
+  const ips = matched.filter((c) => c.f.kind === "ip");
 
   const tagsPositive = tags.filter((c) => c.dev > 0).sort((a, b) => b.dev - a.dev);
   const tagsNegative = tags.filter((c) => c.dev < 0).sort((a, b) => a.dev - b.dev); // most negative first
   const peopleSorted = [...people].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
   const companiesSorted = [...companies].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+  // Signed like people/companies, not split by sign like tags: a franchise you
+  // rate BELOW your average should pull the next entry down just as hard.
+  const ipsSorted = [...ips].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
 
   const kept: FandexContrib[] = [
     ...tagsPositive.slice(0, cfg.topTagsPositive),
     ...tagsNegative.slice(0, cfg.topTagsNegative),
     ...peopleSorted.slice(0, cfg.topPeople),
     ...companiesSorted.slice(0, cfg.topCompanies),
+    ...ipsSorted.slice(0, cfg.topIps),
   ];
   // Q29 (2026-07-19): facets beyond the selection used to just vanish — no
   // trace in the breakdown, so "why isn't this counted" had no visible
@@ -825,6 +830,7 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
     ...tagsNegative.slice(cfg.topTagsNegative),
     ...peopleSorted.slice(cfg.topPeople),
     ...companiesSorted.slice(cfg.topCompanies),
+    ...ipsSorted.slice(cfg.topIps),
     ...tags.filter((c) => c.dev === 0),
   ];
   if (!kept.length) return null;

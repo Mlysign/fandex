@@ -237,6 +237,11 @@ export default function WeightsPanel({
               <input type="number" step="1" min="0" className={numInput} value={draftConfig.topCompanies}
                 onChange={(e) => setDraftConfig((c) => ({ ...c, topCompanies: Number(e.target.value) }))} />
             </label>
+            <label className="flex items-center justify-between gap-2 text-neutral-400">
+              Top franchises
+              <input type="number" step="1" min="0" className={numInput} value={draftConfig.topIps}
+                onChange={(e) => setDraftConfig((c) => ({ ...c, topIps: Number(e.target.value) }))} />
+            </label>
           </div>
         </section>
 

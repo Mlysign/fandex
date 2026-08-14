@@ -24,15 +24,26 @@ import { tagKey, personKey, companyKey } from "@/lib/facets";
 // is the whole story. `/studio` likewise folds every company role (studio /
 // developer / publisher / network) into one page that unions the providers.
 
+// Not every facet kind has a public page. `ip` (franchise) deliberately has
+// none: a new root-level dynamic segment breaks the lint rule that gates CI,
+// and whether franchises become an SEO surface is a product decision, not a
+// side effect of adding them to the score. Expressed as a type so a future
+// kind has to answer the same question instead of silently getting a URL.
+export type LinkableFacetKind = Exclude<FacetKind, "ip">;
+
+export function isLinkableFacetKind(k: string): k is LinkableFacetKind {
+  return k === "person" || k === "tag" || k === "company";
+}
+
 // kind → URL prefix. All company roles share `/studio`.
-const KIND_PREFIX: Record<FacetKind, FacetPrefix> = {
+const KIND_PREFIX: Record<LinkableFacetKind, FacetPrefix> = {
   person: "person",
   tag: "tag",
   company: "studio",
 };
 
 // prefix → the facet kind the route resolves. `studio` maps back to `company`.
-const PREFIX_KIND: Record<FacetPrefix, FacetKind> = {
+const PREFIX_KIND: Record<FacetPrefix, LinkableFacetKind> = {
   person: "person",
   tag: "tag",
   studio: "company",
@@ -45,13 +56,13 @@ export function isFacetPrefix(s: string): s is FacetPrefix {
   return (FACET_PREFIXES as readonly string[]).includes(s);
 }
 
-export function prefixToKind(p: FacetPrefix): FacetKind {
+export function prefixToKind(p: FacetPrefix): LinkableFacetKind {
   return PREFIX_KIND[p];
 }
 
 // The right key normalizer for a kind — so a caller can turn a raw display label
 // into the canonical key without knowing which normalizer applies.
-export function keyFor(kind: FacetKind, label: string): string {
+export function keyFor(kind: LinkableFacetKind, label: string): string {
   return kind === "person" ? personKey(label) : kind === "company" ? companyKey(label) : tagKey(label);
 }
 
@@ -79,6 +90,6 @@ export function slugToKey(slug: string): string {
 // Build the public href for a facet. `role`/`label` are accepted so existing call
 // sites (which carry the full facet) pass straight through, but only kind + key
 // shape the url — the page always renders the combined, role-badged view.
-export function publicFacetHref(f: { kind: FacetKind; role?: FacetRole; key: string; label?: string | null }): string {
+export function publicFacetHref(f: { kind: LinkableFacetKind; role?: FacetRole; key: string; label?: string | null }): string {
   return `/${KIND_PREFIX[f.kind]}/${keyToSlug(f.key)}`;
 }

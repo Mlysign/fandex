@@ -31,7 +31,7 @@
 //      visitors and crawlers get the same payload shape with no new writes.
 
 import type { MediaType } from "@/types";
-import type { FacetKind} from "@/lib/facets";
+import type { LinkableFacetKind } from "@/lib/facetUrl";
 import { personKey } from "@/lib/facets";
 import type { PersonMeta, FacetScope } from "@/lib/facetDetail";
 import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId } from "@/lib/facetDetail";
@@ -81,7 +81,10 @@ export interface PublicFacetItem {
 }
 
 export interface PublicFacetPayload {
-  kind: FacetKind;
+  // A public facet page exists for exactly the three LINKABLE kinds — the route
+  // only ever resolves one from a /person|/tag|/studio prefix, and `ip` has no
+  // public page at all (see facetUrl.ts).
+  kind: LinkableFacetKind;
   key: string;
   label: string;                 // display label recovered from the provider
   person: PersonMeta | null;     // people only — public bio/age/photo
@@ -412,7 +415,7 @@ export function crowdAvg(pool: PoolTitle[]): { avg: number | null; count: number
   return { avg: mean(voted.map((t) => t.vote as number)) != null ? round1(mean(voted.map((t) => t.vote as number))!) : null, count: voted.length };
 }
 
-export interface PublicFacetRef { kind: FacetKind; key: string; label?: string | null }
+export interface PublicFacetRef { kind: LinkableFacetKind; key: string; label?: string | null }
 
 // Cross-request cache for the built facet payload (2026-07-20): every facet
 // GET fans out to providers (studio = up to 8 TMDB discover calls; tag = TMDB +

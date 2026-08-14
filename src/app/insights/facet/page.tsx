@@ -1,6 +1,6 @@
 import { permanentRedirect, redirect } from "next/navigation";
-import { publicFacetHref } from "@/lib/facetUrl";
-import type { FacetKind, FacetRole } from "@/lib/facets";
+import { publicFacetHref, isLinkableFacetKind } from "@/lib/facetUrl";
+import type { FacetRole } from "@/lib/facets";
 
 // P17 — the facet detail experience moved to the PUBLIC pages
 // (/person, /tag, /studio), which are provider-sourced and session-aware (the
@@ -17,8 +17,11 @@ export default async function LegacyFacetRedirect({ searchParams }: { searchPara
   const sp = await searchParams;
   const kind = one(sp.kind);
   const key = one(sp.key);
-  if (kind && key) {
-    permanentRedirect(publicFacetHref({ kind: kind as FacetKind, role: one(sp.role) as FacetRole | undefined, key }));
+  // `kind` is a raw query param, so it gets checked rather than cast — an
+  // unknown or unlinkable kind falls through to /insights instead of building
+  // `/undefined/<key>`, which the old cast happily emitted.
+  if (kind && key && isLinkableFacetKind(kind)) {
+    permanentRedirect(publicFacetHref({ kind, role: one(sp.role) as FacetRole | undefined, key }));
   }
   redirect("/insights");
 }

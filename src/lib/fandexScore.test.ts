@@ -297,6 +297,65 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
   });
 
+  it("2026-08-14: a franchise contributes through its OWN bucket, so it never competes with tags for a slot", () => {
+    // The ip facet's whole reason for a separate bucket: an item that already
+    // fills topTagsPositive must STILL count its franchise. Folded in with
+    // tags, the 5 genre tags below would have taken every slot and the
+    // franchise would have silently vanished from a score it belongs in.
+    const w = new Map<string, number>();
+    const metaMap = new Map<string, ReturnType<typeof meta>>();
+    const facets: Facet[] = [];
+    for (let i = 0; i < 5; i++) {
+      const key = "t" + i;
+      w.set("tag||" + key, 5 - i);
+      metaMap.set("tag||" + key, meta({ key, label: key, category: "genre", classWeight: 1 }));
+      facets.push({ kind: "tag", key, label: key, category: "genre" });
+    }
+    w.set("ip|ip|star wars", 2);
+    metaMap.set("ip|ip|star wars", meta({ kind: "ip", role: "ip", key: "star wars", label: "Star Wars", classWeight: 1 }));
+    facets.push({ kind: "ip", role: "ip", key: "star wars", label: "Star Wars" });
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
+
+    const result = computeFandexScore(facets, profile)!;
+    const counted = result.reasons.filter((r) => !r.capped);
+    expect(counted.map((r) => r.label).sort()).toEqual(["Star Wars", "t0", "t1", "t2", "t3", "t4"]);
+    // rawSum = (5+4+3+2+1) + 2 = 17 — the franchise is ADDED, not substituted.
+    expect(result.score).toBeCloseTo(Math.round((50 + K_UP * 17) * 10) / 10, 6);
+  });
+
+  it("2026-08-14: a franchise you rate BELOW your average pulls the next entry down", () => {
+    const w = new Map<string, number>([["ip|ip|dull saga", -3]]);
+    const metaMap = new Map<string, ReturnType<typeof meta>>([
+      ["ip|ip|dull saga", meta({ kind: "ip", role: "ip", key: "dull saga", label: "Dull Saga", classWeight: 1 })],
+    ]);
+    const facets: Facet[] = [{ kind: "ip", role: "ip", key: "dull saga", label: "Dull Saga" }];
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
+
+    const result = computeFandexScore(facets, profile)!;
+    expect(result.score).toBeLessThan(result.center);
+    expect(result.score).toBeCloseTo(Math.round((50 + K_DOWN * -3) * 10) / 10, 6);
+  });
+
+  it("2026-08-14: topIps caps the franchise bucket, the rest greying out like any other capped facet", () => {
+    const w = new Map<string, number>([["ip|ip|big", 4], ["ip|ip|small", 1]]);
+    const metaMap = new Map<string, ReturnType<typeof meta>>([
+      ["ip|ip|big", meta({ kind: "ip", role: "ip", key: "big", label: "Big", classWeight: 1 })],
+      ["ip|ip|small", meta({ kind: "ip", role: "ip", key: "small", label: "Small", classWeight: 1 })],
+    ]);
+    const facets: Facet[] = [
+      { kind: "ip", role: "ip", key: "big", label: "Big" },
+      { kind: "ip", role: "ip", key: "small", label: "Small" },
+    ];
+    const profile: Profile = { w, meta: metaMap, baseline: 5, hasSignal: true, ratedItemCount: 10 };
+
+    // Default topIps is 1 — the larger |dev| wins, the other is shown capped.
+    expect(DEFAULT_SCORING_CONFIG.topIps).toBe(1);
+    const result = computeFandexScore(facets, profile)!;
+    expect(result.reasons.filter((r) => !r.capped).map((r) => r.label)).toEqual(["Big"]);
+    expect(result.reasons.filter((r) => r.capped).map((r) => r.label)).toEqual(["Small"]);
+    expect(result.score).toBeCloseTo(Math.round((50 + K_UP * 4) * 10) / 10, 6);
+  });
+
   it("2026-07-29: an item with 5 positive genre tags counts all 5 — the per-category cap of 3 used to exclude 2 of them", () => {
     // This is the user's own motivating example for replacing perCategoryCap
     // with a fixed-size top-N selection: "an item with 5 genre tags should

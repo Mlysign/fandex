@@ -44,6 +44,7 @@ dev_f = BA_f − m           // signed taste deviation from your own norm
 Every facet maps to one **weight class** with a tunable weight `W`:
 
 - **People roles:** director, creator, writer, cast, developer, publisher, studio, network
+- **Franchise / IP** (`ip`, added 2026-08-14) — see §3.6
 - **Tag categories:** genre, setting, mood, theme, artstyle, source, audience, + any custom category (mood, characters, "Modes & Perspectives", …)
 - **Ignored classes** (weight = 0, excluded entirely): `meta`/noise and **platform tags** ("PC", "PS5", "Windows", "co-op-as-a-store-facet", etc.).
 
@@ -68,6 +69,21 @@ FandexScore = center + gain · rawSum                              // NO clamp �
 - **Q19 (2026-07-19, still holds):** the center is your own mean rating (the same number Insights shows as "your average"), not a fixed 50 — a fixed center meant roughly half of any library scored below 50 by construction, reading as "you won't like most things." The center is **derived, never a config knob**.
 - Everything here (`C`, all `W`, `mappingConstantUp/Down`, and the four top-N counts) except the center is developer-tunable in `/dev/scoring`'s Weights & Tuning panel.
 - **Still open, deliberately time-gated (re-checked 2026-08-02: only 4 days of data, still too soon):** `priorStrength` (`C`) and the per-role class weights were tuned against the old weighted-mean's compression — nobody has re-validated them against this raw-sum shape yet. See TASKS.md's 2026-07-29 section.
+
+### 3.6 Franchise / IP (added 2026-08-14)
+
+A fourth facet **kind** (`ip`), not a company role — a franchise isn't a company, and folding it into `company` would have merged it into `/studio`'s public page. It needs no new maths: `dev_f = BA_f − m` over the user's rated entries in that franchise is the same Bayesian average every other facet uses. What it needed was a source, a normalizer and its own selection bucket.
+
+- **Sources, both already in stored `raw_data`** — TMDB `belongs_to_collection` (movies) and IGDB `franchises` (games). No extra provider call.
+- **`ipKey()` is what makes it cross-media.** TMDB suffixes its collections ("Star Wars Collection"); IGDB's franchises are bare ("Star Wars"). `ipKey` peels a trailing franchise word (`collection · series · saga · franchise · trilogy · anthology · universe · cinematic`), so both land on `star wars`. Without that peel the movie and the game sit on two different facets and the whole feature does nothing.
+- **Its own top-N bucket** (`topIps`, default **1**) for the same reason people and companies have theirs: a franchise shouldn't have to out-compete a genre tag for a slot. Default 1 because an item belongs to one franchise; the only way to hold two is the providers naming the same one differently enough to survive `ipKey`, in which case counting both double-counts it.
+- **Weight `roleWeights.ip`, default 1.3** — peer with `director`. Tunable in `/dev/scoring` like every other role.
+- **No migration.** `getScoringConfig()` merges `{...DEFAULT, ...stored}` (and spreads `roleWeights` the same way), so an existing `scoring_config` row picks up `ip`/`topIps` from the defaults on the next read. Verified against the real local row, which predates both.
+- **No public page.** `ip` is excluded from `LinkableFacetKind` (`facetUrl.ts`) — a new root-level dynamic segment breaks the lint rule gating CI, and whether franchises become an SEO surface is a separate product decision. The breakdown renders the row as plain text; Insights is unaffected because it renders three explicitly kind-scoped sections.
+
+**Measured on the real 1,921-item library (2026-08-14):** 664 of 2,531 catalog items carry an IP across 401 distinct franchises; 319 of them have enough rated evidence to form an opinion. **516 of 1,903 scored items move.** Biggest movers: Metal Gear Solid **+5.2**, The Lord of the Rings **+5.0**, The Last of Us **+4.7**, Transformers **−8.0**, Assassin's Creed **−6.4**.
+
+**⚠️ Two honest limits.** (1) **Shows never join a cross-media franchise** — of the 14 IPs spanning more than one media type, every one is game+movie, because TMDB has no collection concept for shows and IGDB only covers games. A Star Wars film and a Star Wars game share the facet; Andor does not. (2) **Near-miss franchise names stay split** — the real library carries both `metal gear solid` (5 rated) and `metal gear` (5 rated) as separate facets. A prefix-subsumption rule would fix it and would also wrongly merge "Alien"/"Aliens"; the existing `tag_alias` bundling is the right shape for a fix, but it is tag-keyed today.
 
 ### 3.4 Explainability payload
 

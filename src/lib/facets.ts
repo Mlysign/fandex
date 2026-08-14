@@ -11,10 +11,15 @@ import type { MediaLink, MediaType, Source } from "@/types";
 import { categorizeTag } from "@/lib/tags";
 import { transliterate } from "@/lib/translit";
 
-export type FacetKind = "tag" | "person" | "company";
+export type FacetKind = "tag" | "person" | "company" | "ip";
 export type PersonRole = "director" | "writer" | "creator" | "cast";
 export type CompanyRole = "developer" | "publisher" | "studio" | "network";
-export type FacetRole = PersonRole | CompanyRole;
+// A franchise / shared IP ("Star Wars", "Fallout"). Its own kind rather than a
+// company role: it isn't a company, and it must not merge into `/studio`'s
+// public page. One role only — the role slot exists so `roleWeights.ip` works
+// the same way every other non-tag class weight does.
+export type IpRole = "ip";
+export type FacetRole = PersonRole | CompanyRole | IpRole;
 
 export interface Facet {
   kind: FacetKind;
@@ -86,6 +91,23 @@ const COMPANY_STRIP = new Set([
 export function companyKey(name: string): string {
   const parts = personKey(name).split(" ").filter(Boolean);
   while (parts.length > 1 && COMPANY_STRIP.has(parts[parts.length - 1])) parts.pop();
+  return parts.join(" ");
+}
+
+// The two providers name the same IP differently — TMDB suffixes its movie
+// collections ("Star Wars Collection", "Thor Collection") while IGDB's game
+// franchises are bare ("Star Wars", "Fallout"). Peeling those trailing words is
+// the entire reason a movie and a game end up on ONE facet; without it the
+// cross-media link this feature exists for silently doesn't happen.
+const IP_STRIP = new Set([
+  "collection", "collections", "series", "saga", "franchise", "trilogy",
+  "duology", "quadrilogy", "anthology", "universe", "cinematic",
+]);
+
+// Franchise / IP: people normalization, then peel the trailing franchise words.
+export function ipKey(name: string): string {
+  const parts = personKey(name).split(" ").filter(Boolean);
+  while (parts.length > 1 && IP_STRIP.has(parts[parts.length - 1])) parts.pop();
   return parts.join(" ");
 }
 
@@ -192,6 +214,24 @@ export function extractFacets(
   }
   const trakt = bySource.get("trakt");
   if (trakt && type === "show" && typeof trakt.network === "string") addCompany(trakt.network, "network");
+
+  // ── Franchise / IP ──
+  // TMDB `belongs_to_collection` (movies only — TMDB has no collection concept
+  // for shows) and IGDB `franchises` (games). Both already arrive with names
+  // expanded in the payloads we store, so this needs no extra provider call.
+  //
+  // ⚠️ Coverage is genuinely partial and asymmetric, measured on the real
+  // catalog (2026-08-14): 664 of 2,531 items carry an IP, and of the 14 IPs
+  // spanning more than one media type, EVERY one is game+movie — not a single
+  // show, because neither source describes one. So a Star Wars film and a Star
+  // Wars game share this facet; a Star Wars series does not.
+  const addIp = (name: unknown) => {
+    if (typeof name !== "string") return;
+    const label = name.trim();
+    if (label) push({ kind: "ip", role: "ip", key: ipKey(label), label });
+  };
+  if (tmdb) addIp(tmdb.belongs_to_collection?.name);
+  if (igdb) for (const f of igdb.franchises ?? []) addIp(f?.name);
 
   return out;
 }

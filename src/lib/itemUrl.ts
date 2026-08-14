@@ -2,7 +2,7 @@
 // wishlist · dashboard · discover · insights) routes through here.
 import { CATALOG } from "@/lib/sources/catalog";
 import { publicItemHref } from "@/lib/publicUrl";
-import { publicFacetHref } from "@/lib/facetUrl";
+import { publicFacetHref, isLinkableFacetKind } from "@/lib/facetUrl";
 import type { FacetKind, FacetRole } from "@/lib/facets";
 
 export interface InspectableItem {
@@ -46,5 +46,14 @@ export function buildItemHref(item: InspectableItem): string {
 // is dropped from the url on purpose: the public page shows the person's whole
 // body of work, role-badged per title. See facetUrl.ts.
 export function buildFacetHref(f: { kind: string; role?: string; key: string; label: string }): string {
-  return publicFacetHref({ kind: f.kind as FacetKind, role: f.role as FacetRole | undefined, key: f.key, label: f.label });
+  // This one takes an untyped `kind` (callers hand it loosely-typed rows), so
+  // the LinkableFacetKind guarantee has to be checked rather than inferred. No
+  // current caller can reach this: Insights renders three kind-scoped sections,
+  // and every other producer is a literal. It throws rather than emitting
+  // `/undefined/star-wars`, because a wrong href is the failure that survives
+  // review — an unlinkable facet reaching a URL builder is a bug upstream.
+  if (!isLinkableFacetKind(f.kind)) {
+    throw new Error(`buildFacetHref: facet kind "${f.kind}" has no public page`);
+  }
+  return publicFacetHref({ kind: f.kind, role: f.role as FacetRole | undefined, key: f.key, label: f.label });
 }

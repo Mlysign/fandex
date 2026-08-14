@@ -7,7 +7,7 @@
 import { CATEGORIES } from "@/lib/tags";
 
 export interface ScoringConfigValues {
-  roleWeights: Record<string, number>; // director / creator / writer / cast / developer / publisher / studio / network / tag
+  roleWeights: Record<string, number>; // director / creator / writer / cast / developer / publisher / studio / network / ip / tag
   priorStrength: number;   // C — Bayesian shrinkage prior strength (§3.1)
   // Q19 (2026-07-19): the score now centers on the user's OWN mean rating (not
   // a fixed 50 — see computeFandexScore), with an asymmetric gain so a
@@ -25,6 +25,12 @@ export interface ScoringConfigValues {
   topTagsNegative: number; // top-N tags with dev < 0, by dev ascending (most negative first)
   topPeople: number;       // top-N director/creator/writer/cast facets, by |dev| descending
   topCompanies: number;    // top-N developer/publisher/studio/network facets, by |dev| descending
+  // 2026-08-14: franchise / IP facets get their OWN bucket for the same reason
+  // people and companies do — an IP shouldn't have to out-compete a genre tag
+  // for a slot. Defaults to 1: an item belongs to one franchise, and the only
+  // way to hold two is TMDB and IGDB naming the same one differently enough to
+  // survive `ipKey` — in which case counting both would double-count one IP.
+  topIps: number;          // top-N ip facets, by |dev| descending
 }
 
 // Mirrors discovery.ts's ROLE_WEIGHT + K_SHRINK verbatim, so seeding this table
@@ -49,7 +55,8 @@ export interface ScoringConfigValues {
 export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   roleWeights: {
     director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6,
-    developer: 1.2, publisher: 0.8, studio: 0.7, network: 0.6, tag: 1.0,
+    developer: 1.2, publisher: 0.8, studio: 0.7, network: 0.6,
+    ip: 1.3, tag: 1.0,
   },
   priorStrength: 5,
   mappingConstantUp: 5.4,
@@ -58,6 +65,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   topTagsNegative: 3,
   topPeople: 3,
   topCompanies: 2,
+  topIps: 1,
 };
 
 export interface TagCategorySeed {
