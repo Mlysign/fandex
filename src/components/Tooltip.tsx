@@ -40,6 +40,90 @@ function ImpactChip({ r }: { r: Reason }) {
   );
 }
 
+/**
+ * The score explainer's reasons, fetched at most once per mount.
+ *
+ * A non-null fandexScore only ever exists for an authed, non-cold-start viewer
+ * (computeFandexScore needs a real profile), so no extra session probe is
+ * needed before firing this.
+ */
+function useScoreReasons(item: TooltipItem, enabled: boolean) {
+  const [reasons, setReasons] = useState<Reason[] | null>(null);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled || !item.id || item.linkable === false || fetchedRef.current) return;
+    fetchedRef.current = true;
+    const p = new URLSearchParams({ id: item.id, type: item.type });
+    for (const [k, v] of Object.entries(item.ids ?? {})) {
+      if (v != null) p.set(`${k}Id`, String(v));
+    }
+    fetch(`/api/detail?${p}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: DetailResponse | null) => { if (d?.fandexReasons) setReasons(d.fandexReasons); })
+      .catch(() => {});
+  }, [enabled, item.id, item.type, item.ids, item.linkable]);
+
+  return reasons;
+}
+
+/**
+ * The explainer's CONTENT, with no positioning of its own.
+ *
+ * Split out 2026-08-14 (MB5) so the desktop hover popover and the mobile
+ * long-press bottom sheet render the same thing. They used to be one component
+ * that also owned its fixed positioning, which is why the touch path couldn't
+ * reuse it — a sheet positions itself.
+ */
+export function TooltipBody({ item }: { item: TooltipItem }) {
+  const scored = item.fandexScore != null;
+  const reasons = useScoreReasons(item, scored);
+
+  const rounded = scored ? Math.round(item.fandexScore!) : null;
+  const band = scored ? matchStrength(item.fandexScore!, item.fandexCenter ?? null) : null;
+
+  const tagReasons = (reasons ?? []).filter((r) => r.kind === "tag" && !r.capped);
+  const positive = tagReasons.filter((r) => r.contribution >= 0).sort((a, b) => b.contribution - a.contribution).slice(0, 3);
+  const negative = tagReasons.filter((r) => r.contribution < 0).sort((a, b) => a.contribution - b.contribution).slice(0, 2);
+  const topReasons = [...positive, ...negative];
+
+  const rated = typeof item.rating === "number" && item.rating > 0;
+
+  return (
+    <div className="p-3 space-y-2">
+      <p className="font-serif text-serif-sm text-text-primary">{item.title}</p>
+
+      {scored ? (
+        <>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-serif text-2xl" style={{ color: "var(--color-accent)" }}>{rounded}</span>
+            <span className="text-xs text-text-secondary capitalize">{band}</span>
+          </div>
+          {(rated || item.libraryStatus) && (
+            <p className="text-xs text-text-secondary">
+              {rated && `★ ${item.rating!.toFixed(1)}/10`}
+              {rated && item.libraryStatus && " · "}
+              {item.libraryStatus && item.libraryStatus.charAt(0).toUpperCase() + item.libraryStatus.slice(1)}
+            </p>
+          )}
+          {topReasons.length > 0 && (
+            <div className="pt-1.5 border-t border-border space-y-1">
+              {topReasons.map((r) => <ImpactChip key={`${r.kind}|${r.role ?? ""}|${r.label}`} r={r} />)}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="font-mono text-meta text-text-secondary">
+            {item.releaseDate ? format(parseISO(item.releaseDate), "MMM d, yyyy") : "TBA"}
+          </p>
+          <TypeBadge type={item.type as MediaType} />
+        </>
+      )}
+    </div>
+  );
+}
+
 interface TooltipProps {
   item: TooltipItem;
   // The anchor is passed as a ref so callers don't read `.current` during their
@@ -59,10 +143,6 @@ export default function Tooltip({ item, anchorRef }: TooltipProps) {
   // edge" guarantee the original positioning logic gave.
   const maxH = 340;
 
-  const scored = item.fandexScore != null;
-  const [reasons, setReasons] = useState<Reason[] | null>(null);
-  const fetchedRef = useRef(false);
-
   useEffect(() => {
     const anchor = anchorRef.current;
     if (!anchor) return;
@@ -75,71 +155,14 @@ export default function Tooltip({ item, anchorRef }: TooltipProps) {
     setPos({ top, left });
   }, [anchorRef]);
 
-  // A non-null fandexScore only ever exists for an authed, non-cold-start
-  // viewer (computeFandexScore needs a real profile) — no extra session
-  // probe needed before firing this. Lazy (only on actual hover-intent, this
-  // component doesn't mount otherwise) and fetched at most once per hover.
-  useEffect(() => {
-    if (!scored || !item.id || item.linkable === false || fetchedRef.current) return;
-    fetchedRef.current = true;
-    const p = new URLSearchParams({ id: item.id, type: item.type });
-    for (const [k, v] of Object.entries(item.ids ?? {})) {
-      if (v != null) p.set(`${k}Id`, String(v));
-    }
-    fetch(`/api/detail?${p}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: DetailResponse | null) => { if (d?.fandexReasons) setReasons(d.fandexReasons); })
-      .catch(() => {});
-  }, [scored, item.id, item.type, item.ids, item.linkable]);
-
   if (!pos) return null;
-
-  const rounded = scored ? Math.round(item.fandexScore!) : null;
-  const band = scored ? matchStrength(item.fandexScore!, item.fandexCenter ?? null) : null;
-
-  const tagReasons = (reasons ?? []).filter((r) => r.kind === "tag" && !r.capped);
-  const positive = tagReasons.filter((r) => r.contribution >= 0).sort((a, b) => b.contribution - a.contribution).slice(0, 3);
-  const negative = tagReasons.filter((r) => r.contribution < 0).sort((a, b) => a.contribution - b.contribution).slice(0, 2);
-  const topReasons = [...positive, ...negative];
-
-  const rated = typeof item.rating === "number" && item.rating > 0;
 
   const tooltip = (
     <div
       className="fixed z-[9999] bg-surface-overlay border border-border-strong rounded-xl shadow-2xl pointer-events-none"
       style={{ top: pos.top, left: pos.left, width: w, maxHeight: maxH, overflowY: "auto" }}
     >
-      <div className="p-3 space-y-2">
-        <p className="font-serif text-serif-sm text-text-primary">{item.title}</p>
-
-        {scored ? (
-          <>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-serif text-2xl" style={{ color: "var(--color-accent)" }}>{rounded}</span>
-              <span className="text-xs text-text-secondary capitalize">{band}</span>
-            </div>
-            {(rated || item.libraryStatus) && (
-              <p className="text-xs text-text-secondary">
-                {rated && `★ ${item.rating!.toFixed(1)}/10`}
-                {rated && item.libraryStatus && " · "}
-                {item.libraryStatus && item.libraryStatus.charAt(0).toUpperCase() + item.libraryStatus.slice(1)}
-              </p>
-            )}
-            {topReasons.length > 0 && (
-              <div className="pt-1.5 border-t border-border space-y-1">
-                {topReasons.map((r) => <ImpactChip key={`${r.kind}|${r.role ?? ""}|${r.label}`} r={r} />)}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="font-mono text-meta text-text-secondary">
-              {item.releaseDate ? format(parseISO(item.releaseDate), "MMM d, yyyy") : "TBA"}
-            </p>
-            <TypeBadge type={item.type as MediaType} />
-          </>
-        )}
-      </div>
+      <TooltipBody item={item} />
     </div>
   );
 

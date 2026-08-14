@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
-import Tooltip from "@/components/Tooltip";
+import Tooltip, { TooltipBody } from "@/components/Tooltip";
 import type { TooltipItem } from "@/components/Tooltip";
+import Sheet from "@/components/ui/Sheet";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { TypeIcon } from "@/components/Badges";
 import ActionCells from "@/components/ActionCells";
 import FandexScoreBadge from "@/components/FandexScoreBadge";
@@ -23,11 +25,68 @@ interface PosterCardProps {
   onSelect: (item: PosterCardItem) => void;
 }
 
+// How long a press has to be held before it counts as "tell me about this"
+// rather than "open this". 500ms is the platform convention (Android's own
+// long-press threshold) — shorter starts stealing ordinary taps.
+const LONG_PRESS_MS = 500;
+// A press that wanders further than this is a scroll, not a long-press. Rails
+// scroll horizontally and pages scroll vertically, so both axes count.
+const LONG_PRESS_SLOP_PX = 10;
+
 export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const [hovered, setHovered] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [imgErr, setImgErr] = useState(false);
   const ref = useRef<HTMLAnchorElement | HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── MB5 (2026-08-14) ──────────────────────────────────────────────────────
+  // Nils: "tapping rate or add to wishlist, the card's tooltip opens. On mobile
+  // this should open after a long press, and in a fly-out like the advanced
+  // search filter modal."
+  //
+  // The cause of the first half: a touch tap synthesises `mouseenter`, which
+  // started the 350ms hover-intent timer below — so tapping a quick-action
+  // button popped the explainer as a side effect of touching the card at all.
+  // `(hover: hover)` is the honest test for "this pointer can hover"; a width
+  // breakpoint would get a touchscreen laptop wrong in both directions.
+  //
+  // So: hover opens the popover on a hovering device and NOTHING on a touch
+  // one, where a deliberate long-press opens the same content in <Sheet> — the
+  // component the filter panel already uses, so the fly-out Nils asked for is
+  // literally the one he was comparing it to.
+  const canHover = useMediaQuery("(hover: hover)");
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+  // Set when a long-press fires, read by the click handler that follows it.
+  // Touch emits a click after pointerup regardless, and without this the card
+  // would navigate to the item page the instant the sheet opened.
+  const longPressed = useRef(false);
+
+  const cancelPress = () => {
+    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+    pressOrigin.current = null;
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (canHover || e.pointerType === "mouse") return;
+    pressOrigin.current = { x: e.clientX, y: e.clientY };
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      setSheetOpen(true);
+      // The press is now a gesture, not a tap. Haptics where offered: this is
+      // the only feedback that the hold "took", since the sheet animates in.
+      navigator.vibrate?.(10);
+    }, LONG_PRESS_MS);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const origin = pressOrigin.current;
+    if (!origin) return;
+    if (Math.abs(e.clientX - origin.x) > LONG_PRESS_SLOP_PX || Math.abs(e.clientY - origin.y) > LONG_PRESS_SLOP_PX) {
+      cancelPress();
+    }
+  };
   // Use the portrait poster when present; otherwise fall back to the landscape
   // art (backdrop) — many games have hero/artwork but no box-art cover.
   const imageSrc = item.posterUrl ?? item.backdropUrl ?? null;
@@ -167,10 +226,29 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           // overflow needed; the poster (the only child that ever overflowed
           // this box's rounded shape) now clips itself via its own wrapper's
           // rounded-t-md + overflow-hidden, just above.
-          className="group cursor-pointer rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block"
-          onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
+          className="group cursor-pointer rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block select-none"
+          // Hover-intent is gated on a hovering pointer: a touch tap
+          // synthesises mouseenter, which is what made the explainer pop when
+          // you meant to hit Rate. See the MB5 note above.
+          onMouseEnter={() => { if (canHover) timer.current = setTimeout(() => setHovered(true), 350); }}
           onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
-          onClick={() => onSelect(item)}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={cancelPress}
+          onPointerCancel={cancelPress}
+          // The browser's own long-press menu would race ours on the image.
+          onContextMenu={(e) => { if (!canHover) e.preventDefault(); }}
+          onClick={(e) => {
+            // Swallow the click that touch fires after a long-press, or the
+            // sheet would open and the card would navigate away underneath it.
+            if (longPressed.current) {
+              longPressed.current = false;
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            onSelect(item);
+          }}
         >
           {body}
         </Link>
@@ -186,8 +264,27 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
         </div>
       )}
 
-      {hovered && linkable && (
+      {hovered && linkable && canHover && (
         <Tooltip item={item as TooltipItem} anchorRef={ref} />
+      )}
+
+      {/* The touch equivalent: the same explainer, in the same bottom sheet the
+          advanced-search filter panel uses. Rendered only once a long-press has
+          actually happened, so the (rather heavy) Sheet tree isn't mounted
+          behind every card on a grid. */}
+      {sheetOpen && (
+        <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={item.title}>
+          <TooltipBody item={item as TooltipItem} />
+          <div className="px-3 pb-4">
+            <Link
+              href={buildItemHref(item)}
+              onClick={() => onSelect(item)}
+              className="block w-full text-center text-label py-2.5 rounded-lg bg-surface-elevated border border-border text-text-primary"
+            >
+              View details
+            </Link>
+          </div>
+        </Sheet>
       )}
     </>
   );
