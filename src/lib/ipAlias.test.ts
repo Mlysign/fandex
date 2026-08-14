@@ -140,6 +140,36 @@ describe("per-item franchise corrections", () => {
       .toHaveLength(1);
   });
 
+  it("a WIKIDATA write never overwrites a MANUAL one", () => {
+    // The correction has to survive the next sweep, or the panel looks like it
+    // ignored the click. Detaching Star Wars by hand, then letting Wikidata
+    // re-assert it, is the exact sequence that would undo it.
+    setItemIpOverride("andor", "Star Wars", "remove", "Star Wars", "manual");
+    setItemIpOverride("andor", "Star Wars", "add", "Star Wars", "wikidata");
+
+    const rows = listItemIpOverrides().filter((r) => r.mediaItemId === "andor");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ mode: "remove", source: "manual" });
+    expect(applyIpFacets([ip("star wars")], "andor")).toHaveLength(0);
+  });
+
+  it("a MANUAL write DOES overwrite a wikidata one, and a sweep may refresh its own", () => {
+    setItemIpOverride("item9", "Star Wars", "add", "Star Wars", "wikidata");
+    setItemIpOverride("item9", "Star Wars", "remove", "Star Wars", "manual");
+    expect(listItemIpOverrides()[0]).toMatchObject({ mode: "remove", source: "manual" });
+
+    setItemIpOverride("item10", "Fallout", "add", "Fallout", "wikidata");
+    setItemIpOverride("item10", "Fallout", "add", "Fallout series", "wikidata");
+    const w = listItemIpOverrides().filter((r) => r.mediaItemId === "item10");
+    expect(w).toHaveLength(1);
+    expect(w[0].label).toBe("Fallout series");
+  });
+
+  it("defaults to manual provenance when none is given", () => {
+    setItemIpOverride("item11", "Star Wars", "add");
+    expect(listItemIpOverrides()[0].source).toBe("manual");
+  });
+
   it("lists and deletes overrides", () => {
     setItemIpOverride("i", "Star Wars", "add");
     const rows = listItemIpOverrides();

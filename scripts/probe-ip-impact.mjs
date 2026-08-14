@@ -78,7 +78,7 @@ function scoreAll(topIps) {
   const out = new Map();
   for (const [id, { title, type, links }] of items) {
     const merged = mergeLinks(links, type, country);
-    const fx = computeFandexScore(extractFacets(links, type, merged), p, cfg);
+    const fx = computeFandexScore(extractFacets(links, type, merged), p, cfg, { mediaItemId: id });
     if (fx) out.set(id, { title, type, score: fx.score });
   }
   return out;

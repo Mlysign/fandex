@@ -60,7 +60,14 @@ export function canonicalIpKey(key: string): string {
 }
 
 // ── item_ip_override ──────────────────────────────────────────────────
-export interface ItemIpOverride { ipKey: string; label: string; mode: "add" | "remove" }
+export type IpOverrideSource = "manual" | "wikidata";
+export interface ItemIpOverride {
+  ipKey: string;
+  label: string;
+  mode: "add" | "remove";
+  /** Who attached it. A manual row always wins — see setItemIpOverride. */
+  source: IpOverrideSource;
+}
 
 let _overrideCache: { sig: string; value: Map<string, ItemIpOverride[]> } | null = null;
 
@@ -77,13 +84,17 @@ export function itemIpOverrideSignature(): string {
 export function getItemIpOverrides(): Map<string, ItemIpOverride[]> {
   const sig = itemIpOverrideSignature();
   if (_overrideCache && _overrideCache.sig === sig) return _overrideCache.value;
-  const rows = query<{ media_item_id: string; ip_key: string; label: string; mode: string }>(
-    `SELECT media_item_id, ip_key, label, mode FROM item_ip_override`
+  const rows = query<{ media_item_id: string; ip_key: string; label: string; mode: string; source: string }>(
+    `SELECT media_item_id, ip_key, label, mode, source FROM item_ip_override`
   );
   const value = new Map<string, ItemIpOverride[]>();
   for (const r of rows) {
     const arr = value.get(r.media_item_id) ?? [];
-    arr.push({ ipKey: r.ip_key, label: r.label, mode: r.mode === "remove" ? "remove" : "add" });
+    arr.push({
+      ipKey: r.ip_key, label: r.label,
+      mode: r.mode === "remove" ? "remove" : "add",
+      source: r.source === "wikidata" ? "wikidata" : "manual",
+    });
     value.set(r.media_item_id, arr);
   }
   _overrideCache = { sig, value };
@@ -162,8 +173,8 @@ export interface ItemIpOverrideRow extends ItemIpOverride {
 }
 
 export function listItemIpOverrides(): ItemIpOverrideRow[] {
-  return query<{ media_item_id: string; ip_key: string; label: string; mode: string; title: string | null; type: string | null }>(
-    `SELECT o.media_item_id, o.ip_key, o.label, o.mode, mi.title, mi.type
+  return query<{ media_item_id: string; ip_key: string; label: string; mode: string; source: string; title: string | null; type: string | null }>(
+    `SELECT o.media_item_id, o.ip_key, o.label, o.mode, o.source, mi.title, mi.type
        FROM item_ip_override o
        LEFT JOIN media_items mi ON mi.id = o.media_item_id
       ORDER BY o.ip_key, mi.title`
@@ -172,6 +183,7 @@ export function listItemIpOverrides(): ItemIpOverrideRow[] {
     ipKey: r.ip_key,
     label: r.label,
     mode: r.mode === "remove" ? "remove" : "add",
+    source: r.source === "wikidata" ? "wikidata" : "manual",
     title: r.title,
     type: r.type,
   }));
@@ -210,20 +222,31 @@ export function deleteIpBundle(canonical: string): void {
 
 // Attach or detach one franchise on one item. `label` is only meaningful for an
 // add; a remove keeps it for the admin list's readability.
+// `source` defaults to "manual" because every caller that isn't the Wikidata
+// sweep is a person clicking a button.
+//
+// ⚠️ A wikidata write NEVER overwrites a manual row. The admin panel is the
+// place a wrong automatic guess gets corrected, so a later sweep re-asserting
+// its own answer would undo the correction and look like the UI ignored the
+// click. The reverse is fine and intended: a manual write overwrites whatever
+// was there.
 export function setItemIpOverride(
   mediaItemId: string,
   rawKeyOrLabel: string,
   mode: "add" | "remove",
-  label?: string
+  label?: string,
+  source: IpOverrideSource = "manual"
 ): { ipKey: string } {
   const key = canonicalIpKey(ipKey(rawKeyOrLabel));
   if (!key) throw new Error("Empty franchise key.");
   run(
-    `INSERT INTO item_ip_override (media_item_id, ip_key, label, mode, updated_at)
-     VALUES (?, ?, ?, ?, strftime('%s','now'))
+    `INSERT INTO item_ip_override (media_item_id, ip_key, label, mode, source, updated_at)
+     VALUES (?, ?, ?, ?, ?, strftime('%s','now'))
      ON CONFLICT(media_item_id, ip_key) DO UPDATE SET
-       label = excluded.label, mode = excluded.mode, updated_at = excluded.updated_at`,
-    [mediaItemId, key, (label ?? rawKeyOrLabel).trim(), mode]
+       label = excluded.label, mode = excluded.mode,
+       source = excluded.source, updated_at = excluded.updated_at
+     WHERE excluded.source = 'manual' OR item_ip_override.source != 'manual'`,
+    [mediaItemId, key, (label ?? rawKeyOrLabel).trim(), mode, source]
   );
   _overrideCache = null;
   return { ipKey: key };

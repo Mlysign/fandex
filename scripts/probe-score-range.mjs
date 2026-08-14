@@ -121,9 +121,12 @@ const profileFor = (cfg) => buildProfile(userId, { config: cfg, categoryWeights 
 function scores(cfg) {
   const profile = profileFor(cfg);
   const out = [];
-  for (const { type, links } of itemMap.values()) {
+  // The id matters: computeFandexScore resolves franchise aliases and per-item
+  // overrides off it, so omitting it silently measures a DIFFERENT scoring
+  // model than production runs — it did, until 2026-08-14.
+  for (const [id, { type, links }] of itemMap) {
     const merged = mergeLinks(links, type, country);
-    const fx = computeFandexScore(extractFacets(links, type, merged), profile, cfg);
+    const fx = computeFandexScore(extractFacets(links, type, merged), profile, cfg, { mediaItemId: id });
     if (fx) out.push(fx.score);
   }
   return out.sort((a, b) => a - b);

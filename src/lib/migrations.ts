@@ -435,6 +435,39 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 14,
+    name: "item_ip_override.source + media_item.wikidata sweep cursor",
+    up: (db) => {
+      // 2026-08-14. Wikidata can now attach a franchise automatically, which
+      // makes provenance load-bearing: a hand-made attachment must survive a
+      // re-sweep, and a machine one must be refreshable without asking. Rows
+      // written before this column existed are by definition hand-made, which
+      // is exactly what the DEFAULT encodes.
+      //
+      // Column-added-by-migration → its index belongs in THIS migration, never
+      // in db.ts's schema block, which must stay valid against the old schema.
+      const cols = db.prepare(`PRAGMA table_info(item_ip_override)`).all() as { name: string }[];
+      if (!cols.some((c) => c.name === "source")) {
+        db.exec(`ALTER TABLE item_ip_override ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'`);
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_item_ip_override_source ON item_ip_override(source)`);
+
+      // Which items the Wikidata sweep has already asked about, so a resumable
+      // pass never re-asks. A row here means ASKED, not FOUND — the distinction
+      // is the whole reason this table exists rather than driving the sweep off
+      // "what's still missing a franchise", which never terminates because the
+      // items Wikidata doesn't know stay missing forever. Same trap SM48's
+      // cross-link backfill hit.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS wikidata_ip_checked (
+          media_item_id TEXT PRIMARY KEY,
+          found         INTEGER NOT NULL DEFAULT 0,
+          checked_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own
