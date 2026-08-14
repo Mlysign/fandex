@@ -13,7 +13,7 @@ import { log } from "@/lib/logger";
 import { normalizeName, extractYear } from "@/lib/merge";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
-import { discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
+import { discoverIgdbUpcoming, getIgdbSimilarGames, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import {
   getTraktAnticipatedMovies, getTraktAnticipatedShows,
   getTraktTrendingMovies, getTraktTrendingShows, traktConfigured,
@@ -362,6 +362,88 @@ async function tmdbTrending(
       voteAverage: typeof m.vote_average === "number" && m.vote_average > 0 ? m.vote_average : null,
       popularity: typeof m.popularity === "number" ? m.popularity : null,
     }));
+}
+
+// ── "More like this" top-up (MB11, 2026-08-14) ──────────────────────────────
+//
+// The item page ranks similar titles out of the LOCAL catalog, which is right
+// when the catalog knows enough neighbours and useless when it doesn't — The
+// Odyssey ranked exactly two (Troy, Ulysses) against a rail that needs three,
+// so the section vanished. These fetch the provider's own list to top it up.
+//
+// Both are `bestEffort` + budgeted, because the caller is a page render: a dead
+// provider must cost the rail, never the page. Neither is called unless the
+// local ranking already came up short, and the route caches the result — this
+// is a public surface, and an uncached provider call per cold item view is the
+// exact shape that created the facet-page quota exposure.
+
+/**
+ * TMDB `/recommendations`, falling back to `/similar`.
+ *
+ * They are genuinely different lists and the order matters: recommendations is
+ * behavioural ("people who watched this also watched"), similar is metadata
+ * (shared genres/keywords). The behavioural one is better when it has data and
+ * simply empty for an obscure or unreleased title — which is precisely the case
+ * that needed fixing — so it leads and the metadata one catches the tail.
+ */
+async function tmdbSimilar(type: "movie" | "show", tmdbId: number): Promise<FeedCandidate[]> {
+  const path = type === "movie" ? "movie" : "tv";
+  const map = (results: any[]): FeedCandidate[] =>
+    results.map((m: any): FeedCandidate => ({
+      id: `tmdb-${type}-${m.id}`, rawId: m.id, source: "tmdb", type,
+      title: type === "movie" ? m.title : m.name,
+      releaseDate: (type === "movie" ? m.release_date : m.first_air_date) ?? null,
+      posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
+      overview: m.overview, ids: { tmdb: m.id },
+      raw: { source: "tmdb", sourceId: String(m.id), data: m },
+      genreNames: tmdbGenreNames(m.genre_ids, type),
+      originalLanguage: m.original_language ?? null,
+      voteCount: m.vote_count ?? 0,
+      voteAverage: typeof m.vote_average === "number" && m.vote_average > 0 ? m.vote_average : null,
+      popularity: typeof m.popularity === "number" ? m.popularity : null,
+    }));
+
+  for (const endpoint of ["recommendations", "similar"]) {
+    const res = await httpFetch(
+      `https://api.themoviedb.org/3/${path}/${tmdbId}/${endpoint}?api_key=${TMDB_KEY}&page=1`,
+      { budgetMs: BROWSE_BUDGET_MS }
+    );
+    if (!res.ok) continue;
+    const data = await res.json();
+    const out = map(data.results ?? []).filter((c) => c.posterUrl);
+    if (out.length) return out;
+  }
+  return [];
+}
+
+export function fetchTmdbSimilar(type: "movie" | "show", tmdbId: number): Promise<FeedCandidate[]> {
+  return bestEffort("tmdb", () => tmdbSimilar(type, tmdbId));
+}
+
+/** IGDB's curated `similar_games` for a game. */
+export function fetchIgdbSimilar(igdbId: number): Promise<FeedCandidate[]> {
+  return bestEffort("igdb", async () => {
+    const games = await getIgdbSimilarGames(igdbId);
+    return games.map((g: any): FeedCandidate => ({
+      id: `igdb-${g.id}`, rawId: g.id, source: "igdb", type: "game",
+      title: g.name, releaseDate: igdbReleaseDate(g),
+      posterUrl:
+        igdbImageUrl(g.cover?.image_id, "t_cover_big") ??
+        igdbImageUrl(g.artworks?.[0]?.image_id, "t_720p") ??
+        igdbImageUrl(g.screenshots?.[0]?.image_id, "t_720p"),
+      platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
+      ids: { igdb: g.id },
+      raw: { source: "igdb", sourceId: String(g.id), data: g },
+      genreNames: [
+        ...(g.genres ?? []).map((x: any) => x?.name),
+        ...(g.themes ?? []).map((x: any) => x?.name),
+      ].filter((n): n is string => typeof n === "string"),
+      originalLanguage: null,
+      voteCount: g.total_rating_count ?? 0,
+      voteAverage: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null,
+      popularity: typeof g.total_rating_count === "number" ? g.total_rating_count : null,
+    })).filter((c) => c.posterUrl);
+  });
 }
 
 /** TMDB trending — `/trending/{movie,tv}/{day,week}`. Weekly is far less jumpy. */

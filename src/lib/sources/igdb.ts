@@ -150,6 +150,35 @@ export async function discoverIgdbUpcoming(
   } catch { return []; }
 }
 
+// MB11 (2026-08-14) — IGDB's own "similar games" for a game, used ONLY to top
+// up the item page's "More like this" rail when the local catalog can't field
+// three neighbours. IGDB curates this list itself, so it beats anything we
+// could infer from a catalog that may hold only a handful of comparable titles.
+//
+// Two deliberate choices:
+//   • `similar_games.*` is expanded IN THIS QUERY rather than added to
+//     GAME_FIELDS. Putting it on the main field list would fatten every game
+//     payload we store, for a field only one surface reads — and stored
+//     payloads are what a PROJECTION_VERSION bump has to re-project.
+//   • BROWSE_BUDGET_MS, because the caller is a page render that already
+//     degrades to "no rail" rather than an enrichment path that would rather
+//     wait.
+export async function getIgdbSimilarGames(igdbId: number, limit = 12): Promise<any[]> {
+  if (!igdbConfigured()) return [];
+  try {
+    const rows = await igdbQuery(
+      "games",
+      `fields similar_games.name,similar_games.slug,similar_games.first_release_date,` +
+        `similar_games.cover.image_id,similar_games.artworks.image_id,similar_games.screenshots.image_id,` +
+        `similar_games.genres.name,similar_games.themes.name,similar_games.platforms.name,` +
+        `similar_games.total_rating,similar_games.total_rating_count,similar_games.url; ` +
+        `where id = ${safeInt(igdbId, 0)};`,
+      BROWSE_BUDGET_MS
+    );
+    return (rows[0]?.similar_games ?? []).slice(0, safeInt(limit, 12));
+  } catch { return []; }
+}
+
 // Q27 (2026-07-19) — games matching a tag/keyword facet (genre, theme, or
 // keyword name, case-insensitive contains) for the /discover "more from the
 // databases" supplement — previously TMDB+RAWG only, so a tag with no games
