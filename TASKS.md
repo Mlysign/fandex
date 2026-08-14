@@ -9,9 +9,8 @@
 
 ## ⚠️ Needs Nils — nothing else is blocked on anything but these
 
-0. **Two prod sweeps, both admin-gated, both just repeat-until-drained.** Neither has been run against prod.
-   - `POST /api/dev/scoring/wikidata` `{"maxItems":150}` — franchises. **1,761 eligible**, ~12 calls. Locally this found 584 items incl. **98 shows**, which is the entire point of the feature.
-   - `POST /api/dev/crosslink` `{"source":"steam","maxItems":25}` — games cross-linking (SM48). Skip RAWG while it's down.
+0. **Prod sweeps.** ✅ **The Wikidata franchise sweep RAN on prod 2026-08-14** — 1,803 checked, **407 found**, `remaining` 0, 13 batches, no failures. Prod now has 503 franchises across 416 movie / 385 game / **84 show** memberships and **34 cross-media franchises** (was 14, none with shows). Star Wars spans 24 items incl. Andor and Obi-Wan Kenobi; Andor's breakdown reads *Star Wars +5.8, you rate 7.45 over 19*. ⬜ **Still un-run: `POST /api/dev/crosslink`** `{"source":"steam","maxItems":25}` — games cross-linking (SM48). Skip RAWG while it's down.
+   - **Both routes are session-gated** (`withScoringAdmin` reads the login cookie), so a bare terminal `curl` 404s no matter the syntax. Run them from the browser console on fandex.org while logged in. Also: in PowerShell `curl` is an alias for `Invoke-WebRequest` and does not accept `-H`/`-d` — use `curl.exe` or `Invoke-RestMethod`.
 
 1. ✅ **Donations are LIVE (2026-08-12).** **Any future client-read `NEXT_PUBLIC_*` needs an `ARG` line in the Dockerfile** or Railway never forwards it into the build — and the failure looks like success, since server components still render it fine. → [[next-public-env-needs-dockerfile-arg]]
 2. **`PRUNE_ON_BOOT=0` on Railway — optional now, your call.** The boot prune has now fired against prod **twice**, both times cleanly. On the 2026-08-12 redeploy it deleted 255 browsed-only rows (`media_items` 2267 → **2012**, exactly PR17's original expected figure; `media_links` 4225 → 3969, `media_external_ids` 4237 → 3970) and touched **zero** user rows — `user_library` 1912, `user_watchlist` 96, `user_item_state` 2337 all unchanged, `libRowsWithoutState`/`wishRowsWithoutState` still 0/0. The safety guard demonstrably holds in production. Set it to `0` only if you want no unattended deletes at all until (1a) confirms Litestream.
