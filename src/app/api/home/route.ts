@@ -17,7 +17,7 @@ import {
 import { candidatesForMonth, monthKey, nextMonthKey } from "@/lib/popularMonthFeed";
 import { rankCrossSourcePopularity } from "@/lib/popularMonth";
 import { upcomingFrom } from "@/lib/upcoming";
-import { dayISO, seedFor, rotateRail } from "@/lib/dailyRotation";
+import { dayISO, seedFor, rotationSlot, rotateRailFresh } from "@/lib/dailyRotation";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { buildHighlights } from "@/lib/homeHighlights";
 
@@ -181,6 +181,16 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const today = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : dayISO(now);
 
+    // The rail rotation now turns over every 6 hours instead of once a day, and
+    // each slot draws from a pool the previous slot's picks were removed from
+    // (see lib/dailyRotation.ts — "different seed" does not mean "different
+    // items"). `?slot=N` is the dev-only equivalent of `?day=` for it.
+    // NOTE the pool cache below is deliberately still keyed by DAY, not slot:
+    // the expensive part is the provider fan-out, and re-fetching it four times
+    // a day to shuffle a list we already have would be pure waste.
+    const slotParam = process.env.NODE_ENV !== "production" ? req.nextUrl.searchParams.get("slot") : null;
+    const slot = slotParam && /^-?\d+$/.test(slotParam) ? Number(slotParam) : rotationSlot(now);
+
     const cacheKey = `${region}:${today}`;
     let pools = _publicCache.get(cacheKey);
     if (!pools) {
@@ -191,9 +201,13 @@ export async function GET(req: NextRequest) {
 
     // Rotate, THEN decorate — rotation is pure and cheap, so it stays outside
     // the cache and the cached pool remains the full ranked depth.
-    const trending = decorateSection(rotateRail(pools.trending, RAIL_SIZE, seedFor("trending", today)), userId);
+    const trending = decorateSection(
+      rotateRailFresh(pools.trending, RAIL_SIZE, (e) => seedFor("trending", e), slot),
+      userId,
+    );
     const upcoming = decorateSection(
-      rotateRail(pools.upcoming, RAIL_SIZE, seedFor("upcoming", today)), userId
+      rotateRailFresh(pools.upcoming, RAIL_SIZE, (e) => seedFor("upcoming", e), slot),
+      userId,
     ).sort((a, b) => (a.releaseDate ?? "9999").localeCompare(b.releaseDate ?? "9999"));
 
     let recommendation: Awaited<ReturnType<typeof personalizedFeed>> = [];
@@ -201,10 +215,17 @@ export async function GET(req: NextRequest) {
       // personalizedFeed already ranks ~54 items (FINAL_KEEP × 3 types) and
       // caches them for 45 min — the old code just took the top 15 of that every
       // time. Rotating the SAME cached list costs no provider calls.
+      //
+      // keepTop 1, not 3: this is the rail Nils was looking at, and on a phone
+      // three pinned cards are most of what's on screen. One pinned card still
+      // guarantees the single best match is never rotated out.
       const personalized = await personalizedFeed(userId, region);
       if (personalized) {
         const ranked = [...personalized].sort((a, b) => b.score - a.score);
-        recommendation = rotateRail(ranked, RAIL_SIZE, seedFor("recommendation", userId, today));
+        recommendation = rotateRailFresh(
+          ranked, RAIL_SIZE, (e) => seedFor("recommendation", userId!, e), slot,
+          { keepTop: 1 },
+        );
       }
     }
 

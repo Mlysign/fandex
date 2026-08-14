@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { House, Search, CalendarDays, Library as LibraryIcon, User } from "lucide-react";
+import { House, Search, CalendarDays, Bookmark, User } from "lucide-react";
 import Logo from "@/components/Logo";
 import SignInDialog from "@/components/auth/SignInDialog";
 import NavSearch from "@/components/NavSearch";
@@ -14,14 +14,21 @@ import { recordPageView } from "@/lib/navHistory";
 // top bar on desktop (≥768px) — a single `<nav aria-label="Primary">` landmark
 // either way. Replaces the old top-only NavBar, which was duplicated per-page.
 //
-// Five slots (D-A): Home · Search · Calendar · Library · You. Search = /discover
+// Five slots (D-A): Home · Search · Calendar · Wishlist · You. Search = /discover
 // (per H1.1's decision 3 — the old SearchModal it replaced was deleted in
-// H1.6f, so there is no second search surface). The "Library" slot lights for
+// H1.6f, so there is no second search surface). The "Wishlist" slot lights for
 // BOTH /library and /wishlist (they're one "my stuff" surface, entered via a
 // tab — H1.6e) and links to /wishlist by default (2026-07-27, Nils — the
 // forward-looking half of the pair; the LibraryWishlistTabs switcher lists
 // Wishlist first for the same reason). You lights for /profile and its
 // /settings sub-page.
+//
+// 2026-08-14 (Nils, mobile testing): the slot was labelled "Library" with a
+// Library glyph while already pointing at /wishlist — the label named the half
+// of the pair it doesn't open. Now "Wishlist" + the same Bookmark glyph the
+// quick-action bar uses for the wishlist verb, so the nav word, the icon and
+// the destination finally agree. The match() still covers /library so the
+// slot stays lit when the tab strip switches over to it.
 //
 // Session-aware like the old NavBar: the catalog is public, so anon visitors
 // see the same bar, but the "You" slot opens the H2c sign-in dialog (with a
@@ -32,7 +39,7 @@ const ITEMS = [
   { key: "home",     href: "/",         label: "Home",     Icon: House,       match: (p: string) => p === "/" },
   { key: "search",   href: "/discover", label: "Search",   Icon: Search,      match: (p: string) => p.startsWith("/discover") },
   { key: "calendar", href: "/calendar", label: "Calendar", Icon: CalendarDays, match: (p: string) => p.startsWith("/calendar") },
-  { key: "library",  href: "/wishlist", label: "Library",  Icon: LibraryIcon, match: (p: string) => p.startsWith("/library") || p.startsWith("/wishlist") },
+  { key: "library",  href: "/wishlist", label: "Wishlist", Icon: Bookmark,    match: (p: string) => p.startsWith("/library") || p.startsWith("/wishlist") },
 ] as const;
 
 // One slot renderer shared by the bottom (mobile) and top (desktop) bars so the

@@ -344,21 +344,27 @@ function SettingsContent() {
 
             return (
               <div key={p.key} className="bg-surface-elevated border border-border rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                {/* 2026-08-14 (Nils, mobile testing): this was one
+                    `justify-between` row with a non-wrapping action group, so
+                    at 375px the Connected pill + Sync + Disconnect ran past the
+                    panel's right edge and Disconnect was half off-screen. The
+                    row now stacks below sm and the action group wraps, so no
+                    control can leave the card at any width. */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
                       style={{ background: `${color}20`, color }}>
                       {p.label[0]}
                     </div>
-                    <div>
-                      <p className="font-medium text-text-primary">{p.label}</p>
-                      <p className="text-sm text-text-secondary">
+                    <div className="min-w-0">
+                      <p className="font-medium text-text-primary truncate">{p.label}</p>
+                      <p className="text-sm text-text-secondary truncate">
                         {identity ? `@${identity.display_name ?? identity.provider_user_id}` : p.description}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {identity ? (
                       <>
                         <span className="text-xs bg-success-subtle text-success px-2.5 py-1 rounded-full border border-success/40">

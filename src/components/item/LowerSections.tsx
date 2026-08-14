@@ -114,6 +114,11 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
   const gameModes       = enriched?.gameModes ?? [];
   const storeLinks      = enriched?.storeLinks ?? [];
   const buyLinks        = enriched?.buyLinks ?? [];
+  // Drives the where-to-watch empty state's wording: "not out yet" and "out,
+  // but nobody carries it here" are different facts and a viewer can tell them
+  // apart. A missing/TBA date is treated as released — an unknown date is not
+  // evidence of the future, and the softer sentence is the safe default.
+  const isUnreleased = !!enriched?.releaseDate && enriched.releaseDate > new Date().toISOString().slice(0, 10);
 
   return (
     <div className="mt-10 space-y-8">
@@ -154,7 +159,26 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
       {/* Where to watch — the mockup's `.prov` ROWS (logo block · name +
           availability · action), not the chip cloud this was until 2026-07-30. A
           cloud of tiny logos gave no room for the availability line the mockup
-          shows and read as a tag list rather than a place to go. */}
+          shows and read as a tag list rather than a place to go.
+
+          2026-08-14 (Nils, mobile testing): the whole section used to be gated
+          on `streamingProviders.length > 0`, so a title with no availability
+          simply had no section — indistinguishable from a title we never
+          checked. It now always renders for movies and shows and says so
+          explicitly. Games keep the gate: "where to watch" is not a question
+          about a game, and the store rows in the Links section below are the
+          equivalent affordance. */}
+      {streamingProviders.length === 0 && (type === "movie" || type === "show") && (
+        <section>
+          <SectionHeading>Where to watch</SectionHeading>
+          <p className="text-sm text-text-secondary">
+            {isUnreleased
+              ? "Not streaming anywhere yet — this hasn't been released."
+              : "Not available on any streaming service in your region right now."}
+          </p>
+        </section>
+      )}
+
       {streamingProviders.length > 0 && (
         <section>
           <SectionHeading>Where to watch</SectionHeading>

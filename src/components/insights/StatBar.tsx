@@ -4,6 +4,7 @@
 // dimming are real analysis the mockup's static example never showed, kept
 // here rather than dropped for literal mockup parity.
 import Link from "next/link";
+import NavPendingBar from "@/components/ui/NavPendingBar";
 
 export default function StatBar({
   label, value, rawAvg, count, color, baseline, title, href, impact,
@@ -53,8 +54,18 @@ export default function StatBar({
 
   if (href) {
     return (
-      <Link href={href} className="block rounded-md -mx-2 px-2 hover:bg-surface-elevated transition-colors">
+      // 2026-08-14: `hover:` alone was the entire feedback story here, and a
+      // phone has no hover — tapping a facet looked like nothing happened while
+      // a force-dynamic facet page took its time. `active:` covers the press,
+      // <NavPendingBar> covers the wait. `relative` is what the bar positions
+      // against; `touch-manipulation` drops the 300ms tap delay so the press
+      // state appears on contact rather than after a double-tap timeout.
+      <Link
+        href={href}
+        className="relative block rounded-md -mx-2 px-2 touch-manipulation transition-colors hover:bg-surface-elevated active:bg-surface-overlay"
+      >
         {inner}
+        <NavPendingBar />
       </Link>
     );
   }

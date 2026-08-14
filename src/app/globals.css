@@ -290,6 +290,15 @@
   100% { transform: translateX(100%); }
 }
 
+/* Indeterminate navigation progress (ui/NavPendingBar.tsx) — a third-width
+   segment sweeping the row's bottom edge while a slow <Link> resolves. Only
+   applied under motion-safe; motion-reduce gets a static full-width bar
+   instead, which conveys the same "working on it" without the movement. */
+@keyframes nav-pending {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
 /* focus-visible: --shadow-focus (2px surface gap + 2px accent ring), per
    06-accessibility.md. Keyboard-only (:focus-visible), never on mouse focus.
    box-shadow follows each element's own border-radius, so no radius override

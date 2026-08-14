@@ -1817,3 +1817,50 @@ Scope: anon (sandbox pane) + logged-in (Nils's Chrome, real prod session) agains
 
 ---
 
+
+## Facet-page compute + provider-quota exposure — CLOSED 2026-08-13
+
+Moved out of TASKS.md 2026-08-14. Distinct from the row leak PR13–PR16 closed —
+that was unbounded thin ROW WRITES; this was COMPUTE and third-party quota on
+READ.
+
+Measured cold on prod (2026-08-12, reproducing 08-07 almost exactly):
+`/tag/telepathy` **59.8 s**, `/tag/action` 12.6 s, `/tag/sci-fi` 11.9 s,
+`/tag/comedy` 6.9 s, `/tag/mystery` 5.2 s, `/tag/romance` 5.1 s,
+`/tag/thriller` 4.9 s; warm repeats 0.13–0.16 s.
+
+Cause: all three facet routes are `force-dynamic` and `buildPublicFacetDetail`
+fans out per build (studio = up to 8 TMDB discover calls; tag = TMDB + RAWG +
+IGDB). `robots.txt` allows `/person/ /tag/ /studio/` and the slug surface (every
+person across ~2,000 titles) vastly exceeds any affordable cache → near-100%
+miss rate under a crawl sweep. **RAWG's free tier is 20k req/mo.**
+
+**⚠️ THE HEADLINE NUMBER WAS WRONG.** A read-only probe
+(`scripts/probe-facet-cost.ts`) measured a cold render per kind:
+`tag/telepathy` **60,259 ms** (99% fan-out, 643 ms local),
+`person/christopher nolan` **64 ms**, `company/a24` **159 ms**. Of tag's 250,746
+ms of provider *work*, **234,409 ms (93%) was 12 calls to `api.rawg.io`
+returning Cloudflare 522s at ~19.5 s each**, breaker open; TMDB's 9 calls
+totalled 726 ms. So "facet pages render in 59.8 s" was a dead provider, not
+inherent cost — the same error AGENTS.md records twice (perf §A; the 58 s
+Discover load blamed on the pool cache for days). **Do not re-justify cache work
+with the 60 s figure.**
+
+The fix that survived measurement is a **persisted L2** (`facet_page_cache` in
+SQLite, `src/lib/facetCacheStore.ts`), because the real exposure is third-party
+quota — one tag build can spend 12 RAWG calls against a 20k req/mo free tier,
+and a crawl over the long tail is what burns it. Verified on the real DB across
+a **full server restart** (exactly what the in-memory cache cannot survive):
+`/tag/western` **63.17 s → 0.092 s**, `/tag/history` 59.35 s → 0.017 s,
+`/studio/pixar` 0.43 s → 0.013 s, with **zero provider calls** on the second
+pass and the anon write gate byte-identical (2531/4147/4158).
+
+**Superseded — the in-memory-only mitigation (2026-08-12):** `_facetPageCache`
+TTL 1 h → 24 h (`scoringConfigSignature()` is in the key so admin edits still
+bust it immediately) and `max` 500 → 3,000, sized against 17 measured prod
+payloads (p95 19,385 B) at a 2.5× heap factor against a 150 MB budget ≈ 145 MB.
+Rejected: dropping `force-dynamic` (re-creates PR14's auth-state caching hazard)
+and `Disallow`ing the facets (throws away the P17 SEO surface).
+
+**Reassess only if** a crawl sweep shows the 24 h TTL is too short, or if RAWG's
+latency stops masking the true steady-state tag cost.

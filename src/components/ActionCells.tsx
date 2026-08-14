@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Star, Bookmark } from "lucide-react";
 import type { QuickActionItem } from "@/lib/useQuickActions";
 import { useQuickActions } from "@/lib/useQuickActions";
@@ -66,34 +67,96 @@ export function StarPicker({ rating, onPick }: { rating: number | null; onPick: 
   );
 }
 
+// Half the picker's rendered width, used to centre it on its trigger and to
+// clamp it inside the viewport. The picker is 10 stars at a fixed size, so this
+// is stable; measuring it would need a layout pass before the first paint.
+const PICKER_W = 230;
+
 export default function ActionCells({ item, layout }: { item: QuickActionItem; layout: "row" | "card" }) {
   const { rating, wishlisted, busy, rate, toggleWishlist } = useQuickActions(item);
   const [picking, setPicking] = useState(false);
+  // Viewport coords for the portalled picker — null until measured.
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rated = typeof rating === "number" && rating > 0;
 
   const pick = (n: number | null) => { rate(n); setPicking(false); };
 
+  // 2026-08-14 (Nils, mobile testing): "the rate panel is clipped by the
+  // carousel border". The picker used to be an `absolute top-full` child of
+  // this toolbar, and <Rail>'s scroller is `overflow-x-auto` — which
+  // establishes a clipping box on BOTH axes, so a popover hanging below a card
+  // inside a rail was cut off no matter how high its z-index. (T13 already hit
+  // the same wall once and removed PosterCard's own overflow-hidden; the rail
+  // one is not ours to remove — horizontal scrolling is the point.)
+  //
+  // So the picker now portals to document.body and positions itself from the
+  // trigger's viewport rect, exactly like <Tooltip>. Nothing in the ancestor
+  // chain can clip it. It closes on scroll rather than tracking the anchor:
+  // the anchor lives in a scroller, and a popover that chases a moving card is
+  // worse than one that gets out of the way.
+  const measure = useCallback(() => {
+    const anchor = (layout === "card" ? rootRef.current : triggerRef.current);
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const centred = r.left + r.width / 2 - PICKER_W / 2;
+    const left = Math.max(8, Math.min(centred, window.innerWidth - PICKER_W - 8));
+    // Flip above the trigger when there isn't room below, so a card near the
+    // bottom of the viewport doesn't open its picker off-screen.
+    const below = r.bottom + 6;
+    const top = below + 44 > window.innerHeight ? Math.max(8, r.top - 50) : below;
+    setPickerPos({ top, left });
+  }, [layout]);
+
   // Dismiss the star picker on any click/tap outside the toolbar, or on
   // Escape (SM32: this used to only close on outside click, unlike the item
   // page's "Why?" popover — same pattern as FandexScoreSection). Escape also
   // returns focus to the trigger, so a keyboard user isn't left stranded.
+  //
+  // The outside test checks the PORTAL too: the picker is no longer a DOM
+  // descendant of rootRef, so a plain `rootRef.contains(target)` would treat
+  // every click on a star as an outside click and close before the rating
+  // landed.
   useEffect(() => {
     if (!picking) return;
     const onDown = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setPicking(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setPicking(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { setPicking(false); triggerRef.current?.focus(); }
     };
+    const onScroll = () => setPicking(false);
     document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("keydown", onKey);
+    // Capture phase: the rail's own scroller scrolls, not the window, and a
+    // scroll event doesn't bubble.
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("pointerdown", onDown, true);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [picking]);
+
+  const openPicker = () => { measure(); setPicking(true); };
+  const togglePicker = () => { if (picking) setPicking(false); else openPicker(); };
+
+  // The one picker instance, portalled. Rendered by both layouts.
+  const pickerPortal =
+    picking && pickerPos && typeof document !== "undefined"
+      ? createPortal(
+          <div ref={popRef} className="fixed z-[9999]" style={{ top: pickerPos.top, left: pickerPos.left }}>
+            <StarPicker rating={rating} onPick={pick} />
+          </div>,
+          document.body,
+        )
+      : null;
 
   // 03-components.md §2's quick-action bar, literally: Rate = Star + "Rate",
   // flex:1; Bookmark = fixed 32px square. Both --radius-sm on the spec's
@@ -109,7 +172,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
         <div className="flex gap-1.5">
           <button
             ref={triggerRef}
-            onClick={(e) => { stop(e); setPicking((v) => !v); }}
+            onClick={(e) => { stop(e); togglePicker(); }}
             title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
             aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
             aria-haspopup="true" aria-expanded={picking}
@@ -135,11 +198,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
             <Bookmark className="w-3.5 h-3.5" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
           </button>
         </div>
-        {picking && (
-          <div className="absolute z-30 top-full mt-1 left-1/2 -translate-x-1/2">
-            <StarPicker rating={rating} onPick={pick} />
-          </div>
-        )}
+        {pickerPortal}
       </div>
     );
   }
@@ -152,7 +211,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
       <div className="flex gap-1.5">
         <button
           ref={triggerRef}
-          onClick={(e) => { stop(e); setPicking((v) => !v); }}
+          onClick={(e) => { stop(e); togglePicker(); }}
           title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
           aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
           aria-haspopup="true" aria-expanded={picking}
@@ -178,11 +237,7 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
           <Bookmark className="w-3.5 h-3.5" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
         </button>
       </div>
-      {picking && (
-        <div className="absolute z-30 top-full mt-1 right-0">
-          <StarPicker rating={rating} onPick={pick} />
-        </div>
-      )}
+      {pickerPortal}
     </div>
   );
 }

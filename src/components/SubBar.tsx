@@ -9,6 +9,7 @@ import Chip from "@/components/ui/Chip";
 import TypeFilter from "@/components/ui/TypeFilter";
 import Menu from "@/components/ui/Menu";
 import Sheet from "@/components/ui/Sheet";
+import { useHideOnScroll } from "@/lib/useHideOnScroll";
 
 const VIEW_ICONS = { list: List, card: LayoutGrid, calendar: CalendarDays } as const;
 
@@ -124,6 +125,13 @@ export default function SubBar({
   // and crossing the 768px breakpoint no longer remounts the panel or discards
   // an in-progress facet query.
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // 2026-08-14 (Nils, mobile testing): "I want to scroll away the top header
+  // section, but as soon as I scroll up I want it back immediately — don't make
+  // me scroll all the way to the top." See lib/useHideOnScroll.ts for the rule.
+  // Suppressed while the Filters sheet is open: the sheet's scroll would
+  // otherwise retract the very trigger the user came from.
+  const scrolledAway = useHideOnScroll();
+  const hidden = scrolledAway && !filtersOpen;
   const hasAdvanced = !!(searchFacets || advancedFilters);
   const showSearch = !!onSearchChange;
   // A single available view means there's nothing to switch BETWEEN — render
@@ -165,7 +173,21 @@ export default function SubBar({
        7+12=19px. This is the one visible change from the a11y pass (Nils's
        call, 2026-07-26: pad hit areas, keep the controls' own size, widen
        spacing only where regions actually collide). */
-    <div className="sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3">
+    /* The retract is a transform, not a height/display change: the bar keeps
+       its box in the flow either way, so nothing below it reflows as it comes
+       and goes. `will-change` is deliberately absent — this animates at most
+       twice per scroll gesture, and promoting a full-width bar to its own layer
+       for that costs more than it saves. motion-reduce drops the transition but
+       NOT the behaviour: the header still gets out of the way, it just snaps. */
+    <div
+      /* duration-[var(--duration-base)], NOT `duration-base`: Tailwind v4 has
+         no `--duration-*` theme namespace, so `duration-base` generates no rule
+         at all and silently falls back to the 150ms default. (28 usages across
+         the codebase already do this — flagged separately, not fixed here.) */
+      className={`sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3 transition-transform duration-[var(--duration-base)] motion-reduce:transition-none ${
+        hidden ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       <div className="max-w-6xl mx-auto space-y-3">
 
         {/* THE ORDER OF THIS BLOCK IS THE SPEC (Nils, 2026-07-28), and it is

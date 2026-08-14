@@ -96,3 +96,102 @@ export function rotateRail<T>(ranked: T[], size: number, seed: number, keepTop =
   const rest = pickWeighted(ranked.slice(spine.length), size - spine.length, rngFrom(seed));
   return [...spine, ...rest];
 }
+
+// ── Turnover (2026-08-14) ────────────────────────────────────────────────────
+//
+// Nils, testing on mobile: "I keep seeing the same items in my recommended
+// carousel. This should rotate more." The day-seeded rotation above was doing
+// exactly what it was written to do and still produced that experience, for
+// three compounding reasons — none of which is a bug on its own:
+//
+//   1. `keepTop = 3` pins the same three cards forever. On a phone, three cards
+//      IS most of the visible rail, so the part you actually see barely moved.
+//   2. `pickWeighted`'s default bias of 4 is steeply front-loaded, so the 12
+//      drawn slots kept landing in the same shallow head of the ranking.
+//   3. The seed only changes once per UTC day, and two independent draws from a
+//      front-loaded distribution overlap heavily anyway — "different seed" does
+//      NOT mean "different items".
+//
+// (3) is the one worth internalising: making the rotation *more random* does not
+// make it *turn over*. Independent draws repeat, however good the RNG is.
+//
+// So turnover has to be STRUCTURAL, not probabilistic. Each epoch deals one
+// weighted hand of `cycle × need` items, and each slot in that epoch takes a
+// different, non-overlapping share of that hand. Consecutive slots are then
+// disjoint by construction rather than by luck.
+//
+// A REJECTED design, recorded because it looks obviously right and isn't: "draw
+// from the pool minus what the previous slot drew". The previous slot's pick has
+// to be recomputed, and recomputing it correctly means recomputing ITS exclusion
+// too — the recursion has no base case, so any real implementation truncates it
+// and ends up excluding a hand that was never actually shown. Its own unit test
+// caught this: slots 100 and 101 still shared three items.
+//
+// The shares are dealt round-robin (stride `cycle`), not as contiguous blocks.
+// `pickWeighted` returns its draw in roughly quality order, so contiguous blocks
+// would hand slot 0 the best titles and slot 3 the dregs — a rail that visibly
+// got worse as the day went on. Dealing every cycle-th item spreads quality
+// evenly across all the slots while keeping them disjoint.
+
+/** Rotation periods per day. 4 = a fresh rail every 6 hours. */
+export const SLOTS_PER_DAY = 4;
+
+/**
+ * Which rotation period we're in — a monotonic counter, not a within-day index,
+ * so slot N-1 is always the real previous period even across a midnight or a
+ * month boundary.
+ *
+ * Six hours (rather than the old 24) is a deliberate middle: long enough that
+ * Home → item → Back lands in the same slot in every realistic session, which
+ * is the property the original day-seeding was protecting; short enough that
+ * opening the app morning and evening shows a different shelf.
+ */
+export function rotationSlot(now: Date = new Date(), perDay = SLOTS_PER_DAY): number {
+  return Math.floor(now.getTime() / (86_400_000 / perDay));
+}
+
+/**
+ * Like `rotateRail`, but consecutive slots are guaranteed to share nothing
+ * except the pinned spine.
+ *
+ * `cycle` is how many slots the rail takes to come back around. It is clamped
+ * to what the pool can actually support: a pool only twice as deep as the rail
+ * can offer two disjoint hands, not four, and a full rail beats a fresh one —
+ * so a shallow pool degrades to a shorter cycle rather than to a half-empty
+ * shelf.
+ *
+ * `seedAt` is called with the EPOCH (slot / cycle), not the slot, so one deal
+ * serves a whole cycle and the shares within it stay disjoint.
+ *
+ * SCOPE OF THE GUARANTEE: disjointness is structural *within* an epoch. The one
+ * transition per cycle that crosses into a new deal can overlap, because two
+ * independently seeded weighted draws do. That is inherent to any periodic
+ * reseed — closing it would need the previous epoch's hand recomputed, which is
+ * the unbounded recursion described above — and it is a boundary case of a
+ * cycle, not the steady state. Measured at ≤ 5 of 15 repeated there, against
+ * the ~50% the old day-seeded rotation repeated *every* day.
+ */
+export function rotateRailFresh<T>(
+  ranked: T[],
+  size: number,
+  seedAt: (epoch: number) => number,
+  slot: number,
+  { keepTop = 1, bias = 10, cycle = SLOTS_PER_DAY }: { keepTop?: number; bias?: number; cycle?: number } = {},
+): T[] {
+  if (ranked.length <= size) return [...ranked];
+  const spine = ranked.slice(0, Math.min(keepTop, size));
+  const tail = ranked.slice(spine.length);
+  const need = size - spine.length;
+
+  const cycleLen = Math.max(1, Math.min(cycle, Math.floor(tail.length / need)));
+  // Floor-mod, so a negative slot (only reachable from the dev-only `?slot=`
+  // override) still lands in range instead of producing an empty hand.
+  const share = ((slot % cycleLen) + cycleLen) % cycleLen;
+  const epoch = Math.floor(slot / cycleLen);
+
+  const hand = pickWeighted(tail, cycleLen * need, rngFrom(seedAt(epoch)), bias);
+
+  const picks: T[] = [];
+  for (let i = share; i < hand.length && picks.length < need; i += cycleLen) picks.push(hand[i]);
+  return [...spine, ...picks];
+}
