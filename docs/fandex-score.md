@@ -83,7 +83,20 @@ A fourth facet **kind** (`ip`), not a company role — a franchise isn't a compa
 
 **Measured on the real 1,921-item library (2026-08-14):** 664 of 2,531 catalog items carry an IP across 401 distinct franchises; 319 of them have enough rated evidence to form an opinion. **516 of 1,903 scored items move.** Biggest movers: Metal Gear Solid **+5.2**, The Lord of the Rings **+5.0**, The Last of Us **+4.7**, Transformers **−8.0**, Assassin's Creed **−6.4**.
 
-**⚠️ Two honest limits.** (1) **Shows never join a cross-media franchise** — of the 14 IPs spanning more than one media type, every one is game+movie, because TMDB has no collection concept for shows and IGDB only covers games. A Star Wars film and a Star Wars game share the facet; Andor does not. (2) **Near-miss franchise names stay split** — the real library carries both `metal gear solid` (5 rated) and `metal gear` (5 rated) as separate facets. A prefix-subsumption rule would fix it and would also wrongly merge "Alien"/"Aliens"; the existing `tag_alias` bundling is the right shape for a fix, but it is tag-keyed today.
+#### 3.6.1 The correction layer (migration 13, 2026-08-14)
+
+Both original limits are now editable rather than structural, via two tables and one admin panel (`/dev/scoring` → Taxonomy → Franchises). They fix *different* problems and are deliberately separate mechanisms:
+
+- **`ip_alias` — the providers NAME one franchise twice.** Mirrors `tag_alias` exactly, chains flattened on write. `metal gear solid` + `metal gear` (6 items each in the real catalog) fold into one average.
+- **`item_ip_override` — the providers have no franchise DATA for an item.** An `add` attaches, a `remove` detaches. This is the only thing that can put a *show* in a franchise. Global catalog metadata, like `tag_category_override`. **It must never gain a `user_id` column** — that name is what `deleteAccount()` keys on, so naming one would make GDPR erasure drop everyone's corrections.
+
+**Where resolution happens is the correctness story, and it is not where tag bundling put it.** A franchise the *profile* learned under a canonical key only matches an *item* whose facet carries that key, so both sides must resolve. Profile side: `analyzeLibraryFacets` + `buildCache` (where `applyTagAliases` already runs). Item side: **`computeFandexScore` itself**, via a `mediaItemId` option — *not* the nine `extractFacets()` call sites, because the four per-item ones are exactly where tag bundling silently drifted. `applyIpFacets` is idempotent (tested), which is what makes it safe at more than one layer. One trap worth knowing: `catalogFacets()` in `liveDiscover.ts` keys its map by **candidate** id while the media id exists only inside the loop, so resolution has to happen there rather than at the `fandexFor()` call sites downstream.
+
+Both signatures fold into `scoringConfigSignature()`, so an admin edit invalidates every cached profile immediately.
+
+**Title-match suggestions** (`suggestFranchisesByTitle`) are the only automatic show signal: an item whose title exactly matches, or is prefixed by, a franchise the catalog already knows. 31 candidates on the real catalog. Guarded at **4 chars for exact** and **2 words for prefix** — without that the show "X" matched the "X Collection" key, which it did. Never auto-applied; each is accepted or skipped by hand. **The Mandalorian is correctly not suggested** — it has no title signal, which is why the hand-attach exists.
+
+**Measured dead ends, so nobody re-checks them:** TMDB carries franchise names on **2 of 387** show keyword payloads, and has no collection concept for series at all. The open automatic option is **Wikidata `P179` (part of the series)** — free, keyless, reachable from an IMDb or TMDB id, and the only thing that would find The Mandalorian *and* fix the metal-gear split at the source. Not built.
 
 ### 3.4 Explainability payload
 

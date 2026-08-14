@@ -129,12 +129,15 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 
 **No migration and no prod config edit needed** — `getScoringConfig()` merges `{...DEFAULT, ...stored}`, so prod's existing row picks up `roleWeights.ip: 1.3` and `topIps: 1` from the defaults the moment the code deploys. Verified against the real local row, which predates both.
 
-**Open — yours:**
-1. ⬜ **Tune `ip`** once you've seen it live. Default 1.3 (peer with `director`, which you have at 4). `/dev/scoring` → Role weights → Franchise. `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what any value does to real titles before you commit to it.
-2. ⬜ **Optionally re-fit the gains.** Adding franchises widened the tails slightly (0.9% → 1.7% outside 0–100); the range-fitting pair moves 2.5/4 → **2.4/3.8**. Marginal — only worth doing if you also change the `ip` weight much.
-3. ⬜ **`metal gear solid` and `metal gear` are two facets** (5 rated titles each) and should probably be one. A prefix rule would also wrongly merge "Alien"/"Aliens"; `tag_alias`'s bundling is the right shape but is tag-keyed today. Left alone deliberately.
+**The editor shipped 2026-08-14** (`0a1ee54`) — `/dev/scoring` → Taxonomy → **Franchises**. Migration 13 adds `ip_alias` (bundling, mirrors `tag_alias`) and `item_ip_override` (attach/detach one item). Verified on both apply paths against a copy of the real DB. Design + the resolution-point reasoning → [docs/fandex-score.md](docs/fandex-score.md) §3.6.
 
-**Shows are structurally excluded from cross-media franchises** — of the 14 IPs spanning more than one media type, every one is game+movie. TMDB has no collection concept for shows and IGDB only covers games, so a Star Wars film and a Star Wars game share the facet and Andor does not. Not fixable in code; it needs a third source.
+**Open — yours:**
+1. ⬜ **Bundle `metal gear solid` into `metal gear`** (6 items each). One click in the panel; which name is canonical is your call, which is why it's not pre-applied.
+2. ⬜ **Review the 31 title-match suggestions** — "Find suggestions" in the panel. 4 Star Wars shows, Fallout, The Witcher, Castlevania, Game of Thrones, Ghost in the Shell. Nothing applies until you accept it. **The Mandalorian is deliberately NOT among them** (no title signal at all) — attach it by hand, which is the mechanism's whole point.
+3. ⬜ **Tune `ip`** once you've seen it live. Default 1.3 (peer with `director`, which you have at 4). `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what any value does to real titles first.
+4. ⬜ **Optionally re-fit the gains.** Franchises widened the tails slightly (0.9% → 1.7% outside 0–100); the fitting pair moves 2.5/4 → **2.4/3.8**. Marginal.
+
+**⬜ Wikidata P179 — the remaining phase, NOT started.** Title matching is the only automatic show signal today and it structurally cannot find The Mandalorian or bare Andor. Wikidata's `part of the series` is a real cross-media franchise graph, free and keyless, reachable from an IMDb id (`P345`) or TMDB id — it would cover those *and* fix the metal-gear split at the source. Cost: a new provider integration, so it needs the `http.ts` breaker/budget treatment and a lazy heal path, not a mass sweep. **Measured dead ends, don't re-check them:** TMDB keywords carry franchise names on 2 of 387 show payloads, and TMDB has no collection concept for series at all.
 
 ---
 
