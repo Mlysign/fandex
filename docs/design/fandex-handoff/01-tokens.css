@@ -130,11 +130,16 @@
   --shadow-sheet: 0 -12px 40px -8px rgb(0 0 0 / 0.55); /* bottom sheet, casts upward */
   --shadow-focus: 0 0 0 2px #100E0C, 0 0 0 4px #C8A24B; /* offset focus ring */
 
-  /* ---- Motion ------------------------------------------------------------- */
-  --duration-instant: 80ms;
-  --duration-fast:    120ms;  /* hover / press feedback */
-  --duration-base:    200ms;  /* most transitions */
-  --duration-slow:    320ms;  /* sheet / view change */
+  /* ---- Motion -------------------------------------------------------------
+     `--transition-duration-*`, NOT `--duration-*`: that is the theme key
+     Tailwind v4's `duration-*` utility resolves named values from. Declared as
+     `--duration-*` from 2026-07-23 to 2026-08-14, which generated no rule at
+     all and ran ~28 call sites at the built-in 150ms. Don't shorten it back.
+     (`--ease-*` below is correct as written — that IS the v4 namespace.) */
+  --transition-duration-instant: 80ms;
+  --transition-duration-fast:    120ms;  /* hover / press feedback */
+  --transition-duration-base:    200ms;  /* most transitions */
+  --transition-duration-slow:    320ms;  /* sheet / view change */
   --ease-standard:    cubic-bezier(0.2, 0, 0, 1);
   --ease-decelerate:  cubic-bezier(0, 0, 0, 1);   /* enter */
   --ease-accelerate:  cubic-bezier(0.3, 0, 1, 1); /* exit */

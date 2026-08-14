@@ -29,10 +29,7 @@ export default function NavPendingBar({ className = "" }: { className?: string }
   return (
     <span
       aria-hidden
-      /* duration-[var(--duration-fast)], not `duration-fast` — Tailwind v4 has
-         no `--duration-*` namespace, so the token-named utility generates no
-         rule. See SubBar.tsx for the same note. */
-      className={`pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden transition-opacity duration-[var(--duration-fast)] ${
+      className={`pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden transition-opacity duration-fast ${
         pending ? "opacity-100" : "opacity-0"
       } ${className}`}
     >

@@ -44,7 +44,7 @@
 
 ## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🔵 2 of 15 open
 
-**13 of 15 shipped and verified 2026-08-14** — full write-ups → [archive](docs/archive/history.md), grep `MB — mobile testing batch`. Three findings there are worth reading before touching related code: **re-seeding does not produce turnover** (MB9), **`display:none` does not stop images downloading** (MB13), and **Tailwind resolves competing utilities by stylesheet order, not class-attribute order** (the `buttonClasses` bug MB13 surfaced).
+**13 of 15 shipped and verified 2026-08-14** — full write-ups → [archive](docs/archive/history.md), grep `MB — mobile testing batch`. Four findings there are worth reading before touching related code: **re-seeding does not produce turnover** (MB9), **`display:none` does not stop images downloading** (MB13), **Tailwind resolves competing utilities by stylesheet order, not class-attribute order** (the `buttonClasses` bug MB13 surfaced), and — spun out and **fixed the same day** — **a wrong `@theme` namespace prefix generates no rule at all**, which ran ~28 motion call sites at 150ms for three weeks with the whole quality bar green (grep `Motion tokens`).
 
 **⚠️ Standing limitation: a Claude session has no access to Nils's phone.** Verification is the browser pane at 375×812 with touch emulation. That covers a lot — it caught the hidden-image downloads and proved the long-press gestures — but it provably cannot see MB7.
 

@@ -60,7 +60,7 @@ Surfaces: `--color-surface` `#100E0C`, `--color-surface-elevated` `#181512`.
 - Skeleton shimmer → static `--color-neutral-800` fill (no sweep).
 - Poster hover scale, card press scale, carousel chevron fade → removed;
   color/opacity changes only.
-- Sheet/modal slide → cross-fade in place at `--duration-fast`.
+- Sheet/modal slide → cross-fade in place at `--transition-duration-fast`.
 - Loading spinners (`Loader2`) → replace spin with `aria-busy` + static glyph.
 - No auto-advancing carousels exist, so nothing to disable there.
 

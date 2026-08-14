@@ -125,11 +125,24 @@
   --shadow-sheet: 0 -12px 40px -8px rgb(0 0 0 / 0.55); /* bottom sheet, casts upward */
   --shadow-focus: 0 0 0 2px #100E0C, 0 0 0 4px #C8A24B; /* offset focus ring */
 
-  /* ---- Motion ---------------------------------------------------------------- */
-  --duration-instant: 80ms;
-  --duration-fast:    120ms;  /* hover / press feedback */
-  --duration-base:    200ms;  /* most transitions */
-  --duration-slow:    320ms;  /* sheet / view change */
+  /* ---- Motion ----------------------------------------------------------------
+     The namespace prefix is `--transition-duration-*`, NOT `--duration-*`.
+     Tailwind v4's `duration-*` utility resolves its named values from the
+     `--transition-duration` theme key (numeric ones like duration-150 still
+     fall back to `<n>ms`, so they keep working). Named these `--duration-*`
+     from 2026-07-23 to 2026-08-14: no such namespace exists, so `duration-base`
+     matched no utility, generated NO RULE AT ALL, and ~28 call sites across 10
+     files silently ran at Tailwind's built-in 150ms. Nothing catches this —
+     the token itself resolves fine under getComputedStyle, tsc/lint/tests/build
+     are all clean, and an unknown utility class is not an error. Grep
+     node_modules/tailwindcss/dist/lib.js for the utility's `themeKeys` /
+     `valueThemeKeys` before inventing a token prefix.
+     `--ease-*` below is genuinely correct — that IS the v4 namespace (it's
+     where the built-in --ease-in / --ease-out / --ease-in-out live). */
+  --transition-duration-instant: 80ms;
+  --transition-duration-fast:    120ms;  /* hover / press feedback */
+  --transition-duration-base:    200ms;  /* most transitions */
+  --transition-duration-slow:    320ms;  /* sheet / view change */
   --ease-standard:    cubic-bezier(0.2, 0, 0, 1);
   --ease-decelerate:  cubic-bezier(0, 0, 0, 1);   /* enter */
   --ease-accelerate:  cubic-bezier(0.3, 0, 1, 1); /* exit */

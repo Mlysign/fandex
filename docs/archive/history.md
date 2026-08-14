@@ -1960,13 +1960,8 @@ feel, swipe inertia) still wants an eyeball on real hardware.
   sources, deliberately not the `platformSources` union, which folds in the
   watchlist and would answer "Steam" for an item Steam merely wishlists.
 
-**Also found while measuring, spawned separately:** the Tailwind utilities
-`duration-base|fast|slow|instant` and `ease-standard|…` **generate no CSS at
-all** — Tailwind v4 has no `--duration-*`/`--ease-*` theme namespace, so ~32 call
-sites across 10 files silently animate at the built-in 150ms default. The tokens
-resolve fine, which is why nothing ever looked broken. Third instance of the
-`@theme` family already in AGENTS.md, with a different mechanism (unknown utility
-namespace rather than tree-shaking).
+**Also found while measuring, spawned separately — ✅ FIXED the same day, see
+"Motion tokens" below.**
 
 **And a pre-existing bug the hero work surfaced:** the item page's desktop-only
 text "Back" button had been rendering on MOBILE since 038fc9e (2026-07-29).
@@ -1975,3 +1970,56 @@ it, but **Tailwind resolves competing utilities by the order rules land in the
 stylesheet, not by their order in the class attribute** — so `hidden
 lg:inline-flex` lost. `buttonClasses` now drops its own display utility when the
 caller brought an unprefixed one.
+
+## Motion tokens — `duration-*` generated no CSS for three weeks ✅ 2026-08-14
+
+Spun out of the MB batch above, where it was found while measuring something
+else. `duration-base|fast|slow` were used ~28 times across 10 files and matched
+**no utility at all**, so every one of them ran at Tailwind's built-in **150ms**
+instead of the design's 80/120/200/320ms, from 2026-07-23 (H1.6a, when the
+tokens were added) to 2026-08-14.
+
+**Root cause — a wrong namespace prefix, not a missing namespace.** Tailwind v4's
+`duration-*` utility resolves its named values from **`--transition-duration-*`**;
+the tokens were declared `--duration-*`. Read it out of Tailwind rather than
+inferring it from the utility name — several don't match:
+
+```bash
+grep -o '"duration",[^;]\{0,300\}' node_modules/tailwindcss/dist/lib.js
+# → valueThemeKeys:["--transition-duration"]
+```
+
+**Fix: rename the four tokens.** All 28 short-name call sites then worked
+untouched — no `@utility` shims and no rewrite to `duration-[var(--…)]`, both of
+which were considered and are strictly more code. The three arbitrary-value
+workarounds added earlier that day (`SubBar`, `ui/NavPendingBar`, `item/DetailHero`)
+were reverted to the short names, and `ui/Sheet`'s hardcoded
+`ease-[cubic-bezier(0,0,0,1)]` became `ease-decelerate`.
+
+**Two corrections to the original report, both of which shrank the work:**
+
+- **`--ease-*` was never broken** — that IS the v4 namespace (where the built-in
+  `--ease-in`/`--ease-out`/`--ease-in-out` live). It emitted nothing only because
+  no source file used it. The four "call sites" the grep found were the
+  declarations themselves.
+- **The `document.styleSheets` walk that found the bug gives a false negative.**
+  It still reported zero matching rules against the *fully fixed* stylesheet:
+  Chrome gives every `CSSStyleRule` an empty `.cssRules` (CSS nesting), so the
+  natural recursion — `if (r.cssRules) { walk(r.cssRules); continue }` — skips
+  every leaf rule. Test `selectorText` first; recurse only when
+  `r.cssRules.length > 0`.
+
+**Verified** by fetching the stylesheet and measuring live elements: `.duration-base`
+→ 0.2s (186 nodes on `/`), `.duration-fast` → 0.12s (13 nodes on `/calendar`),
+`.duration-slow` → 0.32s, `.ease-decelerate` → `cubic-bezier(0,0,0,1)`; all four
+rules also present in the production stylesheet after `npm run build`.
+`duration-instant` and the three unused `ease-*` correctly emit nothing — Tailwind
+is scan-based, so a token with no source call site has no rule, and a class
+injected at runtime was never scanned and can't be tested that way.
+
+**Why nothing caught it:** `tsc` clean, `npm run lint` 0 errors, 677 tests green,
+`next build` clean — an unrecognized utility class is not an error in any tool in
+this stack. And `getComputedStyle(…).getPropertyValue('--duration-base')` returned
+`.2s` throughout, so the *existing* AGENTS.md tree-shaking check reported "healthy".
+Third `@theme` trap in `globals.css`, different mechanism from the other two →
+AGENTS.md, [[tailwind-theme-tree-shaking]].

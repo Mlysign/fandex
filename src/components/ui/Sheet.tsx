@@ -28,7 +28,8 @@ export default function Sheet({ open, onClose, title, children, className = "" }
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // Mount → next frame flips `visible` so the CSS transition actually runs;
-  // unmount is delayed by --duration-slow so the exit transition can play.
+  // unmount is delayed by --transition-duration-slow so the exit transition
+  // can play (the 320 below must stay in step with that token).
   useEffect(() => {
     if (open) {
       returnFocusRef.current = document.activeElement as HTMLElement;
@@ -101,7 +102,7 @@ export default function Sheet({ open, onClose, title, children, className = "" }
         tabIndex={-1}
         className={`relative w-full sm:max-w-[480px] sm:mx-4 bg-surface-overlay border border-border
           rounded-t-xl sm:rounded-xl shadow-sheet sm:shadow-lg outline-none
-          transition-transform duration-slow ease-[cubic-bezier(0,0,0,1)]
+          transition-transform duration-slow ease-decelerate
           ${visible ? "translate-y-0 sm:scale-100" : "translate-y-full sm:translate-y-0 sm:scale-95"}
           ${className}`}
       >

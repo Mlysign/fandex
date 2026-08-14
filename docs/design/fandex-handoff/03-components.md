@@ -13,8 +13,8 @@ Global interaction rules (apply to every interactive component unless noted):
   not on mouse `:focus`.
 - **disabled:** `opacity: 0.4`, `cursor: not-allowed`, no hover/active response,
   `aria-disabled="true"`.
-- **transition:** `--duration-fast` / `--ease-standard` for hover & press;
-  `--duration-base` for selected/color changes.
+- **transition:** `--transition-duration-fast` / `--ease-standard` for hover & press;
+  `--transition-duration-base` for selected/color changes.
 - **reduced-motion:** see 06 — transforms drop to opacity-only.
 
 ---
@@ -97,7 +97,7 @@ to 44px tap area.
 **States:**
 - default: as above.
 - hover (desktop): card border → `--color-border-strong`; poster scales
-  `1.02` (transform, `--duration-base`); Rate button fill →
+  `1.02` (transform, `--transition-duration-base`); Rate button fill →
   `rgb(237 231 220 / 0.1)`.
 - focus-visible: `--shadow-focus` on card.
 - active (press): poster scale `0.99`.
@@ -138,7 +138,7 @@ scrollbar hidden, `scroll-snap-type:x proximity`).
 `chip-rail` (horizontally scrolling filter chips).
 
 **States:** rail itself has no selected state; children own theirs. Desktop adds
-`ChevronLeft`/`ChevronRight` overlay buttons on hover (fade in, `--duration-base`);
+`ChevronLeft`/`ChevronRight` overlay buttons on hover (fade in, `--transition-duration-base`);
 hidden entirely under reduced-motion is NOT required — they stay, just no fade.
 Scroll position must be keyboard reachable (roving tabindex on children).
 
@@ -295,7 +295,7 @@ Surface `--color-surface-overlay`, `--radius-lg`, `--shadow-lg`, `1px
 ## 12. Modal & Bottom Sheet  (`<Sheet>` / `<Modal>`)
 - **Mobile: bottom sheet.** Surface `--color-surface-overlay`, top corners
   `--radius-xl`, `--shadow-sheet`, 36px grabber handle in `--color-neutral-600`.
-  Enter: slide up `--duration-slow`/`--ease-decelerate`. Scrim
+  Enter: slide up `--transition-duration-slow`/`--ease-decelerate`. Scrim
   `rgb(0 0 0 / 0.6)`. Dismiss on scrim tap / swipe-down / `Escape`.
 - **Desktop: centered modal.** max-width 480px, `--radius-xl`, `--shadow-lg`,
   scrim as above. Focus trapped; returns focus to invoker on close.

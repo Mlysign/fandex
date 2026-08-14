@@ -191,7 +191,7 @@ export default function DetailHero({
                 className="tap-44-y py-1"
               >
                 <span
-                  className={`block h-1.5 rounded-full transition-all duration-[var(--duration-fast)] ${
+                  className={`block h-1.5 rounded-full transition-all duration-fast ${
                     i === active ? "w-5 bg-text-primary" : "w-1.5 bg-text-primary/40"
                   }`}
                 />

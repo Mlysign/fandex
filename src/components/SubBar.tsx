@@ -180,11 +180,7 @@ export default function SubBar({
        for that costs more than it saves. motion-reduce drops the transition but
        NOT the behaviour: the header still gets out of the way, it just snaps. */
     <div
-      /* duration-[var(--duration-base)], NOT `duration-base`: Tailwind v4 has
-         no `--duration-*` theme namespace, so `duration-base` generates no rule
-         at all and silently falls back to the 150ms default. (28 usages across
-         the codebase already do this — flagged separately, not fixed here.) */
-      className={`sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3 transition-transform duration-[var(--duration-base)] motion-reduce:transition-none ${
+      className={`sticky top-0 md:top-14 z-20 bg-surface border-b border-border px-6 py-3 space-y-3 transition-transform duration-base motion-reduce:transition-none ${
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
