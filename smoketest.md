@@ -120,7 +120,11 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 **A. Public / anonymous**
 1. `/` **Home** (rebuilt H1.6e) — anon: sign-in options + "Browse without an account" + the
    public **Popular** and **Upcoming** rails. **Recommended-for-you must NOT appear for anon**
-   (signed-in-with-taste-signal only), and **no stats strip** (authed only). Cards in the rails
+   (signed-in-with-taste-signal only), and neither must the **highlight panels** or the
+   **"Up next" progress rail** (both authed-only). ⚠️ **The three-counter stats strip
+   (library / wishlist / rated) was REMOVED 2026-08-16** — its absence is correct, not a
+   regression; older checklist lines saying "no stats strip (authed only)" are obsolete.
+   Cards in the rails
    are linkable only when the item already has a catalog row (PR15) — a non-linkable card
    renders inert, that's correct, not a bug.
 2. `/discover` anon — ungated (H2b), items render, search + filters work, no user-specific rows.
@@ -185,9 +189,11 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
 > the whole block is already unlocked. Counts as of this run: 1,920 library / 96 wishlist /
 > 1,597 rated. Findings: **SM18–SM32**.
 13. Nav pages all render with real data (library ~2k items). **New/changed in H1.6c/e/f:**
-    the **`/profile` hub** (stats strip, "Coming up" list, Recommended rail), **`/calendar`**
-    (type-chip filter + its month/agenda toggle), Home's **stats strip + best-genre card +
-    Recommended rail**, and the **Library ⇄ Wishlist tab** (switch both directions; each side
+    the **`/profile` hub** (stats strip, "Coming up" list, Recommended rail — `/profile`'s
+    strip is untouched and still expected), **`/calendar`** (type-chip filter + its
+    month/agenda toggle), Home's **rotating highlight panels + "Up next" progress rail +
+    Recommended rail** (Home's own three-counter strip was removed 2026-08-16 — see C3),
+    and the **Library ⇄ Wishlist tab** (switch both directions; each side
     must keep its own filters/sort — they use separate persisted keys by design).
 13b. **Library's default sort is now "Recently added"** (H1.6f). Verify: it's the pre-selected
     sort on a fresh visit, the list really is newest-added-first (not release-date order), and
@@ -249,6 +255,27 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     row, truncating most titles to ~12 chars. Re-measured 2026-07-28 (after L4 changed the row's
     density): the title box was still only 132px, so titles wrapped to 2 lines (`line-clamp-2`, T13)
     instead — expect ~30-36 chars now, not a fixed-width truncation. Screenshot at mobile.
+
+**C3. Episode tracking + Home's progress rail (added 2026-08-16, MB14)** — brand new surfaces; nothing before this date exercised them.
+13k. **MB14 — per-episode tracking (2026-08-16), item page.** On a SHOW's item page, a
+    "Your progress" section lists seasons collapsed with an `n/total` count. Expand one (the
+    first expand is what lazily fetches that season's episodes from TMDB — expect a one-off
+    delay, then instant forever), tick a single episode, tick a whole season from its header
+    row, and reload: the counts must survive. **Exactly ONE `<EpisodeTracker>` in the DOM** —
+    this page has a history of double-mounting islands. A movie/game item page must show no
+    such section at all.
+13l. **The "Up next" progress rail on Home (2026-08-16).** Signed-in only, sorted AFTER the
+    highlight panels. Check three things the unit tests can't: (a) every tick box is **empty**
+    at rest — a check on a resting card is the bug Nils caught, since every card here is
+    unwatched by definition; (b) tapping one fills the check, holds, then the card fades and
+    shrinks out and the list re-orders; (c) the show whose episode you just ticked jumps to the
+    FRONT with its next episode, because the tick is a new event on the sort's timeline.
+    Nothing to continue → the rail renders nothing at all (no empty-state panel).
+13m. **⚠️ The Trakt round-trip is the one thing no Claude session has verified.** The push/pull
+    paths were exercised only by unit tests and a keyless local session (marks land as
+    `source: "local"`). On a run with a real Trakt identity connected: tick a season, confirm it
+    appears on trakt.tv, then un-watch something ON TRAKT, sync, and confirm it disappears here.
+    That last half is the prune path — the one whose failure mode is silent data loss.
 
 **G. Provider-degradation checks (added 2026-08-02, 10th run)**
 

@@ -32,18 +32,43 @@ to a new platform/media type.
 
 ### Active (implemented or hidden)
 
-| Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Trakt.tv | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | yes | Rating and watched history are separate. |
-| Steam | game | Connectable + Metadata | ✅ Implemented | openid | R | R | | | | Read-only; wishlist pull only. **Also the best TAG source for games** — see below. |
-| RAWG | game | Connectable | ✅ Implemented | credentials | R/W | R | R/W | | yes | No review text. |
-| TMDB | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | | No watched concept; library = rated items. |
-| Letterboxd | movie | Connectable | 🔵 Hidden | oauth | R/W | R | R/W | R | yes | Hidden until a working API key exists. |
-| IGDB | game | Metadata | ✅ Implemented | | | | R | | | Games catalog + community/critic scores. |
-| IMDb | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | Rating via OMDB — **inherits the OMDB key gap below** (no scores in prod today). |
-| Rotten Tomatoes | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | Critic score, also sourced from OMDB (`Ratings[Source="Rotten Tomatoes"]`) — **inherits the OMDB key gap below**. |
-| Metacritic | movie, show, game | Metadata | ✅ Implemented | | | | R | | | Critic score. |
-| OMDB | movie, show | Metadata | ✅ Implemented ⚠️ | apikey | | | R | | | Feeds IMDb rating, box office, awards. **⚠️ Config, not code: the `OMDB_API_KEY` is currently invalid, so no IMDb/RT scores actually land in prod.** Check this before debugging a missing rating. |
+| Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Episodes | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Trakt.tv | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | yes | **R/W** | Rating and watched history are separate. **The only platform with per-episode state** (MB14) — see below. |
+| Steam | game | Connectable + Metadata | ✅ Implemented | openid | R | R | | | | | Read-only; wishlist pull only. **Also the best TAG source for games** — see below. |
+| RAWG | game | Connectable | ✅ Implemented | credentials | R/W | R | R/W | | yes | | No review text. |
+| TMDB | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | | | No watched concept; library = rated items. Its `/tv/{id}/season/{n}` is the episode CATALOG source, which is a metadata role, not a user one. |
+| Letterboxd | movie | Connectable | 🔵 Hidden | oauth | R/W | R | R/W | R | yes | | Hidden until a working API key exists. |
+| IGDB | game | Metadata | ✅ Implemented | | | | R | | | | Games catalog + community/critic scores. |
+| IMDb | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | | Rating via OMDB — **inherits the OMDB key gap below** (no scores in prod today). |
+| Rotten Tomatoes | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | | Critic score, also sourced from OMDB (`Ratings[Source="Rotten Tomatoes"]`) — **inherits the OMDB key gap below**. |
+| Metacritic | movie, show, game | Metadata | ✅ Implemented | | | | R | | | | Critic score. |
+| OMDB | movie, show | Metadata | ✅ Implemented ⚠️ | apikey | | | R | | | | Feeds IMDb rating, box office, awards. **⚠️ Config, not code: the `OMDB_API_KEY` is currently invalid, so no IMDb/RT scores actually land in prod.** Check this before debugging a missing rating. |
+
+#### Per-episode state — Trakt only (MB14, 2026-08-16)
+
+`capabilities.episodes` is a declared capability like every other column here, and
+consumers check it rather than sniffing a response shape. That matters more than
+usual: `syncProvider` reads `episodes.read` to decide whether a provider's library
+pull is **authoritative** about episodes — i.e. whether an episode missing from it
+means "removed upstream". A provider that simply doesn't report episodes must
+never be read that way. → [[trakt-sync-completeness]]
+
+- **Read costs nothing extra.** `/sync/watched/shows` already nests
+  `seasons[].episodes[]` in the response the library pull makes anyway (only
+  `extended=noseasons` suppresses it). Riding on that pull is also what makes the
+  prune invariant transfer for free — a pull that throws carries no episode data
+  either.
+- **Write is one request per batch.** `/sync/history` (and `/sync/history/remove`)
+  take a nested shows → seasons → episodes body, so "mark this season seen" is a
+  single call, not 24 against a rate-limited API. ⚠️ **A bare `{ ids: { trakt } }`
+  at the top level marks the ENTIRE show watched** — the `seasons` array is what
+  scopes the write to the listed episodes.
+- **TMDB supplies the catalog, not the state.** Season lists and episode lists come
+  from `/tv/{id}` and `/tv/{id}/season/{n}`, filled lazily one show at a time and
+  cached a week (`src/lib/episodes.ts`). Deliberately not read out of stored
+  `raw_data`: `project.ts`'s keep-list drops `seasons`, so recovering it locally
+  would need a `PROJECTION_VERSION` bump plus a full-catalog re-projection.
 
 #### Steam as a game TAG source (2026-08-13)
 

@@ -57,6 +57,13 @@ and not listed here, **it does not exist** — do not infer it. Blunt on purpose
 - **Why:** gives the logged-in home a personal spine before the discovery rails.
 - **Data:** `stats.tracked`, `stats.avgRating`, `stats.wishlistCount`,
   `topGenre.{label,ratedCount,userAvg}`.
+- **⚠️ SUPERSEDED, both halves.** The single best-genre card became **seven rotating
+  highlight generators, two drawn per day** (2026-07-30) — a card that says the same
+  thing every visit is the thing nobody reads twice. Then the **three-cell strip was
+  removed outright** (2026-08-16, Nils) for the same reason, and its slot went to the
+  **"Up next" progress rail**: the next episode of each show you're mid-way through,
+  ranked by latest event. The personal spine this delta asked for is still there — it
+  is just made of things that change. → grep `Home progress module` in the archive.
 
 ### A5. **Search "People" and "Matching tags" result groups** — page: `/discover`
 - **What:** search results are grouped Titles / People / Tags, not titles only.
