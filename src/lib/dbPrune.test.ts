@@ -71,6 +71,25 @@ describe("previewPrune — what is in scope", () => {
     expect(p.prunable).toBe(0);
     expect(p.protectedByUserState).toBe(1);
   });
+
+  it("protects a browsed show the user ticked episodes on (MB14)", () => {
+    // Ticking episodes is an action, but it writes NONE of the three tables the
+    // predicate originally named — so before user_episode_state joined it, the
+    // default-ON boot prune would have cascaded a watch history away.
+    addItem("browsed-show", 1);
+    run(
+      `INSERT INTO user_episode_state (user_id, media_item_id, season_number, episode_number)
+       VALUES (?, 'browsed-show', 1, 1)`,
+      [USER],
+    );
+
+    const p = previewPrune();
+    expect(p.prunable).toBe(0);
+    expect(p.protectedByEpisodeState).toBe(1);
+
+    runPrune();
+    expect(count("SELECT COUNT(*) n FROM user_episode_state")).toBe(1);
+  });
 });
 
 describe("runPrune — cascades reach links, never user rows", () => {

@@ -23,11 +23,20 @@ import { log } from "@/lib/logger";
 // a few hundred extra rows costs nothing; depending on an invariant we can only
 // verify on a different database is the kind of bet that loses data. The
 // preview reports both numbers so the difference is visible before applying.
+//
+// 2026-08-16 (MB14): user_episode_state joined the list the moment it existed,
+// for exactly the reason above — it carries `media_item_id REFERENCES
+// media_items(id) ON DELETE CASCADE`, and per-episode watch history is NOT
+// implied by a library/watchlist/item_state row. A show you ticked episodes on
+// without ever rating or saving it stays `browsed = 1`, so without this clause
+// the default-ON boot prune would cascade a user's watch history away.
+// ANY future table referencing media_items belongs here too.
 const PRUNABLE_WHERE = `
   browsed = 1
   AND id NOT IN (SELECT media_item_id FROM user_item_state)
   AND id NOT IN (SELECT media_item_id FROM user_library)
   AND id NOT IN (SELECT media_item_id FROM user_watchlist)
+  AND id NOT IN (SELECT media_item_id FROM user_episode_state)
 `;
 
 function n(sql: string): number {
@@ -43,6 +52,8 @@ export type PrunePreview = {
   protectedByUserState: number;
   protectedByLibrary: number;
   protectedByWatchlist: number;
+  /** Browsed shows kept because the user ticked episodes on them (MB14). */
+  protectedByEpisodeState: number;
   /**
    * Rows the PLAN's narrower `NOT IN user_item_state` predicate would have
    * deleted despite a library/watchlist row pointing at them. Must be 0. If it
@@ -67,6 +78,9 @@ export function previewPrune(): PrunePreview {
     ),
     protectedByWatchlist: n(
       "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM user_watchlist)",
+    ),
+    protectedByEpisodeState: n(
+      "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM user_episode_state)",
     ),
     wouldHaveLostLibraryRows: n(`
       SELECT COUNT(*) n FROM user_library ul

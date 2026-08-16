@@ -10,6 +10,7 @@ import RatingsSection from "./RatingsSection";
 import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
+import EpisodeTracker from "./EpisodeTracker";
 import SimilarRail from "./SimilarRail";
 import BackButton from "@/components/ui/BackButton";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -212,6 +213,11 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
             {belowTitle}
           </div>
         </div>
+
+        {/* MB14 — per-episode tracking. Full width (a season list wants the room)
+            and shows only; the component itself renders nothing for a title with
+            no season data. Mounted ONCE, like every other island on this page. */}
+        {item.type === "show" && <EpisodeTracker mediaItemId={item.id} />}
 
         {/* Full-width band below both columns, one rhythm with the stack above. */}
         <LowerSections enriched={enriched} type={item.type} tagOverrides={tagOverrides} tagCategories={tagCategories} />

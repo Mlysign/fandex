@@ -23,24 +23,26 @@ export interface SourceMeta {
 export const CATALOG: Record<string, SourceMeta> = {
   trakt: {
     id: "trakt", label: "Trakt.tv", shortLabel: "Trakt", color: "#ed1c24", urlParam: "traktId", mediaTypes: ["movie", "show"], auth: "oauth",
-    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: true } },
+    // Trakt is the ONLY provider with per-episode read+write (/sync/watched/shows
+    // returns seasons[].episodes[]; /sync/history takes the same shape back).
+    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: true }, episodes: { read: true, write: true } },
   },
   letterboxd: {
     id: "letterboxd", label: "Letterboxd", color: "#00c030", urlParam: "letterboxdId", mediaTypes: ["movie"], auth: "oauth",
-    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: true, write: false }, status: { write: true } },
+    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: true, write: false }, status: { write: true }, episodes: { read: false, write: false } },
   },
   steam: {
     id: "steam", label: "Steam", color: "#1b9af7", urlParam: "steamId", mediaTypes: ["game"], auth: "openid",
-    capabilities: { wishlist: { read: true, write: false }, library: { read: true }, rating: { read: false, write: false }, review: { read: false, write: false }, status: { write: false } },
+    capabilities: { wishlist: { read: true, write: false }, library: { read: true }, rating: { read: false, write: false }, review: { read: false, write: false }, status: { write: false }, episodes: { read: false, write: false } },
   },
   rawg: {
     id: "rawg", label: "RAWG", color: "#4ade80", urlParam: "rawgId", mediaTypes: ["game"], auth: "credentials",
-    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: true } },
+    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: true }, episodes: { read: false, write: false } },
   },
   tmdb: {
     id: "tmdb", label: "TMDB", color: "#01b4e4", urlParam: "tmdbId", mediaTypes: ["movie", "show"], auth: "oauth",
     // TMDB has no "watched" history — library = Rated items, no status write.
-    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: false } },
+    capabilities: { wishlist: { read: true, write: true }, library: { read: true }, rating: { read: true, write: true }, review: { read: false, write: false }, status: { write: false }, episodes: { read: false, write: false } },
   },
 };
 

@@ -1,6 +1,7 @@
 import { get, run } from "@/lib/db";
 import { linkSourceToItem } from "@/lib/matcher";
 import type { MediaSource, PulledItem } from "../types";
+import type { PulledEpisode } from "@/lib/episodes";
 import { CATALOG } from "../catalog";
 import { decryptSecret, decryptNullable, encryptSecret, encryptNullable } from "@/lib/crypto";
 import {
@@ -8,6 +9,7 @@ import {
   addMovieToTraktWatchlist, addShowToTraktWatchlist,
   removeMovieFromTraktWatchlist, removeShowFromTraktWatchlist,
   rateTraktItem, markTraktWatched, removeTraktRating, removeTraktFromHistory,
+  addTraktEpisodesToHistory, removeTraktEpisodesFromHistory,
   getTraktWatchlistMovies, getTraktWatchlistShows,
   getTraktWatchedMovies, getTraktWatchedShows,
   getTraktRatingsMovies, getTraktRatingsShows,
@@ -21,6 +23,23 @@ function toUnix(s: any): number | null {
   if (!s) return null;
   const p = Date.parse(s);
   return isNaN(p) ? null : Math.floor(p / 1000);
+}
+
+// Flatten one /sync/watched/shows entry's `seasons[].episodes[]` into the flat
+// list `user_episode_state` speaks. Season 0 (Trakt's specials) is dropped to
+// match lib/episodes.ts, which excludes it from the catalog so the UI's
+// "n of total" progress stays meaningful.
+function pulledEpisodes(entry: any): PulledEpisode[] {
+  const out: PulledEpisode[] = [];
+  for (const s of entry?.seasons ?? []) {
+    const season = s?.number;
+    if (!Number.isInteger(season) || season === 0) continue;
+    for (const ep of s?.episodes ?? []) {
+      if (!Number.isInteger(ep?.number)) continue;
+      out.push({ season, episode: ep.number, watchedAt: toUnix(ep.last_watched_at) });
+    }
+  }
+  return out;
 }
 
 // Trakt adapter (movies + shows). OAuth — `context()` refreshes the access token
@@ -112,6 +131,15 @@ export const traktSource: MediaSource = {
     await removeTraktFromHistory(ctx.token, t, id);
   },
 
+  // MB14 — one request for the whole batch (see the helpers in ../trakt.ts).
+  // A "mark this season seen" tick is one call, not one per episode.
+  async pushEpisodes(ctx, sourceId, episodes, watched) {
+    if (!ctx.token || !episodes.length) return;
+    const id = parseInt(sourceId);
+    if (watched) await addTraktEpisodesToHistory(ctx.token, id, episodes);
+    else await removeTraktEpisodesFromHistory(ctx.token, id, episodes);
+  },
+
   async pullWishlist(ctx) {
     if (!ctx.token) return [];
     const [movies, shows] = await Promise.all([
@@ -170,6 +198,15 @@ export const traktSource: MediaSource = {
           rawData: node, status: "watched",
           rating: rated?.rating ?? null,
           reviewedAt: rated?.ratedAt ?? toUnix(e.last_watched_at) ?? null,
+          // MB14 — the per-episode half, from the SAME response. /sync/watched/
+          // shows nests `seasons[].episodes[]` unless you ask for
+          // `extended=noseasons`, so this costs no extra call and inherits the
+          // pull's throw-on-failure contract for free.
+          //
+          // `[]` for a movie is deliberate and NOT the same as `undefined`: it
+          // says "this pull is authoritative about episodes and this item has
+          // none", which is exactly what syncProvider's reconcile needs to hear.
+          ...(kind === "show" ? { episodes: pulledEpisodes(e) } : {}),
         });
       }
     };

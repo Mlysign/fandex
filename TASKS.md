@@ -42,9 +42,9 @@
 
 ---
 
-## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🔵 2 of 15 open
+## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🔵 1 of 15 open
 
-**13 of 15 shipped and verified 2026-08-14** — full write-ups → [archive](docs/archive/history.md), grep `MB — mobile testing batch`. Four findings there are worth reading before touching related code: **re-seeding does not produce turnover** (MB9), **`display:none` does not stop images downloading** (MB13), **Tailwind resolves competing utilities by stylesheet order, not class-attribute order** (the `buttonClasses` bug MB13 surfaced), and — spun out and **fixed the same day** — **a wrong `@theme` namespace prefix generates no rule at all**, which ran ~28 motion call sites at 150ms for three weeks with the whole quality bar green (grep `Motion tokens`).
+**14 of 15 shipped** (13 on 2026-08-14, MB14 on 2026-08-16) — full write-ups → [archive](docs/archive/history.md), grep `MB — mobile testing batch`. Four findings there are worth reading before touching related code: **re-seeding does not produce turnover** (MB9), **`display:none` does not stop images downloading** (MB13), **Tailwind resolves competing utilities by stylesheet order, not class-attribute order** (the `buttonClasses` bug MB13 surfaced), and — spun out and **fixed the same day** — **a wrong `@theme` namespace prefix generates no rule at all**, which ran ~28 motion call sites at 150ms for three weeks with the whole quality bar green (grep `Motion tokens`).
 
 **⚠️ Standing limitation: a Claude session has no access to Nils's phone.** Verification is the browser pane at 375×812 with touch emulation. That covers a lot — it caught the hidden-image downloads and proved the long-press gestures — but it provably cannot see MB7.
 
@@ -53,18 +53,10 @@
   - **Next step, on the device** (`chrome://inspect` against the installed PWA): does the nav's `getBoundingClientRect().top` actually move during the scroll, or does it stay put while something else changes? Those are different bugs with different fixes.
   - **Do NOT speculatively add `viewportFit: "cover"`.** `layout.tsx`'s `viewport` export sets only `themeColor`, so `env(safe-area-inset-bottom)` — which `AppNav`'s mobile bar pads with — is always 0. That is self-consistent today (without `cover`, the app is already laid out inside the safe area) and changing it moves where the whole app paints.
 
-- **MB14** ⬜ **LARGE — designed, deliberately NOT started. Next session, main loop, full effort.**
+- **MB14** ✅ **2026-08-16 — per-episode tracking + two-way Trakt sync.** Migration 15 (`show_seasons`/`show_episodes`/`user_episode_state`), lazy TMDB catalog fill, episode state riding on the existing Trakt library pull, batched `/sync/history` push, `/api/episodes`, and `<EpisodeTracker>` on the item page. Verified on **both** migration apply paths against a real pre-upgrade DB and driven end-to-end in the browser pane. → [archive](docs/archive/history.md), grep `MB14 — per-episode show tracking`.
+  - **Two things that outlive it.** `dbPrune.ts`'s `PRUNABLE_WHERE` now names FOUR tables — **any new table referencing `media_items` must be added there**, or the default-ON boot prune cascades that user data away. And a provider pull's `episodes: undefined` (says nothing) vs `episodes: []` (authoritative, none watched) is the distinction that keeps an empty pull from wiping a watch history; `capabilities.episodes.read` is the gate.
 
-  Per-episode watched tracking for shows: collapsed by season, mark a season seen to mark all its episodes, Showly as the UX reference. **Two-way Trakt sync — Nils's call, 2026-08-14.**
-
-  **Why designed rather than half-started:** it needs a `migrations.ts` change *and* a sync/pull adapter, which are AGENTS.md's two named "main loop at full effort, don't delegate" areas, and the failure mode is silent user-data loss. A migration left half-applied is worse than no migration.
-
-  1. **Schema.** `show_seasons` + `show_episodes` (catalog-side, keyed off `media_items.id`) and `user_episode_state` for the per-user half. ⚠️ **The owning column must literally be named `user_id`** — `deleteAccount()` finds its targets by reading `sqlite_master` for that exact name, so calling it `owner_id` makes GDPR erasure silently skip the table with every test still green → [[account-erasure-and-export]]. Any index on a column the migration adds must be created **in that same migration**, never in `db.ts`'s schema block, which runs first and must stay valid against the pre-migration schema.
-  2. **Catalog fill.** TMDB `/tv/{id}/season/{n}`. Follow P18's precedent and heal lazily on detail view rather than mass-fetching — a full-catalog op is what took prod down once.
-  3. **Pull.** Trakt `/sync/watched/shows` returns per-episode state in one call. ⚠️ **THE PRUNE INVARIANT applies:** a pull that can't complete must **throw**, never return `[]` or a partial — `syncProvider` deletes every local row missing from a "successful" pull, so a swallowed error wipes the user's watch history. A pull that legitimately found nothing may return `[]` → [[trakt-sync-completeness]].
-  4. **Push.** Trakt `/sync/history` and `/sync/history/remove`. Mark-season-as-seen must be **one batched call** — a 24-episode season would otherwise be 24 round-trips against a rate-limited API.
-  5. **UI.** Seasons collapsed by default with an `n/total` progress count, expand for the episode list, season-level toggle. Optimistic local state with rollback on a failed push; the round-trip is far too slow to block a checkbox on.
-  6. **Verification that counts:** run `node scripts/migrate.mjs` against a **copy of the real `data/rr.db`**, not a fresh one. Every DB test starts fresh, so green tests prove nothing about the upgrade path prod actually takes → [[db-migrations-and-testing]].
+  **Still open on it — needs Nils:** the Trakt round-trip itself is **unverified against a live account**. This container has no `data/rr.db` and no provider keys, so the push/pull path was exercised only through unit tests and a keyless local session (marks land as `source: "local"`). Connect Trakt, tick a season, and confirm it appears on trakt.tv — then confirm a sync pulls a Trakt-side change back.
 ---
 
 ## H3 — Monetization 🔵 v1 built 2026-08-03; donations live, affiliate dark

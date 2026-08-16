@@ -468,6 +468,79 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: "show_seasons + show_episodes + user_episode_state (MB14 episode tracking)",
+    up: (db) => {
+      // 2026-08-16, MB14. Three brand-new tables — each with its own indexes in
+      // THIS migration, never in db.ts's schema block, which runs first and must
+      // stay valid against a pre-migration schema.
+      //
+      // Two of them are CATALOG (shared, viewer-independent, filled lazily from
+      // TMDB on a detail view — P18's precedent, never a full-catalog op) and
+      // one is PERSONAL.
+      //
+      // ⚠️ The personal table's owning column is literally named `user_id`, and
+      // that spelling is load-bearing: deleteAccount() finds its targets by
+      // reading sqlite_master for that exact column name, so `owner_id` would
+      // make GDPR erasure silently skip every user's watch history with the
+      // whole test suite still green → [[account-erasure-and-export]]. The
+      // mirror-image rule holds for the two catalog tables: they must NOT gain
+      // a `user_id`, or erasure would delete shared catalog rows.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS show_seasons (
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          season_number INTEGER NOT NULL,
+          name          TEXT,
+          episode_count INTEGER NOT NULL DEFAULT 0,
+          air_date      TEXT,
+          poster_url    TEXT,
+          overview      TEXT,
+          updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (media_item_id, season_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_show_seasons_item ON show_seasons(media_item_id);
+
+        CREATE TABLE IF NOT EXISTS show_episodes (
+          media_item_id   TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          season_number   INTEGER NOT NULL,
+          episode_number  INTEGER NOT NULL,
+          title           TEXT,
+          air_date        TEXT,
+          runtime_minutes INTEGER,
+          overview        TEXT,
+          still_url       TEXT,
+          updated_at      INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (media_item_id, season_number, episode_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_show_episodes_season
+          ON show_episodes(media_item_id, season_number);
+
+        -- One row per episode the user has watched. ABSENCE is "not watched" —
+        -- there is deliberately no watched=0 row, so the table stays proportional
+        -- to what someone actually watched rather than to the catalog.
+        --
+        -- The sources column mirrors user_library.platform_sources: the JSON
+        -- array of providers holding this state. It lets the Trakt pull prune
+        -- ONLY the rows Trakt is responsible for and leave a purely local mark
+        -- alone (see syncProvider's reconcile).
+        CREATE TABLE IF NOT EXISTS user_episode_state (
+          user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media_item_id  TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          season_number  INTEGER NOT NULL,
+          episode_number INTEGER NOT NULL,
+          watched_at     INTEGER,
+          sources        TEXT NOT NULL DEFAULT '["local"]',
+          updated_at     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (user_id, media_item_id, season_number, episode_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_episode_state_user
+          ON user_episode_state(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_episode_state_item
+          ON user_episode_state(user_id, media_item_id);
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

@@ -59,6 +59,13 @@ function populate(userId: string, itemId: string, suffix: string) {
     `sl-${suffix}`,
     userId,
   ]);
+  // MB14 — per-episode watch history. Personal data like everything else here,
+  // so both erasure and the export have to reach it.
+  run(
+    `INSERT INTO user_episode_state (user_id, media_item_id, season_number, episode_number, watched_at, sources)
+     VALUES (?, ?, 2, 5, 1700000000, '["trakt"]')`,
+    [userId, itemId],
+  );
 }
 
 const count = (sql: string, params: unknown[] = []) => get<{ n: number }>(sql, params)?.n ?? 0;
@@ -80,12 +87,15 @@ beforeEach(() => {
 describe("userScopedTables", () => {
   it("finds every table with a user_id column, and nothing else", () => {
     const tables = userScopedTables();
-    for (const t of ["user_identities", "user_library", "user_watchlist", "user_item_state", "sync_log"]) {
+    for (const t of ["user_identities", "user_library", "user_watchlist", "user_item_state", "sync_log", "user_episode_state"]) {
       expect(tables).toContain(t);
     }
     // The shared catalog is not user-scoped — deleting an account must not reach it.
     expect(tables).not.toContain("media_items");
     expect(tables).not.toContain("media_links");
+    // Same for the episode CATALOG (MB14): shared metadata, no user_id column.
+    expect(tables).not.toContain("show_seasons");
+    expect(tables).not.toContain("show_episodes");
     expect(tables).not.toContain("users");
   });
 });
@@ -99,7 +109,8 @@ describe("accountFootprint", () => {
     expect(f.perTable.user_item_state).toBe(1);
     expect(f.perTable.user_identities).toBe(1);
     expect(f.perTable.sync_log).toBe(1);
-    expect(f.total).toBe(5);
+    expect(f.perTable.user_episode_state).toBe(1);
+    expect(f.total).toBe(6);
   });
 
   it("reports a non-existent user as absent", () => {
@@ -112,7 +123,7 @@ describe("deleteAccount", () => {
     const result = deleteAccount(ME);
 
     expect(result.userRowDeleted).toBe(true);
-    expect(result.total).toBe(5);
+    expect(result.total).toBe(6);
     expect(count("SELECT COUNT(*) n FROM users WHERE id = ?", [ME])).toBe(0);
     for (const t of userScopedTables()) {
       expect(count(`SELECT COUNT(*) n FROM "${t}" WHERE user_id = ?`, [ME])).toBe(0);
@@ -128,6 +139,7 @@ describe("deleteAccount", () => {
     expect(count("SELECT COUNT(*) n FROM user_item_state WHERE user_id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM user_identities WHERE user_id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM sync_log WHERE user_id = ?", [OTHER])).toBe(1);
+    expect(count("SELECT COUNT(*) n FROM user_episode_state WHERE user_id = ?", [OTHER])).toBe(1);
   });
 
   it("leaves the shared catalog intact", () => {
@@ -200,6 +212,10 @@ describe("buildAccountExport", () => {
     expect(exp.watchlist).toHaveLength(1);
     expect(exp.watchlist[0]).toMatchObject({ notes: "later" });
     expect(exp.itemState).toHaveLength(1);
+    expect(exp.episodes).toHaveLength(1);
+    expect(exp.episodes[0]).toMatchObject({
+      title: "Title item-1", season: 2, episode: 5, watchedAt: 1700000000,
+    });
     expect(exp.syncLog).toHaveLength(1);
     expect(exp.syncLog[0]).toMatchObject({ provider: "trakt", itemCount: 42 });
   });
@@ -224,6 +240,7 @@ describe("buildAccountExport", () => {
       ...exp.library.map((l) => l.mediaItemId),
       ...exp.watchlist.map((w) => w.mediaItemId),
       ...exp.itemState.map((s) => s.mediaItemId),
+      ...exp.episodes.map((e) => e.mediaItemId),
     ];
     expect(ids.every((id) => id === "item-1")).toBe(true);
     expect(exp.identities.every((i) => i.providerUserId === "trakt-me")).toBe(true);

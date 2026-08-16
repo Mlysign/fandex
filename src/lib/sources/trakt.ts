@@ -347,6 +347,72 @@ export async function removeTraktRating(
   }
 }
 
+// ── Per-episode history (MB14) ────────────────────────────────────────────────
+//
+// ONE request for a whole batch, deliberately. Trakt's /sync/history takes a
+// nested shows → seasons → episodes body, so "mark season 1 as seen" is a single
+// call rather than 24 — which matters against a rate-limited API where a
+// mid-batch 429 would leave the user's history half-written.
+//
+// Note the asymmetry with the movie/show helpers above: those post
+// `{ ids: { trakt } }` at the top level, which marks EVERYTHING. Sending a
+// `seasons` array scopes the write to exactly the listed episodes.
+function episodeBody(traktId: number, episodes: { season: number; episode: number }[]) {
+  const bySeason = new Map<number, number[]>();
+  for (const e of episodes) {
+    const list = bySeason.get(e.season) ?? [];
+    list.push(e.episode);
+    bySeason.set(e.season, list);
+  }
+  return {
+    shows: [
+      {
+        ids: { trakt: traktId },
+        seasons: Array.from(bySeason, ([number, eps]) => ({
+          number,
+          episodes: eps.map((n) => ({ number: n })),
+        })),
+      },
+    ],
+  };
+}
+
+async function postEpisodeHistory(
+  accessToken: string,
+  path: "/sync/history" | "/sync/history/remove",
+  traktId: number,
+  episodes: { season: number; episode: number }[],
+): Promise<void> {
+  if (!episodes.length) return;
+  const res = await httpFetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(episodeBody(traktId, episodes)),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Trakt episode history (${path}) failed: ${res.status} ${body}`);
+  }
+}
+
+/** Mark specific episodes of a show as watched. One request for the whole batch. */
+export function addTraktEpisodesToHistory(
+  accessToken: string,
+  traktId: number,
+  episodes: { season: number; episode: number }[],
+): Promise<void> {
+  return postEpisodeHistory(accessToken, "/sync/history", traktId, episodes);
+}
+
+/** Un-watch specific episodes of a show. One request for the whole batch. */
+export function removeTraktEpisodesFromHistory(
+  accessToken: string,
+  traktId: number,
+  episodes: { season: number; episode: number }[],
+): Promise<void> {
+  return postEpisodeHistory(accessToken, "/sync/history/remove", traktId, episodes);
+}
+
 // Remove watched-history entries for an item from Trakt (/sync/history/remove),
 // so removing it from the library also un-marks it as watched.
 export async function removeTraktFromHistory(

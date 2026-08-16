@@ -1865,6 +1865,84 @@ and `Disallow`ing the facets (throws away the P17 SEO surface).
 **Reassess only if** a crawl sweep shows the 24 h TTL is too short, or if RAWG's
 latency stops masking the true steady-state tag cost.
 
+## MB14 — per-episode show tracking + two-way Trakt sync, 2026-08-16
+
+Shipped the one large item left in the mobile-testing batch. Seasons collapsed
+with an `n/total` count, expand for the episode list, one tick to mark a whole
+season; state syncs both ways with Trakt.
+
+**Schema — migration 15.** `show_seasons` + `show_episodes` (catalog, shared) and
+`user_episode_state` (personal). Three things about it are load-bearing:
+
+- The owning column is literally named **`user_id`**, because `deleteAccount()`
+  finds its targets by reading `sqlite_master` for that exact name. `owner_id`
+  would have made GDPR erasure skip a user's entire watch history with the whole
+  suite still green. The mirror rule holds for the two catalog tables — they must
+  never gain a `user_id`, or erasure would start deleting shared metadata.
+- **Absence means "not watched".** There is no `watched = 0` row, so the table
+  stays proportional to what someone actually watched rather than to the catalog.
+- **`sources` is a JSON array**, mirroring `user_library.platform_sources`. That
+  is what makes the Trakt prune honest: it detaches only the rows Trakt is
+  responsible for, and a purely local tick survives it. Only the last source
+  removed deletes the row — the same shape as `removeLibrarySource`.
+
+**⚠️ `dbPrune.ts`'s `PRUNABLE_WHERE` gained a fourth clause the same session, and
+that was not optional.** Ticking episodes writes NONE of the three tables the
+predicate named, so a show you tracked without ever rating or saving it stays
+`browsed = 1` — and the boot prune is default-ON in prod. Without the clause the
+next deploy would have cascaded that watch history away. The rule this restates:
+**any new table referencing `media_items` belongs in that predicate.**
+
+**Catalog fill is lazy, P18's precedent.** `ensureShowSeasons` (one `/tv/{id}`
+call, on first view) and `ensureSeasonEpisodes` (one `/tv/{id}/season/{n}`, on
+first expand), both cached for a week. Note *why* the season list isn't read from
+the stored blob: `project.ts`'s keep-list drops `seasons`, so recovering it
+locally would need a `PROJECTION_VERSION` bump plus a full-catalog re-projection
+— the op that took prod down once. Two small calls are far cheaper. Both ensure*
+functions **degrade rather than throw** on a TMDB outage (nothing on that path
+drives a prune); the Trakt pull is the opposite case and keeps throwing.
+
+**Pull costs no extra request.** `/sync/watched/shows` already nests
+`seasons[].episodes[]` — the existing library pull was throwing that data away.
+Carrying it on `PulledItem.episodes` means the prune invariant transfers for
+free: if the pull throws, no episode data reaches the reconcile either.
+`reconcileProviderEpisodes` runs inside `syncProvider`'s `try`, after the pull,
+so an outage is a no-op rather than a wiped history — pinned by a test that
+fails if it is ever moved out.
+
+**The `undefined` / `[]` distinction is the whole safety argument.** A movie
+carries no `episodes` key ("this pull says nothing"); a watched show carries `[]`
+("this pull is authoritative and none are watched"). Conflating them is how an
+empty pull would prune a history. `capabilities.episodes.read` is the declarative
+gate — a provider that doesn't report episodes is never read as evidence.
+
+**Push is one request per batch.** `/sync/history` takes a nested
+shows → seasons → episodes body, so a 24-episode season is one call, not 24
+against a rate-limited API where a mid-batch 429 leaves a half-written history.
+Note the asymmetry with the existing movie/show helpers: a bare `{ ids }` at the
+top level marks the ENTIRE show watched; the `seasons` array is what scopes it.
+
+**`/api/episodes` pushes BEFORE it writes**, deliberately. Writing first would
+leave a tick Trakt never accepted looking permanent until the next sync silently
+pruned it. Pushing first means a refusal surfaces as a 502 the client rolls its
+optimistic state back on, and nothing local is ever attributed to a provider that
+didn't take it.
+
+**Verified on both apply paths against a real pre-upgrade database** — a
+`git worktree` at the previous commit built a prod-shaped file (1,200 catalog
+rows, 200 library / 114 watchlist / 314 item_state, at `user_version` 14), then
+`node scripts/migrate.mjs` upgraded a copy: `user_version` 15, `integrity_check`
+ok, 0 `foreign_key_check` violations, all three user-row counts unchanged,
+re-running a clean no-op. Green vitest proves nothing here — every DB test starts
+fresh. Also driven end-to-end in the browser pane at 375×812 with a dev-login
+session and a pre-seeded catalog (no TMDB key needed once the rows are fresh):
+expand → lazy fetch, tick an episode, tick a whole season, survives a reload,
+**exactly one** `<EpisodeTracker>` in the DOM. The doubled `/api/episodes` GET in
+dev is React StrictMode — `/api/detail` and `/api/detail/similar` double too.
+
+Quality bar at the end: **713 tests** · tsc clean · lint 0 errors · build clean ·
+`npm audit` 0 vulnerabilities.
+
 ## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes): the 13 shipped
 
 Nils tested the app on his phone and sent 15 notes; 13 shipped the same day. Two
