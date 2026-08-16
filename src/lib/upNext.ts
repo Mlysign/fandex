@@ -1,4 +1,4 @@
-import { query } from "@/lib/db";
+import { get, query } from "@/lib/db";
 import { publicItemHref } from "@/lib/publicUrl";
 import { CATALOG_TTL_SECONDS, ensureShowSeasons, ensureSeasonEpisodes } from "@/lib/episodes";
 
@@ -37,6 +37,9 @@ import { CATALOG_TTL_SECONDS, ensureShowSeasons, ensureSeasonEpisodes } from "@/
 //     sort straight to the front — and you cannot watch, or tick, something
 //     that isn't out yet.
 
+/** Providers that can supply per-episode state (capabilities.episodes.read). */
+const EPISODE_PROVIDERS = ["trakt"];
+
 /** Cap on the rail. Nils: "~10". */
 const MAX_ENTRIES = 10;
 
@@ -55,6 +58,29 @@ const MAX_ENTRIES = 10;
  */
 const MAX_HEAL_SHOWS = 3;
 const HEAL_BUDGET_MS = 4_000;
+
+/**
+ * Why the rail is empty — because "no data yet", "still fetching episode lists",
+ * "you're caught up" and "the Trakt pull is failing" all render as the same
+ * nothing, and the person looking at it may be on a phone with no console.
+ *
+ * Every field is derived from state this user already owns. It exists to be
+ * shown to them, so it carries no provider ids, tokens or other users' data.
+ */
+export interface UpNextStatus {
+  /** Is a provider that can supply episodes connected at all? */
+  episodeProviderConnected: boolean;
+  /** Rows in user_episode_state — 0 means nothing has ever written any. */
+  episodeRows: number;
+  /** Distinct shows with episode state. */
+  showsTracked: number;
+  /** Of those, how many still need their episode list fetched (heals 3/request). */
+  showsAwaitingCatalog: number;
+  /** The last episode-reconcile this user's sync performed, if any. */
+  lastEpisodeSync: { at: number | null; count: number | null; status: string | null; error: string | null } | null;
+  /** The last Trakt LIBRARY pull — where a failing pull shows up. */
+  lastLibrarySync: { at: number | null; count: number | null; status: string | null; error: string | null } | null;
+}
 
 export interface UpNextEntry {
   mediaItemId: string;
@@ -342,4 +368,52 @@ export async function buildUpNext(
   // than being dropped — the filter already said it belongs here.
   entries.sort((a, b) => (b.eventAt ?? -Infinity) - (a.eventAt ?? -Infinity));
   return entries.slice(0, opts.limit ?? MAX_ENTRIES);
+}
+
+/**
+ * The "why is this empty" answer, computed independently of buildUpNext so a
+ * thrown heal can never take it down — when the rail is blank, this is the only
+ * thing that can say anything at all.
+ */
+export function upNextStatus(userId: string, opts: { now?: number } = {}): UpNextStatus {
+  const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
+
+  const episodeProviderConnected = !!get<{ n: number }>(
+    `SELECT COUNT(*) n FROM user_identities WHERE user_id = ? AND provider IN (${EPISODE_PROVIDERS.map(() => "?").join(",")})`,
+    [userId, ...EPISODE_PROVIDERS],
+  )?.n;
+
+  const rows = get<{ rows: number; shows: number }>(
+    `SELECT COUNT(*) rows, COUNT(DISTINCT media_item_id) shows
+       FROM user_episode_state WHERE user_id = ?`,
+    [userId],
+  );
+
+  const states = loadShowStates(userId);
+  const ids = states.map((s) => s.mediaItemId);
+  const episodeIndex = loadEpisodeIndex(ids);
+  const seasonIndex = loadSeasonIndex(ids);
+  const showsAwaitingCatalog = states.filter(
+    (s) => coverage(s, episodeIndex.get(s.mediaItemId), seasonIndex.get(s.mediaItemId), nowSec) === "missing",
+  ).length;
+
+  const lastLog = (provider: string) => {
+    const r = get<{ synced_at: number; item_count: number; status: string; error: string | null }>(
+      `SELECT synced_at, item_count, status, error FROM sync_log
+        WHERE user_id = ? AND provider = ? ORDER BY synced_at DESC, rowid DESC LIMIT 1`,
+      [userId, provider],
+    );
+    return r
+      ? { at: r.synced_at, count: r.item_count, status: r.status, error: r.error }
+      : null;
+  };
+
+  return {
+    episodeProviderConnected,
+    episodeRows: rows?.rows ?? 0,
+    showsTracked: rows?.shows ?? 0,
+    showsAwaitingCatalog,
+    lastEpisodeSync: lastLog("trakt-episodes"),
+    lastLibrarySync: lastLog("trakt-library"),
+  };
 }

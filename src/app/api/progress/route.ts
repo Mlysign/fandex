@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
-import { buildUpNext } from "@/lib/upNext";
+import { buildUpNext, upNextStatus } from "@/lib/upNext";
 
 // Home's progress module — the episodes you'd watch next, per show.
 //
@@ -18,5 +18,9 @@ import { buildUpNext } from "@/lib/upNext";
 export const dynamic = "force-dynamic";
 
 export const GET = withUser(async (_req: NextRequest, session) => {
-  return NextResponse.json({ entries: await buildUpNext(session.userId) });
+  // `status` is computed even when entries come back full — it costs a handful
+  // of indexed counts, and having it always present means the client never has
+  // to make a second request to explain itself.
+  const entries = await buildUpNext(session.userId);
+  return NextResponse.json({ entries, status: upNextStatus(session.userId) });
 });

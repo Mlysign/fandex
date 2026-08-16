@@ -4,8 +4,10 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import Rail from "@/components/Rail";
 import Panel from "@/components/ui/Panel";
+import Button from "@/components/ui/Button";
 import Eyebrow from "@/components/ui/Eyebrow";
 import { useToast } from "@/components/ui/Toast";
+import { syncToCompletion } from "@/lib/syncClient";
 
 // Home's progress module (2026-08-16) — a carousel of "the episode you'd watch
 // next", one card per show you're in the middle of. Replaces the three counters
@@ -30,6 +32,16 @@ import { useToast } from "@/components/ui/Toast";
 // refused write the check is taken back and the card stays — /api/episodes
 // pushes to Trakt BEFORE writing, so a refusal means nothing was recorded
 // anywhere and the episode genuinely is still up next.
+
+/** Why the rail is empty — see lib/upNext.ts's UpNextStatus. */
+interface UpNextStatus {
+  episodeProviderConnected: boolean;
+  episodeRows: number;
+  showsTracked: number;
+  showsAwaitingCatalog: number;
+  lastEpisodeSync: { at: number | null; count: number | null; status: string | null; error: string | null } | null;
+  lastLibrarySync: { at: number | null; count: number | null; status: string | null; error: string | null } | null;
+}
 
 interface UpNextEntry {
   mediaItemId: string;
@@ -64,6 +76,8 @@ function reducedMotion(): boolean {
 export default function ProgressRail() {
   const { toast } = useToast();
   const [entries, setEntries] = useState<UpNextEntry[] | null>(null);
+  const [status, setStatus] = useState<UpNextStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
   /** Ticked — the check is filled in. */
   const [done, setDone] = useState<Set<string>>(new Set());
   /** Ticked AND fading out. Kept separate so the check is visible before the exit. */
@@ -75,10 +89,14 @@ export default function ProgressRail() {
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setEntries(data.entries ?? []);
+      setStatus(data.status ?? null);
     } catch {
       // A failed progress fetch costs this module, never the page — Home's
-      // rails come from a different request for exactly this reason.
+      // rails come from a different request for exactly this reason. `status`
+      // stays null, which the empty state below reports as exactly that rather
+      // than guessing at a friendlier reason.
       setEntries([]);
+      setStatus(null);
     }
   }, []);
 
@@ -136,9 +154,45 @@ export default function ProgressRail() {
     await load();
   }
 
-  // Nothing to continue is the normal state for a new account, so this renders
-  // nothing at all rather than an empty-state panel competing with the rails.
-  if (!entries?.length) return null;
+  async function runSync() {
+    setSyncing(true);
+    try {
+      await syncToCompletion("trakt");
+      await load();
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Still resolving — render nothing rather than flashing an empty state that
+  // is about to be replaced.
+  if (entries === null) return null;
+
+  if (!entries.length) {
+    return (
+      <section>
+        {/* Deliberately the same serif h2 <Rail> draws, not an Eyebrow: the
+            empty state and the populated rail are the same section, and a
+            different heading style would read as a different module. */}
+        <h2 className="font-serif text-serif-md text-text-primary mb-3 px-1">Up next</h2>
+        <Panel className="px-4 py-3.5">
+          <p className="text-body-sm text-text-secondary">{emptyReason(status)}</p>
+          {status?.episodeProviderConnected && (
+            <Button
+              variant="secondary"
+              size="sm"
+              pill
+              loading={syncing}
+              onClick={() => void runSync()}
+              className="mt-3"
+            >
+              {syncing ? "Syncing Trakt…" : "Sync Trakt now"}
+            </Button>
+          )}
+        </Panel>
+      </section>
+    );
+  }
 
   return (
     <Rail title="Up next" colsClass="auto-cols-[15rem]">
@@ -190,4 +244,46 @@ export default function ProgressRail() {
       })}
     </Rail>
   );
+}
+
+/**
+ * The one line that says WHY the rail is empty.
+ *
+ * It exists because "nothing synced yet", "still fetching episode lists",
+ * "you're caught up" and "the Trakt pull is failing" all render as the same
+ * blank space — and the first thing that happened after this shipped to prod
+ * was exactly that ambiguity (a sync ran, the rail stayed empty, and there was
+ * no way to tell which of the four it was from a phone).
+ *
+ * Ordered most-actionable first, and it never claims success it can't see: a
+ * failed library pull is reported as a failure, not as "no data yet".
+ */
+function emptyReason(status: UpNextStatus | null): string {
+  if (!status) return "Couldn't load your progress just now. Reload to try again.";
+
+  const lib = status.lastLibrarySync;
+  if (lib?.status && lib.status !== "ok") {
+    return `Your last Trakt sync failed, so there's no episode history to show — ${lib.error ?? "no reason recorded"}.`;
+  }
+
+  if (status.episodeRows === 0) {
+    if (!status.episodeProviderConnected) {
+      return "Connect Trakt, or tick an episode on any show, and the next one you'd watch shows up here.";
+    }
+    // Trakt IS connected and the library pull didn't fail, yet no episode rows
+    // exist. Either no sync has run since episode tracking shipped, or Trakt
+    // reports nothing watched.
+    return status.lastEpisodeSync
+      ? "Your last sync found no watched episodes on Trakt. Tick one on any show and it'll pick up from there."
+      : "No episode history yet — sync Trakt to pull in what you've watched.";
+  }
+
+  if (status.showsAwaitingCatalog > 0) {
+    // The bounded heal (3 shows per load) hasn't reached these yet.
+    return `Looking up episode lists for ${status.showsAwaitingCatalog} show${
+      status.showsAwaitingCatalog === 1 ? "" : "s"
+    } — a few more will appear each time you open Home.`;
+  }
+
+  return `You're caught up on all ${status.showsTracked} show${status.showsTracked === 1 ? "" : "s"} you're tracking.`;
 }

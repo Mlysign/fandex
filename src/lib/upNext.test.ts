@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { initDb, run } from "./db";
 import { markEpisodes } from "./episodes";
-import { buildUpNext } from "./upNext";
+import { buildUpNext, upNextStatus } from "./upNext";
 
 // Home's progress module. ONE filter and ONE sort, and both are the feature:
 //
@@ -27,6 +27,8 @@ beforeEach(() => {
   run("DELETE FROM show_seasons");
   run("DELETE FROM media_items");
   run("DELETE FROM users");
+  run("DELETE FROM sync_log");
+  run("DELETE FROM user_identities");
   run("INSERT INTO users (id) VALUES (?)", [USER]);
   // No TMDB reachable in tests. Every show below is seeded with a FRESH catalog,
   // so buildUpNext's bounded heal has nothing to do and never leaves the DB.
@@ -332,5 +334,66 @@ describe("the bounded catalog heal", () => {
     unopenedShow("a", "Alpha");
     watched("a", [[1, 1]], NOW - DAY);
     await expect(buildUpNext(USER, { now: NOW, maxHealShows: 1 })).resolves.toEqual([]);
+  });
+});
+
+describe("upNextStatus — why the rail is empty", () => {
+  // The rail renders blank for four completely different reasons, and the first
+  // thing that happened after it shipped to prod was exactly that ambiguity: a
+  // sync ran, the rail stayed empty, and there was no way to tell which reason
+  // it was from a phone. This is what makes them distinguishable.
+  const syncLog = (provider: string, count: number, status: string, error: string | null = null) =>
+    run(
+      `INSERT INTO sync_log (id, user_id, provider, item_count, status, error, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [`sl-${provider}-${count}`, USER, provider, count, status, error, NOW],
+    );
+
+  it("reports a virgin account: nothing connected, nothing tracked", () => {
+    const s = upNextStatus(USER, { now: NOW });
+    expect(s).toMatchObject({
+      episodeProviderConnected: false,
+      episodeRows: 0,
+      showsTracked: 0,
+      showsAwaitingCatalog: 0,
+      lastEpisodeSync: null,
+      lastLibrarySync: null,
+    });
+  });
+
+  it("sees a connected episode provider", () => {
+    run(
+      `INSERT INTO user_identities (id, user_id, provider, provider_user_id)
+       VALUES ('i1', ?, 'trakt', 'nils')`,
+      [USER],
+    );
+    expect(upNextStatus(USER, { now: NOW }).episodeProviderConnected).toBe(true);
+  });
+
+  it("surfaces a FAILED library pull — the case that must not read as 'no data'", () => {
+    syncLog("trakt-library", 0, "error", "Trakt API error: 401 /sync/watched/shows");
+    const s = upNextStatus(USER, { now: NOW });
+    expect(s.lastLibrarySync?.status).toBe("error");
+    expect(s.lastLibrarySync?.error).toMatch(/401/);
+    expect(s.episodeRows).toBe(0);
+  });
+
+  it("counts shows whose episode list still has to be fetched", () => {
+    // Watch state exists, catalog does not — the bounded heal hasn't reached it.
+    run("INSERT INTO media_items (id, type, title, norm_title) VALUES ('a', 'show', 'Alpha', 'a')");
+    watched("a", [[1, 1]], NOW - DAY);
+    const s = upNextStatus(USER, { now: NOW });
+    expect(s).toMatchObject({ episodeRows: 1, showsTracked: 1, showsAwaitingCatalog: 1 });
+  });
+
+  it("stops counting a show once its catalog can answer", () => {
+    show("a", "Alpha", [{ season: 1, episodes: 6 }]);
+    watched("a", [[1, 1]], NOW - DAY);
+    expect(upNextStatus(USER, { now: NOW }).showsAwaitingCatalog).toBe(0);
+  });
+
+  it("reports what the last episode reconcile actually attached", () => {
+    syncLog("trakt-episodes", 42, "ok shows=7 detached=0");
+    expect(upNextStatus(USER, { now: NOW }).lastEpisodeSync).toMatchObject({ count: 42 });
   });
 });

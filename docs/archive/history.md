@@ -1973,6 +1973,40 @@ Long Abandoned, and ticking Pluribus re-orders live to Pluribus → One Piece �
 Andor with the card advancing to the next episode. The two-year-old show still
 *appears*, ranked last — that is the recency-filter correction, visible. 733 tests.
 
+### Follow-up the same day: the rail rendering nothing is FOUR different states
+
+Shipped to prod, Nils synced Trakt, the rail stayed blank, and from a phone there
+was no way to tell which of these it was:
+
+1. nothing has ever written `user_episode_state` (the table is new and empty)
+2. Trakt's library pull is **failing** — and `syncProvider` logs that to
+   `sync_log` and returns normally, so the UI never showed it
+3. watch state exists but the bounded heal hasn't fetched those episode lists yet
+4. you are genuinely caught up
+
+The original component returned `null` for all four ("nothing to continue is the
+normal state for a new account"). That reads fine on a mature account and is
+useless on the day a feature ships — it is indistinguishable from *not shipped*.
+
+Fixed by making the app diagnose itself rather than by adding a console recipe:
+
+- **`upNextStatus()`** returns the counts that separate the four — provider
+  connected, episode rows, shows tracked, shows awaiting catalog, and the last
+  `trakt-library` / `trakt-episodes` `sync_log` rows. Computed independently of
+  `buildUpNext` so a thrown heal can't take the explanation down with the rail.
+- **The episode reconcile now writes its own `sync_log` row** (`trakt-episodes`,
+  `item_count` = attaches, shows/detaches in `status`). Without it, "the pull ran
+  and carried no episodes" and "the pull never ran" are the same silent nothing.
+- **The empty state is one line plus a Sync Trakt button**, ordered
+  most-actionable first, and it never claims success it can't see: a failed
+  library pull reports the failure and its message, not "no data yet".
+
+All six states were rendered and read back in the browser pane before shipping.
+
+**The general lesson** — a module that renders `null` when empty needs to know
+WHY it is empty before it ships, not after. The cost of getting that wrong is
+paid entirely by the person who can't open a console.
+
 ## MB14 — per-episode show tracking + two-way Trakt sync, 2026-08-16
 
 Shipped the one large item left in the mobile-testing batch. Seasons collapsed

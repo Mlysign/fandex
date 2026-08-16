@@ -135,7 +135,18 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
       // the library and the episode history untouched. Same invariant, same
       // placement: see pruneWatchlist/pruneLibrary's comment above.
       if (src.capabilities.episodes?.read) {
-        reconcileProviderEpisodes(userId, src.id, episodesByItem);
+        const ep = reconcileProviderEpisodes(userId, src.id, episodesByItem);
+        // Its OWN sync_log row. Without one, "the pull ran but wrote no
+        // episodes" and "the pull never carried any episodes" are the same
+        // silent nothing — and the module they feed renders nothing either, so
+        // there is no other place the difference can surface. `item_count` is
+        // the attach count; the shows-with-episodes tally rides in `status`.
+        logSync(
+          userId,
+          `${src.id}-episodes`,
+          ep.attached,
+          `ok shows=${episodesByItem.size} detached=${ep.detached}`,
+        );
       }
       library = syncedIds.size;
       logSync(userId, `${src.id}-library`, library, "ok");
