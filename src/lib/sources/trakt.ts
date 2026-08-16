@@ -106,6 +106,30 @@ export async function getTraktShowSummary(idOrSlug: string): Promise<any | null>
   catch { return null; }
 }
 
+/**
+ * A show's SEASONS + EPISODES — the catalog half of episode tracking, from
+ * Trakt rather than TMDB (MB14 follow-up, 2026-08-16).
+ *
+ * Why this exists even though TMDB already serves it: Trakt is the only
+ * provider that knows what you have WATCHED, but `/sync/watched/shows` returns
+ * only the episodes you've seen — it can't say that season 2 has twelve. So the
+ * "n of total" and "what's next" both need a full list, and a show with no TMDB
+ * link had no way to get one. For a Trakt-only user that meant a blank section
+ * on a show Trakt knows everything about.
+ *
+ * `extended=full,episodes` returns every season WITH its episodes in ONE call —
+ * cheaper than TMDB, which needs one call per season. No stills (Trakt serves no
+ * images), which is why TMDB stays the preferred source when a link exists.
+ *
+ * Public endpoint: client-id only, NO user token. It is catalog metadata, not
+ * anybody's watch history. Throws like the other catalog fetches; the caller in
+ * lib/episodes.ts degrades to whatever is stored.
+ */
+export async function getTraktShowSeasons(idOrSlug: string): Promise<any[]> {
+  const data = await traktGetPublic(`/shows/${idOrSlug}/seasons?extended=full,episodes`);
+  return Array.isArray(data) ? data : [];
+}
+
 export async function searchTraktPublic(query: string, type: "movie" | "show", limit = 5): Promise<any[]> {
   try {
     return (await traktGetPublic(`/search/${type}?query=${encodeURIComponent(query)}&limit=${limit}&extended=full`)) ?? [];

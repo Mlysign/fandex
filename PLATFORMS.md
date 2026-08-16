@@ -64,6 +64,20 @@ never be read that way. → [[trakt-sync-completeness]]
   single call, not 24 against a rate-limited API. ⚠️ **A bare `{ ids: { trakt } }`
   at the top level marks the ENTIRE show watched** — the `seasons` array is what
   scopes the write to the listed episodes.
+- **⚠️ Two different questions, and they have different answers.** *What have you
+  watched* is Trakt and ONLY Trakt — no other provider declares
+  `capabilities.episodes.read`, and TMDB has no watched concept at all (its
+  "library" is rated items). *What episodes EXIST* is shared metadata that
+  **both** can answer, and it needs its own source because
+  `/sync/watched/shows` returns only the episodes you HAVE seen — it can never
+  say that season 2 has twelve. Conflating the two is how a Trakt-only show
+  rendered a blank section on a show Trakt knows everything about
+  (2026-08-16, Nils).
+- **Catalog source order: TMDB when linked, Trakt otherwise.** TMDB wins on
+  stills, overviews and per-season granularity; Trakt's
+  `/shows/:id/seasons?extended=full,episodes` returns every season with its
+  episodes in ONE public (client-id, no user token) call and is the only source
+  for a show nothing ever cross-linked to TMDB.
 - **TMDB supplies the catalog, not the state.** Season lists and episode lists come
   from `/tv/{id}` and `/tv/{id}/season/{n}`, filled lazily one show at a time and
   cached a week (`src/lib/episodes.ts`). Deliberately not read out of stored

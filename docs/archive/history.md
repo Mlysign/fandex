@@ -2048,6 +2048,29 @@ A test caught a real bug in that: the recorded error is module-level, so a show
 that failed once and later succeeded kept reporting the stale failure for the
 whole TTL — worse than saying nothing. A successful fill now clears it.
 
+**Then Nils asked the right question: "you should fetch the user-tracked data
+from Trakt and TMDB depending on what the user has connected — I only use
+Trakt."** Half of that was already true and half exposed a real gap, and the
+distinction is worth keeping:
+
+| question | source |
+|---|---|
+| what have you WATCHED | **Trakt, only.** Nothing else declares `capabilities.episodes.read`, and TMDB has no watched concept at all |
+| what episodes EXIST | shared metadata — **both** can answer, and it needs its own source |
+
+The second row is the gap. `/sync/watched/shows` returns only the episodes you
+HAVE seen; it can never say season 2 has twelve, so "3 of 12" and "what's next"
+both need a full list. That list came only from TMDB — so a show with no TMDB
+link rendered a blank section **on a show Trakt knows everything about**.
+
+Fixed by making Trakt a catalog source too:
+`/shows/:id/seasons?extended=full,episodes` returns every season with its
+episodes in ONE public call (client-id, no user token — it is catalog metadata,
+not anyone's history). TMDB stays preferred when linked, for stills, overviews
+and per-season granularity; Trakt is the fallback and, for a Trakt-only show,
+the only source. Verified live: the route now reaches `/shows/155/seasons` for a
+show with no TMDB link, where before it asked nobody.
+
 **⚠️ THE PATTERN, TWICE IN ONE DAY.** Both surfaces of this feature rendered
 `null` when they had nothing, and both times that turned an ordinary
 diagnosable problem into "the feature doesn't work" with no way to tell why.

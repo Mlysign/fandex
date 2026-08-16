@@ -191,3 +191,85 @@ describe("episodeCatalogDiagnostic — why a show's season list is empty", () =>
     expect(d.lastError).toBeNull();
   });
 });
+
+describe("Trakt as the episode catalog — for a show TMDB never linked", () => {
+  // The gap Nils found: watch state comes from Trakt and only Trakt, but "what
+  // episodes EXIST" came only from TMDB — so a Trakt-only show rendered a blank
+  // section on a show Trakt knows everything about. `/sync/watched/shows` can't
+  // fill it either: it returns only what you HAVE watched, never the full list.
+  const traktOnly = (id: string) => {
+    run("DELETE FROM media_links");
+    run(
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
+       VALUES ('lt', ?, 'trakt', '155', 'Andor', '{}')`,
+      [id],
+    );
+  };
+
+  const traktSeasons = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+  const PAYLOAD = [
+    { number: 0, title: "Specials", episodes: [{ number: 1, title: "Special" }] },
+    {
+      number: 1,
+      title: "Season 1",
+      first_aired: "2022-09-21T00:00:00.000Z",
+      episodes: [
+        { number: 1, title: "Kassa", first_aired: "2022-09-21T00:00:00.000Z", runtime: 38 },
+        { number: 2, title: "That Would Be Me", first_aired: "2022-09-21T00:00:00.000Z", runtime: 34 },
+      ],
+    },
+  ];
+
+  it("fills seasons AND episodes from ONE Trakt call, dropping specials", async () => {
+    traktOnly(SHOW);
+    const f = vi.fn().mockResolvedValue(traktSeasons(PAYLOAD));
+    vi.stubGlobal("fetch", f);
+
+    const seasons = await ensureShowSeasons(SHOW);
+
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(String(f.mock.calls[0][0])).toContain("/shows/155/seasons");
+    expect(String(f.mock.calls[0][0])).toContain("extended=full,episodes");
+    expect(seasons.map((s) => s.seasonNumber)).toEqual([1]); // season 0 dropped
+    expect(seasons[0]).toMatchObject({ name: "Season 1", episodeCount: 2, airDate: "2022-09-21" });
+
+    // The same call already filled the episodes — no per-season endpoint exists.
+    const eps = loadEpisodes(SHOW, 1);
+    expect(eps.map((e) => e.title)).toEqual(["Kassa", "That Would Be Me"]);
+    expect(eps[0]).toMatchObject({ airDate: "2022-09-21", runtimeMinutes: 38, stillUrl: null });
+  });
+
+  it("serves ensureSeasonEpisodes without a second call", async () => {
+    traktOnly(SHOW);
+    const f = vi.fn().mockResolvedValue(traktSeasons(PAYLOAD));
+    vi.stubGlobal("fetch", f);
+
+    expect((await ensureSeasonEpisodes(SHOW, 1)).map((e) => e.episodeNumber)).toEqual([1, 2]);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers TMDB when both are linked — stills and overviews are worth the extra call", async () => {
+    // media_links already has the TMDB row from the outer beforeEach.
+    run(
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
+       VALUES ('lt', ?, 'trakt', '155', 'Andor', '{}')`,
+      [SHOW],
+    );
+    const f = vi.fn().mockResolvedValue(ok(SEASONS));
+    vi.stubGlobal("fetch", f);
+
+    await ensureShowSeasons(SHOW);
+    expect(String(f.mock.calls[0][0])).toContain("themoviedb.org");
+  });
+
+  it("degrades, and says so, when Trakt refuses too", async () => {
+    traktOnly(SHOW);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 404 })));
+
+    expect(await ensureShowSeasons(SHOW)).toEqual([]);
+    const d = episodeCatalogDiagnostic(SHOW);
+    expect(d).toMatchObject({ tmdbLinked: false, traktLinked: true });
+    expect(d.lastError).toMatch(/404/);
+  });
+});

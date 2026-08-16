@@ -1,5 +1,6 @@
 import { get, query, run, transaction } from "@/lib/db";
 import { getTmdbShowSeasons, getTmdbSeasonEpisodes, tmdbPosterUrl } from "@/lib/sources/tmdb";
+import { getTraktShowSeasons } from "@/lib/sources/trakt";
 import { log, errorFields } from "@/lib/logger";
 import { BoundedCache } from "@/lib/boundedCache";
 import { isProviderCircuitOpen } from "@/lib/http";
@@ -54,8 +55,10 @@ function clearCatalogError(mediaItemId: string): void {
 }
 
 export interface EpisodeCatalogDiagnostic {
-  /** Without a TMDB link there is nothing to ask — the show can never fill. */
+  /** Preferred catalog source (stills, overviews, per-season). */
   tmdbLinked: boolean;
+  /** Fallback catalog source, and the only one for a Trakt-only show. */
+  traktLinked: boolean;
   seasonsStored: number;
   episodesStored: number;
   /** http.ts's per-host breaker. Open → every fetch throws before leaving. */
@@ -68,6 +71,7 @@ export interface EpisodeCatalogDiagnostic {
 export function episodeCatalogDiagnostic(mediaItemId: string): EpisodeCatalogDiagnostic {
   return {
     tmdbLinked: !!tmdbIdFor(mediaItemId),
+    traktLinked: !!sourceIdFor(mediaItemId, "trakt"),
     seasonsStored:
       get<{ n: number }>("SELECT COUNT(*) n FROM show_seasons WHERE media_item_id = ?", [mediaItemId])?.n ?? 0,
     episodesStored:
@@ -141,14 +145,110 @@ export function loadEpisodes(mediaItemId: string, seasonNumber: number): Episode
   }));
 }
 
-/** The TMDB id linked to this item, or null when it has no TMDB link. */
-export function tmdbIdFor(mediaItemId: string): string | null {
+/** This item's id at one source, or null when it isn't linked there. */
+export function sourceIdFor(mediaItemId: string, source: string): string | null {
   return (
     get<{ source_id: string }>(
-      "SELECT source_id FROM media_links WHERE media_item_id = ? AND source = 'tmdb'",
-      [mediaItemId],
+      "SELECT source_id FROM media_links WHERE media_item_id = ? AND source = ?",
+      [mediaItemId, source],
     )?.source_id ?? null
   );
+}
+
+/** The TMDB id linked to this item, or null when it has no TMDB link. */
+export function tmdbIdFor(mediaItemId: string): string | null {
+  return sourceIdFor(mediaItemId, "tmdb");
+}
+
+// ── Which provider supplies the episode CATALOG ──────────────────────────────
+//
+// Not the same question as who supplies your watch state — that is Trakt and
+// only Trakt (`capabilities.episodes.read`). This is "what episodes exist",
+// which is shared metadata, and BOTH can answer:
+//
+//   TMDB   preferred when linked: stills, overviews, per-season granularity.
+//   Trakt  the fallback, and for a Trakt-only show the ONLY source. One call
+//          returns every season with its episodes.
+//
+// The fallback is why a show Trakt knows everything about no longer renders a
+// blank section just because nothing ever cross-linked it to TMDB.
+
+/** Write a Trakt `/shows/:id/seasons?extended=full,episodes` payload to both tables. */
+function storeTraktSeasons(mediaItemId: string, seasons: any[]): void {
+  const usable = seasons.filter(
+    (s) => Number.isInteger(s?.number) && s.number !== SPECIALS_SEASON,
+  );
+  if (!usable.length) {
+    recordCatalogError(mediaItemId, `Trakt returned ${seasons.length} seasons, none usable`);
+    return;
+  }
+  clearCatalogError(mediaItemId);
+  const stamp = nowSec();
+  transaction(() => {
+    for (const s of usable) {
+      const episodes = (s.episodes ?? []).filter((e: any) => Number.isInteger(e?.number));
+      run(
+        `INSERT INTO show_seasons
+           (media_item_id, season_number, name, episode_count, air_date, poster_url, overview, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+         ON CONFLICT(media_item_id, season_number) DO UPDATE SET
+           name = excluded.name, episode_count = excluded.episode_count,
+           air_date = excluded.air_date, overview = excluded.overview,
+           updated_at = excluded.updated_at`,
+        [
+          mediaItemId,
+          s.number,
+          s.title ?? `Season ${s.number}`,
+          // Trakt's own `episode_count` counts specials on some shows; the
+          // episodes we actually got is the number the UI can honour.
+          episodes.length || (Number.isFinite(s.episode_count) ? s.episode_count : 0),
+          isoDate(s.first_aired),
+          s.overview || null,
+          stamp,
+        ],
+      );
+      for (const e of episodes) {
+        run(
+          `INSERT INTO show_episodes
+             (media_item_id, season_number, episode_number, title, air_date, runtime_minutes, overview, still_url, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+           ON CONFLICT(media_item_id, season_number, episode_number) DO UPDATE SET
+             title = excluded.title, air_date = excluded.air_date,
+             runtime_minutes = excluded.runtime_minutes, overview = excluded.overview,
+             updated_at = excluded.updated_at`,
+          [
+            mediaItemId,
+            s.number,
+            e.number,
+            e.title ?? null,
+            isoDate(e.first_aired),
+            Number.isFinite(e.runtime) ? e.runtime : null,
+            e.overview || null,
+            stamp,
+          ],
+        );
+      }
+    }
+  });
+}
+
+/** Trakt dates are ISO datetimes; the catalog stores plain `YYYY-MM-DD`. */
+function isoDate(v: unknown): string | null {
+  if (typeof v !== "string" || !v) return null;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
+}
+
+/** Fill a show's whole catalog from Trakt. Degrades like the TMDB path. */
+async function fillFromTrakt(mediaItemId: string, traktId: string): Promise<boolean> {
+  try {
+    storeTraktSeasons(mediaItemId, await getTraktShowSeasons(traktId));
+    return true;
+  } catch (e) {
+    log.warn("episode_seasons_trakt_failed", { mediaItemId, traktId, ...errorFields(e) });
+    recordCatalogError(mediaItemId, e);
+    return false;
+  }
 }
 
 // ── Catalog fill (lazy, one show at a time) ──────────────────────────────────
@@ -173,7 +273,13 @@ function seasonsAreFresh(mediaItemId: string): boolean {
 export async function ensureShowSeasons(mediaItemId: string): Promise<SeasonRow[]> {
   if (seasonsAreFresh(mediaItemId)) return loadSeasons(mediaItemId);
   const tmdbId = tmdbIdFor(mediaItemId);
-  if (!tmdbId) return loadSeasons(mediaItemId);
+  if (!tmdbId) {
+    // No TMDB link — Trakt is then the only source, and for a Trakt-only user
+    // it is the RIGHT one. One call fills seasons and episodes together.
+    const traktId = sourceIdFor(mediaItemId, "trakt");
+    if (traktId) await fillFromTrakt(mediaItemId, traktId);
+    return loadSeasons(mediaItemId);
+  }
 
   let seasons: any[];
   try {
@@ -233,7 +339,13 @@ export async function ensureSeasonEpisodes(
 ): Promise<EpisodeRow[]> {
   if (episodesAreFresh(mediaItemId, seasonNumber)) return loadEpisodes(mediaItemId, seasonNumber);
   const tmdbId = tmdbIdFor(mediaItemId);
-  if (!tmdbId) return loadEpisodes(mediaItemId, seasonNumber);
+  if (!tmdbId) {
+    // Trakt's seasons call returns EVERY season's episodes at once, so this
+    // fills the requested one as a side effect — no per-season endpoint needed.
+    const traktId = sourceIdFor(mediaItemId, "trakt");
+    if (traktId) await fillFromTrakt(mediaItemId, traktId);
+    return loadEpisodes(mediaItemId, seasonNumber);
+  }
 
   let episodes: any[];
   try {

@@ -41,6 +41,7 @@ interface EpisodeInfo {
 /** Why a show's season list came back empty — see lib/episodes.ts. */
 interface CatalogDiagnostic {
   tmdbLinked: boolean;
+  traktLinked: boolean;
   seasonsStored: number;
   episodesStored: number;
   tmdbCircuitOpen: boolean;
@@ -389,8 +390,13 @@ function TickBox({ on }: { on: boolean }) {
  */
 function catalogReason(d: CatalogDiagnostic | null): string | null {
   if (!d) return null;
-  if (!d.tmdbLinked) return "No TMDB link for this show yet, so there are no episodes to list.";
-  if (d.tmdbCircuitOpen) return "TMDB is unreachable right now — episodes will fill in once it recovers.";
-  if (d.lastError) return `Couldn't load episodes from TMDB — ${d.lastError}`;
+  // Neither catalog source is linked — nothing can be asked for this show.
+  if (!d.tmdbLinked && !d.traktLinked) {
+    return "This show isn't linked to TMDB or Trakt yet, so there's no episode list to show.";
+  }
+  if (d.lastError) return `Couldn't load the episode list — ${d.lastError}`;
+  if (d.tmdbLinked && d.tmdbCircuitOpen) {
+    return "TMDB is unreachable right now — episodes will fill in once it recovers.";
+  }
   return null;
 }
