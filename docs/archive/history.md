@@ -1932,9 +1932,32 @@ rail and only the server can decide that.
 Card anatomy is `<HighlightPanel>`'s verbatim — accent mono eyebrow → serif
 headline → mono detail — mapped to episode number (`S.02 E.04`) → show title →
 episode title, so the module reads as part of the band it replaced rather than a
-fourth panel style. The tick box is drawn EMPTY like `<EpisodeTracker>`'s
-unchecked state; every episode here is unwatched by definition, so a check drawn
-in it would be a third state the item page doesn't have.
+fourth panel style.
+
+**The tick box is EMPTY at rest — no check, not even a hover hint.** The first
+cut revealed the check on hover as an affordance, and Nils read the screenshots
+as "the carousel is showing episodes I've already watched". He was right to:
+every card here is unwatched by definition, so a check on a resting card can
+only mean the wrong thing. Drawing one is worse than having no hint at all.
+
+A tick therefore has exactly one meaning, and plays out in three beats:
+**the check fills in** (accent, the same watched tick `<EpisodeTracker>` draws,
+so the two surfaces agree) → **a 260 ms hold**, so a local-only write still shows
+you the check you just made → **the card fades and shrinks out** over
+`duration-slow` on `ease-accelerate`, the design system's exit curve. Then it is
+spliced out LOCALLY before the refetch, not after: `/api/progress` may heal a
+show's catalog from TMDB, so waiting for it would leave an invisible card
+holding its column open. On a refused write the check is taken back and the card
+stays — `/api/episodes` pushes to Trakt before writing, so a refusal means
+nothing was recorded anywhere and the episode genuinely is still up next.
+
+Two things measured rather than eyeballed, both worth knowing:
+`getComputedStyle(card).transitionDuration` reads **0.32s** with the accelerate
+cubic-bezier (AGENTS.md's third `@theme` trap: a wrong namespace prefix emits no
+rule at all and the token still resolves, so the computed value on a real element
+is the only proof) — and **Tailwind v4's `scale-*` sets the standalone `scale`
+property, not `transform`**, so checking `transform` reads `none` and looks like
+a broken animation when it is working.
 
 `<Rail>` gained one prop (`colsClass`) so the wider text card could reuse the
 same header, chevrons and scroll behaviour instead of a second scroller.
