@@ -4,8 +4,14 @@
 // tab predicates.
 import type { EnrichedItem } from "@/types";
 
-export type MyStuffTab = "all" | "wishlist" | "unrated" | "rated";
-const TABS: MyStuffTab[] = ["all", "wishlist", "unrated", "rated"];
+// "progress" (MB16, 2026-08-16) is the odd one out and deliberately so: the
+// other four filter the SAME merged item list, while progress lists EPISODES
+// from /api/progress. It lives here anyway because it is a tab of this view to
+// the reader, and `parseTab` is what makes `?tab=progress` a real deep link —
+// which is what Home's "See all" needs. `filterByTab` never sees it; MyStuffView
+// branches to its own component before that point.
+export type MyStuffTab = "all" | "wishlist" | "unrated" | "rated" | "progress";
+const TABS: MyStuffTab[] = ["all", "wishlist", "unrated", "rated", "progress"];
 
 // SM21 (2026-07-28): the tab used to be pure client state — switching it
 // changed no URL, so it reset on reload and Back exited the page instead of
@@ -49,5 +55,12 @@ export function filterByTab<T extends { inLibrary: boolean; inWishlist: boolean;
     case "wishlist": return items.filter((i) => i.inWishlist);
     case "unrated": return items.filter((i) => i.inLibrary && i.rating == null);
     case "rated": return items.filter((i) => i.inLibrary && i.rating != null);
+    // Not an item filter at all — the Progress tab lists EPISODES from
+    // /api/progress, and MyStuffView branches to its own component before
+    // reaching here. Empty is the correct answer to the question this function
+    // asks ("which of these items belong to that tab"), and it fails safe: if a
+    // future caller does route progress through here, it renders nothing rather
+    // than silently showing the whole library under the wrong heading.
+    case "progress": return [];
   }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { initDb, run } from "./db";
 import { markEpisodes } from "./episodes";
-import { buildUpNext, upNextStatus, backfillUpNextCatalog } from "./upNext";
+import { buildUpNext, buildUpNextPage, upNextStatus, backfillUpNextCatalog } from "./upNext";
 
 // Home's progress module. ONE filter and ONE sort, and both are the feature:
 //
@@ -496,5 +496,88 @@ describe("backfillUpNextCatalog — the bulk fill behind the rail", () => {
   it("does nothing for a user with no episode state", async () => {
     stubTmdb();
     expect(await backfillUpNextCatalog("nobody", { now: NOW })).toEqual({ healed: 0, remaining: 0 });
+  });
+});
+
+describe("buildUpNextPage — the library's Progress tab", () => {
+  // Home caps at 10; the tab explicitly does not. What matters is that paging is
+  // a view over the SAME list — same filter, same sort — so an episode can never
+  // appear on one surface and not the other.
+  const tmdb = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+  function stubTmdb() {
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (/\/tv\/[^/?]+\/season\/(\d+)/.test(u)) {
+        const season = Number(u.match(/\/season\/(\d+)/)![1]);
+        return tmdb({
+          episodes: Array.from({ length: 4 }, (_, i) => ({
+            episode_number: i + 1, name: `Ep ${season}x${i + 1}`, air_date: iso(NOW - 2 * DAY),
+          })),
+        });
+      }
+      return tmdb({ seasons: [{ season_number: 1, name: "Season 1", episode_count: 4 }] });
+    }));
+  }
+
+  function unopenedShow(id: string, title: string) {
+    run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
+    run(
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
+       VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+      [`${id}-l`, id, id, title],
+    );
+  }
+
+  async function seed(n: number) {
+    stubTmdb();
+    for (let i = 0; i < n; i++) {
+      unopenedShow(`s${i}`, `Show ${i}`);
+      watched(`s${i}`, [[1, 1]], NOW - (i + 1) * DAY);
+    }
+    await backfillUpNextCatalog(USER, { now: NOW });
+  }
+
+  it("returns a page plus the honest total", async () => {
+    await seed(25);
+    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 0 });
+    expect(page.entries).toHaveLength(10);
+    expect(page.total).toBe(25);
+    expect(page.hasMore).toBe(true);
+  });
+
+  it("is not capped at Home's 10", async () => {
+    await seed(25);
+    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 50, offset: 0 });
+    expect(page.entries).toHaveLength(25);
+    expect(page.hasMore).toBe(false);
+  });
+
+  // Paging must tile the list exactly: no gaps (a missed episode) and no
+  // repeats (a duplicate React key).
+  it("tiles the list with no gaps and no repeats", async () => {
+    await seed(25);
+    const seen: string[] = [];
+    for (let offset = 0; offset < 30; offset += 10) {
+      const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset });
+      seen.push(...page.entries.map((e) => `${e.mediaItemId}:${e.season}:${e.episode}`));
+    }
+    expect(seen).toHaveLength(25);
+    expect(new Set(seen).size).toBe(25);
+  });
+
+  it("reports hasMore=false past the end", async () => {
+    await seed(5);
+    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 10 });
+    expect(page.entries).toEqual([]);
+    expect(page.total).toBe(5);
+    expect(page.hasMore).toBe(false);
+  });
+
+  it("agrees with buildUpNext on the first 10", async () => {
+    await seed(25);
+    const home = await buildUpNext(USER, { now: NOW, maxHealShows: 0 });
+    const tab = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 0 });
+    expect(tab.entries.map((e) => e.showTitle)).toEqual(home.map((e) => e.showTitle));
   });
 });

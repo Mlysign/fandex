@@ -1,37 +1,35 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
-import Rail from "@/components/Rail";
+import { ArrowRight } from "lucide-react";
 import Panel from "@/components/ui/Panel";
 import Button from "@/components/ui/Button";
-import Eyebrow from "@/components/ui/Eyebrow";
+import EpisodeRow, { EPISODE_ROW_GAP, EPISODE_ROW_H, entryKey } from "@/components/EpisodeRow";
+import type { EpisodeRowEntry } from "@/components/EpisodeRow";
 import { useToast } from "@/components/ui/Toast";
+import { useEpisodeTick } from "@/lib/useEpisodeTick";
 import { syncToCompletion } from "@/lib/syncClient";
 
-// Home's progress module (2026-08-16) — a carousel of "the episode you'd watch
-// next", one card per show you're in the middle of. Replaces the three counters
-// (library / wishlist / rated) that sat above the highlights.
+// Home's progress module — "the episode you'd watch next", one row per show
+// you're in the middle of. Replaced the three counters (library / wishlist /
+// rated) that sat above the highlights.
 //
-// The relevance rules live server-side in lib/upNext.ts; this renders what it
-// returns and owns nothing but the tick.
+// ── 2026-08-16 REBUILD (Nils) ───────────────────────────────────────────────
+// The first cut borrowed <HighlightPanel>'s anatomy in a horizontal <Rail>.
+// Nils: *"don't use the insight highlight panel as a foundation … use the
+// calendar list view items instead … render the list item full width and don't
+// use a horizontal carousel, use a vertical carousel instead."* So:
 //
-// Card anatomy is <HighlightPanel>'s, deliberately: accent mono eyebrow → serif
-// headline → mono detail line. Here that maps to episode number → show title →
-// episode title, so the module reads as part of the same band it sits in rather
-// than a fourth panel style.
+//   • the row is <EpisodeRow> — <ListCard>'s anatomy, with the show's poster
+//     and a checkbox where the wishlist toggle would be.
+//   • the scroller is VERTICAL and full width, its own scroll region about
+//     2.5 rows tall, so it reads as a peek-and-scroll list rather than a band
+//     of cards. The 2.5 is deliberate: a half-row at the fold is what tells you
+//     there's more without needing a scrollbar to say so.
+//   • "See all" goes to the library's Progress tab, matching every other rail.
 //
-// ── EVERY card here is UNWATCHED ─────────────────────────────────────────────
-// That is the rail's whole premise, so the tick box is EMPTY at rest — no
-// check, not even a hover hint. A check on a resting card reads as "already
-// seen", which is the one thing this list never contains.
-//
-// A tick therefore has exactly one meaning, and it plays out in three beats:
-// the check fills in (you did that), it holds long enough to be seen even when
-// the write is instant, then the card animates out and the list refetches. On a
-// refused write the check is taken back and the card stays — /api/episodes
-// pushes to Trakt BEFORE writing, so a refusal means nothing was recorded
-// anywhere and the episode genuinely is still up next.
+// The relevance rules stay server-side in lib/upNext.ts; this renders what it
+// returns. The tick lives in useEpisodeTick, shared with that tab.
 
 /** Why the rail is empty — see lib/upNext.ts's UpNextStatus. */
 interface UpNextStatus {
@@ -43,45 +41,23 @@ interface UpNextStatus {
   lastLibrarySync: { at: number | null; count: number | null; status: string | null; error: string | null } | null;
 }
 
-interface UpNextEntry {
-  mediaItemId: string;
-  showTitle: string;
-  season: number;
-  episode: number;
-  episodeTitle: string | null;
-  href: string;
-}
+/** Where "See all" goes. The tab is a real query param, so it deep-links. */
+export const PROGRESS_TAB_HREF = "/library?tab=progress";
 
-/** The spec's format, verbatim: S.02 E.04. */
-const epLabel = (season: number, episode: number) =>
-  `S.${String(season).padStart(2, "0")} E.${String(episode).padStart(2, "0")}`;
-
-const entryKey = (e: UpNextEntry) => `${e.mediaItemId}:${e.season}:${e.episode}`;
-
-/** Long enough that a local-only write still shows you the check you just made. */
-const CONFIRM_HOLD_MS = 260;
-/** Matches `duration-slow` on the card, so removal lands as the fade finishes. */
-const EXIT_MS = 320;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// globals.css already collapses CSS transitions under prefers-reduced-motion,
-// but a JS wait is invisible to that rule — so read the query here too, the same
-// way lib/scrollBehavior.ts does for JS-driven smooth scrolling.
-function reducedMotion(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+/**
+ * The scroll region's height, in whole rows plus the gaps between them —
+ * "roughly 2.5 list view items". Derived from EpisodeRow's own exported metrics
+ * rather than hard-coded, so changing the row height can't silently leave this
+ * showing 2.1 or 3.4 rows.
+ */
+const VISIBLE_ROWS = 2.5;
+const SCROLLER_H = Math.round(EPISODE_ROW_H * VISIBLE_ROWS + EPISODE_ROW_GAP * (Math.ceil(VISIBLE_ROWS) - 1));
 
 export default function ProgressRail() {
   const { toast } = useToast();
-  const [entries, setEntries] = useState<UpNextEntry[] | null>(null);
+  const [entries, setEntries] = useState<EpisodeRowEntry[] | null>(null);
   const [status, setStatus] = useState<UpNextStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
-  /** Ticked — the check is filled in. */
-  const [done, setDone] = useState<Set<string>>(new Set());
-  /** Ticked AND fading out. Kept separate so the check is visible before the exit. */
-  const [leaving, setLeaving] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -106,53 +82,11 @@ export default function ProgressRail() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
-  const without = (set: Set<string>, k: string) => {
-    const next = new Set(set);
-    next.delete(k);
-    return next;
-  };
-
-  async function markDone(e: UpNextEntry) {
-    const k = entryKey(e);
-    if (done.has(k)) return; // already in flight — a second tap is a no-op
-    setDone((s) => new Set(s).add(k));
-
-    try {
-      const res = await fetch("/api/episodes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mediaItemId: e.mediaItemId,
-          watched: true,
-          episodes: [{ season: e.season, episode: e.episode }],
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Request failed (${res.status})`);
-      }
-    } catch (err) {
-      setDone((s) => without(s, k));
-      toast(err instanceof Error ? err.message : "Couldn't save that.", "error");
-      return;
-    }
-
-    const quick = reducedMotion();
-    if (!quick) await sleep(CONFIRM_HOLD_MS);
-    setLeaving((s) => new Set(s).add(k));
-    if (!quick) await sleep(EXIT_MS);
-
-    // Drop it locally the moment the fade finishes, THEN refetch. /api/progress
-    // may heal a show's catalog from TMDB, so waiting for it would leave an
-    // invisible card holding its column open for as long as that takes.
-    setEntries((list) => (list ?? []).filter((x) => entryKey(x) !== k));
-    setDone((s) => without(s, k));
-    setLeaving((s) => without(s, k));
-
-    // Refetch rather than stop there: ticking this episode may promote the NEXT
-    // one of the same show into the rail, which only the server can decide.
-    await load();
-  }
+  const { done, leaving, tick } = useEpisodeTick({
+    onRemove: (k) => setEntries((list) => (list ?? []).filter((x) => entryKey(x) !== k)),
+    onRefresh: load,
+    onError: (m) => toast(m, "error"),
+  });
 
   async function runSync() {
     setSyncing(true);
@@ -171,9 +105,6 @@ export default function ProgressRail() {
   if (!entries.length) {
     return (
       <section>
-        {/* Deliberately the same serif h2 <Rail> draws, not an Eyebrow: the
-            empty state and the populated rail are the same section, and a
-            different heading style would read as a different module. */}
         <h2 className="font-serif text-serif-md text-text-primary mb-3 px-1">Up next</h2>
         <Panel className="px-4 py-3.5">
           <p className="text-body-sm text-text-secondary">{emptyReason(status)}</p>
@@ -186,14 +117,7 @@ export default function ProgressRail() {
             </p>
           )}
           {status?.episodeProviderConnected && (
-            <Button
-              variant="secondary"
-              size="sm"
-              pill
-              loading={syncing}
-              onClick={() => void runSync()}
-              className="mt-3"
-            >
+            <Button variant="secondary" size="sm" pill loading={syncing} onClick={() => void runSync()} className="mt-3">
               {syncing ? "Syncing Trakt…" : "Sync Trakt now"}
             </Button>
           )}
@@ -203,54 +127,38 @@ export default function ProgressRail() {
   }
 
   return (
-    <Rail title="Up next" colsClass="auto-cols-[15rem]">
-      {entries.map((e) => {
-        const k = entryKey(e);
-        const ticked = done.has(k);
-        const exiting = leaving.has(k);
-        return (
-          /* items-center, not items-start: the tick reads as the card's one
-             action, so it sits on the card's vertical centre rather than
-             hanging off the first line of text.
+    <section>
+      {/* Header matches <Rail>'s exactly — same serif h2, same "See all" with
+          its arrow — because this IS one of Home's rails to the reader, even
+          though it scrolls the other way and can't reuse the component. */}
+      <div className="flex items-center justify-between gap-3 mb-3 px-1">
+        <h2 className="font-serif text-serif-md text-text-primary">Up next</h2>
+        <Link
+          href={PROGRESS_TAB_HREF}
+          className="inline-flex items-center gap-1 text-label text-text-secondary hover:text-text-primary transition-colors shrink-0"
+        >
+          See all
+          <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+        </Link>
+      </div>
 
-             ease-accelerate is the design system's EXIT curve — this only ever
-             animates one way, out. */
-          <Panel
-            key={k}
-            className={`flex items-center gap-2 px-4 py-3.5 h-full transition-all duration-slow ease-accelerate motion-reduce:transition-none ${
-              exiting ? "opacity-0 scale-90 pointer-events-none" : "opacity-100 scale-100"
-            }`}
-          >
-            <Link href={e.href} className="min-w-0 flex-1 group">
-              <Eyebrow>{epLabel(e.season, e.episode)}</Eyebrow>
-              <div className="font-serif text-serif-md text-text-primary mt-1.5 line-clamp-2 transition-opacity group-hover:opacity-80">
-                {e.showTitle}
-              </div>
-              <div className="font-mono text-meta text-text-secondary mt-1.5 line-clamp-1">
-                {e.episodeTitle || `Episode ${e.episode}`}
-              </div>
-            </Link>
-            <button
-              onClick={() => void markDone(e)}
-              disabled={ticked}
-              aria-label={`Mark ${e.showTitle} ${epLabel(e.season, e.episode)} watched`}
-              className="shrink-0 w-11 h-11 -mr-2 flex items-center justify-center rounded-lg hover:bg-white/[0.05] transition-colors"
-            >
-              {/* Filled accent once ticked — the same "watched" tick the item
-                  page's <EpisodeTracker> draws, so the two agree. */}
-              <span
-                className={`w-7 h-7 rounded-sm border flex items-center justify-center transition-colors duration-fast ${
-                  ticked ? "bg-accent border-accent" : "border-border-strong"
-                }`}
-                aria-hidden
-              >
-                {ticked && <Check className="w-5 h-5 text-surface" strokeWidth={3} />}
-              </span>
-            </button>
-          </Panel>
-        );
-      })}
-    </Rail>
+      {/* Its own scroll region, ~2.5 rows tall. `overscroll-contain` stops a
+          flick that reaches the end from chaining into the page scroll, which
+          on a phone is the difference between a peek-list and a scroll trap. */}
+      <div
+        style={{ height: SCROLLER_H, gap: EPISODE_ROW_GAP }}
+        className="flex flex-col overflow-y-auto overscroll-contain snap-y snap-proximity pr-0.5 [scrollbar-width:thin]"
+      >
+        {entries.map((e) => {
+          const k = entryKey(e);
+          return (
+            <div key={k} className="snap-start shrink-0">
+              <EpisodeRow entry={e} ticked={done.has(k)} exiting={leaving.has(k)} onTick={(x) => void tick(x)} />
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -287,10 +195,9 @@ function emptyReason(status: UpNextStatus | null): string {
   }
 
   if (status.showsAwaitingCatalog > 0) {
-    // The bounded heal (3 shows per load) hasn't reached these yet.
     return `Looking up episode lists for ${status.showsAwaitingCatalog} show${
       status.showsAwaitingCatalog === 1 ? "" : "s"
-    } — a few more will appear each time you open Home.`;
+    } — syncing fills these in.`;
   }
 
   return `You're caught up on all ${status.showsTracked} show${status.showsTracked === 1 ? "" : "s"} you're tracking.`;

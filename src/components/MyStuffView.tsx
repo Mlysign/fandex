@@ -25,10 +25,14 @@ import EmptyState from "@/components/ui/EmptyState";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWishlistTabs";
+import ProgressTabPanel from "@/components/ProgressTabPanel";
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
-const TAB_LABEL: Record<MyStuffTab, string> = { all: "All", wishlist: "Wishlist", unrated: "Unrated", rated: "Rated" };
-const TAB_NOUN: Record<MyStuffTab, string> = { all: "titles", wishlist: "saved", unrated: "unrated", rated: "rated" };
+const TAB_LABEL: Record<MyStuffTab, string> = { all: "All", wishlist: "Wishlist", unrated: "Unrated", rated: "Rated", progress: "Progress" };
+// The noun the toolbar counts in. "progress" counts EPISODES, not titles — and
+// its count comes from its own panel, so the toolbar's number is suppressed for
+// that tab rather than reporting a library total under an episode heading.
+const TAB_NOUN: Record<MyStuffTab, string> = { all: "titles", wishlist: "saved", unrated: "unrated", rated: "rated", progress: "episodes" };
 
 // usePersistedState's `normalize` param must be a STABLE reference (its own
 // hydrate effect is keyed on it) — a fresh arrow every render re-runs that
@@ -121,6 +125,10 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
+  /** Auth resolved — gates the item load so it can't race ahead of the session check. */
+  const [authChecked, setAuthChecked] = useState(false);
+  /** The (large) item payload has been fetched at least once. */
+  const [itemsLoaded, setItemsLoaded] = useState(false);
   // The `?tab=` query param IS the state — no local mirror. Deriving it
   // directly (rather than useState+effect) means Back/Forward/reload all just
   // work: each is a normal navigation that changes searchParams, and this
@@ -148,7 +156,6 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_mystuff_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_mystuff_membership", {});
 
-  useEffect(() => { init(); }, []);
 
   // SM1 — a card's quick-action remove used to leave the row on screen until
   // the next reload (the shared hook only flips its own icon). Drop wishlist
@@ -175,18 +182,55 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
       setAutoSyncing(true);
       syncToCompletion("all").finally(() => setAutoSyncing(false));
     }
-    await loadItems();
+    setAuthChecked(true);
   }
+
+  // Kicked off once on mount. Declared AFTER init so the reference is not a
+  // use-before-declaration — the lint rule that flags it is guarding against a
+  // stale binding, which is a real hazard for a function this one calls.
+  // Both disables are justified: init's first statement is an `await fetch`, so
+  // every setState in it happens after a suspension point rather than
+  // synchronously in the effect body — the rule can't see through the call.
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { void init(); }, []);
 
   async function loadItems() {
     setLoading(true);
-    const [libRes, calRes] = await Promise.all([fetch("/api/library"), fetch("/api/calendar")]);
-    const libData = await libRes.json();
-    const calData = await calRes.json();
-    setLibraryItems(libData.items ?? []);
-    setWishlistItems(calData.items ?? []);
-    setLoading(false);
+    try {
+      const [libRes, calRes] = await Promise.all([fetch("/api/library"), fetch("/api/calendar")]);
+      const libData = await libRes.json();
+      const calData = await calRes.json();
+      setLibraryItems(libData.items ?? []);
+      setWishlistItems(calData.items ?? []);
+      setItemsLoaded(true);
+    } finally {
+      // In a `finally`, because this used to be the last statement of a
+      // try-less function: a rejected fetch or a body that failed to parse left
+      // `loading` true forever and the page sat on "Loading…" with no error and
+      // no way out. The payload here is multi-megabyte, which is exactly the
+      // kind of response that fails halfway.
+      setLoading(false);
+    }
   }
+
+  // MB16 — the item payload is loaded by the effect below, NOT here, so the
+  // Progress tab can skip it entirely.
+  //
+  // It is not a small skip: `/api/library` is ~8.9 MB across 1,922 items on this
+  // account, and every render then runs merge/filter/sort memos over all of it.
+  // The Progress tab needs none of that — it lists episodes from /api/progress —
+  // so before this split, following Home's "See all" meant waiting on a
+  // multi-megabyte download and a main-thread stall before a single episode row
+  // appeared. Measured in the browser pane: the tab stayed blank for 30 s+ and
+  // the renderer stopped responding. Deep-linking to ?tab=progress now costs one
+  // small request.
+  useEffect(() => {
+    if (!authChecked || activeTab === "progress" || itemsLoaded) return;
+    // loadItems' own setState calls sit around an `await`, so none of them runs
+    // synchronously in this effect body — same justified disable as above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadItems();
+  }, [authChecked, activeTab, itemsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function sync() {
     setSyncing(true);
@@ -289,7 +333,10 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
         advancedActiveCount={advancedActiveCount}
-        resultCount={loading ? null : tabItems.length}
+        // Progress counts episodes, and only its own panel knows how many — so
+        // suppress the toolbar's number there rather than showing a library
+        // total under an episode heading. The panel prints its own count.
+        resultCount={loading || activeTab === "progress" ? null : tabItems.length}
         resultNoun={TAB_NOUN[activeTab]}
         view={effView}
         onViewChange={() => {}}
@@ -313,6 +360,20 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
       {/* SM29 — bridges the tab strip's role="tab" buttons to their content,
           which had no role="tabpanel" anywhere. */}
       <main id={TABPANEL_ID} role="tabpanel" aria-labelledby={tabId(activeTab)} className="max-w-6xl mx-auto px-6 py-6">
+        {/* MB16 — Progress is the one tab that isn't a filter over `merged`: it
+            lists EPISODES from /api/progress, owns its own paging, and shares
+            none of the item pipeline above (search, facets, sort and grouping
+            all address titles, not episodes). So it returns early rather than
+            threading an "is this an episode?" branch through five render
+            blocks. The toolbar above stays visible because the tab strip lives
+            in it — the filters simply don't apply here, which is why none of
+            them are consulted. */}
+        {activeTab === "progress" ? (
+          <ErrorBoundary label="library progress tab">
+            <ProgressTabPanel />
+          </ErrorBoundary>
+        ) : (
+          <>
         {loading && <Spinner label="Loading…" />}
 
         {!loading && merged.length === 0 && (
@@ -363,6 +424,8 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
               step={capRender ? INCREMENTAL_PAGE : undefined}
             />
           </ErrorBoundary>
+        )}
+          </>
         )}
       </main>
     </div>

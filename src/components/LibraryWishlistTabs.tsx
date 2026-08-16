@@ -1,5 +1,5 @@
 "use client";
-import { Library as LibraryIcon, Bookmark, LayoutGrid, Star } from "lucide-react";
+import { Library as LibraryIcon, Bookmark, LayoutGrid, Star, PlayCircle } from "lucide-react";
 import type { MyStuffTab } from "@/lib/myStuffMerge";
 
 // C8 (2026-07-28) — the Library/Wishlist merge: what was a two-route Link
@@ -20,6 +20,11 @@ const TABS: { key: MyStuffTab; label: string; Icon: typeof LibraryIcon }[] = [
   { key: "wishlist", label: "Wishlist", Icon: Bookmark },
   { key: "unrated", label: "Unrated", Icon: LibraryIcon },
   { key: "rated", label: "Rated", Icon: Star },
+  // MB16 — episodes, not titles. Note the original comment above: "Playing"
+  // was left out in July because the app stored no in-progress status and the
+  // tab would have been permanently empty. Per-episode tracking is exactly the
+  // data that was missing, so this is that tab, finally backed by something.
+  { key: "progress", label: "Progress", Icon: PlayCircle },
 ];
 
 // 2026-07-28: the outer `max-w-6xl mx-auto px-6 pt-4` wrapper is gone — the
