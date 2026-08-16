@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { initDb, run } from "./db";
 import { markEpisodes } from "./episodes";
-import { buildUpNext, upNextStatus } from "./upNext";
+import { buildUpNext, upNextStatus, backfillUpNextCatalog } from "./upNext";
 
 // Home's progress module. ONE filter and ONE sort, and both are the feature:
 //
@@ -395,5 +395,106 @@ describe("upNextStatus — why the rail is empty", () => {
   it("reports what the last episode reconcile actually attached", () => {
     syncLog("trakt-episodes", 42, "ok shows=7 detached=0");
     expect(upNextStatus(USER, { now: NOW }).lastEpisodeSync).toMatchObject({ count: 42 });
+  });
+});
+
+describe("backfillUpNextCatalog — the bulk fill behind the rail", () => {
+  // The bug this closes: the first real Trakt sync attached episodes for 280
+  // shows, all with an EMPTY catalog. buildUpNext heals 3 shows per render, so
+  // the rail showed 2 entries against a cap of 10 and would have needed ~90 Home
+  // loads to become useful. The cap was never the binding constraint — coverage
+  // was. This runs on the sync path instead, where being generous is free.
+  const tmdb = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+  function stubTmdb() {
+    const f = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (/\/tv\/[^/?]+\/season\/(\d+)/.test(u)) {
+        const season = Number(u.match(/\/season\/(\d+)/)![1]);
+        return tmdb({
+          episodes: Array.from({ length: 4 }, (_, i) => ({
+            episode_number: i + 1, name: `Ep ${season}x${i + 1}`, air_date: iso(NOW - 2 * DAY),
+          })),
+        });
+      }
+      return tmdb({ seasons: [{ season_number: 1, name: "Season 1", episode_count: 4 }] });
+    });
+    vi.stubGlobal("fetch", f);
+    return f;
+  }
+
+  function unopenedShow(id: string, title: string) {
+    run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
+    run(
+      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
+       VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+      [`${id}-l`, id, id, title],
+    );
+  }
+
+  it("fills far more shows than a render can, so the rail reaches its cap", async () => {
+    stubTmdb();
+    for (let i = 0; i < 12; i++) {
+      unopenedShow(`s${i}`, `Show ${i}`);
+      watched(`s${i}`, [[1, 1]], NOW - (i + 1) * DAY);
+    }
+
+    // A render alone heals 3 → nowhere near the 10-entry cap.
+    expect(await buildUpNext(USER, { now: NOW, maxHealShows: 3 })).toHaveLength(3);
+
+    await backfillUpNextCatalog(USER, { now: NOW });
+
+    // Now every show can answer, and the cap is what limits it — which is the
+    // whole point: `limit` should be the binding constraint, not coverage.
+    const entries = await buildUpNext(USER, { now: NOW, maxHealShows: 0 });
+    expect(entries).toHaveLength(10);
+  });
+
+  it("reports what it healed and what is left", async () => {
+    stubTmdb();
+    for (let i = 0; i < 5; i++) {
+      unopenedShow(`s${i}`, `Show ${i}`);
+      watched(`s${i}`, [[1, 1]], NOW - (i + 1) * DAY);
+    }
+    const r = await backfillUpNextCatalog(USER, { now: NOW, maxShows: 2 });
+    expect(r).toEqual({ healed: 2, remaining: 3 });
+  });
+
+  // Resumability without a cursor table: a healed show simply stops qualifying,
+  // so calling it again picks up exactly where it left off.
+  it("resumes on the next call and converges", async () => {
+    stubTmdb();
+    for (let i = 0; i < 4; i++) {
+      unopenedShow(`s${i}`, `Show ${i}`);
+      watched(`s${i}`, [[1, 1]], NOW - (i + 1) * DAY);
+    }
+    expect((await backfillUpNextCatalog(USER, { now: NOW, maxShows: 2 })).remaining).toBe(2);
+    expect((await backfillUpNextCatalog(USER, { now: NOW, maxShows: 2 })).remaining).toBe(0);
+    expect((await backfillUpNextCatalog(USER, { now: NOW })).healed).toBe(0);
+  });
+
+  it("takes the most recently watched shows first", async () => {
+    stubTmdb();
+    unopenedShow("old", "Old");
+    unopenedShow("new", "New");
+    watched("old", [[1, 1]], NOW - 100 * DAY);
+    watched("new", [[1, 1]], NOW - 1 * DAY);
+
+    await backfillUpNextCatalog(USER, { now: NOW, maxShows: 1 });
+    expect((await buildUpNext(USER, { now: NOW, maxHealShows: 0 })).map((e) => e.showTitle)).toEqual(["New"]);
+  });
+
+  // It runs on the sync path but writes only shared catalog rows and drives no
+  // prune, so a dead provider must cost coverage and nothing else.
+  it("never throws when the provider is down", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
+    unopenedShow("a", "Alpha");
+    watched("a", [[1, 1]], NOW - DAY);
+    await expect(backfillUpNextCatalog(USER, { now: NOW })).resolves.toMatchObject({ healed: 1 });
+  });
+
+  it("does nothing for a user with no episode state", async () => {
+    stubTmdb();
+    expect(await backfillUpNextCatalog("nobody", { now: NOW })).toEqual({ healed: 0, remaining: 0 });
   });
 });

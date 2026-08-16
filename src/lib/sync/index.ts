@@ -7,6 +7,8 @@ import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
 import { crossLinkBudget } from "@/lib/sources/crossLink";
 import type { PulledEpisode } from "@/lib/episodes";
 import { reconcileProviderEpisodes } from "@/lib/episodes";
+import { backfillUpNextCatalog } from "@/lib/upNext";
+import { log } from "@/lib/logger";
 
 // Wall-clock budget for a single sync request (P6). The full ~1,700-item
 // Trakt+Steam+TMDB sync in ONE request spiked memory past Railway's 512 MB and
@@ -164,6 +166,23 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
       logSync(userId, `${src.id}-library`, library, "ok");
     } catch (e: any) {
       logSync(userId, `${src.id}-library`, library, "error", e.message);
+    }
+
+    // Bulk-fill the episode CATALOG for shows that can't yet produce an "Up
+    // next" entry. Separate from the pull above and deliberately OUTSIDE its
+    // try: it writes only shared catalog rows, drives no prune, and must not be
+    // able to fail a sync. It is also why the rail no longer needs ~90 Home
+    // renders to become useful — the per-request heal does 3 shows, this does
+    // hundreds, and both re-derive their work list so neither can get stuck.
+    if (src.capabilities.episodes?.read) {
+      try {
+        const fill = await backfillUpNextCatalog(userId);
+        if (fill.healed) {
+          logSync(userId, `${src.id}-episode-catalog`, fill.healed, `healed=${fill.healed} remaining=${fill.remaining}`);
+        }
+      } catch (e: any) {
+        log.warn("episode_catalog_backfill_failed", { userId, provider: src.id, error: e?.message });
+      }
     }
   }
 

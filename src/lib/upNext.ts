@@ -59,6 +59,15 @@ const MAX_ENTRIES = 10;
 const MAX_HEAL_SHOWS = 3;
 const HEAL_BUDGET_MS = 4_000;
 
+// The bulk catalog backfill (backfillUpNextCatalog), which runs on the SYNC
+// path rather than on a page render — so it can be far more generous than the
+// per-request heal above without making Home slow. Sized to drain a
+// ~300-show library in a couple of syncs while leaving the sync itself well
+// inside a request's lifetime.
+const BACKFILL_MAX_SHOWS = 400;
+const BACKFILL_BUDGET_MS = 20_000;
+const BACKFILL_CONCURRENCY = 6;
+
 /**
  * Why the rail is empty — because "no data yet", "still fetching episode lists",
  * "you're caught up" and "the Trakt pull is failing" all render as the same
@@ -368,6 +377,74 @@ export async function buildUpNext(
   // than being dropped — the filter already said it belongs here.
   entries.sort((a, b) => (b.eventAt ?? -Infinity) - (a.eventAt ?? -Infinity));
   return entries.slice(0, opts.limit ?? MAX_ENTRIES);
+}
+
+/**
+ * Fill the episode catalog for shows that can't produce a rail entry yet.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────────
+ * buildUpNext heals 3 shows per request, which is right for a Home render but
+ * cannot bootstrap a library. The first real sync attached episodes for 280
+ * shows, all with an empty catalog, so the rail could only ever show entries for
+ * the handful healed so far — Nils saw **2** where the cap is 10. The cap was
+ * never the binding constraint; catalog coverage was.
+ *
+ * Bounded and resumable by construction: it re-derives "what still lacks
+ * coverage" on every call and stops at the first of `maxShows` or `budgetMs`, so
+ * repeated calls converge and none of them runs long. Nothing is persisted about
+ * where it got to — the same reason the Wikidata sweep needed a `checked` table
+ * does NOT apply here, because a healed show stops qualifying.
+ *
+ * Runs a few shows CONCURRENTLY because each is network-bound and independent.
+ * Kept deliberately small: TMDB tolerates far more, but a sync already fires
+ * other provider calls and the point is to converge over a few passes, not to
+ * burst.
+ *
+ * Never throws — `healShow`'s helpers already degrade to what's stored, so a
+ * provider outage costs coverage, not the sync it's attached to.
+ */
+export async function backfillUpNextCatalog(
+  userId: string,
+  opts: { now?: number; maxShows?: number; budgetMs?: number; concurrency?: number } = {},
+): Promise<{ healed: number; remaining: number }> {
+  const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
+  const maxShows = opts.maxShows ?? BACKFILL_MAX_SHOWS;
+  const budgetMs = opts.budgetMs ?? BACKFILL_BUDGET_MS;
+  const concurrency = Math.max(1, opts.concurrency ?? BACKFILL_CONCURRENCY);
+
+  const states = loadShowStates(userId);
+  if (!states.length) return { healed: 0, remaining: 0 };
+
+  const ids = states.map((s) => s.mediaItemId);
+  const episodeIndex = loadEpisodeIndex(ids);
+  const seasonIndex = loadSeasonIndex(ids);
+
+  // Same priority as the per-request heal: unusable before merely stale, most
+  // recently watched first. So the shows most likely to belong at the front of
+  // the rail are also the ones filled first, and an interrupted sweep still
+  // leaves the rail better than it found it.
+  const rank = { missing: 0, stale: 1, ok: 2 } as const;
+  const pending = states
+    .map((s) => ({ st: s, cov: coverage(s, episodeIndex.get(s.mediaItemId), seasonIndex.get(s.mediaItemId), nowSec) }))
+    .filter((c) => c.cov !== "ok")
+    .sort((a, b) => rank[a.cov] - rank[b.cov] || (b.st.lastWatchedAt ?? 0) - (a.st.lastWatchedAt ?? 0));
+
+  const targets = pending.slice(0, maxShows);
+  const deadline = Date.now() + budgetMs;
+  let healed = 0;
+  let next = 0;
+
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= targets.length || Date.now() > deadline) return;
+      await healShow(targets[i].st);
+      healed++;
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, worker));
+  return { healed, remaining: Math.max(0, pending.length - healed) };
 }
 
 /**
