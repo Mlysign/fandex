@@ -484,3 +484,70 @@ export async function removeTraktFromHistory(
     throw new Error(`Trakt remove history failed: ${res.status} ${body}`);
   }
 }
+
+// ── Diagnostic: what shape does /sync/watched/shows actually come back in? ────
+//
+// MB14's per-episode half reads `seasons[].episodes[]` off this response, and on
+// prod it returned 280 shows with ZERO episodes between them. Trakt documents
+// seasons as included by default, this environment can't reach a real account,
+// and three deploys of inference didn't settle it — so this reports the shape
+// directly instead.
+//
+// SHAPE ONLY, by construction: counts, key names and types. No titles, no ids,
+// no token, no watch history. It cannot leak what it never reads.
+export interface WatchedShowsShape {
+  entries: number;
+  entryKeys: string[];
+  /** How the `seasons` field arrives across every entry. */
+  seasons: { absent: number; notArray: number; emptyArray: number; nonEmptyArray: number };
+  totalSeasons: number;
+  totalEpisodes: number;
+  seasonKeys: string[];
+  episodeKeys: string[];
+}
+
+function describeWatchedShows(list: any[]): WatchedShowsShape {
+  const out: WatchedShowsShape = {
+    entries: list.length,
+    entryKeys: list.length ? Object.keys(list[0] ?? {}) : [],
+    seasons: { absent: 0, notArray: 0, emptyArray: 0, nonEmptyArray: 0 },
+    totalSeasons: 0,
+    totalEpisodes: 0,
+    seasonKeys: [],
+    episodeKeys: [],
+  };
+  for (const e of list) {
+    const s = e?.seasons;
+    if (s === undefined || s === null) out.seasons.absent++;
+    else if (!Array.isArray(s)) out.seasons.notArray++;
+    else if (s.length === 0) out.seasons.emptyArray++;
+    else {
+      out.seasons.nonEmptyArray++;
+      out.totalSeasons += s.length;
+      for (const season of s) {
+        const eps = season?.episodes;
+        if (Array.isArray(eps)) out.totalEpisodes += eps.length;
+        if (!out.seasonKeys.length && season) out.seasonKeys = Object.keys(season);
+        if (!out.episodeKeys.length && Array.isArray(eps) && eps[0]) out.episodeKeys = Object.keys(eps[0]);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Both variants side by side — the comparison IS the answer. If `withExtended`
+ * shows no seasons and `plain` does, `extended=full` is suppressing them; if
+ * neither does, the account genuinely has no per-episode history at this
+ * endpoint and no amount of adapter work will conjure one.
+ */
+export async function probeWatchedShowsShape(accessToken: string): Promise<{
+  withExtended: WatchedShowsShape;
+  plain: WatchedShowsShape;
+}> {
+  const [full, plain] = await Promise.all([
+    traktGetAllPages("/sync/watched/shows?extended=full", accessToken),
+    traktGetAllPages("/sync/watched/shows", accessToken),
+  ]);
+  return { withExtended: describeWatchedShows(full), plain: describeWatchedShows(plain) };
+}
