@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { TypeIcon } from "@/components/Badges";
-import { TYPE_COLORS } from "@/lib/constants";
 
 // MB16 — the one row used by BOTH episode surfaces: Home's "Up next" scroller
 // and the library's Progress tab. Nils's spec, 2026-08-16: *"don't use the
@@ -71,7 +70,6 @@ export default function EpisodeRow({
   onTick: (entry: EpisodeRowEntry) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
-  const typeColor = TYPE_COLORS.show ?? "#888";
 
   return (
     <div
@@ -80,15 +78,15 @@ export default function EpisodeRow({
         exiting ? "opacity-0 scale-[0.97] pointer-events-none" : "opacity-100 scale-100"
       }`}
     >
-      {/* Type accent bar — ListCard's signature, and the reason a row reads as
-          part of the calendar/list family rather than a new component. */}
-      <div className="w-7 flex-shrink-0 flex items-center justify-center" style={{ background: typeColor }}>
-        <span className="text-text-on-media"><TypeIcon type="show" size={15} /></span>
-      </div>
+      {/* No type accent bar (removed 2026-08-16, Nils). ListCard carries one
+          because its list mixes games, movies and shows and the colour is what
+          tells them apart. Both episode surfaces are shows and only shows, so
+          the bar encoded exactly zero information — it was a purple stripe on
+          every row. The poster now sits flush at the leading edge. */}
 
-      {/* Portrait poster, flush against the bar and absolutely filled so its
-          aspect ratio can never drive the row height — rows stay uniform, which
-          is what lets the scroller below size itself in whole rows. */}
+      {/* Portrait poster, absolutely filled so its aspect ratio can never drive
+          the row height — rows stay uniform, which is what lets the Home
+          scroller size itself in whole rows. */}
       <div className="relative w-14 flex-shrink-0 bg-neutral-800 overflow-hidden">
         {entry.posterUrl && !imgErr ? (
           <Image
@@ -106,14 +104,29 @@ export default function EpisodeRow({
         )}
       </div>
 
-      <div className="flex-1 min-w-0 px-3 py-2 flex flex-col justify-center">
-        <span className="font-mono text-micro uppercase text-accent">{epLabel(entry.season, entry.episode)}</span>
-        <Link
-          href={entry.href}
-          className="font-serif text-serif-sm text-text-primary truncate hover:opacity-80 transition-opacity duration-fast"
-        >
-          {entry.showTitle}
-        </Link>
+      <div className="flex-1 min-w-0 px-3 py-2 flex flex-col justify-center gap-1">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* The episode number as a CHIP, Showly's treatment (Nils, 2026-08-16
+              — "make the episode number text a bit more readable"). It was
+              `text-micro`, an 8px mono caption, which is the smallest step in
+              the scale and unreadable at arm's length on a phone.
+              `text-label-lg` (12.5px, weight 600) is ~56% larger, and the
+              accent-subtle pill gives it an edge to sit against instead of
+              floating above the title. `tabular-nums` keeps S02/S03 the same
+              width so a column of rows doesn't shimmer. */}
+          <span
+            className="shrink-0 inline-flex items-center rounded-md px-1.5 py-1 font-mono text-label-lg tabular-nums"
+            style={{ background: "var(--color-accent-subtle)", color: "var(--color-accent)" }}
+          >
+            {epLabel(entry.season, entry.episode)}
+          </span>
+          <Link
+            href={entry.href}
+            className="font-serif text-serif-sm text-text-primary truncate hover:opacity-80 transition-opacity duration-fast"
+          >
+            {entry.showTitle}
+          </Link>
+        </div>
         <span className="font-mono text-meta text-text-secondary truncate">
           {entry.episodeTitle || `Episode ${entry.episode}`}
         </span>

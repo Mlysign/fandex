@@ -4,14 +4,23 @@
 // tab predicates.
 import type { EnrichedItem } from "@/types";
 
-// "progress" (MB16, 2026-08-16) is the odd one out and deliberately so: the
-// other four filter the SAME merged item list, while progress lists EPISODES
-// from /api/progress. It lives here anyway because it is a tab of this view to
-// the reader, and `parseTab` is what makes `?tab=progress` a real deep link —
-// which is what Home's "See all" needs. `filterByTab` never sees it; MyStuffView
-// branches to its own component before that point.
-export type MyStuffTab = "all" | "wishlist" | "unrated" | "rated" | "progress";
-const TABS: MyStuffTab[] = ["all", "wishlist", "unrated", "rated", "progress"];
+// ── The tab set, trimmed to three on 2026-08-16 (Nils: "the tabs get a little
+// crowded") ─────────────────────────────────────────────────────────────────
+// Was: all · wishlist · unrated · rated · progress. "All" was a superset nobody
+// asked for, and rated/unrated were a rating FILTER wearing a tab's clothes —
+// the toolbar's own filters cover that. Now: Wishlist · Progress · Library, in
+// that order, which is also roughly the order you use them.
+//
+// `TABS` order IS the strip's order — LibraryWishlistTabs renders from its own
+// list, but `parseTab` validates against this one, so both must agree.
+//
+// "progress" is the odd one out and deliberately so: the other two filter the
+// SAME merged item list, while progress lists EPISODES from /api/progress. It
+// lives here because it is a tab of this view to the reader, and `parseTab` is
+// what makes `?tab=progress` a real deep link — which is what Home's "See all"
+// needs. `filterByTab` never sees it; MyStuffView branches before that point.
+export type MyStuffTab = "wishlist" | "progress" | "library";
+const TABS: MyStuffTab[] = ["wishlist", "progress", "library"];
 
 // SM21 (2026-07-28): the tab used to be pure client state — switching it
 // changed no URL, so it reset on reload and Back exited the page instead of
@@ -51,10 +60,11 @@ export function filterByTab<T extends { inLibrary: boolean; inWishlist: boolean;
   items: T[], tab: MyStuffTab
 ): T[] {
   switch (tab) {
-    case "all": return items;
     case "wishlist": return items.filter((i) => i.inWishlist);
-    case "unrated": return items.filter((i) => i.inLibrary && i.rating == null);
-    case "rated": return items.filter((i) => i.inLibrary && i.rating != null);
+    // Everything you actually own/watched/played. Note this is NOT the old
+    // "all": that folded in wishlist-only items, which is what made it a
+    // superset rather than a place.
+    case "library": return items.filter((i) => i.inLibrary);
     // Not an item filter at all — the Progress tab lists EPISODES from
     // /api/progress, and MyStuffView branches to its own component before
     // reaching here. Empty is the correct answer to the question this function

@@ -77,31 +77,39 @@ describe("filterByTab", () => {
     [base({ id: "wishlist-only" })]
   );
 
-  it("all returns every item", () => {
-    expect(filterByTab(items, "all")).toHaveLength(4);
-  });
-
   it("wishlist returns only inWishlist items", () => {
     expect(filterByTab(items, "wishlist").map((i) => i.id).sort()).toEqual(["both", "wishlist-only"]);
   });
 
-  it("unrated returns inLibrary items with no rating", () => {
-    expect(filterByTab(items, "unrated").map((i) => i.id)).toEqual(["unrated"]);
+  // The tab set went to three on 2026-08-16. "Library" is NOT the old "all":
+  // that folded in wishlist-only items, which is what made it a superset
+  // rather than a place. This one is what you own/watched/played.
+  it("library returns only inLibrary items, excluding wishlist-only", () => {
+    expect(filterByTab(items, "library").map((i) => i.id).sort()).toEqual(["both", "rated", "unrated"]);
   });
 
-  it("rated returns inLibrary items with a rating", () => {
-    expect(filterByTab(items, "rated").map((i) => i.id).sort()).toEqual(["both", "rated"]);
+  // Progress lists EPISODES from /api/progress; MyStuffView branches before
+  // this function. Empty fails safe — a future caller that does route it here
+  // renders nothing rather than the whole library under an episode heading.
+  it("progress matches no ITEMS at all", () => {
+    expect(filterByTab(items, "progress")).toEqual([]);
   });
 });
 
 describe("parseTab", () => {
-  it("accepts each of the four valid values", () => {
-    expect(parseTab("all", "wishlist")).toBe("all");
-    expect(parseTab("wishlist", "all")).toBe("wishlist");
-    expect(parseTab("unrated", "all")).toBe("unrated");
-    expect(parseTab("rated", "all")).toBe("rated");
+  it("accepts each of the three valid values", () => {
+    expect(parseTab("wishlist", "library")).toBe("wishlist");
+    expect(parseTab("progress", "library")).toBe("progress");
+    expect(parseTab("library", "wishlist")).toBe("library");
   });
 
+  // Old links and bookmarks (?tab=all / rated / unrated) must not 500 or render
+  // a blank tab — they fall back to the route default like any other unknown.
+  it("falls back for a RETIRED tab value", () => {
+    expect(parseTab("all", "library")).toBe("library");
+    expect(parseTab("rated", "library")).toBe("library");
+    expect(parseTab("unrated", "wishlist")).toBe("wishlist");
+  });
   it("falls back for undefined", () => {
     expect(parseTab(undefined, "wishlist")).toBe("wishlist");
   });
@@ -115,6 +123,6 @@ describe("parseTab", () => {
   });
 
   it("falls back for null", () => {
-    expect(parseTab(null, "rated")).toBe("rated");
+    expect(parseTab(null, "library")).toBe("library");
   });
 });

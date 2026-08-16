@@ -1,5 +1,5 @@
 "use client";
-import { Library as LibraryIcon, Bookmark, LayoutGrid, Star, PlayCircle } from "lucide-react";
+import { Library as LibraryIcon, Bookmark, PlayCircle } from "lucide-react";
 import type { MyStuffTab } from "@/lib/myStuffMerge";
 
 // C8 (2026-07-28) — the Library/Wishlist merge: what was a two-route Link
@@ -15,16 +15,23 @@ import type { MyStuffTab } from "@/lib/myStuffMerge";
 // ownership flags), so it would be permanently empty. "Unrated" is backed by
 // real data instead (2026-07-28 decision).
 
+// Three tabs since 2026-08-16 (Nils: "the tabs get a little crowded"). "All"
+// was a superset of the other two rather than a place of its own, and
+// Rated/Unrated were a rating FILTER wearing a tab's clothes — the toolbar
+// already filters. Library keeps Unrated's icon, which is the one that always
+// meant "your library" anyway.
+//
+// Order is Wishlist → Progress → Library, per the spec, and it happens to run
+// from "haven't started" through "in the middle of" to "done with".
+//
+// MB16 footnote: the original comment above says "Playing" was left out in July
+// because the app stored no in-progress status and the tab would have been
+// permanently empty. Per-episode tracking is exactly the data that was missing,
+// so Progress is that tab, finally backed by something.
 const TABS: { key: MyStuffTab; label: string; Icon: typeof LibraryIcon }[] = [
-  { key: "all", label: "All", Icon: LayoutGrid },
   { key: "wishlist", label: "Wishlist", Icon: Bookmark },
-  { key: "unrated", label: "Unrated", Icon: LibraryIcon },
-  { key: "rated", label: "Rated", Icon: Star },
-  // MB16 — episodes, not titles. Note the original comment above: "Playing"
-  // was left out in July because the app stored no in-progress status and the
-  // tab would have been permanently empty. Per-episode tracking is exactly the
-  // data that was missing, so this is that tab, finally backed by something.
   { key: "progress", label: "Progress", Icon: PlayCircle },
+  { key: "library", label: "Library", Icon: LibraryIcon },
 ];
 
 // 2026-07-28: the outer `max-w-6xl mx-auto px-6 pt-4` wrapper is gone — the

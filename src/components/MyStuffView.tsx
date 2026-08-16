@@ -28,11 +28,14 @@ import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWis
 import ProgressTabPanel from "@/components/ProgressTabPanel";
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
-const TAB_LABEL: Record<MyStuffTab, string> = { all: "All", wishlist: "Wishlist", unrated: "Unrated", rated: "Rated", progress: "Progress" };
+const TAB_LABEL: Record<MyStuffTab, string> = { wishlist: "Wishlist", progress: "Progress", library: "Library" };
 // The noun the toolbar counts in. "progress" counts EPISODES, not titles — and
 // its count comes from its own panel, so the toolbar's number is suppressed for
 // that tab rather than reporting a library total under an episode heading.
-const TAB_NOUN: Record<MyStuffTab, string> = { all: "titles", wishlist: "saved", unrated: "unrated", rated: "rated", progress: "episodes" };
+// SubBar renders this as `${noun} · ${count}`, so the noun has to read as a
+// label, not a phrase — "in library · 1922" is clumsy where "titles · 1922"
+// isn't, and the tab is already called Library.
+const TAB_NOUN: Record<MyStuffTab, string> = { wishlist: "saved", progress: "episodes", library: "titles" };
 
 // usePersistedState's `normalize` param must be a STABLE reference (its own
 // hydrate effect is keyed on it) — a fresh arrow every render re-runs that

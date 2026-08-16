@@ -5,5 +5,5 @@ import MyStuffView from "@/components/MyStuffView";
 // (MyStuffView); the route decides only which tab opens initially. See
 // MyStuffView.tsx for the merge + tab logic.
 export default function LibraryPageClient() {
-  return <MyStuffView route="library" initialTab="all" />;
+  return <MyStuffView route="library" initialTab="library" />;
 }
