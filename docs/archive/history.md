@@ -1872,34 +1872,46 @@ rated) and put a carousel of "the episode I need to watch next" in that slot,
 ordered after the rotating highlight panels, under a rail header like
 "Recommended for you".
 
-**The feature IS the relevance rule** (`src/lib/upNext.ts`), specified by Nils
-and implemented verbatim. An episode qualifies when the episode immediately
-before it is watched, AND either that predecessor was watched in the last 30
-days OR this episode was released in the last 30 days.
+**One filter, one sort** (`src/lib/upNext.ts`). The filter is the only one there
+is: the episode immediately before it is marked watched. Nothing is excluded for
+being old.
 
-The second clause is the interesting one and it does two jobs at once: the first
-arm keeps a show you're mid-binge on, the second brings a show back the week a
-new season drops even though you finished the last one a year ago. Together they
-are the **abandonment test** — there is no abandoned flag anywhere in the schema
-and none was added, because "no activity either side in 30 days" already says it.
+The sort is the interesting half. **A watch and a release are dated events on one
+timeline**, and an entry sits at its LATEST event —
+`eventAt = max(preceding episode's watched_at, this episode's release date)` —
+newest first, capped at 10. Nils's own example: you finish a Pluribus episode on
+Jan 1, a new Andor episode drops Jan 2, you finish a One Piece episode on Jan 3 →
+One Piece, Andor, Pluribus. Tick Pluribus on Jan 4 and it stamps a *new* event,
+so it jumps to the front: Pluribus, One Piece, Andor.
 
-Three behaviours that follow from the rule and are deliberate, not gaps:
+**⚠️ The first cut of this shipped the same two dates as a 30-day recency FILTER,
+and that was wrong.** Nils corrected it within the hour. The dates are right; the
+mechanism wasn't. As a filter they silently *hid* a show rather than ranking it,
+there is no honest cutoff to pick, and the cap is what bounds the rail anyway.
+Worth remembering as a shape: when a rule reads "only show X if it's recent", ask
+whether the requirement is actually "rank recent things higher".
+
+Two behaviours that are deliberate, not gaps:
 
 - **A show you have never ticked never appears.** S1E1 has no preceding episode
   to satisfy, so this is strictly *continue* watching, not *start* watching.
 - **It fills the earliest GAP**, not the episode after the highest watched. With
   1, 2 and 5 seen, next up is 3.
-- **An unaired episode never appears.** The watched arm would happily surface
-  next week's episode the day after you watch this week's, and you can't tick
-  something that isn't out.
-- A `watched_at` of NULL (Trakt can omit `last_watched_at`) counts as NOT recent
-  — "watched, date unknown" honestly reads as "some time ago", and the release
-  arm still rescues a genuinely new episode.
+- **An unaired episode never appears.** A future release date would otherwise
+  sort straight to the front, and you can't tick something that isn't out.
+- A `watched_at` of NULL (Trakt can omit `last_watched_at`) simply doesn't
+  compete for the event date; the release wins by default, and an entry with
+  neither date sorts last rather than being dropped.
 
-**The season rollover needed the catalog to answer two questions at once.**
-`catalogCovers` requires the season you're in AND the one after it before it
-trusts stored rows, otherwise someone sitting on a season finale looks finished
-whenever the next season hasn't been fetched.
+**Catalog coverage is a three-state test, and the third state only matters
+because release is a sort input.** `coverage()` returns `missing` when the stored
+rows can't answer at all — including when the next season exists in the season
+list but its episodes were never fetched, which is what makes the rollover work
+(otherwise someone sitting on a season finale looks finished). It returns
+`stale` when the rows *can* answer but the season LIST is older than the catalog
+TTL: a show whose new season dropped since then would answer "covered" forever
+and could never reach the front of the rail. `missing` heals before `stale`,
+since only the former blocks an entry outright.
 
 **Bounded heal, and this is the load-bearing bit.** MB14 fills `show_episodes`
 lazily on a detail view — but the Trakt pull writes watch state for shows nobody
@@ -1932,10 +1944,11 @@ Also removed with the strip: `/api/home`'s `libraryTotal`/`wishlistTotal`/
 `getLibraryFacetAnalysis` call. `stats` stays — a non-null value is what tells
 the page the viewer is signed in.
 
-Verified in the browser pane against a seeded account covering each branch
-(mid-binge / new-season-after-a-year / abandoned / paused-3-weeks): the abandoned
-show is absent, order is most-recent-first, and ticking Andor 1×04 promotes 1×05
-into the same card. 732 tests.
+Verified in the browser pane against a seeded account reproducing Nils's example
+plus a show untouched for two years: the order is One Piece → Andor → Pluribus →
+Long Abandoned, and ticking Pluribus re-orders live to Pluribus → One Piece →
+Andor with the card advancing to the next episode. The two-year-old show still
+*appears*, ranked last — that is the recency-filter correction, visible. 733 tests.
 
 ## MB14 — per-episode show tracking + two-way Trakt sync, 2026-08-16
 

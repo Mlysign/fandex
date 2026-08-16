@@ -3,17 +3,16 @@ import { initDb, run } from "./db";
 import { markEpisodes } from "./episodes";
 import { buildUpNext } from "./upNext";
 
-// Home's progress module. The whole feature IS the relevance rule, so that is
-// what these pin:
+// Home's progress module. ONE filter and ONE sort, and both are the feature:
 //
-//   1. an episode shows only when the one immediately before it is watched
-//   2. and only when either that predecessor was watched in the last 30 days,
-//      OR this episode came out in the last 30 days
+//   FILTER  the episode immediately before it is marked watched. That's all —
+//           nothing is excluded for being old.
+//   SORT    a watch and a release are dated events on one timeline; an entry
+//           sits at its LATEST event, newest first, capped at ~10.
 //
-// Rule 2's two arms do different jobs and both matter: the first keeps a show
-// you're mid-binge on, the second brings back a show whose new season just
-// dropped a year after you finished the last one. Together they are the
-// "abandoned" test — there is no abandoned flag to read.
+// (A 30-day recency FILTER was the first cut of this, replaced the same day: the
+// two arms are the same two dates, but as a filter they silently hid a show
+// instead of ranking it, and there is no honest cutoff.)
 
 initDb();
 
@@ -108,48 +107,83 @@ describe("rule 1 — the preceding episode must be watched", () => {
   });
 });
 
-describe("rule 2 — recency is the abandonment test", () => {
-  it("keeps a show you watched within the last 30 days", async () => {
-    show("a", "Alpha", [{ season: 1, episodes: 6 }]);
-    watched("a", [[1, 1]], NOW - 29 * DAY);
-    expect(await labels()).toEqual(["Alpha 1x2"]);
-  });
+describe("the event timeline — a watch and a release rank the same way", () => {
+  it("orders by latest event, newest first — and re-orders when a tick adds one", async () => {
+    // Nils's own example, verbatim.
+    //   Jan 1  a Pluribus episode is marked watched
+    //   Jan 2  a new Andor episode is released
+    //   Jan 3  a One Piece episode is marked watched
+    const JAN1 = NOW - 3 * DAY, JAN2 = NOW - 2 * DAY, JAN3 = NOW - 1 * DAY;
 
-  it("drops a show abandoned more than 30 days ago", async () => {
-    show("a", "Alpha", [{ season: 1, episodes: 6 }]);
-    watched("a", [[1, 1]], NOW - 31 * DAY);
-    expect(await labels()).toEqual([]);
-  });
+    show("p", "Pluribus", [{ season: 1, episodes: 6, airDate: iso(NOW - 300 * DAY) }]);
+    watched("p", [[1, 1]], JAN1);
 
-  it("brings an abandoned show BACK when the next episode is newly released", async () => {
-    // Finished season 1 a year ago; season 2 premiered last week. The watched
-    // arm fails and the release arm rescues it — this is the case the second
-    // clause exists for.
-    show("a", "Alpha", [
-      { season: 1, episodes: 2, airDate: iso(NOW - 400 * DAY) },
-      { season: 2, episodes: 8, airDate: iso(NOW - 7 * DAY) },
+    // Andor's next episode is the one that dropped on Jan 2; the watch that
+    // unlocked it is older, so the RELEASE is Andor's latest event.
+    show("a", "Andor", [
+      { season: 1, episodes: 1, airDate: iso(NOW - 300 * DAY) },
+      { season: 2, episodes: 4, airDate: iso(JAN2) },
     ]);
-    watched("a", [[1, 1], [1, 2]], NOW - 365 * DAY);
-    expect(await labels()).toEqual(["Alpha 2x1"]);
+    watched("a", [[1, 1]], NOW - 200 * DAY);
+
+    show("o", "One Piece", [{ season: 1, episodes: 6, airDate: iso(NOW - 300 * DAY) }]);
+    watched("o", [[1, 1]], JAN3);
+
+    expect((await upNext()).map((e) => e.showTitle)).toEqual(["One Piece", "Andor", "Pluribus"]);
+
+    // Now tick Pluribus. That stamps a NEW event on it and a new episode is
+    // available, so it jumps to the front.
+    watched("p", [[1, 2]], NOW);
+    expect((await upNext()).map((e) => e.showTitle)).toEqual(["Pluribus", "One Piece", "Andor"]);
   });
 
-  it("stays dropped when the next episode is also old", async () => {
-    show("a", "Alpha", [{ season: 1, episodes: 6, airDate: iso(NOW - 400 * DAY) }]);
-    watched("a", [[1, 1]], NOW - 100 * DAY);
-    expect(await labels()).toEqual([]);
+  it("reports which of the two events won", async () => {
+    show("a", "Alpha", [{ season: 1, episodes: 6, airDate: iso(NOW - 300 * DAY) }]);
+    watched("a", [[1, 1]], NOW - DAY);
+    show("b", "Bravo", [{ season: 1, episodes: 6, airDate: iso(NOW - 2 * DAY) }]);
+    watched("b", [[1, 1]], NOW - 300 * DAY);
+
+    const byTitle = Object.fromEntries((await upNext()).map((e) => [e.showTitle, e.eventKind]));
+    expect(byTitle).toEqual({ Alpha: "watched", Bravo: "released" });
   });
 
-  it("treats an unknown watched_at as NOT recent", async () => {
-    // Trakt can hand back an episode with no last_watched_at. "Watched, date
-    // unknown" reads as "some time ago", so it must not keep a show alive on
-    // its own — only a recent release can.
-    show("a", "Alpha", [{ season: 1, episodes: 6 }]);
+  it("KEEPS a show nobody has touched in a year — age is a rank, not a filter", async () => {
+    // The behaviour the recency filter got wrong. It still belongs in the rail,
+    // it just sorts below anything with a newer event.
+    show("old", "Ancient", [{ season: 1, episodes: 6, airDate: iso(NOW - 900 * DAY) }]);
+    watched("old", [[1, 1]], NOW - 800 * DAY);
+    show("new", "Fresh", [{ season: 1, episodes: 6, airDate: iso(NOW - 300 * DAY) }]);
+    watched("new", [[1, 1]], NOW - DAY);
+
+    expect((await upNext()).map((e) => e.showTitle)).toEqual(["Fresh", "Ancient"]);
+  });
+
+  it("sorts an entry with no dated event last, rather than dropping it", async () => {
+    // Trakt can hand back an episode with no last_watched_at, and a catalog row
+    // can have no air_date. The filter already said this belongs here.
+    show("a", "Alpha", [{ season: 1, episodes: 6 }]); // no airDate
     run(
       `INSERT INTO user_episode_state (user_id, media_item_id, season_number, episode_number, watched_at, sources)
        VALUES (?, 'a', 1, 1, NULL, '["trakt"]')`,
       [USER],
     );
-    expect(await labels()).toEqual([]);
+    show("b", "Bravo", [{ season: 1, episodes: 6 }]);
+    watched("b", [[1, 1]], NOW - 500 * DAY);
+
+    const entries = await upNext();
+    expect(entries.map((e) => e.showTitle)).toEqual(["Bravo", "Alpha"]);
+    expect(entries[1].eventAt).toBeNull();
+    expect(entries[1].eventKind).toBe("unknown");
+  });
+
+  it("caps the rail at ~10", async () => {
+    for (let i = 0; i < 14; i++) {
+      show(`s${i}`, `Show ${i}`, [{ season: 1, episodes: 6, airDate: iso(NOW - 300 * DAY) }]);
+      watched(`s${i}`, [[1, 1]], NOW - i * DAY);
+    }
+    const entries = await upNext();
+    expect(entries).toHaveLength(10);
+    expect(entries[0].showTitle).toBe("Show 0"); // newest event first
   });
 });
 
@@ -269,6 +303,28 @@ describe("the bounded catalog heal", () => {
     expect(
       (await buildUpNext(USER, { now: NOW, maxHealShows: 1 })).map((e) => e.showTitle),
     ).toEqual(["Bravo", "Alpha"]);
+  });
+
+  it("re-checks a STALE season list, so a new season can reach the rail", async () => {
+    // The gap this closes only matters now that a release is a SORT input:
+    // a show whose season list predates its new season would answer "covered"
+    // forever, and that new season could never surface. Freshness is therefore
+    // part of the coverage test, at lower heal priority than a missing catalog.
+    const f = stubTmdb();
+    unopenedShow("a", "Alpha");
+    watched("a", [[1, 1]], NOW - 400 * DAY);
+
+    await buildUpNext(USER, { now: NOW, maxHealShows: 1 });
+    const calls = f.mock.calls.length;
+
+    // Fresh → left alone.
+    await buildUpNext(USER, { now: NOW, maxHealShows: 1 });
+    expect(f.mock.calls.length).toBe(calls);
+
+    // Aged past the TTL → re-fetched.
+    run("UPDATE show_seasons SET updated_at = 0");
+    await buildUpNext(USER, { now: NOW, maxHealShows: 1 });
+    expect(f.mock.calls.length).toBeGreaterThan(calls);
   });
 
   it("degrades rather than throwing when TMDB is down", async () => {
