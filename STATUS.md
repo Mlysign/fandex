@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-16 (MB16 — the episode UI: vertical Up next + a Progress library tab)._
+_Last updated: 2026-08-16 (episode tracking live end to end; Up next + Progress tab; three-tab library)._
 
 ---
 
@@ -31,8 +31,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 | | Item | Blocked on |
 |--|------|--|
-| 🟢 | **MB14 — episode tracking is FIXED and live** | Root cause: **`/sync/watched/shows` carries no episode data at all** — `seasons` absent on all 280 entries in every variant, though Trakt documents it as default-on. `/api/dev/trakt-shape` settled it; the pull now uses **`/sync/history/episodes`**. Same account that measured `withEpisodes=0` now reads **`shows=280 withEpisodes=280 episodes=12318`**. **You: open the app and hit Sync once** to populate prod — the sync also bulk-fills the episode catalog, so Home's "Up next" rail fills to its 10-entry cap in that one pass. → [TASKS.md](TASKS.md) |
-| 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped.** MB14 is the row above. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). Also shipped 2026-08-16: **Home's three counters are gone**, replaced by the "Up next" progress carousel. → [TASKS.md](TASKS.md) |
+| 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped**, MB14 included. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | 🔵 | **Games cross-link backfill on prod** | **You:** `POST /api/dev/crosslink` `{"source":"steam","maxItems":25}` from the browser console on fandex.org while logged in (both dev routes are session-gated, so a terminal `curl` 404s). Repeat until the cursor drains. Until then prod fills organically at ~30 cross-links per sync pass. |
 | 🔵 | **Franchise `ip` weight** | **You.** Live on prod since 2026-08-14 at the default 1.3 (peer with `director`, which you have at 4). `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what a value does to real titles first. Two smaller calls with it → [TASKS.md](TASKS.md). |
@@ -40,6 +39,10 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
 | 🟢 | **Fandex Score's residual ~1% outside 0–100** | A design call, not a bug: `FandexScoreBadge` makes no 0–100 claim itself, so "relabel rather than re-tune" is a live option. → [TASKS.md](TASKS.md) |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |
+
+**Episode tracking is LIVE and populated (MB14 + MB16, 2026-08-16).** Per-episode watched state for shows, two-way with Trakt: the item page's season tracker, Home's vertical **Up next** list, and the library's **Progress** tab. Prod synced 12,318 episodes across 280 shows.
+
+**⚠️ The lesson from MB14, because it cost five deploys:** `/sync/watched/shows` carries **no** episode data in any variant, though Trakt documents `seasons` as default-on. A mocked unit test of the *documented* shape passed the whole time. **Measure a provider's response against a real account before building on it** — episodes come from `/sync/history/episodes` (bulk) or `/shows/{id}/progress/watched` (per-show, `completed: true` only). → [[trakt-episode-endpoints]]
 
 Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scoring (swept on prod), the facet-page compute + quota exposure, all five audit passes, all 11 smoke sweeps, every production incident, and the full performance audit.** Grep [the archive](docs/archive/history.md) for any of them.
 
@@ -73,7 +76,7 @@ Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scori
 
 ## ✅ Quality bar (as of 2026-08-16)
 
-**751 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**768 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
