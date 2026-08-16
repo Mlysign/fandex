@@ -2030,6 +2030,31 @@ The empty state prints that line verbatim under the sentence. Showing a raw
 counter string to a user is normally wrong; here the user IS the person
 debugging it, from a phone, with no console.
 
+**Then the second report: the ITEM PAGE showed no progress section either.** That
+is the bigger clue, and it pointed at the same mistake made twice. The item
+page's section reads `show_seasons` and TMDB — it does not touch watch history
+at all, so every show should at least list its seasons. It rendered `null` when
+the list came back empty, which hid *no TMDB link* / *open circuit* / *TMDB
+returned nothing* behind a blank page **on every show at once**.
+
+So `episodeCatalogDiagnostic()` now reports `tmdbLinked` / `seasonsStored` /
+`episodesStored` / `tmdbCircuitOpen` / `lastError`, `/api/episodes` returns it
+**only when the season list is empty**, and the section prints one line instead
+of nothing. Verified live: a bogus key reads *"Couldn't load episodes from TMDB
+— TMDB error: 403 /tv/83867"*; a show with no TMDB link reads *"No TMDB link for
+this show yet."*
+
+A test caught a real bug in that: the recorded error is module-level, so a show
+that failed once and later succeeded kept reporting the stale failure for the
+whole TTL — worse than saying nothing. A successful fill now clears it.
+
+**⚠️ THE PATTERN, TWICE IN ONE DAY.** Both surfaces of this feature rendered
+`null` when they had nothing, and both times that turned an ordinary
+diagnosable problem into "the feature doesn't work" with no way to tell why.
+`return null` on an empty state is not a neutral default — it is a decision to
+discard the only evidence anyone will get. If a component can be empty for more
+than one reason, it must be able to say which, BEFORE it ships.
+
 **The general lesson** — a module that renders `null` when empty needs to know
 WHY it is empty before it ships, not after. The cost of getting that wrong is
 paid entirely by the person who can't open a console.

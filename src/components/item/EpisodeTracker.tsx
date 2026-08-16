@@ -38,8 +38,18 @@ interface EpisodeInfo {
   runtimeMinutes: number | null;
 }
 
+/** Why a show's season list came back empty — see lib/episodes.ts. */
+interface CatalogDiagnostic {
+  tmdbLinked: boolean;
+  seasonsStored: number;
+  episodesStored: number;
+  tmdbCircuitOpen: boolean;
+  lastError: string | null;
+}
+
 interface EpisodesResponse {
   supported?: boolean;
+  diagnostic?: CatalogDiagnostic;
   seasons?: SeasonInfo[];
   episodes?: EpisodeInfo[];
   watched?: { season: number; episode: number }[];
@@ -55,6 +65,7 @@ export default function EpisodeTracker({ mediaItemId }: { mediaItemId: string })
   const [loadingSeason, setLoadingSeason] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showSignIn, setShowSignIn] = useState(false);
+  const [diagnostic, setDiagnostic] = useState<CatalogDiagnostic | null>(null);
 
   const load = useCallback(async () => {
     // Same shortcut as PersonalSection: ask the shared probe rather than firing
@@ -63,7 +74,11 @@ export default function EpisodeTracker({ mediaItemId }: { mediaItemId: string })
     const res = await fetch(`/api/episodes?mediaItemId=${encodeURIComponent(mediaItemId)}`);
     if (!res.ok) { setState("anon"); return; }
     const data: EpisodesResponse = await res.json();
-    if (!data.supported || !data.seasons?.length) { setState("none"); return; }
+    if (!data.supported || !data.seasons?.length) {
+      setDiagnostic(data.diagnostic ?? null);
+      setState("none");
+      return;
+    }
     setSeasons(data.seasons);
     setState("user");
   }, [mediaItemId]);
@@ -199,7 +214,21 @@ export default function EpisodeTracker({ mediaItemId }: { mediaItemId: string })
   if (state === "loading") {
     return <div className="h-20 rounded-xl border border-border bg-neutral-900/40 animate-pulse" />;
   }
-  if (state === "none") return null;
+  // A show with NO season list used to render nothing at all — the same
+  // silent-null this module's Home counterpart had. It hid the actual failure
+  // (no TMDB link / an open circuit / TMDB returning nothing) behind a blank
+  // page on every show at once, which is exactly how it looked to Nils. It now
+  // says which, because from a phone there is no other way to find out.
+  if (state === "none") {
+    const why = catalogReason(diagnostic);
+    if (!why) return null;
+    return (
+      <section className="mt-8">
+        <SectionHeading>Your progress</SectionHeading>
+        <p className="text-body-sm text-text-secondary">{why}</p>
+      </section>
+    );
+  }
 
   if (state === "anon") {
     return (
@@ -351,4 +380,17 @@ function TickBox({ on }: { on: boolean }) {
       {on && <Check className="w-3.5 h-3.5 text-surface" strokeWidth={3} />}
     </span>
   );
+}
+
+/**
+ * Why this show has no season list. Returns null when there is nothing useful
+ * to say — a movie, or a show whose catalog genuinely holds no seasons and
+ * never errored, where a message would be noise.
+ */
+function catalogReason(d: CatalogDiagnostic | null): string | null {
+  if (!d) return null;
+  if (!d.tmdbLinked) return "No TMDB link for this show yet, so there are no episodes to list.";
+  if (d.tmdbCircuitOpen) return "TMDB is unreachable right now — episodes will fill in once it recovers.";
+  if (d.lastError) return `Couldn't load episodes from TMDB — ${d.lastError}`;
+  return null;
 }

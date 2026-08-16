@@ -1,6 +1,9 @@
 import { get, query, run, transaction } from "@/lib/db";
 import { getTmdbShowSeasons, getTmdbSeasonEpisodes, tmdbPosterUrl } from "@/lib/sources/tmdb";
 import { log, errorFields } from "@/lib/logger";
+import { BoundedCache } from "@/lib/boundedCache";
+import { isProviderCircuitOpen } from "@/lib/http";
+import { TMDB_HOST } from "@/lib/sources/tmdb";
 
 // ── MB14 — per-episode watched tracking ──────────────────────────────────────
 //
@@ -28,6 +31,51 @@ export const CATALOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 const SPECIALS_SEASON = 0;
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// Why a show's catalog is empty, kept for exactly as long as it is useful.
+//
+// Both `ensure*` helpers below DEGRADE on a provider failure — correct, since
+// nothing on this path drives a prune — but degrading silently is how "TMDB is
+// refusing us" and "this show genuinely has no seasons" became the same blank
+// section on every show page. The message is surfaced to the item's own viewer
+// through /api/episodes; it is our own error text, never a provider payload.
+const _catalogError = new BoundedCache<string, string>({ max: 500, ttlMs: 60 * 60 * 1000 });
+
+function recordCatalogError(mediaItemId: string, e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  _catalogError.set(mediaItemId, msg.slice(0, 200));
+}
+
+/** A successful fill clears the last failure — otherwise a show that recovered
+ *  keeps reporting a stale error for the whole TTL, which is worse than saying
+ *  nothing. (Caught by a test that expected exactly that.) */
+function clearCatalogError(mediaItemId: string): void {
+  _catalogError.delete(mediaItemId);
+}
+
+export interface EpisodeCatalogDiagnostic {
+  /** Without a TMDB link there is nothing to ask — the show can never fill. */
+  tmdbLinked: boolean;
+  seasonsStored: number;
+  episodesStored: number;
+  /** http.ts's per-host breaker. Open → every fetch throws before leaving. */
+  tmdbCircuitOpen: boolean;
+  /** The last failure this show's catalog fetch hit, if any. */
+  lastError: string | null;
+}
+
+/** What to say when a show's season list comes back empty. */
+export function episodeCatalogDiagnostic(mediaItemId: string): EpisodeCatalogDiagnostic {
+  return {
+    tmdbLinked: !!tmdbIdFor(mediaItemId),
+    seasonsStored:
+      get<{ n: number }>("SELECT COUNT(*) n FROM show_seasons WHERE media_item_id = ?", [mediaItemId])?.n ?? 0,
+    episodesStored:
+      get<{ n: number }>("SELECT COUNT(*) n FROM show_episodes WHERE media_item_id = ?", [mediaItemId])?.n ?? 0,
+    tmdbCircuitOpen: isProviderCircuitOpen(TMDB_HOST),
+    lastError: _catalogError.get(mediaItemId) ?? null,
+  };
+}
 
 export interface SeasonRow {
   seasonNumber: number;
@@ -132,12 +180,15 @@ export async function ensureShowSeasons(mediaItemId: string): Promise<SeasonRow[
     seasons = await getTmdbShowSeasons(tmdbId);
   } catch (e) {
     log.warn("episode_seasons_fetch_failed", { mediaItemId, tmdbId, ...errorFields(e) });
+    recordCatalogError(mediaItemId, e);
     return loadSeasons(mediaItemId);
   }
 
   const usable = seasons.filter(
     (s) => Number.isInteger(s?.season_number) && s.season_number !== SPECIALS_SEASON,
   );
+  if (usable.length) clearCatalogError(mediaItemId);
+  else recordCatalogError(mediaItemId, `TMDB returned ${seasons.length} seasons, none usable`);
   const stamp = nowSec();
   transaction(() => {
     for (const s of usable) {
@@ -189,10 +240,12 @@ export async function ensureSeasonEpisodes(
     episodes = await getTmdbSeasonEpisodes(tmdbId, seasonNumber);
   } catch (e) {
     log.warn("episode_list_fetch_failed", { mediaItemId, tmdbId, seasonNumber, ...errorFields(e) });
+    recordCatalogError(mediaItemId, e);
     return loadEpisodes(mediaItemId, seasonNumber);
   }
 
   const usable = episodes.filter((e) => Number.isInteger(e?.episode_number));
+  if (usable.length) clearCatalogError(mediaItemId);
   const stamp = nowSec();
   transaction(() => {
     for (const e of usable) {

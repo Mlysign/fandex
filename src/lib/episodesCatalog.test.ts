@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { initDb, run, get, query } from "./db";
-import { ensureShowSeasons, ensureSeasonEpisodes, loadEpisodes } from "./episodes";
+import { ensureShowSeasons, ensureSeasonEpisodes, loadEpisodes, episodeCatalogDiagnostic } from "./episodes";
 
 // MB14 — the CATALOG half. Filled lazily from TMDB one show (then one season) at
 // a time, P18's precedent: the alternative is a full-catalog fetch, which is the
@@ -151,5 +151,43 @@ describe("the catalog tables are shared, not personal", () => {
 
     run("DELETE FROM media_items WHERE id = ?", [SHOW]);
     expect(query("SELECT * FROM show_seasons WHERE media_item_id = ?", [SHOW])).toHaveLength(0);
+  });
+});
+
+describe("episodeCatalogDiagnostic — why a show's season list is empty", () => {
+  // Both ensure* helpers degrade on a provider failure, which is right — but
+  // degrading SILENTLY made "TMDB is refusing us" and "this show has no
+  // seasons" the same blank section on every show at once. That is what a
+  // whole-site symptom looked like from a phone, with nothing to read.
+  it("reports a show with no TMDB link — it can never fill", async () => {
+    run("DELETE FROM media_links");
+    const d = episodeCatalogDiagnostic(SHOW);
+    expect(d).toMatchObject({ tmdbLinked: false, seasonsStored: 0, episodesStored: 0 });
+  });
+
+  it("records the failure text when TMDB refuses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(notFound()));
+    await ensureShowSeasons(SHOW);
+
+    const d = episodeCatalogDiagnostic(SHOW);
+    expect(d.tmdbLinked).toBe(true);
+    expect(d.seasonsStored).toBe(0);
+    expect(d.lastError).toMatch(/404/);
+  });
+
+  it("records a 200 that carried no usable seasons — NOT the same as a failure", async () => {
+    // "Fetched fine, returned nothing" and "never fetched" look identical from
+    // the outside; only this tells them apart.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok({ seasons: [] })));
+    await ensureShowSeasons(SHOW);
+    expect(episodeCatalogDiagnostic(SHOW).lastError).toMatch(/none usable/);
+  });
+
+  it("says nothing when the catalog is healthy", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok(SEASONS)));
+    await ensureShowSeasons(SHOW);
+    const d = episodeCatalogDiagnostic(SHOW);
+    expect(d.seasonsStored).toBe(2);
+    expect(d.lastError).toBeNull();
   });
 });

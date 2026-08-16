@@ -12,6 +12,7 @@ import type { EpisodeRef } from "@/lib/episodes";
 import {
   ensureShowSeasons, ensureSeasonEpisodes, loadEpisodes,
   loadWatched, watchedCounts, markEpisodes, unmarkEpisodes,
+  episodeCatalogDiagnostic,
 } from "@/lib/episodes";
 
 // MB14 — per-episode tracking for shows.
@@ -53,6 +54,10 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
   return NextResponse.json({
     supported: true,
+    // Only when there is nothing to show: an empty season list has several very
+    // different causes and the section is otherwise blank, so it has to be able
+    // to say which one. See EpisodeTracker's own note.
+    ...(seasons.length ? {} : { diagnostic: episodeCatalogDiagnostic(mediaItemId) }),
     seasons: seasons.map((s) => ({ ...s, watchedCount: counts[s.seasonNumber] ?? 0 })),
     // Only the requested season's watched set — the whole show's would grow
     // without bound on a long-running series and the collapsed view needs
