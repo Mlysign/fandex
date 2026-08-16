@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   getTraktWatchedMovies, getTraktRatingsMovies, getTraktWatchlistMovies,
-  addTraktEpisodesToHistory, removeTraktEpisodesFromHistory,
+  addTraktEpisodesToHistory, removeTraktEpisodesFromHistory, getTraktWatchedShows,
 } from "./trakt";
 
 // Regression: Trakt paginates its /sync list endpoints at 100 items/page and
@@ -140,5 +140,65 @@ describe("Trakt episode history", () => {
     await expect(
       addTraktEpisodesToHistory("tok", 1, [{ season: 1, episode: 1 }]),
     ).rejects.toThrow(/420/);
+  });
+});
+
+// ── MB14 follow-up: seasons must survive `extended=full` ─────────────────────
+//
+// The first live sync attached ZERO episodes while the library pull succeeded.
+// Trakt documents `seasons` as returned by default (only `extended=noseasons`
+// suppresses it), but this environment can't reach a real account to check — so
+// the pull verifies the assumption at run time instead of betting on it twice.
+describe("getTraktWatchedShows — seasons fallback", () => {
+  const page = (items: unknown[]) => new Response(JSON.stringify(items), { status: 200 });
+
+  it("makes ONE call when extended=full already carries seasons", async () => {
+    const f = vi.fn().mockResolvedValue(
+      page([{ show: { ids: { trakt: 1 } }, seasons: [{ number: 1, episodes: [{ number: 1 }] }] }]),
+    );
+    vi.stubGlobal("fetch", f);
+
+    const shows = await getTraktWatchedShows("tok");
+
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(shows[0].seasons[0].episodes).toHaveLength(1);
+  });
+
+  it("grafts seasons on from the plain list when extended=full drops them", async () => {
+    const f = vi
+      .fn()
+      // extended=full — rich metadata, NO seasons
+      .mockResolvedValueOnce(page([
+        { show: { ids: { trakt: 1 }, overview: "rich" } },
+        { show: { ids: { trakt: 2 }, overview: "rich" } },
+      ]))
+      // plain — seasons, bare metadata
+      .mockResolvedValueOnce(page([
+        { show: { ids: { trakt: 1 } }, seasons: [{ number: 1, episodes: [{ number: 1 }, { number: 2 }] }] },
+        { show: { ids: { trakt: 2 } }, seasons: [{ number: 3, episodes: [{ number: 7 }] }] },
+      ]));
+    vi.stubGlobal("fetch", f);
+
+    const shows = await getTraktWatchedShows("tok");
+
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(String(f.mock.calls[0][0])).toContain("extended=full");
+    expect(String(f.mock.calls[1][0])).not.toContain("extended=full");
+    // Both halves survive: the rich metadata AND the episodes.
+    expect(shows[0].show.overview).toBe("rich");
+    expect(shows[0].seasons[0].episodes).toHaveLength(2);
+    expect(shows[1].seasons[0].number).toBe(3);
+  });
+
+  it("makes no second call for a genuinely empty watched list", async () => {
+    const f = vi.fn().mockResolvedValue(page([]));
+    vi.stubGlobal("fetch", f);
+    expect(await getTraktWatchedShows("tok")).toEqual([]);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("still throws on failure — the fallback must not swallow a bad pull", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
+    await expect(getTraktWatchedShows("tok")).rejects.toThrow();
   });
 });

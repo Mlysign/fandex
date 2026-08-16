@@ -185,7 +185,36 @@ export async function getTraktWatchedMovies(accessToken: string) {
 }
 
 export async function getTraktWatchedShows(accessToken: string) {
-  return traktGetAllPages("/sync/watched/shows?extended=full", accessToken);
+  const full = await traktGetAllPages("/sync/watched/shows?extended=full", accessToken);
+
+  // MB14 — the per-episode half rides on THIS response's `seasons[].episodes[]`.
+  //
+  // Trakt documents seasons as returned by default (only `extended=noseasons`
+  // suppresses them), so `extended=full` should carry both the show metadata the
+  // merge needs AND the episodes. Shipped on that reading — and the first live
+  // sync attached zero episodes, which is exactly what a missing `seasons` would
+  // look like.
+  //
+  // Rather than bet again on an assumption this environment can't test, verify
+  // it at run time: if NOT ONE entry has a `seasons` array, take the plain list
+  // (documented to carry them) and graft them on by trakt id. Costs an extra
+  // paginated call only when the assumption is actually wrong, and nothing at
+  // all when it holds. Throws like every other pull — see the prune invariant.
+  if (full.length && !full.some((e: any) => Array.isArray(e?.seasons))) {
+    const plain = await traktGetAllPages("/sync/watched/shows", accessToken);
+    const seasonsById = new Map<number, any>();
+    for (const e of plain) {
+      const id = e?.show?.ids?.trakt;
+      if (id != null && Array.isArray(e.seasons)) seasonsById.set(id, e.seasons);
+    }
+    for (const e of full) {
+      const id = e?.show?.ids?.trakt;
+      const seasons = id != null ? seasonsById.get(id) : undefined;
+      if (seasons) e.seasons = seasons;
+    }
+  }
+
+  return full;
 }
 
 export async function getTraktRatingsMovies(accessToken: string) {

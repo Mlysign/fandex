@@ -136,6 +136,17 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
       // placement: see pruneWatchlist/pruneLibrary's comment above.
       if (src.capabilities.episodes?.read) {
         const ep = reconcileProviderEpisodes(userId, src.id, episodesByItem);
+        // The SHAPE of what the pull carried, not just what we wrote. Three
+        // very different failures all end in "0 episodes", and only these
+        // counts separate them:
+        //   shows=0            the provider reported no watched shows at all
+        //                      (e.g. they're in your Trakt COLLECTION but you
+        //                      have never marked an episode watched there)
+        //   withEpisodes=0     shows came back but carried no seasons array
+        //   episodes>0 attached=0  we had it all already
+        const showsSeen = items.filter((i) => i.episodes !== undefined).length;
+        const withEpisodes = items.filter((i) => i.episodes && i.episodes.length > 0).length;
+        const episodesSeen = items.reduce((n, i) => n + (i.episodes?.length ?? 0), 0);
         // Its OWN sync_log row. Without one, "the pull ran but wrote no
         // episodes" and "the pull never carried any episodes" are the same
         // silent nothing — and the module they feed renders nothing either, so
@@ -145,7 +156,8 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
           userId,
           `${src.id}-episodes`,
           ep.attached,
-          `ok shows=${episodesByItem.size} detached=${ep.detached}`,
+          `shows=${showsSeen} withEpisodes=${withEpisodes} episodes=${episodesSeen}` +
+            ` attached=${ep.attached} detached=${ep.detached}`,
         );
       }
       library = syncedIds.size;

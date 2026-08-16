@@ -177,6 +177,14 @@ export default function ProgressRail() {
         <h2 className="font-serif text-serif-md text-text-primary mb-3 px-1">Up next</h2>
         <Panel className="px-4 py-3.5">
           <p className="text-body-sm text-text-secondary">{emptyReason(status)}</p>
+          {emptyDetail(status) && (
+            /* The raw counts from the last sync. Deliberately shown: three
+               different failures all end in "no episodes", and this is the only
+               thing that separates them for someone without a console. */
+            <p className="font-mono text-micro text-text-secondary/70 mt-2 break-all">
+              {emptyDetail(status)}
+            </p>
+          )}
           {status?.episodeProviderConnected && (
             <Button
               variant="secondary"
@@ -274,7 +282,7 @@ function emptyReason(status: UpNextStatus | null): string {
     // exist. Either no sync has run since episode tracking shipped, or Trakt
     // reports nothing watched.
     return status.lastEpisodeSync
-      ? "Your last sync found no watched episodes on Trakt. Tick one on any show and it'll pick up from there."
+      ? "Your last sync pulled no episode data from Trakt — the counts below say which part came back empty."
       : "No episode history yet — sync Trakt to pull in what you've watched.";
   }
 
@@ -286,4 +294,16 @@ function emptyReason(status: UpNextStatus | null): string {
   }
 
   return `You're caught up on all ${status.showsTracked} show${status.showsTracked === 1 ? "" : "s"} you're tracking.`;
+}
+
+/**
+ * The raw last-sync counts, shown only when the sentence above can't be
+ * specific enough. `shows=0` means Trakt reported no WATCHED shows at all
+ * (they may be in your collection or watchlist instead); `withEpisodes=0` with
+ * `shows>0` means the response carried no seasons.
+ */
+function emptyDetail(status: UpNextStatus | null): string | null {
+  if (!status || status.episodeRows > 0) return null;
+  const s = status.lastEpisodeSync;
+  return s?.status ? `last sync · ${s.status}` : null;
 }

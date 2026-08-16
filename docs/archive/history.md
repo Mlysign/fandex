@@ -2003,6 +2003,33 @@ Fixed by making the app diagnose itself rather than by adding a console recipe:
 
 All six states were rendered and read back in the browser pane before shipping.
 
+**What the diagnostic then reported: "no watched episodes on Trakt."** The
+library pull succeeded; the episode reconcile attached zero. The adapter code is
+correct, so the variable is the RESPONSE SHAPE — and this environment cannot
+reach a real Trakt account to look at one.
+
+So the pull now **verifies the assumption at run time instead of betting on it a
+second time.** `getTraktWatchedShows` reads the `extended=full` response and, if
+NOT ONE entry carries a `seasons` array, fetches the plain list (documented to
+carry them) and grafts the seasons on by trakt id. One extra paginated call only
+when the assumption is actually wrong, none when it holds, and it still throws
+like every other pull.
+
+Alongside it, the `trakt-episodes` log row now records the SHAPE of what the
+pull carried, not just what was written — `shows` / `withEpisodes` / `episodes`
+/ `attached` / `detached` — because three unrelated failures all end in "0
+episodes" and only these separate them:
+
+| reading | meaning |
+|---|---|
+| `shows=0` | Trakt reported no WATCHED shows at all — they may be in the collection or watchlist instead, which is not a bug |
+| `shows>0 withEpisodes=0` | shows came back carrying no seasons — the `extended=full` case the fallback now handles |
+| `episodes>0 attached=0` | we already had all of it |
+
+The empty state prints that line verbatim under the sentence. Showing a raw
+counter string to a user is normally wrong; here the user IS the person
+debugging it, from a phone, with no console.
+
 **The general lesson** — a module that renders `null` when empty needs to know
 WHY it is empty before it ships, not after. The cost of getting that wrong is
 paid entirely by the person who can't open a console.
