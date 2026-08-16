@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { traktSource } from "@/lib/sources/adapters/trakt";
-import { probeWatchedShowsShape } from "@/lib/sources/trakt";
+import { probeWatchedShowsShape, probeEpisodeSources } from "@/lib/sources/trakt";
 
 // One-look answer to "why did the Trakt pull carry no episodes?" — see
 // probeWatchedShowsShape. Admin-gated like every /api/dev route (404 for anyone
@@ -20,5 +20,10 @@ export const GET = withScoringAdmin(async (_req: NextRequest, session) => {
   if (!ctx?.token) {
     return NextResponse.json({ error: "Trakt is not connected for this account" }, { status: 400 });
   }
-  return NextResponse.json(await probeWatchedShowsShape(ctx.token));
+  const sample = Number(_req.nextUrl.searchParams.get("showId") ?? 116129);
+  const [watched, candidates] = await Promise.all([
+    probeWatchedShowsShape(ctx.token),
+    probeEpisodeSources(ctx.token, sample),
+  ]);
+  return NextResponse.json({ ...watched, candidates });
 });

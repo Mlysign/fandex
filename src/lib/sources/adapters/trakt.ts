@@ -13,6 +13,7 @@ import {
   getTraktWatchlistMovies, getTraktWatchlistShows,
   getTraktWatchedMovies, getTraktWatchedShows,
   getTraktRatingsMovies, getTraktRatingsShows,
+  getTraktEpisodeHistory,
 } from "../trakt";
 import { METADATA } from "@/lib/metadata/registry";
 import { log, errorFields } from "@/lib/logger";
@@ -29,16 +30,36 @@ function toUnix(s: any): number | null {
 // list `user_episode_state` speaks. Season 0 (Trakt's specials) is dropped to
 // match lib/episodes.ts, which excludes it from the catalog so the UI's
 // "n of total" progress stays meaningful.
-function pulledEpisodes(entry: any): PulledEpisode[] {
-  const out: PulledEpisode[] = [];
-  for (const s of entry?.seasons ?? []) {
-    const season = s?.number;
+// Fold /sync/history/episodes into per-show episode lists.
+//
+// The history is an EVENT log: one entry per play, so a rewatched episode
+// appears more than once. Deduped on (season, episode) keeping the LATEST
+// watched_at, because the row we store is "have you seen it", not "how often".
+//
+// Season 0 is skipped, preserving the original MB14 decision — specials
+// shouldn't surface as the next episode to watch on Home.
+export function episodeHistoryByShow(history: any[]): Map<number, PulledEpisode[]> {
+  const byShow = new Map<number, Map<string, PulledEpisode>>();
+  for (const h of history ?? []) {
+    const showId = Number(h?.show?.ids?.trakt);
+    const season = h?.episode?.season;
+    const episode = h?.episode?.number;
+    if (!Number.isFinite(showId)) continue;
     if (!Number.isInteger(season) || season === 0) continue;
-    for (const ep of s?.episodes ?? []) {
-      if (!Number.isInteger(ep?.number)) continue;
-      out.push({ season, episode: ep.number, watchedAt: toUnix(ep.last_watched_at) });
+    if (!Number.isInteger(episode)) continue;
+
+    const watchedAt = toUnix(h?.watched_at);
+    const forShow = byShow.get(showId) ?? new Map<string, PulledEpisode>();
+    const k = `${season}:${episode}`;
+    const prev = forShow.get(k);
+    if (!prev || (watchedAt ?? 0) > (prev.watchedAt ?? 0)) {
+      forShow.set(k, { season, episode, watchedAt });
     }
+    byShow.set(showId, forShow);
   }
+
+  const out = new Map<number, PulledEpisode[]>();
+  for (const [showId, eps] of byShow) out.set(showId, [...eps.values()]);
   return out;
 }
 
@@ -170,10 +191,17 @@ export const traktSource: MediaSource = {
 
   async pullLibrary(ctx) {
     if (!ctx.token) return [];
-    const [wMovies, wShows, rMovies, rShows] = await Promise.all([
+    // The fifth call is the episode history, and it has to be a separate call:
+    // `/sync/watched/shows` carries NO seasons array in any variant (measured —
+    // see getTraktWatchedShows). In the same Promise.all deliberately, because
+    // it drives a PRUNE and its failure must propagate out of pullLibrary before
+    // syncProvider can delete anything.
+    const [wMovies, wShows, rMovies, rShows, epHistory] = await Promise.all([
       getTraktWatchedMovies(ctx.token), getTraktWatchedShows(ctx.token),
       getTraktRatingsMovies(ctx.token), getTraktRatingsShows(ctx.token),
+      getTraktEpisodeHistory(ctx.token),
     ]);
+    const episodesByShow = episodeHistoryByShow(epHistory);
     const rating = (list: any[], kind: "movie" | "show") => {
       const map = new Map<number, { rating: number; ratedAt: number | null }>();
       for (const r of list) {
@@ -198,15 +226,14 @@ export const traktSource: MediaSource = {
           rawData: node, status: "watched",
           rating: rated?.rating ?? null,
           reviewedAt: rated?.ratedAt ?? toUnix(e.last_watched_at) ?? null,
-          // MB14 — the per-episode half, from the SAME response. /sync/watched/
-          // shows nests `seasons[].episodes[]` unless you ask for
-          // `extended=noseasons`, so this costs no extra call and inherits the
-          // pull's throw-on-failure contract for free.
+          // MB14 — the per-episode half, joined on the trakt show id from the
+          // episode-history call above.
           //
-          // `[]` for a movie is deliberate and NOT the same as `undefined`: it
-          // says "this pull is authoritative about episodes and this item has
-          // none", which is exactly what syncProvider's reconcile needs to hear.
-          ...(kind === "show" ? { episodes: pulledEpisodes(e) } : {}),
+          // `[]` for a show with no history is deliberate and NOT the same as
+          // `undefined`: it says "this pull is authoritative about episodes and
+          // this show has none", which is exactly what syncProvider's reconcile
+          // needs to hear in order to prune.
+          ...(kind === "show" ? { episodes: episodesByShow.get(Number(tid)) ?? [] } : {}),
         });
       }
     };

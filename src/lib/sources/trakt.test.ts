@@ -143,62 +143,42 @@ describe("Trakt episode history", () => {
   });
 });
 
-// ── MB14 follow-up: seasons must survive `extended=full` ─────────────────────
+// ── MB14, settled: this endpoint has no episode data ────────────────────────
 //
-// The first live sync attached ZERO episodes while the library pull succeeded.
 // Trakt documents `seasons` as returned by default (only `extended=noseasons`
-// suppresses it), but this environment can't reach a real account to check — so
-// the pull verifies the assumption at run time instead of betting on it twice.
-describe("getTraktWatchedShows — seasons fallback", () => {
+// suppresses it). It isn't — not with `extended=full`, not plain, not
+// unpaginated. Measured, not inferred; see the describe below.
+describe("getTraktWatchedShows — the endpoint that carries NO episodes", () => {
   const page = (items: unknown[]) => new Response(JSON.stringify(items), { status: 200 });
 
-  it("makes ONE call when extended=full already carries seasons", async () => {
-    const f = vi.fn().mockResolvedValue(
-      page([{ show: { ids: { trakt: 1 } }, seasons: [{ number: 1, episodes: [{ number: 1 }] }] }]),
-    );
+  // MB14 shipped reading seasons[].episodes[] off this response and attached
+  // ZERO episodes; a run-time fallback to the plain call was added and found
+  // nothing either. /api/dev/trakt-shape against the live account settled it on
+  // 2026-08-16: 280 entries, `seasons` ABSENT (not empty — absent) on all 280,
+  // in BOTH variants. This endpoint is show-level metadata and nothing more.
+  //
+  // The test that used to live here asserted the graft worked. It passed, on a
+  // mocked response shaped the way the docs implied. That is precisely how the
+  // bug survived four deploys — so what is pinned now is the call count, which
+  // is checkable, rather than a payload shape we would be inventing.
+  it("makes exactly ONE call and never a fallback", async () => {
+    const f = vi.fn().mockResolvedValue(page([{ show: { ids: { trakt: 1 }, overview: "rich" } }]));
     vi.stubGlobal("fetch", f);
 
     const shows = await getTraktWatchedShows("tok");
 
     expect(f).toHaveBeenCalledTimes(1);
-    expect(shows[0].seasons[0].episodes).toHaveLength(1);
-  });
-
-  it("grafts seasons on from the plain list when extended=full drops them", async () => {
-    const f = vi
-      .fn()
-      // extended=full — rich metadata, NO seasons
-      .mockResolvedValueOnce(page([
-        { show: { ids: { trakt: 1 }, overview: "rich" } },
-        { show: { ids: { trakt: 2 }, overview: "rich" } },
-      ]))
-      // plain — seasons, bare metadata
-      .mockResolvedValueOnce(page([
-        { show: { ids: { trakt: 1 } }, seasons: [{ number: 1, episodes: [{ number: 1 }, { number: 2 }] }] },
-        { show: { ids: { trakt: 2 } }, seasons: [{ number: 3, episodes: [{ number: 7 }] }] },
-      ]));
-    vi.stubGlobal("fetch", f);
-
-    const shows = await getTraktWatchedShows("tok");
-
-    expect(f).toHaveBeenCalledTimes(2);
     expect(String(f.mock.calls[0][0])).toContain("extended=full");
-    expect(String(f.mock.calls[1][0])).not.toContain("extended=full");
-    // Both halves survive: the rich metadata AND the episodes.
     expect(shows[0].show.overview).toBe("rich");
-    expect(shows[0].seasons[0].episodes).toHaveLength(2);
-    expect(shows[1].seasons[0].number).toBe(3);
   });
 
-  it("makes no second call for a genuinely empty watched list", async () => {
-    const f = vi.fn().mockResolvedValue(page([]));
-    vi.stubGlobal("fetch", f);
+  it("returns an empty list unchanged", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(page([])));
     expect(await getTraktWatchedShows("tok")).toEqual([]);
-    expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("still throws on failure — the fallback must not swallow a bad pull", async () => {
+  it("throws rather than returning a partial — it feeds a prune", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
-    await expect(getTraktWatchedShows("tok")).rejects.toThrow();
+    await expect(getTraktWatchedShows("tok")).rejects.toThrow(/500/);
   });
 });

@@ -208,37 +208,47 @@ export async function getTraktWatchedMovies(accessToken: string) {
   return traktGetAllPages("/sync/watched/movies?extended=full", accessToken);
 }
 
+// ⚠️ THIS RESPONSE CARRIES NO EPISODES. Do not try to read `seasons` off it
+// again — the answer is measured, not inferred, and it is final.
+//
+// Trakt documents seasons as returned by default for this endpoint (only
+// `extended=noseasons` suppresses them). MB14 shipped on that reading and
+// attached zero episodes. A run-time fallback was then added to graft seasons
+// from the plain call; it fired and found nothing either. `/api/dev/trakt-shape`
+// against the live account on 2026-08-16 settled it — 280 entries, `seasons`
+// **absent** (not empty: absent) on all 280, in BOTH variants:
+//
+//   withExtended  entries 280  seasons {absent: 280, nonEmptyArray: 0}
+//   plain         entries 280  seasons {absent: 280, nonEmptyArray: 0}
+//
+// The bulk episode source is `/sync/history/episodes` (below); the per-show one
+// is `/shows/{id}/progress/watched`. This call is now purely what it always
+// should have been: show-level library metadata.
 export async function getTraktWatchedShows(accessToken: string) {
-  const full = await traktGetAllPages("/sync/watched/shows?extended=full", accessToken);
+  return traktGetAllPages("/sync/watched/shows?extended=full", accessToken);
+}
 
-  // MB14 — the per-episode half rides on THIS response's `seasons[].episodes[]`.
-  //
-  // Trakt documents seasons as returned by default (only `extended=noseasons`
-  // suppresses them), so `extended=full` should carry both the show metadata the
-  // merge needs AND the episodes. Shipped on that reading — and the first live
-  // sync attached zero episodes, which is exactly what a missing `seasons` would
-  // look like.
-  //
-  // Rather than bet again on an assumption this environment can't test, verify
-  // it at run time: if NOT ONE entry has a `seasons` array, take the plain list
-  // (documented to carry them) and graft them on by trakt id. Costs an extra
-  // paginated call only when the assumption is actually wrong, and nothing at
-  // all when it holds. Throws like every other pull — see the prune invariant.
-  if (full.length && !full.some((e: any) => Array.isArray(e?.seasons))) {
-    const plain = await traktGetAllPages("/sync/watched/shows", accessToken);
-    const seasonsById = new Map<number, any>();
-    for (const e of plain) {
-      const id = e?.show?.ids?.trakt;
-      if (id != null && Array.isArray(e.seasons)) seasonsById.set(id, e.seasons);
-    }
-    for (const e of full) {
-      const id = e?.show?.ids?.trakt;
-      const seasons = id != null ? seasonsById.get(id) : undefined;
-      if (seasons) e.seasons = seasons;
-    }
-  }
+// MB14's actual bulk episode source. One entry PER PLAY — a rewatch appears
+// twice — shaped {id, watched_at, action, type, episode:{season, number, ids},
+// show:{ids, title}}. Verified 2026-08-16: 100 entries on the first page with
+// real season/episode numbers.
+//
+// Paginated, and walked in full: this drives the prune, so a partial read would
+// look like "the user un-watched everything after page 3". traktGetAllPages
+// throws on any page failing, which is what keeps that from happening.
+export async function getTraktEpisodeHistory(accessToken: string) {
+  return traktGetAllPages("/sync/history/episodes", accessToken);
+}
 
-  return full;
+// The per-show view of the same state, used where one show's exact progress
+// matters more than breadth. Returns {aired, completed, seasons:[{number,
+// aired, completed, episodes:[{number, completed, last_watched_at}]}]}.
+//
+// ⚠️ It lists EVERY aired episode, watched or not — only `completed: true`
+// counts. Reading mere presence would mark a whole show watched on sight, and
+// since the result feeds a prune, the inverse mistake deletes real history.
+export async function getTraktShowWatchedProgress(accessToken: string, traktId: number) {
+  return traktGet(`/shows/${traktId}/progress/watched?specials=true&count_specials=false`, accessToken);
 }
 
 export async function getTraktRatingsMovies(accessToken: string) {
@@ -550,4 +560,38 @@ export async function probeWatchedShowsShape(accessToken: string): Promise<{
     traktGetAllPages("/sync/watched/shows", accessToken),
   ]);
   return { withExtended: describeWatchedShows(full), plain: describeWatchedShows(plain) };
+}
+
+/**
+ * Shape-only probe of the two CANDIDATE episode sources, for the same reason
+ * probeWatchedShowsShape exists: measure, don't infer. Counts and key names
+ * only — no titles, no ids.
+ */
+export async function probeEpisodeSources(accessToken: string, sampleShowId: number) {
+  const out: Record<string, unknown> = {};
+  try {
+    const hist = await traktGet(`/sync/history/episodes?limit=100`, accessToken);
+    out.historyEpisodes = {
+      count: Array.isArray(hist) ? hist.length : null,
+      keys: Array.isArray(hist) && hist[0] ? Object.keys(hist[0]) : [],
+      hasEpisodeNumbers:
+        Array.isArray(hist) && hist[0]?.episode
+          ? typeof hist[0].episode.season === "number" && typeof hist[0].episode.number === "number"
+          : false,
+    };
+  } catch (e) {
+    out.historyEpisodes = { error: e instanceof Error ? e.message : String(e) };
+  }
+  try {
+    const prog = await traktGet(`/shows/${sampleShowId}/progress/watched`, accessToken);
+    out.progressWatched = {
+      aired: prog?.aired ?? null,
+      completed: prog?.completed ?? null,
+      seasons: Array.isArray(prog?.seasons) ? prog.seasons.length : null,
+      episodesInFirstSeason: Array.isArray(prog?.seasons?.[0]?.episodes) ? prog.seasons[0].episodes.length : null,
+    };
+  } catch (e) {
+    out.progressWatched = { error: e instanceof Error ? e.message : String(e) };
+  }
+  return out;
 }
