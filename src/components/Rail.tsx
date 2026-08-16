@@ -29,11 +29,21 @@ export interface RailProps {
    * the action wins rather than the two stacking up in one corner.
    */
   action?: React.ReactNode;
+  /**
+   * Column width for the scroller, as a Tailwind `auto-cols-*` class. Defaults
+   * to the 150px poster column every rail used before 2026-08-16. Home's
+   * progress rail carries three lines of text instead of a poster, so it needs a
+   * wider column — a prop rather than a second scroller so the header, the
+   * chevrons and the scroll behaviour stay in one place.
+   */
+  colsClass?: string;
   children: React.ReactNode;
   className?: string;
 }
 
-export default function Rail({ title, forYou, seeAllHref, action, children, className = "" }: RailProps) {
+export default function Rail({
+  title, forYou, seeAllHref, action, colsClass = "auto-cols-[150px]", children, className = "",
+}: RailProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [hovering, setHovering] = useState(false);
 
@@ -69,7 +79,7 @@ export default function Rail({ title, forYou, seeAllHref, action, children, clas
       >
         <div
           ref={scrollerRef}
-          className="grid grid-flow-col auto-cols-[150px] gap-3 overflow-x-auto pb-1 snap-x snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className={`grid grid-flow-col ${colsClass} gap-3 overflow-x-auto pb-1 snap-x snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
         >
           {children}
         </div>

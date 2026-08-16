@@ -18,7 +18,6 @@ import { candidatesForMonth, monthKey, nextMonthKey } from "@/lib/popularMonthFe
 import { rankCrossSourcePopularity } from "@/lib/popularMonth";
 import { upcomingFrom } from "@/lib/upcoming";
 import { dayISO, seedFor, rotationSlot, rotateRailFresh } from "@/lib/dailyRotation";
-import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { buildHighlights } from "@/lib/homeHighlights";
 
 // Home's three rails + the signed-in stats strip. Reuses the exact discover-feed
@@ -229,18 +228,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 2026-08-16: the libraryTotal/wishlistTotal/ratedTotal counters went with
+    // the StatStrip they fed (Home's progress rail took that slot). That also
+    // dropped a COUNT query and this route's only direct call into
+    // getLibraryFacetAnalysis — buildHighlights makes its own, cached.
+    // `stats` stays: a non-null value is what tells the page the viewer is
+    // signed in.
     let stats: HomeStats | null = null;
     if (userId) {
-      const a = getLibraryFacetAnalysis(userId);
-      const wishlistTotal = dbGet<{ n: number }>(
-        "SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?", [userId]
-      )?.n ?? 0;
-      stats = {
-        libraryTotal: a.libraryItemCount,
-        wishlistTotal,
-        ratedTotal: a.ratedItemCount,
-        highlights: buildHighlights(userId, today),
-      };
+      stats = { highlights: buildHighlights(userId, today) };
     }
 
     return NextResponse.json({
@@ -256,8 +252,5 @@ export async function GET(req: NextRequest) {
 }
 
 interface HomeStats {
-  libraryTotal: number;
-  wishlistTotal: number;
-  ratedTotal: number;
   highlights: ReturnType<typeof buildHighlights>;
 }
