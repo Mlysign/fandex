@@ -1,37 +1,44 @@
 import { query } from "@/lib/db";
 import { publicItemHref } from "@/lib/publicUrl";
-import { ensureShowSeasons, ensureSeasonEpisodes, loadSeasons } from "@/lib/episodes";
+import { CATALOG_TTL_SECONDS, ensureShowSeasons, ensureSeasonEpisodes } from "@/lib/episodes";
 
 // ── "Up next" — the Home progress module (2026-08-16) ────────────────────────
 //
-// The one episode you'd actually watch next, per show, for the shows you are
-// actually watching. Built on MB14's `user_episode_state` + `show_episodes`.
+// The one episode you'd actually watch next, per show. Built on MB14's
+// `user_episode_state` + `show_episodes`.
 //
-// RELEVANCE, exactly as specified. An episode qualifies when:
-//   1. the episode IMMEDIATELY BEFORE it (in season/episode order, across the
-//      season boundary) is marked watched, and
-//   2. either that preceding episode was watched in the last 30 days, OR this
-//      episode was released in the last 30 days.
+// ── ONE filter, ONE sort ─────────────────────────────────────────────────────
 //
-// (2) is what separates "paused mid-season" from "abandoned", and its second
-// arm is what brings a show back the week a new season drops even though you
-// finished the previous one a year ago. There is no explicit "abandoned" flag —
-// the recency window IS the abandonment test, which is why nothing here reads
-// one.
+// FILTER (the only one): the episode immediately before it — in season/episode
+// order, across the season boundary — is marked watched. That's it. Nothing is
+// excluded for being old.
 //
-// Two consequences worth stating because they are deliberate, not oversights:
-//   • A show you have never ticked an episode on never appears. Rule (1) has no
-//     preceding episode to satisfy for S1E1, so this module is strictly
-//     "continue watching", not "start watching".
-//   • An UNAIRED episode never appears. Rule (2)'s first arm would happily
-//     surface next week's episode the day after you watch this week's, and you
-//     cannot watch — or tick — something that isn't out.
+// SORT: a watch and a release are both DATED EVENTS on one timeline, and an
+// entry's position is its LATEST event:
+//
+//     eventAt = max(preceding episode's watched_at, this episode's release date)
+//
+// Newest event first, capped at MAX_ENTRIES. So (Nils's own example) —
+//   Jan 1  you finish a Pluribus episode
+//   Jan 2  a new Andor episode is released
+//   Jan 3  you finish a One Piece episode
+// reads One Piece → Andor → Pluribus; and ticking Pluribus on Jan 4 stamps a
+// NEW event on it, so it jumps to the front: Pluribus → One Piece → Andor.
+//
+// This replaced a 30-day recency FILTER (2026-08-16, same day): the two arms are
+// the same two dates, but as a filter they silently hid a show rather than
+// ranking it, and there is no honest cutoff — the cap is what bounds the rail.
+//
+// Two behaviours that are deliberate, not oversights:
+//   • A show you have never ticked an episode on never appears. The filter has
+//     no preceding episode to satisfy for S1E1, so this is strictly "continue
+//     watching", not "start watching".
+//   • An UNAIRED episode never appears. A future release date would otherwise
+//     sort straight to the front — and you cannot watch, or tick, something
+//     that isn't out yet.
 
-const DAY = 86_400;
-const RECENT_SECONDS = 30 * DAY;
-
-/** Cap on what the rail renders. Well past what anyone scrolls. */
-const MAX_ENTRIES = 20;
+/** Cap on the rail. Nils: "~10". */
+const MAX_ENTRIES = 10;
 
 /**
  * Shows whose episode catalog may be filled from TMDB in ONE request.
@@ -42,9 +49,9 @@ const MAX_ENTRIES = 20;
  * show at once would put an unbounded provider fan-out on the heaviest page in
  * the app, which is the exact shape of the 2026-08-02 latency incident.
  *
- * So: a small number per request, most-recently-watched first, and each heal is
- * permanent (a week's TTL). A user with a large Trakt history converges over a
- * few Home loads instead of paying for all of it on one.
+ * So: a small number per request, prioritised below, and each heal lasts a week.
+ * A user with a large Trakt history converges over a few Home loads instead of
+ * paying for all of it on one.
  */
 const MAX_HEAL_SHOWS = 3;
 const HEAL_BUDGET_MS = 4_000;
@@ -59,6 +66,10 @@ export interface UpNextEntry {
   airDate: string | null;
   /** When the PRECEDING episode was marked watched (unix seconds), if known. */
   previousWatchedAt: number | null;
+  /** The sort key: the later of the two events above. Null when neither is dated. */
+  eventAt: number | null;
+  /** Which event won — useful when reading the rail's order back. */
+  eventKind: "watched" | "released" | "unknown";
   /** The show's item page. */
   href: string;
 }
@@ -83,7 +94,7 @@ export interface ShowState {
   posterUrl: string | null;
   /** episode key → watched_at (null when the provider gave no date) */
   watched: Map<string, number | null>;
-  /** The most recent watched_at across the show — drives heal priority + sort. */
+  /** The most recent watched_at across the show — drives heal priority. */
   lastWatchedAt: number | null;
   /** Highest season the user has watched anything in. */
   maxWatchedSeason: number;
@@ -164,29 +175,66 @@ function loadEpisodeIndex(mediaItemIds: string[]): Map<string, CatalogEpisode[]>
   return out;
 }
 
+interface SeasonInfo {
+  seasons: number[];
+  /** Oldest `updated_at` across the show's season rows — its freshness. */
+  updatedAt: number;
+}
+
 /**
- * Does this show's stored catalog cover what "next up" needs?
+ * The season LIST per show, in one query rather than one per show.
  *
- * It needs the season the user is in AND the one after it — otherwise a viewer
- * sitting on a season finale looks finished when the next season exists. Asking
- * for both up front is what makes the season rollover work without a second
- * pass. A show whose stored list simply ends (the real final season) answers
- * "covered" on the first clause and correctly yields no entry.
+ * Batched deliberately: the freshness check below needs this for every candidate
+ * on every request, and the old per-show `loadSeasons()` call inside the coverage
+ * test was one indexed query per show on Home's critical path.
  */
-function catalogCovers(st: ShowState, eps: CatalogEpisode[] | undefined): boolean {
-  if (!eps?.length) return false;
-  const hasCurrent = eps.some((e) => e.season === st.maxWatchedSeason);
-  if (!hasCurrent) return false;
-  const seasons = loadSeasons(st.mediaItemId).map((s) => s.seasonNumber);
+function loadSeasonIndex(mediaItemIds: string[]): Map<string, SeasonInfo> {
+  const out = new Map<string, SeasonInfo>();
+  if (!mediaItemIds.length) return out;
+  const placeholders = mediaItemIds.map(() => "?").join(",");
+  const rows = query<{ media_item_id: string; season_number: number; updated_at: number }>(
+    `SELECT media_item_id, season_number, updated_at FROM show_seasons
+      WHERE media_item_id IN (${placeholders})`,
+    mediaItemIds,
+  );
+  for (const r of rows) {
+    const info = out.get(r.media_item_id) ?? { seasons: [], updatedAt: Infinity };
+    info.seasons.push(r.season_number);
+    info.updatedAt = Math.min(info.updatedAt, r.updated_at);
+    out.set(r.media_item_id, info);
+  }
+  return out;
+}
+
+type Coverage = "missing" | "stale" | "ok";
+
+/**
+ * Can this show's STORED catalog answer "what's next", and is it still current?
+ *
+ * `missing` — no rows, or nothing covering the season the user is in, or the
+ *   next season exists in the season list but its episodes were never fetched.
+ *   The next-season half is what makes the rollover work: without it, someone
+ *   sitting on a season finale looks finished.
+ *
+ * `stale` — it can answer, but the season LIST is older than the catalog TTL, so
+ *   a season released since then would be invisible. That matters much more now
+ *   that a release is a sort input rather than a bonus filter: a show whose new
+ *   season just dropped has to be able to reach the front of the rail, and it
+ *   never would if we only ever trusted a year-old season list. Lower heal
+ *   priority than `missing`, which can't produce an entry at all.
+ */
+function coverage(st: ShowState, eps: CatalogEpisode[] | undefined, info: SeasonInfo | undefined, nowSec: number): Coverage {
+  if (!eps?.length || !info) return "missing";
+  if (!eps.some((e) => e.season === st.maxWatchedSeason)) return "missing";
   const nextSeason = st.maxWatchedSeason + 1;
-  if (!seasons.includes(nextSeason)) return true; // no next season exists
-  return eps.some((e) => e.season === nextSeason);
+  if (info.seasons.includes(nextSeason) && !eps.some((e) => e.season === nextSeason)) return "missing";
+  if (info.updatedAt < nowSec - CATALOG_TTL_SECONDS) return "stale";
+  return "ok";
 }
 
 /** One show's catalog fill: the season list, then the two seasons that matter. */
 async function healShow(st: ShowState): Promise<void> {
-  await ensureShowSeasons(st.mediaItemId);
-  const seasons = loadSeasons(st.mediaItemId).map((s) => s.seasonNumber);
+  const seasons = (await ensureShowSeasons(st.mediaItemId)).map((s) => s.seasonNumber);
   for (const n of [st.maxWatchedSeason, st.maxWatchedSeason + 1]) {
     if (seasons.includes(n)) await ensureSeasonEpisodes(st.mediaItemId, n);
   }
@@ -199,7 +247,6 @@ export function nextForShow(
   nowSec: number,
 ): UpNextEntry | null {
   if (!eps?.length) return null;
-  const cutoff = nowSec - RECENT_SECONDS;
 
   // The earliest unwatched episode whose immediate predecessor IS watched. That
   // is "the next one to watch" including the case of a gap left mid-season, and
@@ -214,13 +261,16 @@ export function nextForShow(
     const air = airUnix(ep.airDate);
     if (air != null && air > nowSec) return null;
 
-    // A null watched_at means "watched, date unknown" — treated as NOT recent,
-    // because the honest reading of an unknown date is "some time ago", and the
-    // release arm below still rescues a genuinely new episode.
+    // The two events, on one timeline. Latest wins — that IS the sort key.
     const prevWatchedAt = st.watched.get(prevKey) ?? null;
-    const prevRecent = prevWatchedAt != null && prevWatchedAt >= cutoff;
-    const releaseRecent = air != null && air >= cutoff;
-    if (!prevRecent && !releaseRecent) return null;
+    let eventAt: number | null = null;
+    let eventKind: UpNextEntry["eventKind"] = "unknown";
+    if (prevWatchedAt != null || air != null) {
+      // A null `watched_at` (Trakt can omit last_watched_at) simply doesn't
+      // compete — the other event, if any, wins by default.
+      eventAt = Math.max(prevWatchedAt ?? -Infinity, air ?? -Infinity);
+      eventKind = eventAt === prevWatchedAt ? "watched" : "released";
+    }
 
     return {
       mediaItemId: st.mediaItemId,
@@ -231,6 +281,8 @@ export function nextForShow(
       episodeTitle: ep.title,
       airDate: ep.airDate,
       previousWatchedAt: prevWatchedAt,
+      eventAt,
+      eventKind,
       href: publicItemHref({ id: st.mediaItemId, type: "show", title: st.title }),
     };
   }
@@ -246,49 +298,48 @@ export function nextForShow(
  */
 export async function buildUpNext(
   userId: string,
-  opts: { now?: number; maxHealShows?: number; healBudgetMs?: number } = {},
+  opts: { now?: number; maxHealShows?: number; healBudgetMs?: number; limit?: number } = {},
 ): Promise<UpNextEntry[]> {
   const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
   const states = loadShowStates(userId);
   if (!states.length) return [];
 
-  let index = loadEpisodeIndex(states.map((s) => s.mediaItemId));
+  const ids = states.map((s) => s.mediaItemId);
+  let episodeIndex = loadEpisodeIndex(ids);
+  const seasonIndex = loadSeasonIndex(ids);
 
-  // Heal the shows whose catalog can't answer yet — most recently watched
-  // first, since those are the ones the user is actually in the middle of.
+  // `missing` before `stale` — a show with no usable catalog cannot appear at
+  // all, while a stale one is merely possibly out of date. Within each group,
+  // most recently watched first.
+  const rank = { missing: 0, stale: 1, ok: 2 } as const;
   const needHeal = states
-    .filter((s) => !catalogCovers(s, index.get(s.mediaItemId)))
-    .sort((a, b) => (b.lastWatchedAt ?? 0) - (a.lastWatchedAt ?? 0))
+    .map((s) => ({ st: s, cov: coverage(s, episodeIndex.get(s.mediaItemId), seasonIndex.get(s.mediaItemId), nowSec) }))
+    .filter((c) => c.cov !== "ok")
+    .sort((a, b) => rank[a.cov] - rank[b.cov] || (b.st.lastWatchedAt ?? 0) - (a.st.lastWatchedAt ?? 0))
     .slice(0, opts.maxHealShows ?? MAX_HEAL_SHOWS);
 
   if (needHeal.length) {
     const deadline = Date.now() + (opts.healBudgetMs ?? HEAL_BUDGET_MS);
     const healed: string[] = [];
-    for (const st of needHeal) {
+    for (const { st } of needHeal) {
       if (Date.now() > deadline) break;
       await healShow(st);
       healed.push(st.mediaItemId);
     }
     if (healed.length) {
       const fresh = loadEpisodeIndex(healed);
-      index = new Map([...index, ...fresh]);
+      episodeIndex = new Map([...episodeIndex, ...fresh]);
     }
   }
 
   const entries: UpNextEntry[] = [];
   for (const st of states) {
-    const e = nextForShow(st, index.get(st.mediaItemId), nowSec);
+    const e = nextForShow(st, episodeIndex.get(st.mediaItemId), nowSec);
     if (e) entries.push(e);
   }
 
-  // Most recent activity first: the show you watched last night is the one you
-  // are most likely to continue. A brand-new episode of a show you last touched
-  // months ago sorts below it, which is the right emphasis for a "continue"
-  // module.
-  entries.sort(
-    (a, b) =>
-      (b.previousWatchedAt ?? 0) - (a.previousWatchedAt ?? 0) ||
-      (b.airDate ?? "").localeCompare(a.airDate ?? ""),
-  );
-  return entries.slice(0, MAX_ENTRIES);
+  // Newest event first. An entry with no dated event at all sorts last rather
+  // than being dropped — the filter already said it belongs here.
+  entries.sort((a, b) => (b.eventAt ?? -Infinity) - (a.eventAt ?? -Infinity));
+  return entries.slice(0, opts.limit ?? MAX_ENTRIES);
 }

@@ -21,7 +21,7 @@ import { log, errorFields } from "@/lib/logger";
 // mark alone. See reconcileProviderEpisodes below.
 
 /** How long a stored season list / episode list is trusted before a refetch. */
-const CATALOG_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const CATALOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /** Season 0 is TMDB's "Specials". Excluded — Trakt tracks it separately and it
  *  breaks the "n of total" progress the UI is built around. */
