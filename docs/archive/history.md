@@ -2185,6 +2185,56 @@ dev is React StrictMode — `/api/detail` and `/api/detail/similar` double too.
 Quality bar at the end: **713 tests** · tsc clean · lint 0 errors · build clean ·
 `npm audit` 0 vulnerabilities.
 
+
+### The fix (2026-08-16, same day) — `/sync/watched/shows` never had episodes
+
+Shipped attaching zero episodes on prod (`shows=280 withEpisodes=0 episodes=0`). Four deploys
+inferred a cause; the fifth added `/api/dev/trakt-shape` and stopped inferring. Against the live
+account it is unambiguous:
+
+| call | entries | `seasons` |
+|---|---|---|
+| `?extended=full` | 280 | **absent 280**, nonEmpty 0 |
+| plain, paginated | 280 | **absent 280**, nonEmpty 0 |
+| plain, unpaginated | **100** of 280 | absent — and it capped silently, so the endpoint IS paginated |
+
+`seasons` is **absent**, not empty — on every entry, in every variant. Trakt documents it as
+returned by default (only `?extended=noseasons` suppresses it). It is not. So the run-time
+fallback added on deploy four, which grafted seasons from the plain call, was reading a second
+empty well.
+
+**Why the quality bar never caught it.** The unit test asserting the graft worked *passed* — it
+mocked the response shape the docs implied. tsc, lint, 750 tests and `next build` were green
+through all four deploys. **A mocked test of an assumed provider shape proves only that you were
+consistent with yourself.** The generalised rule is now in `AGENTS.md`: measure a provider's
+response before building on it, and when an integration returns nothing, probe the payload before
+theorising about the code.
+
+**The replacement.** The same probe measured both candidates, and both work:
+
+- **`/sync/history/episodes`** — BULK, so it drops into the existing sync architecture unchanged
+  and keeps Home's "Up next" rail fed. An EVENT log: one entry per play, so `episodeHistoryByShow()`
+  dedupes on (season, episode) keeping the latest `watched_at`, and still drops season 0. It rides in
+  the same `Promise.all` as the rest of `pullLibrary` deliberately — it feeds a prune, so its failure
+  must reach `syncProvider`'s catch before anything is deleted.
+- **`/shows/{id}/progress/watched`** — per-show, kept documented for where one show's exact state
+  matters. ⚠️ It lists EVERY aired episode, so **only `completed: true` counts**; reading presence
+  would mark a whole show watched on sight, and the inverse mistake would delete real history.
+
+**Verified on the very account that measured zero:**
+
+```
+before   shows=280 withEpisodes=0   episodes=0     attached=0
+after    shows=280 withEpisodes=280 episodes=12318 attached=12318
+```
+
+Item page reads real per-season progress (13 Reasons Why 13/13 across four seasons); Home's rail
+renders `Silo S3E6` and `SABIKUI BISCO S2E1`. The season catalog still heals lazily at 2–3 shows
+per request, so the rail fills as the app is used rather than all at once.
+
+The three tests that encoded the wrong shape were replaced with tests of the real one, plus
+dedupe / malformed-entry / throw-on-partial coverage. 757 pass. → [[trakt-episode-endpoints]]
+
 ## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes): the 13 shipped
 
 Nils tested the app on his phone and sent 15 notes; 13 shipped the same day. Two
