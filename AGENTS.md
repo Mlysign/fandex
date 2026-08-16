@@ -39,13 +39,13 @@ Env vars: the authoritative table is in `README.md`; `src/lib/config.ts` fail-fa
 
 ## Repo map
 
-- `src/app/` — routes. `api/` holds 54 route handlers (`account auth calendar csp-report detail dev discover episodes facet health home insights library progress search settings sync watchlist`); the rest are pages. Root-level `[type]/`, `person/`, `tag/`, `studio/` are the PUBLIC SEO surfaces (P13/P17) — a new root-level dynamic segment breaks a lint rule that gates CI.
-- `src/lib/` — 89 modules + 64 colocated `*.test.ts`, mostly flat. The load-bearing ones: `db.ts`/`migrations.ts` (schema), `matcher.ts` (identity + write paths), `merge.ts`/`facets.ts` (projection), `discovery.ts` (catalog pool, Fandex Score, ranking), `liveDiscover.ts` (provider-fed browse feed), `libraryAnalysis.ts` (taste profile), `session.ts` (auth), `http.ts` (every third-party call), `affiliate.ts` (monetization — off by default), `episodes.ts` (MB14 per-episode tracking: catalog fill + the provider reconcile that inherits the prune invariant), `upNext.ts` (Home's progress rail).
+- `src/app/` — routes. `api/` holds 55 route handlers (`account auth calendar csp-report detail dev discover episodes facet health home insights library progress search settings sync watchlist`); the rest are pages. Root-level `[type]/`, `person/`, `tag/`, `studio/` are the PUBLIC SEO surfaces (P13/P17) — a new root-level dynamic segment breaks a lint rule that gates CI.
+- `src/lib/` — 90 modules + 65 colocated `*.test.ts`, mostly flat. The load-bearing ones: `db.ts`/`migrations.ts` (schema), `matcher.ts` (identity + write paths), `merge.ts`/`facets.ts` (projection), `discovery.ts` (catalog pool, Fandex Score, ranking), `liveDiscover.ts` (provider-fed browse feed), `libraryAnalysis.ts` (taste profile), `session.ts` (auth), `http.ts` (every third-party call), `affiliate.ts` (monetization — off by default), `episodes.ts` (MB14 per-episode tracking: catalog fill + the provider reconcile that inherits the prune invariant), `upNext.ts` (Home's progress rail).
   - `sources/` — per-provider fetch + normalize + project; `sources/adapters/` are the sync pull/push adapters (**the prune invariant lives here**).
   - `sync/index.ts` — `syncProvider`, the one place that prunes.
   - `detail/` — item + facet detail assembly, incl. the public (leak-boundary) variants.
   - `metadata/`, `legal/` — provider registry, and the bilingual legal content tree.
-- `src/components/` — 80 components, grouped `auth discovery facet insights item legal ui`.
+- `src/components/` — 81 components, grouped `auth discovery facet insights item legal ui`.
 - `scripts/` — standalone Node tooling (migrate, rehearsals, probes). These run under plain `node` via `alias-hooks.mjs`, which is why the `import type` rule below is load-bearing.
 
 ## Verifying anything behind a login

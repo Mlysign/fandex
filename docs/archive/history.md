@@ -2071,6 +2071,31 @@ and per-season granularity; Trakt is the fallback and, for a Trakt-only show,
 the only source. Verified live: the route now reaches `/shows/155/seasons` for a
 show with no TMDB link, where before it asked nobody.
 
+**Where it stands at end of session: shipped, and NOT working.** Every surface
+renders and every path is tested, but prod measured
+**`shows=280 withEpisodes=0 episodes=0 attached=0`** — `/sync/watched/shows`
+returns 280 watched shows and not one carries an episode. The adapter reads
+`seasons[].episodes[]`, which is the documented shape, so the RESPONSE is the
+variable and no session here can reach a real Trakt account to see one.
+
+`GET /api/dev/trakt-shape` (admin-gated, shape-only — counts and key names, no
+titles/ids/token) runs `?extended=full` and the plain call side by side. The
+comparison is the whole answer:
+
+- `withExtended` empty + `plain` non-empty → **`extended=full` suppresses
+  seasons.** One-line fix: the fallback already in `getTraktWatchedShows` tests
+  `Array.isArray`, which an *empty* array passes, so it never fires — it should
+  test for a non-empty one.
+- **both** empty → the account has no per-episode history at that endpoint at
+  all. That is a design question, not a bug; the next candidate source is
+  `/sync/history?type=episodes`.
+
+**The process lesson, which cost more than the bug.** Four deploys went to
+inference — reasoning from Trakt's docs about a response no session here can
+fetch — before one went to *looking*. When a hypothesis is about the shape of
+data you cannot see, a shape probe is the FIRST move, not the fifth. It was
+cheap to build and would have answered this two hours earlier.
+
 **⚠️ THE PATTERN, TWICE IN ONE DAY.** Both surfaces of this feature rendered
 `null` when they had nothing, and both times that turned an ordinary
 diagnosable problem into "the feature doesn't work" with no way to tell why.

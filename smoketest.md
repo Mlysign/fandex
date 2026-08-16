@@ -271,6 +271,13 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     shrinks out and the list re-orders; (c) the show whose episode you just ticked jumps to the
     FRONT with its next episode, because the tick is a new event on the sort's timeline.
     Nothing to continue → the rail renders nothing at all (no empty-state panel).
+13n. **⚠️ EPISODE TRACKING IS LIVE BUT PULLS NOTHING (open as of 2026-08-16).** Every
+    surface renders; Trakt returns no episode data. Measured on prod:
+    `shows=280 withEpisodes=0 episodes=0`. **Before logging anything about the
+    rail or the progress section being empty, open
+    `/api/dev/trakt-shape`** (GET, admin-gated, shape-only) — it compares
+    `?extended=full` against the plain call and says which half is empty. An
+    empty rail is a SYMPTOM of this, not a separate finding.
 13m. **⚠️ The Trakt round-trip is the one thing no Claude session has verified.** The push/pull
     paths were exercised only by unit tests and a keyless local session (marks land as
     `source: "local"`). On a run with a real Trakt identity connected: tick a season, confirm it

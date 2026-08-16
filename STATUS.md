@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-16 (MB14 episode tracking + Home's "Up next" progress module)._
+_Last updated: 2026-08-16 (MB14 episode tracking shipped — and is NOT yet working on prod; see below)._
 
 ---
 
@@ -31,7 +31,8 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 | | Item | Blocked on |
 |--|------|--|
-| 🟡 | **MB — Nils's mobile-testing batch (15 notes)** | **14 shipped.** **MB14 (per-episode tracking + two-way Trakt sync) shipped 2026-08-16** — migration 15, lazy TMDB fill, `/api/episodes`, `<EpisodeTracker>`; verified on both migration apply paths against a real pre-upgrade DB. **You:** the Trakt round-trip itself is unverified against a live account (no keys, no `rr.db` in that session) — connect Trakt, tick a season, confirm it lands on trakt.tv. Also that session: **Home's three counters are gone**, replaced by an "Up next" progress carousel of the episodes you'd watch next (filter: the preceding episode is watched; sort: latest event — a watch or a release — first, capped at 10). One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
+| 🔴 | **MB14 — episode tracking is SHIPPED BUT NOT WORKING** | Everything is live on prod and every surface renders, but **Trakt returns no episode data**, so the "Up next" rail and the item-page progress section are both empty. Measured on prod: **`shows=280 withEpisodes=0 episodes=0`** — the pull fetches 280 watched shows and not one carries a single episode. **You, one click:** open **`https://fandex.org/api/dev/trakt-shape`** in your phone browser while logged in and send back the JSON. It compares `?extended=full` against the plain call and the comparison IS the answer. → [TASKS.md](TASKS.md) |
+| 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped.** MB14 is the row above. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). Also shipped 2026-08-16: **Home's three counters are gone**, replaced by the "Up next" progress carousel. → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | 🔵 | **Games cross-link backfill on prod** | **You:** `POST /api/dev/crosslink` `{"source":"steam","maxItems":25}` from the browser console on fandex.org while logged in (both dev routes are session-gated, so a terminal `curl` 404s). Repeat until the cursor drains. Until then prod fills organically at ~30 cross-links per sync pass. |
 | 🔵 | **Franchise `ip` weight** | **You.** Live on prod since 2026-08-14 at the default 1.3 (peer with `director`, which you have at 4). `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what a value does to real titles first. Two smaller calls with it → [TASKS.md](TASKS.md). |
