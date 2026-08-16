@@ -21,6 +21,66 @@ full history.
 
 ---
 
+---
+
+## MB16 episode UI — vertical Up next + the Progress tab (2026-08-16)
+
+Nils, after MB14 started working: *"don't use the insight highlight panel as a foundation for the
+up next items, use the calendar list view items instead"* — poster in, wishlist button out, checkbox
+in, full width, vertical scroller not a horizontal carousel, about 2.5 items tall, "See all" to a new
+library tab that isn't capped at 10 and loads more on scroll.
+
+**`<EpisodeRow>`** is `<ListCard>`'s anatomy with three deliberate departures:
+
+- the media is the show's **poster** (portrait, 56px) rather than ListCard's landscape backdrop — an
+  episode row is about the show, and the poster is what makes one recognisable in a dense list;
+- the trailing action is a **checkbox**, not `<ActionCells>` — wishlisting a show you are already
+  midway through is meaningless;
+- the row is **not** a `<Link>` wrapper. Nesting the checkbox button inside an anchor is invalid HTML
+  that browsers resolve unpredictably (a tap can fire both), so the TITLE is the link, which also
+  keeps the 44px tap target free of navigation.
+
+Home's scroller derives its height from `EPISODE_ROW_H`/`EPISODE_ROW_GAP` rather than a magic number,
+so "roughly 2.5 items" survives a change to the row. Measured at 375px: **206px tall, 76px rows,
+335px wide, 2.45 rows visible, scrollable.** The tick moved into `useEpisodeTick`, shared by both
+surfaces — the confirm-hold-exit choreography is the feature and two copies would have drifted.
+
+**⚠️ The Progress tab does not load the library payload, and that is what makes it usable.**
+`/api/library` is **8.9 MB across 1,922 items** on this account, and `MyStuffContent` then runs
+merge/filter/sort memos over all of it. Following "See all" originally meant paying all of that
+before a single episode row appeared — measured in the browser pane: **blank for 30 s+ with the
+renderer unresponsive.** The item fetch is now driven by an effect that skips the progress tab and
+fires when a tab that needs it becomes active. General rule worth keeping: **a tab that shares a
+route does not have to share that route's data load** — check what a new tab inherits before
+assuming it is free.
+
+**Two pre-existing bugs, both fixed here:**
+
+1. `loadItems()` had no `try/finally`. A rejected fetch or a body that failed to parse left `loading`
+   true forever, and the page sat on "Loading…" with no error and no way out. A multi-megabyte
+   response is exactly the kind that fails halfway.
+2. The mount effect referenced `init()` before its declaration — flagged by the react-hooks rules as
+   a stale-binding hazard, and an error under this repo's config.
+
+**Paging.** `buildUpNextPage` shares `buildUpNext`'s work (`limit: Infinity`, then slice) so the
+filter and the sort can never differ between Home and the full list. Only the FIRST page pays for the
+bounded catalog heal — making every scroll tick fire provider calls is the shape of the 2026-08-02
+latency incident. A **"Load more" button sits alongside the IntersectionObserver**: the observer
+needs a compositor and never fires in some embedded/headless contexts, and a keyboard user shouldn't
+have to simulate a scroll to reach the rest of the list.
+
+**Verified at 375×812 on a clean build:** rail renders 10 rows with poster + checkbox and a working
+"See all"; the tab opens to 20 of "81 episodes up next", pages 20 → 40 → 81, then retires the button
+and prints "That's everything". 768 tests, 5 of them new for paging (tiling with no gaps or repeats,
+past-the-end, agreement with Home's first 10).
+
+**A debugging note that cost most of the session.** The dev server's HMR WebSocket was failing, so
+the browser kept running stale client chunks while `tsc` reported the new source clean. That produced
+a string of impossible-looking results — React logging `ready: true` while the DOM held the skeleton,
+a `ReferenceError` for a variable that plainly existed. **When the browser and the typechecker
+disagree about what the code says, suspect the bundle before the code:** check for HMR socket errors
+and restart the dev server with `.next` cleared rather than theorising about React internals.
+
 ## Phase 0 — Warm-up (orient in the codebase, low-risk wins)
 
 | ID | Status | Epic | Task | Pri | Urg | Est. | Notes |

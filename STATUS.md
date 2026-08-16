@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-16 (MB14 episode tracking FIXED — the pull now attaches 12,318 episodes)._
+_Last updated: 2026-08-16 (MB16 — the episode UI: vertical Up next + a Progress library tab)._
 
 ---
 
