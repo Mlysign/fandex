@@ -21,6 +21,25 @@ export async function getTmdbShow(id: number) {
   return tmdbGet(`/tv/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,content_ratings,external_ids" });
 }
 
+// ── Seasons + episodes (MB14) ────────────────────────────────────────────────
+// Deliberately NOT folded into getTmdbShow's append_to_response: the season list
+// is dropped by project.ts's keep-list, so reading it from a stored blob would
+// mean bumping PROJECTION_VERSION and re-projecting the whole catalog — the op
+// that took prod down once. Two small dedicated calls, cached in show_seasons /
+// show_episodes forever after, cost far less than that.
+//
+// Both THROW on a bad response (tmdbGet does). Callers in lib/episodes.ts
+// degrade to whatever is already stored; nothing here drives a prune.
+export async function getTmdbShowSeasons(id: string | number): Promise<any[]> {
+  const data = await tmdbGet(`/tv/${id}`);
+  return Array.isArray(data?.seasons) ? data.seasons : [];
+}
+
+export async function getTmdbSeasonEpisodes(id: string | number, seasonNumber: number): Promise<any[]> {
+  const data = await tmdbGet(`/tv/${id}/season/${seasonNumber}`);
+  return Array.isArray(data?.episodes) ? data.episodes : [];
+}
+
 export async function searchTmdbMovie(query: string, year?: number) {
   const params: Record<string, string> = { query };
   if (year) params.year = String(year);

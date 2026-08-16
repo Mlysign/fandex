@@ -128,7 +128,8 @@ export function deleteAccount(userId: string): AccountDeletionResult {
 // here on purpose. `accountExport.test.ts` pins this by scanning the serialized
 // output for planted secrets.
 
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 1;
+// v2 (2026-08-16, MB14): adds `episodes` — per-episode watched state.
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 2;
 
 /** Keys never worth putting in a downloadable file, whatever a provider called them. */
 const SECRET_KEY = /token|secret|password|session[_-]?id|credential/i;
@@ -202,6 +203,14 @@ export type AccountExport = {
     review: string | null;
     reviewedAt: number | null;
     addedAt: number | null;
+  }>;
+  episodes: Array<{
+    mediaItemId: string;
+    title: string | null;
+    season: number;
+    episode: number;
+    watchedAt: number | null;
+    sources: string;
   }>;
   syncLog: Array<{
     provider: string;
@@ -287,6 +296,23 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
     [userId],
   );
 
+  // MB14. Explicit column list, never SELECT * — same rule as every query above:
+  // it is what keeps a column added later from drifting into a file the user
+  // downloads without someone deciding it belongs there.
+  const episodes = query<{
+    media_item_id: string;
+    title: string | null;
+    season_number: number;
+    episode_number: number;
+    watched_at: number | null;
+    sources: string;
+  }>(
+    `SELECT e.media_item_id, m.title, e.season_number, e.episode_number, e.watched_at, e.sources
+       FROM user_episode_state e LEFT JOIN media_items m ON m.id = e.media_item_id
+      WHERE e.user_id = ? ORDER BY m.title, e.season_number, e.episode_number`,
+    [userId],
+  );
+
   const syncLog = query<{
     provider: string;
     synced_at: number | null;
@@ -307,6 +333,7 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       "This file contains everything Fandex stores about your account.",
       "Timestamps are Unix seconds (UTC) unless they end in 'Z'.",
       "'library' and 'watchlist' are the merged per-item view; 'itemState' is the same data split per connected provider.",
+      "'episodes' lists the individual show episodes you have marked as watched.",
       "Access tokens for connected accounts are deliberately excluded — they are credentials, not your data.",
       "Titles are shown for convenience; the catalog itself is shared and is not part of your personal data.",
     ],
@@ -355,6 +382,14 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       review: s.review,
       reviewedAt: s.reviewed_at,
       addedAt: s.added_at,
+    })),
+    episodes: episodes.map((e) => ({
+      mediaItemId: e.media_item_id,
+      title: e.title,
+      season: e.season_number,
+      episode: e.episode_number,
+      watchedAt: e.watched_at,
+      sources: e.sources,
     })),
     syncLog: syncLog.map((s) => ({
       provider: s.provider,

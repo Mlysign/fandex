@@ -20,6 +20,7 @@ beforeEach(() => {
   run("DELETE FROM media_items");
   run("DELETE FROM users");
   run("DELETE FROM sync_log");
+  run("DELETE FROM user_episode_state");
   run("INSERT INTO users (id) VALUES (?)", [USER]);
 });
 
@@ -93,5 +94,95 @@ describe("syncProvider — a failed pull must not prune", () => {
     await syncProvider(USER, source(async () => [item("1", "A")]));
     await syncProvider(USER, source(async () => []));
     expect(libraryCount()).toBe(0);
+  });
+});
+
+// ── MB14: the same invariant, one level deeper ───────────────────────────────
+//
+// Per-episode state rides on this very pull, and reconcileProviderEpisodes treats
+// "absent from the pull" as "un-watched upstream" — so a swallowed error would
+// wipe a whole watch history rather than a library row. The property under test
+// is the one the outage exposes, NOT the happy path: a pull that FAILS must
+// leave every episode untouched. That holds only because the reconcile sits
+// inside the try, after the pull; move it out and this test goes red.
+
+const show = (sourceId: string, episodes?: { season: number; episode: number }[]): PulledItem => ({
+  sourceId,
+  title: `Show ${sourceId}`,
+  releaseDate: "2024-01-01",
+  type: "show",
+  status: "watched",
+  rawData: { ids: { trakt: Number(sourceId) }, title: `Show ${sourceId}` },
+  ...(episodes ? { episodes } : {}),
+});
+
+function showSource(pullLibrary: () => Promise<PulledItem[]>, episodesRead = true): MediaSource {
+  return {
+    id: "trakt",
+    label: "Trakt",
+    color: "#ed1c24",
+    mediaTypes: ["show"],
+    capabilities: {
+      wishlist: { read: false, write: false },
+      library: { read: true },
+      rating: { read: true, write: false },
+      review: { read: false, write: false },
+      status: { write: false },
+      episodes: { read: episodesRead, write: false },
+    },
+    async context() {
+      return { userId: USER, identity: {}, token: "tok", slug: null };
+    },
+    pullLibrary,
+  } as unknown as MediaSource;
+}
+
+const episodeCount = () =>
+  query<{ c: number }>("SELECT COUNT(*) c FROM user_episode_state WHERE user_id = ?", [USER])[0].c;
+
+describe("syncProvider — episode state (MB14)", () => {
+  it("ingests per-episode watched state from the library pull", async () => {
+    await syncProvider(
+      USER,
+      showSource(async () => [show("10", [{ season: 1, episode: 1 }, { season: 1, episode: 2 }])]),
+    );
+    expect(episodeCount()).toBe(2);
+  });
+
+  it("keeps every episode when the pull throws", async () => {
+    await syncProvider(
+      USER,
+      showSource(async () => [show("10", [{ season: 1, episode: 1 }, { season: 1, episode: 2 }])]),
+    );
+    expect(episodeCount()).toBe(2);
+
+    await syncProvider(
+      USER,
+      showSource(async () => {
+        throw new Error("Trakt API error: 500 /sync/watched/shows");
+      }),
+    );
+
+    expect(episodeCount()).toBe(2); // a swallowed error here erases a watch history
+  });
+
+  it("prunes an episode genuinely un-watched upstream", async () => {
+    await syncProvider(
+      USER,
+      showSource(async () => [show("10", [{ season: 1, episode: 1 }, { season: 1, episode: 2 }])]),
+    );
+    await syncProvider(USER, showSource(async () => [show("10", [{ season: 1, episode: 1 }])]));
+    expect(episodeCount()).toBe(1);
+  });
+
+  it("leaves episodes alone for a provider that doesn't read them", async () => {
+    // Steam's pull says nothing about episodes, so it must not be read as
+    // evidence that none are watched. `capabilities.episodes.read` is the gate.
+    await syncProvider(
+      USER,
+      showSource(async () => [show("10", [{ season: 1, episode: 1 }])]),
+    );
+    await syncProvider(USER, showSource(async () => [show("10")], false));
+    expect(episodeCount()).toBe(1);
   });
 });

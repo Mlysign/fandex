@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { getTraktWatchedMovies, getTraktRatingsMovies, getTraktWatchlistMovies } from "./trakt";
+import {
+  getTraktWatchedMovies, getTraktRatingsMovies, getTraktWatchlistMovies,
+  addTraktEpisodesToHistory, removeTraktEpisodesFromHistory,
+} from "./trakt";
 
 // Regression: Trakt paginates its /sync list endpoints at 100 items/page and
 // returns only the first page unless you follow X-Pagination-Page-Count. A user
@@ -75,5 +78,67 @@ describe("Trakt /sync pagination", () => {
     vi.stubGlobal("fetch", f);
 
     await expect(getTraktWatchedMovies("tok")).rejects.toThrow(/429/);
+  });
+});
+
+// ── MB14 — batched per-episode history ───────────────────────────────────────
+//
+// "Mark this season as seen" must be ONE request. 24 round-trips against a
+// rate-limited API is how a mid-batch 429 leaves a half-written history, and it
+// is the specific failure this batching exists to prevent.
+describe("Trakt episode history", () => {
+  it("sends a whole season as a single nested request", async () => {
+    const f = vi.fn().mockResolvedValue(new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", f);
+
+    await addTraktEpisodesToHistory(
+      "tok",
+      555,
+      Array.from({ length: 24 }, (_, i) => ({ season: 1, episode: i + 1 })),
+    );
+
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(String(f.mock.calls[0][0])).toContain("/sync/history");
+    const body = JSON.parse(String(f.mock.calls[0][1].body));
+    expect(body.shows).toHaveLength(1);
+    expect(body.shows[0].ids).toEqual({ trakt: 555 });
+    // Scoped to the listed episodes — a bare `{ ids }` at the top level would
+    // mark the ENTIRE show watched, which is a different (and destructive) op.
+    expect(body.shows[0].seasons).toEqual([
+      { number: 1, episodes: Array.from({ length: 24 }, (_, i) => ({ number: i + 1 })) },
+    ]);
+  });
+
+  it("groups a cross-season batch by season, still in one request", async () => {
+    const f = vi.fn().mockResolvedValue(new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", f);
+
+    await removeTraktEpisodesFromHistory("tok", 7, [
+      { season: 1, episode: 1 },
+      { season: 2, episode: 3 },
+      { season: 1, episode: 2 },
+    ]);
+
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(String(f.mock.calls[0][0])).toContain("/sync/history/remove");
+    const seasons = JSON.parse(String(f.mock.calls[0][1].body)).shows[0].seasons;
+    expect(seasons).toEqual([
+      { number: 1, episodes: [{ number: 1 }, { number: 2 }] },
+      { number: 2, episodes: [{ number: 3 }] },
+    ]);
+  });
+
+  it("makes no request at all for an empty batch", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    await addTraktEpisodesToHistory("tok", 1, []);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("throws on a rejected write, so the route can roll the UI back", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 420 })));
+    await expect(
+      addTraktEpisodesToHistory("tok", 1, [{ season: 1, episode: 1 }]),
+    ).rejects.toThrow(/420/);
   });
 });

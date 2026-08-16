@@ -1,5 +1,6 @@
 import type { MediaType, Source } from "@/types";
 import type { CrossLinkBudget } from "./crossLink";
+import type { EpisodeRef, PulledEpisode } from "@/lib/episodes";
 
 // ── MediaSource adapter contract ──────────────────────────────────────────────
 //
@@ -18,6 +19,12 @@ export interface Capabilities {
   rating:   { read: boolean; write: boolean };
   review:   { read: boolean; write: boolean };
   status:   { write: boolean };
+  // MB14 — per-episode show tracking. Declared rather than sniffed for the same
+  // reason as the rest: `episodes.read` is what tells syncProvider a provider's
+  // library pull is AUTHORITATIVE about episodes, and therefore that an episode
+  // missing from it means "removed upstream". A provider that simply doesn't
+  // report episodes must never be read that way.
+  episodes: { read: boolean; write: boolean };
 }
 
 // Cross-reference ids known for an item, used to resolve a provider's own id
@@ -52,6 +59,13 @@ export interface PulledItem {
   review?: string | null;
   status?: string | null;      // watched | played | owned
   reviewedAt?: number | null;  // unix seconds
+  // MB14 — per-episode watched state carried by the SAME library pull that
+  // produced this item (Trakt's /sync/watched/shows returns seasons[].episodes[]
+  // in the one call). Riding on that pull rather than adding a second one is what
+  // makes the prune invariant transfer for free: if the pull throws, no episode
+  // data reaches the reconcile either. `undefined` on a provider that doesn't
+  // report episodes; `[]` legitimately means "this show, nothing watched".
+  episodes?: PulledEpisode[];
 }
 
 export interface MediaSource {
@@ -99,6 +113,14 @@ export interface MediaSource {
   // so a later resync doesn't re-pull the removed state. Present when the platform
   // can write ratings/status. (TMDB has no watched concept → clears the rating.)
   removeFromLibrary?(ctx: SourceContext, sourceId: string, type: MediaType): Promise<void>;
+
+  // MB14 — mark/un-mark episodes of ONE show on the platform. Present when
+  // capabilities.episodes.write is true.
+  //
+  // Takes the whole list, not one episode: "mark season 1 as seen" must be ONE
+  // request. A 24-episode season as 24 round-trips against a rate-limited API is
+  // how you get 429'd halfway through and leave the user's history half-written.
+  pushEpisodes?(ctx: SourceContext, sourceId: string, episodes: EpisodeRef[], watched: boolean): Promise<void>;
 
   // Cross-enrich a freshly-persisted item with secondary source links (e.g.
   // Trakt/Letterboxd → TMDB, and every game → the other game catalogs).

@@ -96,6 +96,21 @@ export const LibraryDeleteSchema = z.object({
   ids: zIds.optional(),
 });
 
+// POST /api/episodes — mark/un-mark watched episodes of one show (MB14).
+// Two shapes, one schema: an explicit `episodes` list, or a bare `season` meaning
+// "the whole season" (resolved server-side from the catalog, so the client never
+// has to enumerate 24 episodes just to tick a season header). `episodes` wins
+// when both are sent.
+export const EpisodesPostSchema = z.object({
+  mediaItemId: z.string().min(1),
+  watched: z.boolean(),
+  season: z.number().int().min(0).optional(),
+  episodes: z
+    .array(z.object({ season: z.number().int().min(0), episode: z.number().int().min(0) }))
+    .max(500)
+    .optional(),
+});
+
 // POST /api/sync — trigger a provider sync. Missing body defaults to "all".
 // `provider` starts a fresh run (a source id or "all"); `providers` is P6's
 // resume list — the remaining provider ids the client re-invokes with.

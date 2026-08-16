@@ -5,6 +5,8 @@ import { SOURCES, getSource } from "@/lib/sources/registry";
 import { ingestWishlistItem, ingestLibraryItem } from "@/lib/sources/ingest";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
 import { crossLinkBudget } from "@/lib/sources/crossLink";
+import type { PulledEpisode } from "@/lib/episodes";
+import { reconcileProviderEpisodes } from "@/lib/episodes";
 
 // Wall-clock budget for a single sync request (P6). The full ~1,700-item
 // Trakt+Steam+TMDB sync in ONE request spiked memory past Railway's 512 MB and
@@ -119,11 +121,22 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
     try {
       const items = await src.pullLibrary(ctx);
       const syncedIds = new Set<string>();
+      // MB14 — per-episode state carried by this same pull, collected while we
+      // ingest so we already know each item's canonical media_item_id.
+      const episodesByItem = new Map<string, PulledEpisode[]>();
       for (const item of items) {
-        await ingestLibraryItem(userId, src, item, budget);
+        const mediaItemId = await ingestLibraryItem(userId, src, item, budget);
         syncedIds.add(item.sourceId);
+        if (item.episodes) episodesByItem.set(mediaItemId, item.episodes);
       }
       pruneLibrary(userId, src.id, syncedIds);
+      // Both of these run ONLY here — after the pull resolved, inside the try.
+      // The `catch` below returns before them, so a throwing pull leaves both
+      // the library and the episode history untouched. Same invariant, same
+      // placement: see pruneWatchlist/pruneLibrary's comment above.
+      if (src.capabilities.episodes?.read) {
+        reconcileProviderEpisodes(userId, src.id, episodesByItem);
+      }
       library = syncedIds.size;
       logSync(userId, `${src.id}-library`, library, "ok");
     } catch (e: any) {
