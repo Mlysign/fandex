@@ -9,8 +9,8 @@ import SubBar from "@/components/SubBar";
 import PosterCard from "@/components/PosterCard";
 import Panel from "@/components/ui/Panel";
 import Eyebrow from "@/components/ui/Eyebrow";
-import StatStrip from "@/components/ui/StatStrip";
 import HighlightPanel from "@/components/HighlightPanel";
+import ProgressRail from "@/components/ProgressRail";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
@@ -28,11 +28,11 @@ import type { MediaType } from "@/types";
 // H1.6c minimal placeholder (sign-in hero / bare launcher grid).
 
 interface HomeStats {
-  libraryTotal: number;
-  wishlistTotal: number;
-  ratedTotal: number;
   // 2026-07-30: replaces the single hard-wired `bestGenre` card. Two of seven
   // generators, re-drawn daily — see lib/homeHighlights.ts.
+  //
+  // The three counters that used to live here went with the strip they fed
+  // (2026-08-16). `stats` stays the authed marker — it is null for anon.
   highlights: Highlight[];
 }
 interface HomeData {
@@ -146,28 +146,27 @@ export default function HomePage() {
           </Panel>
         )}
 
-        {/* Stats — signed-in only. Two rows since 2026-07-30: the three counters
-            combined into ONE segmented strip (the mockup's `.stat3`), then the
-            day's rotating highlight panels under it. The counters are the fixed
-            anchor; the highlights are the part that changes. */}
-        {authed && data?.stats && (
-          <div className="space-y-3">
-            <StatStrip
-              cells={[
-                { label: "library", value: data.stats.libraryTotal },
-                { label: "wishlist", value: data.stats.wishlistTotal },
-                { label: "rated", value: data.stats.ratedTotal },
-              ]}
-            />
-            {data.stats.highlights.length > 0 && (
-              <div className="flex flex-wrap gap-3">
-                {data.stats.highlights.map((h) => (
-                  <HighlightPanel key={h.kind} highlight={h} />
-                ))}
-              </div>
-            )}
+        {/* Signed-in band — the day's rotating highlight panels, then the
+            progress rail.
+
+            2026-08-16 (Nils): the three counters (library / wishlist / rated)
+            that used to sit above the highlights are GONE. They were the fixed
+            anchor of this band, but a number that barely moves is the one thing
+            here nobody looks at twice; the progress rail takes over that slot
+            and its footprint, sorted AFTER the highlights so the varying stat
+            panels still lead. */}
+        {authed && data?.stats && data.stats.highlights.length > 0 && (
+          <div className="flex flex-wrap gap-3">
+            {data.stats.highlights.map((h) => (
+              <HighlightPanel key={h.kind} highlight={h} />
+            ))}
           </div>
         )}
+
+        {/* Its own island + its own request: it may heal a show's episode
+            catalog from TMDB, and that must never sit in front of Home's rails.
+            Renders nothing when there's nothing to continue. */}
+        {authed && <ProgressRail />}
 
         {/* Rails — default / loading / empty / error states. */}
         {error ? (

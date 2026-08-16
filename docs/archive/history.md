@@ -1865,6 +1865,78 @@ and `Disallow`ing the facets (throws away the P17 SEO surface).
 **Reassess only if** a crawl sweep shows the 24 h TTL is too short, or if RAWG's
 latency stops masking the true steady-state tag cost.
 
+## Home progress module ("Up next"), 2026-08-16
+
+Nils, same session as MB14: drop Home's three counters (library / wishlist /
+rated) and put a carousel of "the episode I need to watch next" in that slot,
+ordered after the rotating highlight panels, under a rail header like
+"Recommended for you".
+
+**The feature IS the relevance rule** (`src/lib/upNext.ts`), specified by Nils
+and implemented verbatim. An episode qualifies when the episode immediately
+before it is watched, AND either that predecessor was watched in the last 30
+days OR this episode was released in the last 30 days.
+
+The second clause is the interesting one and it does two jobs at once: the first
+arm keeps a show you're mid-binge on, the second brings a show back the week a
+new season drops even though you finished the last one a year ago. Together they
+are the **abandonment test** — there is no abandoned flag anywhere in the schema
+and none was added, because "no activity either side in 30 days" already says it.
+
+Three behaviours that follow from the rule and are deliberate, not gaps:
+
+- **A show you have never ticked never appears.** S1E1 has no preceding episode
+  to satisfy, so this is strictly *continue* watching, not *start* watching.
+- **It fills the earliest GAP**, not the episode after the highest watched. With
+  1, 2 and 5 seen, next up is 3.
+- **An unaired episode never appears.** The watched arm would happily surface
+  next week's episode the day after you watch this week's, and you can't tick
+  something that isn't out.
+- A `watched_at` of NULL (Trakt can omit `last_watched_at`) counts as NOT recent
+  — "watched, date unknown" honestly reads as "some time ago", and the release
+  arm still rescues a genuinely new episode.
+
+**The season rollover needed the catalog to answer two questions at once.**
+`catalogCovers` requires the season you're in AND the one after it before it
+trusts stored rows, otherwise someone sitting on a season finale looks finished
+whenever the next season hasn't been fetched.
+
+**Bounded heal, and this is the load-bearing bit.** MB14 fills `show_episodes`
+lazily on a detail view — but the Trakt pull writes watch state for shows nobody
+has ever opened here, so this path can be the first thing that needs a given
+show's episode list. Healing all of them at once would put an unbounded provider
+fan-out on the heaviest page in the app, which is exactly the 2026-08-02 latency
+shape. So: **3 shows per request, most-recently-watched first, 4 s budget**, each
+heal permanent for a week. A large Trakt history converges over a few Home loads.
+For the same reason it is `/api/progress`, a **separate route and island** — not
+folded into `/api/home`, where it would sit in front of the three public rails.
+
+**Not a second writer.** The card's tick posts to `/api/episodes`, which already
+owns the push-to-Trakt-then-write ordering; a second writer for the same state is
+how the two would drift. After a successful tick the rail **refetches** rather
+than splicing, because ticking may promote the same show's next episode into the
+rail and only the server can decide that.
+
+Card anatomy is `<HighlightPanel>`'s verbatim — accent mono eyebrow → serif
+headline → mono detail — mapped to episode number (`S.02 E.04`) → show title →
+episode title, so the module reads as part of the band it replaced rather than a
+fourth panel style. The tick box is drawn EMPTY like `<EpisodeTracker>`'s
+unchecked state; every episode here is unwatched by definition, so a check drawn
+in it would be a third state the item page doesn't have.
+
+`<Rail>` gained one prop (`colsClass`) so the wider text card could reuse the
+same header, chevrons and scroll behaviour instead of a second scroller.
+
+Also removed with the strip: `/api/home`'s `libraryTotal`/`wishlistTotal`/
+`ratedTotal`, which dropped a COUNT query and that route's only direct
+`getLibraryFacetAnalysis` call. `stats` stays — a non-null value is what tells
+the page the viewer is signed in.
+
+Verified in the browser pane against a seeded account covering each branch
+(mid-binge / new-season-after-a-year / abandoned / paused-3-weeks): the abandoned
+show is absent, order is most-recent-first, and ticking Andor 1×04 promotes 1×05
+into the same card. 732 tests.
+
 ## MB14 — per-episode show tracking + two-way Trakt sync, 2026-08-16
 
 Shipped the one large item left in the mobile-testing batch. Seasons collapsed
