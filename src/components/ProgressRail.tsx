@@ -99,7 +99,10 @@ export default function ProgressRail() {
       {entries.map((e) => {
         const key = `${e.mediaItemId}:${e.season}:${e.episode}`;
         return (
-          <Panel key={key} className="flex items-start gap-2 px-4 py-3.5 h-full">
+          /* items-center, not items-start: the tick reads as the card's one
+             action, so it sits on the card's vertical centre rather than
+             hanging off the first line of text. */
+          <Panel key={key} className="flex items-center gap-2 px-4 py-3.5 h-full">
             <Link href={e.href} className="min-w-0 flex-1 group">
               <Eyebrow>{epLabel(e.season, e.episode)}</Eyebrow>
               <div className="font-serif text-serif-md text-text-primary mt-1.5 line-clamp-2 transition-opacity group-hover:opacity-80">
@@ -113,10 +116,10 @@ export default function ProgressRail() {
               onClick={() => void markDone(e)}
               disabled={busy === key}
               aria-label={`Mark ${e.showTitle} ${epLabel(e.season, e.episode)} watched`}
-              className="group/tick shrink-0 w-9 h-9 -mr-1.5 -mt-1 flex items-center justify-center rounded-sm hover:bg-white/[0.05] transition-colors disabled:opacity-50"
+              className="group/tick shrink-0 w-11 h-11 -mr-2 flex items-center justify-center rounded-lg hover:bg-white/[0.05] transition-colors disabled:opacity-50"
             >
               {busy === key ? (
-                <Loader2 className="w-4 h-4 animate-spin text-text-secondary" aria-hidden />
+                <Loader2 className="w-5 h-5 animate-spin text-text-secondary" aria-hidden />
               ) : (
                 /* EMPTY, like <EpisodeTracker>'s unchecked box — every episode
                    here is by definition unwatched, and a check drawn in it
@@ -124,11 +127,11 @@ export default function ProgressRail() {
                    section title plus the button's accessible name carry "mark
                    this watched"; the check only ever appears on hover. */
                 <span
-                  className="w-5 h-5 rounded-sm border border-border-strong flex items-center justify-center"
+                  className="w-7 h-7 rounded-sm border border-border-strong flex items-center justify-center"
                   aria-hidden
                 >
                   <Check
-                    className="w-3.5 h-3.5 text-text-secondary opacity-0 group-hover/tick:opacity-100 transition-opacity"
+                    className="w-5 h-5 text-text-secondary opacity-0 group-hover/tick:opacity-100 transition-opacity"
                     strokeWidth={3}
                   />
                 </span>
