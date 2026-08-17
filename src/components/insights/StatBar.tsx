@@ -26,7 +26,11 @@ export default function StatBar({
   const inner = (
     <div className="py-1.5" title={title ?? label}>
       <div className="flex items-baseline justify-between gap-3 mb-1.5">
-        <span className="text-sm font-medium text-text-primary truncate">{label}</span>
+        {/* MB7 — `truncate` alone does NOTHING here. A flex item defaults to
+            `min-width: auto`, so this span kept contributing the full width of
+            names like "Sony Interactive Entertainment", growing its card past
+            the viewport. `min-w-0` is what lets the ellipsis actually engage. */}
+        <span className="min-w-0 text-sm font-medium text-text-primary truncate">{label}</span>
         <span className="font-mono text-meta text-text-secondary shrink-0 tabular-nums">
           {count} · {value.toFixed(1)}{showRaw && ` (avg ${rawAvg!.toFixed(1)})`}
           {impact != null && (

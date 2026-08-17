@@ -103,9 +103,16 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
   **What unlocked it:** Nils confirming it reproduces in **normal mobile Chrome**, not only the installed PWA. That revived the dynamic-viewport theory the original note had ruled out *precisely because* it looked PWA-only — standalone mode has no URL bar, so the toolbar explanation seemed dead. Shrink-to-fit happens in both.
 
-  **Three overflow sources, all one class of bug** — a flex/grid item defaults to `min-width: auto` and refuses to shrink below its own content: the decade histogram (14 columns needing ~28px each) → `min-w-0` + `overflow-x-auto`; the "You rate higher/lower" cards (410px wide) → `min-w-0`; FacetSection's filter row (a `w-44` input + stepper + toggle ≈ 380px) → `flex-wrap`.
+  **FIVE overflow sources, all one class of bug** — a flex/grid item defaults to `min-width: auto` and refuses to shrink below its own content:
+  1. the decade histogram in `InsightsView` (14 columns needing ~28px each) → `min-w-0` + `overflow-x-auto`;
+  2. the "You rate higher/lower" divergence cards (410px) → `min-w-0`;
+  3. `FacetSection`'s filter row (`w-44` input + stepper + toggle ≈ 380px) → `flex-wrap`;
+  4. **the "How you rate" histogram in `Histogram.tsx`** — 19 half-point buckets each held open by a count label ("310", "383") → `min-w-0`;
+  5. **`StatBar`'s label** — it already had `truncate`, which **does nothing inside a flex row without `min-w-0`**: the span kept contributing the full width of names like "Sony Interactive Entertainment", growing its facet card past the viewport → `min-w-0` on the span, plus `min-w-0` on the card.
 
-  **Verified:** `scrollWidth` 470 → **375** (= clientWidth), scale 0.80 → **1**, `innerHeight` 1017 → **812**, nav bottom edge at 812 both at the top of the page and after scrolling to the end — **offscreen by 0**.
+  **⚠️ The first fix shipped incomplete, and the method is the lesson.** 1–3 were fixed and verified at **one width (375)**, which measured clean — so it shipped. Nils's phone still showed the overflow, because 4 and 5 only bite at other widths and with his data. **Verify this class of bug across several viewport widths (320 / 360 / 412) and after scrolling the whole page, never at one size.**
+
+  **Verified now at 320, 360 and 412:** `scrollWidth` == `clientWidth` (**overflow 0**), `visualViewport.scale` **1**, `innerHeight` == `visualViewport.height`, nav bottom edge flush with the viewport bottom — **offscreen by 0** at every width, top of page and scrolled to the end.
 
   <details><summary>Original framing, kept for context</summary>
 

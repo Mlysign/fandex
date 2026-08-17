@@ -57,7 +57,7 @@ function FacetGroup({
   const shown = expanded ? sorted : sorted.slice(0, limit);
 
   return (
-    <div className="rounded-xl border border-border bg-surface-elevated p-3">
+    <div className="min-w-0 rounded-xl border border-border bg-surface-elevated p-3">
       <div className="flex items-center gap-2 mb-2">
         <span className="w-2 h-2 rounded-full" style={{ background: group.color }} />
         <span className="text-sm font-medium text-text-primary">{group.label}</span>

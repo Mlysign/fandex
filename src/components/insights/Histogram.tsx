@@ -29,7 +29,14 @@ export default function Histogram({
           return (
             <div
               key={d.bucket}
-              className={`flex-1 flex flex-col items-center justify-end h-full group ${clickable ? "cursor-pointer" : ""}`}
+              // MB7 — `min-w-0` is load-bearing. A flex item defaults to
+              // `min-width: auto`, so each column refused to shrink below its own
+              // count label ("310", "383"): ~20px × 19 half-point buckets ≈ 380px
+              // of content in a 375px viewport. The page then overflows, Chrome
+              // shrink-to-fits, the layout viewport inflates, and the `fixed
+              // bottom-0` mobile nav pins itself below the fold. Same bug and same
+              // fix as the decade chart in InsightsView.
+              className={`flex-1 min-w-0 flex flex-col items-center justify-end h-full group ${clickable ? "cursor-pointer" : ""}`}
               onClick={clickable ? () => onBarClick!(d.bucket) : undefined}
             >
               {!compact && d.count > 0 && (
