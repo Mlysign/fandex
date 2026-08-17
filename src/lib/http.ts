@@ -83,10 +83,23 @@ interface Breaker {
 const _breakers = new Map<string, Breaker>();
 
 /** Thrown instead of making a request while a host's breaker is open. */
+// ⚠️ The fields are declared and assigned explicitly rather than with TypeScript
+// PARAMETER PROPERTIES (`constructor(readonly host: string, …)`). Same class of
+// trap as AGENTS.md's `import type` rule: Node's native type-stripping — what
+// scripts/alias-hooks.mjs gives every standalone rehearse-*/calibrate-*/probe-*
+// script — only ERASES type syntax, it never emits code, so a parameter property
+// (which has to generate an assignment) is rejected outright with
+// ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX. That killed any script reaching a provider
+// path the moment it imported http.ts, while tsc, vitest, next dev and next
+// build all compiled it happily.
 export class ProviderUnavailableError extends Error {
-  constructor(readonly host: string, readonly retryInMs: number) {
+  readonly host: string;
+  readonly retryInMs: number;
+  constructor(host: string, retryInMs: number) {
     super(`Provider ${host} is unavailable (circuit open, retry in ${Math.ceil(retryInMs / 1000)}s)`);
     this.name = "ProviderUnavailableError";
+    this.host = host;
+    this.retryInMs = retryInMs;
   }
 }
 
