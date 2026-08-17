@@ -60,7 +60,14 @@ const privacy: LegalDocument = {
             "IGDB — ausschließlich Spielemetadaten, über einen anwendungsseitigen API-Schlüssel. IGDB erhält keinerlei individuelle Informationen über Sie.",
           ],
         },
-        "TODO(H4.3): Die genaue rechtliche Übermittlungsgrundlage für jeden dieser in den USA ansässigen Anbieter (Standardvertragsklauseln, ein Angemessenheitsbeschluss oder eine andere Grundlage) wurde noch nicht einzeln anhand der aktuellen Nutzungsbedingungen jedes Anbieters geprüft und sollte vor endgültiger Freigabe dieser Erklärung verifiziert und hier benannt werden.",
+        "Die meisten dieser Anbieter sitzen in den USA. Was das für Ihre Daten bedeutet, hängt davon ab, um welchen Anbieter es geht — deshalb hier die Fälle einzeln statt einer pauschalen Aussage:",
+        {
+          list: [
+            "Nur Metadaten — es verlassen keine personenbezogenen Daten Fandex. IGDB immer, sowie TMDB und RAWG, solange Sie dort kein Konto verbunden haben, erhalten einen Titel oder eine ID und nichts über Sie. Es findet keine Übermittlung personenbezogener Daten statt, für die es einer Grundlage bedürfte.",
+            "Von Ihnen selbst verbundene Konten. Wenn Sie Ihr TMDB-, Trakt-, RAWG- oder Steam-Konto verbinden, gehen Daten an ein Konto, das Sie dort bereits besitzen — auf Ihre Veranlassung und nur solange die Verbindung besteht; Sie können sie jederzeit in den Einstellungen trennen. Diese Übermittlung erfolgt, weil Sie sie ausdrücklich veranlasst haben (Art. 49 Abs. 1 lit. a DSGVO); ab dem Eingang behandelt der jeweilige Anbieter die Daten nach seiner eigenen Datenschutzerklärung, nicht nach dieser.",
+            "Anbieter, die Daten im Auftrag von Fandex verarbeiten. Das sind Railway (Hosting einschließlich der Datenbank) und Cloudflare (DNS sowie die Zustellung des Postfachs hello@fandex.org). Beide sind nach dem EU-US Data Privacy Framework selbstzertifiziert und verpflichten sich zusätzlich auf die Standardvertragsklauseln der Europäischen Kommission für den Fall, dass diese Zertifizierung entfällt. Stand August 2026 — Zertifizierungen können widerrufen werden, dies wird daher nachgeprüft und nicht unterstellt.",
+          ],
+        },
         "Fandex wird bei Railway gehostet; DNS und das Kontakt-Postfach hello@fandex.org laufen über Cloudflare. Beide Anbieter verarbeiten Daten im Rahmen des Betriebs des Dienstes (Hosting der Datenbank, Auslieferung der App, Weiterleitung der einzigen Kontaktadresse) und nicht zu eigenen Zwecken.",
       ],
     },
@@ -83,7 +90,7 @@ const privacy: LegalDocument = {
           ],
         },
         "Für alles Weitere — Berichtigung, Einschränkung, Widerspruch — kontaktieren Sie hello@fandex.org.",
-        "Sie haben zudem das Recht, sich bei einer Datenschutzaufsichtsbehörde zu beschweren. TODO(H4.3): Die konkret zuständige Behörde (abhängig vom tatsächlichen Sitz des Verantwortlichen, sobald H4.0 geklärt ist) wurde noch nicht benannt.",
+        "Sie haben zudem das Recht, sich bei einer Datenschutzaufsichtsbehörde zu beschweren. Nach Art. 77 DSGVO können Sie sich an die Behörde des EU- oder EWR-Staates wenden, in dem Sie wohnen, in dem Sie arbeiten oder in dem der mutmaßliche Verstoß stattgefunden hat — es muss keine deutsche Behörde sein, auch wenn der Verantwortliche von Fandex in Deutschland ansässig ist.",
       ],
     },
     {

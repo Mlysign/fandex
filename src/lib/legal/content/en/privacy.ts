@@ -59,7 +59,14 @@ const privacy: LegalDocument = {
             "IGDB — game metadata only, via an app-level API key. It never sees anything about you individually.",
           ],
         },
-        "TODO(H4.3): the exact legal transfer basis for each of these US-based providers (standard contractual clauses, an adequacy decision, or another basis) has not been individually confirmed against each provider's current terms and should be verified and named here before this policy is treated as final.",
+        "Most of these providers are based in the United States. What that means for your data depends on which of them we are talking about, so rather than one blanket statement, here is each case:",
+        {
+          list: [
+            "Metadata only — no personal data leaves Fandex. IGDB always, and TMDB and RAWG whenever you have not connected an account with them, receive a title or an id and nothing about you. There is no transfer of your personal data to base on anything.",
+            "Accounts you connect yourself. If you link your TMDB, Trakt, RAWG or Steam account, data goes to an account you already hold with that provider, at your instruction, and only for as long as the connection exists — you can disconnect at any time in Settings. That transfer happens because you explicitly asked for it (Art. 49(1)(a) GDPR), and from the moment it arrives that provider handles it under its own privacy policy, not this one.",
+            "Providers that process data on Fandex's behalf. These are Railway (hosting, including the database) and Cloudflare (DNS, and routing the hello@fandex.org mailbox). Both self-certify under the EU–US Data Privacy Framework, and both additionally commit to the European Commission's Standard Contractual Clauses as a fallback should that certification lapse. Checked August 2026 — certifications can be withdrawn, so this is re-checked rather than assumed.",
+          ],
+        },
         "Fandex is hosted on Railway, with DNS and the hello@fandex.org contact mailbox routed through Cloudflare. Both providers process data as part of running the service (hosting the database, delivering the app, and routing the one contact address) rather than receiving it for their own purposes.",
       ],
     },
@@ -82,7 +89,7 @@ const privacy: LegalDocument = {
           ],
         },
         "For anything else — correction, restriction, objection — contact hello@fandex.org.",
-        "You also have the right to lodge a complaint with a data protection supervisory authority. TODO(H4.3): the specific competent authority (tied to the controller's actual registered location once H4.0 resolves) has not been named yet.",
+        "You also have the right to lodge a complaint with a data protection supervisory authority. Under Art. 77 GDPR you can do that with the authority in the EU or EEA country where you live, where you work, or where you believe the problem occurred — it does not have to be a German one, even though Fandex's controller is based in Germany.",
       ],
     },
     {
