@@ -15,7 +15,7 @@ const privacy: LegalDocument = {
       heading: "Verantwortlicher",
       body: [
         "Nils Mlynarek, erreichbar unter hello@fandex.org.",
-        "TODO(H4.0/H4.2): Üblicherweise wird hier eine ladungsfähige Anschrift erwartet. Fandex veröffentlicht bislang keine — dies ist bewusst zurückgestellt, bis eine fachliche Rechtsberatung klärt, wie diese Pflicht erfüllt werden kann, ohne eine Privatadresse zu veröffentlichen (siehe Impressum).",
+        "Die vollständige ladungsfähige Anschrift des Verantwortlichen ist im Impressum veröffentlicht, das Bestandteil dieser Erklärung ist.",
       ],
     },
     {

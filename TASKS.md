@@ -24,21 +24,16 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 ---
 
-## 🔴 The legal pages render literal `TODO(...)` text to users — and two are now FACTUALLY WRONG
+## Legal pages: the two false `TODO(...)` strings are FIXED; `TODO(H4.3)` still renders
 
-Found 2026-08-17 while acting on the decisions above. **Not applied — legal wording is Nils's to approve.**
+⚠️ **These are not code comments.** They sit inside `body:` arrays in `src/lib/legal/content/{de,en}/*.ts`, so anything written there **renders as visible prose on the live legal pages**. Worth remembering before adding another marker — STATUS.md's "the legal surface is CLOSED and filled" was overstating it.
 
-These are not code comments. They sit inside `body:` arrays in `src/lib/legal/content/{de,en}/*.ts`, so they **render as visible prose on the live legal pages**. That was a deliberate honesty choice at the time ("a TODO instead of a guess"), and STATUS.md's "the legal surface is CLOSED and filled" overstates it.
+✅ **Rewritten 2026-08-17 (Nils approved), both locales:**
+1. **`privacy.ts`** claimed *"Fandex does not publish a postal address yet — pending legal advice on how to satisfy that without publishing a home address."* The approved Imprint publishes one, so the policy contradicted the imprint a click away. Now: *"The controller's full postal address is published in the Imprint, which forms part of this notice."*
+2. **`terms.ts`** gated the paid-tier placeholders on *"a separate decision (H3.8) that hasn't been made."* H3.8 is approved. The sections stay correctly **inactive** (no paid tier exists) but no longer claim an undecided dependency — they now take effect only "if and when such an offering is actually launched and announced here."
 
-Two of them are now **contradicted by today's decisions** and should not stay as-is:
-
-1. **`privacy.ts` — `TODO(H4.0/H4.2)`** says *"Fandex does not publish a postal address yet — intentionally pending legal advice on how to satisfy that without publishing a home address (see the Imprint)."* **The Imprint now publishes a real postal address, and Nils approved it today.** So the privacy policy actively contradicts the imprint one click away. Proposed replacement: state the controller's postal address is given in the Imprint and link it — no TODO.
-2. **`terms.ts` — `TODO(H3)`** says the paid-tier sections *"depend on a separate, not-yet-made decision (H3.8)"*. **H3.8 was approved today.** The sections are still correctly *inactive* (no paid tier exists), but "not yet made" is now false. Proposed replacement: keep them as forward-looking placeholders, drop the TODO marker and the "not yet decided" clause.
-
-Still genuinely open, so a marker is defensible — but it should not read as a code TODO on a public page:
-3. **`privacy.ts` — `TODO(H4.3)` ×2**: the per-provider transfer basis for US processors, and the competent supervisory authority. Both need real legal input.
-
-**Ask:** approve the two rewrites (1 and 2), and say whether 3 should stay visible or be softened to plain prose.
+⬜ **Still open — `TODO(H4.3)`, two spots, deliberately untouched** (Nils ruled on 1 and 2 only): the per-provider **transfer basis** for the US processors, and the **competent supervisory authority**. Both need real legal input, so the marker is defensible — but it is a literal "TODO(H4.3):" on a public privacy policy, which is worth softening to plain prose either way.
+   - ⚠️ **One clause inside it is now stale too:** the supervisory-authority sentence says the authority depends on the controller's seat *"sobald H4.0 geklärt ist"* / "once H4.0 resolves". H4.0 **is** resolved — the address is published and approved. Only the naming of the authority is genuinely outstanding.
 
 ---
 

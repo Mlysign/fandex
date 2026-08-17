@@ -69,7 +69,7 @@ const terms: LegalDocument = {
     {
       heading: "Künftige Monetarisierung (heute nicht aktiv)",
       body: [
-        "TODO(H3): Fandex' derzeit festgelegtes Monetarisierungsmodell für den Start sind ausschließlich Spenden und Affiliate-Links — keines davon ist ein direkter Verkauf durch Fandex an Sie, daher lösen sie die folgenden Abschnitte nicht von sich aus aus. Diese Abschnitte sind Platzhalter für eine mögliche spätere Stufe (eine einmalige werbefreie Freischaltung oder eine kostenpflichtige Stufe), die von einer separaten, noch nicht getroffenen Entscheidung (H3.8) abhängt. Sie sind derzeit nicht wirksam und beschreiben kein heute existierendes Merkmal.",
+        "Fandex finanziert sich derzeit ausschließlich über Spenden und Affiliate-Links — keines davon ist ein direkter Verkauf durch Fandex an Sie, daher lösen sie die folgenden Abschnitte nicht von sich aus aus. Die nachfolgenden Abschnitte sind Platzhalter für eine mögliche spätere Stufe, etwa eine einmalige werbefreie Freischaltung oder eine kostenpflichtige Stufe. Ein solches Merkmal existiert heute nicht; die Abschnitte werden erst wirksam, wenn ein solches Angebot tatsächlich eingeführt und hier bekannt gegeben wird.",
         {
           list: [
             "Zahlungs- und Abonnementbedingungen — Preisgestaltung, Abrechnungszyklus und der genutzte Zahlungsdienstleister würden hier festgelegt, sobald (falls) ein kostenpflichtiges Merkmal eingeführt wird.",

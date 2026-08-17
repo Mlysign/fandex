@@ -73,7 +73,7 @@ const terms: LegalDocument = {
     {
       heading: "Future monetization (not active today)",
       body: [
-        "TODO(H3): Fandex's current, locked monetization plan for launch is donations and affiliate links only — neither is a direct sale by Fandex to you, so neither triggers the sections below on its own. These sections are placeholders for a possible LATER stage (a one-time ad-free unlock or a paid tier), gated on a separate decision (H3.8) that hasn't been made. They are not in effect and describe no real feature today.",
+        "Fandex's monetization today is donations and affiliate links only — neither is a direct sale by Fandex to you, so neither triggers the sections below on its own. The sections that follow are placeholders for a possible later stage, such as a one-time ad-free unlock or a paid tier. No such feature exists today, and these sections are not in effect unless and until one is actually launched and announced here.",
         {
           list: [
             "Payment and subscription terms — pricing, billing cycle, and the payment processor used would be specified here once (if) a paid feature ships.",

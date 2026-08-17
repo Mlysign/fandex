@@ -14,7 +14,7 @@ const privacy: LegalDocument = {
       heading: "Who controls your data",
       body: [
         "Nils Mlynarek, contactable at hello@fandex.org.",
-        "TODO(H4.0/H4.2): a postal address is normally expected here for a German data controller. Fandex does not publish one yet — this is intentionally pending professional legal advice on how to satisfy that requirement without publishing a home address (see the Imprint page).",
+        "The controller's full postal address is published in the Imprint, which forms part of this notice.",
       ],
     },
     {
