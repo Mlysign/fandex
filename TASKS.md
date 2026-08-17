@@ -154,8 +154,10 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 
 **Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Proven working there.
 
-**The three options, none applied (your call — it means restructuring correct, carefully-reasoned SM21 code for a dev-only bug):**
-1. **Leave it, use the prod build to verify.** Zero risk, keeps SM21's URL-as-state exactly. Costs dev ergonomics on two pages.
+**✅ DECIDED 2026-08-17 (Nils): option 1 — leave it, re-test on the next Next.js bump.** Do NOT restructure `MyStuffView` for this; the other two options are recorded only so the reasoning isn't re-derived. Add a re-test of these two pages to the checklist whenever `next` is upgraded (a Dependabot `next` bump is exactly the moment to try it).
+
+**The three options:**
+1. **Leave it, use the prod build to verify.** ← chosen. Zero risk, keeps SM21's URL-as-state exactly. Costs dev ergonomics on two pages.
 2. **Pass `searchParams` from the server `page.tsx` as a prop** (the other option Next's own docs give). Keeps SSR correct with no flash, drops `useSearchParams` entirely — but a tab switch then needs a server round-trip instead of being instant.
 3. **Derive the tab from `window.location.search` + a `popstate` listener.** Keeps switching instant, but the initial render no longer knows the tab server-side, so a deep link to `?tab=progress` flashes the default first.
 
