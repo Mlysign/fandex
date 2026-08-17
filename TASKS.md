@@ -95,7 +95,19 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 **⚠️ Standing limitation: a Claude session has no access to Nils's phone.** Verification is the browser pane at 375×812 with touch emulation. That covers a lot — it caught the hidden-image downloads and proved the long-press gestures — but it provably cannot see MB7.
 
-- **MB7** ⬜ **DEFERRED 2026-08-17 — needs a device look.**
+- **MB7** ✅ **FIXED 2026-08-17. Root cause was horizontal overflow on Insights — nothing was wrong with the nav.** The mobile batch is now **15 of 15**.
+
+  **The chain, measured at 375×812.** Insights rendered ~470px of content in a 375px viewport, so Chrome applied **shrink-to-fit** (`visualViewport.scale` 0.80). Zooming out inflates the **layout** viewport to 812/0.8 ≈ **1017** while the **visual** viewport stays 812. The mobile bar is `fixed bottom-0`, so it pinned itself to 1017 — **~205px below the visible area**. One page's horizontal overflow was zooming the viewport out from under a fixed element.
+
+  **⚠️ The earlier investigation had the number and misread it.** It recorded the nav's `top` as **965 in an 812-tall viewport** and concluded "unchanged across a 1500px scroll → fine". It was unchanged *and* off-screen the whole time: the check asked whether the value MOVED, never whether it was VISIBLE. **When measuring a fixed element, compare its `bottom` against `visualViewport.height` — not against its own earlier value.**
+
+  **What unlocked it:** Nils confirming it reproduces in **normal mobile Chrome**, not only the installed PWA. That revived the dynamic-viewport theory the original note had ruled out *precisely because* it looked PWA-only — standalone mode has no URL bar, so the toolbar explanation seemed dead. Shrink-to-fit happens in both.
+
+  **Three overflow sources, all one class of bug** — a flex/grid item defaults to `min-width: auto` and refuses to shrink below its own content: the decade histogram (14 columns needing ~28px each) → `min-w-0` + `overflow-x-auto`; the "You rate higher/lower" cards (410px wide) → `min-w-0`; FacetSection's filter row (a `w-44` input + stepper + toggle ≈ 380px) → `flex-wrap`.
+
+  **Verified:** `scrollWidth` 470 → **375** (= clientWidth), scale 0.80 → **1**, `innerHeight` 1017 → **812**, nav bottom edge at 812 both at the top of the page and after scrolling to the end — **offscreen by 0**.
+
+  <details><summary>Original framing, kept for context</summary>
 
   **What the task actually is (this was missing, and is why it got deferred).** You reported, from the installed PWA on your phone: *"the bottom nav scrolls away on Insights."* Every other page keeps its bottom nav pinned while you scroll; `/insights` doesn't. The nav is the app's primary navigation on mobile — Home / Search / Calendar / Wishlist / You — so on that one page you scroll down and lose the way out, and have to scroll back up to navigate. It is the **last open item of the 15-note mobile batch**; the other 14 are shipped.
 
@@ -108,6 +120,8 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
   Guessing between those two is how you waste an afternoon changing the wrong thing — hence the probe below rather than a speculative patch.
 
   **Cost if skipped:** one page has degraded navigation in the installed app. Not data loss, not a prod outage. Closing the batch at 14/15 is a legitimate choice.
+
+  </details>
   - **Ruled out by measurement at 375×812 with a session — don't re-check these:** the nav is `position: fixed` with `top` unchanged at 965 across a 1500px scroll; **no ancestor** carries a `transform`/`filter`/`perspective`/`contain`/`backdrop-filter`/`will-change` (the usual ways `fixed` silently becomes containing-block-relative — the whole chain to `<html>` was walked); **nothing covers it** (it's `z-40` and IS the topmost element at its own centre by `elementFromPoint`; the only higher-z element is the toast container at `z-100 bottom-4 right-4`, which doesn't overlap); and **`min-h-screen` is not insights-specific** — Home, Discover, Calendar, Profile and Settings all use it.
   - **Next step, on the device** (`chrome://inspect` against the installed PWA): does the nav's `getBoundingClientRect().top` actually move during the scroll, or does it stay put while something else changes? Those are different bugs with different fixes.
   - **⚠️ A Claude session cannot do this even with the phone plugged in** (established 2026-08-17): the browser tooling rewrites a `chrome://` URL to `https://chrome://`, and a Chrome extension cannot script `chrome://` pages regardless. It needs a human at `chrome://inspect`.

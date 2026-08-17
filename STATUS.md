@@ -42,7 +42,7 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 | | Item | Blocked on |
 |--|------|--|
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
-| 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped**, MB14 included. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
+| ✅ | **MB — mobile batch COMPLETE (15/15)** | MB7 fixed 2026-08-17: Insights overflowed horizontally, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` nav pinned ~205px below the fold. → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context now in [TASKS.md](TASKS.md) (it's the "Fandex as a thin Play Store wrapper of the website" decision from 2026-06-18; needs a signing key + $25 Play account). |
 | 🔵 | **H3 — affiliate revenue (UNPARKED, GOG first)** | **You:** program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 

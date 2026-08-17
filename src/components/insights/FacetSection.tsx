@@ -150,7 +150,12 @@ export default function FacetSection({
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-3 mb-1">
         <span className="font-mono text-eyebrow uppercase text-accent">{title}</span>
-        <div className="flex items-center gap-2">
+        {/* MB7 — `flex-wrap` here is load-bearing on mobile: a `w-44` input plus
+            the min stepper plus the Highest/Lowest toggle is ~380px of content in
+            a 327px content box, and without wrapping it pushed the PAGE wider,
+            which zooms the viewport out and drops the fixed bottom nav off-screen
+            (see the note in InsightsView's decade chart). */}
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

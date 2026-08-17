@@ -79,13 +79,23 @@ function DecadeChart({ data, baseline, selected, onSelect }: {
   if (!data.length) return <p className="text-sm text-text-secondary">Not enough dated items.</p>;
   return (
     <div className="rounded-xl border border-border bg-surface-elevated p-4">
-      <div className="flex items-end gap-2 h-40">
+      {/* MB7 — `min-w-0` is load-bearing, not tidying.
+          A flex item defaults to `min-width: auto`, so these columns refused to
+          shrink below the width of their own labels ("2020s", "×508"). A library
+          spanning 1890s→2020s is 14 columns needing ~28px each: ~470px of content
+          in a 375px viewport. Chrome answered by SHRINK-TO-FIT — visualViewport
+          .scale 0.8, which inflates the LAYOUT viewport to 812/0.8 ≈ 1017 — and
+          the app's `fixed bottom-0` mobile nav then pinned itself to 1017,
+          i.e. ~205px BELOW the visible area. That is the whole of "the bottom bar
+          scrolls away on Insights": one page's horizontal overflow silently
+          zooming the viewport out from under a fixed element on every other. */}
+      <div className="flex items-end gap-2 h-40 overflow-x-auto">
         {data.map((d) => {
           const dimmed = selected != null && selected !== d.decade;
           return (
             <div
               key={d.decade}
-              className={`flex-1 flex flex-col items-center justify-end h-full ${onSelect ? "cursor-pointer" : ""}`}
+              className={`flex-1 min-w-0 flex flex-col items-center justify-end h-full ${onSelect ? "cursor-pointer" : ""}`}
               onClick={onSelect ? () => onSelect(d.decade) : undefined}
             >
               <span className="text-[10px] leading-none text-text-secondary tabular-nums mb-0.5">{d.avg.toFixed(1)}</span>
@@ -230,11 +240,11 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
       <section>
         <PanelHeader eyebrow="You vs the crowd" hint="Where your ratings most diverge from the crowd (both shown on a 0-10 scale)." />
         <div className="grid sm:grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border bg-surface-elevated p-3">
+          <div className="min-w-0 rounded-xl border border-border bg-surface-elevated p-3">
             <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-success mb-2">You rate higher</h3>
             <div className="space-y-0.5">{data.extra.divergence.overRated.map((i) => <DivergenceRow key={i.id} item={i} />)}</div>
           </div>
-          <div className="rounded-xl border border-border bg-surface-elevated p-3">
+          <div className="min-w-0 rounded-xl border border-border bg-surface-elevated p-3">
             <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-danger mb-2">You rate lower</h3>
             <div className="space-y-0.5">{data.extra.divergence.underRated.map((i) => <DivergenceRow key={i.id} item={i} />)}</div>
           </div>
