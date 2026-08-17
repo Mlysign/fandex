@@ -4,7 +4,11 @@
 
 ## 1. What it is
 
-A number (target scale **0–100**) on every game / movie / show that answers "how well does this match *my* taste?" — not "is this good?". Clicking it reveals exactly which facets pushed it up or down. Two hard properties:
+A number (**nominally 0–100, but deliberately not clamped**) on every game / movie / show that answers "how well does this match *my* taste?" — not "is this good?". Clicking it reveals exactly which facets pushed it up or down. Two hard properties:
+
+> **0–100 is a target, not a rule — decided 2026-08-17, do not "fix" the overflow.**
+> About 3.3% of real scores print outside the range (measured on the live 1,922-item library: min −23, max 115). That is intentional. Nils's reasoning: **exceeding 100 is rare, and it makes an item stand out — it promotes the score rather than making it look broken.** The formula is a raw sum by design (§3) and was un-clamped on purpose.
+> Two consequences for anyone touching the scoring: the range is **not** a bug to re-tune away — measured alternatives (tighter top-N, refitted gains, a lower `ip` weight) were all considered and **rejected**; and `FandexScoreBadge` is already correct here, printing a bare integer coloured against `center ± 10`, which reads sensibly at any scale and makes no 0–100 claim of its own.
 
 - **Deterministic** — same profile + same config + same item ⇒ same score, every time. No randomness, no time-dependence.
 - **Explainable** — the score is a sum of named, signed facet contributions; the breakdown *is* the computation, not a post-hoc rationalization.
@@ -20,7 +24,7 @@ The "Taste Match" discovery engine already implements most of the machinery — 
 - `src/lib/tags.ts` — the tag taxonomy: `CATEGORIES` (genre, source, setting, artstyle, mood, theme, audience, other, meta) + `categorizeTag()`. `meta` is already a `defaultIgnored` category.
 - `src/components/discovery/MatchReasons.tsx` — renders the reasons. The explainability UI primitive already exists.
 
-**The three real gaps** this design fills: (1) a clean **Bayesian average** per facet, (2) a stable **0–100 normalization** for a value users see, and (3) a **developer backend** that moves weights + taxonomy out of hardcoded TS into tunable, DB-backed config.
+**The three real gaps** this design fills: (1) a clean **Bayesian average** per facet, (2) a stable, **centred normalization** for a value users see — anchored on the viewer's own mean rating rather than clamped to 0–100 (see the note in §1), and (3) a **developer backend** that moves weights + taxonomy out of hardcoded TS into tunable, DB-backed config.
 
 ## 3. Scoring model
 

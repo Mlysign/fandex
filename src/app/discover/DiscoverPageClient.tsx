@@ -208,6 +208,20 @@ export default function DiscoverPageClient() {
   const [searchTotal, setSearchTotal] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchLoadingMore, setSearchLoadingMore] = useState(false);
+  /**
+   * The query the currently-displayed results actually belong to.
+   *
+   * Gates the "No results" empty state, and the reason is a 300ms hole the
+   * other flags cannot cover: the search is DEBOUNCED, and `searchLoading` is
+   * only set inside runSearch — i.e. after the debounce fires. So for the first
+   * 300ms after a query changes, `searchLoading`, `searchLoadingMore` and
+   * `webLoading` are all false while `combined` is still empty, and the empty
+   * state renders "No results for X" for a query nothing has searched yet.
+   * Measured on /discover 2026-08-17: typing from browse mode showed it within
+   * ~216ms, every time. The existing guard covers the WEB phase (`webLoading`),
+   * which is why this survived — the hole is strictly before the search starts.
+   */
+  const [searchedQ, setSearchedQ] = useState<string | null>(null);
   const [webItems, setWebItems] = useState<any[]>([]);   // fresh DB matches (fetch-more)
   const [webLoading, setWebLoading] = useState(false);
   // A5 — typed search groups: People/Tags matching a real text query, shown
@@ -384,6 +398,9 @@ export default function DiscoverPageClient() {
 
   // ── Search loader ──
   async function runSearch(offset: number, append: boolean) {
+    // Captured up front: `q` can change again while this is awaiting, and what
+    // gates the empty state has to be the query THESE results are for.
+    const qUsed = q.trim();
     if (append) setSearchLoadingMore(true);
     else { setSearchLoading(true); setWebItems([]); setPeopleMatches([]); setTagMatches([]); }
     try {
@@ -405,7 +422,8 @@ export default function DiscoverPageClient() {
       }
       setSearchItems((prev) => (append ? [...prev, ...localItems] : localItems));
       // Show local results immediately; the DB fetch below populates separately.
-      if (append) setSearchLoadingMore(false); else setSearchLoading(false);
+      if (append) setSearchLoadingMore(false);
+      else { setSearchLoading(false); setSearchedQ(qUsed); }
 
       // Fetch-more from the external DBs: a text query pulls live title matches;
       // a must-include facet pulls its full external set (e.g. a person's TMDB
@@ -450,7 +468,7 @@ export default function DiscoverPageClient() {
         setWebLoading(false);
       }
     } catch {
-      if (!append) { setSearchItems([]); setSearchTotal(0); setWebItems([]); }
+      if (!append) { setSearchItems([]); setSearchTotal(0); setWebItems([]); setSearchedQ(qUsed); }
       setSearchLoading(false); setSearchLoadingMore(false); setWebLoading(false);
     }
   }
@@ -680,7 +698,10 @@ export default function DiscoverPageClient() {
               <Spinner label="Searching the databases…" />
             )}
 
-            {!searchLoading && !webLoading && combined.length === 0 && peopleMatches.length === 0 && tagMatches.length === 0 && (
+            {/* `searchedQ === q.trim()` is the debounce-window guard — without it
+                this renders "No results for X" for the 300ms before the search
+                even starts. See searchedQ's declaration for the measurement. */}
+            {!searchLoading && !webLoading && searchedQ === q.trim() && combined.length === 0 && peopleMatches.length === 0 && tagMatches.length === 0 && (
               <EmptyState
                 title={<>No results{q.trim() ? <> for &ldquo;<span className="text-text-primary">{q}</span>&rdquo;</> : " with these filters"}</>}
                 actions={<Button variant="ghost" onClick={resetFilters}>Clear search &amp; filters</Button>}

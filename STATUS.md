@@ -2,7 +2,9 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-17 (cache tables became views — migration 16; /library + /wishlist found dead)._
+_Last updated: 2026-08-17 (migration 16; both prod sweeps done; the full open-decision list answered and locked)._
+
+> **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (GOG first), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
 ---
 
@@ -41,11 +43,9 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 |--|------|--|
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
 | 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped**, MB14 included. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
-| 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
-| 🔵 | **H3 — affiliate revenue** | **You:** Railway → program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
-| 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
-| 🔵 | **Fandex Score prints 3.3% outside 0–100** | **Your call.** Re-measured against prod's REAL config 2026-08-17 (it runs `ip: 3`, not the 1.3 the docs assumed). Three measured options — tighten top-N, lower `ip`, or relabel. → [TASKS.md](TASKS.md) |
-| 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |
+| 🔴 | **Legal pages render literal `TODO(...)` to users** | **You:** two are now factually wrong (privacy says no address is published — the approved Imprint publishes one; terms says H3.8 is undecided — it's approved). Rewrites drafted, not applied. → [TASKS.md](TASKS.md) |
+| 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context now in [TASKS.md](TASKS.md) (it's the "Fandex as a thin Play Store wrapper of the website" decision from 2026-06-18; needs a signing key + $25 Play account). |
+| 🔵 | **H3 — affiliate revenue (UNPARKED, GOG first)** | **You:** program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 
 **The cache tables are gone (migration 16, 2026-08-17).** `user_library` and `user_watchlist` are now VIEWS over `user_item_state`, so migration 3's expand-then-contract finally contracted and `rebuildCaches` is deleted — drift is no longer absent but impossible. Proven byte-exact on all 2,017 real rows through **both** apply paths (`scripts/verify-cache-views.mjs`, `scripts/rehearse-cache-view-migration.mjs`). **Two traps recorded in [TASKS.md](TASKS.md): a code-only rollback breaks every library write, and `CREATE INDEX` on these names now throws at boot.**
 

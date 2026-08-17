@@ -2463,3 +2463,110 @@ this stack. And `getComputedStyle(…).getPropertyValue('--duration-base')` retu
 `.2s` throughout, so the *existing* AGENTS.md tree-shaking check reported "healthy".
 Third `@theme` trap in `globals.css`, different mechanism from the other two →
 AGENTS.md, [[tailwind-theme-tree-shaking]].
+
+
+---
+
+## Archived 2026-08-17 — sections closed out of TASKS.md
+
+Moved verbatim from TASKS.md when they closed, per the doc-map convention. Grep, don't read.
+
+## SM39 — the Fandex Score range ✅ root cause fixed 2026-08-14; one design call left
+
+**Finding 1 — ✅ FIXED 2026-08-14. Prod's two gain constants were the whole of SM39.** `GET /api/dev/scoring` showed a **hand-tuned** config (`K_up 30 · K_down 20 · C 2 · director 4`), not a stale default. Feeding it back through the real library (`node scripts/probe-score-range.mjs data/rr.db --config <the GET response>`) reproduced SM39 almost exactly: **min −359 · p10 −71 · median 133 · p90 305 · max 556, 77.1% outside** vs SM39's −362.3 / −74 / 93.4 / 301.1 / 557.4. Fixed by fitting **only the gains** — 30/20 → **2.5/4**, every taste decision untouched → 0.9% outside. Note the fitted pair is `K_down > K_up`: the center sits at 66.8, so there are 33 points of room above against 66.8 below, and a symmetric pair cannot fit that. The save also stripped the vestigial `perCategoryCap` (zod `z.object` drops unknown keys).
+
+**The trap that made local and prod diverge silently, worth knowing before touching any scoring default:** migration 9 seeds `scoring_config` with `INSERT OR IGNORE` (`migrations.ts:298`) and `getScoringConfig()` merges `{...DEFAULT, ...stored}` — **the stored blob wins**. A recalibrated default never reaches a database that already has a row. `tag_category` is seeded the same way. (The same merge is what lets a NEW knob ship with no migration — see the franchise section below.)
+
+**Finding 2 — ✅ CLOSED 2026-08-17: the range is a TARGET, not a rule. Nothing to fix.** Nils's call, and the reasoning is worth keeping: *exceeding 100 is rare and makes an item stand out — it promotes the score rather than making it unbelievable.* So `ip` stays at 3, the gains stay, top-N stays, and `docs/fandex-score.md` §1 now says so in the design doc rather than implying a range the formula was deliberately un-clamped from. **Do not re-tune this, and do not re-file the overflow as a bug.** The measurements below are kept only so the options aren't re-derived.
+
+**The measurement, for the record — re-measured against PROD's real config: 3.3% outside, not ~1%.** The old figure assumed `ip: 1.3`; prod runs **`ip: 3`**, which widened the tails a lot. `node scripts/probe-score-range.mjs data/rr.db --config <prod response>` on the real 1,922-item library:
+
+| config | min | p10 | median | p90 | max | <0 | >100 | outside |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| **A · prod as it runs today** | −23 | 40 | 72 | 89 | 115 | 8 | 55 | **3.3%** |
+| B · gains fitted (2 / 4.3) | −30 | 38 | 71 | 85 | 106 | 9 | 4 | 0.7% |
+| C · C=5 + fitted gains | −42 | 37 | 71 | 85 | 106 | 10 | 10 | 1.1% |
+| **E · top-N 3/2/2/1, gains unchanged** | **2** | 47 | 70 | 83 | **103** | **0** | 2 | **0.1%** |
+
+**E is the standout and it is not the one the old note predicted.** It is the only row with *no negative scores at all* (min 2, max 103), and it needs no gain change — just tighter top-N. Its cost is the documented one: a thinner breakdown (fewer facets listed per item) and a narrower spread (p10–p90 of 36 points vs today's 49).
+
+Three honest options, still your call: **(a) tighten top-N to 3/2/2/1** → 0.1% outside, no negatives; **(b) drop `ip` 3 → ~2**, which attacks the actual cause rather than the symptom (it alone moves 721 items by up to ±24); **(c) relabel** — `FandexScoreBadge` makes no 0–100 claim itself, printing a bare integer coloured against `center ± 10`, which reads correctly at any scale, and the 0–100 target lives only in `docs/fandex-score.md` §1.
+
+⚠️ Both probes above ran against the LOCAL `data/rr.db` with prod's config imported. Local has more franchise attachments than prod did (584 vs 407 found by the Wikidata sweep), so the `ip` effect here is, if anything, slightly overstated — though the 70 suggestions applied to prod on 2026-08-17 have narrowed that gap.
+
+---
+
+## Franchise / IP as a scoring factor ✅ BUILT 2026-08-14 · needs a deploy + your weight call
+
+A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchises`, both already in stored `raw_data`. Full design → [docs/fandex-score.md](docs/fandex-score.md) §3.6. Measured on the real library: **516 of 1,903 scored items move** (Metal Gear Solid +5.2, LOTR +5.0, The Last of Us +4.7, Transformers −8.0).
+
+**No migration and no prod config edit needed** — `getScoringConfig()` merges `{...DEFAULT, ...stored}`, so prod's existing row picks up `roleWeights.ip: 1.3` and `topIps: 1` from the defaults the moment the code deploys. Verified against the real local row, which predates both.
+
+**The editor shipped 2026-08-14** (`0a1ee54`) — `/dev/scoring` → Taxonomy → **Franchises**. Migration 13 adds `ip_alias` (bundling, mirrors `tag_alias`) and `item_ip_override` (attach/detach one item). Verified on both apply paths against a copy of the real DB. Design + the resolution-point reasoning → [docs/fandex-score.md](docs/fandex-score.md) §3.6.
+
+**⚠️ The numbers this section used to quote were WRONG — prod was never read.** Live `GET /api/dev/scoring` on 2026-08-17 says **`ip: 3`** (not "the default 1.3") and **`director: 2`** (not 4), with `priorStrength: 2`, `K_up 2.5 / K_down 4`. The `ip` weight had already been tuned. This is the third time the "read `/api/dev/scoring` before theorising" rule has paid — the stored blob wins over any default, so a doc quoting defaults is quoting fiction.
+
+**Done 2026-08-17 (on prod):**
+1. ✅ **Bundled `metal gear solid` into `metal gear`.** Prod had 4 + 3 items, deduping to 5 — the two were double-attached. Canonical is `metal gear`: it is the series, Metal Gear Solid is a sub-series inside it.
+   - **Two of the five members were wrong and were removed**: *PlayStation All-Stars Battle Royale* and *Super Smash Bros. Ultimate*, crossover fighters where Snake/Raiden guest-appear. Both were collecting the **full franchise deviation (+15.6 each at `ip: 3`)** — i.e. being credited with a Metal Gear rating for a cameo. Re-attach by hand if you disagree. Metal Gear is now Snake Eater, Delta, Ground Zeroes, Phantom Pain.
+2. ✅ **Applied 70 of 71 title-match suggestions.** (Prod had **71**, not the 31 quoted here — that was the local count.) Overwhelmingly genuine: GTA III/V/San Andreas/Vice City → Grand Theft Auto, the five Back to the Future episodes, Half-Life 2's episodes, Elder Scrolls, System Shock, Sam & Max, The Last of Us Part I + Remastered. Stored `source: manual`, so a Wikidata re-sweep cannot undo them.
+   - ⬜ **One deliberately skipped: the GAME `Journey` → `Journey Collection`.** That collection is a **1-item *movie*** collection — a name collision, not a franchise. Attach it only if you actually want the game folded into a film collection.
+3. ✅ **`ip` is live at 3 and that is aggressive — measured.** `node scripts/probe-ip-impact.mjs data/rr.db --config <prod response>`: **721 of 1,904 items move**, swinging up to **±24 points** (Metal Gear Solid V +15.6 → 115; LOTR +15.0 → 108; Transformers: Age of Extinction −24.1 → −23). It is the main driver of finding 2 below. Lowering it to ~2 is the single biggest lever if you want the range back.
+4. ⬜ **Optional gain re-fit** — see the measured table in the SM39 section; the honest options changed now that prod's real config is known.
+
+**✅ Wikidata shipped 2026-08-14** (`313a830`) — **the shows gap is closed.** `POST /api/dev/scoring/wikidata` (admin, bounded + resumable, repeat until `remaining` is 0). On the local catalog: 2,295 items asked, **584 found, 605 attachments — 321 games, 165 movies, 98 shows.** Star Wars now spans 11 movies + 6 shows (The Mandalorian, Andor, Obi-Wan Kenobi…), plus links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek.
+
+- ⬜ **Run it against prod** — same shape as `/api/dev/crosslink`; prod's catalog is untouched. Repeat `POST {"maxItems":150}` until `remaining` is 0 (~15 calls).
+- **Property per medium, both measured — don't "simplify" to one.** Films/shows: IMDb `P345` → **`P8345`** (P179 there also returns sub-series like "Star Wars original trilogy"). Games: Steam `P1733` → **`P179`** (P8345 is absent on games entirely).
+- **Labels need `en,mul,en-gb`.** Plain `"en"` returns bare QIDs for the Half-Life/Portal/Fallout/Last of Us series — they carry `mul` labels. Anything still QID-shaped is dropped.
+- **A wikidata write never overwrites a `manual` one** (`item_ip_override.source`, enforced in the upsert's WHERE) — otherwise a re-sweep would undo your corrections.
+- **Measured dead ends, don't re-check:** TMDB keywords carry franchise names on 2 of 387 show payloads; TMDB has no collection concept for series.
+
+---
+
+## Drop the `user_library` / `user_watchlist` cache tables ✅ DONE 2026-08-17 (migration 16)
+
+**They are now VIEWS over `user_item_state`, not tables.** Migration 3's expand-then-contract finally contracted. `rebuildCaches` is deleted; the drift that was audited on every boot for a year is no longer absent but *impossible*, because there is nothing separate left to drift.
+
+**Why views rather than rewriting the ~18 read sites:** it puts the correctness of every rating, status and review in two SQL definitions instead of eighteen queries — and, decisively, it makes the swap *provable* by diffing view output against the real stored rows. It is also cheaply reversible: `user_item_state` still holds everything, so a wrong view is one `CREATE VIEW` from correct, never a restore.
+
+**Verification that actually counts (both apply paths, real data):**
+- `node scripts/verify-cache-views.mjs data/rr.db` — view output vs the real tables, column by column: **byte-exact on all 2,017 rows**, `added_at` included, at zero tolerance.
+- `node scripts/rehearse-cache-view-migration.mjs data/rr.db` — runs the **standalone** `scripts/migrate.mjs` against a prod-shaped copy and diffs pre-migration table vs post-migration view. Clean, idempotent on a second run, every other table's row count unchanged.
+- Live: `/api/library` 1,922 items with ratings intact (incl. averaged 6.5), `/api/calendar` 95, `/insights` renders 1,671 rated / 1,922 in library / 6.7 average.
+
+**⚠️ Three things a future session must not relearn the hard way:**
+1. **A code-only rollback does NOT work.** Old code calls `rebuildCaches`, which issues INSERT/UPDATE/DELETE against a view — SQLite refuses ("cannot modify … because it is a view") and every library write fails. Rolling back means recreating the tables from the views too; the two-statement recipe is in migration 16's comment.
+2. **Never index these names again.** `CREATE TABLE IF NOT EXISTS` over a view is a silent no-op, but `CREATE INDEX IF NOT EXISTS` over one **throws**. `db.ts`'s schema block re-runs before migrations on *every* boot and used to carry exactly those two index statements — left in, this migration would have applied cleanly and then stopped the app from starting on the next restart. They moved into migration 3 (the only thing still needing real tables, for its backfill); `cacheViews.test.ts` guards it at the source level.
+3. **The wishlist view orders its JSON by `source` and the library view by `rowid`, deliberately.** `rebuildCaches` never named an order, so SQLite picked one per query — the wishlist's `SELECT source` is covered by the UNIQUE index (alphabetical), the library's five-column select is not (rowid order). Both are baked into years of stored JSON. Measured, not inferred.
+
+Also retired with it: `dbSize.ts`'s `libRowsWithoutState` / `wishRowsWithoutState`, which did their job (0/0 on prod is what unblocked this) and can now only ever read 0. `dbPrune.ts`'s `PRUNABLE_WHERE` drops its two view clauses — provably redundant now, since a view row cannot exist without the `user_item_state` row it derives from — and keeps the hedge as a *measurement* (`wouldHaveLost*`, which must stay 0).
+
+---
+
+## 2026-08-13 — advanced search's Fandex Score (SM43–SM48) ✅ CLOSED
+
+Six fixes, all shipped and verified on prod: the heal loop's latency budget (SM44, 66.3 s → 4.1 s),
+the database half of search having no score fields (SM45 — the actual cause of the report), that half
+rebuilt to Nils's spec with provider-side AND (SM46), Steam added as the games tag source (SM47), and
+games cross-linked to every catalog on ingest plus a backfill (SM48). Full write-ups + the five traps
+they turned up → [archive](docs/archive/history.md), grep `SM44 heal budget`.
+
+**Still open here — your call:**
+
+0. **PROD IS NOT BACKFILLED.** The script drains a local DB; prod's catalog is on the Railway volume. `POST /api/dev/crosslink` (admin-gated, 25 items / 20 s per request, returns a cursor) is the way in — **not yet run**. Until it is, prod fills organically at 30 cross-links per sync pass (~16 syncs). RAWG's pass should wait for RAWG to come back.
+
+1. **`deckbuilding` + `tower defense` returns 0 from TMDB/RAWG/IGDB** — genuinely, not as a bug: IGDB has no game carrying both terms and RAWG is down. **Steam now covers it (277 games), so the query works.** Still worth re-running once RAWG is back; if RAWG stays empty, suspect a slug mismatch (`rawgTagSlug("deckbuilding")` → `deckbuilding`, while RAWG's tag may be `deck-building`) — there is no alias layer between our tag keys and a provider's vocabulary.
+2. ✅ **Games' thin rows are mostly RAWG-only — FIXED on prod 2026-08-17.** Your call was to fix the root cause by cross-linking IGDB rather than fall back to a depressed number, and that is what ran: **319 games visited, 263 linked (82%), IGDB coverage `needing` 357 → 61.** No script needed in the end — `POST /api/dev/crosslink {"source":"igdb","maxItems":25}` already supports IGDB and is cursor-driven, so `scripts/backfill-game-detail.ts` stays unused.
+   - Prod's remaining game-link gaps: **rawg 168** (untouched — RAWG has been down all day, timeouts + open circuit), **steam 111**, **igdb 61**. The steam and igdb figures are *visited-and-unlinkable*, not pending work — those titles simply aren't in those catalogs.
+   - ⚠️ The route ignores an unrecognised `dryRun` key, so `{"dryRun":true}` **still writes**. Found by passing it and watching `needing` drop by 5. Don't trust it as a preview.
+   - Practical note for a future long sweep: each 25-item batch takes ~15–20 s against IGDB's rate limit, and a browser-console loop dies at the 45 s CDP timeout. Kick the loop off as a detached async function writing progress to `window`, then poll that — the whole 319-item drain ran in one go that way.
+3. **Progressive reveal is built but only half-observed.** `DiscoverPageClient.runSearch` paints local `find()` results first and folds `webItems` in when they land ("Show local results immediately" is the existing comment), the empty state is gated on `!webLoading` so an intermediate never reads as "No results", and there's a "Pulling more from the databases…" affordance. The database half still arrives as ONE batch, not a trickle — with AND that is unavoidable for tags (the conjunction is one query), so "slowly fills" is now local-then-external, at 6–9 s rather than 66 s.
+4. ✅ **The shimmer/blank-state eyeball happened 2026-08-17 — and it found a real bug, now fixed.** Discover's empty state was rendering **"No results for X" for ~300 ms before the search had even started**, on every fresh query.
+   - **Root cause:** the search is debounced 300 ms, and `searchLoading` is only set *inside* `runSearch` — i.e. after the debounce fires. The empty state was gated on `!searchLoading && !webLoading`, and in that window **all three flags are false while `combined` is empty**. The existing guard covers the WEB phase, which is exactly why this survived: the hole is strictly *before* the search begins.
+   - **Fix:** a `searchedQ` state stamped when results land; the empty state additionally requires `searchedQ === q.trim()`. Verified both directions in the browser — no premature "No results" inside the debounce window, and a genuinely empty query still shows "No results for …" correctly.
+   - ⚠️ **Two measurement traps that nearly produced a wrong conclusion**, worth carrying: item links are `/movie|/show|/game/<id>/<slug>`, **not** `/item/...`, so a `a[href*="/item"]` selector silently counts 0 every time; and **the browser pane throttles timers to ~1/2s when it isn't displayed**, so a 30 ms sampling loop yields ~6 frames in 14 s. Fine-grained UI timing cannot be sampled that way — confirm the mechanism in the code instead.
+
+**Also found — ✅ FIXED 2026-08-17.** Standalone `node` couldn't import `src/lib/http.ts`: `ProviderUnavailableError`'s constructor used TypeScript **parameter properties**, which Node's strip-only type removal rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), so any `scripts/*.mjs` reaching a provider path died on import. Same class as AGENTS.md's `import type` rule — **type-stripping erases, it never emits**, and a parameter property has to generate an assignment. Fields are now declared and assigned explicitly; verified by importing `http.ts` through `alias-hooks.mjs` and constructing the error with `host`/`retryInMs` intact.
+
+---

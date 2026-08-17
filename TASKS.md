@@ -7,6 +7,41 @@
 
 ---
 
+## ✅ Decisions LOCKED 2026-08-17 — do not re-open these
+
+Nils answered the full open-decision list in one pass. Treat every line here as settled; a future session that re-raises one is wasting his time.
+
+1. **Impressum: APPROVED as-is.** H4.2 closes. **All of H3 is unblocked.**
+2. **Affiliate signups: GO, starting with GOG, now.** The "prod stably up for days, not hours" gate is met (serving since 2026-08-12). Sequence unchanged: GOG → Humble → Fanatical → GMG → **Amazon LAST**. Claude does not do the signups — they carry his tax/payment identity.
+3. **H3.0 is CLOSED as WON'T DO. The support page must NEVER quote a running-cost figure — permanently, not "until we have one".** The qualitative line ("Hosting, Domain und die Dienste … gehen auf eigene Rechnung") stays; no number ever joins it. Do not re-add H3.0 as an open item.
+4. **Fandex Score range: RELABEL (option c).** 0–100 is a **target, not a rule**. His reasoning, worth keeping: *exceeding 100 is rare and makes an item stand out — it promotes the score rather than making it unbelievable.* So **no re-tune, no top-N change, `ip` stays at 3.** `docs/fandex-score.md` §1 updated to match. SM39 finding 2 is CLOSED.
+5. **The three franchise calls stand.** Smash Bros + PlayStation All-Stars stay removed from Metal Gear; the `metal gear solid` → `metal gear` bundle stays; the game `Journey` stays unattached from the `Journey Collection` movie collection.
+6. **MB7: DEFERRED** — he needs a proper writeup of *what the task is and why it matters* before acting (my earlier note explained only why I can't do it). See the MB7 section.
+7. **Android TWA (P15/P16): NEEDS MORE DETAIL** before he acts — "Bubblewrap" read as belonging to a different project. See the P15/P16 section.
+8. **H3.8 thresholds: APPROVED.** Ads at **10,000 pageviews/mo**, freemium at **3,500 sustained weekly-actives**. The long-standing "defined but explicitly NOT approved" guard is **retired** — these are now real triggers.
+9. **`PRUNE_ON_BOOT` stays ON** (the guard has held in prod three times). **`priorStrength` / role-weight re-tune: NOT needed — current tuning approved as good.** That time-gated item is closed.
+10. **Shimmer/blank-state check: DONE**, and it found a real bug — see "Discover's empty state" below.
+
+---
+
+## 🔴 The legal pages render literal `TODO(...)` text to users — and two are now FACTUALLY WRONG
+
+Found 2026-08-17 while acting on the decisions above. **Not applied — legal wording is Nils's to approve.**
+
+These are not code comments. They sit inside `body:` arrays in `src/lib/legal/content/{de,en}/*.ts`, so they **render as visible prose on the live legal pages**. That was a deliberate honesty choice at the time ("a TODO instead of a guess"), and STATUS.md's "the legal surface is CLOSED and filled" overstates it.
+
+Two of them are now **contradicted by today's decisions** and should not stay as-is:
+
+1. **`privacy.ts` — `TODO(H4.0/H4.2)`** says *"Fandex does not publish a postal address yet — intentionally pending legal advice on how to satisfy that without publishing a home address (see the Imprint)."* **The Imprint now publishes a real postal address, and Nils approved it today.** So the privacy policy actively contradicts the imprint one click away. Proposed replacement: state the controller's postal address is given in the Imprint and link it — no TODO.
+2. **`terms.ts` — `TODO(H3)`** says the paid-tier sections *"depend on a separate, not-yet-made decision (H3.8)"*. **H3.8 was approved today.** The sections are still correctly *inactive* (no paid tier exists), but "not yet made" is now false. Proposed replacement: keep them as forward-looking placeholders, drop the TODO marker and the "not yet decided" clause.
+
+Still genuinely open, so a marker is defensible — but it should not read as a code TODO on a public page:
+3. **`privacy.ts` — `TODO(H4.3)` ×2**: the per-provider transfer basis for US processors, and the competent supervisory authority. Both need real legal input.
+
+**Ask:** approve the two rewrites (1 and 2), and say whether 3 should stay visible or be softened to plain prose.
+
+---
+
 ## ⚠️ Needs Nils — nothing else is blocked on anything but these
 
 1. ✅ **Episode tracking is DONE and populated on prod (2026-08-16)** — nothing left for you here. The sync pulled **12,318 episodes across 280 shows** and bulk-filled the episode catalog in the same pass. Root cause of the dead first release, worth carrying: `/sync/watched/shows` returns **no** episode data in any variant. → [[trakt-episode-endpoints]]
@@ -16,13 +51,13 @@
    - **Both routes are session-gated** (`withScoringAdmin` reads the login cookie), so a bare terminal `curl` 404s no matter the syntax. Run them from the browser console on fandex.org while logged in. Also: in PowerShell `curl` is an alias for `Invoke-WebRequest` and does not accept `-H`/`-d` — use `curl.exe` or `Invoke-RestMethod`.
 
 3. ✅ **Donations are LIVE (2026-08-12).** **Any future client-read `NEXT_PUBLIC_*` needs an `ARG` line in the Dockerfile** or Railway never forwards it into the build — and the failure looks like success, since server components still render it fine. → [[next-public-env-needs-dockerfile-arg]]
-4. **`PRUNE_ON_BOOT=0` on Railway — optional now, your call.** The boot prune has now fired against prod **twice**, both times cleanly. On the 2026-08-12 redeploy it deleted 255 browsed-only rows (`media_items` 2267 → **2012**, exactly PR17's original expected figure; `media_links` 4225 → 3969, `media_external_ids` 4237 → 3970) and touched **zero** user rows — `user_library` 1912, `user_watchlist` 96, `user_item_state` 2337 all unchanged, `libRowsWithoutState`/`wishRowsWithoutState` still 0/0. The safety guard demonstrably holds in production. Set it to `0` only if you want no unattended deletes at all until (1a) confirms Litestream.
+4. ✅ **`PRUNE_ON_BOOT` — DECIDED 2026-08-17: stays ON.** The boot prune has now fired against prod three times, every time touching **zero** user rows (2026-08-12: 255 browsed-only rows deleted, `media_items` 2267 → 2012, with `user_library`/`user_watchlist`/`user_item_state` unchanged; 2026-08-17: 28 more). The guard demonstrably holds in production. Nothing to set.
 5. ~~Reclaim the WAL high-water~~ — **attempted twice 2026-08-12, cannot be done while Litestream runs** (`busy: 1`, no reclaim, both times). Not a fault and not worth chasing: the volume is 12% used with 4 GB free. Details in the PR17 section below.
-6. **Watch whether prod STAYS up.** It served ~32 min on 2026-08-07 then was un-routed at the edge; this session it has been stable ~7 h. The app never crashed either time (`uptime` climbed monotonically), so both events read as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this is stably up for days, not hours** — every program reviews the applicant URL and a 404 buys a rejection.
+6. **Watch whether prod STAYS up** — still worth an eye, but **no longer blocking anything.** It served ~32 min on 2026-08-07 then was un-routed at the edge; it has now been serving continuously **since 2026-08-12** (restarts since then are deploys, not outages). The app never crashed either time (`uptime` climbed monotonically), so both events read as a billing/pause action, not a technical one. **That "days, not hours" gate is met, so affiliate signups are UNPARKED** — see the locked decisions at the top.
 7. **Review the Impressum** — ✅ **mechanically checked on live prod 2026-08-17, nothing wrong with it.** `noindex, nofollow, noarchive, nosnippet` intact; canonical + hreflang resolve to the real domain (not `localhost`, so the `force-dynamic` rule is holding); sections are `§ 5 DDG` + `§ 18 Abs. 2 MStV`, Kontakt, Verbraucherstreitbeilegung, Haftung für Inhalte, Haftung für Links, Urheberrecht; real postcode/town + email present; **zero placeholders**; the Verbraucherstreitbeilegung paragraph is the standard non-participation wording; and there is **no ODR / OS-Plattform link**, which is correct — that platform closed 2025-07-20. What remains is genuinely your sign-off (is the address the one you want published), not a defect. Once you're happy, H4.2 closes and **all of H3 unblocks**.
 8. **On Ko-fi itself: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier. Also still open: the monthly-running-cost placeholder on the support page — that's H3.0's number (#10).
 9. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
-10. **H3.0 — confirm the upkeep baseline**: the actual Railway monthly bill + domain + any other recurring cost. One number; it goes in the H3 section below.
+10. ✅ **H3.0 — CLOSED as WON'T DO (2026-08-17).** The support page will **never** quote a running-cost figure — permanently, not "until we have one". The qualitative sentence stays ("Betrieb kostet Geld: Hosting, Domain und die Dienste"); no number ever joins it. **Do not re-open this as an open item or re-add a placeholder.**
 11. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
 12. **Sign up for the affiliate programs** — **still PARKED** (your call, 2026-08-03), now on prod being **stably** up rather than up at all — see #6. Every program reviews the site URL on the application, so applying during an un-routed window buys a rejection, and reapplying is worse than a first application. Sequence once that holds: **GOG first** (the only merchant the catalog already product-links), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a 180-day/3-qualifying-sale clock that closes the account if missed, and Amazon is the only movie/show coverage. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md).
 
@@ -30,8 +65,23 @@
 
 ## Open — carried forward from Phase 6
 
-- **P15** 🔵 · Med · ~25k — **Digital Asset Links** (`/.well-known/assetlinks.json`) + stable HTTPS origin for the Play Store TWA. Serving infra done (`src/app/.well-known/assetlinks.json/route.ts`, env-driven). Blocked on you (see above).
-- **P16** ⬜ · Low · ~60k — Verify **OAuth + cookie flow inside the TWA**: re-register prod redirect URIs per provider; test webview behaviour + deep-link return / `sameSite`. Needs P15 first.
+### P15/P16 — the Android app. Read this before deciding; "Bubblewrap" needed context.
+
+**This is Fandex, not a different project.** It traces back to a decision you locked on **2026-06-18**: *"public website first, Android as a PWA/TWA wrapper"* — i.e. Fandex ships to the Play Store as a **thin Android app that just displays fandex.org**, not as a separate codebase. Two months on, the name of the tool (Bubblewrap) carried none of that context. Fair.
+
+**What a TWA is.** A *Trusted Web Activity* is an Android app whose entire content is your website, rendered by the user's Chrome. No second codebase, no rewrite, no separate release of features — you ship the website, the app shows it. The only reason it isn't just a browser shortcut is that a TWA can **hide the browser address bar**, so it looks like a native app. Hiding that bar is exactly what needs proving you own the domain — which is what P15 is.
+
+**What's already built (by Claude, done):** `src/app/.well-known/assetlinks.json/route.ts` serves the Digital Asset Links file Google's verifier fetches. It's env-driven and currently returns an empty `[]`, which is valid JSON and simply means "no app claims this origin yet". **P14 (PWA manifest + service worker) is also done** — that's the prerequisite that makes the site installable at all.
+
+**What only you can do, and why.** Generating the Android package requires creating a **signing key** and a **Play Console account** — a credential and an account tied to your identity, so Claude does not do it. The mechanical shape:
+1. Run **Bubblewrap** (Google's CLI) or **PWABuilder** (a website that does the same thing without installing anything) against `https://fandex.org/manifest.webmanifest`. Output: a signed `.aab` plus two values — the **package name** (e.g. `org.fandex.twa`) and the signing cert's **SHA-256 fingerprint**.
+2. Set those as `TWA_PACKAGE_NAME` and `TWA_CERT_FINGERPRINT` on Railway. The route above starts serving a real claim; verify at `/.well-known/assetlinks.json`.
+3. Upload the `.aab` to the Play Console. (Google charges a **one-off $25** developer registration.)
+4. **P16** then verifies the thing that most plausibly breaks: **OAuth inside the app's webview** — Trakt/TMDB/Steam redirect URIs re-registered for prod, deep-link return, and `sameSite` cookie behaviour on the round-trip. This is why P16 exists as separate work rather than "it just works".
+
+**The honest cost/benefit.** Benefit: a Play Store listing and an installable icon without maintaining an Android app. Cost: a $25 account, a signing key you must never lose, and P16's OAuth verification — the webview is a genuinely different cookie environment from desktop Chrome, and sign-in breaking there is the realistic failure.
+
+**Decide:** do it, or explicitly park P15/P16 so they stop reading as in-progress work. Either is fine — **the website is unaffected either way**, and nothing else depends on this.
 - **P18** ✅ 2026-08-03 — **JustWatch clickable streaming links.** Its original blocker (a JustWatch Content Partner API + a full-catalog re-projection) turned out to be wrong on both counts: TMDB already returns a per-region `link` in the payload already fetched, and the existing lazy self-heal path (`ensureTmdbDetail`) delivers it one detail view at a time — no mass op needed. → [archive](docs/archive/history.md), grep `P18 streaming links`.
 
 ---
@@ -51,7 +101,19 @@
 
 **⚠️ Standing limitation: a Claude session has no access to Nils's phone.** Verification is the browser pane at 375×812 with touch emulation. That covers a lot — it caught the hidden-image downloads and proved the long-press gestures — but it provably cannot see MB7.
 
-- **MB7** ⬜ **NOT REPRODUCIBLE in the browser pane — needs a device look.** "The bottom nav scrolls away on Insights." It's the **installed PWA** (Nils), which kills the obvious theory: standalone mode has no Chrome URL bar to hide, so the dynamic-toolbar explanation is dead.
+- **MB7** ⬜ **DEFERRED 2026-08-17 — needs a device look.**
+
+  **What the task actually is (this was missing, and is why it got deferred).** You reported, from the installed PWA on your phone: *"the bottom nav scrolls away on Insights."* Every other page keeps its bottom nav pinned while you scroll; `/insights` doesn't. The nav is the app's primary navigation on mobile — Home / Search / Calendar / Wishlist / You — so on that one page you scroll down and lose the way out, and have to scroll back up to navigate. It is the **last open item of the 15-note mobile batch**; the other 14 are shipped.
+
+  **Why it hasn't been solved from here.** Everything checkable without your phone has been checked and came back clean, so there is no theory left to test in a desktop browser — the remaining question is a measurement that can only be taken on the device.
+
+  **What the device visit would answer, in one number.** Two completely different bugs produce the same complaint, and they have different fixes:
+  - the nav element **itself moves** (its `getBoundingClientRect().top` climbs as you scroll) → `position: fixed` is resolving against something other than the viewport, and the fix is in the CSS/ancestor chain;
+  - the nav **stays exactly where it is** while `visualViewport.height` / `offsetTop` change → the nav is fine and the *viewport* is resizing under it (PWA toolbar / safe-area behaviour), and the fix is a layout/viewport one.
+
+  Guessing between those two is how you waste an afternoon changing the wrong thing — hence the probe below rather than a speculative patch.
+
+  **Cost if skipped:** one page has degraded navigation in the installed app. Not data loss, not a prod outage. Closing the batch at 14/15 is a legitimate choice.
   - **Ruled out by measurement at 375×812 with a session — don't re-check these:** the nav is `position: fixed` with `top` unchanged at 965 across a 1500px scroll; **no ancestor** carries a `transform`/`filter`/`perspective`/`contain`/`backdrop-filter`/`will-change` (the usual ways `fixed` silently becomes containing-block-relative — the whole chain to `<html>` was walked); **nothing covers it** (it's `z-40` and IS the topmost element at its own centre by `elementFromPoint`; the only higher-z element is the toast container at `z-100 bottom-4 right-4`, which doesn't overlap); and **`min-h-screen` is not insights-specific** — Home, Discover, Calendar, Profile and Settings all use it.
   - **Next step, on the device** (`chrome://inspect` against the installed PWA): does the nav's `getBoundingClientRect().top` actually move during the scroll, or does it stay put while something else changes? Those are different bugs with different fixes.
   - **⚠️ A Claude session cannot do this even with the phone plugged in** (established 2026-08-17): the browser tooling rewrites a `chrome://` URL to `https://chrome://`, and a Chrome extension cannot script `chrome://` pages regardless. It needs a human at `chrome://inspect`.
@@ -96,9 +158,9 @@
 **Built 2026-08-03 — H3.3 ✅ (donations, live) · H3.4 ✅ (affiliate, DARK behind `MONETIZATION_ENABLED`) · H3.9 ✅ (go-live checklist).** Full write-ups → [archive](docs/archive/history.md), grep `H3 monetization v1`. Operating instructions → [docs/monetization-go-live.md](docs/monetization-go-live.md). **The one thing to know before touching any of it:** the catalog's store rows are Steam/PSN/GOG/Xbox/Nintendo/Epic/itch.io and only **GOG** is affiliate-capable, so `affiliate.ts` has *two* mechanisms — a rewriter for GOG-shaped links and `buildBuyLinks()` synthesizing per-title search links for the merchants we have programs with. → [[monetization-h3]]
 
 **Still open:**
-- **H3.0** ⬜ · High · **you** · ~0k — confirm the upkeep baseline (see "Needs Nils" above). Feeds the support page, which deliberately carries no cost figure.
-- **Affiliate program signups** ⏸️ — parked on Railway (see "Needs Nils" #7); every program reviews the applicant site.
-- **H3.8** 🔵 **defined 2026-08-02, explicitly NOT approved** — **Path B trigger**, two arms with different metrics:
+- **H3.0** ✅ **CLOSED as WON'T DO 2026-08-17** — the support page never quotes a cost figure. Permanent, not pending.
+- **Affiliate program signups** 🔵 **UNPARKED 2026-08-17 — GO, GOG first.** The uptime gate is met (prod serving since 2026-08-12) and the Impressum is approved, so the §5 DDG gate is clear too. Walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md). **Nils does these himself** — they carry his tax/payment identity.
+- **H3.8** ✅ **APPROVED 2026-08-17** — the thresholds below are now REAL triggers, not a parked proposal. The previous standing instruction ("defined but explicitly NOT approved — a future session must not read them as settled") is **retired**. **Path B trigger**, two arms with different metrics:
   - **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20) — not a second gate, just worth re-checking which network fits.
   - **Freemium → 3,500 sustained weekly-active users.** The old "roughly 1k+ actives" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€, leaving room for Trakt's separate approval and normal churn.
   - **The metric, checked against the live schema:** no pageview/session log exists, and **`users.last_seen_at` is a false friend** — it's written only on a RAWG login or Steam OAuth callback (`src/app/api/auth/rawg/route.ts:72`, `.../steam/callback/route.ts:65`), never on an ordinary revisit via an existing 30-day cookie, and never at all for TMDB/Trakt. It undercounts badly. The best signal computable today (verified against the real DB) is "touched library/wishlist/rating in the last 7 days":
@@ -118,56 +180,9 @@
 
 ---
 
-## SM39 — the Fandex Score range ✅ root cause fixed 2026-08-14; one design call left
+- **SM39 — the Fandex Score range** ✅ CLOSED 2026-08-17. Root cause (prod's hand-tuned gains) fixed 2026-08-14; the residual out-of-range was then **relabelled, not re-tuned** — 0–100 is a target, see `docs/fandex-score.md` §1 and the locked-decisions list above. → grep the archive for `SM39`.
 
-**Finding 1 — ✅ FIXED 2026-08-14. Prod's two gain constants were the whole of SM39.** `GET /api/dev/scoring` showed a **hand-tuned** config (`K_up 30 · K_down 20 · C 2 · director 4`), not a stale default. Feeding it back through the real library (`node scripts/probe-score-range.mjs data/rr.db --config <the GET response>`) reproduced SM39 almost exactly: **min −359 · p10 −71 · median 133 · p90 305 · max 556, 77.1% outside** vs SM39's −362.3 / −74 / 93.4 / 301.1 / 557.4. Fixed by fitting **only the gains** — 30/20 → **2.5/4**, every taste decision untouched → 0.9% outside. Note the fitted pair is `K_down > K_up`: the center sits at 66.8, so there are 33 points of room above against 66.8 below, and a symmetric pair cannot fit that. The save also stripped the vestigial `perCategoryCap` (zod `z.object` drops unknown keys).
-
-**The trap that made local and prod diverge silently, worth knowing before touching any scoring default:** migration 9 seeds `scoring_config` with `INSERT OR IGNORE` (`migrations.ts:298`) and `getScoringConfig()` merges `{...DEFAULT, ...stored}` — **the stored blob wins**. A recalibrated default never reaches a database that already has a row. `tag_category` is seeded the same way. (The same merge is what lets a NEW knob ship with no migration — see the franchise section below.)
-
-**Finding 2 — ⬜ re-measured 2026-08-17 against PROD's real config: it is 3.3% outside, not ~1%.** The old figure assumed `ip: 1.3`; prod runs **`ip: 3`**, which widened the tails a lot. `node scripts/probe-score-range.mjs data/rr.db --config <prod response>` on the real 1,922-item library:
-
-| config | min | p10 | median | p90 | max | <0 | >100 | outside |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| **A · prod as it runs today** | −23 | 40 | 72 | 89 | 115 | 8 | 55 | **3.3%** |
-| B · gains fitted (2 / 4.3) | −30 | 38 | 71 | 85 | 106 | 9 | 4 | 0.7% |
-| C · C=5 + fitted gains | −42 | 37 | 71 | 85 | 106 | 10 | 10 | 1.1% |
-| **E · top-N 3/2/2/1, gains unchanged** | **2** | 47 | 70 | 83 | **103** | **0** | 2 | **0.1%** |
-
-**E is the standout and it is not the one the old note predicted.** It is the only row with *no negative scores at all* (min 2, max 103), and it needs no gain change — just tighter top-N. Its cost is the documented one: a thinner breakdown (fewer facets listed per item) and a narrower spread (p10–p90 of 36 points vs today's 49).
-
-Three honest options, still your call: **(a) tighten top-N to 3/2/2/1** → 0.1% outside, no negatives; **(b) drop `ip` 3 → ~2**, which attacks the actual cause rather than the symptom (it alone moves 721 items by up to ±24); **(c) relabel** — `FandexScoreBadge` makes no 0–100 claim itself, printing a bare integer coloured against `center ± 10`, which reads correctly at any scale, and the 0–100 target lives only in `docs/fandex-score.md` §1.
-
-⚠️ Both probes above ran against the LOCAL `data/rr.db` with prod's config imported. Local has more franchise attachments than prod did (584 vs 407 found by the Wikidata sweep), so the `ip` effect here is, if anything, slightly overstated — though the 70 suggestions applied to prod on 2026-08-17 have narrowed that gap.
-
----
-
-## Franchise / IP as a scoring factor ✅ BUILT 2026-08-14 · needs a deploy + your weight call
-
-A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchises`, both already in stored `raw_data`. Full design → [docs/fandex-score.md](docs/fandex-score.md) §3.6. Measured on the real library: **516 of 1,903 scored items move** (Metal Gear Solid +5.2, LOTR +5.0, The Last of Us +4.7, Transformers −8.0).
-
-**No migration and no prod config edit needed** — `getScoringConfig()` merges `{...DEFAULT, ...stored}`, so prod's existing row picks up `roleWeights.ip: 1.3` and `topIps: 1` from the defaults the moment the code deploys. Verified against the real local row, which predates both.
-
-**The editor shipped 2026-08-14** (`0a1ee54`) — `/dev/scoring` → Taxonomy → **Franchises**. Migration 13 adds `ip_alias` (bundling, mirrors `tag_alias`) and `item_ip_override` (attach/detach one item). Verified on both apply paths against a copy of the real DB. Design + the resolution-point reasoning → [docs/fandex-score.md](docs/fandex-score.md) §3.6.
-
-**⚠️ The numbers this section used to quote were WRONG — prod was never read.** Live `GET /api/dev/scoring` on 2026-08-17 says **`ip: 3`** (not "the default 1.3") and **`director: 2`** (not 4), with `priorStrength: 2`, `K_up 2.5 / K_down 4`. The `ip` weight had already been tuned. This is the third time the "read `/api/dev/scoring` before theorising" rule has paid — the stored blob wins over any default, so a doc quoting defaults is quoting fiction.
-
-**Done 2026-08-17 (on prod):**
-1. ✅ **Bundled `metal gear solid` into `metal gear`.** Prod had 4 + 3 items, deduping to 5 — the two were double-attached. Canonical is `metal gear`: it is the series, Metal Gear Solid is a sub-series inside it.
-   - **Two of the five members were wrong and were removed**: *PlayStation All-Stars Battle Royale* and *Super Smash Bros. Ultimate*, crossover fighters where Snake/Raiden guest-appear. Both were collecting the **full franchise deviation (+15.6 each at `ip: 3`)** — i.e. being credited with a Metal Gear rating for a cameo. Re-attach by hand if you disagree. Metal Gear is now Snake Eater, Delta, Ground Zeroes, Phantom Pain.
-2. ✅ **Applied 70 of 71 title-match suggestions.** (Prod had **71**, not the 31 quoted here — that was the local count.) Overwhelmingly genuine: GTA III/V/San Andreas/Vice City → Grand Theft Auto, the five Back to the Future episodes, Half-Life 2's episodes, Elder Scrolls, System Shock, Sam & Max, The Last of Us Part I + Remastered. Stored `source: manual`, so a Wikidata re-sweep cannot undo them.
-   - ⬜ **One deliberately skipped: the GAME `Journey` → `Journey Collection`.** That collection is a **1-item *movie*** collection — a name collision, not a franchise. Attach it only if you actually want the game folded into a film collection.
-3. ✅ **`ip` is live at 3 and that is aggressive — measured.** `node scripts/probe-ip-impact.mjs data/rr.db --config <prod response>`: **721 of 1,904 items move**, swinging up to **±24 points** (Metal Gear Solid V +15.6 → 115; LOTR +15.0 → 108; Transformers: Age of Extinction −24.1 → −23). It is the main driver of finding 2 below. Lowering it to ~2 is the single biggest lever if you want the range back.
-4. ⬜ **Optional gain re-fit** — see the measured table in the SM39 section; the honest options changed now that prod's real config is known.
-
-**✅ Wikidata shipped 2026-08-14** (`313a830`) — **the shows gap is closed.** `POST /api/dev/scoring/wikidata` (admin, bounded + resumable, repeat until `remaining` is 0). On the local catalog: 2,295 items asked, **584 found, 605 attachments — 321 games, 165 movies, 98 shows.** Star Wars now spans 11 movies + 6 shows (The Mandalorian, Andor, Obi-Wan Kenobi…), plus links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek.
-
-- ⬜ **Run it against prod** — same shape as `/api/dev/crosslink`; prod's catalog is untouched. Repeat `POST {"maxItems":150}` until `remaining` is 0 (~15 calls).
-- **Property per medium, both measured — don't "simplify" to one.** Films/shows: IMDb `P345` → **`P8345`** (P179 there also returns sub-series like "Star Wars original trilogy"). Games: Steam `P1733` → **`P179`** (P8345 is absent on games entirely).
-- **Labels need `en,mul,en-gb`.** Plain `"en"` returns bare QIDs for the Half-Life/Portal/Fallout/Last of Us series — they carry `mul` labels. Anything still QID-shaped is dropped.
-- **A wikidata write never overwrites a `manual` one** (`item_ip_override.source`, enforced in the upsert's WHERE) — otherwise a re-sweep would undo your corrections.
-- **Measured dead ends, don't re-check:** TMDB keywords carry franchise names on 2 of 387 show payloads; TMDB has no collection concept for series.
-
----
+- **Franchise / IP as a scoring factor** ✅ CLOSED 2026-08-17. Built + Wikidata-swept 2026-08-14; the panel was cleared on prod 2026-08-17 (metal gear bundled, two crossover cameos removed, 70 of 71 suggestions applied). `ip` stays at **3**. → grep the archive for `Franchise / IP`.
 
 ## 🟡 `/library` + `/wishlist` are dead under `next dev` — DEV ONLY ⬜ your call which fix
 
@@ -200,49 +215,9 @@ Worth re-testing on the next Next.js bump before spending effort — this looks 
 
 ---
 
-## Drop the `user_library` / `user_watchlist` cache tables ✅ DONE 2026-08-17 (migration 16)
+- **Drop the `user_library` / `user_watchlist` cache tables** ✅ DONE 2026-08-17 (migration 16 — they are VIEWS now). **Two traps live on in migration 16's own comment and in `src/lib/cacheViews.ts`: a code-only rollback breaks every library write, and `CREATE INDEX` on either name throws at boot.** → grep the archive for `migration 16`.
 
-**They are now VIEWS over `user_item_state`, not tables.** Migration 3's expand-then-contract finally contracted. `rebuildCaches` is deleted; the drift that was audited on every boot for a year is no longer absent but *impossible*, because there is nothing separate left to drift.
-
-**Why views rather than rewriting the ~18 read sites:** it puts the correctness of every rating, status and review in two SQL definitions instead of eighteen queries — and, decisively, it makes the swap *provable* by diffing view output against the real stored rows. It is also cheaply reversible: `user_item_state` still holds everything, so a wrong view is one `CREATE VIEW` from correct, never a restore.
-
-**Verification that actually counts (both apply paths, real data):**
-- `node scripts/verify-cache-views.mjs data/rr.db` — view output vs the real tables, column by column: **byte-exact on all 2,017 rows**, `added_at` included, at zero tolerance.
-- `node scripts/rehearse-cache-view-migration.mjs data/rr.db` — runs the **standalone** `scripts/migrate.mjs` against a prod-shaped copy and diffs pre-migration table vs post-migration view. Clean, idempotent on a second run, every other table's row count unchanged.
-- Live: `/api/library` 1,922 items with ratings intact (incl. averaged 6.5), `/api/calendar` 95, `/insights` renders 1,671 rated / 1,922 in library / 6.7 average.
-
-**⚠️ Three things a future session must not relearn the hard way:**
-1. **A code-only rollback does NOT work.** Old code calls `rebuildCaches`, which issues INSERT/UPDATE/DELETE against a view — SQLite refuses ("cannot modify … because it is a view") and every library write fails. Rolling back means recreating the tables from the views too; the two-statement recipe is in migration 16's comment.
-2. **Never index these names again.** `CREATE TABLE IF NOT EXISTS` over a view is a silent no-op, but `CREATE INDEX IF NOT EXISTS` over one **throws**. `db.ts`'s schema block re-runs before migrations on *every* boot and used to carry exactly those two index statements — left in, this migration would have applied cleanly and then stopped the app from starting on the next restart. They moved into migration 3 (the only thing still needing real tables, for its backfill); `cacheViews.test.ts` guards it at the source level.
-3. **The wishlist view orders its JSON by `source` and the library view by `rowid`, deliberately.** `rebuildCaches` never named an order, so SQLite picked one per query — the wishlist's `SELECT source` is covered by the UNIQUE index (alphabetical), the library's five-column select is not (rowid order). Both are baked into years of stored JSON. Measured, not inferred.
-
-Also retired with it: `dbSize.ts`'s `libRowsWithoutState` / `wishRowsWithoutState`, which did their job (0/0 on prod is what unblocked this) and can now only ever read 0. `dbPrune.ts`'s `PRUNABLE_WHERE` drops its two view clauses — provably redundant now, since a view row cannot exist without the `user_item_state` row it derives from — and keeps the hedge as a *measurement* (`wouldHaveLost*`, which must stay 0).
-
----
-
-## 2026-08-13 — advanced search's Fandex Score (SM43–SM48) ✅ CLOSED
-
-Six fixes, all shipped and verified on prod: the heal loop's latency budget (SM44, 66.3 s → 4.1 s),
-the database half of search having no score fields (SM45 — the actual cause of the report), that half
-rebuilt to Nils's spec with provider-side AND (SM46), Steam added as the games tag source (SM47), and
-games cross-linked to every catalog on ingest plus a backfill (SM48). Full write-ups + the five traps
-they turned up → [archive](docs/archive/history.md), grep `SM44 heal budget`.
-
-**Still open here — your call:**
-
-0. **PROD IS NOT BACKFILLED.** The script drains a local DB; prod's catalog is on the Railway volume. `POST /api/dev/crosslink` (admin-gated, 25 items / 20 s per request, returns a cursor) is the way in — **not yet run**. Until it is, prod fills organically at 30 cross-links per sync pass (~16 syncs). RAWG's pass should wait for RAWG to come back.
-
-1. **`deckbuilding` + `tower defense` returns 0 from TMDB/RAWG/IGDB** — genuinely, not as a bug: IGDB has no game carrying both terms and RAWG is down. **Steam now covers it (277 games), so the query works.** Still worth re-running once RAWG is back; if RAWG stays empty, suspect a slug mismatch (`rawgTagSlug("deckbuilding")` → `deckbuilding`, while RAWG's tag may be `deck-building`) — there is no alias layer between our tag keys and a provider's vocabulary.
-2. ✅ **Games' thin rows are mostly RAWG-only — FIXED on prod 2026-08-17.** Your call was to fix the root cause by cross-linking IGDB rather than fall back to a depressed number, and that is what ran: **319 games visited, 263 linked (82%), IGDB coverage `needing` 357 → 61.** No script needed in the end — `POST /api/dev/crosslink {"source":"igdb","maxItems":25}` already supports IGDB and is cursor-driven, so `scripts/backfill-game-detail.ts` stays unused.
-   - Prod's remaining game-link gaps: **rawg 168** (untouched — RAWG has been down all day, timeouts + open circuit), **steam 111**, **igdb 61**. The steam and igdb figures are *visited-and-unlinkable*, not pending work — those titles simply aren't in those catalogs.
-   - ⚠️ The route ignores an unrecognised `dryRun` key, so `{"dryRun":true}` **still writes**. Found by passing it and watching `needing` drop by 5. Don't trust it as a preview.
-   - Practical note for a future long sweep: each 25-item batch takes ~15–20 s against IGDB's rate limit, and a browser-console loop dies at the 45 s CDP timeout. Kick the loop off as a detached async function writing progress to `window`, then poll that — the whole 319-item drain ran in one go that way.
-3. **Progressive reveal is built but only half-observed.** `DiscoverPageClient.runSearch` paints local `find()` results first and folds `webItems` in when they land ("Show local results immediately" is the existing comment), the empty state is gated on `!webLoading` so an intermediate never reads as "No results", and there's a "Pulling more from the databases…" affordance. The database half still arrives as ONE batch, not a trickle — with AND that is unavoidable for tags (the conjunction is one query), so "slowly fills" is now local-then-external, at 6–9 s rather than 66 s.
-4. **The shimmer and blank states were verified by code + unit tests, NOT visually** — driving the filter panel through the browser pane didn't land in the time available, and a shimmer is inherently racy to catch in a DOM snapshot. Worth an eyeball on a tag search with a mix of scored and unscored results.
-
-**Also found — ✅ FIXED 2026-08-17.** Standalone `node` couldn't import `src/lib/http.ts`: `ProviderUnavailableError`'s constructor used TypeScript **parameter properties**, which Node's strip-only type removal rejects (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), so any `scripts/*.mjs` reaching a provider path died on import. Same class as AGENTS.md's `import type` rule — **type-stripping erases, it never emits**, and a parameter property has to generate an assignment. Fields are now declared and assigned explicitly; verified by importing `http.ts` through `alias-hooks.mjs` and constructing the error with `host`/`retryInMs` intact.
-
----
+- **Advanced search's Fandex Score (SM43–SM48)** ✅ FULLY CLOSED 2026-08-17 — the last two open items (the IGDB cross-link backfill and the shimmer/blank-state check) both landed. → grep the archive for `SM44 heal budget`.
 
 ## Still open elsewhere
 
