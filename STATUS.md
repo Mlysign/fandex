@@ -27,19 +27,19 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this holds for days, not hours** — every program reviews the applicant site.
 
-## 🔴 `/library` and `/wishlist` are DEAD — neither page hydrates (found 2026-08-17)
+## 🟡 `/library` + `/wishlist` don't work under `next dev` (DEV ONLY — prod is fine)
 
-Both `MyStuffView` routes render their toolbar server-side and then sit on **“Loading…” forever**. `<main>` carries no React fiber while `body`/`nav` do, so no effect runs, `/api/library` is never requested, and **clicking a tab does nothing** — that last one is the 5-second reproduction. `/` and `/insights` are fine.
+**Production is unaffected.** A `next start` build hydrates both pages and renders real items; fandex.org is fine and this was never a user-facing outage. It does mean **neither page can be developed or verified against the dev server**, which is exactly why it went unnoticed — the smoke sweeps run against prod.
 
-**Pre-existing on `main`, proven by an A/B against a clean HEAD checkout — not migration 16.** The last commits to touch that file are MB16's tab rework (`fd7f13b` / `967c45d`, 2026-08-16), which is where to look. The API layer is healthy (`/api/library` returns 1,922 items in ~1 s), so this is purely client-side. Full findings + the ruled-out theories → [TASKS.md](TASKS.md).
+Under `next dev` both pages render their toolbar server-side and then sit on **“Loading…” forever**: React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing**. Cause is measured, not guessed: `useSearchParams()` postpones the Suspense boundary (React comment marker **`$~`**) and the dev client never resumes it. Swapping that one call for a plain `URLSearchParams` makes the page work instantly.
 
-**Wishlist is a bottom-nav item**, so this is a nav destination that does nothing on a live site. Treat as the top priority.
+**Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Diagnosis, the ruled-out fixes, and the three real options → [TASKS.md](TASKS.md).
 
 ## ▶ What's open
 
 | | Item | Blocked on |
 |--|------|--|
-| 🔴 | **`/library` + `/wishlist` don't hydrate** | Nobody — see above. Pre-existing, client-side, top priority. |
+| 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
 | 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped**, MB14 included. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | 🔵 | **Games cross-link backfill on prod** | **You:** `POST /api/dev/crosslink` `{"source":"steam","maxItems":25}` from the browser console on fandex.org while logged in (both dev routes are session-gated, so a terminal `curl` 404s). Repeat until the cursor drains. Until then prod fills organically at ~30 cross-links per sync pass. |

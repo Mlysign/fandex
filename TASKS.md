@@ -134,23 +134,32 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 
 ---
 
-## 🔴 `/library` and `/wishlist` never hydrate — both pages are DEAD ⬜ NOT FIXED
+## 🟡 `/library` + `/wishlist` are dead under `next dev` — DEV ONLY ⬜ your call which fix
 
-**Found 2026-08-17. Pre-existing on `main`, proven by A/B against a clean HEAD checkout — not caused by migration 16.** Almost certainly a regression from MB16's tab rework (`fd7f13b` / `967c45d`, 2026-08-16), which is the last thing to touch `MyStuffView.tsx`. **Wishlist is a bottom-nav item, so this is a nav destination that does nothing.**
+**Found 2026-08-17 while verifying migration 16. Production is NOT affected** — a `next start` build hydrates both pages and renders real items, so fandex.org was never broken. (An earlier note in this file said it was; that was wrong, generalised from the dev server before the prod build was tested.) It is also **not** caused by migration 16 — it reproduces on a clean HEAD checkout.
 
-**Symptom:** both routes SSR their full toolbar (heading, type filter, the three tabs, search, sort, Sync) and then sit on “Loading…” forever.
+**What it costs:** neither page can be developed or verified against `next dev` at all. That is why it went unnoticed — the smoke sweeps run against prod.
 
-**What it is NOT — don't re-check these:**
-- Not the API. `/api/library` (1,922 items) and `/api/calendar` (95) both return 200; the exact `Promise.all([...])` that `loadItems` runs completes in **3.0 s** when fired by hand from the console on that very page.
-- Not `init()` bailing. `/api/auth/me` returns a user, and the last sync is 14 h old against a 24 h `SYNC_STALE_MS`, so the auto-sync branch never runs and nothing in `init()` can throw.
-- Not a slow request. `performance.getEntriesByType('resource')` lists only *completed* requests, which is what made this look like a hang at first — but `/api/library` is never issued at all.
-- Not a console error, a failed script chunk, or a server error. All three are clean.
+**Symptom (dev):** both routes SSR their full toolbar and then sit on “Loading…” forever. React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing** — no URL change, no `aria-selected` move, zero fetches. That last one is the 5-second reproduction.
 
-**The actual finding: the page never hydrates.** `document.body` and `<nav>` both carry a `__reactFiber$…` key; the whole `<main>` subtree does **not**. React claims the layout and never claims the page tree, so no effect ever runs (hence no fetch), `loading` stays at its initial `true`, and **clicking a tab does nothing at all** — no URL change, no `aria-selected` move, zero fetches. That last one is the cheapest reproduction.
+**Root cause, measured:** `MyStuffContent` calls `useSearchParams()` (the `?tab=` IS the state, per SM21). That postpones its Suspense boundary — the DOM carries React's **`$~`** postpone marker and the fiber is `dehydrated: true` — and the `next dev` client never resumes it. **Replacing that single call with a plain `URLSearchParams` makes the page hydrate, fetch and render immediately, and the `$~` marker disappears.** That is the whole of it.
 
-**Blast radius:** `/library` and `/wishlist` (the two `MyStuffView` routes). `/` and `/insights` hydrate normally.
+**Ruled out by experiment — don't re-try these:**
+- **`export const dynamic = "force-dynamic"` on both pages does NOT fix it.** So it is not the static prerender.
+- **Moving the `Suspense` boundary out of the client module into the server `page.tsx` does NOT fix it.** So it is not boundary placement.
+- Not the API (`/api/library` 1,922 items + `/api/calendar` 95 complete in 3.0 s when fired by hand *on that page*), not `init()` bailing (auth returns a user; last sync 14 h vs a 24 h `SYNC_STALE_MS`, so the auto-sync branch never runs), not a console error, not a failed chunk, not a server error.
+- ⚠️ `performance.getEntriesByType('resource')` lists only **completed** requests — "never issued" and "in flight" look identical there. That cost an hour.
 
-**Where to start:** `MyStuffView.tsx`'s `Suspense` wrapper around `useSearchParams`, and the seven `usePersistedState` (localStorage) hooks in `MyStuffContent` — a value read during render is the classic way to poison hydration for one subtree while the rest of the app is fine.
+**Diagnostic worth keeping:** `Object.keys(document.querySelector('main')).some(k => k.startsWith('__reactFiber'))` — `false` on `<main>` while `true` on `body` means an unhydrated subtree, not a slow request.
+
+**Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Proven working there.
+
+**The three options, none applied (your call — it means restructuring correct, carefully-reasoned SM21 code for a dev-only bug):**
+1. **Leave it, use the prod build to verify.** Zero risk, keeps SM21's URL-as-state exactly. Costs dev ergonomics on two pages.
+2. **Pass `searchParams` from the server `page.tsx` as a prop** (the other option Next's own docs give). Keeps SSR correct with no flash, drops `useSearchParams` entirely — but a tab switch then needs a server round-trip instead of being instant.
+3. **Derive the tab from `window.location.search` + a `popstate` listener.** Keeps switching instant, but the initial render no longer knows the tab server-side, so a deep link to `?tab=progress` flashes the default first.
+
+Worth re-testing on the next Next.js bump before spending effort — this looks like a dev/Turbopack bug in 16.3.0, not a mistake in the app.
 
 ---
 
