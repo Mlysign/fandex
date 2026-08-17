@@ -30,6 +30,7 @@
 import type DatabaseT from "better-sqlite3";
 import { projectRawData, PROJECTION_VERSION } from "@/lib/sources/project";
 import { DEFAULT_SCORING_CONFIG, DEFAULT_TAG_CATEGORIES } from "@/lib/scoringDefaults";
+import { createCacheViews } from "@/lib/cacheViews";
 import type { Source } from "@/types";
 type DB = DatabaseT.Database;
 
@@ -95,7 +96,43 @@ export const MIGRATIONS: Migration[] = [
       // rows become caches REBUILT from this table on every write (matcher.ts),
       // so the canonical rating can no longer drift and "clear a rating"
       // propagates. Expand-then-contract: the cache tables are kept (reads still
-      // hit them); a later migration may drop their JSON columns.
+      // hit them). Migration 16 is the contract step — they become VIEWS.
+      //
+      // These two CREATE TABLEs used to live in db.ts's schema block and moved
+      // here with migration 16 (2026-08-17). This migration is the only thing
+      // that still needs them as real tables: on a FRESH database it backfills
+      // user_item_state FROM them, so they must exist before the two INSERTs
+      // below. They cannot stay in db.ts, because that block re-runs on every
+      // boot and would then be creating tables that shadow migration 16's views.
+      // IF NOT EXISTS keeps this a no-op on every database that predates the move.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_watchlist (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          platform_sources TEXT NOT NULL DEFAULT '[]',
+          added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          notes TEXT,
+          UNIQUE(user_id, media_item_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_watchlist_user ON user_watchlist(user_id);
+
+        CREATE TABLE IF NOT EXISTS user_library (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          platform_sources TEXT NOT NULL DEFAULT '[]',
+          status TEXT,
+          rating REAL,
+          review TEXT,
+          reviewed_at INTEGER,
+          metadata TEXT,
+          added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          UNIQUE(user_id, media_item_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_library_user ON user_library(user_id);
+      `);
+
       db.exec(`
         CREATE TABLE IF NOT EXISTS user_item_state (
           id TEXT PRIMARY KEY,
@@ -539,6 +576,48 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_user_episode_state_item
           ON user_episode_state(user_id, media_item_id);
       `);
+    },
+  },
+  {
+    version: 16,
+    name: "user_library + user_watchlist become views (D2 expand-then-CONTRACT)",
+    up: (db) => {
+      // 2026-08-17. Migration 3 normalized per-source user state into
+      // user_item_state and promised a contract step it never took: for a year
+      // the two older tables carried a DUPLICATE of that state, rebuilt on every
+      // write by matcher.ts's rebuildCaches, audited for drift on every boot by
+      // dbSize.ts. This is that step. Both become views derived from
+      // user_item_state, so the drift they were watched for stops being absent
+      // and starts being impossible. rebuildCaches is deleted in the same commit.
+      //
+      // Every read site keeps working untouched — that is the point of doing it
+      // as views rather than rewriting eighteen queries. Proof it is lossless:
+      // `node scripts/verify-cache-views.mjs data/rr.db` diffs view output against
+      // the real stored rows column by column. It was byte-exact on all 2,017
+      // rows of the live database, added_at included, at zero tolerance.
+      //
+      // ⚠️ TWO THINGS A FUTURE SESSION NEEDS TO KNOW
+      //
+      // 1. A CODE-ONLY ROLLBACK DOES NOT WORK. Reverting the app to a commit
+      //    that still calls rebuildCaches leaves it issuing INSERT/UPDATE/DELETE
+      //    against a view — SQLite answers "cannot modify user_library because it
+      //    is a view" and every library write fails. To roll back you must also
+      //    turn the views back into tables, which is lossless and quick:
+      //      CREATE TABLE ul_new AS SELECT * FROM user_library;   -- view -> rows
+      //      DROP VIEW user_library; ALTER TABLE ul_new RENAME TO user_library;
+      //    (plus the UNIQUE/index rebuild, and the same for user_watchlist).
+      //    Forward is normally the cheaper fix: user_item_state still holds
+      //    everything, so a wrong view is one CREATE VIEW away from correct.
+      //
+      // 2. NEVER INDEX THESE NAMES AGAIN. `CREATE TABLE IF NOT EXISTS` over a
+      //    view is a silent no-op, but `CREATE INDEX IF NOT EXISTS` over one
+      //    throws `views may not be indexed`. db.ts's schema block re-runs on
+      //    EVERY boot before migrations, so the two index statements it used to
+      //    carry would have let this migration succeed and then stopped the app
+      //    from starting on the next restart — a green deploy followed by a dead
+      //    one. They were removed from db.ts and the CREATE TABLEs moved into
+      //    migration 3, which is the only thing that still needs real tables.
+      createCacheViews(db);
     },
   },
 ];

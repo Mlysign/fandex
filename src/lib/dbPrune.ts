@@ -10,32 +10,39 @@ import { log } from "@/lib/logger";
 // public facet page, never anything a user owns. See TASKS.md "Catalog-pool
 // blowup + memory ramp" and the prod-db-size-and-page-cache memory note.
 //
-// ── Why the predicate names FOUR tables, not one ─────────────────────────────
-// The plan's predicate was `browsed = 1 AND id NOT IN user_item_state`, which
-// is correct ONLY IF user_item_state is a strict superset of user_library and
-// user_watchlist. On the dev DB it is (verified: 0 rows at risk). But
-// user_library and user_watchlist BOTH carry
-// `media_item_id REFERENCES media_items(id) ON DELETE CASCADE`, so if that
-// invariant is off by even one row in prod, this silently deletes a library
-// entry — the user's own rating and review with it, unrecoverable.
+// ── Why the predicate names every TABLE that references media_items ──────────
+// The rule is unchanged and it is the one that matters: exclude every table
+// carrying `media_item_id REFERENCES media_items(id) ON DELETE CASCADE`, because
+// a row this deletes takes the user's own rating, review or watch history with
+// it, unrecoverably. Retaining a few hundred extra catalog rows costs nothing;
+// betting on an invariant we can only verify on a different database is how you
+// lose data. ANY future table referencing media_items belongs here too.
 //
-// So the predicate excludes every table that references media_items. Retaining
-// a few hundred extra rows costs nothing; depending on an invariant we can only
-// verify on a different database is the kind of bet that loses data. The
-// preview reports both numbers so the difference is visible before applying.
+// 2026-08-16 (MB14): user_episode_state joined the moment it existed — ticking
+// episodes writes none of the other tables, so a show tracked but never rated or
+// saved stays `browsed = 1`, and without its clause the default-ON boot prune
+// would have cascaded a watch history away.
 //
-// 2026-08-16 (MB14): user_episode_state joined the list the moment it existed,
-// for exactly the reason above — it carries `media_item_id REFERENCES
-// media_items(id) ON DELETE CASCADE`, and per-episode watch history is NOT
-// implied by a library/watchlist/item_state row. A show you ticked episodes on
-// without ever rating or saving it stays `browsed = 1`, so without this clause
-// the default-ON boot prune would cascade a user's watch history away.
-// ANY future table referencing media_items belongs here too.
+// 2026-08-17 (migration 16): user_library and user_watchlist LEFT the predicate,
+// and this is the one change here that is a narrowing rather than a widening, so
+// it deserves its reasoning in full. They used to be listed because the original
+// predicate (`NOT IN user_item_state` alone) is correct only if user_item_state
+// is a strict superset of both — true on the dev DB, unverifiable on prod at the
+// time, and a single stale row would have meant silent data loss. They are now
+// VIEWS whose definition begins `FROM user_item_state`. The superset property is
+// therefore not an assumption to hedge against but a fact of their construction:
+// a row can no longer appear in either one without the user_item_state row that
+// generates it. They also no longer reference media_items at all — a view
+// references nothing — so the rule above stops covering them by its own terms.
+//
+// The hedge is kept as a MEASUREMENT rather than a clause: previewPrune still
+// reports wouldHaveLostLibraryRows / wouldHaveLostWatchlistRows, which now count
+// what THIS predicate would lose. Structurally that is 0. If either is ever
+// non-zero, something has turned these names back into real tables and this
+// predicate needs its clauses back before the next prune runs.
 const PRUNABLE_WHERE = `
   browsed = 1
   AND id NOT IN (SELECT media_item_id FROM user_item_state)
-  AND id NOT IN (SELECT media_item_id FROM user_library)
-  AND id NOT IN (SELECT media_item_id FROM user_watchlist)
   AND id NOT IN (SELECT media_item_id FROM user_episode_state)
 `;
 
@@ -55,9 +62,14 @@ export type PrunePreview = {
   /** Browsed shows kept because the user ticked episodes on them (MB14). */
   protectedByEpisodeState: number;
   /**
-   * Rows the PLAN's narrower `NOT IN user_item_state` predicate would have
-   * deleted despite a library/watchlist row pointing at them. Must be 0. If it
-   * ever isn't, the extra clauses above just prevented real data loss.
+   * Library / wishlist rows the LIVE predicate would delete. Must be 0.
+   *
+   * Until migration 16 these measured the gap between the live predicate and a
+   * narrower hypothetical one, and 0 meant "the extra clauses are belt and
+   * braces". Now that user_library / user_watchlist are views over
+   * user_item_state the narrower predicate IS the live one, so these measure it
+   * directly: a non-zero reading means the views have been turned back into real
+   * tables and drifted, and the prune must not run until the clauses come back.
    */
   wouldHaveLostLibraryRows: number;
   wouldHaveLostWatchlistRows: number;
@@ -82,18 +94,14 @@ export function previewPrune(): PrunePreview {
     protectedByEpisodeState: n(
       "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM user_episode_state)",
     ),
+    // Measured against the LIVE predicate, not a hypothetical narrower one —
+    // see the field docs. Both are 0 by construction while these names are views.
     wouldHaveLostLibraryRows: n(`
       SELECT COUNT(*) n FROM user_library ul
-       WHERE ul.media_item_id IN (
-         SELECT id FROM media_items
-          WHERE browsed = 1 AND id NOT IN (SELECT media_item_id FROM user_item_state)
-       )`),
+       WHERE ul.media_item_id IN (SELECT id FROM media_items WHERE ${PRUNABLE_WHERE})`),
     wouldHaveLostWatchlistRows: n(`
       SELECT COUNT(*) n FROM user_watchlist uw
-       WHERE uw.media_item_id IN (
-         SELECT id FROM media_items
-          WHERE browsed = 1 AND id NOT IN (SELECT media_item_id FROM user_item_state)
-       )`),
+       WHERE uw.media_item_id IN (SELECT id FROM media_items WHERE ${PRUNABLE_WHERE})`),
     linkRowsToDelete: n(`
       SELECT COUNT(*) n FROM media_links
        WHERE media_item_id IN (SELECT id FROM media_items WHERE ${PRUNABLE_WHERE})`),

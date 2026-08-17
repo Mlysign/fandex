@@ -251,9 +251,10 @@ function remergeItem(mediaItemId: string) {
 
 // ── Per-source user state (D1 + D2): user_item_state is the truth ─────────────
 // One normalized table holds wishlist + library state, one row per
-// (user, item, source, relation). user_watchlist / user_library are CACHES
-// rebuilt from it on every write (rebuildCaches), so all existing read paths keep
-// working while the canonical rating can no longer drift from the per-source data.
+// (user, item, source, relation). user_watchlist / user_library are VIEWS over
+// it (migration 16), so every existing read path keeps working and the canonical
+// rating cannot drift from the per-source data — not because something rebuilds
+// it, but because there is nothing separate left to drift.
 
 export interface LibraryFields {
   status?: string | null;     // watched | played | owned
@@ -303,69 +304,32 @@ function clearSourceState(userId: string, mediaItemId: string, source: string, r
   );
 }
 
-// Rebuild the user_watchlist + user_library cache rows for one item from the
-// normalized truth. Canonical library rating = average of per-source ratings;
-// reviewed_at = max; status/review taken from the most recently reviewed source.
-function rebuildCaches(userId: string, mediaItemId: string) {
-  // Wishlist cache
-  const wl = query<{ source: string }>(
-    "SELECT source FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'wishlist'",
-    [userId, mediaItemId]
-  ).map((r) => r.source);
-  const wlExisting = get<{ id: string }>(
-    "SELECT id FROM user_watchlist WHERE user_id = ? AND media_item_id = ?", [userId, mediaItemId]
-  );
-  if (wl.length) {
-    if (wlExisting) run("UPDATE user_watchlist SET platform_sources = ? WHERE id = ?", [JSON.stringify(wl), wlExisting.id]);
-    else run(
-      "INSERT INTO user_watchlist (id, user_id, media_item_id, platform_sources) VALUES (?, ?, ?, ?)",
-      [randomUUID(), userId, mediaItemId, JSON.stringify(wl)]
-    );
-  } else if (wlExisting) {
-    run("DELETE FROM user_watchlist WHERE id = ?", [wlExisting.id]);
-  }
-
-  // Library cache
-  const lib = query<{ source: string; status: string | null; rating: number | null; review: string | null; reviewed_at: number | null }>(
-    "SELECT source, status, rating, review, reviewed_at FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'library'",
-    [userId, mediaItemId]
-  );
-  const libExisting = get<{ id: string }>(
-    "SELECT id FROM user_library WHERE user_id = ? AND media_item_id = ?", [userId, mediaItemId]
-  );
-  if (lib.length) {
-    const metadata: Record<string, any> = {};
-    for (const r of lib) metadata[r.source] = { status: r.status, rating: r.rating, review: r.review, reviewedAt: r.reviewed_at };
-    const sources = lib.map((r) => r.source);
-    const rating = averageFromMetadata(metadata);
-    const reviewedAt = Math.max(0, ...lib.map((r) => r.reviewed_at ?? 0)) || null;
-    const recent = [...lib].sort((a, b) => (b.reviewed_at ?? 0) - (a.reviewed_at ?? 0))[0];
-    const status = recent?.status ?? lib.map((r) => r.status).find((s) => s) ?? null;
-    const review = recent?.review ?? lib.map((r) => r.review).find((s) => s) ?? null;
-    if (libExisting) run(
-      "UPDATE user_library SET platform_sources = ?, status = ?, rating = ?, review = ?, reviewed_at = ?, metadata = ? WHERE id = ?",
-      [JSON.stringify(sources), status, rating, review, reviewedAt, JSON.stringify(metadata), libExisting.id]
-    );
-    else run(
-      `INSERT INTO user_library (id, user_id, media_item_id, platform_sources, status, rating, review, reviewed_at, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), userId, mediaItemId, JSON.stringify(sources), status, rating, review, reviewedAt, JSON.stringify(metadata)]
-    );
-  } else if (libExisting) {
-    run("DELETE FROM user_library WHERE id = ?", [libExisting.id]);
-  }
-}
+// ── rebuildCaches is GONE (migration 16, 2026-08-17) ─────────────────────────
+// It used to write a duplicate of user_item_state into user_watchlist and
+// user_library after every mutation, deriving the canonical library rating
+// (average of per-source ratings), reviewed_at (max) and status/review (from the
+// most recently reviewed source) in TypeScript.
+//
+// Those two names are now VIEWS that compute exactly the same thing in SQL
+// (src/lib/cacheViews.ts), so there is nothing left to keep in step: the writes
+// below land in user_item_state and every reader sees the derived result on its
+// next SELECT. Deleting this function is the point of the migration, not a
+// side-effect of it — a cache you must remember to rebuild is a drift bug with a
+// delay on it, and this one was audited on every boot for a year to prove it
+// hadn't happened.
+//
+// The write helpers below are unchanged apart from losing their rebuild call.
+// Do NOT reintroduce a write against user_watchlist / user_library: SQLite will
+// reject it with "cannot modify … because it is a view".
 
 // ── Public write helpers (signatures unchanged; now go through the truth table) ──
 
 export function upsertWatchlistEntry(userId: string, mediaItemId: string, source: Source) {
   setSourceState(userId, mediaItemId, source, "wishlist");
-  rebuildCaches(userId, mediaItemId);
 }
 
 export function removeWatchlistSource(userId: string, mediaItemId: string, source: Source) {
   clearSourceState(userId, mediaItemId, source, "wishlist");
-  rebuildCaches(userId, mediaItemId);
 }
 
 // Remove an item from the wishlist entirely (clears every per-source wishlist
@@ -376,26 +340,22 @@ export function removeWatchlistSource(userId: string, mediaItemId: string, sourc
 // exactly this shortcut in the old /api/watchlist DELETE handler).
 export function clearWatchlist(userId: string, mediaItemId: string) {
   run("DELETE FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'wishlist'", [userId, mediaItemId]);
-  rebuildCaches(userId, mediaItemId);
 }
 
 export function upsertLibraryEntry(userId: string, mediaItemId: string, source: Source, fields: LibraryFields = {}) {
   setSourceState(userId, mediaItemId, source, "library", fields);
-  rebuildCaches(userId, mediaItemId);
 }
 
 export function removeLibrarySource(userId: string, mediaItemId: string, source: Source) {
   clearSourceState(userId, mediaItemId, source, "library");
-  rebuildCaches(userId, mediaItemId);
 }
 
 // Fully unlink one source from a user (auth disconnect): clears every wishlist +
-// library truth row that source holds across ALL the user's items, and rebuilds
-// each affected item's cache. Other sources on the same items are untouched.
-// Goes through removeWatchlistSource/removeLibrarySource (not raw SQL against
-// user_watchlist/user_library) for the same reason clearWatchlist does — a raw
-// DELETE/UPDATE against the cache tables leaves user_item_state with orphaned
-// rows nothing ever cleans up.
+// library truth row that source holds across ALL the user's items. Other sources
+// on the same items are untouched. Goes through removeWatchlistSource /
+// removeLibrarySource rather than raw SQL for the same reason clearWatchlist
+// does — and since migration 16 a raw write against user_watchlist/user_library
+// is not merely wrong, it is rejected: they are views.
 export function disconnectSource(userId: string, source: Source) {
   const wishlistItems = query<{ media_item_id: string }>(
     "SELECT DISTINCT media_item_id FROM user_item_state WHERE user_id = ? AND source = ? AND relation = 'wishlist'",
@@ -411,8 +371,9 @@ export function disconnectSource(userId: string, source: Source) {
 }
 
 // ── Ignored (T10 "For You" feed swipe-left) ───────────────────────
-// One per-item ignored marker (no cache rebuild needed — ignored never feeds the
-// wishlist/library views). Uses source 'local' so it's a single row per item.
+// One per-item ignored marker. Uses source 'local' so it's a single row per item.
+// The wishlist/library views filter on relation, so an 'ignored' row is invisible
+// to both by construction.
 export function ignoreItem(userId: string, mediaItemId: string) {
   run(
     "INSERT OR IGNORE INTO user_item_state (id, user_id, media_item_id, source, relation) VALUES (?, ?, ?, 'local', 'ignored')",
@@ -428,7 +389,6 @@ export function unignoreItem(userId: string, mediaItemId: string) {
 // drops status + rating). Used by the card "watched" toggle when turning it off.
 export function clearLibrary(userId: string, mediaItemId: string) {
   run("DELETE FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'library'", [userId, mediaItemId]);
-  rebuildCaches(userId, mediaItemId);
 }
 
 // Record a rating / status from the library route's write-back flow. `sources`
@@ -463,7 +423,6 @@ export function recordLibraryRating(
     const targets = existing.length ? existing : ["local"];
     for (const s of targets) setSourceState(userId, mediaItemId, s, "library", { status: opts.status, reviewedAt: opts.reviewedAt });
   }
-  rebuildCaches(userId, mediaItemId);
   const row = get<{ rating: number | null; metadata: string | null }>(
     "SELECT rating, metadata FROM user_library WHERE user_id = ? AND media_item_id = ?", [userId, mediaItemId]
   );

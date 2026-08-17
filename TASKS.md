@@ -134,16 +134,43 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 
 ---
 
-## Drop the `user_library` / `user_watchlist` cache tables ⬜ NOT STARTED · **not delegable**
+## 🔴 `/library` and `/wishlist` never hydrate — both pages are DEAD ⬜ NOT FIXED
 
-**The precondition is MET.** Migration 3's "expand-then-contract" never contracted: both tables are caches rebuilt from `user_item_state` by `matcher.ts`'s `rebuildCaches`. Dropping them was gated on `libRowsWithoutState` / `wishRowsWithoutState` reading **0/0 on prod**, and they do (confirmed 2026-08-12, and again post-redeploy).
+**Found 2026-08-17. Pre-existing on `main`, proven by A/B against a clean HEAD checkout — not caused by migration 16.** Almost certainly a regression from MB16's tab rework (`fd7f13b` / `967c45d`, 2026-08-16), which is the last thing to touch `MyStuffView.tsx`. **Wishlist is a bottom-nav item, so this is a nav destination that does nothing.**
 
-**⚠️ Do NOT delegate this to a background or low-effort session, and do not let a plan hand it to Sonnet.** It touches `migrations.ts` *and* `matcher.ts`'s write paths — AGENTS.md's two named "main loop at full effort" areas. The failure mode is silent user-data loss, and **every DB test starts from a fresh database, so none of them exercise the upgrade path production actually takes**. Green tests would prove nothing here. Written up 2026-08-13 during a session that deliberately declined to execute it.
+**Symptom:** both routes SSR their full toolbar (heading, type filter, the three tabs, search, sort, Sync) and then sit on “Loading…” forever.
 
-What it involves, so the next Opus session doesn't re-derive it:
-- A real migration in `migrations.ts` dropping both tables, plus removing `rebuildCaches`'s writes and every read path that still selects from them (`/api/library`, `/api/calendar`, `libraryAnalysis`, `loadMembershipGroups` are the known consumers — grep before trusting that list).
-- **Verification that actually counts:** run `node scripts/migrate.mjs` against a **copy of the real prod-shaped `data/rr.db`**, not a fresh one, and compare `user_library` / `user_watchlist` / `user_item_state` counts and a sample of rows before and after. The standalone path resolves neither the `@/*` alias nor extensionless specifiers, so an import mistake surfaces only there.
-- Take a Litestream snapshot reading first. Backups are now proven restorable (PR17 step 4), which is exactly the safety net this op needs.
+**What it is NOT — don't re-check these:**
+- Not the API. `/api/library` (1,922 items) and `/api/calendar` (95) both return 200; the exact `Promise.all([...])` that `loadItems` runs completes in **3.0 s** when fired by hand from the console on that very page.
+- Not `init()` bailing. `/api/auth/me` returns a user, and the last sync is 14 h old against a 24 h `SYNC_STALE_MS`, so the auto-sync branch never runs and nothing in `init()` can throw.
+- Not a slow request. `performance.getEntriesByType('resource')` lists only *completed* requests, which is what made this look like a hang at first — but `/api/library` is never issued at all.
+- Not a console error, a failed script chunk, or a server error. All three are clean.
+
+**The actual finding: the page never hydrates.** `document.body` and `<nav>` both carry a `__reactFiber$…` key; the whole `<main>` subtree does **not**. React claims the layout and never claims the page tree, so no effect ever runs (hence no fetch), `loading` stays at its initial `true`, and **clicking a tab does nothing at all** — no URL change, no `aria-selected` move, zero fetches. That last one is the cheapest reproduction.
+
+**Blast radius:** `/library` and `/wishlist` (the two `MyStuffView` routes). `/` and `/insights` hydrate normally.
+
+**Where to start:** `MyStuffView.tsx`'s `Suspense` wrapper around `useSearchParams`, and the seven `usePersistedState` (localStorage) hooks in `MyStuffContent` — a value read during render is the classic way to poison hydration for one subtree while the rest of the app is fine.
+
+---
+
+## Drop the `user_library` / `user_watchlist` cache tables ✅ DONE 2026-08-17 (migration 16)
+
+**They are now VIEWS over `user_item_state`, not tables.** Migration 3's expand-then-contract finally contracted. `rebuildCaches` is deleted; the drift that was audited on every boot for a year is no longer absent but *impossible*, because there is nothing separate left to drift.
+
+**Why views rather than rewriting the ~18 read sites:** it puts the correctness of every rating, status and review in two SQL definitions instead of eighteen queries — and, decisively, it makes the swap *provable* by diffing view output against the real stored rows. It is also cheaply reversible: `user_item_state` still holds everything, so a wrong view is one `CREATE VIEW` from correct, never a restore.
+
+**Verification that actually counts (both apply paths, real data):**
+- `node scripts/verify-cache-views.mjs data/rr.db` — view output vs the real tables, column by column: **byte-exact on all 2,017 rows**, `added_at` included, at zero tolerance.
+- `node scripts/rehearse-cache-view-migration.mjs data/rr.db` — runs the **standalone** `scripts/migrate.mjs` against a prod-shaped copy and diffs pre-migration table vs post-migration view. Clean, idempotent on a second run, every other table's row count unchanged.
+- Live: `/api/library` 1,922 items with ratings intact (incl. averaged 6.5), `/api/calendar` 95, `/insights` renders 1,671 rated / 1,922 in library / 6.7 average.
+
+**⚠️ Three things a future session must not relearn the hard way:**
+1. **A code-only rollback does NOT work.** Old code calls `rebuildCaches`, which issues INSERT/UPDATE/DELETE against a view — SQLite refuses ("cannot modify … because it is a view") and every library write fails. Rolling back means recreating the tables from the views too; the two-statement recipe is in migration 16's comment.
+2. **Never index these names again.** `CREATE TABLE IF NOT EXISTS` over a view is a silent no-op, but `CREATE INDEX IF NOT EXISTS` over one **throws**. `db.ts`'s schema block re-runs before migrations on *every* boot and used to carry exactly those two index statements — left in, this migration would have applied cleanly and then stopped the app from starting on the next restart. They moved into migration 3 (the only thing still needing real tables, for its backfill); `cacheViews.test.ts` guards it at the source level.
+3. **The wishlist view orders its JSON by `source` and the library view by `rowid`, deliberately.** `rebuildCaches` never named an order, so SQLite picked one per query — the wishlist's `SELECT source` is covered by the UNIQUE index (alphabetical), the library's five-column select is not (rowid order). Both are baked into years of stored JSON. Measured, not inferred.
+
+Also retired with it: `dbSize.ts`'s `libRowsWithoutState` / `wishRowsWithoutState`, which did their job (0/0 on prod is what unblocked this) and can now only ever read 0. `dbPrune.ts`'s `PRUNABLE_WHERE` drops its two view clauses — provably redundant now, since a view row cannot exist without the `user_item_state` row it derives from — and keeps the hedge as a *measurement* (`wouldHaveLost*`, which must stay 0).
 
 ---
 

@@ -146,34 +146,19 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_links_item ON media_links(media_item_id);
     CREATE INDEX IF NOT EXISTS idx_links_source ON media_links(source, source_id);
 
-    -- User watchlist: what the user is tracking
-    CREATE TABLE IF NOT EXISTS user_watchlist (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
-      platform_sources TEXT NOT NULL DEFAULT '[]', -- JSON: ["steam","rawg"]
-      added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-      notes TEXT,
-      UNIQUE(user_id, media_item_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_watchlist_user ON user_watchlist(user_id);
-
-    -- User library: items the user has already watched / played / owns,
-    -- with an optional personal review score and the date it was logged.
-    CREATE TABLE IF NOT EXISTS user_library (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
-      platform_sources TEXT NOT NULL DEFAULT '[]', -- JSON: ["trakt","letterboxd"]
-      status TEXT,                                  -- watched | played | owned
-      rating REAL,                                  -- personal score, 0-10 scale
-      review TEXT,                                  -- review text, if any
-      reviewed_at INTEGER,                          -- unix: when watched/rated
-      metadata TEXT,                                -- JSON: per-source detail
-      added_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-      UNIQUE(user_id, media_item_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_library_user ON user_library(user_id);
+    -- user_watchlist and user_library are NOT created here. As of migration 16
+    -- they are VIEWS over user_item_state (see src/lib/cacheViews.ts), and this
+    -- block re-runs on every boot BEFORE migrations, so anything it declared
+    -- about those two names would fight the migration that owns them:
+    --   * CREATE TABLE IF NOT EXISTS over a view is a silent no-op — harmless,
+    --     but it would leave a stale table definition here shadowing nothing.
+    --   * CREATE INDEX IF NOT EXISTS over a view THROWS 'views may not be
+    --     indexed', which would break getDb() on the first boot AFTER the
+    --     migration applied — i.e. a green deploy followed by an app that
+    --     cannot start. Do not add one back.
+    -- Migration 3 still creates them as real tables, because it backfills
+    -- user_item_state from them on a fresh database; migration 16 then drops
+    -- them and installs the views.
 
     -- Sync log
     CREATE TABLE IF NOT EXISTS sync_log (

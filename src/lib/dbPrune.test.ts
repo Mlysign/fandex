@@ -41,13 +41,22 @@ const addState = (id: string, relation = "wishlist") =>
     "INSERT INTO user_item_state (id, user_id, media_item_id, source, relation) VALUES (?, ?, ?, 'tmdb', ?)",
     [`${id}-st`, USER, id, relation],
   );
+// Since migration 16 user_library / user_watchlist are VIEWS, so a library row
+// is created the only way one can be: by writing the user_item_state row it is
+// derived from. That is not a workaround for the test — it is the property being
+// relied on, since it is what lets the prune predicate stop naming them.
 const addLibrary = (id: string, rating = 9) =>
   run(
-    "INSERT INTO user_library (id, user_id, media_item_id, status, rating, review) VALUES (?, ?, ?, 'watched', ?, 'my private note')",
+    `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation, status, rating, review)
+     VALUES (?, ?, ?, 'tmdb', 'library', 'watched', ?, 'my private note')`,
     [`${id}-lib`, USER, id, rating],
   );
 const addWatchlist = (id: string) =>
-  run("INSERT INTO user_watchlist (id, user_id, media_item_id) VALUES (?, ?, ?)", [`${id}-wl`, USER, id]);
+  run(
+    `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation)
+     VALUES (?, ?, ?, 'tmdb', 'wishlist')`,
+    [`${id}-wl`, USER, id],
+  );
 
 const count = (sql: string) => get<{ n: number }>(sql)?.n ?? 0;
 
@@ -122,19 +131,30 @@ describe("runPrune — cascades reach links, never user rows", () => {
     expect(r.watchlistRowsAfter).toBe(r.watchlistRowsBefore);
   });
 
-  // THE test. The plan's original predicate was `browsed = 1 AND id NOT IN
-  // user_item_state`. This constructs the exact state where that is wrong — a
-  // library row whose item is browsed with NO user_item_state row — and proves
-  // the extra clauses save it. If someone ever "simplifies" the predicate back,
-  // this fails instead of quietly eating a rating and review.
-  it("does NOT delete an item held only by user_library (narrower predicate would have)", () => {
+  // THE test, and its meaning changed with migration 16 — worth reading before
+  // touching the predicate.
+  //
+  // It used to construct a state the original predicate got wrong: a library row
+  // whose item is browsed with NO user_item_state row, proving the extra
+  // user_library clause saved a rating and review. That state can no longer be
+  // built. user_library is a view over user_item_state, so writing a library row
+  // IS writing the state row, and the item is protected by the clause that was
+  // always there.
+  //
+  // So the assertion flips from "the extra clause caught what the narrow one
+  // missed" to "there is nothing left for it to catch": wouldHaveLost* is 0
+  // against the LIVE predicate. A non-zero reading here means these names are
+  // real tables again and the predicate needs its clauses back — which is why
+  // this still guards the same thing it always did, from the other side.
+  it("does NOT delete an item held only in the library, and nothing could have", () => {
     addItem("library-only", 1);
     addLibrary("library-only", 9.5);
 
     const p = previewPrune();
-    expect(p.wouldHaveLostLibraryRows).toBe(1); // the naive predicate's blast radius
-    expect(p.prunable).toBe(0);                 // the safe one spares it
+    expect(p.prunable).toBe(0);
     expect(p.protectedByLibrary).toBe(1);
+    expect(p.protectedByUserState).toBe(1); // the same row, seen through both
+    expect(p.wouldHaveLostLibraryRows).toBe(0);
 
     const r = runPrune();
     expect(r.deleted).toBe(0);
@@ -142,13 +162,14 @@ describe("runPrune — cascades reach links, never user rows", () => {
     expect(get<{ review: string }>("SELECT review FROM user_library")?.review).toBe("my private note");
   });
 
-  it("does NOT delete an item held only by user_watchlist", () => {
+  it("does NOT delete an item held only in the wishlist", () => {
     addItem("watchlist-only", 1);
     addWatchlist("watchlist-only");
 
     const p = previewPrune();
-    expect(p.wouldHaveLostWatchlistRows).toBe(1);
     expect(p.prunable).toBe(0);
+    expect(p.protectedByWatchlist).toBe(1);
+    expect(p.wouldHaveLostWatchlistRows).toBe(0);
 
     expect(runPrune().deleted).toBe(0);
     expect(count("SELECT COUNT(*) n FROM user_watchlist")).toBe(1);

@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-16 (episode tracking live end to end; Up next + Progress tab; three-tab library)._
+_Last updated: 2026-08-17 (cache tables became views — migration 16; /library + /wishlist found dead)._
 
 ---
 
@@ -27,10 +27,19 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **Affiliate signups stay parked until this holds for days, not hours** — every program reviews the applicant site.
 
+## 🔴 `/library` and `/wishlist` are DEAD — neither page hydrates (found 2026-08-17)
+
+Both `MyStuffView` routes render their toolbar server-side and then sit on **“Loading…” forever**. `<main>` carries no React fiber while `body`/`nav` do, so no effect runs, `/api/library` is never requested, and **clicking a tab does nothing** — that last one is the 5-second reproduction. `/` and `/insights` are fine.
+
+**Pre-existing on `main`, proven by an A/B against a clean HEAD checkout — not migration 16.** The last commits to touch that file are MB16's tab rework (`fd7f13b` / `967c45d`, 2026-08-16), which is where to look. The API layer is healthy (`/api/library` returns 1,922 items in ~1 s), so this is purely client-side. Full findings + the ruled-out theories → [TASKS.md](TASKS.md).
+
+**Wishlist is a bottom-nav item**, so this is a nav destination that does nothing on a live site. Treat as the top priority.
+
 ## ▶ What's open
 
 | | Item | Blocked on |
 |--|------|--|
+| 🔴 | **`/library` + `/wishlist` don't hydrate** | Nobody — see above. Pre-existing, client-side, top priority. |
 | 🟡 | **MB — the rest of the mobile batch** | **14 of 15 shipped**, MB14 included. One left: **MB7** (bottom nav scrolls away on Insights, **installed PWA only** — not reproducible in the browser pane, needs a device look). → [TASKS.md](TASKS.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** build/sign the TWA (Bubblewrap/PWABuilder) → package name + cert → 2 env vars on Railway. Serving infra is done. |
 | 🔵 | **Games cross-link backfill on prod** | **You:** `POST /api/dev/crosslink` `{"source":"steam","maxItems":25}` from the browser console on fandex.org while logged in (both dev routes are session-gated, so a terminal `curl` 404s). Repeat until the cursor drains. Until then prod fills organically at ~30 cross-links per sync pass. |
@@ -39,6 +48,8 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 | 🔵 | **H3.0 — upkeep baseline** | **You.** One number (Railway bill + domain + recurring). The support page deliberately quotes no figure until it exists. |
 | 🟢 | **Fandex Score's residual ~1% outside 0–100** | A design call, not a bug: `FandexScoreBadge` makes no 0–100 claim itself, so "relabel rather than re-tune" is a live option. → [TASKS.md](TASKS.md) |
 | 🟢 | **Score `priorStrength`/role-weight re-tune** | Time. Needs a few weeks of real scores under the raw-sum formula; 5 days as of 2026-08-03. |
+
+**The cache tables are gone (migration 16, 2026-08-17).** `user_library` and `user_watchlist` are now VIEWS over `user_item_state`, so migration 3's expand-then-contract finally contracted and `rebuildCaches` is deleted — drift is no longer absent but impossible. Proven byte-exact on all 2,017 real rows through **both** apply paths (`scripts/verify-cache-views.mjs`, `scripts/rehearse-cache-view-migration.mjs`). **Two traps recorded in [TASKS.md](TASKS.md): a code-only rollback breaks every library write, and `CREATE INDEX` on these names now throws at boot.**
 
 **Episode tracking is LIVE and populated (MB14 + MB16, 2026-08-16).** Per-episode watched state for shows, two-way with Trakt: the item page's season tracker, Home's vertical **Up next** list, and the library's **Progress** tab. Prod synced 12,318 episodes across 280 shows.
 
@@ -76,7 +87,7 @@ Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scori
 
 ## ✅ Quality bar (as of 2026-08-16)
 
-**768 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**783 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 

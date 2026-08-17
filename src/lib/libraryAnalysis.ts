@@ -252,10 +252,19 @@ export function librarySignature(userId: string): string {
   // D6: COUNT/MAX(reviewed_at)/SUM(rating) alone miss two offsetting edits
   // (7→8 and 8→7 leave all three unchanged). A rowid-weighted rating sum is
   // order-sensitive, so swapping two items' ratings changes the signature.
+  //
+  // Signed off user_item_state, not user_library. Two reasons, in order of
+  // importance: user_library is a VIEW as of migration 16 and a view HAS no
+  // rowid (this query threw `no such column: rowid` the moment it became one),
+  // and user_item_state is the truth table anyway — one row per
+  // (item, source), so this is strictly MORE sensitive than the per-item
+  // aggregate it replaces. discovery.ts's poolSignature already signs the same
+  // table the same way. The signature is only ever a cache key, so the one-off
+  // change in its value just recomputes each profile once.
   const r = get<{ n: number; mx: number; sm: number; wsm: number }>(
     `SELECT COUNT(*) n, COALESCE(MAX(reviewed_at),0) mx, COALESCE(SUM(rating),0) sm,
             COALESCE(SUM(rating * rowid),0) wsm
-     FROM user_library WHERE user_id = ?`,
+     FROM user_item_state WHERE user_id = ? AND relation = 'library'`,
     [userId]
   );
   // D9: the facets come from the underlying media_links' raw_data, but an

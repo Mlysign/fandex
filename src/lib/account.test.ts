@@ -40,20 +40,20 @@ function populate(userId: string, itemId: string, suffix: string) {
      VALUES (?, ?, 'trakt', ?, 'Nils', 'https://img/a.png', ?, ?, ?)`,
     [`ident-${suffix}`, userId, `trakt-${suffix}`, SECRET, SECRET, JSON.stringify({ slug: "nils", accessToken: SECRET })],
   );
+  // Since migration 16 the library and wishlist rows are not written, they are
+  // DERIVED: user_library / user_watchlist are views over user_item_state, so
+  // these two inserts produce one row in each view. That is why the seed no
+  // longer writes them directly — and why erasure still reaches them despite
+  // userScopedTables() not listing them (see the test below).
   run(
-    `INSERT INTO user_library (id, user_id, media_item_id, platform_sources, status, rating, review)
-     VALUES (?, ?, ?, '["trakt"]', 'watched', 9, 'my private note')`,
-    [`lib-${suffix}`, userId, itemId],
-  );
-  run("INSERT INTO user_watchlist (id, user_id, media_item_id, notes) VALUES (?, ?, ?, 'later')", [
-    `wl-${suffix}`,
-    userId,
-    itemId,
-  ]);
-  run(
-    `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation, status, rating)
-     VALUES (?, ?, ?, 'trakt', 'library', 'watched', 9)`,
+    `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation, status, rating, review)
+     VALUES (?, ?, ?, 'trakt', 'library', 'watched', 9, 'my private note')`,
     [`st-${suffix}`, userId, itemId],
+  );
+  run(
+    `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation)
+     VALUES (?, ?, ?, 'trakt', 'wishlist')`,
+    [`stw-${suffix}`, userId, itemId],
   );
   run("INSERT INTO sync_log (id, user_id, provider, item_count, status) VALUES (?, ?, 'trakt', 42, 'ok')", [
     `sl-${suffix}`,
@@ -87,7 +87,7 @@ beforeEach(() => {
 describe("userScopedTables", () => {
   it("finds every table with a user_id column, and nothing else", () => {
     const tables = userScopedTables();
-    for (const t of ["user_identities", "user_library", "user_watchlist", "user_item_state", "sync_log", "user_episode_state"]) {
+    for (const t of ["user_identities", "user_item_state", "sync_log", "user_episode_state"]) {
       expect(tables).toContain(t);
     }
     // The shared catalog is not user-scoped — deleting an account must not reach it.
@@ -98,19 +98,34 @@ describe("userScopedTables", () => {
     expect(tables).not.toContain("show_episodes");
     expect(tables).not.toContain("users");
   });
+
+  // The GDPR-critical consequence of migration 16, and the reason it is safe.
+  // userScopedTables() scans sqlite_master WHERE type = 'table', so the two
+  // views drop out of the erasure target list even though they expose a user_id
+  // column. That is correct rather than a leak — they hold no rows of their own,
+  // and DELETE FROM a view would throw anyway — but "correct" here rests on a
+  // one-word filter in a query, so it gets asserted from both directions: the
+  // views are absent from the list, AND the erasure is still complete through
+  // them (proved in the deleteAccount block below).
+  it("excludes the derived views, which have a user_id column but no rows of their own", () => {
+    const tables = userScopedTables();
+    expect(tables).not.toContain("user_library");
+    expect(tables).not.toContain("user_watchlist");
+  });
 });
 
 describe("accountFootprint", () => {
   it("counts only the target user's rows", () => {
     const f = accountFootprint(ME);
     expect(f.exists).toBe(true);
-    expect(f.perTable.user_library).toBe(1);
-    expect(f.perTable.user_watchlist).toBe(1);
-    expect(f.perTable.user_item_state).toBe(1);
+    // 2: one library + one wishlist row. These are the rows that USED to be
+    // counted a second time as user_library / user_watchlist; the footprint is
+    // now the real one rather than the same data tallied three times.
+    expect(f.perTable.user_item_state).toBe(2);
     expect(f.perTable.user_identities).toBe(1);
     expect(f.perTable.sync_log).toBe(1);
     expect(f.perTable.user_episode_state).toBe(1);
-    expect(f.total).toBe(6);
+    expect(f.total).toBe(5);
   });
 
   it("reports a non-existent user as absent", () => {
@@ -123,11 +138,28 @@ describe("deleteAccount", () => {
     const result = deleteAccount(ME);
 
     expect(result.userRowDeleted).toBe(true);
-    expect(result.total).toBe(6);
+    expect(result.total).toBe(5);
     expect(count("SELECT COUNT(*) n FROM users WHERE id = ?", [ME])).toBe(0);
     for (const t of userScopedTables()) {
       expect(count(`SELECT COUNT(*) n FROM "${t}" WHERE user_id = ?`, [ME])).toBe(0);
     }
+  });
+
+  // The other half of the migration-16 erasure argument. deleteAccount never
+  // names user_library / user_watchlist — they are not in userScopedTables() —
+  // so completeness has to be shown through the surfaces a user would actually
+  // check, not through the list of tables the code happened to visit. A view
+  // that still returned the erased user's ratings would be a live GDPR failure
+  // with every other assertion in this file still green.
+  it("empties the derived views too, without ever naming them", () => {
+    expect(count("SELECT COUNT(*) n FROM user_library WHERE user_id = ?", [ME])).toBe(1);
+    expect(count("SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?", [ME])).toBe(1);
+
+    deleteAccount(ME);
+
+    expect(count("SELECT COUNT(*) n FROM user_library WHERE user_id = ?", [ME])).toBe(0);
+    expect(count("SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?", [ME])).toBe(0);
+    expect(count("SELECT COUNT(*) n FROM user_library WHERE review = 'my private note'")).toBe(1); // OTHER's, untouched
   });
 
   it("leaves the OTHER user completely untouched", () => {
@@ -136,7 +168,7 @@ describe("deleteAccount", () => {
     expect(count("SELECT COUNT(*) n FROM users WHERE id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM user_library WHERE user_id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM user_watchlist WHERE user_id = ?", [OTHER])).toBe(1);
-    expect(count("SELECT COUNT(*) n FROM user_item_state WHERE user_id = ?", [OTHER])).toBe(1);
+    expect(count("SELECT COUNT(*) n FROM user_item_state WHERE user_id = ?", [OTHER])).toBe(2);
     expect(count("SELECT COUNT(*) n FROM user_identities WHERE user_id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM sync_log WHERE user_id = ?", [OTHER])).toBe(1);
     expect(count("SELECT COUNT(*) n FROM user_episode_state WHERE user_id = ?", [OTHER])).toBe(1);
@@ -210,8 +242,14 @@ describe("buildAccountExport", () => {
     expect(exp.library).toHaveLength(1);
     expect(exp.library[0]).toMatchObject({ title: "Title item-1", rating: 9, review: "my private note" });
     expect(exp.watchlist).toHaveLength(1);
-    expect(exp.watchlist[0]).toMatchObject({ notes: "later" });
-    expect(exp.itemState).toHaveLength(1);
+    expect(exp.watchlist[0]).toMatchObject({ title: "Title item-1", platformSources: '["trakt"]' });
+    // `notes` is vestigial and always null: nothing has written it since
+    // migration 3 (0 of 95 rows on the live DB), so the view supplies NULL and
+    // the export keeps the column for shape compatibility. The old assertion
+    // here wrote 'later' by hand and proved only that the seed could set a
+    // column no code path ever sets.
+    expect(exp.watchlist[0].notes).toBeNull();
+    expect(exp.itemState).toHaveLength(2); // the library row and the wishlist row
     expect(exp.episodes).toHaveLength(1);
     expect(exp.episodes[0]).toMatchObject({
       title: "Title item-1", season: 2, episode: 5, watchedAt: 1700000000,
