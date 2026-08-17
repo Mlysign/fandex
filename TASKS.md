@@ -16,46 +16,31 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 3. **H3.0 is CLOSED as WON'T DO. The support page must NEVER quote a running-cost figure — permanently, not "until we have one".** The qualitative line ("Hosting, Domain und die Dienste … gehen auf eigene Rechnung") stays; no number ever joins it. Do not re-add H3.0 as an open item.
 4. **Fandex Score range: RELABEL (option c).** 0–100 is a **target, not a rule**. His reasoning, worth keeping: *exceeding 100 is rare and makes an item stand out — it promotes the score rather than making it unbelievable.* So **no re-tune, no top-N change, `ip` stays at 3.** `docs/fandex-score.md` §1 updated to match. SM39 finding 2 is CLOSED.
 5. **The three franchise calls stand.** Smash Bros + PlayStation All-Stars stay removed from Metal Gear; the `metal gear solid` → `metal gear` bundle stays; the game `Journey` stays unattached from the `Journey Collection` movie collection.
-6. **MB7: DEFERRED** — he needs a proper writeup of *what the task is and why it matters* before acting (my earlier note explained only why I can't do it). See the MB7 section.
+6. **MB7: deferred, then FIXED and confirmed working on Nils's device the same day.** It was never the nav — Insights overflowed horizontally, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` bar pinned below the fold. **The mobile batch is 15/15.** → archive, grep `MB — mobile testing batch`.
 7. **Android TWA (P15/P16): NEEDS MORE DETAIL** before he acts — "Bubblewrap" read as belonging to a different project. See the P15/P16 section.
 8. **H3.8 thresholds: APPROVED.** Ads at **10,000 pageviews/mo**, freemium at **3,500 sustained weekly-actives**. The long-standing "defined but explicitly NOT approved" guard is **retired** — these are now real triggers.
 9. **`PRUNE_ON_BOOT` stays ON** (the guard has held in prod three times). **`priorStrength` / role-weight re-tune: NOT needed — current tuning approved as good.** That time-gated item is closed.
-10. **Shimmer/blank-state check: DONE**, and it found a real bug — see "Discover's empty state" below.
+10. **Shimmer/blank-state check: DONE**, and it found a real bug — Discover rendered "No results for X" for ~300 ms *before* the search started, because the search is debounced 300 ms while `searchLoading` is only set inside `runSearch`. Fixed with a `searchedQ` gate. → archive, grep `SM44 heal budget`.
 
 ---
 
-## Legal pages: the two false `TODO(...)` strings are FIXED; `TODO(H4.3)` still renders
+- **Legal pages — all `TODO(...)` strings resolved** ✅ 2026-08-17. Two were factually wrong after that day's decisions (privacy claimed no postal address was published while the approved Imprint publishes one; terms claimed H3.8 was undecided), and `TODO(H4.3)` was answered per-case rather than as one blanket claim. **The rule that outlives it: strings in `src/lib/legal/content/{de,en}/*.ts` `body:` arrays RENDER to users — they are not code comments.** → grep the archive for `TODO(H4.3)`.
 
-⚠️ **These are not code comments.** They sit inside `body:` arrays in `src/lib/legal/content/{de,en}/*.ts`, so anything written there **renders as visible prose on the live legal pages**. Worth remembering before adding another marker — STATUS.md's "the legal surface is CLOSED and filled" was overstating it.
+## ⚠️ Needs Nils — this is the whole list
 
-✅ **Rewritten 2026-08-17 (Nils approved), both locales:**
-1. **`privacy.ts`** claimed *"Fandex does not publish a postal address yet — pending legal advice on how to satisfy that without publishing a home address."* The approved Imprint publishes one, so the policy contradicted the imprint a click away. Now: *"The controller's full postal address is published in the Imprint, which forms part of this notice."*
-2. **`terms.ts`** gated the paid-tier placeholders on *"a separate decision (H3.8) that hasn't been made."* H3.8 is approved. The sections stay correctly **inactive** (no paid tier exists) but no longer claim an undecided dependency — they now take effect only "if and when such an offering is actually launched and announced here."
+Everything else in this file is either done or a standing constraint. Only three things are waiting on a human.
 
-✅ **`TODO(H4.3)` FIXED 2026-08-17 too** — no `TODO(...)` string renders on any legal page now. The transfer paragraph was replaced by a per-case breakdown rather than one blanket claim: metadata-only providers (IGDB always; TMDB/RAWG while unconnected) receive **no personal data at all**, so there is nothing to base a transfer on; connected accounts go to an account the user already holds, at their instruction, under Art. 49(1)(a); and the two actual processors — **Railway** (hosting) and **Cloudflare** (DNS + mailbox) — are **EU–US DPF self-certified with the EU SCCs as a documented fallback**, verified against their published DPAs and stamped "checked August 2026" since certifications can be withdrawn. The supervisory-authority sentence now states the Art. 77 right correctly (the user's OWN country's authority — it need not be German), which is both more useful and needs no address.
+1. **Sign up for the affiliate programs — GOG first.** Unparked 2026-08-17: prod has been stably up since 2026-08-12 and the Impressum is approved, so both gates are clear. Sequence: **GOG** (the only merchant the catalog already product-links) → Humble → Fanatical → GMG → **Amazon LAST**, because applying to Amazon starts a 180-day / 3-qualifying-sale clock that closes the account if missed. Then set the env vars and flip `MONETIZATION_ENABLED`. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md). **Claude does not do these** — they carry your tax and payment identity.
 
----
+2. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
 
-## ⚠️ Needs Nils — nothing else is blocked on anything but these
+3. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
 
-1. ✅ **Episode tracking is DONE and populated on prod (2026-08-16)** — nothing left for you here. The sync pulled **12,318 episodes across 280 shows** and bulk-filled the episode catalog in the same pass. Root cause of the dead first release, worth carrying: `/sync/watched/shows` returns **no** episode data in any variant. → [[trakt-episode-endpoints]]
-
-2. ✅ **Prod sweeps — BOTH DONE.** The Wikidata franchise sweep ran 2026-08-14 (1,803 checked, **407 found**, `remaining` 0). **The Steam cross-link sweep ran 2026-08-17**: 253 items visited across 11 cursor batches, **131 games gained a Steam link** (`needing` 242 → 111). RAWG's pass is still un-run and stays that way while RAWG is down.
-   - ⚠️ **The 111 still "needing" are NOT leftover work — do not re-run to chase them.** They were visited and could not link because those games are not on Steam. This is the trap already recorded for backfills: **a sweep driven off "what's still missing" never terminates.** The termination condition is the CURSOR draining (`remaining: 0`, `nextAfterId: null`), which it did.
-   - **Both routes are session-gated** (`withScoringAdmin` reads the login cookie), so a bare terminal `curl` 404s no matter the syntax. Run them from the browser console on fandex.org while logged in. Also: in PowerShell `curl` is an alias for `Invoke-WebRequest` and does not accept `-H`/`-d` — use `curl.exe` or `Invoke-RestMethod`.
-
-3. ✅ **Donations are LIVE (2026-08-12).** **Any future client-read `NEXT_PUBLIC_*` needs an `ARG` line in the Dockerfile** or Railway never forwards it into the build — and the failure looks like success, since server components still render it fine. → [[next-public-env-needs-dockerfile-arg]]
-4. ✅ **`PRUNE_ON_BOOT` — DECIDED 2026-08-17: stays ON.** The boot prune has now fired against prod three times, every time touching **zero** user rows (2026-08-12: 255 browsed-only rows deleted, `media_items` 2267 → 2012, with `user_library`/`user_watchlist`/`user_item_state` unchanged; 2026-08-17: 28 more). The guard demonstrably holds in production. Nothing to set.
-5. ~~Reclaim the WAL high-water~~ — **attempted twice 2026-08-12, cannot be done while Litestream runs** (`busy: 1`, no reclaim, both times). Not a fault and not worth chasing: the volume is 12% used with 4 GB free. Details in the PR17 section below.
-6. **Watch whether prod STAYS up** — still worth an eye, but **no longer blocking anything.** It served ~32 min on 2026-08-07 then was un-routed at the edge; it has now been serving continuously **since 2026-08-12** (restarts since then are deploys, not outages). The app never crashed either time (`uptime` climbed monotonically), so both events read as a billing/pause action, not a technical one. **That "days, not hours" gate is met, so affiliate signups are UNPARKED** — see the locked decisions at the top.
-7. **Review the Impressum** — ✅ **mechanically checked on live prod 2026-08-17, nothing wrong with it.** `noindex, nofollow, noarchive, nosnippet` intact; canonical + hreflang resolve to the real domain (not `localhost`, so the `force-dynamic` rule is holding); sections are `§ 5 DDG` + `§ 18 Abs. 2 MStV`, Kontakt, Verbraucherstreitbeilegung, Haftung für Inhalte, Haftung für Links, Urheberrecht; real postcode/town + email present; **zero placeholders**; the Verbraucherstreitbeilegung paragraph is the standard non-participation wording; and there is **no ODR / OS-Plattform link**, which is correct — that platform closed 2025-07-20. What remains is genuinely your sign-off (is the address the one you want published), not a defect. Once you're happy, H4.2 closes and **all of H3 unblocks**.
-8. **On Ko-fi itself: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier. Also still open: the monthly-running-cost placeholder on the support page — that's H3.0's number (#10).
-9. **Build + sign the Android TWA** (P15) — Bubblewrap/PWABuilder → package name + signing-cert SHA-256 → set `TWA_PACKAGE_NAME`/`TWA_CERT_FINGERPRINT` on Railway.
-10. ✅ **H3.0 — CLOSED as WON'T DO (2026-08-17).** The support page will **never** quote a running-cost figure — permanently, not "until we have one". The qualitative sentence stays ("Betrieb kostet Geld: Hosting, Domain und die Dienste"); no number ever joins it. **Do not re-open this as an open item or re-add a placeholder.**
-11. **H3.8's thresholds are defined but NOT approved** (your call, 2026-08-02: "leave it defined but unapproved"). A future session must not read them as settled.
-12. **Sign up for the affiliate programs** — **still PARKED** (your call, 2026-08-03), now on prod being **stably** up rather than up at all — see #6. Every program reviews the site URL on the application, so applying during an un-routed window buys a rejection, and reapplying is worse than a first application. Sequence once that holds: **GOG first** (the only merchant the catalog already product-links), then Humble → Fanatical → GMG, **Amazon LAST** — applying starts a 180-day/3-qualifying-sale clock that closes the account if missed, and Amazon is the only movie/show coverage. Full walkthrough → [docs/monetization-go-live.md](docs/monetization-go-live.md).
-
----
+**Standing constraints — not tasks, but do not violate them:**
+- **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
+- **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative "it costs money to run" line stays; no number ever joins it.
+- **Do NOT contact TMDB or Trakt about commercial terms** while monetizing on their free tiers — the accepted risk is key revocation, and asking invites it.
+- **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
 
 ## Open — carried forward from Phase 6
 
@@ -89,78 +74,7 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 ---
 
-## MB — mobile testing batch, 2026-08-14 (Nils, 15 notes) 🟡 1 of 15 open
-
-**14 of 15 shipped** (13 on 2026-08-14, MB14 on 2026-08-16 — fixed and verified the same day) — full write-ups → [archive](docs/archive/history.md), grep `MB — mobile testing batch`. Four findings there are worth reading before touching related code: **re-seeding does not produce turnover** (MB9), **`display:none` does not stop images downloading** (MB13), **Tailwind resolves competing utilities by stylesheet order, not class-attribute order** (the `buttonClasses` bug MB13 surfaced), and — spun out and **fixed the same day** — **a wrong `@theme` namespace prefix generates no rule at all**, which ran ~28 motion call sites at 150ms for three weeks with the whole quality bar green (grep `Motion tokens`).
-
-**⚠️ Standing limitation: a Claude session has no access to Nils's phone.** Verification is the browser pane at 375×812 with touch emulation. That covers a lot — it caught the hidden-image downloads and proved the long-press gestures — but it provably cannot see MB7.
-
-- **MB7** ✅ **FIXED 2026-08-17. Root cause was horizontal overflow on Insights — nothing was wrong with the nav.** The mobile batch is now **15 of 15**.
-
-  **The chain, measured at 375×812.** Insights rendered ~470px of content in a 375px viewport, so Chrome applied **shrink-to-fit** (`visualViewport.scale` 0.80). Zooming out inflates the **layout** viewport to 812/0.8 ≈ **1017** while the **visual** viewport stays 812. The mobile bar is `fixed bottom-0`, so it pinned itself to 1017 — **~205px below the visible area**. One page's horizontal overflow was zooming the viewport out from under a fixed element.
-
-  **⚠️ The earlier investigation had the number and misread it.** It recorded the nav's `top` as **965 in an 812-tall viewport** and concluded "unchanged across a 1500px scroll → fine". It was unchanged *and* off-screen the whole time: the check asked whether the value MOVED, never whether it was VISIBLE. **When measuring a fixed element, compare its `bottom` against `visualViewport.height` — not against its own earlier value.**
-
-  **What unlocked it:** Nils confirming it reproduces in **normal mobile Chrome**, not only the installed PWA. That revived the dynamic-viewport theory the original note had ruled out *precisely because* it looked PWA-only — standalone mode has no URL bar, so the toolbar explanation seemed dead. Shrink-to-fit happens in both.
-
-  **FIVE overflow sources, all one class of bug** — a flex/grid item defaults to `min-width: auto` and refuses to shrink below its own content:
-  1. the decade histogram in `InsightsView` (14 columns needing ~28px each) → `min-w-0` + `overflow-x-auto`;
-  2. the "You rate higher/lower" divergence cards (410px) → `min-w-0`;
-  3. `FacetSection`'s filter row (`w-44` input + stepper + toggle ≈ 380px) → `flex-wrap`;
-  4. **the "How you rate" histogram in `Histogram.tsx`** — 19 half-point buckets each held open by a count label ("310", "383") → `min-w-0`;
-  5. **`StatBar`'s label** — it already had `truncate`, which **does nothing inside a flex row without `min-w-0`**: the span kept contributing the full width of names like "Sony Interactive Entertainment", growing its facet card past the viewport → `min-w-0` on the span, plus `min-w-0` on the card.
-
-  **⚠️ The first fix shipped incomplete, and the method is the lesson.** 1–3 were fixed and verified at **one width (375)**, which measured clean — so it shipped. Nils's phone still showed the overflow, because 4 and 5 only bite at other widths and with his data. **Verify this class of bug across several viewport widths (320 / 360 / 412) and after scrolling the whole page, never at one size.**
-
-  **Verified now at 320, 360 and 412:** `scrollWidth` == `clientWidth` (**overflow 0**), `visualViewport.scale` **1**, `innerHeight` == `visualViewport.height`, nav bottom edge flush with the viewport bottom — **offscreen by 0** at every width, top of page and scrolled to the end.
-
-  <details><summary>Original framing, kept for context</summary>
-
-  **What the task actually is (this was missing, and is why it got deferred).** You reported, from the installed PWA on your phone: *"the bottom nav scrolls away on Insights."* Every other page keeps its bottom nav pinned while you scroll; `/insights` doesn't. The nav is the app's primary navigation on mobile — Home / Search / Calendar / Wishlist / You — so on that one page you scroll down and lose the way out, and have to scroll back up to navigate. It is the **last open item of the 15-note mobile batch**; the other 14 are shipped.
-
-  **Why it hasn't been solved from here.** Everything checkable without your phone has been checked and came back clean, so there is no theory left to test in a desktop browser — the remaining question is a measurement that can only be taken on the device.
-
-  **What the device visit would answer, in one number.** Two completely different bugs produce the same complaint, and they have different fixes:
-  - the nav element **itself moves** (its `getBoundingClientRect().top` climbs as you scroll) → `position: fixed` is resolving against something other than the viewport, and the fix is in the CSS/ancestor chain;
-  - the nav **stays exactly where it is** while `visualViewport.height` / `offsetTop` change → the nav is fine and the *viewport* is resizing under it (PWA toolbar / safe-area behaviour), and the fix is a layout/viewport one.
-
-  Guessing between those two is how you waste an afternoon changing the wrong thing — hence the probe below rather than a speculative patch.
-
-  **Cost if skipped:** one page has degraded navigation in the installed app. Not data loss, not a prod outage. Closing the batch at 14/15 is a legitimate choice.
-
-  </details>
-  - **Ruled out by measurement at 375×812 with a session — don't re-check these:** the nav is `position: fixed` with `top` unchanged at 965 across a 1500px scroll; **no ancestor** carries a `transform`/`filter`/`perspective`/`contain`/`backdrop-filter`/`will-change` (the usual ways `fixed` silently becomes containing-block-relative — the whole chain to `<html>` was walked); **nothing covers it** (it's `z-40` and IS the topmost element at its own centre by `elementFromPoint`; the only higher-z element is the toast container at `z-100 bottom-4 right-4`, which doesn't overlap); and **`min-h-screen` is not insights-specific** — Home, Discover, Calendar, Profile and Settings all use it.
-  - **Next step, on the device** (`chrome://inspect` against the installed PWA): does the nav's `getBoundingClientRect().top` actually move during the scroll, or does it stay put while something else changes? Those are different bugs with different fixes.
-  - **⚠️ A Claude session cannot do this even with the phone plugged in** (established 2026-08-17): the browser tooling rewrites a `chrome://` URL to `https://chrome://`, and a Chrome extension cannot script `chrome://` pages regardless. It needs a human at `chrome://inspect`.
-  - **Paste this into the remote console** once the PWA's inspector is open, then scroll — it answers the question above in one go rather than needing a second round-trip:
-    ```js
-    (() => {
-      const nav = document.querySelector('nav.fixed, [class*="fixed"][class*="bottom"]')
-              || [...document.querySelectorAll('nav')].at(-1);
-      const s = [];
-      const rec = () => s.push({ y: Math.round(scrollY), top: Math.round(nav.getBoundingClientRect().top),
-        vh: innerHeight, vv: Math.round(visualViewport?.height ?? 0),
-        off: Math.round(visualViewport?.offsetTop ?? 0), pos: getComputedStyle(nav).position });
-      rec(); addEventListener('scroll', rec, { passive: true });
-      visualViewport?.addEventListener('resize', rec);
-      setTimeout(() => { console.table(s); window.__mb7 = s; }, 8000);
-      return 'scroll for 8s — then read the table';
-    })()
-    ```
-    **How to read it:** if `top` stays constant while `vh`/`vv` change, the nav is fine and the VIEWPORT is resizing (the PWA's own toolbar/safe-area) — a different bug from the nav moving. If `top` climbs with `y`, `position: fixed` is resolving against something other than the viewport after all, despite the ancestor chain having been walked clean.
-  - **Do NOT speculatively add `viewportFit: "cover"`.** `layout.tsx`'s `viewport` export sets only `themeColor`, so `env(safe-area-inset-bottom)` — which `AppNav`'s mobile bar pads with — is always 0. That is self-consistent today (without `cover`, the app is already laid out inside the safe area) and changing it moves where the whole app paints.
-
-- **MB14** ✅ **2026-08-16 — per-episode show tracking, working.** Root cause of the dead first release: `/sync/watched/shows` carries **no episode data in any variant** (measured — `seasons` absent on all 280 entries); the pull uses `/sync/history/episodes` now. → [[trakt-episode-endpoints]] · [archive](docs/archive/history.md), grep `MB14 — per-episode show tracking`.
-- **MB16** ✅ **2026-08-16 — the episode UI, to Nils's spec.** "Up next" is now a full-width VERTICAL scroller of calendar-style list rows (show poster, checkbox where the wishlist toggle would be), about 2.5 rows tall, with "See all" → a new **Progress** tab in the library that isn't capped at 10 and pages as you scroll. `<EpisodeRow>` + `useEpisodeTick` are shared by both surfaces so the tick can't drift. → [archive](docs/archive/history.md), grep `MB16 episode UI`.
-  - **The Progress tab deliberately does NOT load the library payload.** `/api/library` is **8.9 MB / 1,922 items** here, and `MyStuffContent` then runs merge/filter/sort memos over all of it; paying that before showing an episode left the tab blank for 30 s+ with the renderer unresponsive. The item fetch is now effect-driven and skipped for that tab.
-  - **Two pre-existing bugs fixed on the way:** `loadItems()` had no `try/finally`, so a rejected fetch or a half-parsed body left `loading` true and the page stuck on "Loading…" with no error and no way out; and the mount effect referenced `init()` before its declaration (a stale-binding hazard the react-hooks rules flag as an error).
-  - **A "Load more" button sits alongside the IntersectionObserver** — the observer needs a compositor and never fires in some embedded contexts, and a keyboard user shouldn't have to simulate a scroll.
-  - **The tab set is now three: Wishlist · Progress · Library** (2026-08-16). "All" was a superset rather than a place, and Rated/Unrated were a rating filter wearing a tab's clothes. **Library is NOT the old All** — that folded in wishlist-only items. Retired values (`?tab=all|rated|unrated`) fall back to the route default, with a test pinning it so old links keep working.
-
-- **Home progress module** ✅ **2026-08-16** — Home's three counters are gone; a carousel of the episode you'd watch next takes that slot, after the highlight panels. ONE filter (the preceding episode is watched) and ONE sort (a watch and a release are dated events on one timeline; latest first, capped at 10). `src/lib/upNext.ts` + `/api/progress` + `<ProgressRail>`. **Live and populated** now that MB14 feeds it real episodes. → [archive](docs/archive/history.md), grep `Home progress module`.
-  - Two rules that outlived it, both now in `AGENTS.md`: **a 30-day recency FILTER was the first cut and was wrong** (a filter hides a show instead of ranking it — ask that of any "only show it if it's recent" rule), and **a module that renders `null` when empty must know why before it ships** (this one cost four deploys).
-
----
+- **MB — mobile testing batch (15 notes)** ✅ **COMPLETE 15/15, 2026-08-17.** MB7 was last: "the bottom nav scrolls away on Insights" turned out to be **horizontal overflow**, not the nav — the page overflowed, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` bar pinned itself below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and a fixed element must be checked with `bottom` vs `visualViewport.height` at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix.** → grep the archive for `MB — mobile testing batch`.
 
 ## H3 — Monetization 🔵 v1 built 2026-08-03; donations live, affiliate dark
 

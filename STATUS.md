@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-17 (migration 16; both prod sweeps done; the full open-decision list answered and locked)._
+_Last updated: 2026-08-17 (migration 16; both prod sweeps done; all decisions locked; mobile batch 15/15)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (GOG first), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -29,7 +29,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **That "days, not hours" gate is now MET** (continuous since 2026-08-12), which is what unparked the affiliate signups — every program reviews the applicant site, and it has been serving cleanly.
 
-## 🟡 `/library` + `/wishlist` don't work under `next dev` (DEV ONLY — prod is fine)
+## 🟡 `/library` + `/wishlist` do not work under `next dev` (DEV ONLY — prod is fine)
 
 **Production is unaffected.** A `next start` build hydrates both pages and renders real items; fandex.org is fine and this was never a user-facing outage. It does mean **neither page can be developed or verified against the dev server**, which is exactly why it went unnoticed — the smoke sweeps run against prod.
 
@@ -42,9 +42,11 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 | | Item | Blocked on |
 |--|------|--|
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
-| ✅ | **MB — mobile batch COMPLETE (15/15)** | MB7 fixed 2026-08-17: Insights overflowed horizontally, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` nav pinned ~205px below the fold. → [TASKS.md](TASKS.md) |
-| 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context now in [TASKS.md](TASKS.md) (it's the "Fandex as a thin Play Store wrapper of the website" decision from 2026-06-18; needs a signing key + $25 Play account). |
-| 🔵 | **H3 — affiliate revenue (UNPARKED, GOG first)** | **You:** program signups (**GOG first, Amazon last**) → env vars → flip `MONETIZATION_ENABLED`. Code is done and dark. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
+| 🔵 | **H3 — affiliate revenue (UNPARKED, GOG first)** | **You:** program signups (**GOG first, Amazon last** — its 180-day clock). Both gates are now clear: prod stable since 2026-08-12, Impressum approved. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
+| 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context in [TASKS.md](TASKS.md) (Fandex as a thin Play Store wrapper of the website, the 2026-06-18 decision; needs a signing key + a one-off $25 Play account). |
+| 🔵 | **RAWG cross-link sweep** | **You**, once RAWG is back — it was down all of 2026-08-17. 168 games lack a RAWG link. Not urgent: they have IGDB as a second source now, so they still score. |
+
+**The mobile batch is COMPLETE, 15/15 (2026-08-17).** MB7 — "the bottom nav scrolls away on Insights" — was never the nav: the page **overflowed horizontally**, Chrome shrink-to-fit zoomed the *layout* viewport out (812 → ~1017) while the visual viewport stayed 812, and the `fixed bottom-0` bar pinned itself ~205px below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and this class of bug must be verified at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix that Nils caught on his phone.**
 
 **The cache tables are gone (migration 16, 2026-08-17).** `user_library` and `user_watchlist` are now VIEWS over `user_item_state`, so migration 3's expand-then-contract finally contracted and `rebuildCaches` is deleted — drift is no longer absent but impossible. Proven byte-exact on all 2,017 real rows through **both** apply paths (`scripts/verify-cache-views.mjs`, `scripts/rehearse-cache-view-migration.mjs`). **Two traps recorded in [TASKS.md](TASKS.md): a code-only rollback breaks every library write, and `CREATE INDEX` on these names now throws at boot.**
 
