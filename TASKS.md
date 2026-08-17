@@ -54,6 +54,23 @@
 - **MB7** ⬜ **NOT REPRODUCIBLE in the browser pane — needs a device look.** "The bottom nav scrolls away on Insights." It's the **installed PWA** (Nils), which kills the obvious theory: standalone mode has no Chrome URL bar to hide, so the dynamic-toolbar explanation is dead.
   - **Ruled out by measurement at 375×812 with a session — don't re-check these:** the nav is `position: fixed` with `top` unchanged at 965 across a 1500px scroll; **no ancestor** carries a `transform`/`filter`/`perspective`/`contain`/`backdrop-filter`/`will-change` (the usual ways `fixed` silently becomes containing-block-relative — the whole chain to `<html>` was walked); **nothing covers it** (it's `z-40` and IS the topmost element at its own centre by `elementFromPoint`; the only higher-z element is the toast container at `z-100 bottom-4 right-4`, which doesn't overlap); and **`min-h-screen` is not insights-specific** — Home, Discover, Calendar, Profile and Settings all use it.
   - **Next step, on the device** (`chrome://inspect` against the installed PWA): does the nav's `getBoundingClientRect().top` actually move during the scroll, or does it stay put while something else changes? Those are different bugs with different fixes.
+  - **⚠️ A Claude session cannot do this even with the phone plugged in** (established 2026-08-17): the browser tooling rewrites a `chrome://` URL to `https://chrome://`, and a Chrome extension cannot script `chrome://` pages regardless. It needs a human at `chrome://inspect`.
+  - **Paste this into the remote console** once the PWA's inspector is open, then scroll — it answers the question above in one go rather than needing a second round-trip:
+    ```js
+    (() => {
+      const nav = document.querySelector('nav.fixed, [class*="fixed"][class*="bottom"]')
+              || [...document.querySelectorAll('nav')].at(-1);
+      const s = [];
+      const rec = () => s.push({ y: Math.round(scrollY), top: Math.round(nav.getBoundingClientRect().top),
+        vh: innerHeight, vv: Math.round(visualViewport?.height ?? 0),
+        off: Math.round(visualViewport?.offsetTop ?? 0), pos: getComputedStyle(nav).position });
+      rec(); addEventListener('scroll', rec, { passive: true });
+      visualViewport?.addEventListener('resize', rec);
+      setTimeout(() => { console.table(s); window.__mb7 = s; }, 8000);
+      return 'scroll for 8s — then read the table';
+    })()
+    ```
+    **How to read it:** if `top` stays constant while `vh`/`vv` change, the nav is fine and the VIEWPORT is resizing (the PWA's own toolbar/safe-area) — a different bug from the nav moving. If `top` climbs with `y`, `position: fixed` is resolving against something other than the viewport after all, despite the ancestor chain having been walked clean.
   - **Do NOT speculatively add `viewportFit: "cover"`.** `layout.tsx`'s `viewport` export sets only `themeColor`, so `env(safe-area-inset-bottom)` — which `AppNav`'s mobile bar pads with — is always 0. That is self-consistent today (without `cover`, the app is already laid out inside the safe area) and changing it moves where the whole app paints.
 
 - **MB14** ✅ **2026-08-16 — per-episode show tracking, working.** Root cause of the dead first release: `/sync/watched/shows` carries **no episode data in any variant** (measured — `seasons` absent on all 280 entries); the pull uses `/sync/history/episodes` now. → [[trakt-episode-endpoints]] · [archive](docs/archive/history.md), grep `MB14 — per-episode show tracking`.
