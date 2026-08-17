@@ -11,7 +11,8 @@
 
 1. ✅ **Episode tracking is DONE and populated on prod (2026-08-16)** — nothing left for you here. The sync pulled **12,318 episodes across 280 shows** and bulk-filled the episode catalog in the same pass. Root cause of the dead first release, worth carrying: `/sync/watched/shows` returns **no** episode data in any variant. → [[trakt-episode-endpoints]]
 
-2. **Prod sweeps.** ✅ **The Wikidata franchise sweep RAN on prod 2026-08-14** — 1,803 checked, **407 found**, `remaining` 0, 13 batches, no failures. Prod now has 503 franchises across 416 movie / 385 game / **84 show** memberships and **34 cross-media franchises** (was 14, none with shows). Star Wars spans 24 items incl. Andor and Obi-Wan Kenobi; Andor's breakdown reads *Star Wars +5.8, you rate 7.45 over 19*. ⬜ **Still un-run: `POST /api/dev/crosslink`** `{"source":"steam","maxItems":25}` — games cross-linking (SM48). Skip RAWG while it's down.
+2. ✅ **Prod sweeps — BOTH DONE.** The Wikidata franchise sweep ran 2026-08-14 (1,803 checked, **407 found**, `remaining` 0). **The Steam cross-link sweep ran 2026-08-17**: 253 items visited across 11 cursor batches, **131 games gained a Steam link** (`needing` 242 → 111). RAWG's pass is still un-run and stays that way while RAWG is down.
+   - ⚠️ **The 111 still "needing" are NOT leftover work — do not re-run to chase them.** They were visited and could not link because those games are not on Steam. This is the trap already recorded for backfills: **a sweep driven off "what's still missing" never terminates.** The termination condition is the CURSOR draining (`remaining: 0`, `nextAfterId: null`), which it did.
    - **Both routes are session-gated** (`withScoringAdmin` reads the login cookie), so a bare terminal `curl` 404s no matter the syntax. Run them from the browser console on fandex.org while logged in. Also: in PowerShell `curl` is an alias for `Invoke-WebRequest` and does not accept `-H`/`-d` — use `curl.exe` or `Invoke-RestMethod`.
 
 3. ✅ **Donations are LIVE (2026-08-12).** **Any future client-read `NEXT_PUBLIC_*` needs an `ARG` line in the Dockerfile** or Railway never forwards it into the build — and the failure looks like success, since server components still render it fine. → [[next-public-env-needs-dockerfile-arg]]
@@ -106,7 +107,20 @@
 
 **The trap that made local and prod diverge silently, worth knowing before touching any scoring default:** migration 9 seeds `scoring_config` with `INSERT OR IGNORE` (`migrations.ts:298`) and `getScoringConfig()` merges `{...DEFAULT, ...stored}` — **the stored blob wins**. A recalibrated default never reaches a database that already has a row. `tag_category` is seeded the same way. (The same merge is what lets a NEW knob ship with no migration — see the franchise section below.)
 
-**Finding 2 — ⬜ a residual ~1% still prints outside 0–100, and that last bit is a design call.** With the gains fitted the tails are tiny but nonzero. Two measured ways to close them: top-N **3/2/2/1** → 0.1% outside (min 40, max 100) at the cost of a thinner breakdown and a narrower spread; or accept it. Worth knowing before spending effort: **`FandexScoreBadge` makes no 0–100 claim itself** — it prints a bare integer coloured against `center ± 10`, which reads correctly at any scale, and the 0–100 target lives only in `docs/fandex-score.md` §1. So "relabel rather than re-tune" is a live third option.
+**Finding 2 — ⬜ re-measured 2026-08-17 against PROD's real config: it is 3.3% outside, not ~1%.** The old figure assumed `ip: 1.3`; prod runs **`ip: 3`**, which widened the tails a lot. `node scripts/probe-score-range.mjs data/rr.db --config <prod response>` on the real 1,922-item library:
+
+| config | min | p10 | median | p90 | max | <0 | >100 | outside |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| **A · prod as it runs today** | −23 | 40 | 72 | 89 | 115 | 8 | 55 | **3.3%** |
+| B · gains fitted (2 / 4.3) | −30 | 38 | 71 | 85 | 106 | 9 | 4 | 0.7% |
+| C · C=5 + fitted gains | −42 | 37 | 71 | 85 | 106 | 10 | 10 | 1.1% |
+| **E · top-N 3/2/2/1, gains unchanged** | **2** | 47 | 70 | 83 | **103** | **0** | 2 | **0.1%** |
+
+**E is the standout and it is not the one the old note predicted.** It is the only row with *no negative scores at all* (min 2, max 103), and it needs no gain change — just tighter top-N. Its cost is the documented one: a thinner breakdown (fewer facets listed per item) and a narrower spread (p10–p90 of 36 points vs today's 49).
+
+Three honest options, still your call: **(a) tighten top-N to 3/2/2/1** → 0.1% outside, no negatives; **(b) drop `ip` 3 → ~2**, which attacks the actual cause rather than the symptom (it alone moves 721 items by up to ±24); **(c) relabel** — `FandexScoreBadge` makes no 0–100 claim itself, printing a bare integer coloured against `center ± 10`, which reads correctly at any scale, and the 0–100 target lives only in `docs/fandex-score.md` §1.
+
+⚠️ Both probes above ran against the LOCAL `data/rr.db` with prod's config imported. Local has more franchise attachments than prod did (584 vs 407 found by the Wikidata sweep), so the `ip` effect here is, if anything, slightly overstated — though the 70 suggestions applied to prod on 2026-08-17 have narrowed that gap.
 
 ---
 
@@ -118,11 +132,15 @@ A fourth facet kind (`ip`) fed by TMDB `belongs_to_collection` + IGDB `franchise
 
 **The editor shipped 2026-08-14** (`0a1ee54`) — `/dev/scoring` → Taxonomy → **Franchises**. Migration 13 adds `ip_alias` (bundling, mirrors `tag_alias`) and `item_ip_override` (attach/detach one item). Verified on both apply paths against a copy of the real DB. Design + the resolution-point reasoning → [docs/fandex-score.md](docs/fandex-score.md) §3.6.
 
-**Open — yours:**
-1. ⬜ **Bundle `metal gear solid` into `metal gear`** (6 items each). One click in the panel; which name is canonical is your call, which is why it's not pre-applied.
-2. ⬜ **Review the 31 title-match suggestions** — "Find suggestions" in the panel. 4 Star Wars shows, Fallout, The Witcher, Castlevania, Game of Thrones, Ghost in the Shell. Nothing applies until you accept it. **The Mandalorian is deliberately NOT among them** (no title signal at all) — attach it by hand, which is the mechanism's whole point.
-3. ⬜ **Tune `ip`** once you've seen it live. Default 1.3 (peer with `director`, which you have at 4). `node scripts/probe-ip-impact.mjs data/rr.db --config <a GET /api/dev/scoring response>` shows what any value does to real titles first.
-4. ⬜ **Optionally re-fit the gains.** Franchises widened the tails slightly (0.9% → 1.7% outside 0–100); the fitting pair moves 2.5/4 → **2.4/3.8**. Marginal.
+**⚠️ The numbers this section used to quote were WRONG — prod was never read.** Live `GET /api/dev/scoring` on 2026-08-17 says **`ip: 3`** (not "the default 1.3") and **`director: 2`** (not 4), with `priorStrength: 2`, `K_up 2.5 / K_down 4`. The `ip` weight had already been tuned. This is the third time the "read `/api/dev/scoring` before theorising" rule has paid — the stored blob wins over any default, so a doc quoting defaults is quoting fiction.
+
+**Done 2026-08-17 (on prod):**
+1. ✅ **Bundled `metal gear solid` into `metal gear`.** Prod had 4 + 3 items, deduping to 5 — the two were double-attached. Canonical is `metal gear`: it is the series, Metal Gear Solid is a sub-series inside it.
+   - **Two of the five members were wrong and were removed**: *PlayStation All-Stars Battle Royale* and *Super Smash Bros. Ultimate*, crossover fighters where Snake/Raiden guest-appear. Both were collecting the **full franchise deviation (+15.6 each at `ip: 3`)** — i.e. being credited with a Metal Gear rating for a cameo. Re-attach by hand if you disagree. Metal Gear is now Snake Eater, Delta, Ground Zeroes, Phantom Pain.
+2. ✅ **Applied 70 of 71 title-match suggestions.** (Prod had **71**, not the 31 quoted here — that was the local count.) Overwhelmingly genuine: GTA III/V/San Andreas/Vice City → Grand Theft Auto, the five Back to the Future episodes, Half-Life 2's episodes, Elder Scrolls, System Shock, Sam & Max, The Last of Us Part I + Remastered. Stored `source: manual`, so a Wikidata re-sweep cannot undo them.
+   - ⬜ **One deliberately skipped: the GAME `Journey` → `Journey Collection`.** That collection is a **1-item *movie*** collection — a name collision, not a franchise. Attach it only if you actually want the game folded into a film collection.
+3. ✅ **`ip` is live at 3 and that is aggressive — measured.** `node scripts/probe-ip-impact.mjs data/rr.db --config <prod response>`: **721 of 1,904 items move**, swinging up to **±24 points** (Metal Gear Solid V +15.6 → 115; LOTR +15.0 → 108; Transformers: Age of Extinction −24.1 → −23). It is the main driver of finding 2 below. Lowering it to ~2 is the single biggest lever if you want the range back.
+4. ⬜ **Optional gain re-fit** — see the measured table in the SM39 section; the honest options changed now that prod's real config is known.
 
 **✅ Wikidata shipped 2026-08-14** (`313a830`) — **the shows gap is closed.** `POST /api/dev/scoring/wikidata` (admin, bounded + resumable, repeat until `remaining` is 0). On the local catalog: 2,295 items asked, **584 found, 605 attachments — 321 games, 165 movies, 98 shows.** Star Wars now spans 11 movies + 6 shows (The Mandalorian, Andor, Obi-Wan Kenobi…), plus links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek.
 
