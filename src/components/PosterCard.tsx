@@ -199,9 +199,14 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           <div className="text-caption text-text-secondary line-clamp-1">{item.roles.join(", ")}</div>
         )}
 
-        {/* Quick actions — skipped for a non-linkable item, which has no
-            identity to act on. */}
-        {linkable && <ActionCells item={item} layout="card" />}
+        {/* Quick actions. `linkable` is passed DOWN rather than gating the
+            render here (2026-08-18): a non-linkable item has no identity to
+            write against, but for a signed-out viewer both buttons are just a
+            sign-in prompt, which needs none — and hiding them made a logged-out
+            Home look half-built, some cards with the bar and some without. See
+            ActionCells' `linkable` prop for the full note. It still renders
+            nothing for a signed-in viewer on an item with no row. */}
+        <ActionCells item={item} layout="card" linkable={linkable} />
       </div>
     </>
   );

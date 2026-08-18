@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { Bookmark } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { EnrichedItem, MediaType } from "@/types";
@@ -26,6 +27,8 @@ import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWishlistTabs";
 import ProgressTabPanel from "@/components/ProgressTabPanel";
+import SignInDialog from "@/components/auth/SignInDialog";
+import { resetSessionProbe } from "@/lib/sessionProbe";
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 const TAB_LABEL: Record<MyStuffTab, string> = { wishlist: "Wishlist", progress: "Progress", library: "Library" };
@@ -130,6 +133,9 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [autoSyncing, setAutoSyncing] = useState(false);
   /** Auth resolved — gates the item load so it can't race ahead of the session check. */
   const [authChecked, setAuthChecked] = useState(false);
+  /** null = session probe still in flight; true = signed out, render the gate. */
+  const [anon, setAnon] = useState<boolean | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
   /** The (large) item payload has been fetched at least once. */
   const [itemsLoaded, setItemsLoaded] = useState(false);
   // The `?tab=` query param IS the state — no local mirror. Deriving it
@@ -177,7 +183,16 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   async function init() {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (!data.user) { router.replace("/"); return; }
+    // 2026-08-18 — this used to `router.replace("/")`. Nils: "clicking
+    // 'wishlist' did redirect to home instead of asking to sign up." A bounce
+    // is the wrong answer for a nav slot that is visible to anonymous visitors
+    // and that AppNav renders as a plain link for them: it reads as a broken
+    // link, not as a gate, because nothing ever says a sign-in was needed.
+    // Unlike the calendar, there is no public half of this page to show —
+    // library and wishlist ARE the user's own data — so the whole view becomes
+    // a sign-in prompt rather than a partial render.
+    if (!data.user) { setAnon(true); return; }
+    setAnon(false);
     setIdentities(data.identities ?? []);
     const syncLogs: { last_sync: number }[] = data.syncLogs ?? [];
     const latestSyncMs = syncLogs.length > 0 ? Math.max(...syncLogs.map((l) => l.last_sync * 1000)) : 0;
@@ -314,6 +329,45 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const capRender = route === "library" && autoTodaySampled;
 
   const isBusy = syncing || autoSyncing;
+
+  // ── Signed out ────────────────────────────────────────────────────────────
+  // Returned BEFORE the toolbar: every control in it (search your wishlist,
+  // sort your library, sync your accounts) addresses data that doesn't exist
+  // yet, so rendering the chrome around an empty set would be a page pretending
+  // to work. `anon === null` (probe in flight) falls through to the normal
+  // loading spinner rather than flashing this.
+  if (anon) {
+    const noun = route === "library" ? "library" : "wishlist";
+    return (
+      <div className="min-h-screen">
+        <h1 className="sr-only">{TAB_LABEL[activeTab]}</h1>
+        <main className="max-w-6xl mx-auto px-6 py-6">
+          <EmptyState
+            className="mt-20"
+            icon={<Bookmark className="w-5 h-5" aria-hidden />}
+            title={`Sign in to see your ${noun}`}
+            hint="Connect Trakt, Steam, RAWG or TMDB and Fandex brings in everything you've watched, played, saved or own — then tracks what's coming next."
+            actions={
+              <>
+                <Button variant="primary" size="md" onClick={() => setShowSignIn(true)}>Sign in</Button>
+                <Link href="/discover" className={buttonClasses("outline", "md")}>Browse without an account →</Link>
+              </>
+            }
+          />
+        </main>
+        {showSignIn && (
+          <SignInDialog
+            returnTo={`/${route}`}
+            onClose={() => setShowSignIn(false)}
+            // RAWG signs in in-place with no redirect, so nothing re-mounts on
+            // its own: drop the cached probe and re-run init(), which clears
+            // `anon` and lets the item-load effect fire.
+            onAuthenticated={() => { resetSessionProbe(); setShowSignIn(false); void init(); }}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

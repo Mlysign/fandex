@@ -296,6 +296,54 @@
   --color-tmdb: #01b4e4;
 }
 
+/* ---- Interactive-surface hover fills (2026-08-18) --------------------------
+   The rest / hover pair for the quick-action bars (ActionCells' Rate + Bookmark,
+   the item page's Rate it / Save). Those buttons pick their fill per state, so
+   the value has to be handed to CSS from JS — which means these are read ONLY
+   through an inline `var()`, and per the trap documented in AGENTS.md they must
+   live in a plain `:root` block. In `@theme` Tailwind would TREE-SHAKE them (no
+   class ever names them) and every one of these buttons would resolve its
+   background to the empty string. */
+:root {
+  --fill-idle:         rgb(237 231 220 / 0.06);
+  --fill-idle-hover:   rgb(237 231 220 / 0.12);
+  --fill-idle-border:  rgb(237 231 220 / 0.07);
+  --fill-idle-border-hover: rgb(237 231 220 / 0.18);
+  /* The accent-tinted (rated / saved) state's own hover — a touch denser, so a
+     button that is already "on" still visibly responds. */
+  --fill-accent-hover: rgb(200 162 75 / 0.22);
+  --fill-accent-border-hover: rgb(200 162 75 / 0.34);
+}
+
+:root[data-theme="light"] {
+  --fill-idle:         rgb(27 23 18 / 0.05);
+  --fill-idle-hover:   rgb(27 23 18 / 0.10);
+  --fill-idle-border:  rgb(27 23 18 / 0.10);
+  --fill-idle-border-hover: rgb(27 23 18 / 0.22);
+  --fill-accent-hover: rgb(133 102 25 / 0.20);
+  --fill-accent-border-hover: rgb(133 102 25 / 0.32);
+}
+
+/* ---- Pointer cursor on controls (2026-08-18) ------------------------------
+   Nils: "the rate, save and 'why' buttons dont have any hover behavior (no
+   highlight, no cursor swap)". The cursor half was NOT those three buttons —
+   it was every button in the app. Tailwind v4's preflight styles `button` with
+   `appearance: button` and deliberately leaves `cursor` alone, and the browser
+   default for `<button>` is `default`, not `pointer` (v3's preflight is where
+   the pointer came from). So the arrow cursor was showing on every control in
+   Fandex that isn't an <a>, and no component-level fix would have found that.
+
+   `:not(:disabled)` so a disabled control still reads as unavailable — the
+   shared <Button> already pairs that with `disabled:cursor-not-allowed`. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}
+
 * { box-sizing: border-box; }
 
 /* Skeleton shimmer sweep (ui/Skeleton.tsx). */

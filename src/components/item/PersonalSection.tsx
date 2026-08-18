@@ -7,7 +7,7 @@ import type { IntentAction} from "@/lib/pendingIntent";
 import { stashIntent, takeIntent } from "@/lib/pendingIntent";
 import { probeSession } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
-import { StarPicker } from "@/components/ActionCells";
+import { StarPicker, QUICK_BTN_CLASS, quickBtnVars } from "@/components/ActionCells";
 import { fmtScore } from "./format";
 import RatingsSection from "./RatingsSection";
 import WishlistPanel from "./WishlistPanel";
@@ -221,7 +221,11 @@ export default function PersonalSection({
   const wishlisted = !anon && !!detail?.onAnyList;
   // h-11 is already the 44px tap minimum, so (unlike ActionCells' barBtn)
   // this needs no .tap-44-y padding trick.
-  const barBtn = "flex items-center justify-center gap-1.5 rounded-sm border transition-colors disabled:opacity-50 h-11";
+  // 2026-08-18: the look itself is now ActionCells' shared QUICK_BTN_CLASS +
+  // quickBtnVars. This file used to carry its own copy of the same two inline
+  // style objects, which is how it ended up with no hover state (and no
+  // disabled handling) while looking identical to the cards' bar.
+  const barBtn = `h-11 ${QUICK_BTN_CLASS}`;
 
   // Anon still opens the same star popover (not just a flat CTA) — picking a
   // star stashes the H2c "rate" intent with that value instead of applying it
@@ -242,6 +246,11 @@ export default function PersonalSection({
           cold-start / unscorable per FandexScoreSection's own logic. */}
       <FandexScoreSection
         anon={anon}
+        // No IntentAction for "look at the score" — there is nothing to replay
+        // afterwards, the panel just fills in once a session exists. So this
+        // opens the dialog directly rather than going through requestAuth,
+        // which exists to stash a pending rate/wishlist write.
+        onRequestSignIn={() => setShowSignIn(true)}
         score={anon ? null : (item.fandexScore ?? null)}
         center={anon ? null : (detail?.fandexCenter ?? null)}
         reasons={anon ? [] : (detail?.fandexReasons ?? [])}
@@ -259,9 +268,7 @@ export default function PersonalSection({
             aria-haspopup="true"
             aria-expanded={picking}
             className={`${barBtn} flex-1 text-sm font-medium`}
-            style={rated
-              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-              : { background: "rgb(237 231 220 / 0.06)", borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-primary)" }}
+            style={quickBtnVars(rated)}
           >
             <Star className="w-4 h-4 shrink-0" fill={rated ? "currentColor" : "none"} aria-hidden />
             {rated ? `${fmtScore(item.rating!)}/10` : anon ? "Sign in to rate" : "Rate it"}
@@ -271,9 +278,7 @@ export default function PersonalSection({
             disabled={saveAction}
             aria-pressed={wishlisted}
             className={`${barBtn} px-4 text-sm font-medium`}
-            style={wishlisted
-              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-              : { background: "rgb(237 231 220 / 0.06)", borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-secondary)" }}
+            style={quickBtnVars(wishlisted, true)}
           >
             <Bookmark className="w-4 h-4" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
             Save

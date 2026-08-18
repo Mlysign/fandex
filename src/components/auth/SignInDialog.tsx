@@ -43,15 +43,19 @@ export default function SignInDialog({
       aria-modal="true"
       aria-label="Sign in"
     >
+      {/* 2026-08-18: the raw neutral-900/700/100/400 literals became the surface
+          tokens, alongside the brand-colour removal in AuthOptions — this dialog
+          was the last place in the auth flow still hard-coding the dark theme's
+          palette instead of reading it. */}
       <div
-        className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-sm space-y-4"
+        className="bg-surface-overlay border border-border-strong rounded-2xl p-6 w-full max-w-sm space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <h3 className="font-semibold text-base text-neutral-100">
+          <h3 className="font-semibold text-base text-text-primary">
             {type ? "Rate it, track it, don’t lose it" : "Sign in to Fandex"}
           </h3>
-          <p className="text-sm text-neutral-400 mt-1">
+          <p className="text-sm text-text-secondary mt-1">
             {type
               ? `Sign in to rate this, mark it ${verb}, and sync your wishlist across Trakt, Steam & more. We’ll bring you right back.`
               : "Track your wishlists, ratings and releases across Trakt, Steam & more. We’ll bring you right back."}
@@ -66,7 +70,7 @@ export default function SignInDialog({
             nav → "You" → dialog → link a real two clicks. It also sits where a
             reader most wants them: directly under the buttons that connect an
             account. See LegalLinks for the full writeup. */}
-        <div className="pt-4 border-t border-neutral-700">
+        <div className="pt-4 border-t border-border">
           {/* onClose: AppNav owns this dialog and never unmounts, so without it
               the dialog stays open on top of the page you just navigated to. */}
           <LegalLinks onNavigate={onClose} />

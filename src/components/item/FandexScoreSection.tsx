@@ -46,14 +46,53 @@ function reasonGroupLabel(r: Reason): string {
 // reason are now always static content; only "Why?" is a real button, shown
 // exactly when there's something to disclose (mirrors the old
 // `disabled={!reasons.length}` gate, which hid the toggle in that case too).
+//
+// 2026-08-18 — `onActivate` re-introduces a whole-panel button for ONE case:
+// the anon gate, whose entire content is the instruction "sign in". SM29's
+// objection was the accessible NAME (every bit of score/eyebrow/reason text
+// concatenated) and the surprise of a panel full of static content silently
+// being a control — neither applies here, and both are answered explicitly:
+// `activateLabel` names the button outright instead of letting it inherit the
+// concatenation, and the gated panel has no static content to compete with.
+// Do NOT pass it alongside `expandable`; a nested "Why?" button inside a button
+// is invalid HTML.
 function ScorePanel({
   numberColor, number, eyebrow, reason, expandable, expanded, disabled, onToggle, rootRef, children,
+  onActivate, activateLabel,
 }: {
   numberColor: string; number: string; eyebrow: string; reason: React.ReactNode;
   expandable?: boolean; expanded?: boolean; disabled?: boolean;
   onToggle?: () => void; rootRef?: React.RefObject<HTMLDivElement | null>;
   children?: React.ReactNode;
+  onActivate?: () => void; activateLabel?: string;
 }) {
+  const rowClass = "w-full flex items-center gap-3.5 px-3.5 py-3 text-left";
+  const inner = (
+    <>
+      <span className="font-serif text-3xl leading-[0.8] shrink-0" style={{ color: numberColor }}>{number}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-mono text-[9px] tracking-[.13em] uppercase text-accent">{eyebrow}</span>
+        <span className="block text-xs font-medium text-text-primary mt-1">{reason}</span>
+      </span>
+    </>
+  );
+
+  if (onActivate) {
+    return (
+      <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
+        <button
+          type="button"
+          onClick={onActivate}
+          aria-label={activateLabel}
+          className={`${rowClass} rounded-xl transition-colors duration-fast hover:bg-[var(--fill-idle-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]`}
+        >
+          {inner}
+        </button>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div ref={rootRef} className="relative rounded-xl border border-border bg-neutral-900/40 overflow-visible">
       <div className="w-full flex items-center gap-3.5 px-3.5 py-3 text-left">
@@ -68,7 +107,11 @@ function ScorePanel({
             onClick={onToggle}
             aria-expanded={expanded}
             aria-label={expanded ? "Hide Fandex Score breakdown" : "Show Fandex Score breakdown"}
-            className="text-text-secondary text-xs shrink-0"
+            // 2026-08-18 (Nils): this had no hover state at all — bare secondary
+            // text that never acknowledged the pointer, so the one disclosure
+            // control on the panel didn't read as a control. The px/py also give
+            // it a real hit area; it was a bare text run before.
+            className="shrink-0 text-xs px-2 py-1 -mr-1 rounded-sm text-text-secondary transition-colors duration-fast hover:text-text-primary hover:bg-[var(--fill-idle-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
           >
             {expanded ? "Hide why ▲" : "Why? ▼"}
           </button>
@@ -90,8 +133,19 @@ function scoreReasonLine(score: number, center: number | null, top: Reason | und
 }
 
 export default function FandexScoreSection({
-  score, center, reasons, coldStart, anon,
-}: { score: number | null; center: number | null; reasons: Reason[]; coldStart: boolean; anon?: boolean }) {
+  score, center, reasons, coldStart, anon, onRequestSignIn,
+}: {
+  score: number | null; center: number | null; reasons: Reason[]; coldStart: boolean; anon?: boolean;
+  /**
+   * Open the sign-in dialog. Anon-only — the gated panel says "Sign in to see
+   * your taste-match Score", and 2026-08-18 (Nils: "on a details page, the
+   * fandex score is empty - good - but clicking it should again ask me to sign
+   * in") made that sentence do what it says. It was inert text: a viewer read
+   * an instruction, tapped it, and nothing happened, with the actual sign-in
+   * three controls further down the page.
+   */
+  onRequestSignIn?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +170,11 @@ export default function FandexScoreSection({
       <ScorePanel
         numberColor="var(--color-text-muted)" number="—" eyebrow="Fandex Score"
         reason={<span className="text-text-secondary font-normal">Sign in to see your taste-match Score.</span>}
+        // No handler → the panel stays the static div it has always been, so a
+        // caller that hasn't wired sign-in doesn't advertise a control that
+        // does nothing (the exact bug this fixes).
+        onActivate={onRequestSignIn}
+        activateLabel="Sign in to see your Fandex Score"
       />
     );
   }

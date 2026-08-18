@@ -17,6 +17,8 @@ import type { CalendarScope} from "@/components/ui/ScopeFilter";
 import ScopeFilter, { CALENDAR_SCOPES } from "@/components/ui/ScopeFilter";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
+import SignInDialog from "@/components/auth/SignInDialog";
+import { resetSessionProbe } from "@/lib/sessionProbe";
 
 // The calendar answers "what's coming out", from three independent sources
 // (2026-07-28, Nils's brief). It used to be wishlist-only, which meant it could
@@ -25,6 +27,21 @@ import ErrorState from "@/components/ui/ErrorState";
 //   wishlist — /api/calendar (user_watchlist)
 //   library  — /api/library  (user_library), lazily fetched
 //   popular  — /api/calendar/popular?month=…, live from the providers, per month
+//
+// ── PUBLIC as of 2026-08-18 (Nils: "the release calendar should be public
+// access") ──────────────────────────────────────────────────────────────────
+// This page used to `router.replace("/")` an anonymous visitor, which made the
+// one genuinely public thing on it — Popular, a provider-fed "what's coming out"
+// feed with no user data in it at all — unreachable to the exact audience it
+// answers. Now the page renders for everyone and the SCOPES carry the gate:
+// Wishlist and Library are per-user, so for an anon visitor they are disabled
+// chips that open the sign-in dialog, and only Popular is on.
+//
+// Note the two things this deliberately does NOT do: it does not fetch
+// /api/calendar or /api/library for an anon visitor (both are withUser and would
+// just 401), and it does not silently drop the signed-in visitor's stored scope
+// choice — `effectiveScopes` narrows what's APPLIED without writing to storage,
+// so signing in restores exactly what they had.
 //
 // Scope + type are two separate chip rows in the shared SubBar, in the standard
 // page order (filters → tabs → search → content); the calendar has no tabs and
@@ -47,11 +64,25 @@ export default function CalendarPageClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [mode, setMode] = useState<CalendarMode>("month");
+  // null = probe in flight. The page renders either way; only the personal
+  // scopes depend on it.
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
 
   // SM2's shared type-filter key, so Games-only set on Discover/Library/Home
   // still holds here (it used to be plain useState and reset on every visit).
   const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
-  const [scopes, setScopes] = usePersistedState<CalendarScope[]>("rr_calendar_scopes", DEFAULT_SCOPES);
+  const [storedScopes, setScopes] = usePersistedState<CalendarScope[]>("rr_calendar_scopes", DEFAULT_SCOPES);
+
+  // What's actually applied. For an anon visitor the two personal scopes can
+  // never resolve to anything, so they're dropped here rather than written out
+  // of storage — see the header note. `authed === null` (probe in flight) is
+  // treated as anon so no personal fetch is fired on a guess; the effects below
+  // re-run when it resolves.
+  const scopes = useMemo<CalendarScope[]>(
+    () => (authed ? storedScopes : storedScopes.filter((s) => s === "popular")),
+    [authed, storedScopes],
+  );
 
   const wantsLibrary = scopes.includes("library");
   const wantsWishlist = scopes.includes("wishlist");
@@ -101,13 +132,19 @@ export default function CalendarPageClient() {
     setLoading(true);
     setError(false);
     try {
+      // 2026-08-18: this used to `router.replace("/")` when `me.user` was null,
+      // which is what made the calendar private. The session now only decides
+      // WHICH SCOPES are available — an anon visitor stays on the page and gets
+      // the Popular feed. (The old SM8 note that made this replace() rather
+      // than push() no longer applies here because there is no redirect left;
+      // the rule still holds at every gate that does redirect.)
       const me = await fetch("/api/auth/me").then((r) => r.json());
-      // SM8 (2026-07-27): replace(), never push(). push() leaves THIS gated
-      // route in history, so an anon visitor pressing Back re-enters it and
-      // gets redirected again — Back appears dead and they can never get
-      // back to the page they came from. Same rule at every auth gate and
-      // both logout handlers.
-      if (!me.user) { router.replace("/"); return; }
+      const signedIn = Boolean(me.user);
+      setAuthed(signedIn);
+      // Anonymous: /api/calendar is withUser and would only 401. Popular is
+      // fetched by its own month-driven effect below, so there is nothing else
+      // to do here.
+      if (!signedIn) return;
       // The wishlist read is unconditional: mergeMyStuff needs it to mark a
       // library item as also-wishlisted, and it's the smaller of the two.
       const res = await fetch("/api/calendar");
@@ -119,7 +156,7 @@ export default function CalendarPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   // Fetch-on-mount: the server can't know the session, so the auth-gate + the
   // calendar payload are both resolved client-side. Same justified disable
@@ -217,21 +254,32 @@ export default function CalendarPageClient() {
   const body = () => {
     if (error) return <ErrorState title="Couldn't load your calendar" hint="Check your connection and try again." onRetry={load} />;
     if (loading) return <Spinner label="Loading…" />;
+    const anon = authed === false;
     if (scopes.length === 0) {
       return (
         <EmptyState
           icon={<CalendarDays className="w-5 h-5" aria-hidden />}
           title="No sources selected"
-          hint="Turn on Wishlist, Library or Popular above to see releases."
+          hint={anon
+            ? "Turn on Popular above to see what's coming out. Sign in to add your own wishlist and library."
+            : "Turn on Wishlist, Library or Popular above to see releases."}
         />
       );
     }
+    // An anon visitor's only scope is Popular, which is fetched per visible
+    // month by its own effect — so "nothing here" before that lands is a LOADING
+    // state, not an empty one. Without this the public calendar's first paint is
+    // "Nothing on your calendar yet", which is both wrong and the anon copy for
+    // an action they can't take.
+    if (scoped.length === 0 && popularLoading) return <Spinner label="Loading…" />;
     if (scoped.length === 0) {
       return (
         <EmptyState
           icon={<CalendarDays className="w-5 h-5" aria-hidden />}
-          title="Nothing on your calendar yet"
-          hint="Add titles to your library or wishlist from Discover, or turn on Popular to see what's coming out this month."
+          title={anon ? "Nothing scheduled for this month" : "Nothing on your calendar yet"}
+          hint={anon
+            ? "Page to another month, or sign in to add your own wishlist and library to the calendar."
+            : "Add titles to your library or wishlist from Discover, or turn on Popular to see what's coming out this month."}
         />
       );
     }
@@ -261,7 +309,14 @@ export default function CalendarPageClient() {
       <SubBar
         activeTypes={activeTypes}
         onToggleType={toggleType}
-        filters={<ScopeFilter activeScopes={scopes} onToggleScope={toggleScope} />}
+        filters={
+          <ScopeFilter
+            activeScopes={scopes}
+            onToggleScope={toggleScope}
+            anon={authed === false}
+            onRequestSignIn={() => setShowSignIn(true)}
+          />
+        }
         actions={modeToggle}
         availableViews={[]}
       />
@@ -274,6 +329,17 @@ export default function CalendarPageClient() {
         )}
         {body()}
       </main>
+
+      {showSignIn && (
+        <SignInDialog
+          returnTo="/calendar"
+          onClose={() => setShowSignIn(false)}
+          // RAWG signs in without a redirect, so nothing re-mounts on its own:
+          // drop the cached probe and re-run load(), which flips `authed` and
+          // pulls the wishlist the personal scopes need.
+          onAuthenticated={() => { resetSessionProbe(); setShowSignIn(false); void load(); }}
+        />
+      )}
     </div>
   );
 }

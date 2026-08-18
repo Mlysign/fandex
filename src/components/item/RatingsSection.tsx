@@ -35,8 +35,12 @@ export default function RatingsSection({
         <div className="flex items-center gap-2 flex-wrap">
           {communityRatings.map((r) => <ScoreBadge key={r.source} r={r} />)}
           {steamReview && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm" style={{ background: "#1b9af71f", color: "#1b9af7" }}>
-              <span className="text-[10px] uppercase tracking-wide opacity-80 font-bold">Steam</span>
+            /* Hand-matched to <ScoreBadge>'s shape because it sits in the same
+               row but isn't a numeric score. 2026-08-18: both dropped the Steam
+               blue they were tinted with — see components/BrandGlyph.tsx. Keep
+               the two in step if either is restyled. */
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm bg-surface-elevated border border-border text-text-primary">
+              <span className="text-[10px] uppercase tracking-wide font-bold text-text-secondary">Steam</span>
               {steamReview}
             </span>
           )}

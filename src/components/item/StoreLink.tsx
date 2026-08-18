@@ -1,7 +1,7 @@
 "use client";
 import { Globe } from "lucide-react";
+import BrandGlyph from "@/components/BrandGlyph";
 import { BRAND_MARKS } from "@/lib/brandMarks";
-import { SOURCE_COLORS } from "@/lib/constants";
 
 // One outbound store/reference link on the item detail page.
 //
@@ -11,20 +11,29 @@ import { SOURCE_COLORS } from "@/lib/constants";
 // was doubly odd — an IGDB-sourced Steam link rendered in IGDB's purple, so the
 // colour named the middleman rather than the destination.
 //
-// Now: the brand's own mark, from a generated table (lib/brandMarks.ts, see
-// scripts/gen-brand-marks.mjs). Remote favicons are not an option — the CSP
-// blocks every external host — so the marks are inline SVG paths.
+// ── 2026-08-18, Nils, round two ─────────────────────────────────────────────
+// "the logos inside the slabs are cool but so small they are not readable. just
+// showing the logo should be enough." and "the hover on the logos still uses the
+// color coding, this should be the normal hover highlight behavior from other
+// buttons."
 //
-// ACCESSIBILITY: a bare logo is not a label. The mark is `aria-hidden` and the
-// accessible name comes from a real (visually hidden) text node, so the link
-// announces "Steam" rather than "link, graphic". The name is also the `title`,
-// which gives sighted users a hover tooltip and covers the fallback case.
+// The August 14 pass put the logo INSIDE the pill instead of replacing the pill
+// with it, and shrank it to 15px to fit — which is fine for a pictorial mark
+// (Steam, Reddit) and unreadable for a WORDMARK, and simple-icons gives us
+// several of those: IGDB is the letters "IGDB" in a rounded box, Wikipedia is a
+// glyph-heavy "W". At 15px inside a bordered chip they were noise.
 //
-// COLOUR: the mark sits in the UI's own secondary text colour at rest and takes
-// the brand's colour on hover/focus. A row of eleven saturated brand logos is a
-// fruit salad that fights the whole "Ticket · Calm" palette; desaturating at
-// rest keeps the row calm while still letting a logo be recognisably itself the
-// moment you reach for it.
+// So: no chip. The mark is the control, at 22px, on a transparent ground that
+// only fills on hover — the same ghost treatment `<Button variant="ghost">`
+// uses, which is what "the normal hover highlight behavior from other buttons"
+// means here. No brand colour in any state; `brandHoverColor()` and its
+// #000000 guard are no longer needed anywhere and are gone.
+//
+// ACCESSIBILITY is unchanged and is why this is a link with a hidden label
+// rather than a bare <svg>: the mark is `aria-hidden` and the accessible name
+// comes from a real (visually hidden) text node, so it announces "Steam" and
+// not "link, graphic". The name is also the `title`, giving sighted users a
+// hover tooltip — which matters more now that the chip's text is gone.
 
 export interface StoreLinkItem {
   name: string;
@@ -40,11 +49,11 @@ export default function StoreLink({
   /** Trailing content rendered inside the link, e.g. the affiliate marker. */
   children?: React.ReactNode;
 }) {
-  const mark = BRAND_MARKS[link.name];
-  // Fallback tint for the two names with no brand mark: "Official site" (not a
-  // brand at all) and RAWG (simple-icons carries no icon for it). Those fall
-  // back to the source colour, which for RAWG IS its own colour.
-  const hoverColor = mark?.hex ?? SOURCE_COLORS[link.source] ?? "var(--color-text-primary)";
+  // "Official site" is not a brand and RAWG has no simple-icons entry, so both
+  // fall back to a globe. Those two keep a VISIBLE label — a globe alone can't
+  // say which of them it is, and two identical globes side by side is exactly
+  // the ambiguity the logos were meant to remove.
+  const hasMark = !!BRAND_MARKS[link.name];
 
   return (
     <a
@@ -52,29 +61,19 @@ export default function StoreLink({
       target="_blank"
       rel={link.affiliate ? "sponsored noopener noreferrer" : "noopener noreferrer"}
       title={link.name}
-      className="group tap-44 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border bg-surface-elevated text-text-secondary transition-colors hover:border-border-strong"
-      style={{ ["--brand" as string]: hoverColor }}
+      className={
+        "tap-44 inline-flex items-center gap-2 h-11 rounded-lg text-text-secondary " +
+        "transition-colors duration-fast hover:text-text-primary hover:bg-[var(--fill-idle-hover)] " +
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] " +
+        (hasMark ? "px-3" : "px-3.5")
+      }
     >
-      {mark ? (
-        <svg
-          viewBox="0 0 24 24"
-          width="15"
-          height="15"
-          aria-hidden
-          className="shrink-0 fill-current transition-colors group-hover:text-[var(--brand)] group-focus-visible:text-[var(--brand)]"
-        >
-          <path d={mark.path} />
-        </svg>
+      {hasMark ? (
+        <BrandGlyph source={link.name} size={22} className="text-current" />
       ) : (
-        <Globe
-          className="w-[15px] h-[15px] shrink-0 transition-colors group-hover:text-[var(--brand)] group-focus-visible:text-[var(--brand)]"
-          aria-hidden
-        />
+        <Globe className="w-[18px] h-[18px] shrink-0" aria-hidden />
       )}
-      {/* The accessible name. Visible for the fallback case — "Official site"
-          and RAWG are not recognisable from a globe or a dot — and screen-reader
-          only where a real logo already carries the identity. */}
-      <span className={mark ? "sr-only" : "text-xs"}>{link.name}</span>
+      <span className={hasMark ? "sr-only" : "text-sm"}>{link.name}</span>
       {children}
     </a>
   );

@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SOURCE_COLORS } from "@/lib/constants";
+import BrandGlyph from "@/components/BrandGlyph";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -340,7 +340,6 @@ function SettingsContent() {
           {providers.map((p) => {
             const identity = getIdentity(p.key);
             const log = getSyncLog(p.key);
-            const color = SOURCE_COLORS[p.key] ?? "#888";
 
             return (
               <div key={p.key} className="bg-surface-elevated border border-border rounded-xl p-5">
@@ -352,9 +351,13 @@ function SettingsContent() {
                     control can leave the card at any width. */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
-                      style={{ background: `${color}20`, color }}>
-                      {p.label[0]}
+                    {/* 2026-08-18: was the provider's first LETTER in a tile
+                        tinted with its brand hex — so Trakt and TMDB both showed
+                        a "T", and the eight cards were eight different colours.
+                        The real mark identifies it and the label is right
+                        beside it. See components/BrandGlyph.tsx. */}
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface border border-border">
+                      <BrandGlyph source={p.key} size={18} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-text-primary truncate">{p.label}</p>
@@ -380,14 +383,12 @@ function SettingsContent() {
                     ) : (
                       p.connectUrl === "rawg-form" ? (
                         <button onClick={() => setShowRawgForm(true)}
-                          className="text-xs px-4 py-2 rounded-lg font-medium transition-colors"
-                          style={{ background: `${color}20`, border: `1px solid ${color}44`, color }}>
+                          className="text-xs px-4 py-2 rounded-lg font-medium border border-border-strong bg-surface text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
                           Connect
                         </button>
                       ) : p.connectUrl ? (
                         <a href={p.connectUrl}
-                          className="text-xs px-4 py-2 rounded-lg font-medium transition-colors"
-                          style={{ background: `${color}20`, border: `1px solid ${color}44`, color }}>
+                          className="text-xs px-4 py-2 rounded-lg font-medium border border-border-strong bg-surface text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
                           Connect
                         </a>
                       ) : null
@@ -434,22 +435,22 @@ function SettingsContent() {
           <div className="flex gap-3 flex-wrap">
             {!getIdentity("trakt") && (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
-              <a href="/api/auth/trakt" className="text-sm px-4 py-2 rounded-lg transition-colors"
-                style={{ background: "#ed1c2415", border: "1px solid #ed1c2430", color: "#ed1c24" }}>
+              <a href="/api/auth/trakt" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
+                <BrandGlyph source="trakt" size={15} />
                 Connect Trakt
               </a>
             )}
             {/* Letterboxd hidden until an API key is available — re-add when ready. */}
             {!getIdentity("steam") && (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
-              <a href="/api/auth/steam" className="text-sm px-4 py-2 rounded-lg transition-colors"
-                style={{ background: "#1b9af715", border: "1px solid #1b9af730", color: "#1b9af7" }}>
+              <a href="/api/auth/steam" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
+                <BrandGlyph source="steam" size={15} />
                 Connect Steam
               </a>
             )}
             {!getIdentity("rawg") && (
-              <button onClick={() => setShowRawgForm(true)} className="text-sm px-4 py-2 rounded-lg transition-colors"
-                style={{ background: "#4ade8015", border: "1px solid #4ade8030", color: "#4ade80" }}>
+              <button onClick={() => setShowRawgForm(true)} className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
+                <BrandGlyph source="rawg" size={15} />
                 Connect RAWG
               </button>
             )}

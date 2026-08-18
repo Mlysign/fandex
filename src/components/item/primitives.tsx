@@ -1,20 +1,26 @@
-import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
+import { SOURCE_LABELS } from "@/lib/constants";
+import BrandGlyph from "@/components/BrandGlyph";
 import { fmtScore } from "./format";
 
 // Small presentational bits shared across the item detail sections.
 
 // A single community/critic score, formatted by its scale.
+//
+// 2026-08-18: the whole chip used to be tinted in the source's brand hex (fill
+// at 12% alpha, text at 100%), so a row of five scores was five different
+// colours, and IMDb's yellow / Metacritic's yellow were near-indistinguishable
+// while meaning different scales. Now every chip is the same neutral surface and
+// the SOURCE LABEL — which was always there — does the identifying. See
+// components/BrandGlyph.tsx.
 export function ScoreBadge({ r }: { r: { source: string; label: string; score: number; outOf: number; votes?: number | null; url?: string | null } }) {
-  const color = SOURCE_COLORS[r.source] ?? "#888";
   const text =
     r.outOf === 100 ? `${Math.round(r.score)}${r.source === "rt" || r.source === "steam" ? "%" : ""}`
     : r.outOf === 5 ? `${r.score.toFixed(1)}/5`
     : `${fmtScore(r.score)}`;
   const inner = (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold"
-      style={{ background: color + "1f", color }}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold bg-surface-elevated border border-border text-text-primary"
       title={r.votes ? `${r.label} — ${r.votes.toLocaleString()} votes` : r.label}>
-      <span className="text-[10px] uppercase tracking-wide opacity-80 font-bold">{r.label}</span>
+      <span className="text-[10px] uppercase tracking-wide font-bold text-text-secondary">{r.label}</span>
       {text}
     </span>
   );
@@ -64,7 +70,7 @@ export function RatingsBreakdown({ ratings }: { ratings: { source: string; ratin
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
       {ratings.map((r) => (
         <span key={r.source} className="inline-flex items-center gap-1 text-xs">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: SOURCE_COLORS[r.source] ?? "#888" }} />
+          <BrandGlyph source={r.source} size={11} />
           <span className="text-text-secondary">{SOURCE_LABELS[r.source] ?? r.source}</span>
           <span className="text-text-primary font-medium">{fmtScore(r.rating)}</span>
         </span>

@@ -29,26 +29,43 @@ const SCOPE_META: Record<CalendarScope, { label: string; title: string; Icon: ty
 const INACTIVE_CLASS =
   "border-border-strong text-text-secondary bg-transparent hover:border-neutral-400";
 
+// The scopes that read a user's own data. 2026-08-18: the calendar is public
+// now, so for an anonymous visitor these two can't resolve to anything — they
+// render as a sign-in prompt instead of a filter that silently does nothing.
+// Popular is deliberately absent: it's provider-fed and identical for everyone.
+export const PERSONAL_SCOPES: readonly CalendarScope[] = ["wishlist", "library"];
+
 export interface ScopeFilterProps {
   activeScopes: CalendarScope[];
   onToggleScope: (s: CalendarScope) => void;
+  /**
+   * Anonymous viewer. The two personal chips become sign-in triggers: still
+   * visible (so the calendar's full shape is discoverable logged out) and still
+   * a real 44px control, but dimmed, never `aria-pressed`, and routed to
+   * `onRequestSignIn` instead of `onToggleScope`.
+   */
+  anon?: boolean;
+  onRequestSignIn?: () => void;
 }
 
-export default function ScopeFilter({ activeScopes, onToggleScope }: ScopeFilterProps) {
+export default function ScopeFilter({ activeScopes, onToggleScope, anon, onRequestSignIn }: ScopeFilterProps) {
   return (
     <div className="flex items-center gap-2" role="group" aria-label="Filter by source">
       {CALENDAR_SCOPES.map((scope) => {
         const { label, title, Icon } = SCOPE_META[scope];
-        const active = activeScopes.includes(scope);
+        const locked = !!anon && PERSONAL_SCOPES.includes(scope);
+        const active = !locked && activeScopes.includes(scope);
         return (
           <button
             key={scope}
             type="button"
-            onClick={() => onToggleScope(scope)}
-            aria-pressed={active}
-            aria-label={label}
-            title={title}
-            className={`tap-44 w-10 h-10 shrink-0 rounded-full border flex items-center justify-center transition-colors ${active ? "" : INACTIVE_CLASS}`}
+            onClick={() => (locked ? onRequestSignIn?.() : onToggleScope(scope))}
+            // A locked chip is a sign-in button, not a toggle — announcing a
+            // pressed state for it would be a lie.
+            aria-pressed={locked ? undefined : active}
+            aria-label={locked ? `${title} — sign in to use` : label}
+            title={locked ? `Sign in to see your ${title.toLowerCase()}` : title}
+            className={`tap-44 w-10 h-10 shrink-0 rounded-full border flex items-center justify-center transition-colors ${active ? "" : INACTIVE_CLASS} ${locked ? "opacity-45" : ""}`}
             style={active ? { borderColor: "var(--color-accent)", background: "var(--color-accent)", color: "var(--color-text-on-accent)" } : undefined}
           >
             <Icon className="w-4 h-4" aria-hidden />

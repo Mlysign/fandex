@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { EnrichedItem } from "@/types";
 import type { PublicEnrichedItem } from "@/lib/detail/enrich";
 import { SOURCE_COLORS, SOURCE_LABELS, TYPE_COLORS } from "@/lib/constants";
+import BrandGlyph from "@/components/BrandGlyph";
 import { fmtDate, fmtRuntime } from "./format";
 import MediaGallery from "./MediaGallery";
 import DetailHero from "./DetailHero";
@@ -90,7 +91,10 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
       <div className="space-y-1">
         {dates.map((d) => (
           <div key={d.source} className="flex items-center gap-2 text-sm">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: SOURCE_COLORS[d.source] ?? "#888" }} />
+            {/* 2026-08-18: was a 8px dot in the source's brand hex. See
+                components/BrandGlyph.tsx — the label beside it already named
+                the source, so the colour was carrying nothing. */}
+            <BrandGlyph source={d.source} size={12} />
             <span className="text-text-secondary text-xs w-16">{SOURCE_LABELS[d.source] ?? d.source}</span>
             <span className="font-mono text-text-primary">{fmtDate(d.date)}</span>
           </div>

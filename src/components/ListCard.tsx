@@ -74,11 +74,12 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
           <FandexScoreBadge score={item.fandexScore} center={item.fandexCenter} />
         </div>
       </div>
-      {linkable && (
-        <div className="flex items-center pr-3 flex-shrink-0">
-          <ActionCells item={item} layout="row" />
-        </div>
-      )}
+      {/* `linkable` passed down, not gated here — see PosterCard's note. The
+          wrapper stays unconditional so the row's trailing slot keeps its width
+          whichever way ActionCells resolves. */}
+      <div className="flex items-center pr-3 flex-shrink-0">
+        <ActionCells item={item} layout="row" linkable={linkable} />
+      </div>
     </>
   );
 

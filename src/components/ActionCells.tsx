@@ -1,9 +1,12 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 import { Star, Bookmark } from "lucide-react";
 import type { QuickActionItem } from "@/lib/useQuickActions";
 import { useQuickActions } from "@/lib/useQuickActions";
+import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
+import SignInDialog from "@/components/auth/SignInDialog";
 
 // Action toolbar shared by PosterCard + ListCard. Always visible (works on
 // touch); each cell is both an indicator and a control. The rate cell opens a
@@ -35,7 +38,53 @@ const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
 // nested controls need preventDefault() too, or every click here would also
 // navigate to the item page.
 const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
-const IDLE = "rgb(237 231 220 / 0.06)"; // matches the ghost-button hover fill
+
+// ── The quick-action button look, in ONE place (2026-08-18) ─────────────────
+// Nils: "the rate, save and 'why' buttons dont have any hover behavior (no
+// highlight, no cursor swap)." The cursor half was global (see globals.css); the
+// highlight half was this.
+//
+// These buttons had `transition-colors` and no `hover:` anything, and adding one
+// would NOT have worked: their fill came from an inline `style={{ background }}`,
+// and an inline style beats every stylesheet rule short of `!important`. So the
+// colours move into CSS CUSTOM PROPERTIES set inline — the inline style now names
+// the values, and ordinary `hover:` utilities do the switching, because
+// `bg-[var(--qa-bg)]` and `hover:bg-[var(--qa-bg-hover)]` are two normal rules
+// competing on specificity rather than one of them fighting the style attribute.
+//
+// Shared with PersonalSection's Rate it / Save pair, which is the same control
+// at a bigger size and previously carried its own copy of the same two style
+// objects — they had already drifted (that copy has no `disabled:` handling).
+export const QUICK_BTN_CLASS =
+  "flex items-center justify-center gap-1.5 rounded-sm border transition-colors duration-fast " +
+  "disabled:opacity-50 disabled:cursor-not-allowed " +
+  "bg-[var(--qa-bg)] border-[var(--qa-border)] text-[var(--qa-fg)] " +
+  "hover:bg-[var(--qa-bg-hover)] hover:border-[var(--qa-border-hover)] " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]";
+
+/**
+ * The four colour vars QUICK_BTN_CLASS reads. `active` = rated / wishlisted,
+ * which takes the accent tint; otherwise the neutral idle fill. `mutedIdle`
+ * dims the label for the secondary (bookmark) cell, matching what the two
+ * layouts did before.
+ */
+export function quickBtnVars(active: boolean, mutedIdle = false): React.CSSProperties {
+  return active
+    ? {
+        ["--qa-bg" as string]: "var(--color-accent-subtle)",
+        ["--qa-bg-hover" as string]: "var(--fill-accent-hover)",
+        ["--qa-border" as string]: "var(--color-accent-subtle)",
+        ["--qa-border-hover" as string]: "var(--fill-accent-border-hover)",
+        ["--qa-fg" as string]: "var(--color-accent)",
+      }
+    : {
+        ["--qa-bg" as string]: "var(--fill-idle)",
+        ["--qa-bg-hover" as string]: "var(--fill-idle-hover)",
+        ["--qa-border" as string]: "var(--fill-idle-border)",
+        ["--qa-border-hover" as string]: "var(--fill-idle-border-hover)",
+        ["--qa-fg" as string]: mutedIdle ? "var(--color-text-secondary)" : "var(--color-text-primary)",
+      };
+}
 
 // `onPick(null)` = REMOVE the rating. Re-clicking the star you're already rated
 // at is the toggle-off gesture (2026-07-30): the whole clear-a-rating backend
@@ -72,15 +121,43 @@ export function StarPicker({ rating, onPick }: { rating: number | null; onPick: 
 // is stable; measuring it would need a layout pass before the first paint.
 const PICKER_W = 230;
 
-export default function ActionCells({ item, layout }: { item: QuickActionItem; layout: "row" | "card" }) {
+export default function ActionCells({
+  item, layout, linkable = true,
+}: {
+  item: QuickActionItem;
+  layout: "row" | "card";
+  /**
+   * False = the card's item has no local `media_items` row (a genuine
+   * first-sighting; see annotateDiscover.ts). 2026-08-18 — this used to be
+   * decided by the CARD, which simply didn't render this bar at all, and that
+   * produced Nils's "some cards on the home page did not have rate and wishlist
+   * buttons": on a logged-out Home, whichever titles the providers returned
+   * that we'd never persisted rendered as two-thirds of a card next to
+   * complete ones, with nothing saying why.
+   *
+   * The bar's job for a SIGNED-OUT viewer is "prompt sign-in", which needs no
+   * item identity at all — so a non-linkable item still gets a full, consistent
+   * bar. For a signed-in viewer there is genuinely nothing to write against, so
+   * it still renders nothing. Deciding that here rather than in the card keeps
+   * the two callers (PosterCard, ListCard) from drifting.
+   */
+  linkable?: boolean;
+}) {
   const { rating, wishlisted, busy, rate, toggleWishlist } = useQuickActions(item);
+  const pathname = usePathname();
+  // null = probe in flight. Module-cached across every card on the page, so a
+  // 54-card grid still costs one /api/auth/me.
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
+  useEffect(() => { void probeSession().then(setAuthed); }, []);
+  const anon = authed === false;
   const [picking, setPicking] = useState(false);
   // Viewport coords for the portalled picker — null until measured.
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const rated = typeof rating === "number" && rating > 0;
+  const ratedRaw = typeof rating === "number" && rating > 0;
 
   const pick = (n: number | null) => { rate(n); setPicking(false); };
 
@@ -158,13 +235,57 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
         )
       : null;
 
+  // ── Anonymous viewer ──────────────────────────────────────────────────────
+  // Both buttons become one gesture: open the sign-in dialog. Before this they
+  // ran the real write, which 401'd, and the optimistic state reverted behind a
+  // "Couldn't save your rating. Please try again." toast — an error message for
+  // something that was never going to work and that the viewer could fix
+  // immediately if we'd said so.
+  //
+  // No `stashIntent` here, unlike the item page's PersonalSection: a card is not
+  // a page, so there is no path to key the intent to and nothing to resume on
+  // after the OAuth round-trip returns you to whatever list you were browsing.
+  // Signing in and tapping the (now live) button again is one extra tap and
+  // cannot fire against the wrong item.
+  const requestSignIn = () => setShowSignIn(true);
+  const signInPortal =
+    showSignIn && typeof document !== "undefined"
+      ? createPortal(
+          <SignInDialog
+            returnTo={pathname}
+            onClose={() => setShowSignIn(false)}
+            // RAWG sets the session in place with no navigation; reload so every
+            // island on the page (including the other cards' probes) picks it up.
+            onAuthenticated={() => { resetSessionProbe(); window.location.reload(); }}
+          />,
+          document.body,
+        )
+      : null;
+
+  // Nothing to act on and nothing to offer: a signed-in viewer looking at an
+  // item with no local row. Rendered as nothing, exactly as the cards used to do
+  // for every viewer. Placed after every hook above so the hook order is stable.
+  if (!linkable && !anon) return null;
+
+  const rated = !anon && ratedRaw;
+  const onList = !anon && wishlisted;
+  const onRate = anon ? requestSignIn : togglePicker;
+  const onWishlist = anon ? requestSignIn : () => { if (!busy) toggleWishlist(); };
+  const rateTitle = anon ? "Sign in to rate" : rated ? `Your rating ${fmt(rating!)}/10` : "Rate";
+  const rateLabel = anon
+    ? "Sign in to rate this"
+    : rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this";
+  const wishTitle = anon ? "Sign in to add to your wishlist" : onList ? "On wishlist" : "Add to wishlist";
+  const wishLabel = anon
+    ? "Sign in to add this to your wishlist"
+    : onList ? "On your wishlist — remove" : "Add to wishlist";
+
   // 03-components.md §2's quick-action bar, literally: Rate = Star + "Rate",
   // flex:1; Bookmark = fixed 32px square. Both --radius-sm on the spec's
   // rgb(237 231 220 / 0.06) fill with a 1px border. Rated/wishlisted states
   // fill accent-subtle with an accent label and a FILLED glyph, per §2's
   // "rated" state. The 32px visible size is padded to a 44px tap area.
-  const barBtn =
-    "tap-44-y flex items-center justify-center gap-1.5 rounded-sm border transition-colors disabled:opacity-50 h-8";
+  const barBtn = `tap-44-y h-8 ${QUICK_BTN_CLASS}`;
 
   if (layout === "card") {
     return (
@@ -172,33 +293,34 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
         <div className="flex gap-1.5">
           <button
             ref={triggerRef}
-            onClick={(e) => { stop(e); togglePicker(); }}
-            title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
-            aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
-            aria-haspopup="true" aria-expanded={picking}
+            onClick={(e) => { stop(e); onRate(); }}
+            title={rateTitle}
+            aria-label={rateLabel}
+            // A sign-in trigger opens a dialog, not the star popover it has no
+            // access to — so it must not claim a popup it doesn't own.
+            aria-haspopup={anon ? "dialog" : "true"}
+            aria-expanded={anon ? undefined : picking}
             className={`${barBtn} flex-1 text-label`}
-            style={rated
-              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-              : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-primary)" }}
+            style={quickBtnVars(rated)}
           >
             <Star className="w-3.5 h-3.5 shrink-0" fill={rated ? "currentColor" : "none"} aria-hidden />
             {rated ? fmt(rating!) : "Rate"}
           </button>
           <button
-            onClick={(e) => { stop(e); if (!busy) toggleWishlist(); }}
-            disabled={busy}
-            title={wishlisted ? "On wishlist" : "Add to wishlist"}
-            aria-label={wishlisted ? "On your wishlist — remove" : "Add to wishlist"}
-            aria-pressed={wishlisted}
+            onClick={(e) => { stop(e); onWishlist(); }}
+            disabled={busy && !anon}
+            title={wishTitle}
+            aria-label={wishLabel}
+            aria-pressed={anon ? undefined : onList}
+            aria-haspopup={anon ? "dialog" : undefined}
             className={`${barBtn} w-8 shrink-0`}
-            style={wishlisted
-              ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-              : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-secondary)" }}
+            style={quickBtnVars(onList, true)}
           >
-            <Bookmark className="w-3.5 h-3.5" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
+            <Bookmark className="w-3.5 h-3.5" fill={onList ? "currentColor" : "none"} aria-hidden />
           </button>
         </div>
         {pickerPortal}
+        {signInPortal}
       </div>
     );
   }
@@ -211,33 +333,32 @@ export default function ActionCells({ item, layout }: { item: QuickActionItem; l
       <div className="flex gap-1.5">
         <button
           ref={triggerRef}
-          onClick={(e) => { stop(e); togglePicker(); }}
-          title={rated ? `Your rating ${fmt(rating!)}/10` : "Rate"}
-          aria-label={rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this"}
-          aria-haspopup="true" aria-expanded={picking}
+          onClick={(e) => { stop(e); onRate(); }}
+          title={rateTitle}
+          aria-label={rateLabel}
+          aria-haspopup={anon ? "dialog" : "true"}
+          aria-expanded={anon ? undefined : picking}
           className={`${barBtn} w-14 shrink-0`}
-          style={rated
-            ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-            : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-primary)" }}
+          style={quickBtnVars(rated)}
         >
           <Star className="w-3.5 h-3.5 shrink-0" fill={rated ? "currentColor" : "none"} aria-hidden />
           {rated && fmt(rating!)}
         </button>
         <button
-          onClick={(e) => { stop(e); if (!busy) toggleWishlist(); }}
-          disabled={busy}
-          title={wishlisted ? "On wishlist" : "Add to wishlist"}
-          aria-label={wishlisted ? "On your wishlist — remove" : "Add to wishlist"}
-          aria-pressed={wishlisted}
+          onClick={(e) => { stop(e); onWishlist(); }}
+          disabled={busy && !anon}
+          title={wishTitle}
+          aria-label={wishLabel}
+          aria-pressed={anon ? undefined : onList}
+          aria-haspopup={anon ? "dialog" : undefined}
           className={`${barBtn} w-8 shrink-0`}
-          style={wishlisted
-            ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-subtle)", color: "var(--color-accent)" }
-            : { background: IDLE, borderColor: "rgb(237 231 220 / 0.07)", color: "var(--color-text-secondary)" }}
+          style={quickBtnVars(onList, true)}
         >
-          <Bookmark className="w-3.5 h-3.5" fill={wishlisted ? "currentColor" : "none"} aria-hidden />
+          <Bookmark className="w-3.5 h-3.5" fill={onList ? "currentColor" : "none"} aria-hidden />
         </button>
       </div>
       {pickerPortal}
+      {signInPortal}
     </div>
   );
 }

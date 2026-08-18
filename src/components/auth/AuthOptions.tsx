@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resetSessionProbe } from "@/lib/sessionProbe";
+import BrandGlyph from "@/components/BrandGlyph";
 
 // The sign-in provider options — Trakt, Steam, RAWG — factored out of the login
 // page (src/app/page.tsx) so the H2c in-page SignInDialog renders the EXACT same
@@ -14,6 +15,34 @@ import { resetSessionProbe } from "@/lib/sessionProbe";
 //    providers so the OAuth callback lands back on the item page; `onAuthenticated`
 //    is called after a successful RAWG login (which sets the session in-place, no
 //    navigation) so the caller can resume the stashed intent without a round-trip.
+
+// ── 2026-08-18: brand MARKS, not brand COLOURS ──────────────────────────────
+// Nils: "the login modal should drop the color coding of the platforms and
+// instead use the platforms logos (the color coding can be removed everywhere on
+// fandex)".
+//
+// Every option used to be a tinted slab — its own hex at 20% fill, 44% border
+// and 100% text, with a bare capital letter standing in for a logo. That made
+// four saturated blocks in one 320px dialog, gave two different providers the
+// same glyph ("T" for both Trakt and TMDB), and was the same fruit-salad problem
+// StoreLink already solved on the item page.
+//
+// So this reuses StoreLink's answer: the real mark from lib/brandMarks
+// (simple-icons, inlined — the CSP blocks remote favicons), rendered in the UI's
+// own text colour. 2026-08-18: the mark took the BRAND's colour on hover at
+// first; Nils — "the hover on the logos ... should be the normal hover highlight
+// behavior from other buttons" — so the hover is now the house one and no brand
+// hue appears in any state. The logo carries the identity; nothing else has to.
+//
+// RAWG has no simple-icons entry (see gen-brand-marks.mjs) and falls back to
+// <BrandGlyph>'s generic globe — it is the only option here whose word-mark does
+// the identifying, which is fine, because every option is labelled in text.
+const OPTION_CLASS =
+  "group flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium border border-border " +
+  "bg-surface-elevated text-text-primary transition-colors hover:border-border-strong hover:bg-surface-overlay";
+
+// Follows the button's own label colour, so the whole option lights together.
+const GLYPH_CLASS = "text-text-secondary transition-colors duration-fast group-hover:text-text-primary";
 
 export default function AuthOptions({
   returnTo,
@@ -67,54 +96,52 @@ export default function AuthOptions({
         at runtime the static /api route still wins. False positive.
       */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href={`/api/auth/trakt${q}`}
-        className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
-        style={{ background: "#ed1c2420", border: "1px solid #ed1c2444", color: "#ed1c24" }}>
-        <span className="text-lg font-bold">T</span>
+      <a href={`/api/auth/trakt${q}`} className={OPTION_CLASS}>
+        <BrandGlyph source="Trakt" size={18} className={GLYPH_CLASS} />
         Continue with Trakt.tv
       </a>
 
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href={`/api/auth/steam${q}`}
-        className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
-        style={{ background: "#1b9af720", border: "1px solid #1b9af744", color: "#1b9af7" }}>
-        <span className="text-lg font-bold">S</span>
+      <a href={`/api/auth/steam${q}`} className={OPTION_CLASS}>
+        <BrandGlyph source="Steam" size={18} className={GLYPH_CLASS} />
         Continue with Steam
       </a>
 
       {/* Q6: TMDB was connect-only although its callback fully supports fresh
           login (creates the user + session, honors the H2c return cookie). */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href={`/api/auth/tmdb${q}`}
-        className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
-        style={{ background: "#01b4e420", border: "1px solid #01b4e444", color: "#01b4e4" }}>
-        <span className="text-lg font-bold">T</span>
+      <a href={`/api/auth/tmdb${q}`} className={OPTION_CLASS}>
+        <BrandGlyph source="TMDB" size={18} className={GLYPH_CLASS} />
         Continue with TMDB
       </a>
 
       {!showRawg ? (
-        <button onClick={() => setShowRawg(true)}
-          className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
-          style={{ background: "#4ade8020", border: "1px solid #4ade8044", color: "#4ade80" }}>
-          <span className="text-lg font-bold">R</span>
+        <button onClick={() => setShowRawg(true)} className={OPTION_CLASS}>
+          <BrandGlyph source="RAWG" size={18} className={GLYPH_CLASS} />
           Continue with RAWG
         </button>
       ) : (
-        <div className="rounded-xl p-4 space-y-3 text-left"
-          style={{ background: "#4ade8010", border: "1px solid #4ade8030" }}>
-          <p className="text-sm font-medium" style={{ color: "#4ade80" }}>Sign in with RAWG</p>
+        <div className="rounded-xl p-4 space-y-3 text-left bg-surface-elevated border border-border">
+          <p className="text-sm font-medium text-text-primary flex items-center gap-2">
+            <BrandGlyph source="RAWG" size={18} className={GLYPH_CLASS} />
+            Sign in with RAWG
+          </p>
           <form onSubmit={handleRawgLogin} className="space-y-2">
             <input type="email" placeholder="RAWG email" required
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-border-strong"
               value={rawgEmail} onChange={(e) => setRawgEmail(e.target.value)} />
             <input type="password" placeholder="RAWG password" required
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-border-strong"
               value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
             {rawgError && <p className="text-danger text-xs">{rawgError}</p>}
             <div className="flex gap-2">
+              {/* The submit is the dialog's one PRIMARY action, so it takes the
+                  accent — it used to be `--color-success`, a green that read as
+                  a status, not a button, and was part of the same colour
+                  scatter this pass removed. */}
               <button type="submit" disabled={rawgLoading}
                 className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                style={{ background: "var(--color-success)", color: "var(--color-neutral-950)" }}>
+                style={{ background: "var(--color-accent)", color: "var(--color-text-on-accent)" }}>
                 {rawgLoading ? "Signing in..." : "Sign in"}
               </button>
               <button type="button" onClick={() => setShowRawg(false)}

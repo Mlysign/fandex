@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import type { VocabMatch, TitleMatch } from "@/components/discovery/types";
 import { ROLE_LABELS } from "@/lib/constants";
 import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
+import { seedPersistedState } from "@/lib/usePersistedState";
 
 // B5 (2026-07-28) — the desktop nav's collapsing search field
 // (AppNav.tsx's trailing slot, 03-components.md §1). Debounced against the
@@ -16,10 +17,24 @@ import { buildItemHref, buildFacetHref } from "@/lib/itemUrl";
 // finds them). Desktop-only: rendered from AppNav's `hidden md:flex` bar,
 // so the mobile bottom nav never sees this component.
 //
-// That endpoint is `withUser`-gated (Taste Match's own autocomplete, which
-// this reuses, is a personalized feature) — an anon visitor's fetch 401s.
-// Rather than show a misleading "No matches", a failed/non-OK response just
-// keeps the dropdown closed.
+// A failed/non-OK response keeps the dropdown closed rather than showing a
+// misleading "No matches".
+//
+// 2026-08-18 — that used to be load-bearing in a way it should never have been:
+// `/api/discover/facets` was `withUser`-gated, so for a LOGGED-OUT visitor every
+// request 401'd, the dropdown never opened, and Enter — which picks from the
+// options this fetch produces — did nothing either. The whole box was inert.
+// Nils: "the search icon next to the profile icon does not do anything. I can
+// type a prompt but there is no quick result modal and i cannot press enter."
+// The endpoint is public now; it only ever read the local catalog vocab that
+// /discover and the facet pages already serve anonymously.
+//
+// Enter also has a real FALLBACK now. It used to be a no-op whenever nothing
+// matched, which is the one key a search field must always answer — it hands the
+// query to /discover, which searches the live providers as well as the catalog.
+//
+// (Historic note, kept because it explains the 401 handling below: that endpoint
+// was Taste Match's own autocomplete, which is a personalized feature.)
 
 type Option =
   | { group: "people" | "tags"; kind: "facet"; data: VocabMatch }
@@ -92,6 +107,21 @@ export default function NavSearch() {
     router.push(hrefFor(opt));
   }
 
+  // Enter's fallback: hand the raw query to /discover. /discover's own query is
+  // NOT in the URL — it lives in `rr_discover_q` via usePersistedState — so
+  // seeding that key before navigating is what makes the search carry over. A
+  // `?q=` param would be nicer, but /discover doesn't read one and inventing it
+  // means teaching the whole page a second source of truth for its query.
+  //
+  // Deliberately unconditional on match count: the local vocab only knows the
+  // catalog, while /discover also queries the providers live, so "no matches
+  // here" is exactly the case where the full search is most worth reaching.
+  function goToDiscover(term: string) {
+    reset();
+    seedPersistedState("rr_discover_q", term);
+    router.push("/discover");
+  }
+
   // Dismiss on outside pointerdown (ActionCells.tsx:62-69's pattern).
   useEffect(() => {
     if (!open) return;
@@ -108,8 +138,14 @@ export default function NavSearch() {
     if (e.key === "ArrowUp") { e.preventDefault(); if (options.length) setActiveIdx((i) => (i <= 0 ? options.length - 1 : i - 1)); return; }
     if (e.key === "Enter") {
       e.preventDefault();
-      const opt = options[activeIdx] ?? options[0];
-      if (opt) go(opt);
+      // An explicitly arrowed-to option wins; otherwise Enter means "search for
+      // what I typed", which is the full /discover search — NOT the top
+      // suggestion. Silently jumping to a title the user never selected is the
+      // wrong default for a field whose suggestions arrive 250ms behind typing.
+      const opt = activeIdx >= 0 ? options[activeIdx] : null;
+      if (opt) { go(opt); return; }
+      const term = q.trim();
+      if (term) goToDiscover(term);
     }
   }
 
@@ -154,7 +190,20 @@ export default function NavSearch() {
           className="absolute z-30 top-full mt-1.5 w-64 max-h-80 overflow-y-auto rounded-lg border border-border-strong bg-surface-overlay shadow-xl py-1"
         >
           {noMatches ? (
-            <li className="px-3 py-2 text-xs text-text-secondary">No matches</li>
+            // The visible half of Enter's fallback. "No matches" alone was a
+            // dead end — the local vocab is only the catalog, and /discover
+            // still queries the providers live, so there is somewhere left to
+            // go and the box should say so.
+            <li role="presentation">
+              <p className="px-3 pt-2 text-xs text-text-secondary">No matches in your catalog</p>
+              <button
+                type="button"
+                onClick={() => goToDiscover(q.trim())}
+                className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-surface-elevated hover:text-text-primary transition-colors"
+              >
+                Search all of Fandex for <span className="text-text-primary">{q.trim()}</span> →
+              </button>
+            </li>
           ) : (
             (["people", "tags", "titles"] as const).map((g) => {
               const groupOptions = options.filter((o) => o.group === g);

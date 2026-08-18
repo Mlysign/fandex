@@ -117,3 +117,15 @@ export function useScrollRestore(key: string, ready: boolean) {
     };
   }, [key, ready]);
 }
+
+// Write a value into the store a `usePersistedState(key, …)` will hydrate from,
+// BEFORE the component that owns it mounts (2026-08-18). One use so far: the nav
+// search box's Enter fallback hands its query to /discover, whose query lives in
+// `rr_discover_q` rather than in the URL.
+//
+// It exists so the JSON encoding stays in exactly one place — a caller writing
+// `sessionStorage.setItem(key, term)` (no JSON.stringify) would store a value the
+// hydrate above throws on and silently discards.
+export function seedPersistedState<T>(key: string, value: T): void {
+  try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable / quota */ }
+}
