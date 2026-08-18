@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-18 (the anonymous surface — calendar public, every gate now asks instead of bouncing; platform colour-coding removed)._
+_Last updated: 2026-08-18 (AN batch shipped + live — the anonymous surface; platform colour-coding removed site-wide)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (GOG first), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -37,6 +37,8 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 
 **Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Diagnosis, the ruled-out fixes, and the three real options → [TASKS.md](TASKS.md).
 
+⚠️ **Contradicting observation, 2026-08-18 — do not act on it yet, but do not assume the section above is still complete either.** During the AN batch, `/wishlist` **hydrated and rendered real items under `next dev`** (checked for a `__reactFiber` key on `<main>`, saw the item list). One observation, one page, one session — not enough to declare this fixed, and the cause is unknown: that session also added a state branch to `MyStuffView`, so the component itself changed. **Re-check both pages under `next dev` before spending any time on the three options in TASKS.md** — the bug may already be gone, or may be intermittent, which would itself change which fix is right.
+
 ## ▶ What's open
 
 | | Item | Blocked on |
@@ -54,18 +56,7 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 
 **⚠️ The lesson from MB14, because it cost five deploys:** `/sync/watched/shows` carries **no** episode data in any variant, though Trakt documents `seasons` as default-on. A mocked unit test of the *documented* shape passed the whole time. **Measure a provider's response against a real account before building on it** — episodes come from `/sync/history/episodes` (bulk) or `/shows/{id}/progress/watched` (per-show, `completed: true` only). → [[trakt-episode-endpoints]]
 
-**The ANONYMOUS surface was audited and fixed (AN1–AN6, 2026-08-18)** after Nils got logged out and used the site as a visitor. Six defects, one theme — *every* gate answered by disappearing rather than asking:
-
-- **The release calendar is PUBLIC now.** It used to `router.replace("/")` an anon visitor, hiding a provider-fed "what's coming out" feed containing no user data at all. Wishlist/Library are locked chips that open the sign-in dialog; `/api/calendar/popular` moved to the new `withOptionalUser`.
-- **`/wishlist` asks instead of bouncing.** A redirect home reads as a broken link, not a gate — and AppNav shows that slot to anon visitors.
-- **The nav search box was completely inert when logged out** — `/api/discover/facets` was `withUser`, so the dropdown never opened and Enter did nothing. It only ever read the public catalog vocab. Enter now also falls back to /discover.
-- **A third of the cards on a logged-out Home had no Rate/Wishlist buttons** — `linkable: false` items (never-persisted first-sightings) dropped the whole bar. For anon the bar is a sign-in prompt, which needs no identity.
-- **The item page's "Sign in to see your Fandex Score" was not clickable.**
-- **Platform colour-coding is gone site-wide** (Nils's call): the login modal, the item page's dates/score chips/wishlist panel, and settings all use the real brand marks via one `<BrandGlyph>` instead of a dozen brand hexes. **`TYPE_COLORS` (game/movie/show) is a different axis and stays.**
-
-**Round two the same day** (Nils, on the round-one build): the marks carry no brand hue at **all** now, not even on hover — hover is the house treatment everywhere; `StoreLink` drops the chip and renders the bare mark at 22px, because a simple-icons WORDMARK (IGDB, Wikipedia) is illegible at the 15px a chip allows. And **every button in the app was missing `cursor: pointer`** — Tailwind v4's preflight leaves `<button>` at the browser default; fixed once in `globals.css`.
-
-**Three rules worth keeping:** a `withOptionalUser` route's anon cap must be sized to what it actually SPENDS (240/min default for local reads; 60 for the provider fan-out) — a tight default 429s a person typing in a search box. **A `hover:` utility can never beat an inline `style={{background}}`** — move the value into a CSS var (`QUICK_BTN_CLASS` + `quickBtnVars` in ActionCells). And ⚠️ **a Browser pane that isn't displayed stops compositing, which pins every TRANSITIONED property at its start value** — `getComputedStyle` then reports a working hover as broken, through `!important` and all. Kill transitions before measuring one. → [[hover-and-cursor-traps]]
+**The anonymous surface works (AN1–AN6, 2026-08-18, `f5bad29`, live).** Current state, not a changelog: **the release calendar is PUBLIC** (Popular only for anon; Wishlist/Library are locked chips that open the sign-in dialog), `/wishlist` shows a sign-in gate instead of redirecting, the nav search box works logged out, every Home card carries its Rate/Wishlist bar, and **platform colour-coding is gone site-wide** in favour of `<BrandGlyph>` — `TYPE_COLORS` (game/movie/show) is a different axis and stays. `withOptionalUser` is the wrapper for a route serving both audiences; it does not weaken PR15's write gate. → [archive](docs/archive/history.md), grep `AN — the anonymous surface`.
 
 Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scoring (swept on prod), the facet-page compute + quota exposure, all five audit passes, all 11 smoke sweeps, every production incident, and the full performance audit.** Grep [the archive](docs/archive/history.md) for any of them.
 

@@ -23,6 +23,60 @@ full history.
 
 ---
 
+## AN — the anonymous surface, and the end of platform colour-coding (2026-08-18)
+
+Commit `f5bad29`, live on prod the same day. Nils got logged out of his own browser, used Fandex as
+a visitor, and reported six things in one message. They turned out to be **one root cause wearing
+six costumes: every gate answered by DISAPPEARING** — a redirect, an empty dropdown, a missing
+button, inert text — **instead of asking to sign in.** Nothing crashed, nothing 500'd, `tsc`, lint,
+788 tests and `next build` were green throughout, because a silent gate is indistinguishable from a
+working feature right up until someone without a session looks at it.
+
+| | Symptom | Root cause | Fix |
+|---|---|---|---|
+| AN1 | `/calendar` bounced anon home | its own `router.replace("/")`, though the **Popular** scope is provider-fed and holds no user data | page is public; `/api/calendar/popular` → `withOptionalUser`; Wishlist/Library become locked chips that open the sign-in dialog |
+| AN2 | `/wishlist` bounced anon home | same, in `MyStuffView.init()` — and `AppNav` renders that slot to anon visitors as a plain link, so it read as a dead link | a real sign-in gate; no public half exists to show, so the whole view becomes the prompt |
+| AN3 | nav search box totally inert | `/api/discover/facets` was `withUser` → 401 → the dropdown deliberately stays shut on a non-OK response, and Enter picks from options that never arrived | endpoint made public (it only ever read the catalog vocab `/discover` and the facet pages already serve anonymously); Enter also falls back to `/discover` via `seedPersistedState` |
+| AN4 | ~2/3 of logged-out Home cards had no Rate/Wishlist bar | `linkable: false` (never-persisted first-sightings) made `PosterCard` drop the bar entirely | `linkable` passed DOWN to `ActionCells`; for anon the bar is a sign-in prompt, which needs no item identity. Measured 23/30 bare → 0/30 |
+| AN5 | "Sign in to see your taste-match Score" did nothing | the anon `ScorePanel` was a static `div` | `onActivate` + `activateLabel` — a whole-panel button with an explicit accessible name, so SM29's name-concatenation objection doesn't return |
+| AN6 | platform colour-coding everywhere | pre-existing; the last holdout after facets (17 hues → 4) and StoreLink | one `<BrandGlyph>` replaces ~12 brand hexes across the login modal, the item page's dates / score chips / wishlist panel, and settings |
+
+**Round two, same day, on the round-one build.** Nils: *"the logos inside the slabs are cool but so
+small they are not readable"* and *"the hover on the logos still uses the color coding, this should
+be the normal hover highlight behavior from other buttons"*, plus *"the rate, save and 'why' buttons
+dont have any hover behavior (no highlight, no cursor swap)"*. Four more:
+
+- **No brand hue in ANY state, hover included.** `brandHoverColor()` / `src/lib/brandColor.ts`
+  lived about an hour and was deleted — with nothing painting a brand hex, the `#000000`-for-Steam
+  trap it guarded is moot.
+- **`StoreLink` drops the chip entirely, mark at 22px.** The 2026-08-14 note already said "just
+  render the page's logo"; that pass put the logo *inside* the pill and shrank it to 15px to fit,
+  which is fine for a pictorial mark and illegible for a simple-icons **wordmark** (IGDB is letters
+  in a box, Wikipedia a glyphy W).
+- **Every `<button>` in the app was missing `cursor: pointer`** — Tailwind v4's preflight leaves it
+  at the browser default (v3's preflight is where the pointer came from). The report named three
+  buttons; the bug was ~48 per page. One `@layer base` rule in `globals.css`.
+- **The quick-action bars had no hover, and `hover:bg-*` would NOT have fixed it** — their fill came
+  from an inline `style={{ background }}`, which beats every stylesheet rule short of `!important`.
+  Values moved into custom properties (`QUICK_BTN_CLASS` + `quickBtnVars`, `ActionCells.tsx`), now
+  shared with `PersonalSection`'s Rate it / Save pair — which had a drifted copy of the same style
+  objects, and that is exactly how it ended up with neither hover nor disabled handling.
+
+**Verified anonymously on fandex.org after the deploy** (`uptime` 46s, a real restart): calendar
+renders 14 releases with locked personal chips, `/wishlist` shows its gate, the search dropdown
+returns matches, 30/30 Home cards carry the bar, 0/72 buttons lack the pointer, 0 platform-coloured
+elements on the item page. `/api/calendar` `/api/library` `/api/detail` `/api/insights` all still
+401 — the two routes opened up are the only ones that changed.
+
+Rules that outlived the batch → `AGENTS.md`, [[anon-gates-must-ask-not-bounce]],
+[[platform-brand-marks-not-colours]], [[hover-and-cursor-traps]]. The one that cost the most time
+was a **measurement** trap, not a code one: a Browser pane that isn't displayed stops compositing,
+so transitions never advance and `getComputedStyle` returns the START value of every transitioned
+property while `matches(':hover')` says `true` — a correct hover measured as dead through
+`!important` and a literal `red`. Inject `* { transition: none !important }` before measuring.
+
+---
+
 ## MB16 episode UI — vertical Up next + the Progress tab (2026-08-16)
 
 Nils, after MB14 started working: *"don't use the insight highlight panel as a foundation for the

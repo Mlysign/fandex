@@ -126,7 +126,27 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
    regression; older checklist lines saying "no stats strip (authed only)" are obsolete.
    Cards in the rails
    are linkable only when the item already has a catalog row (PR15) — a non-linkable card
-   renders inert, that's correct, not a bug.
+   doesn't navigate, that's correct, not a bug. ⚠️ **But it must still render its Rate/Wishlist
+   bar for an anon viewer** (AN4, 2026-08-18): the bar's job logged out is "prompt sign-in",
+   which needs no item identity. Every card carries it or none do — a grid where only some
+   cards have buttons is the regression. `[...document.querySelectorAll('[data-item-id]')]
+   .filter(c => !c.querySelector('[aria-label^="Sign in"]')).length` must be **0** anon.
+1b. **`/calendar` anon — PUBLIC since 2026-08-18 (AN1).** It must NOT redirect. Popular renders;
+    the Wishlist and Library scope chips are dimmed, carry `aria-label="… — sign in to use"`, and
+    open the sign-in dialog rather than toggling. `/api/calendar/popular` answers **200** anon
+    while `/api/calendar` stays **401**.
+1c. **`/wishlist` anon — a sign-in GATE, not a redirect (AN2).** `location.pathname` must still be
+    `/wishlist` and the page must read "Sign in to see your wishlist". A bounce to `/` is the
+    regression; it reads as a broken nav link, because `AppNav` shows that slot to anon visitors.
+1d. **The nav search box, anon (AN3).** Open it (desktop ≥768px), type 3+ chars, expect a real
+    dropdown — it was totally inert while `/api/discover/facets` was session-gated. Enter with
+    nothing matched must land on `/discover` with the query carried into its search field.
+    **The tell for the whole class:** a non-OK response deliberately keeps the dropdown CLOSED, so
+    a gating regression looks like "no matches", not like an error.
+1e. **Every anon gate must ASK, never disappear.** Sweep the logged-out surface for controls that
+    silently do nothing: the item page's "Sign in to see your Fandex Score" panel must be a real
+    `<button>` (AN5), and card Rate/Wishlist must open the dialog rather than 401 into a
+    "Couldn't save your rating" toast.
 2. `/discover` anon — ungated (H2b), items render, search + filters work, no user-specific rows.
    **A5 (2026-07-26):** typed **People / Tags** result groups are **signed-in only**. For anon,
    searching a person's name must return Titles ONLY — no People/Tags groups, no "Titles"
