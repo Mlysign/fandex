@@ -43,17 +43,19 @@ Everything else in this file is either done or a standing constraint. Two things
 - **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
 
 
-## ⬜ Prod `rr.db` is 331 MB, up from 37.7 MB a week ago. Worth one look, not an alarm.
+## 🟡 Prod `rr.db` grew 37.7 → 331 MB. Measured, fixed in code, one manual step left.
 
-**Observed 2026-08-19** on `/api/health` while confirming the deploy: `dbFilesMb.dbMb` is **331.4**. PR17 measured **37.7 MB** on 2026-08-12 and closed the leak question on that number. That is roughly **9x in seven days**, and this repo has been taken down by database growth once already, so it should not sit unexamined.
+**Answered 2026-08-19 by `GET /api/dev/dbsize?deep=1`, not by inference.** `facet_page_cache` holds **24,953 rows / 222.8 MB — 80.2% of the file**. `media_links` is 39.2 MB (14.1%) and that is its `raw_data` column behaving normally at ~9 KB per provider row. **No thin-write leak**: `media_items` is 2,021 rows and 0.3 MB, *below* the 2,267 PR17 recorded, because the boot prune has been doing its job. The 2026-07-22 shape is not back.
 
-**Most likely benign, and check this first:** `facet_page_cache`, the persisted L2 added **2026-08-13** (the day after the 37.7 MB reading), stores whole rendered page payloads in SQLite by design. A cache sized in entry COUNT rather than bytes is exactly how it would reach hundreds of MB without anything being wrong. MB14's 12,318 episode rows landed in the same window and are a second, smaller contributor.
+**Why the cache grew without limit, which is two bugs, not one.** It shipped with a 24 h age cap swept **once per boot** at 2000 rows. (1) Boot-only is not a schedule, and prod runs for days. (2) **An age cap is not a size cap** — every row a crawler writes inside the TTL window is fresh by definition, so the sweep had nothing to collect while the table grew all day. The writer is crawler traffic over the person/tag/studio long tail, so the write rate is set by somebody else.
 
-**What would NOT be benign:** growth in `media_items` / `media_links` / `media_external_ids`, which is the shape of the 2026-07-22 thin-write leak.
+**Fixed in code (2026-08-19).** `trimFacetCacheToRows()` caps the table at **12,000 rows**, payloads are **gzipped** (measured 2.97–3.86x over four real `/api/facet` payloads, mean ~3.5x), and both passes now run on a **15-minute interval** in `instrumentation.ts`, not only at boot. Steady state is ~31 MB instead of unbounded. Eviction is by write time, deliberately not true LRU: tracking read time would turn every cache HIT into a write on a request path, which is the shape that caused this.
 
-**How to tell them apart, in one call:** `GET /api/dev/dbsize?deep=1` while signed in as an admin gives exact bytes per table and index. ⚠️ It is a full B-tree scan, so run it **once**, read the answer, and do not poll it. Compare `media_items` against the ~2,267 rows PR17 recorded.
+**⬜ Left for you, one Railway variable.** Deleting rows does not shrink a SQLite file — the 226 MB goes on the freelist and the file still reads 331 MB, and it is the FILE SIZE the kernel page-caches, which is what Railway bills. `VACUUM_ON_BOOT=1` (new, `docker-entrypoint.sh`) runs one VACUUM **before Litestream attaches**, which is the only window where it can take the exclusive lock — that is the same wall `wal_checkpoint(TRUNCATE)` hit twice from a Railway shell. Closing the connection also truncates the **340 MB WAL**, so this reclaims both. Rehearsed against a real DB copy locally.
 
-The 340 MB WAL alongside it is the known high-water mark and is **not** part of this question: it cannot be reclaimed while Litestream runs, and needs no action.
+Sequence: let the trim drain first (~12,900 excess rows at 2000/tick = about 1h45m), *then* set the variable, redeploy, read the `[vacuum] … MB -> … MB` log line, and **remove the variable again**. Expect **~331 MB → ~55 MB**.
+
+⚠️ **VACUUM rewrites every page, so Litestream will start a NEW GENERATION and re-upload a full snapshot.** A changed generation is normally the signal that something went wrong (PR17 records the opposite as the healthy reading) — after a deliberate VACUUM it is correct. Confirm the new generation replicates before treating the old one as disposable.
 
 ## Open — carried forward from Phase 6
 
