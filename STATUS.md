@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-19 (backups were dead for two days and are fixed; facet_page_cache bounded)._
+_Last updated: 2026-08-19 (backups were dead for two days and are fixed; facet_page_cache bounded; the memory ramp is the JS heap)._page_cache bounded)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (GOG first), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 

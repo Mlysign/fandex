@@ -15,12 +15,9 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 2. **~~Affiliate signups: GO, starting with GOG, now.~~ SUPERSEDED 2026-08-19 by Nils** (see H3 below): the plan is ads-first and affiliate is demoted. Recorded rather than deleted, so the reversal is visible. The original text, still true as of 2026-08-17: The "prod stably up for days, not hours" gate is met (serving since 2026-08-12). Sequence unchanged: GOG → Humble → Fanatical → GMG → **Amazon LAST**. Claude does not do the signups — they carry his tax/payment identity.
 3. **H3.0 is CLOSED as WON'T DO. The support page must NEVER quote a running-cost figure — permanently, not "until we have one".** The qualitative line ("Hosting, Domain und die Dienste … gehen auf eigene Rechnung") stays; no number ever joins it. Do not re-add H3.0 as an open item.
 4. **Fandex Score range: RELABEL (option c).** 0–100 is a **target, not a rule**. His reasoning, worth keeping: *exceeding 100 is rare and makes an item stand out — it promotes the score rather than making it unbelievable.* So **no re-tune, no top-N change, `ip` stays at 3.** `docs/fandex-score.md` §1 updated to match. SM39 finding 2 is CLOSED.
-5. **The three franchise calls stand.** Smash Bros + PlayStation All-Stars stay removed from Metal Gear; the `metal gear solid` → `metal gear` bundle stays; the game `Journey` stays unattached from the `Journey Collection` movie collection.
-6. **MB7: deferred, then FIXED and confirmed working on Nils's device the same day.** It was never the nav — Insights overflowed horizontally, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` bar pinned below the fold. **The mobile batch is 15/15.** → archive, grep `MB — mobile testing batch`.
 7. **Android TWA (P15/P16): NEEDS MORE DETAIL** before he acts — "Bubblewrap" read as belonging to a different project. See the P15/P16 section.
 8. **H3.8 thresholds: APPROVED.** Ads at **10,000 pageviews/mo**, freemium at **3,500 sustained weekly-actives**. The long-standing "defined but explicitly NOT approved" guard is **retired** — these are now real triggers.
 9. **`PRUNE_ON_BOOT` stays ON** (the guard has held in prod three times). **`priorStrength` / role-weight re-tune: NOT needed — current tuning approved as good.** That time-gated item is closed.
-10. **Shimmer/blank-state check: DONE**, and it found a real bug — Discover rendered "No results for X" for ~300 ms *before* the search started, because the search is debounced 300 ms while `searchLoading` is only set inside `runSearch`. Fixed with a `searchedQ` gate. → archive, grep `SM44 heal budget`.
 
 ---
 
@@ -52,9 +49,9 @@ Everything else in this file is either done or a standing constraint.
 malformed database schema (user_watchlist) - near "ORDER": syntax error
 ```
 
-Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist view. **`ORDER BY` inside an aggregate's argument list is SQLite 3.44.0+ (2023-11-01)**; better-sqlite3 ships 3.53 so the app was fine, and **Litestream v0.3.13 embeds ~3.40** and could not parse it. SQLite parses the WHOLE schema before preparing ANY statement, so the backup daemon could not run a single query. **Railway volume backups are Pro-plan only** (the Backups tab reads "No Backups"), so Litestream was the only copy of the database.
+Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist view. That is **SQLite 3.44.0+** syntax; **Litestream v0.3.13 embeds ~3.40**, and SQLite parses the whole schema before preparing any statement, so the backup daemon could not run one query. **Railway volume backups are Pro-plan only**, so Litestream was the only copy.
 
-**Fixed and live** (`9d63a68`): the sort moved into a subquery, which SQLite deliberately will not flatten into an outer aggregate query, so the ordering is preserved exactly. Migration 18 replays `createCacheViews`, because migration 16 had already run on prod and editing `cacheViews.ts` alone would have shipped nothing. Verified byte-identical on all 2,023 live rows, through **both** apply paths, and against a **real SQLite 3.40 CLI** — which cannot count `users` on the old schema and reads everything on the new one.
+**Fixed and live** (`9d63a68`): the sort moved into a subquery; migration 18 applies it to prod. Verified byte-identical on all 2,023 live rows, through both apply paths, and against a real SQLite 3.40 CLI. Full detail in the commit message and `AGENTS.md`.
 
 **Confirmed working on prod:** new generation `c62d7dc17a0fd0cb`, `snapshot written` in 3.0 s, WAL segments streaming, zero schema errors in the boot log, and the bucket went **33.6 MB → 181.8 MB**.
 
@@ -74,28 +71,30 @@ node -e "const D=require('better-sqlite3');const d=new D('/tmp/restore-test.db',
 
 Compare against live via `/api/dev/dbsize`, then `rm /tmp/restore-test.db`.
 
-### ✅ The file already reclaimed itself — no VACUUM step, and none was ever needed
+### ✅ The file already reclaimed itself — there is no VACUUM step, and there never was
 
-**`rr.db` went 331.4 MB → 154.2 MB on the fix deploy**, unprompted. `src/lib/db.ts` VACUUMs whenever a migration actually applies (added for H2a), migration 18 applied, so it fired. **It ran with Litestream attached and completed fine.**
+**`rr.db` went 331.4 MB → 154.2 MB on the fix deploy, unprompted.** `src/lib/db.ts` VACUUMs whenever a migration actually applies (H2a), migration 18 applied, so it fired — **with Litestream attached, completing fine.** A `VACUUM_ON_BOOT` entrypoint flag was added and removed the same day: a third, worse copy, resting on a premise that drop disproves. The manual lever is `POST /api/dev/prune {"action":"vacuum","confirm":"VACUUM"}`, which checks free space first. **The WAL is still 340.8 MB** — that one does need the last connection to close with Litestream detached.
 
-A `VACUUM_ON_BOOT=1` entrypoint flag was added earlier this session and **removed the same day**: it was a third copy of something the codebase already does twice, and it rested on a premise the 331→154 drop disproves — that VACUUM needs the exclusive lock before Litestream attaches. The manual lever, if the file ever bloats again with no migration pending, is `POST /api/dev/prune {"action":"vacuum","confirm":"VACUUM"}`, which checks free space first.
+### ⚠️ The memory ramp: measured, and it is the JS HEAP. Both of my earlier answers were wrong.
 
-**The WAL is still 340.8 MB** and this did not touch it. That one genuinely does need the last connection to close cleanly with Litestream detached.
+`/api/health` sampled every 5 min for ~6.5 h. **Read `heapTotal`, not `heapUsed` at boot** — that is the mistake that produced two wrong diagnoses in a row.
 
-### ⚠️ The memory ramp is NOT page cache. My first answer was wrong; here is the measurement.
-
-Sampled `/api/health` every 5 min for ~10 h. Over one container's life:
-
-| | start | end |
+| | 12:24 (boot) | 18:18 (6 h later) |
 |--|--|--|
-| **node RSS** | 95 MB | **420 MB** |
-| litestream RSS | 33 MB | 24 MB (flat throughout) |
-| `heapUsed` | ~30 MB | ~30 MB |
-| `fileMb` (page cache) | 60 | oscillates 38–360, repeatedly reclaimed |
+| node RSS | 95 MB | **420 MB** |
+| **`heapTotal`** | **33 MB** | **289 MB** |
+| `rss − heapTotal` (native) | 60 MB | 126 MB |
+| litestream RSS | 33 MB | 25 MB (flat throughout) |
+| `cgroupMb.fileMb` | 60 | oscillates 38–546, repeatedly reclaimed |
 
-So: **the ramp is the node process, it is native memory (heap is flat), and Litestream is not involved.** `fileMb` is noise around a flat mean, not the trend — which kills the "cgroup bills page cache over a big file" story that the 2026-07-22 incident made the obvious one to reach for.
+**The heap grew 256 MB; native grew 66 MB.** So it is a JS-side ramp, and the two answers I gave before it were sampled properly are both retracted:
 
-That puts it in the same family as 2026-07-21 (`rss` ramping while `heapUsed` sits still ⇒ native, not a JS leak), and the prime suspect is SQLite's own allocation against a large file. **Unfalsified either way right now.** The file is 154 MB instead of 331, so the next few days answer it for free: if the ramp shrinks proportionally it was the DB size, and if it does not, it is something else and the step shape (95→120→138→201→215→231→420) is the clue to chase.
+1. **Not page cache.** `fileMb` is noise around a flat mean and gets reclaimed; it is not the trend. That was the 2026-07-22 answer being reached for out of habit.
+2. **Not native memory either.** I said "`heapUsed` flat at 30 MB ⇒ native, stop reading cache code" (the 2026-07-21 rule). That was drawn from three or four spot checks that **all happened to land minutes after a container boot**, where the heap genuinely is 30 MB. The time series shows heap climbing the whole way. **A rule of thumb applied to unrepresentative samples is worse than no rule** — the samples were the problem, not the rule.
+
+**What is actually growing:** the in-process L1 caches, filling under a crawl. The largest is `_facetPageCache` (`max: 3000`, whose own comment budgets **~145 MB retained**), beside ~10 more `BoundedCache`s. The ramp begins with a traffic burst at ~15:30 UTC.
+
+**Not urgent, and do not "fix" it blind.** 289 MB against `--max-old-space-size=1536`; no OOM risk, and that heap is the cache doing its job. ⚠️ **NOT established: whether `fe12682` made it worse** — the burst began before that deploy, so the pre/post comparison is confounded. Settle it by comparing heap against **crawl volume**, not wall-clock. If a bound is ever wanted, the lever is `_facetPageCache`'s `max`, sized against measured retained bytes. → [[prod-incidents]]
 
 ### Corrected belief
 
