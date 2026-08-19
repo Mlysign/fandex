@@ -28,19 +28,51 @@
 // The order is cosmetic to every consumer (both columns are JSON.parse'd and read
 // by key), so reproducing it is about making the verification diff meaningful --
 // a clean diff is the entire proof that the swap is lossless.
+//
+// ── ⚠️ HOW THE SORT IS EXPRESSED IS LOAD-BEARING (2026-08-19) ────────────────
+// It is written as ORDER BY in a SUBQUERY, never as `ORDER BY` inside an
+// aggregate's argument list. `json_group_array(source ORDER BY source)` is
+// SQLite **3.44.0+** syntax (2023-11-01), and this file shipped it on 2026-08-17.
+//
+// **That took production backups down for two days and nothing said so.** SQLite
+// parses the ENTIRE schema before preparing ANY statement, so an unparseable view
+// makes every query fail with `malformed database schema (user_watchlist) - near
+// "ORDER": syntax error` — including Litestream's. Litestream v0.3.13 (pinned in
+// the Dockerfile) embeds SQLite ~3.40, so from the moment migration 16 landed it
+// logged that error once a second and replicated NOTHING. The app was fine
+// throughout: better-sqlite3 ships 3.53, tests passed, `/api/health` said `db: up`.
+// Railway volume backups are Pro-plan only, so Litestream was the only copy.
+// It also explains the WAL that would not truncate — Litestream could not advance
+// its read position, so SQLite could not checkpoint past it.
+//
+// The subquery form produces byte-identical output (verified on the live DB) and
+// parses on 3.40, checked with a real 3.40 CLI rather than by reading a changelog.
+// SQLite deliberately will not flatten a subquery that has ORDER BY into an outer
+// AGGREGATE query, which is exactly what preserves the order here.
+//
+// Rule for anything added to these views: it must parse on the SQLite version
+// Litestream embeds, not the one better-sqlite3 ships. When in doubt, open a copy
+// of the DB with an old sqlite3 CLI — the failure is total and silent otherwise.
 
 import type DatabaseT from "better-sqlite3";
 
+// ⚠️ NEVER write `ORDER BY` inside an aggregate's argument list here. See the
+// "how the sort is expressed" note above createCacheViews — it cost two days of
+// production backups.
 export const WATCHLIST_VIEW_BODY = `
 SELECT
   user_id || ':' || media_item_id                 AS id,
   user_id,
   media_item_id,
-  json_group_array(source ORDER BY source)        AS platform_sources,
+  json_group_array(source)                        AS platform_sources,
   MIN(added_at)                                   AS added_at,
   NULL                                            AS notes
-FROM user_item_state
-WHERE relation = 'wishlist'
+FROM (
+  SELECT user_id, media_item_id, source, added_at
+  FROM user_item_state
+  WHERE relation = 'wishlist'
+  ORDER BY user_id, media_item_id, source
+)
 GROUP BY user_id, media_item_id`;
 
 // Mirrors rebuildCaches' derivation exactly:
@@ -59,20 +91,20 @@ WITH lib AS (
 agg AS (
   SELECT
     user_id, media_item_id,
-    json_group_array(source ORDER BY rid)                            AS platform_sources,
+    json_group_array(source)                                         AS platform_sources,
     ROUND(AVG(CASE WHEN rating > 0 THEN rating END), 1)              AS rating,
     NULLIF(MAX(COALESCE(reviewed_at, 0)), 0)                         AS reviewed_at,
     MIN(added_at)                                                    AS added_at,
     MIN(CASE WHEN status IS NOT NULL AND status <> '' THEN rid END)  AS fallback_status_rid,
     MIN(CASE WHEN review IS NOT NULL AND review <> '' THEN rid END)  AS fallback_review_rid
-  FROM lib GROUP BY user_id, media_item_id
+  FROM (SELECT * FROM lib ORDER BY rid) GROUP BY user_id, media_item_id
 ),
 meta AS (
   SELECT user_id, media_item_id,
     json_group_object(source, json_object(
       'status', status, 'rating', rating, 'review', review, 'reviewedAt', reviewed_at
-    ) ORDER BY rid) AS metadata
-  FROM lib GROUP BY user_id, media_item_id
+    )) AS metadata
+  FROM (SELECT * FROM lib ORDER BY rid) GROUP BY user_id, media_item_id
 ),
 recent AS (
   SELECT user_id, media_item_id, status, review,

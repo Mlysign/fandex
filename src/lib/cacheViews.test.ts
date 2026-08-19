@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
-import { createCacheViews } from "./cacheViews";
+import { createCacheViews, WATCHLIST_VIEW_BODY, LIBRARY_VIEW_BODY } from "./cacheViews";
 
 // Migration 16 turned user_library / user_watchlist into views. Two things about
 // that are dangerous in a way no ordinary test would catch, so they get their own
@@ -156,5 +156,59 @@ describe("the derivation rebuildCaches used to do in TypeScript", () => {
     add(db, "a", "local", "ignored");
     expect(lib(db)).toBeUndefined();
     expect(db.prepare("SELECT * FROM user_watchlist WHERE user_id = ?").get(U)).toBeUndefined();
+  });
+});
+
+// ── The 2026-08-19 guard ────────────────────────────────────────────────────
+// `json_group_array(x ORDER BY y)` needs SQLite 3.44+ (2023-11-01). Litestream
+// v0.3.13 embeds ~3.40 and parses the WHOLE schema before any statement, so this
+// syntax in a view stopped ALL replication for two days while every test here
+// stayed green — better-sqlite3 ships 3.53. There is no old SQLite in this test
+// process to parse against, so the guard is on the SQL text itself. It is a
+// blunt instrument on purpose: the failure mode it prevents is silent, total,
+// and only visible in a log nobody reads.
+describe("view SQL stays parseable by the SQLite Litestream embeds", () => {
+  const bodies: Array<[string, string]> = [
+    ["user_watchlist", WATCHLIST_VIEW_BODY],
+    ["user_library", LIBRARY_VIEW_BODY],
+  ];
+
+  // Extract each aggregate call's OWN argument list by walking paren depth. A
+  // regex cannot do this: `json_group_array(source)` followed later by any `)`
+  // makes even a lazy match span half the statement, which is how the first
+  // version of this guard failed against SQL that was already correct.
+  function aggregateArgLists(sql: string): string[] {
+    const out: string[] = [];
+    const re = /\b(json_group_array|json_group_object|group_concat|string_agg)\s*\(/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(sql)) !== null) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      const start = i;
+      while (i < sql.length && depth > 0) {
+        if (sql[i] === "(") depth++;
+        else if (sql[i] === ")") depth--;
+        i++;
+      }
+      out.push(sql.slice(start, i - 1));
+    }
+    return out;
+  }
+
+  it.each(bodies)("%s uses no ORDER BY inside an aggregate argument list", (_name, sql) => {
+    const offenders = aggregateArgLists(sql)
+      // Drop nested parenthesised groups: an ORDER BY inside a subquery passed
+      // as an argument is ordinary SQL. Only a TOP-LEVEL one is the 3.44 syntax.
+      .map((args) => args.replace(/\([^()]*\)/g, ""))
+      .filter((args) => /\bORDER\s+BY\b/i.test(args));
+    expect(offenders).toEqual([]);
+  });
+
+  it.each(bodies)("%s still sorts, via a subquery ORDER BY", (_name, sql) => {
+    // The counterpart assertion: dropping the aggregate ORDER BY must not have
+    // been "fixed" by dropping the ordering altogether. SQLite deliberately
+    // will not flatten an ORDER BY subquery into an outer aggregate query, so
+    // this is what preserves the byte-exact JSON order the migration proved.
+    expect(sql).toMatch(/ORDER BY/i);
   });
 });

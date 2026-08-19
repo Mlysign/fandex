@@ -681,6 +681,45 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 18,
+    name: "recreate the cache views without aggregate ORDER BY (unbreaks Litestream)",
+    up: (db) => {
+      // 2026-08-19, and this one is a production incident, not a feature.
+      //
+      // Migration 16 wrote `json_group_array(source ORDER BY source)` into the
+      // user_watchlist view. ORDER BY inside an aggregate's argument list is
+      // SQLite **3.44.0+** syntax (released 2023-11-01). better-sqlite3 ships
+      // 3.53, so the app never noticed. **Litestream v0.3.13 embeds ~3.40.**
+      //
+      // SQLite parses the WHOLE schema before preparing ANY statement, so from
+      // the moment migration 16 landed on prod (2026-08-17) every Litestream
+      // call failed with `malformed database schema (user_watchlist) - near
+      // "ORDER": syntax error`, once a second, and NOTHING replicated for two
+      // days. Railway volume backups are Pro-plan only, so that was the only
+      // copy of the database. It is also why the 340 MB WAL would not truncate:
+      // Litestream could not advance its read position, so SQLite could not
+      // checkpoint past it, which had been misread as a benign high-water mark.
+      //
+      // The app stayed green throughout — 820 tests, `db: up` on /api/health,
+      // every read site working — because the only process that could not parse
+      // the schema was the backup daemon, and it reports into a log nobody
+      // watches.
+      //
+      // This migration exists at all because migration 16 has ALREADY RUN on
+      // prod (user_version is past it), so fixing cacheViews.ts alone changes
+      // nothing there. The view bodies live in one module, so this just replays
+      // createCacheViews over the existing views; it is idempotent by
+      // construction and drops-by-actual-type, so re-running is safe.
+      //
+      // Verified before shipping, not after: byte-identical output on all 2,023
+      // rows of the live DB (96 wishlist + 1,927 library), and a real SQLite
+      // 3.40 CLI reads the resulting file, both views, `PRAGMA integrity_check`
+      // and `PRAGMA wal_checkpoint` — where the same CLI could not so much as
+      // count `users` against the old schema.
+      createCacheViews(db);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own
