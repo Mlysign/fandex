@@ -2750,3 +2750,27 @@ Moved verbatim from TASKS.md on completion, per the doc-map convention. Grep, do
 Worth re-testing on the next Next.js bump before spending effort — this looks like a dev/Turbopack bug in 16.3.0, not a mistake in the app.
 
 ---
+
+
+## P15/P16 Android TWA — context archived 2026-08-19; the DECISION is still open in TASKS.md
+
+### P15/P16 — the Android app. Read this before deciding; "Bubblewrap" needed context.
+
+**This is Fandex, not a different project.** It traces back to a decision you locked on **2026-06-18**: *"public website first, Android as a PWA/TWA wrapper"* — i.e. Fandex ships to the Play Store as a **thin Android app that just displays fandex.org**, not as a separate codebase. Two months on, the name of the tool (Bubblewrap) carried none of that context. Fair.
+
+**What a TWA is.** A *Trusted Web Activity* is an Android app whose entire content is your website, rendered by the user's Chrome. No second codebase, no rewrite, no separate release of features — you ship the website, the app shows it. The only reason it isn't just a browser shortcut is that a TWA can **hide the browser address bar**, so it looks like a native app. Hiding that bar is exactly what needs proving you own the domain — which is what P15 is.
+
+**What's already built (by Claude, done):** `src/app/.well-known/assetlinks.json/route.ts` serves the Digital Asset Links file Google's verifier fetches. It's env-driven and currently returns an empty `[]`, which is valid JSON and simply means "no app claims this origin yet". **P14 (PWA manifest + service worker) is also done** — that's the prerequisite that makes the site installable at all.
+
+**What only you can do, and why.** Generating the Android package requires creating a **signing key** and a **Play Console account** — a credential and an account tied to your identity, so Claude does not do it. The mechanical shape:
+1. Run **Bubblewrap** (Google's CLI) or **PWABuilder** (a website that does the same thing without installing anything) against `https://fandex.org/manifest.webmanifest`. Output: a signed `.aab` plus two values — the **package name** (e.g. `org.fandex.twa`) and the signing cert's **SHA-256 fingerprint**.
+2. Set those as `TWA_PACKAGE_NAME` and `TWA_CERT_FINGERPRINT` on Railway. The route above starts serving a real claim; verify at `/.well-known/assetlinks.json`.
+3. Upload the `.aab` to the Play Console. (Google charges a **one-off $25** developer registration.)
+4. **P16** then verifies the thing that most plausibly breaks: **OAuth inside the app's webview** — Trakt/TMDB/Steam redirect URIs re-registered for prod, deep-link return, and `sameSite` cookie behaviour on the round-trip. This is why P16 exists as separate work rather than "it just works".
+
+**The honest cost/benefit.** Benefit: a Play Store listing and an installable icon without maintaining an Android app. Cost: a $25 account, a signing key you must never lose, and P16's OAuth verification — the webview is a genuinely different cookie environment from desktop Chrome, and sign-in breaking there is the realistic failure.
+
+**Decide:** do it, or explicitly park P15/P16 so they stop reading as in-progress work. Either is fine — **the website is unaffected either way**, and nothing else depends on this.
+- **P18** ✅ 2026-08-03 — **JustWatch clickable streaming links.** Its original blocker (a JustWatch Content Partner API + a full-catalog re-projection) turned out to be wrong on both counts: TMDB already returns a per-region `link` in the payload already fetched, and the existing lazy self-heal path (`ensureTmdbDetail`) delivers it one detail view at a time — no mass op needed. → [archive](docs/archive/history.md), grep `P18 streaming links`.
+
+---

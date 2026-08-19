@@ -30,7 +30,7 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 Everything else in this file is either done or a standing constraint.
 
-1. **🔴 Prove the restore works, then reclaim the file.** Two console commands and one Railway variable, in that order — full detail in the backups section below. This is the only urgent one: backups replicate again, but "replicating" and "restorable" are different claims and only one of them has been checked.
+1. **🔴 Prove the restore works.** Two Console commands, detailed in the backups section below. The only urgent item: backups replicate again, but "replicating" and "restorable" are different claims and only the first has been checked. **No Railway variable to set — the file already reclaimed itself, 331.4 → 154.2 MB.**
 
 2. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
 
@@ -43,7 +43,6 @@ Everything else in this file is either done or a standing constraint.
 - **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative "it costs money to run" line stays; no number ever joins it.
 - **Do NOT contact TMDB or Trakt about commercial terms** while monetizing on their free tiers — the accepted risk is key revocation, and asking invites it.
 - **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
-
 
 ## 🔴 Backups were DEAD for two days (2026-08-17 → 2026-08-19). Fixed and replicating; the restore drill is yours.
 
@@ -59,25 +58,44 @@ Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist 
 
 **Confirmed working on prod:** new generation `c62d7dc17a0fd0cb`, `snapshot written` in 3.0 s, WAL segments streaming, zero schema errors in the boot log, and the bucket went **33.6 MB → 181.8 MB**.
 
-### ⬜ Your step: the restore drill. "The errors stopped" is not "this restores."
+### ⬜ Your step, and it is now the ONLY one: the restore drill
 
-Railway → releaseradar → **Console** (I can drive the browser but the harness blocks typing into a production shell, correctly):
+Railway → releaseradar → **Console** (I can drive the browser, but the harness blocks typing into a production shell, correctly):
 
 ```
 litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
 ```
 
-then check it is real, not just present:
+then check it is real, not merely present:
 
 ```
 node -e "const D=require('better-sqlite3');const d=new D('/tmp/restore-test.db',{readonly:true});console.log(d.pragma('integrity_check'));for(const t of ['users','user_identities','user_item_state','media_items'])console.log(t, d.prepare('SELECT COUNT(*) n FROM '+t).get().n);console.log('browsed=0', d.prepare('SELECT COUNT(*) n FROM media_items WHERE browsed=0').get().n);"
 ```
 
-Compare against live via `/api/dev/dbsize`. Then `rm /tmp/restore-test.db`.
+Compare against live via `/api/dev/dbsize`, then `rm /tmp/restore-test.db`.
 
-### ⬜ Only after that passes: `VACUUM_ON_BOOT=1`
+### ✅ The file already reclaimed itself — no VACUUM step, and none was ever needed
 
-Still the right move (331 MB file, ~226 MB of it now freelist once the facet-cache trim drains), and still a Railway variable → redeploy → read the `[vacuum] … MB -> … MB` line → **remove the variable**. Do not run it while the restore is unproven.
+**`rr.db` went 331.4 MB → 154.2 MB on the fix deploy**, unprompted. `src/lib/db.ts` VACUUMs whenever a migration actually applies (added for H2a), migration 18 applied, so it fired. **It ran with Litestream attached and completed fine.**
+
+A `VACUUM_ON_BOOT=1` entrypoint flag was added earlier this session and **removed the same day**: it was a third copy of something the codebase already does twice, and it rested on a premise the 331→154 drop disproves — that VACUUM needs the exclusive lock before Litestream attaches. The manual lever, if the file ever bloats again with no migration pending, is `POST /api/dev/prune {"action":"vacuum","confirm":"VACUUM"}`, which checks free space first.
+
+**The WAL is still 340.8 MB** and this did not touch it. That one genuinely does need the last connection to close cleanly with Litestream detached.
+
+### ⚠️ The memory ramp is NOT page cache. My first answer was wrong; here is the measurement.
+
+Sampled `/api/health` every 5 min for ~10 h. Over one container's life:
+
+| | start | end |
+|--|--|--|
+| **node RSS** | 95 MB | **420 MB** |
+| litestream RSS | 33 MB | 24 MB (flat throughout) |
+| `heapUsed` | ~30 MB | ~30 MB |
+| `fileMb` (page cache) | 60 | oscillates 38–360, repeatedly reclaimed |
+
+So: **the ramp is the node process, it is native memory (heap is flat), and Litestream is not involved.** `fileMb` is noise around a flat mean, not the trend — which kills the "cgroup bills page cache over a big file" story that the 2026-07-22 incident made the obvious one to reach for.
+
+That puts it in the same family as 2026-07-21 (`rss` ramping while `heapUsed` sits still ⇒ native, not a JS leak), and the prime suspect is SQLite's own allocation against a large file. **Unfalsified either way right now.** The file is 154 MB instead of 331, so the next few days answer it for free: if the ramp shrinks proportionally it was the DB size, and if it does not, it is something else and the step shape (95→120→138→201→215→231→420) is the clue to chase.
 
 ### Corrected belief
 
@@ -97,25 +115,15 @@ STATUS and PR17 recorded the 340 MB WAL as a benign high-water mark that "cannot
 1. Run **Bubblewrap** (Google's CLI) or **PWABuilder** (a website that does the same thing without installing anything) against `https://fandex.org/manifest.webmanifest`. Output: a signed `.aab` plus two values — the **package name** (e.g. `org.fandex.twa`) and the signing cert's **SHA-256 fingerprint**.
 2. Set those as `TWA_PACKAGE_NAME` and `TWA_CERT_FINGERPRINT` on Railway. The route above starts serving a real claim; verify at `/.well-known/assetlinks.json`.
 3. Upload the `.aab` to the Play Console. (Google charges a **one-off $25** developer registration.)
-4. **P16** then verifies the thing that most plausibly breaks: **OAuth inside the app's webview** — Trakt/TMDB/Steam redirect URIs re-registered for prod, deep-link return, and `sameSite` cookie behaviour on the round-trip. This is why P16 exists as separate work rather than "it just works".
 
-**The honest cost/benefit.** Benefit: a Play Store listing and an installable icon without maintaining an Android app. Cost: a $25 account, a signing key you must never lose, and P16's OAuth verification — the webview is a genuinely different cookie environment from desktop Chrome, and sign-in breaking there is the realistic failure.
-
-**Decide:** do it, or explicitly park P15/P16 so they stop reading as in-progress work. Either is fine — **the website is unaffected either way**, and nothing else depends on this.
-- **P18** ✅ 2026-08-03 — **JustWatch clickable streaming links.** Its original blocker (a JustWatch Content Partner API + a full-catalog re-projection) turned out to be wrong on both counts: TMDB already returns a per-region `link` in the payload already fetched, and the existing lazy self-heal path (`ensureTmdbDetail`) delivers it one detail view at a time — no mass op needed. → [archive](docs/archive/history.md), grep `P18 streaming links`.
-
----
+**The rest of the context** (what a TWA is and is not, Bubblewrap, the signing key, the one-off $25 Play account) → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
 
 ## Closed epics — pointers only (full write-ups in the archive)
 
 - **PR17 — post-outage verification** ✅ 2026-08-12. All five steps; the leak and the memory ramp are confirmed dead in prod and backups proven by a real restore drill. Two corrected beliefs before touching backups: an **unchanged** Litestream generation is the HEALTHY signal, and `wal-truncate` reclaims nothing while Litestream runs. → grep `PR17`.
-- **H4 — legal & compliance** ✅ 2026-08-03. Three standing guards survive it, reproduced verbatim in `AGENTS.md`: a cookie banner isn't needed today but **any analytics/affiliate-tracking/ad script triggers it**; **"the nav reaches it" is a different claim per auth state** ([[anon-legal-reachability]]); the Impressum stays `noindex, nofollow, noarchive, nosnippet` and out of `sitemap.ts`. Live refs: [compliance-review](docs/compliance-review.md) · [cookie-assessment](docs/cookie-assessment.md) · [monetization-legal](docs/monetization-legal.md).
 - **Smoke test 2026-08-12 (11th run)** ✅ All five findings fixed (SM38–SM42). The valuable half was the RAWG outage it ran during, which re-verified the three 2026-08-02 single-source games bugs as fixed under the exact condition that exposed them. → grep `Smoke test 2026-08-12 11th run`.
-- **Facet-page compute + provider quota** ✅ 2026-08-13. Closed by a persisted SQLite L2 (`facet_page_cache`, `src/lib/facetCacheStore.ts`); `/tag/western` 63.17 s → 0.092 s across a full restart, zero provider calls warm. **⚠️ The "59.8 s render" that motivated it was 93% a dead RAWG, not inherent cost** — don't re-justify cache work with that figure. → grep `Facet-page compute`.
 
 ---
-
-- **MB — mobile testing batch (15 notes)** ✅ **COMPLETE 15/15, 2026-08-17.** MB7 was last: "the bottom nav scrolls away on Insights" turned out to be **horizontal overflow**, not the nav — the page overflowed, Chrome shrink-to-fit zoomed the layout viewport out, and the `fixed bottom-0` bar pinned itself below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and a fixed element must be checked with `bottom` vs `visualViewport.height` at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix.** → grep the archive for `MB — mobile testing batch`.
 
 ## H3 — Monetization 🔵 ads-first since 2026-08-19; donations live, affiliate built + dark + demoted
 
@@ -140,7 +148,7 @@ The three findings that decided it, so nobody re-derives them:
 - **H3.8** ✅ **APPROVED 2026-08-17, and now THE PLAN rather than a parked Path B.** Both gates became measurable on 2026-08-19 (`/dev/analytics`). **Ads → 10,000 pageviews/mo** · **Freemium → 3,500 sustained weekly actives.**
   - **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20) — not a second gate, just worth re-checking which network fits.
   - **Freemium → 3,500 sustained weekly-active users.** The old "roughly 1k+ actives" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€, leaving room for Trakt's separate approval and normal churn.
-  - **✅ BOTH gates are now instrumented (2026-08-19).** `/dev/analytics` measures them directly: pageviews/30d against the 10,000 ads gate, and signed-in WAU against the 3,500 freemium gate, plus the anonymous-vs-signed-in split that decides which arm is worth pursuing at all. Self-hosted (migration 17, two pre-aggregated counter tables), no third-party analytics and no cookie. **It counts real-browser pageviews only**, because it is a client beacon: crawlers and no-JS requests are invisible by design, which is the right population for an ads decision and the wrong one for an SEO one (use Search Console for that). The paragraph below is kept because its *reasoning* is still correct; the "no pageview log exists" premise is not.
+  - **✅ Both gates are instrumented (2026-08-19)** — `/dev/analytics` measures them directly, plus the anon-vs-signed-in split that decides which arm is worth building. Self-hosted, no third-party analytics, no cookie. ⚠️ **Client beacon, so crawlers are invisible by design** — right population for an ads decision, wrong one for SEO (use Search Console). → [[telemetry-self-hosted]]
   - **The metric, as checked against the schema in July 2026:** no pageview/session log existed then, and **`users.last_seen_at` is a false friend** — it's written only on a RAWG login or Steam OAuth callback (`src/app/api/auth/rawg/route.ts:72`, `.../steam/callback/route.ts:65`), never on an ordinary revisit via an existing 30-day cookie, and never at all for TMDB/Trakt. It undercounts badly. The best signal computable today (verified against the real DB) is "touched library/wishlist/rating in the last 7 days":
     ```sql
     SELECT COUNT(DISTINCT user_id) wau FROM (
@@ -152,7 +160,7 @@ The three findings that decided it, so nobody re-derives them:
     )
     ```
     It counts only users who took a write action — a pure browser isn't captured by anything in the schema.
-  - **✅ `last_seen_at` is now real (2026-08-03).** Stamped in `getSession()` (`src/lib/session.ts`), the one funnel every authenticated request passes through, rate-limited to **one write per user per UTC day** — `getSession()` runs several times per render, so an unconditional write would turn every authed read into a write. The freshness check is free: it rides along on the SELECT the epoch check already does. Best-effort (a write error is swallowed — a metric must never fail a login) and stamped only **after** epoch validation, so a revoked token can't report its owner active. Verified against the real `data/rr.db`: all three users were 7–11 days stale, a dev-login stamped only that user, and two further authed page loads wrote nothing. **This does not approve H3.8's thresholds** — it's the meter, not the trigger. Activity data is uncollectable retroactively, which is why it went in first.
+  - **✅ `last_seen_at` is real (2026-08-03)** — stamped in `getSession()`, one write per user per UTC day, best-effort, only after epoch validation. It is the meter, not the trigger. → grep the archive for `last_seen_at`.
 
 **If affiliate is ever revived:** sign up → set the env vars → flip `MONETIZATION_ENABLED` → run the post-go-live cookie check. The runbook is still accurate and still in the go-live doc; only its priority changed.
 
