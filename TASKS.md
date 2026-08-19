@@ -55,7 +55,7 @@ Everything else in this file is either done or a standing constraint. Two things
 
 Sequence: let the trim drain first (~12,900 excess rows at 2000/tick = about 1h45m), *then* set the variable, redeploy, read the `[vacuum] … MB -> … MB` log line, and **remove the variable again**. Expect **~331 MB → ~55 MB**.
 
-⚠️ **VACUUM rewrites every page, so Litestream will start a NEW GENERATION and re-upload a full snapshot.** A changed generation is normally the signal that something went wrong (PR17 records the opposite as the healthy reading) — after a deliberate VACUUM it is correct. Confirm the new generation replicates before treating the old one as disposable.
+⚠️ **Check the Litestream generation afterwards, and don't assume which way it goes.** The 2026-07-21 VACUUM ran *while* Litestream was attached and was absorbed into generation `18d8221abccc198d`; PR17 recorded an unchanged generation as the healthy signal. This one runs *before* Litestream attaches, so it may instead find the file changed under its last shadow-WAL position and start a new generation with a full snapshot. Both are fine here. A new generation is only alarming when nothing deliberate caused it — confirm replication is live before treating the old one as disposable.
 
 ## Open — carried forward from Phase 6
 

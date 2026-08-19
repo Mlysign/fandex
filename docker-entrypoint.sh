@@ -14,11 +14,15 @@ set -e
 # Railway shell. Closing the connection afterwards also truncates the WAL, which
 # is the only thing that clears its 340 MB high-water mark.
 #
-# ⚠️ EXPECTED SIDE EFFECT: VACUUM rewrites every page, so Litestream starts a
-# NEW GENERATION and re-uploads a full snapshot. A changed generation is
-# normally the signal that something went wrong (see docs/archive/history.md,
-# PR17) — after a deliberate VACUUM it is correct. Verify the new generation
-# replicates before treating the old one as disposable.
+# ⚠️ CHECK THE LITESTREAM GENERATION AFTER, and do not assume which way it goes.
+# A VACUUM performed *while* Litestream was attached (2026-07-21) was absorbed
+# into the existing generation `18d8221abccc198d`, and PR17 recorded an
+# UNCHANGED generation as the healthy signal. This VACUUM runs before Litestream
+# attaches, so it may instead find the file changed under its last shadow-WAL
+# position and start a new generation with a full snapshot. Both outcomes are
+# acceptable here; a new one is only alarming when nothing deliberate caused it.
+# Confirm replication is live afterwards before treating the old generation as
+# disposable.
 #
 # One-shot by design: flip the Railway variable to 1, redeploy, read the log
 # line, then remove the variable. Never leave it on — a VACUUM every boot means
