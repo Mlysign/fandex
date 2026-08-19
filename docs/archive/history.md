@@ -2716,3 +2716,37 @@ Moved verbatim from TASKS.md on completion, per the doc-map convention. Grep, do
   - Two rules that outlived it, both now in `AGENTS.md`: **a 30-day recency FILTER was the first cut and was wrong** (a filter hides a show instead of ranking it — ask that of any "only show it if it's recent" rule), and **a module that renders `null` when empty must know why before it ships** (this one cost four deploys).
 
 ---
+
+
+## library + wishlist dead under next dev (DEV ONLY) — archived 2026-08-19, decision unchanged
+
+## 🟡 `/library` + `/wishlist` are dead under `next dev` — DEV ONLY ⬜ your call which fix
+
+**Found 2026-08-17 while verifying migration 16. Production is NOT affected** — a `next start` build hydrates both pages and renders real items, so fandex.org was never broken. (An earlier note in this file said it was; that was wrong, generalised from the dev server before the prod build was tested.) It is also **not** caused by migration 16 — it reproduces on a clean HEAD checkout.
+
+**What it costs:** neither page can be developed or verified against `next dev` at all. That is why it went unnoticed — the smoke sweeps run against prod.
+
+**Symptom (dev):** both routes SSR their full toolbar and then sit on “Loading…” forever. React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing** — no URL change, no `aria-selected` move, zero fetches. That last one is the 5-second reproduction.
+
+**Root cause, measured:** `MyStuffContent` calls `useSearchParams()` (the `?tab=` IS the state, per SM21). That postpones its Suspense boundary — the DOM carries React's **`$~`** postpone marker and the fiber is `dehydrated: true` — and the `next dev` client never resumes it. **Replacing that single call with a plain `URLSearchParams` makes the page hydrate, fetch and render immediately, and the `$~` marker disappears.** That is the whole of it.
+
+**Ruled out by experiment — don't re-try these:**
+- **`export const dynamic = "force-dynamic"` on both pages does NOT fix it.** So it is not the static prerender.
+- **Moving the `Suspense` boundary out of the client module into the server `page.tsx` does NOT fix it.** So it is not boundary placement.
+- Not the API (`/api/library` 1,922 items + `/api/calendar` 95 complete in 3.0 s when fired by hand *on that page*), not `init()` bailing (auth returns a user; last sync 14 h vs a 24 h `SYNC_STALE_MS`, so the auto-sync branch never runs), not a console error, not a failed chunk, not a server error.
+- ⚠️ `performance.getEntriesByType('resource')` lists only **completed** requests — "never issued" and "in flight" look identical there. That cost an hour.
+
+**Diagnostic worth keeping:** `Object.keys(document.querySelector('main')).some(k => k.startsWith('__reactFiber'))` — `false` on `<main>` while `true` on `body` means an unhydrated subtree, not a slow request.
+
+**Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Proven working there.
+
+**✅ DECIDED 2026-08-17 (Nils): option 1 — leave it, re-test on the next Next.js bump.** Do NOT restructure `MyStuffView` for this; the other two options are recorded only so the reasoning isn't re-derived. Add a re-test of these two pages to the checklist whenever `next` is upgraded (a Dependabot `next` bump is exactly the moment to try it).
+
+**The three options:**
+1. **Leave it, use the prod build to verify.** ← chosen. Zero risk, keeps SM21's URL-as-state exactly. Costs dev ergonomics on two pages.
+2. **Pass `searchParams` from the server `page.tsx` as a prop** (the other option Next's own docs give). Keeps SSR correct with no flash, drops `useSearchParams` entirely — but a tab switch then needs a server round-trip instead of being instant.
+3. **Derive the tab from `window.location.search` + a `popstate` listener.** Keeps switching instant, but the initial render no longer knows the tab server-side, so a deep link to `?tab=progress` flashes the default first.
+
+Worth re-testing on the next Next.js bump before spending effort — this looks like a dev/Turbopack bug in 16.3.0, not a mistake in the app.
+
+---

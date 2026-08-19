@@ -28,13 +28,15 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 ## ⚠️ Needs Nils — this is the whole list
 
-Everything else in this file is either done or a standing constraint. Two things are waiting on a human, and one is optional.
+Everything else in this file is either done or a standing constraint.
 
-1. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
+1. **🔴 Prove the restore works, then reclaim the file.** Two console commands and one Railway variable, in that order — full detail in the backups section below. This is the only urgent one: backups replicate again, but "replicating" and "restorable" are different claims and only one of them has been checked.
 
-2. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
+2. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
 
-3. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
+3. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
+
+4. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
 
 **Standing constraints — not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
@@ -43,19 +45,43 @@ Everything else in this file is either done or a standing constraint. Two things
 - **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
 
 
-## 🟡 Prod `rr.db` grew 37.7 → 331 MB. Measured, fixed in code, one manual step left.
+## 🔴 Backups were DEAD for two days (2026-08-17 → 2026-08-19). Fixed and replicating; the restore drill is yours.
 
-**Answered 2026-08-19 by `GET /api/dev/dbsize?deep=1`, not by inference.** `facet_page_cache` holds **24,953 rows / 222.8 MB — 80.2% of the file**. `media_links` is 39.2 MB (14.1%) and that is its `raw_data` column behaving normally at ~9 KB per provider row. **No thin-write leak**: `media_items` is 2,021 rows and 0.3 MB, *below* the 2,267 PR17 recorded, because the boot prune has been doing its job. The 2026-07-22 shape is not back.
+**Found in the Railway deploy log while checking something else, not by any alarm.** Litestream logged this once a second, for two days:
 
-**Why the cache grew without limit, which is two bugs, not one.** It shipped with a 24 h age cap swept **once per boot** at 2000 rows. (1) Boot-only is not a schedule, and prod runs for days. (2) **An age cap is not a size cap** — every row a crawler writes inside the TTL window is fresh by definition, so the sweep had nothing to collect while the table grew all day. The writer is crawler traffic over the person/tag/studio long tail, so the write rate is set by somebody else.
+```
+malformed database schema (user_watchlist) - near "ORDER": syntax error
+```
 
-**Fixed in code (2026-08-19).** `trimFacetCacheToRows()` caps the table at **12,000 rows**, payloads are **gzipped** (measured 2.97–3.86x over four real `/api/facet` payloads, mean ~3.5x), and both passes now run on a **15-minute interval** in `instrumentation.ts`, not only at boot. Steady state is ~31 MB instead of unbounded. Eviction is by write time, deliberately not true LRU: tracking read time would turn every cache HIT into a write on a request path, which is the shape that caused this.
+Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist view. **`ORDER BY` inside an aggregate's argument list is SQLite 3.44.0+ (2023-11-01)**; better-sqlite3 ships 3.53 so the app was fine, and **Litestream v0.3.13 embeds ~3.40** and could not parse it. SQLite parses the WHOLE schema before preparing ANY statement, so the backup daemon could not run a single query. **Railway volume backups are Pro-plan only** (the Backups tab reads "No Backups"), so Litestream was the only copy of the database.
 
-**⬜ Left for you, one Railway variable.** Deleting rows does not shrink a SQLite file — the 226 MB goes on the freelist and the file still reads 331 MB, and it is the FILE SIZE the kernel page-caches, which is what Railway bills. `VACUUM_ON_BOOT=1` (new, `docker-entrypoint.sh`) runs one VACUUM **before Litestream attaches**, which is the only window where it can take the exclusive lock — that is the same wall `wal_checkpoint(TRUNCATE)` hit twice from a Railway shell. Closing the connection also truncates the **340 MB WAL**, so this reclaims both. Rehearsed against a real DB copy locally.
+**Fixed and live** (`9d63a68`): the sort moved into a subquery, which SQLite deliberately will not flatten into an outer aggregate query, so the ordering is preserved exactly. Migration 18 replays `createCacheViews`, because migration 16 had already run on prod and editing `cacheViews.ts` alone would have shipped nothing. Verified byte-identical on all 2,023 live rows, through **both** apply paths, and against a **real SQLite 3.40 CLI** — which cannot count `users` on the old schema and reads everything on the new one.
 
-Sequence: let the trim drain first (~12,900 excess rows at 2000/tick = about 1h45m), *then* set the variable, redeploy, read the `[vacuum] … MB -> … MB` log line, and **remove the variable again**. Expect **~331 MB → ~55 MB**.
+**Confirmed working on prod:** new generation `c62d7dc17a0fd0cb`, `snapshot written` in 3.0 s, WAL segments streaming, zero schema errors in the boot log, and the bucket went **33.6 MB → 181.8 MB**.
 
-⚠️ **Check the Litestream generation afterwards, and don't assume which way it goes.** The 2026-07-21 VACUUM ran *while* Litestream was attached and was absorbed into generation `18d8221abccc198d`; PR17 recorded an unchanged generation as the healthy signal. This one runs *before* Litestream attaches, so it may instead find the file changed under its last shadow-WAL position and start a new generation with a full snapshot. Both are fine here. A new generation is only alarming when nothing deliberate caused it — confirm replication is live before treating the old one as disposable.
+### ⬜ Your step: the restore drill. "The errors stopped" is not "this restores."
+
+Railway → releaseradar → **Console** (I can drive the browser but the harness blocks typing into a production shell, correctly):
+
+```
+litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
+```
+
+then check it is real, not just present:
+
+```
+node -e "const D=require('better-sqlite3');const d=new D('/tmp/restore-test.db',{readonly:true});console.log(d.pragma('integrity_check'));for(const t of ['users','user_identities','user_item_state','media_items'])console.log(t, d.prepare('SELECT COUNT(*) n FROM '+t).get().n);console.log('browsed=0', d.prepare('SELECT COUNT(*) n FROM media_items WHERE browsed=0').get().n);"
+```
+
+Compare against live via `/api/dev/dbsize`. Then `rm /tmp/restore-test.db`.
+
+### ⬜ Only after that passes: `VACUUM_ON_BOOT=1`
+
+Still the right move (331 MB file, ~226 MB of it now freelist once the facet-cache trim drains), and still a Railway variable → redeploy → read the `[vacuum] … MB -> … MB` line → **remove the variable**. Do not run it while the restore is unproven.
+
+### Corrected belief
+
+STATUS and PR17 recorded the 340 MB WAL as a benign high-water mark that "cannot be reclaimed while Litestream runs" and "needs no action". **That was this bug.** Litestream could not advance its read position, so SQLite could not checkpoint past it, which is why `wal_checkpoint(TRUNCATE)` returned `busy: 1` twice. A WAL that will not truncate is a symptom worth chasing, not a quirk to document.
 
 ## Open — carried forward from Phase 6
 
@@ -136,36 +162,13 @@ The three findings that decided it, so nobody re-derives them:
 
 - **Franchise / IP as a scoring factor** ✅ CLOSED 2026-08-17. Built + Wikidata-swept 2026-08-14; the panel was cleared on prod 2026-08-17 (metal gear bundled, two crossover cameos removed, 70 of 71 suggestions applied). `ip` stays at **3**. → grep the archive for `Franchise / IP`.
 
-## 🟡 `/library` + `/wishlist` are dead under `next dev` — DEV ONLY ⬜ your call which fix
+## 🟡 `/library` + `/wishlist` are dead under `next dev` — DEV ONLY, and the fix is DECIDED
 
-**Found 2026-08-17 while verifying migration 16. Production is NOT affected** — a `next start` build hydrates both pages and renders real items, so fandex.org was never broken. (An earlier note in this file said it was; that was wrong, generalised from the dev server before the prod build was tested.) It is also **not** caused by migration 16 — it reproduces on a clean HEAD checkout.
+**Prod is unaffected** and always was; a `next start` build hydrates both pages. **Nils decided 2026-08-17: option 1, leave it** — do not restructure `MyStuffView`. Cause is measured: `useSearchParams()` postpones the Suspense boundary (React `$~` marker) and the dev client never resumes it. Looks like a Turbopack bug in Next 16.3.0.
 
-**What it costs:** neither page can be developed or verified against `next dev` at all. That is why it went unnoticed — the smoke sweeps run against prod.
+**Two things to carry forward.** Verify those pages on the `prod` launch config (:3100), and **re-test them on the next `next` bump** — a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` = unhydrated subtree, not a slow fetch.
 
-**Symptom (dev):** both routes SSR their full toolbar and then sit on “Loading…” forever. React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing** — no URL change, no `aria-selected` move, zero fetches. That last one is the 5-second reproduction.
-
-**Root cause, measured:** `MyStuffContent` calls `useSearchParams()` (the `?tab=` IS the state, per SM21). That postpones its Suspense boundary — the DOM carries React's **`$~`** postpone marker and the fiber is `dehydrated: true` — and the `next dev` client never resumes it. **Replacing that single call with a plain `URLSearchParams` makes the page hydrate, fetch and render immediately, and the `$~` marker disappears.** That is the whole of it.
-
-**Ruled out by experiment — don't re-try these:**
-- **`export const dynamic = "force-dynamic"` on both pages does NOT fix it.** So it is not the static prerender.
-- **Moving the `Suspense` boundary out of the client module into the server `page.tsx` does NOT fix it.** So it is not boundary placement.
-- Not the API (`/api/library` 1,922 items + `/api/calendar` 95 complete in 3.0 s when fired by hand *on that page*), not `init()` bailing (auth returns a user; last sync 14 h vs a 24 h `SYNC_STALE_MS`, so the auto-sync branch never runs), not a console error, not a failed chunk, not a server error.
-- ⚠️ `performance.getEntriesByType('resource')` lists only **completed** requests — "never issued" and "in flight" look identical there. That cost an hour.
-
-**Diagnostic worth keeping:** `Object.keys(document.querySelector('main')).some(k => k.startsWith('__reactFiber'))` — `false` on `<main>` while `true` on `body` means an unhydrated subtree, not a slow request.
-
-**Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Proven working there.
-
-**✅ DECIDED 2026-08-17 (Nils): option 1 — leave it, re-test on the next Next.js bump.** Do NOT restructure `MyStuffView` for this; the other two options are recorded only so the reasoning isn't re-derived. Add a re-test of these two pages to the checklist whenever `next` is upgraded (a Dependabot `next` bump is exactly the moment to try it).
-
-**The three options:**
-1. **Leave it, use the prod build to verify.** ← chosen. Zero risk, keeps SM21's URL-as-state exactly. Costs dev ergonomics on two pages.
-2. **Pass `searchParams` from the server `page.tsx` as a prop** (the other option Next's own docs give). Keeps SSR correct with no flash, drops `useSearchParams` entirely — but a tab switch then needs a server round-trip instead of being instant.
-3. **Derive the tab from `window.location.search` + a `popstate` listener.** Keeps switching instant, but the initial render no longer knows the tab server-side, so a deep link to `?tab=progress` flashes the default first.
-
-Worth re-testing on the next Next.js bump before spending effort — this looks like a dev/Turbopack bug in 16.3.0, not a mistake in the app.
-
----
+⚠️ **Re-check before spending any time on it:** `/wishlist` hydrated normally under `next dev` on 2026-08-18. One observation, and `MyStuffView` changed that session, so it may be fixed or intermittent. Full write-up, the three options and the ruled-out experiments → [archive](docs/archive/history.md), grep `library + wishlist dead under next dev`.
 
 - **Drop the `user_library` / `user_watchlist` cache tables** ✅ DONE 2026-08-17 (migration 16 — they are VIEWS now). **Two traps live on in migration 16's own comment and in `src/lib/cacheViews.ts`: a code-only rollback breaks every library write, and `CREATE INDEX` on either name throws at boot.** → grep the archive for `migration 16`.
 
@@ -184,7 +187,6 @@ Worth re-testing on the next Next.js bump before spending effort — this looks 
 
 Everything below the line is fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
 
-- **2026-08-12** → grep `PR17 post-outage verification` — PR17 steps 1–3 closed against live prod (leak confirmed fixed, memory ramp dead, `rr.db` 37.7 MB), non-ASCII person slugs fixed via `src/lib/translit.ts` ([[unicode-normalization-lossy-slugs]]), facet payload cache enlarged against 17 measured payloads.
-- **2026-08-03** → grep `H3 monetization v1` and `P18 streaming links` — P18 closed, H3 v1 built, H4 epic closed, the `//`-comment-renders-as-text incident ([[jsx-comment-in-children-renders]]), and the light-theme `--color-accent` contrast fix.
-  - **Two light-theme contrast gaps are still deliberately unfixed, and they are yours to call** because they change the design rather than a value: `--color-accent-hover` is **3.47:1** (clearing AA means inverting it to darken-on-hover) and accent text on `--color-surface-inset` is **4.32:1**. The light theme still has no toggle wired, so neither is user-visible yet.
+- **2026-08-12 / 2026-08-03** → grep `PR17 post-outage verification`, `H3 monetization v1`, `P18 streaming links`.
+  - **Two light-theme contrast gaps stay deliberately unfixed and are yours to call** (they change the design, not a value): `--color-accent-hover` is **3.47:1**, accent text on `--color-surface-inset` is **4.32:1**. No light-theme toggle is wired, so neither is user-visible yet.
 - Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
