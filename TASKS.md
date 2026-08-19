@@ -42,6 +42,19 @@ Everything else in this file is either done or a standing constraint. Two things
 - **Do NOT contact TMDB or Trakt about commercial terms** while monetizing on their free tiers — the accepted risk is key revocation, and asking invites it.
 - **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
 
+
+## ⬜ Prod `rr.db` is 331 MB, up from 37.7 MB a week ago. Worth one look, not an alarm.
+
+**Observed 2026-08-19** on `/api/health` while confirming the deploy: `dbFilesMb.dbMb` is **331.4**. PR17 measured **37.7 MB** on 2026-08-12 and closed the leak question on that number. That is roughly **9x in seven days**, and this repo has been taken down by database growth once already, so it should not sit unexamined.
+
+**Most likely benign, and check this first:** `facet_page_cache`, the persisted L2 added **2026-08-13** (the day after the 37.7 MB reading), stores whole rendered page payloads in SQLite by design. A cache sized in entry COUNT rather than bytes is exactly how it would reach hundreds of MB without anything being wrong. MB14's 12,318 episode rows landed in the same window and are a second, smaller contributor.
+
+**What would NOT be benign:** growth in `media_items` / `media_links` / `media_external_ids`, which is the shape of the 2026-07-22 thin-write leak.
+
+**How to tell them apart, in one call:** `GET /api/dev/dbsize?deep=1` while signed in as an admin gives exact bytes per table and index. ⚠️ It is a full B-tree scan, so run it **once**, read the answer, and do not poll it. Compare `media_items` against the ~2,267 rows PR17 recorded.
+
+The 340 MB WAL alongside it is the known high-water mark and is **not** part of this question: it cannot be reclaimed while Litestream runs, and needs no action.
+
 ## Open — carried forward from Phase 6
 
 ### P15/P16 — the Android app. Read this before deciding; "Bubblewrap" needed context.
@@ -167,18 +180,9 @@ Worth re-testing on the next Next.js bump before spending effort — this looks 
 
 ## Recently closed — pointers only
 
-Everything below is fully written up in [docs/archive/history.md](docs/archive/history.md). Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
+Everything below the line is fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
 
-**2026-08-12** — grep `PR17 post-outage verification`:
-
-- **PR17 steps 1–3 closed against live prod** — the 2026-07-22 leak is confirmed fixed (byte-identical crawl replay), the memory ramp is dead (`fileMb` flat 74–76 MB over ~7 h), `rr.db` is 37.7 MB. Steps 4–5 still need the Railway shell. → [[prod-incidents]]
-- **⚠️ Non-ASCII person slugs hard-404'd** — `personKey`/`slugify` used NFD/NFKD + combining-mark stripping, which does **nothing** for `ø å æ ł ß đ ð þ` (no canonical decomposition), so the next `[^a-z0-9]` strip deleted them: `"Lisa Tønne"` → `/person/lisa-t-nne`, 0 TMDB results. Fixed via a transliteration map in the new `src/lib/translit.ts`. **`tagKey` deliberately excluded — its keys are persisted.** → [[unicode-normalization-lossy-slugs]]
-- **Facet payload cache enlarged** — TTL 1 h → 24 h, `max` 500 → 3,000, sized against 17 measured prod payloads rather than a blind multiple. See the open item above.
-
-**2026-08-03** — grep `H3 monetization v1`:
-
-- **P18 closed** — clickable streaming rows + offer-type line, via the existing lazy self-heal path, not a re-projection. Plus a default-ON boot-time prune of the browsed tail, `omdbConfigured()`, and cache-contraction drift counts in `/api/dev/dbsize` (tables still untouched, gated on PR17). → [archive](docs/archive/history.md), grep `P18 streaming links`.
-- **H3 v1 built** — donations live, affiliate layer dark behind `MONETIZATION_ENABLED`, go-live checklist written. → [[monetization-h3]]
-- **H4 epic closed** — H4.0's advice in, Impressum written + filled in both locales.
-- **⚠️ A `//` comment rendered as visible page text** after a `return` was wrapped in a fragment. tsc, 540 tests, lint and build all passed; a human spotted it. `react/jsx-no-comment-textnodes` is now an eslint ERROR. → [[jsx-comment-in-children-renders]]
-- **✅ Fixed 2026-08-03:** `--color-accent` in light theme measured **4.48:1** on `--color-surface` (under AA for body text, while its own comment claimed 4.5:1+). Now `#856619` → **4.76:1**; `--color-accent-subtle` was rebased onto the same hue. Verified via `getComputedStyle` in both themes (dark untouched). **Two adjacent gaps left deliberately unfixed — they change the design, not just a value, so they're your call:** `--color-accent-hover` sits at **3.47:1** (it's a *lightening* hover, so clearing AA means inverting it to darken-on-hover), and accent text on `--color-surface-inset` (#ECE6DA) is **4.32:1**. Note the light theme still has no toggle wired, so none of this is user-visible yet.
+- **2026-08-12** → grep `PR17 post-outage verification` — PR17 steps 1–3 closed against live prod (leak confirmed fixed, memory ramp dead, `rr.db` 37.7 MB), non-ASCII person slugs fixed via `src/lib/translit.ts` ([[unicode-normalization-lossy-slugs]]), facet payload cache enlarged against 17 measured payloads.
+- **2026-08-03** → grep `H3 monetization v1` and `P18 streaming links` — P18 closed, H3 v1 built, H4 epic closed, the `//`-comment-renders-as-text incident ([[jsx-comment-in-children-renders]]), and the light-theme `--color-accent` contrast fix.
+  - **Two light-theme contrast gaps are still deliberately unfixed, and they are yours to call** because they change the design rather than a value: `--color-accent-hover` is **3.47:1** (clearing AA means inverting it to darken-on-hover) and accent text on `--color-surface-inset` is **4.32:1**. The light theme still has no toggle wired, so neither is user-visible yet.
+- Earlier sessions (G#/SM34–37, the eight closed questions) are archived too.
