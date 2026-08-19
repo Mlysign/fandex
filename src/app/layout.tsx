@@ -3,6 +3,7 @@ import { DM_Serif_Display, Space_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
 import AppProviders from "@/components/ui/AppProviders";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import TelemetryBeacon from "@/components/TelemetryBeacon";
 import AppNav from "@/components/AppNav";
 import { BASE_URL } from "@/lib/baseUrl";
 
@@ -69,6 +70,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           data-* attributes on <body> before hydration, causing a benign mismatch. */}
       <body suppressHydrationWarning className="font-sans antialiased bg-surface text-text-primary min-h-screen">
         <ServiceWorkerRegister />
+        {/* Self-hosted pageview counter (migration 17). Renders nothing, sets no
+            cookie, sends no third-party request. */}
+        <TelemetryBeacon />
         <AppProviders>
           {/* Skip-to-content link (06-accessibility.md) — visually hidden until
               focused, then anchors keyboard users past the nav to the page. */}

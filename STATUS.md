@@ -70,6 +70,10 @@ Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scori
 
 **Performance is closed (2026-08-02).** The probes stay in `scripts/`; **measure before optimising** (§A was mis-sized by 100× once).
 
+**Traffic telemetry is live and self-hosted (2026-08-19).** `/dev/analytics`, behind the existing `SCORING_ADMIN_USER_IDS` allowlist, answers the two questions H3.8's thresholds ask and nothing else could: **pageviews/30d vs the 10,000 ads gate**, **signed-in WAU vs the 3,500 freemium gate**, and the **anonymous-vs-signed-in split** that decides which arm is even worth building. No Google Analytics, no third-party script, no cookie, no IP stored.
+
+Two things to know before touching it. **The tables are pre-aggregated counters, never per-event rows** (migration 17): one row per (day, dimension), so cardinality is bounded by the dimension set instead of by traffic. A row per pageview is the exact shape that grew the DB to 2,487 MB on 2026-07-22. And **it counts real-browser pageviews only**, because it is a client beacon: crawlers and no-JS requests are invisible by design. That is the correct population for an ads decision and the wrong one for judging SEO reach, which belongs in Search Console.
+
 ## 🗺️ Roadmap
 
 | Area | Status |
@@ -88,9 +92,9 @@ Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scori
 | **H3** — monetization | 🔵 v1 built 2026-08-03 — donations live, affiliate dark → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🔵 needs the TWA build |
 
-## ✅ Quality bar (as of 2026-08-16)
+## ✅ Quality bar (as of 2026-08-19)
 
-**783 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**805 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 

@@ -620,6 +620,67 @@ export const MIGRATIONS: Migration[] = [
       createCacheViews(db);
     },
   },
+  {
+    version: 17,
+    name: "page_view_daily + referrer_daily (self-hosted traffic telemetry)",
+    up: (db) => {
+      // 2026-08-19. The H3.8 thresholds (10,000 pageviews/mo for ads, 3,500
+      // sustained WAU for freemium) were set in July against a schema that
+      // could measure neither. This is the meter for the first one; the second
+      // is already derivable from users.last_seen_at + the write tables, so it
+      // needs no storage of its own.
+      //
+      // ── PRE-AGGREGATED, NEVER RAW EVENTS ────────────────────────────────
+      //
+      // The obvious shape is one row per pageview. That is exactly the shape
+      // that took prod down on 2026-07-22: unbounded row growth against a
+      // synchronous single-file SQLite, 2,487 MB before anyone noticed. So
+      // these are COUNTERS: one row per (day, dimension), incremented by an
+      // UPSERT. Cardinality is bounded by the dimension sets, not by traffic:
+      // ~40 templated path keys x 2 auth states x 365 days is under 30k rows a
+      // year at any traffic level, and a viral week costs the same bytes as a
+      // dead one.
+      //
+      // `path_key` is a TEMPLATE ("/tag/[slug]"), never a raw path. Raw paths
+      // would make cardinality unbounded (one row per tag slug per day) and
+      // would turn an aggregate counter into something closer to a visit log.
+      // normalizePathKey() in src/lib/telemetry.ts is the only writer.
+      //
+      // ── DELIBERATELY NOT PERSONAL DATA ──────────────────────────────────
+      //
+      // No user_id, no IP, no session id, no timestamp finer than a UTC day.
+      // Three consequences, all of them wanted:
+      //   * account erasure (src/lib/account.ts) finds its targets by looking
+      //     for a column literally named `user_id`, so these tables are
+      //     correctly invisible to it. There is nothing personal in them to
+      //     erase, and a deleted account must not retroactively rewrite last
+      //     month's traffic total;
+      //   * /api/account/export needs no new block for the same reason;
+      //   * neither table references media_items, so dbPrune.ts's
+      //     PRUNABLE_WHERE does not need extending (that list is about rows
+      //     that cascade off a catalog row; these don't).
+      // The `authed` flag is a 0/1 count dimension, not an identity.
+      //
+      // Both PKs lead with `day`, which is also the only range any read filters
+      // on, so the implicit PK index serves every query the dashboard makes and
+      // no secondary index is needed.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS page_view_daily (
+          day      TEXT    NOT NULL,             -- 'YYYY-MM-DD', UTC
+          path_key TEXT    NOT NULL,             -- templated route, see above
+          authed   INTEGER NOT NULL,             -- 0 = anonymous, 1 = signed in
+          count    INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (day, path_key, authed)
+        );
+        CREATE TABLE IF NOT EXISTS referrer_daily (
+          day       TEXT    NOT NULL,            -- 'YYYY-MM-DD', UTC
+          ref_class TEXT    NOT NULL,            -- search|social|internal|direct|other
+          count     INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (day, ref_class)
+        );
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

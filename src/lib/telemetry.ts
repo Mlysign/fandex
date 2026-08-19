@@ -1,0 +1,316 @@
+import { getDb } from "@/lib/db";
+
+// Self-hosted traffic telemetry (2026-08-19). No Google Analytics, no Plausible,
+// no third-party script, no cookie, no IP stored. Everything here is a counter
+// in our own SQLite, written by our own beacon.
+//
+// ── What it exists to answer ────────────────────────────────────────────────
+//
+// Exactly two questions, both from H3.8's thresholds:
+//   1. "Are we at 10,000 pageviews/month yet?"  → the ads gate.
+//   2. "Are we at 3,500 sustained weekly actives?" → the freemium gate.
+// Plus the split that decides which of those is even worth pursuing: ads
+// monetize anonymous SEO visitors, a subscription monetizes signed-in ones, and
+// nothing in the schema could previously tell those two populations apart.
+//
+// ── Why counters and not events ─────────────────────────────────────────────
+//
+// See migration 17's comment. One row per pageview is the shape that grew the
+// database to 2,487 MB on 2026-07-22; one row per (day, dimension) is bounded by
+// the dimension set instead of by traffic.
+//
+// ── What it deliberately cannot tell you ────────────────────────────────────
+//
+// **Unique anonymous visitors.** Counting those without a cookie means storing a
+// daily-salted hash of IP+UA per visitor per day, which is both a per-visitor row
+// (the growth shape above) and a much harder privacy argument than "we increment
+// an integer". Neither gate needs it: the ads threshold is denominated in
+// PAGEVIEWS, and the freemium threshold in signed-in actives, which we count
+// exactly from users.last_seen_at. If a future ad network asks for uniques, take
+// the number from their own tag rather than building an estimator here.
+
+export type RefClass = "search" | "social" | "internal" | "direct" | "other";
+
+const REF_CLASSES: RefClass[] = ["search", "social", "internal", "direct", "other"];
+
+/** UTC calendar day, 'YYYY-MM-DD'. The only time resolution stored anywhere here. */
+export function utcDay(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function dayNDaysAgo(days: number, now: Date = new Date()): string {
+  return utcDay(new Date(now.getTime() - days * 86_400_000));
+}
+
+// ── Path templating ─────────────────────────────────────────────────────────
+
+/** Root-level dynamic segments that are real media types (see AGENTS.md's repo map). */
+const MEDIA_TYPES = new Set(["game", "movie", "show"]);
+
+/** Routes counted under their own name, with no dynamic part to collapse. */
+const STATIC_PATHS = new Set([
+  "/", "/calendar", "/dashboard", "/discover", "/insights", "/insights/facet",
+  "/library", "/wishlist", "/profile", "/settings", "/login", "/item/debug",
+]);
+
+/**
+ * Collapse a raw pathname to a bounded, non-identifying route template.
+ *
+ * This is the whole reason `page_view_daily` can't grow without bound: a raw
+ * path would mint a new row per tag slug per day (and per crafted 404 path, which
+ * would hand any visitor a write amplifier). Anything unrecognized collapses to
+ * "other", so the key set is fixed by this function rather than by the internet.
+ *
+ * Returns null for paths that must never be counted at all.
+ */
+export function normalizePathKey(rawPath: string): string | null {
+  let path = rawPath.split("?")[0].split("#")[0].toLowerCase();
+  if (!path.startsWith("/")) path = `/${path}`;
+  if (path.length > 1) path = path.replace(/\/+$/, "");
+  if (path === "") path = "/";
+
+  // Never counted: our own APIs, framework internals, files. The beacon only
+  // ever reports page routes, but it is a public endpoint and the body is a
+  // client-supplied string, so this is a filter and not an assumption.
+  if (/^\/(api|_next|\.well-known)(\/|$)/.test(path)) return null;
+  if (/\.[a-z0-9]{2,5}$/.test(path)) return null;
+  // The admin surface is not traffic; counting it would let this dashboard
+  // inflate the very numbers it reports.
+  if (path === "/dev" || path.startsWith("/dev/")) return null;
+
+  if (STATIC_PATHS.has(path)) return path;
+
+  const seg = path.slice(1).split("/");
+
+  if (seg.length === 2) {
+    if (seg[0] === "person") return "/person/[slug]";
+    if (seg[0] === "tag") return "/tag/[slug]";
+    if (seg[0] === "studio") return "/studio/[slug]";
+    if (MEDIA_TYPES.has(seg[0])) return "/[type]/[id]";
+  }
+  if (seg.length === 3 && seg[0] === "legal") return "/legal/[locale]/[doc]";
+
+  return "other";
+}
+
+// ── Referrer classification ─────────────────────────────────────────────────
+
+const SEARCH_HOSTS = [
+  "google.", "bing.", "duckduckgo.", "ecosia.", "yahoo.", "startpage.",
+  "search.brave.", "qwant.", "yandex.", "baidu.", "mojeek.", "search.marginalia.",
+];
+const SOCIAL_HOSTS = [
+  "reddit.", "twitter.", "x.com", "t.co", "facebook.", "instagram.",
+  "mastodon.", "bsky.", "bluesky.", "youtube.", "tiktok.", "linkedin.",
+  "discord.", "pinterest.", "tumblr.", "threads.",
+];
+
+/**
+ * Bucket a referrer into one of five classes. Only the class is ever stored,
+ * never the referring URL, which can carry a search query or a private forum path.
+ *
+ * `selfHost` collapses in-app navigation to "internal" so it can't be mistaken for
+ * acquisition. That matters more here than on a normal site: the beacon fires on
+ * every client-side route change, and App Router transitions carry the previous
+ * Fandex page as document.referrer.
+ */
+export function classifyReferrer(referrer: string | null | undefined, selfHost?: string | null): RefClass {
+  const ref = referrer?.trim();
+  if (!ref) return "direct";
+
+  let host: string;
+  try {
+    host = new URL(ref).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "other";
+  }
+  if (!host) return "other";
+
+  const self = selfHost?.toLowerCase().replace(/^www\./, "");
+  if (self && (host === self || host.endsWith(`.${self}`))) return "internal";
+  if (SEARCH_HOSTS.some((h) => host.startsWith(h) || host.includes(`.${h}`))) return "search";
+  if (SOCIAL_HOSTS.some((h) => host === h.replace(/\.$/, "") || host.startsWith(h) || host.includes(`.${h}`))) return "social";
+  return "other";
+}
+
+// ── Write ───────────────────────────────────────────────────────────────────
+
+/**
+ * Increment the two counters for one pageview. Both statements are UPSERTs, so a
+ * day's first view creates its row and every later one costs a single integer
+ * update: no read-modify-write, no lock held across a round trip.
+ *
+ * Best-effort by construction at the call site: a telemetry failure must never
+ * surface to a visitor, and the caller swallows errors. Nothing here throws on
+ * ordinary input; a bad path is filtered by normalizePathKey upstream.
+ */
+export function recordPageView(opts: {
+  pathKey: string;
+  authed: boolean;
+  refClass: RefClass;
+  now?: Date;
+}): void {
+  const db = getDb();
+  const day = utcDay(opts.now);
+  const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO page_view_daily (day, path_key, authed, count) VALUES (?, ?, ?, 1)
+       ON CONFLICT(day, path_key, authed) DO UPDATE SET count = count + 1`,
+    ).run(day, opts.pathKey, opts.authed ? 1 : 0);
+    db.prepare(
+      `INSERT INTO referrer_daily (day, ref_class, count) VALUES (?, ?, 1)
+       ON CONFLICT(day, ref_class) DO UPDATE SET count = count + 1`,
+    ).run(day, opts.refClass);
+  });
+  tx();
+}
+
+// ── Read ────────────────────────────────────────────────────────────────────
+
+export interface DailyPoint {
+  day: string;
+  anon: number;
+  authed: number;
+  total: number;
+}
+
+/**
+ * Daily pageviews for the last `days` days, zero-filled. Zero-filling matters:
+ * a gap in the data and a day with no traffic are the same fact to a reader, but
+ * a chart that silently omits empty days draws a flat line through an outage.
+ */
+export function pageViewSeries(days = 30, now: Date = new Date()): DailyPoint[] {
+  const from = dayNDaysAgo(days - 1, now);
+  const rows = getDb()
+    .prepare(
+      `SELECT day, SUM(CASE WHEN authed = 1 THEN count ELSE 0 END) AS authed,
+                   SUM(CASE WHEN authed = 0 THEN count ELSE 0 END) AS anon
+       FROM page_view_daily WHERE day >= ? GROUP BY day`,
+    )
+    .all(from) as { day: string; authed: number; anon: number }[];
+
+  const byDay = new Map(rows.map((r) => [r.day, r]));
+  const out: DailyPoint[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = dayNDaysAgo(i, now);
+    const r = byDay.get(day);
+    const anon = r?.anon ?? 0;
+    const authed = r?.authed ?? 0;
+    out.push({ day, anon, authed, total: anon + authed });
+  }
+  return out;
+}
+
+export function topPages(days = 30, limit = 15, now: Date = new Date()): { pathKey: string; count: number }[] {
+  return getDb()
+    .prepare(
+      `SELECT path_key AS pathKey, SUM(count) AS count FROM page_view_daily
+       WHERE day >= ? GROUP BY path_key ORDER BY count DESC LIMIT ?`,
+    )
+    .all(dayNDaysAgo(days - 1, now), limit) as { pathKey: string; count: number }[];
+}
+
+export function referrerBreakdown(days = 30, now: Date = new Date()): { refClass: RefClass; count: number }[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ref_class AS refClass, SUM(count) AS count FROM referrer_daily
+       WHERE day >= ? GROUP BY ref_class`,
+    )
+    .all(dayNDaysAgo(days - 1, now)) as { refClass: RefClass; count: number }[];
+  const byClass = new Map(rows.map((r) => [r.refClass, r.count]));
+  return REF_CLASSES.map((refClass) => ({ refClass, count: byClass.get(refClass) ?? 0 }));
+}
+
+export interface UserMetrics {
+  total: number;
+  dau: number;
+  wau: number;
+  mau: number;
+  signups: { day: string; count: number }[];
+}
+
+/**
+ * Signed-in user counts, exact. These come from real rows, not from the beacon.
+ *
+ * ⚠️ `last_seen_at` only became meaningful on 2026-08-03, when getSession() began
+ * stamping it once per user per UTC day. Before that it was written only on a RAWG
+ * login or a Steam OAuth callback, so any window reaching further back undercounts
+ * badly. It is also, by definition, blind to anonymous visitors. That is what the
+ * pageview counters are for.
+ */
+export function userMetrics(days = 30, now: Date = new Date()): UserMetrics {
+  const db = getDb();
+  const nowSec = Math.floor(now.getTime() / 1000);
+  const since = (d: number) => nowSec - d * 86_400;
+
+  const total = (db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number }).n;
+  const active = (d: number) =>
+    (db.prepare(`SELECT COUNT(*) AS n FROM users WHERE last_seen_at >= ?`).get(since(d)) as { n: number }).n;
+
+  const rows = db
+    .prepare(
+      `SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') AS day, COUNT(*) AS count
+       FROM users WHERE created_at >= ? GROUP BY day`,
+    )
+    .all(since(days)) as { day: string; count: number }[];
+  const byDay = new Map(rows.map((r) => [r.day, r.count]));
+
+  const signups: { day: string; count: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = dayNDaysAgo(i, now);
+    signups.push({ day, count: byDay.get(day) ?? 0 });
+  }
+
+  return { total, dau: active(1), wau: active(7), mau: active(30), signups };
+}
+
+// ── The two gates ───────────────────────────────────────────────────────────
+
+/** H3.8's approved thresholds (locked 2026-08-17). Not knobs, decisions. */
+export const ADS_PAGEVIEW_GATE = 10_000;
+export const FREEMIUM_WAU_GATE = 3_500;
+
+export interface GateProgress {
+  pageviews30d: number;
+  adsGate: number;
+  adsPct: number;
+  wau: number;
+  freemiumGate: number;
+  freemiumPct: number;
+}
+
+export function gateProgress(now: Date = new Date()): GateProgress {
+  const pageviews30d = pageViewSeries(30, now).reduce((a, p) => a + p.total, 0);
+  const { wau } = userMetrics(1, now);
+  return {
+    pageviews30d,
+    adsGate: ADS_PAGEVIEW_GATE,
+    adsPct: Math.min(100, (pageviews30d / ADS_PAGEVIEW_GATE) * 100),
+    wau,
+    freemiumGate: FREEMIUM_WAU_GATE,
+    freemiumPct: Math.min(100, (wau / FREEMIUM_WAU_GATE) * 100),
+  };
+}
+
+export interface AnalyticsSnapshot {
+  gates: GateProgress;
+  series: DailyPoint[];
+  topPages: { pathKey: string; count: number }[];
+  referrers: { refClass: RefClass; count: number }[];
+  users: UserMetrics;
+  days: number;
+  generatedAt: string;
+}
+
+/** Everything the dashboard renders, in one call. */
+export function analyticsSnapshot(days = 30, now: Date = new Date()): AnalyticsSnapshot {
+  return {
+    gates: gateProgress(now),
+    series: pageViewSeries(days, now),
+    topPages: topPages(days, 15, now),
+    referrers: referrerBreakdown(days, now),
+    users: userMetrics(days, now),
+    days,
+    generatedAt: now.toISOString(),
+  };
+}
