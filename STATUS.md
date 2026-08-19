@@ -25,7 +25,7 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 - **Backups are PROVEN, not just present** — a full restore drill on 2026-08-12 (the one recommended since June and never run) restored the replica to a scratch file: `integrity_check` **ok**, every user table exact, and every real (`browsed=0`) catalog row exact at **1994**. Replication lag 6m39s. **PR17 is CLOSED.**
 
-**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** nothing on the infrastructure side, and **no prod sweeps left** — the Steam cross-link sweep ran 2026-08-17 (131 games linked, cursor drained) and the Wikidata franchise sweep ran 2026-08-14. What is left is action, not judgement — the judgement calls were all made 2026-08-17: the **GOG affiliate signup** (unparked), and **MB7 / the TWA**, both of which now have full writeups in TASKS.md. `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. The 340 MB WAL high-water **cannot** be reclaimed while Litestream runs (`busy: 1`, tried twice) and needs no action — the volume is 12% used.
+**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** nothing on the infrastructure side, and **no prod sweeps left** — the Steam cross-link sweep ran 2026-08-17 (131 games linked, cursor drained) and the Wikidata franchise sweep ran 2026-08-14. What is left is action, not judgement. **The affiliate signup is no longer the next step** (direction changed 2026-08-19, see below); what remains is **the TWA decision**, which has a full writeup in TASKS.md. `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. The 340 MB WAL high-water **cannot** be reclaimed while Litestream runs (`busy: 1`, tried twice) and needs no action — the volume is 12% used.
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **That "days, not hours" gate is now MET** (continuous since 2026-08-12), which is what unparked the affiliate signups — every program reviews the applicant site, and it has been serving cleanly.
 
@@ -44,7 +44,7 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 | | Item | Blocked on |
 |--|------|--|
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
-| 🔵 | **H3 — affiliate revenue (UNPARKED, GOG first)** | **You:** program signups (**GOG first, Amazon last** — its 180-day clock). Both gates are now clear: prod stable since 2026-08-12, Impressum approved. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
+| 🔵 | **H3 — monetization, now ADS-FIRST** | **Nobody, yet.** Direction changed 2026-08-19; the next move is traffic, not a signup. Watch the two gates on `/dev/analytics`. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context in [TASKS.md](TASKS.md) (Fandex as a thin Play Store wrapper of the website, the 2026-06-18 decision; needs a signing key + a one-off $25 Play account). |
 | 🔵 | **RAWG cross-link sweep** | **You**, once RAWG is back — it was down all of 2026-08-17. 168 games lack a RAWG link. Not urgent: they have IGDB as a second source now, so they still score. |
 
@@ -79,6 +79,15 @@ Two things to know before touching it. **The tables are pre-aggregated counters,
 **⚠️ The privacy policy changed, in both locales.** A "Usage statistics" / „Nutzungsstatistik" section now describes the counting, and `updated` moved to 2026-08-19. `docs/cookie-assessment.md` previously claimed **"zero analytics"**, which this work made false; it is corrected, and it now records why first-party cookieless counting does **not** trigger the consent banner (§25 TDDDG governs storing information on, or reading it from, the user's device, and the beacon does neither) plus the four changes that WOULD trigger it.
 
 
+
+## 🧭 Monetization changed direction (2026-08-19)
+
+**Nils's call: go live → wait for traction → ads → premium (ad-free + extras).** Affiliate is **demoted, not cancelled** and the code stays built and dark. The old plan (sign up for seven affiliate programs, GOG first, Amazon last) is retired.
+
+The model that decided it, per **1,000 monthly active users**: **ads ~€150 · premium ~€60 · donations ~€14 · affiliate ~€3.** Affiliate is last by 20 to 50 times, for reasons specific to this app: Fandex is **past-tense** (people log what they already played or watched, so a buy link arrives after the purchase decision), only **GOG** appears in the catalog at all (295 of 1,033 games, while six of the seven programs appear on **zero** items), and Amazon pays **1% on video games**. The settling argument: covering upkeep once TMDB's $149/mo commercial tier applies takes ~1,000 users on ads and **~45,000 on affiliate**, so **affiliate is the only method that cannot clear its own cliff**.
+
+Both H3.8 gates are now measurable rather than theoretical, which is what the two dashboards below are for. Full reasoning + the standing guard against self-referring to beat Amazon's 180-day clock → [docs/monetization-go-live.md](docs/monetization-go-live.md).
+
 ## 🗺️ Roadmap
 
 | Area | Status |
@@ -94,7 +103,7 @@ Two things to know before touching it. **The tables are pre-aggregated counters,
 | **H2** — data-model hardening | ✅ |
 | **H5** — Fandex Score | ✅ 2026-07-27 incl. calibration; **franchise/IP added 2026-08-14** (§3.6). Design → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
-| **H3** — monetization | 🔵 v1 built 2026-08-03 — donations live, affiliate dark → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
+| **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🔵 needs the TWA build |
 
 ## ✅ Quality bar (as of 2026-08-19)
