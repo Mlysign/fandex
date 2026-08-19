@@ -2,9 +2,9 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-19 (backups were dead for two days and are fixed; facet_page_cache bounded; the memory ramp is the JS heap)._page_cache bounded)._
+_Last updated: 2026-08-19 (backups were dead for two days and are fixed; `facet_page_cache` bounded; the memory ramp is the JS heap)._
 
-> **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (GOG first), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
+> **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
 ---
 
@@ -25,7 +25,11 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 - **Backups were proven by a real restore drill on 2026-08-12** — `integrity_check` ok, every user table exact, every real (`browsed=0`) catalog row exact at 1994, lag 6m39s. **PR17 is CLOSED.** ⚠️ **That proof expired five days later and nobody noticed:** migration 16 (2026-08-17) broke Litestream outright, and nothing replicated until 2026-08-19. **A restore drill proves the backup you had that day, not the one you have now** — re-run it after ANY schema change, which is the lesson this cost two days to learn.
 
-**Still on you (see [TASKS.md](TASKS.md) "Needs Nils"):** the restore drill, then `VACUUM_ON_BOOT=1` (see the red row below) — and **no prod sweeps left** — the Steam cross-link sweep ran 2026-08-17 (131 games linked, cursor drained) and the Wikidata franchise sweep ran 2026-08-14. What is left is action, not judgement. **The affiliate signup is no longer the next step** (direction changed 2026-08-19, see below); what remains is **the TWA decision**, which has a full writeup in TASKS.md. `PRUNE_ON_BOOT=0` is optional now that the guard has held twice in prod. ⚠️ **The 340 MB WAL was never a benign high-water mark — it was the backup outage, and it is still 340.8 MB.** Litestream could not parse the schema, so it could not advance its read position, so SQLite could not checkpoint past it; that is why `wal_checkpoint(TRUNCATE)` returned `busy: 1` twice. Recorded here as a quirk needing no action from 2026-08-12 until 2026-08-19. **A WAL that will not truncate is a symptom to chase.**
+**Still on you — the whole infrastructure list is one item:** run the restore drill (commands in [TASKS.md](TASKS.md)). **There is no variable to set.** The file reclaimed itself 331.4 → 154.2 MB when migration 18 triggered `db.ts`’s post-migration VACUUM.
+
+**No prod sweeps left.** Steam cross-link ran 2026-08-17 (131 games, cursor drained), Wikidata franchise ran 2026-08-14. `PRUNE_ON_BOOT=0` is optional now the guard has held three times. The remaining judgement call is **the TWA decision**; the affiliate signup is no longer the next step (direction changed 2026-08-19).
+
+⚠️ **The 340 MB WAL was never a benign high-water mark — it was the backup outage, and it is still 340.8 MB.** Litestream could not parse the schema, so it could not advance its read position, so SQLite could not checkpoint past it; that is why `wal_checkpoint(TRUNCATE)` answered `busy: 1` twice. This file recorded it as a quirk needing no action from 2026-08-12 to 2026-08-19. **A WAL that will not truncate is a symptom to chase.**
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **That "days, not hours" gate is now MET** (continuous since 2026-08-12), which is what unparked the affiliate signups — every program reviews the applicant site, and it has been serving cleanly.
 
