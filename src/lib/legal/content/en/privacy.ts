@@ -5,7 +5,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // verifiable from the code, it's marked TODO(H4.3) rather than guessed.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-07-30",
+  updated: "2026-08-19",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why — not a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
   ],
@@ -36,7 +36,7 @@ const privacy: LegalDocument = {
     {
       heading: "What Fandex does NOT store",
       body: [
-        "No email address, no real name (only whatever display name your connected provider gives us), no payment information (Fandex has no payment feature today), and no third-party analytics or advertising identifiers — there are none in the app.",
+        "No email address, no real name (only whatever display name your connected provider gives us), no payment information (Fandex has no payment feature today), and no third-party analytics or advertising identifiers. Fandex does count pageviews, but it does so itself and without identifying anyone; see \"Usage statistics\" below.",
       ],
     },
     {
@@ -44,6 +44,17 @@ const privacy: LegalDocument = {
       body: [
         "Fandex sets three cookies, all strictly necessary for the app to function and none used for tracking or advertising: a session cookie so you stay signed in, and two short-lived (10-minute) security cookies used only during the moment you connect a provider account, to prevent a cross-site forgery of that connection. Because every cookie is strictly necessary, German law (§25 TDDDG) doesn't require a consent banner for them — this conclusion, and the full list with exact names and lifetimes, is recorded separately for anyone who wants the detail.",
         "If Fandex ever adds analytics, advertising, or affiliate-tracking cookies, a consent banner will be added before that happens — not after.",
+      ],
+    },
+    {
+      heading: "Usage statistics",
+      body: [
+        "Fandex counts how much the site is used, so the operator can tell whether it is worth continuing to run and pay for. That counting is done by Fandex itself, in its own database. There is no Google Analytics, no other third-party analytics service, no tracking script, no advertising identifier and no fingerprinting.",
+        "What a count records: the calendar day, what KIND of page was opened, whether the visitor was signed in, and a coarse category for where the visit came from (a search engine, a social site, a link inside Fandex, or no referrer at all). \"Kind of page\" means a route template, so opening a specific tag, person or item page is recorded only as \"a tag page\", \"a person page\" or \"an item page\" and never as the particular one you looked at.",
+        "What a count does not record: any identifier of any kind. No user id, no IP address, no session id, no device or browser details, and no time more precise than the day. Counts are stored only as running daily totals, so there is nothing in them that could be traced back to you, and no way to reconstruct what any one person did.",
+        "Because nothing is stored on or read from your device, this needs no consent banner under §25 TDDDG, and because no personal data is kept there is nothing here for the GDPR to attach to. Sending a count is an ordinary web request, and like every request to any website it briefly shows your IP address to the server; it is used only to apply a rate limit, exactly as it is on every other part of the app, and is never stored alongside the counts.",
+        "For signed-in accounts Fandex also records the date each account was last seen, at most once per day, so the operator can tell how many accounts are still in use. That date is stored on your account and is removed when you delete it.",
+        "These statistics are visible only to the operator.",
       ],
     },
     {

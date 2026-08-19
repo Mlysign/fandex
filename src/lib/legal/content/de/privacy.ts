@@ -6,7 +6,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // steht ein TODO(H4.3) statt einer Vermutung.
 const privacy: LegalDocument = {
   title: "Datenschutzerklärung",
-  updated: "2026-07-30",
+  updated: "2026-08-19",
   intro: [
     "Fandex ist ein Hobbyprojekt einer Einzelperson, kein Unternehmen. Diese Erklärung ist bewusst einfach und exakt formuliert — sie beschreibt genau, was die App speichert und warum, nicht als Vorlagentext. Sie stellt keine Rechtsberatung dar und befindet sich in Überarbeitung, bis eine fachliche Rechtsberatung vorliegt (siehe Hinweis zur Anschrift des Verantwortlichen unten).",
   ],
@@ -37,7 +37,7 @@ const privacy: LegalDocument = {
     {
       heading: "Was Fandex NICHT speichert",
       body: [
-        "Keine E-Mail-Adresse, kein echter Name (nur der Anzeigename, den Ihr verknüpfter Anbieter liefert), keine Zahlungsdaten (Fandex hat derzeit keine Zahlungsfunktion) und keine Analyse- oder Werbe-Kennungen Dritter — es gibt keine solchen in der App.",
+        "Keine E-Mail-Adresse, kein echter Name (nur der Anzeigename, den Ihr verknüpfter Anbieter liefert), keine Zahlungsdaten (Fandex hat derzeit keine Zahlungsfunktion) und keine Analyse- oder Werbe-Kennungen Dritter. Fandex zählt zwar Seitenaufrufe, tut dies aber selbst und ohne jede Identifizierung; siehe „Nutzungsstatistik“ weiter unten.",
       ],
     },
     {
@@ -45,6 +45,17 @@ const privacy: LegalDocument = {
       body: [
         "Fandex setzt drei Cookies, alle technisch notwendig für die Funktion der App und keines zu Tracking- oder Werbezwecken: ein Sitzungscookie, damit Sie angemeldet bleiben, sowie zwei kurzlebige (10 Minuten) Sicherheitscookies, die ausschließlich während des Verbindens eines Anbieterkontos verwendet werden, um eine standortübergreifende Fälschung dieser Verbindung zu verhindern. Da jedes Cookie technisch notwendig ist, verlangt § 25 TDDDG hierfür kein Consent-Banner — diese Einschätzung sowie die vollständige Liste mit exakten Namen und Laufzeiten sind gesondert dokumentiert.",
         "Sollte Fandex jemals Analyse-, Werbe- oder Affiliate-Tracking-Cookies einführen, wird vorher — nicht nachträglich — ein Consent-Banner eingeführt.",
+      ],
+    },
+    {
+      heading: "Nutzungsstatistik",
+      body: [
+        "Fandex zählt, wie stark die Seite genutzt wird, damit der Betreiber einschätzen kann, ob sich der weitere Betrieb lohnt. Gezählt wird von Fandex selbst, in der eigenen Datenbank. Es gibt kein Google Analytics, keinen anderen Analysedienst Dritter, kein Tracking-Skript, keine Werbe-Kennung und kein Fingerprinting.",
+        "Erfasst wird: der Kalendertag, um welche ART von Seite es sich handelte, ob die Person angemeldet war, sowie eine grobe Kategorie für die Herkunft des Aufrufs (Suchmaschine, soziales Netzwerk, ein Link innerhalb von Fandex oder gar kein Verweis). „Art von Seite“ bedeutet ein Routen-Muster: Der Aufruf einer bestimmten Tag-, Personen- oder Titelseite wird nur als „eine Tag-Seite“, „eine Personenseite“ bzw. „eine Titelseite“ gezählt, niemals als die konkrete Seite, die Sie angesehen haben.",
+        "Nicht erfasst wird: irgendeine Kennung. Keine Nutzer-ID, keine IP-Adresse, keine Sitzungs-ID, keine Geräte- oder Browserdaten und keine Uhrzeit, die genauer wäre als der Tag. Gespeichert werden ausschließlich laufende Tagessummen. Es gibt darin nichts, was sich auf Sie zurückführen ließe, und keine Möglichkeit, das Verhalten einer einzelnen Person zu rekonstruieren.",
+        "Da nichts auf Ihrem Endgerät gespeichert oder ausgelesen wird, ist hierfür kein Consent-Banner nach § 25 TDDDG erforderlich; und da keine personenbezogenen Daten aufbewahrt werden, gibt es hier auch keinen Anknüpfungspunkt für die DSGVO. Die Übermittlung einer Zählung ist ein gewöhnlicher Web-Request und macht wie jeder Request an jede Website kurzzeitig Ihre IP-Adresse gegenüber dem Server sichtbar; sie wird ausschließlich für die Rate-Begrenzung verwendet, genau wie in jedem anderen Teil der App, und niemals zusammen mit den Zählungen gespeichert.",
+        "Für angemeldete Konten speichert Fandex zusätzlich das Datum, an dem das Konto zuletzt gesehen wurde, höchstens einmal pro Tag. So lässt sich erkennen, wie viele Konten noch genutzt werden. Dieses Datum liegt an Ihrem Konto und wird mit dessen Löschung entfernt.",
+        "Diese Statistiken sind ausschließlich für den Betreiber sichtbar.",
       ],
     },
     {

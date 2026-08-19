@@ -226,6 +226,13 @@ export interface UserMetrics {
   dau: number;
   wau: number;
   mau: number;
+  /**
+   * Distinct signed-in users seen at least once inside the SELECTED range, as
+   * opposed to dau/wau/mau which are fixed 1/7/30-day windows. The dashboard's
+   * range tabs move this one; they deliberately do not move the gates, whose
+   * windows are part of the threshold definition rather than a view setting.
+   */
+  activeInRange: number;
   signups: { day: string; count: number }[];
 }
 
@@ -261,7 +268,7 @@ export function userMetrics(days = 30, now: Date = new Date()): UserMetrics {
     signups.push({ day, count: byDay.get(day) ?? 0 });
   }
 
-  return { total, dau: active(1), wau: active(7), mau: active(30), signups };
+  return { total, dau: active(1), wau: active(7), mau: active(30), activeInRange: active(days), signups };
 }
 
 // ── The two gates ───────────────────────────────────────────────────────────

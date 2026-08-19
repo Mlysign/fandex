@@ -30,10 +30,47 @@ privacy-policy reader would reasonably ask about it in the same breath.
 
 ## What's explicitly NOT present
 
-No analytics script, no advertising script, no third-party tracking pixel, and no
-cross-site cookie of any kind — every cookie above is `sameSite=lax` and first-party. This
+No **third-party** analytics script, no advertising script, no third-party tracking pixel, and
+no cross-site cookie of any kind — every cookie above is `sameSite=lax` and first-party. This
 matches the "very favorable starting position" already noted in `TASKS.md`'s H4 recon:
-identity-less users, no email/real name stored, zero analytics.
+identity-less users, no email/real name stored.
+
+⚠️ **Corrected 2026-08-19:** this section used to end "zero analytics". That is no longer
+true. Fandex now counts pageviews itself (see the section below), so the accurate claim is
+"no third-party analytics", not "no analytics".
+
+## First-party usage counting (added 2026-08-19): assessed, and it does NOT trigger the banner
+
+`/dev/analytics` is fed by a first-party beacon (`POST /api/telemetry/pv`) that increments two
+aggregate counter tables. **This assessment continues to hold unchanged**, for a reason worth
+stating precisely, because it is the reason and not a preference:
+
+**§25 TDDDG governs STORING information on, or ACCESSING information already stored on, the
+user's terminal equipment.** The beacon does neither. It sets no cookie, writes no
+localStorage/sessionStorage/IndexedDB, reads nothing back, and does no fingerprinting. There is
+therefore nothing for §25 to attach to, and no consent requirement arises. Note this is a
+different test from "is it necessary?". The necessity question only matters once something IS
+stored on the device, which is why an analytics COOKIE would need consent while this does not.
+
+**GDPR:** the counters hold no personal data. Columns are a UTC day, a route TEMPLATE, a 0/1
+signed-in flag, a referrer CLASS, and an integer. No user id, no IP, no session id, no
+sub-day timestamp, and nothing joinable back to a person. The beacon request itself exposes an
+IP to the server, as every HTTP request does; it is consumed transiently for rate limiting
+under the same Art. 6(1)(f) legitimate interest that already covers every other route, and is
+never written next to a count.
+
+**What would change this answer** (any one of them, and then H4.4's parked banner build gets
+un-parked BEFORE the change ships, not after):
+- storing a cookie, localStorage entry or any other device-side identifier to count visitors,
+  including a "just an anonymous id" one;
+- deriving a per-visitor identifier server-side (a hashed IP+UA "daily visitor" key is the
+  usual temptation, and it is what a unique-visitor count would require);
+- recording raw paths, raw referrer URLs, or any timestamp finer than a day, since those start
+  to make a single person's session reconstructable;
+- adding any third-party analytics, ad or affiliate-tracking script.
+
+The disclosure lives in the privacy policy under "Usage statistics" / „Nutzungsstatistik"
+(both locales, `updated` bumped to 2026-08-19).
 
 ## The standing guard
 
