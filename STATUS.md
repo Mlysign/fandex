@@ -2,13 +2,13 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-20 (SEO: structured data, a crawlable release calendar, the homepage hub; Search Console verified)._
+_Last updated: 2026-08-20 (SEO: structured data, a crawlable calendar, the homepage hub, Search Console verified; the restore drill passed)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
 ---
 
-## 🟢 Prod is BACK, deployed, and the leak is confirmed fixed
+## 🟢 Prod is up, deployed, and backups are proven restorable
 
 fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It was down from **2026-07-22** on a Railway compute-usage pause, and served only a ~32-minute window on 2026-08-07.
 
@@ -23,9 +23,9 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 → full readings in [the archive](docs/archive/history.md), grep `PR17 post-outage verification`.
 
-- **Backups were proven by a real restore drill on 2026-08-12** — `integrity_check` ok, every user table exact, every real (`browsed=0`) catalog row exact at 1994, lag 6m39s. **PR17 is CLOSED.** ⚠️ **That proof expired five days later and nobody noticed:** migration 16 (2026-08-17) broke Litestream outright, and nothing replicated until 2026-08-19. **A restore drill proves the backup you had that day, not the one you have now** — re-run it after ANY schema change, which is the lesson this cost two days to learn.
+- **Backups are proven restorable, re-verified 2026-08-20.** The drill ran on the live container: restored from generation `c62d7dc17a0fd0cb`, `integrity_check: ok`, the restored file **byte-for-byte the same size as live** (161,644,544), and all seven tables matching exactly (`user_item_state` 2419, `media_items` 2770, `user_episode_state` 12342, `show_episodes` 7055, `media_links` 5224). `/app/data/rr.db` untouched throughout. ⚠️ **The previous proof, from 2026-08-12, expired five days later and nobody noticed** — migration 16 broke Litestream outright and nothing replicated until 08-19. **A restore drill proves the backup you had that day, not the one you have now. Re-run it after ANY schema change.**
 
-**Still on you, on the infrastructure side:** run the restore drill (commands in [TASKS.md](TASKS.md)). **There is no variable to set.** The file reclaimed itself 331.4 → 154.2 MB when migration 18 triggered `db.ts`’s post-migration VACUUM.
+**Nothing is open on the infrastructure side.** ⚠️ But **Railway volume backups are Pro-plan only** (re-confirmed 2026-08-20: the Backups tab reads "No Backups"), so **Litestream is the only copy of the database.** There is no second net.
 
 **No prod sweeps left.** Steam cross-link ran 2026-08-17 (131 games, cursor drained), Wikidata franchise ran 2026-08-14. `PRUNE_ON_BOOT=0` is optional now the guard has held three times. The remaining judgement call is **the TWA decision**; the affiliate signup is no longer the next step (direction changed 2026-08-19).
 
@@ -47,7 +47,7 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 
 | | Item | Blocked on |
 |--|------|--|
-| 🔴 | **Backups were DEAD 2026-08-17 → 2026-08-19. Fixed; the restore drill is yours** | **You:** two Console commands, in [TASKS.md](TASKS.md). Migration 16 put SQLite 3.44+ syntax in a view; Litestream v0.3.13 embeds ~3.40 and replicated **nothing** for two days. Railway volume backups are Pro-only, so it was the only copy. Live again (`9d63a68`, new generation, bucket 33.6 → 181.8 MB). **No variable to set — the file reclaimed itself, 331.4 → 154.2 MB.** |
+| ✅ | **Backups: proven restorable 2026-08-20** | **Nobody.** The drill ran on the live container and passed: `integrity_check: ok`, the restored file byte-for-byte the same size as live, and all seven tables matching exactly. ⚠️ Railway volume backups are still Pro-only, so **Litestream remains the only copy**, and **a drill proves the backup you had THAT DAY — re-run it after ANY schema change.** |
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
 | 🔵 | **H3 — monetization, now ADS-FIRST** | **Nobody, yet.** Direction changed 2026-08-19; the next move is traffic, not a signup. Watch the two gates on `/dev/analytics`. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context in [TASKS.md](TASKS.md) (Fandex as a thin Play Store wrapper of the website, the 2026-06-18 decision; needs a signing key + a one-off $25 Play account). |

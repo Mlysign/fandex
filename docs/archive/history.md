@@ -23,6 +23,50 @@ full history.
 
 ---
 
+## Litestream outage, the fix, and the restore drill that closed it (2026-08-17 → 2026-08-20)
+
+**Backups were dead for two days and nothing alarmed.** Found in the Railway deploy log while checking something else. Litestream logged this once a second:
+
+```
+malformed database schema (user_watchlist) - near "ORDER": syntax error
+```
+
+Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist view. That is **SQLite 3.44.0+** syntax; **Litestream v0.3.13 embeds ~3.40**, and SQLite parses the whole schema before preparing any statement, so the backup daemon could not run a single query. **Railway volume backups are Pro-plan only** (re-confirmed 2026-08-20: the Backups tab reads "No Backups. This service's volume does not have any backups"), so Litestream was and is the only copy.
+
+Everything else stayed green throughout: 820 tests, lint, `next build`, `/api/health` reporting `db: up`, every read site working. The only process that could not read the schema was the one whose output nobody watches.
+
+**Fixed** (`9d63a68`): the sort moved into a subquery; migration 18 applied it to prod. Verified byte-identical on all 2,023 live rows, through both apply paths, and against a real SQLite 3.40 CLI.
+
+**The 340 MB WAL was this bug, not a benign high-water mark.** Litestream could not advance its read position, so SQLite could not checkpoint past it, which is why `wal_checkpoint(TRUNCATE)` answered `busy: 1` twice. STATUS/PR17 had recorded it as a quirk needing no action from 2026-08-12 to 2026-08-19. A WAL that will not truncate is a symptom to chase.
+
+### ✅ The restore drill, run 2026-08-20 — PASSED
+
+Run in the Railway Console on the live container. **"Replicating" and "restorable" are different claims**, and only the first had been checked since the fix.
+
+```
+litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
+```
+
+Restored from generation `c62d7dc17a0fd0cb`, applying WAL indexes 19 → 47, finishing at `renaming database from temporary location`.
+
+- Restored file: **161,644,544 bytes — byte-for-byte the same size as the live `rr.db`**
+- `PRAGMA integrity_check` → **ok**
+- Every table counted against live, in the same process:
+
+| table | live | restored |
+|---|--:|--:|
+| `users` | 1 | 1 |
+| `user_identities` | 4 | 4 |
+| `user_item_state` | 2419 | 2419 |
+| `media_items` | 2770 | 2770 |
+| `user_episode_state` | 12342 | 12342 |
+| `show_episodes` | 7055 | 7055 |
+| `media_links` | 5224 | 5224 |
+
+**ALL TABLES MATCH.** Scratch file removed afterwards; `/app/data/rr.db` unchanged at 161,644,544 bytes with its original mtime, confirming the live database was never touched. Prod stayed up on the same boot throughout.
+
+**The rule this cost two days to learn: a restore drill proves the backup you had THAT DAY, not the one you have now.** It passed on 2026-08-12, migration 16 broke replication on 08-17, and nobody noticed until 08-19. **Re-run it after ANY schema change.**
+
 ## AN — the anonymous surface, and the end of platform colour-coding (2026-08-18)
 
 Commit `f5bad29`, live on prod the same day. Nils got logged out of his own browser, used Fandex as

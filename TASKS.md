@@ -27,13 +27,11 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 Everything else in this file is either done or a standing constraint.
 
-1. **🔴 Prove the restore works.** Two Console commands, detailed in the backups section below. The only urgent item: backups replicate again, but "replicating" and "restorable" are different claims and only the first has been checked. **No Railway variable to set — the file already reclaimed itself, 331.4 → 154.2 MB.**
+1. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
 
-2. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
+2. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
 
-3. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
-
-4. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
+3. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
 
 **Standing constraints — not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
@@ -41,35 +39,13 @@ Everything else in this file is either done or a standing constraint.
 - **Do NOT contact TMDB or Trakt about commercial terms** while monetizing on their free tiers — the accepted risk is key revocation, and asking invites it.
 - **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings (billing/pause), never crashes — `uptime` climbed monotonically through both.
 
-## 🔴 Backups were DEAD for two days (2026-08-17 → 2026-08-19). Fixed and replicating; the restore drill is yours.
+## ✅ Backups: broken 2026-08-17, fixed 2026-08-19, and PROVEN RESTORABLE 2026-08-20
 
-**Found in the Railway deploy log while checking something else, not by any alarm.** Litestream logged this once a second, for two days:
+**Closed.** Migration 16 put SQLite 3.44+ syntax in a view; Litestream v0.3.13 embeds ~3.40, so it replicated **nothing** for two days while every other check stayed green. Fixed in `9d63a68` (migration 18).
 
-```
-malformed database schema (user_watchlist) - near "ORDER": syntax error
-```
+**The drill ran on 2026-08-20 and passed:** restored from generation `c62d7dc17a0fd0cb` into `/tmp`, `integrity_check: ok`, the file byte-for-byte the same size as live (161,644,544), and **all seven tables matching live exactly** — `users` 1, `user_identities` 4, `user_item_state` 2419, `media_items` 2770, `user_episode_state` 12342, `show_episodes` 7055, `media_links` 5224. Scratch file removed; `/app/data/rr.db` untouched. Full record → grep the archive for `restore drill`.
 
-Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist view. That is **SQLite 3.44.0+** syntax; **Litestream v0.3.13 embeds ~3.40**, and SQLite parses the whole schema before preparing any statement, so the backup daemon could not run one query. **Railway volume backups are Pro-plan only**, so Litestream was the only copy.
-
-**Fixed and live** (`9d63a68`): the sort moved into a subquery; migration 18 applies it to prod. Verified byte-identical on all 2,023 live rows, through both apply paths, and against a real SQLite 3.40 CLI. Full detail in the commit message and `AGENTS.md`.
-
-**Confirmed working on prod:** new generation `c62d7dc17a0fd0cb`, `snapshot written` in 3.0 s, WAL segments streaming, zero schema errors in the boot log, and the bucket went **33.6 MB → 181.8 MB**.
-
-### ⬜ Your step here: the restore drill
-
-Railway → releaseradar → **Console** (I can drive the browser, but the harness blocks typing into a production shell, correctly):
-
-```
-litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
-```
-
-then check it is real, not merely present:
-
-```
-node -e "const D=require('better-sqlite3');const d=new D('/tmp/restore-test.db',{readonly:true});console.log(d.pragma('integrity_check'));for(const t of ['users','user_identities','user_item_state','media_items'])console.log(t, d.prepare('SELECT COUNT(*) n FROM '+t).get().n);console.log('browsed=0', d.prepare('SELECT COUNT(*) n FROM media_items WHERE browsed=0').get().n);"
-```
-
-Compare against live via `/api/dev/dbsize`, then `rm /tmp/restore-test.db`.
+⚠️ **Railway volume backups remain Pro-plan only** (re-confirmed on the Backups tab, 2026-08-20), so **Litestream is still the only copy**. And **a drill proves the backup you had THAT DAY** — the 2026-08-12 drill was invalidated by a schema change five days later and nobody noticed for two more. **Re-run it after ANY schema change.**
 
 ### ✅ The file already reclaimed itself — there is no VACUUM step, and there never was
 
