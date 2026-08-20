@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { getDb } from "@/lib/db";
 import {
   classifyReferrer,
+  isCrawlerUserAgent,
   normalizePathKey,
   recordPageView,
   pageViewSeries,
@@ -28,6 +29,25 @@ describe("normalizePathKey", () => {
     expect(normalizePathKey("/legal/de/imprint")).toBe("/legal/[locale]/[doc]");
   });
 
+  // The URLs the sitemap actually ships. Until 2026-08-20 the item arm only
+  // matched two segments, so every real item view landed in "other" and the
+  // dashboard could not show one. Assert against the sitemap's shape, not the
+  // route folder's.
+  it("templates the three-segment item URL the sitemap ships", () => {
+    expect(normalizePathKey("/movie/0029c55c-b0ed-4e30-9223-6f0cfd541e36/the-fellowship-of-the-ring")).toBe("/[type]/[id]");
+    expect(normalizePathKey("/show/00198515-1af6-4cf5-89e3-c375f4eb1f67/erased")).toBe("/[type]/[id]");
+    expect(normalizePathKey("/game/abc/hollow-knight")).toBe("/[type]/[id]");
+    // Not a media type, so it stays in the bucket that bounds cardinality.
+    expect(normalizePathKey("/tag/a/b")).toBe("other");
+  });
+
+  it("templates the public calendar month pages", () => {
+    expect(normalizePathKey("/calendar/2026-09")).toBe("/calendar/[month]");
+    expect(normalizePathKey("/calendar/1999-01")).toBe("/calendar/[month]");
+    // The client-rendered app page is a different route and keeps its own key.
+    expect(normalizePathKey("/calendar")).toBe("/calendar");
+  });
+
   it("normalizes case, trailing slashes and query strings", () => {
     expect(normalizePathKey("/Calendar/")).toBe("/calendar");
     expect(normalizePathKey("/tag/Horror?x=1#y")).toBe("/tag/[slug]");
@@ -52,6 +72,64 @@ describe("normalizePathKey", () => {
     // inflate the very numbers it reports.
     expect(normalizePathKey("/dev/analytics")).toBeNull();
     expect(normalizePathKey("/dev/scoring")).toBeNull();
+  });
+});
+
+describe("isCrawlerUserAgent", () => {
+  // Every one of these renders JavaScript, so "a client beacon excludes crawlers"
+  // was never true. These are the agents that produced 80% of the ads gate.
+  it("catches rendering crawlers", () => {
+    const uas = [
+      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)",
+      "Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)",
+      "Mozilla/5.0 (compatible; PetalBot;+https://webmaster.petalsearch.com/site/petalbot)",
+      "Mozilla/5.0 (compatible; DataForSeoBot/1.0)",
+      "Screaming Frog SEO Spider/19.2",
+      "Mozilla/5.0 (compatible; Baiduspider/2.0)",
+      "Mozilla/5.0 (compatible; Yahoo! Slurp)",
+    ];
+    for (const ua of uas) expect(isCrawlerUserAgent(ua), ua).toBe(true);
+  });
+
+  it("catches headless engines and scripted clients", () => {
+    const uas = [
+      "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/126.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (X11; Linux x86_64) Chrome-Lighthouse",
+      "python-requests/2.31.0",
+      "Go-http-client/2.0",
+      "curl/8.4.0",
+      "okhttp/4.12.0",
+    ];
+    for (const ua of uas) expect(isCrawlerUserAgent(ua), ua).toBe(true);
+  });
+
+  it("catches AI and answer-engine fetchers that never say 'bot'", () => {
+    expect(isCrawlerUserAgent("Mozilla/5.0 (compatible; PerplexityBot/1.0)")).toBe(true);
+    expect(isCrawlerUserAgent("Mozilla/5.0 AppleWebKit (KHTML, like Gecko; compatible; ClaudeBot/1.0)")).toBe(true);
+    expect(isCrawlerUserAgent("Mozilla/5.0 (compatible; Bytespider)")).toBe(true);
+  });
+
+  it("treats a missing user agent as a crawler", () => {
+    expect(isCrawlerUserAgent(null)).toBe(true);
+    expect(isCrawlerUserAgent("")).toBe(true);
+    expect(isCrawlerUserAgent("   ")).toBe(true);
+  });
+
+  // A false positive drops a real person from the only number gating the ads
+  // decision, so the generic `bot` token is anchored. CUBOT and Abbott are real
+  // strings that appear in real user agents.
+  it("does not misclassify real browsers", () => {
+    const uas = [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+      // A real Android phone whose model name contains "bot".
+      "Mozilla/5.0 (Linux; Android 12; CUBOT NOTE 20) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36",
+    ];
+    for (const ua of uas) expect(isCrawlerUserAgent(ua), ua).toBe(false);
   });
 });
 

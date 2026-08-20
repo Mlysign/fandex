@@ -86,11 +86,79 @@ export function normalizePathKey(rawPath: string): string | null {
     if (seg[0] === "person") return "/person/[slug]";
     if (seg[0] === "tag") return "/tag/[slug]";
     if (seg[0] === "studio") return "/studio/[slug]";
+    if (seg[0] === "calendar") return "/calendar/[month]";
+    // A bare /{type}/{uuid} is not a URL the app ever links, but it resolves,
+    // so it gets the same key as the canonical three-segment form below.
     if (MEDIA_TYPES.has(seg[0])) return "/[type]/[id]";
   }
-  if (seg.length === 3 && seg[0] === "legal") return "/legal/[locale]/[doc]";
+  if (seg.length === 3) {
+    if (seg[0] === "legal") return "/legal/[locale]/[doc]";
+    // The real item URL, and the shape the sitemap ships: /{type}/{uuid}/{slug}.
+    // This arm was missing until 2026-08-20, so every one of the 2,022 item pages
+    // counted as "other" and the dashboard's top-pages panel could not show a
+    // single item view. The two-segment arm above had been standing in for a URL
+    // nothing emits. Lesson: template a route against the SITEMAP, not against
+    // the route file's folder name.
+    if (MEDIA_TYPES.has(seg[0])) return "/[type]/[id]";
+  }
 
   return "other";
+}
+
+// ── Crawler filtering ───────────────────────────────────────────────────────
+
+/**
+ * Known-crawler user agents, matched case-insensitively.
+ *
+ * ⚠️ The comment that used to sit on the beacon route claimed a client beacon
+ * "excludes crawlers for free". That is only true of crawlers that fetch HTML
+ * and stop. Googlebot, AhrefsBot, Semrush and most modern SEO tools RENDER the
+ * page, so they execute the bundle and POST here exactly like a browser.
+ * Measured on prod 2026-08-20: 4,314 of 5,365 pageviews in 30 days were
+ * /person, /tag and /studio views against 14 homepage views, which is a crawl
+ * of the facet long tail and not a person. The ads gate was reading ~80% bot.
+ *
+ * Precision matters more than recall here. A false positive silently drops a
+ * real visitor from the only number that gates the ads decision, so every
+ * generic token below is anchored: `bot` must be followed by a delimiter or end
+ * of string, or "CUBOT" (a real phone brand that appears in real Android user
+ * agents) would classify every one of its owners as a crawler.
+ */
+const CRAWLER_PATTERNS: RegExp[] = [
+  // A crawler names a version: "Googlebot/2.1", "PetalBot;", "SeoBot)". The
+  // delimiter set deliberately excludes whitespace, because "CUBOT NOTE 20" is
+  // a real Android phone and "BOT " with a trailing space is all it takes to
+  // classify every one of its owners as a crawler. A test asserts that.
+  /\bbot\b|bot[/;)+]|^bot/i,
+  /crawl|spider|slurp|scraper/i,
+  // Headless engines: Lighthouse, most rendering scrapers, and anything driving
+  // Chrome or Firefox without a display.
+  /headlesschrome|phantomjs|puppeteer|playwright|selenium|chrome-lighthouse/i,
+  // Scripted clients. These do not run JS, so they can only reach this endpoint
+  // by POSTing to it directly.
+  /python-requests|python-urllib|go-http-client|java\/|okhttp|libwww-perl|^curl|^wget|axios\//i,
+  // Link unfurlers and social preview fetchers.
+  // "whatsapp" carries a slash because the unfurler is "WhatsApp/2.x" while the
+  // in-app browser is a normal mobile UA that must keep counting.
+  /facebookexternalhit|twitterbot|slackbot|discordbot|telegrambot|whatsapp\/|embedly|quora link preview|skypeuripreview/i,
+  // AI training and answer-engine fetchers, which mostly do not identify as "bot".
+  /gptbot|claudebot|claude-web|anthropic-ai|ccbot|perplexity|bytespider|amazonbot|applebot|google-extended|cohere-ai|diffbot/i,
+  // Named SEO suites worth listing explicitly: several use a UA that would not
+  // otherwise match, and they are the heaviest facet-page crawlers.
+  /ahrefs|semrush|mj12|dotbot|blexbot|dataforseo|screaming frog|sitebulb|serpstat|petal|barkrowler|zoominfo|seekport|megaindex/i,
+];
+
+/**
+ * True when a user agent is a crawler, a headless engine, or a scripted client.
+ *
+ * A missing or empty user agent counts as a crawler: every real browser sends
+ * one, and an empty string is the cheapest possible forged request against a
+ * public write endpoint.
+ */
+export function isCrawlerUserAgent(ua: string | null | undefined): boolean {
+  const s = ua?.trim();
+  if (!s) return true;
+  return CRAWLER_PATTERNS.some((re) => re.test(s));
 }
 
 // ── Referrer classification ─────────────────────────────────────────────────

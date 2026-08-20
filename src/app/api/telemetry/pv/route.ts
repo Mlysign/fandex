@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withOptionalUser } from "@/lib/withUser";
-import { classifyReferrer, normalizePathKey, recordPageView } from "@/lib/telemetry";
+import { classifyReferrer, isCrawlerUserAgent, normalizePathKey, recordPageView } from "@/lib/telemetry";
 import { log } from "@/lib/logger";
 
 // Writes to the DB on every call. Never prerender or cache this.
@@ -18,11 +18,24 @@ export const dynamic = "force-dynamic";
 //
 // Under the App Router an internal navigation never reaches the server, so a
 // middleware or layout counter would miss most of a session and undercount the
-// engaged users worst. The beacon also excludes crawlers for free, which is what
-// we want here: this number gates an ADS decision, and an ad network pays for
-// impressions rendered in a real browser, not for Googlebot fetching a facet page.
-// Server-rendered crawler traffic is therefore deliberately invisible to it. Read
-// that number from the access log or Search Console, not from this dashboard.
+// engaged users worst. This number gates an ADS decision, and an ad network pays
+// for impressions rendered in a real browser, not for Googlebot fetching a facet
+// page, so the browser is the right place to count from.
+//
+// ⚠️ What this file used to claim, and what is actually true ────────────────
+//
+// It said a client beacon "excludes crawlers for free". It does not. That holds
+// only for crawlers that fetch HTML and stop; Googlebot, AhrefsBot, Semrush and
+// most modern SEO tools RENDER the page, run the bundle, and POST here exactly
+// like a browser. Prod on 2026-08-20: 5,365 pageviews in 30 days, of which 4,314
+// were /person, /tag and /studio against FOURTEEN homepage views. Nobody reaches
+// 2,855 distinct person pages through a front door they opened fourteen times.
+// The ads gate had been reading roughly 80% bot since the day it shipped, and
+// nothing flagged it, because a wrong number and a right one look identical on a
+// dashboard. `isCrawlerUserAgent` is the filter; the shape of the top-pages
+// panel is the thing that gave it away, so keep that panel honest.
+//
+// Counts before 2026-08-20 are unfiltered and are not comparable to later ones.
 //
 // 60/min per anonymous IP: a real person cannot navigate 60 pages a minute, and
 // this is a WRITE endpoint, so the default 240 (sized for local reads) is looser
@@ -30,6 +43,12 @@ export const dynamic = "force-dynamic";
 // auditable figure to hand an ad network.
 export const POST = withOptionalUser(
   async (req: NextRequest, session) => {
+    // Checked before the body is even read: a crawler's POST costs us nothing
+    // beyond this line, and answering ok keeps the beacon silent on the page.
+    if (isCrawlerUserAgent(req.headers.get("user-agent"))) {
+      return NextResponse.json({ ok: true, counted: false });
+    }
+
     let body: { path?: unknown; ref?: unknown };
     try {
       body = await req.json();
