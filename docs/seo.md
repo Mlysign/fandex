@@ -45,6 +45,17 @@ it. If it still reads "Couldn't fetch" after ~24 h, that is worth chasing.
 Expect nothing useful for several days. Coverage data lags crawling, and the
 site is new to the index.
 
+**Checked 2026-08-20, hours after verifying:** every report reads *"Processing
+data, please check again in a day or so."* That is the normal fresh-property
+state, not a fault. An independent check the same day said what the reports will
+say later: `site:fandex.org` returned **two results, both the homepage**, under
+`http://fandex.org` and `https://www.fandex.org`. Zero of the 2,022 item pages,
+zero facet pages, zero calendar months. `/dev/analytics` agreed from the other
+side: **1** visit classed `search` in 30 days.
+
+So the pipeline is fine and the index is empty. Both were fixed the same day
+(see host canonicalization below); the wait is Google's.
+
 Optional, five minutes: [Bing Webmaster Tools](https://www.bing.com/webmasters)
 can **import** a verified Search Console property in one click. Bing is small
 but free, and it feeds DuckDuckGo.
@@ -145,6 +156,63 @@ Genre chips come from the provider genre maps (`providerGenreKeys`), deduped by
 provider **target** rather than by key: "science fiction"/"sci fi" share TMDB
 878 and "rpg"/"role playing" share one RAWG slug, and linking both would put two
 near-identical facet pages in front of a crawler competing for one query.
+
+---
+
+## ✅ Host canonicalization, and the favicon (2026-08-20)
+
+Google had indexed `http://fandex.org` and `https://www.fandex.org`, and neither
+is the host we want ranked. Three separate causes, all now closed.
+
+- **`https://www.fandex.org` served the whole app at 200 with no redirect.** A
+  second copy of all 2,022 item pages and every facet page. `http://` already
+  301s, so www was the live duplicate. Fixed with an exact-host redirect in
+  `next.config.ts` (`permanent: true`, which Next emits as **308**; Google treats
+  308 and 301 identically for canonicalization). **Done in the repo rather than
+  as a Cloudflare rule on purpose:** it ships with the deploy, it is reviewable,
+  and it does not touch the account that also holds the verification TXT record.
+- **The homepage was the only indexable surface with no canonical.** Item, facet,
+  calendar-month and legal pages all had one. Declared in `src/app/page.tsx`,
+  **not** in the root layout: metadata is inherited, so `canonical: "/"` on the
+  layout would tell Google that `/discover`, `/library` and every other untagged
+  page are duplicates of the homepage.
+- **`/favicon.ico` returned 404,** which is why the search result still showed an
+  old mark. Next was emitting correct `<link rel="icon">` tags for `icon.svg` and
+  `icon.png`, but Google's favicon fetcher also probes the host root, and
+  `icon.png` is **256x256** where Google's guidance is a square that is a
+  multiple of **48**. `scripts/build-favicon.mjs` derives a 16/32/48 `.ico` from
+  `src/app/icon.svg`, trimming the launcher-tile padding so the mark fills ~84%
+  of the frame instead of ~56% and stays legible at 16px. Re-run it after any
+  brand-art change. Google's favicon cache is slow, so expect days, not hours.
+
+---
+
+## ✅ The ads gate was reading 80% crawler (2026-08-20)
+
+`/dev/analytics` showed **5,365 pageviews / 30d**, "54% of the 10,000 ads gate".
+The top-pages panel is what gave it away: `/person` 2,855, `/tag` 1,351,
+`/studio` 108, against **14** homepage views, 100% anonymous and 5,347 of 5,365
+classed `direct`. Nobody reaches 2,855 distinct person pages through a front door
+they opened fourteen times. It is the same facet long-tail crawl that filled
+`facet_page_cache` to 222 MB.
+
+**The claim that let it stand for a month:** the beacon route's own comment said a
+client beacon "excludes crawlers for free". That holds only for crawlers that
+fetch HTML and stop. **Googlebot, AhrefsBot and Semrush render the page,** run the
+bundle and POST to `/api/telemetry/pv` exactly like a browser.
+`isCrawlerUserAgent` (`src/lib/telemetry.ts`) now filters them before the body is
+read. Its generic `bot` token is anchored to a delimiter because **CUBOT is a real
+Android phone brand**, and a test asserts that a real browser is never dropped: a
+false positive silently removes a person from the only number gating the ads
+decision.
+
+Counts before 2026-08-20 are unfiltered and **not comparable** to later ones.
+
+Found alongside it: `normalizePathKey` templated item pages as **two** segments,
+`/{type}/{uuid}`, while the sitemap ships **three**, `/{type}/{uuid}/{slug}`. So
+every view of every item page landed in the `other` bucket and the dashboard could
+not show one. `/calendar/{month}` had the same gap. **Template a route against the
+sitemap, not against the route folder's name.**
 
 ---
 
