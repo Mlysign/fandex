@@ -109,6 +109,34 @@ const nextConfig: NextConfig = {
     ];
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // SEO (2026-08-20): fold the www host onto the apex.
+  //
+  // `https://www.fandex.org` served the entire app at 200 with no redirect,
+  // which is a second copy of all 2,022 item pages plus every facet page on a
+  // host we do not want ranked. It was not theoretical: `site:fandex.org`
+  // returned exactly two results that day, `http://fandex.org` and
+  // `https://www.fandex.org`, and both were the homepage. The http one already
+  // 301s, so www was the live duplicate.
+  //
+  // Done here rather than as a Cloudflare redirect rule on purpose. This lives
+  // in the repo, ships with the deploy, and is visible to anyone reading the
+  // config; a rule in a dashboard is none of those, and the account it would
+  // live in also holds the DNS TXT record that keeps Search Console verified
+  // (docs/seo.md). Item and facet pages already carry an absolute canonical
+  // pointing at the apex, so this closes the homepage gap and the crawl budget
+  // rather than fixing a wrong signal.
+  //
+  // The host match is exact. A wildcard would also catch any future subdomain.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.fandex.org" }],
+        destination: "https://fandex.org/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
