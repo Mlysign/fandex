@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-20 (SEO: structured data, a crawlable calendar, the homepage hub, Search Console verified; the restore drill passed)._
+_Last updated: 2026-08-20 (SEO shipped + Search Console verified; restore drill passed; RAWG quota found exhausted)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -51,7 +51,7 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
 | 🔵 | **H3 — monetization, now ADS-FIRST** | **Nobody, yet.** Direction changed 2026-08-19; the next move is traffic, not a signup. Watch the two gates on `/dev/analytics`. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context in [TASKS.md](TASKS.md) (Fandex as a thin Play Store wrapper of the website, the 2026-06-18 decision; needs a signing key + a one-off $25 Play account). |
-| 🔵 | **RAWG cross-link sweep** | **You**, once RAWG is back — it was down all of 2026-08-17. 168 games lack a RAWG link. Not urgent: they have IGDB as a second source now, so they still score. |
+| 🟡 | **RAWG monthly API quota is EXHAUSTED** | **Nobody, until it resets.** Measured 2026-08-20: `401 {"error": "The monthly API limit reached"}`. **Not the 2026-08-17 outage** — different failure, different fix. The cross-link sweep cannot run (157 games still lack a RAWG link); games are unaffected because IGDB carries them. ⚠️ **Unanswered: what burns 20k requests/month at pre-launch traffic.** No per-provider call counter exists. → [TASKS.md](TASKS.md) |
 
 **The mobile batch is COMPLETE, 15/15 (2026-08-17).** MB7 — "the bottom nav scrolls away on Insights" — was never the nav: the page **overflowed horizontally**, Chrome shrink-to-fit zoomed the *layout* viewport out (812 → ~1017) while the visual viewport stayed 812, and the `fixed bottom-0` bar pinned itself ~205px below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and this class of bug must be verified at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix that Nils caught on his phone.**
 
