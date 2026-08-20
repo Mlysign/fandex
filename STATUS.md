@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-20 (SEO audit: structured data, a crawlable release calendar, thin facets noindexed; Search Console still unverified)._
+_Last updated: 2026-08-20 (SEO: structured data, a crawlable release calendar, the homepage hub; Search Console verified)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -51,7 +51,6 @@ Under `next dev` both pages render their toolbar server-side and then sit on **�
 | 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
 | 🔵 | **H3 — monetization, now ADS-FIRST** | **Nobody, yet.** Direction changed 2026-08-19; the next move is traffic, not a signup. Watch the two gates on `/dev/analytics`. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | 🔵 | **P15/P16 — Android TWA** | **You:** do it or park it — full context in [TASKS.md](TASKS.md) (Fandex as a thin Play Store wrapper of the website, the 2026-06-18 decision; needs a signing key + a one-off $25 Play account). |
-| 🔴 | **Search Console is not verified, so reach is unmeasurable** | **You:** ten minutes, no deploy, steps in [docs/seo.md](docs/seo.md). `/dev/analytics` is a client beacon and cannot see crawlers, so nothing today can answer "is Fandex indexed". Blocking now that monetization is ads-first and the first gate is 10,000 pageviews/mo. |
 | 🔵 | **RAWG cross-link sweep** | **You**, once RAWG is back — it was down all of 2026-08-17. 168 games lack a RAWG link. Not urgent: they have IGDB as a second source now, so they still score. |
 
 **The mobile batch is COMPLETE, 15/15 (2026-08-17).** MB7 — "the bottom nav scrolls away on Insights" — was never the nav: the page **overflowed horizontally**, Chrome shrink-to-fit zoomed the *layout* viewport out (812 → ~1017) while the visual viewport stayed 812, and the `fixed bottom-0` bar pinned itself ~205px below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and this class of bug must be verified at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix that Nils caught on his phone.**
@@ -94,15 +93,17 @@ The model that decided it, per **1,000 monthly active users**: **ads ~€150 · 
 
 Both H3.8 gates are now measurable rather than theoretical, which is what the two dashboards below are for. Full reasoning + the standing guard against self-referring to beat Amazon's 180-day clock → [docs/monetization-go-live.md](docs/monetization-go-live.md).
 
-## 🔎 Organic reach is the new work, and it starts unmeasured (2026-08-20)
+## 🔎 Organic reach: the surface is fixed, and it is now measured (2026-08-20)
 
-**Ads-first means the bottleneck is traffic, and nothing in the repo was about reach.** An audit of what fandex.org actually serves a crawler, measured against live prod rather than against the code's intentions, found five gaps. Three are fixed (`6a584e1`); the reference, the numbers and what is still open live in **[docs/seo.md](docs/seo.md)**.
+**Ads-first means the bottleneck is traffic, and nothing in the repo was about reach.** An audit of what fandex.org actually serves a crawler, measured against live prod rather than against the code's intentions, found five gaps. **Four are fixed and Search Console is verified**; the reference, the numbers and what remains live in **[docs/seo.md](docs/seo.md)**.
 
+- **Search Console is VERIFIED** — `fandex.org` as a Domain property, via a DNS TXT record on the apex. ⚠️ **Deleting that record un-verifies the property and empties every report.** The sitemap is submitted; its "Couldn't fetch" is the pending state, not a fault (the sitemap answers in 180 ms with a correct content type and serves Googlebot identically). Expect no useful data for several days.
 - **Structured data existed nowhere** — zero `ld+json` across 2,022 indexable pages. Item pages now emit `Movie` / `TVSeries` / `VideoGame` + `BreadcrumbList`, calendar months an `ItemList`. ⚠️ **`aggregateRating` is deliberately absent and a test keeps it absent** — every rating we could publish is somebody else's aggregate shown under attribution, and marking those up as our own earns a structured-data manual action, which is sitewide.
-- **The release calendar had no indexable surface.** `/calendar/{YYYY-MM}` is new, server-rendered, eight months in the sitemap. It never reads the session (so an anonymous crawler cannot mint a `media_items` row), its month links all come from one closed window, and outside a wider servable range it 404s **before** touching a provider. ⚠️ `robots.ts` now needs **both** `/calendar/` (allow) and `/calendar` (disallow) — longest match wins, so do not tidy them into one rule.
-- **Thin facet pages are `noindex, follow`** below 3 pooled titles. ⚠️ **The threshold is pool size, not linkable count.** `/person/angelina-jolie` renders a full filmography at 175 KB and links 2 of it, because `linkable` is only true for titles a logged-in visit happened to persist. That page is under-linked, not thin, and a linkable-count rule would have deleted it.
+- **The homepage was a crawl dead end** — priority 1.0, an `sr-only` h1, and zero catalog links, because the page was `"use client"` and fetched a robots-disallowed endpoint. It now ships **74 server-rendered links** (30 titles, 36 genres, 8 calendar months) from the local catalog: no provider call on the most-hit page, no session read, and it only ever SELECTs so it cannot mint a row.
+- **The release calendar had no indexable surface.** `/calendar/{YYYY-MM}` is new, server-rendered, eight months in the sitemap, with three crawl bounds. ⚠️ `robots.ts` now needs **both** `/calendar/` (allow) and `/calendar` (disallow) — longest match wins, so do not tidy them into one rule.
+- **Thin facet pages are `noindex, follow`** below 3 pooled titles. ⚠️ **The threshold is pool size, not linkable count.** `/person/angelina-jolie` renders a full filmography at 175 KB and links 2 of it — under-linked, not thin.
 
-**Still open, and the homepage one is the big one: `/` is a crawl dead-end** — priority 1.0 in the sitemap, an `sr-only` h1, and zero links into 2,022 item pages. Item pages likewise link to ~25 facet pages and no sibling items. Both are written up in docs/seo.md.
+**Still open, both internal-linking:** item pages link to ~25 facet pages and **no sibling items**, and facet pages stay out of the sitemap on purpose until that is fixed. Written up in docs/seo.md.
 
 ## 🗺️ Roadmap
 
@@ -121,11 +122,11 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
 | **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🔵 needs the TWA build |
-| **SEO / organic reach** | 🔵 **open work since 2026-08-20** — structured data + a crawlable calendar shipped; Search Console unverified → [docs/seo.md](docs/seo.md) |
+| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar and the homepage hub shipped; Search Console verified. Internal linking still thin → [docs/seo.md](docs/seo.md) |
 
 ## ✅ Quality bar (as of 2026-08-20)
 
-**861 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**872 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 

@@ -12,36 +12,42 @@ ads decision and the wrong one for judging reach. Reach belongs in Search Consol
 
 ---
 
-## ⬜ Your step, and everything else waits on it: verify Search Console
+## ✅ Search Console is verified (2026-08-20)
 
-**Nothing below is measurable until this is done.** There is no way to know
-whether a single Fandex page is indexed, what queries reach it, or whether the
-2026-08-20 changes did anything, without it. Ten minutes, no deploy needed.
+**Property:** `fandex.org`, a **Domain** property (covers `www` and both protocols, survives any redeploy).
+**Method:** DNS TXT on the apex, added by hand in Cloudflare:
 
-1. Go to [search.google.com/search-console](https://search.google.com/search-console),
-   sign in, **Add property → Domain** (the left option, not "URL prefix").
-   Enter `fandex.org`.
-2. Google shows a **TXT record**. In Cloudflare → the `fandex.org` zone → **DNS**
-   → **Add record**: type `TXT`, name `@`, content = the string Google gave you.
-   Leave proxy off (TXT records aren't proxied anyway).
-3. Back in Search Console, click **Verify**. If it fails, wait a few minutes for
-   DNS and retry; Cloudflare usually propagates in under one.
-4. **Sitemaps** in the left nav → submit `sitemap.xml`.
+```
+Type: TXT   Name: @   Content: google-site-verification=sONMjRE03Xj6G-qEGLfsiuQg9ujBS9i_2uN1sGpy88U
+```
 
-A Domain property is the right choice over URL prefix: it covers `www` and
-`https` together, and it needs no HTML meta tag, so it survives any redeploy.
+⚠️ **Do not delete that record.** Removing it un-verifies the property and every
+report empties out. Search Console offered to write it itself via an OAuth grant
+against the Cloudflare account; that was declined deliberately, because standing
+write access to the zone that serves fandex.org is a much larger permission than
+one TXT record needs.
 
-**Then, and only then, three reports are worth reading:**
+`sitemap.xml` is submitted. It showed **"Couldn't fetch"** immediately after
+submission, which is Search Console's pending state rather than a fault: the
+sitemap answers in **180 ms** with `200`, 417 KB and `application/xml`, serves
+Googlebot's user-agent identically, is not covered by any `Disallow`, and
+`fandex.org` is grey-clouded in Cloudflare so no bot challenge sits in front of
+it. If it still reads "Couldn't fetch" after ~24 h, that is worth chasing.
+
+**The three reports worth reading, once Google has crawled for a few days:**
 
 | Report | The question it answers |
 |---|---|
-| **Pages** (Indexing) | How many of the 2,030 sitemap URLs are actually indexed, and how many sit in **"Crawled – currently not indexed"** |
+| **Pages** (Indexing) | How many of the 2,037 sitemap URLs are indexed, and how many sit in **"Crawled – currently not indexed"** |
 | **Performance** → Queries | What people search to land here. The first real evidence of which surface earns traffic |
-| **Performance** → Pages | Whether item pages, facet pages or the new calendar months carry it |
+| **Performance** → Pages | Whether item pages, facet pages or the calendar months carry it |
 
-Optional, five more minutes: [Bing Webmaster Tools](https://www.bing.com/webmasters)
-can **import** a verified Search Console property in one click. Bing is small but
-free, and it feeds DuckDuckGo.
+Expect nothing useful for several days. Coverage data lags crawling, and the
+site is new to the index.
+
+Optional, five minutes: [Bing Webmaster Tools](https://www.bing.com/webmasters)
+can **import** a verified Search Console property in one click. Bing is small
+but free, and it feeds DuckDuckGo.
 
 ---
 
@@ -49,12 +55,12 @@ free, and it feeds DuckDuckGo.
 
 | Surface | State |
 |---|---|
-| `sitemap.xml` | 2,030 URLs — 2,022 items, 8 calendar months, 6 legal, 1 root |
+| `sitemap.xml` | 2,037 URLs — 2,022 items, 8 calendar months, 6 legal, 1 root |
 | item pages | Title, description, canonical, OG, `index, follow`, **and JSON-LD since 2026-08-20**. Link out to ~25 facet pages, **0 to other items** |
 | facet pages | Crawlable, indexable, **not in the sitemap** (deliberate, see below). Thin ones are `noindex, follow` since 2026-08-20 |
 | `/calendar/{YYYY-MM}` | **New 2026-08-20.** SSR, 8 months in the sitemap |
 | `/calendar` | The interactive app. Client-rendered, robots-disallowed, correctly |
-| `/` | ⚠️ **A crawl dead-end — see below** |
+| `/` | **74 outbound links since 2026-08-20** — 30 titles, 36 genres, 8 calendar months, all server-rendered |
 
 ### ✅ Structured data (`src/lib/jsonLd.ts`)
 
@@ -110,21 +116,39 @@ Measured spread, 2026-08-20: `/tag/mystery` 35 linkable · `/tag/action` 28 ·
 to read the tag. It reduces index bloat. Do not cite it as a fix for the
 `facet_page_cache` / heap pressure.
 
+### ✅ The homepage hub (`src/components/CatalogHub.tsx`, `src/lib/homeHub.ts`)
+
+`/` used to link to **nothing**: priority 1.0, an `sr-only` h1, 36 KB, and zero
+catalog links, because the page was `"use client"` end to end and fetched
+`/api/home` — an endpoint under the `/api/` disallow. It now ships **74 outbound
+links** server-side: 30 catalog titles, 36 genre facet pages, 8 calendar months.
+
+`page.tsx` is a thin server shell; the interactive half lives in
+`HomePageClient.tsx`, unchanged. `/` is now `ƒ (Dynamic)`, which the DB read
+requires anyway (Railway's build phase has no volume mounted, same invariant
+`sitemap.ts` carries).
+
+**It reads the local catalog, not Home's provider rails**, and that is the whole
+design: no provider call on the most-hit page on the site, every link resolves
+because pool rows have uuids by definition, and no session read so the HTML is
+identical for crawler and human. It only ever SELECTs, so it cannot mint a row
+even in principle.
+
+⚠️ **The genre cap was a bug, and a test caught it rather than a reading.** It
+was 24 applied after an alphabetical sort, which silently cut puzzle, racing,
+rpg, shooter, simulation, sports and strategy — every RAWG game genre — from a
+catalog that is a third games, with every other assertion still green. It is now
+a safety bound above the real count. If it ever needs to be a real limit, balance
+the selection across the three provider maps first.
+
+Genre chips come from the provider genre maps (`providerGenreKeys`), deduped by
+provider **target** rather than by key: "science fiction"/"sci fi" share TMDB
+878 and "rpg"/"role playing" share one RAWG slug, and linking both would put two
+near-identical facet pages in front of a crawler competing for one query.
+
 ---
 
 ## Still open
-
-### 🔴 The homepage is a crawl dead-end
-
-`/` is priority 1.0 in the sitemap, 36 KB, has an `sr-only` `<h1>`, and contains
-**zero links to any catalog content**. Nothing flows from the highest-authority
-URL on the domain into 2,022 item pages; they are reachable only via the sitemap,
-and facet pages only one hop beyond that.
-
-The fix is an SSR hub block on `/` — recently added, a few popular titles, top
-genres. Two constraints: it must be **anonymous-safe** (no session read, no thin
-writes) and **bounded-cache backed**, or it becomes a per-request provider
-fan-out on the most-hit page on the site.
 
 ### 🔵 Facet pages are not in the sitemap, on purpose
 
