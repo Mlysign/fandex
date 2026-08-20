@@ -326,3 +326,34 @@ describe("provider call counters", () => {
     expect(s.projectedPerMonth).toBeGreaterThanOrEqual(0);
   });
 });
+
+// 2026-08-20 — the state MUST live on globalThis. Next resolves http.ts into
+// several bundles (a page route and an API route get different instances), so a
+// plain module-level Map silently becomes several, each with its own view.
+// Measured on prod: a page route's provider calls never reached /api/health,
+// and the circuit breaker was counting failures separately per bundle.
+describe("cross-bundle state", () => {
+  it("keeps counters on globalThis so every bundle shares one map", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(resp(200)));
+    await httpFetch("https://api.rawg.io/a");
+
+    const g = globalThis as Record<string, unknown>;
+    const shared = g.__fandexProviderCalls as Map<string, { requests: number }>;
+    expect(shared).toBeInstanceOf(Map);
+    expect(shared.get("api.rawg.io")?.requests).toBe(1);
+
+    // A second module instance would re-read the SAME object off globalThis
+    // rather than starting a fresh Map — that is the whole guarantee.
+    expect(providerCallSnapshot()["api.rawg.io"].requests).toBe(1);
+  });
+
+  it("keeps breaker state on globalThis too", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
+    for (let i = 0; i < 3; i++) {
+      await expect(httpFetch("https://api.rawg.io/x", { retries: 0 })).rejects.toThrow();
+    }
+    const g = globalThis as Record<string, unknown>;
+    expect(g.__fandexBreakers).toBeInstanceOf(Map);
+    expect(providerBreakerSnapshot()["api.rawg.io"]).toBeDefined();
+  });
+});

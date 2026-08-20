@@ -80,7 +80,35 @@ interface Breaker {
   probing: boolean;
 }
 
-const _breakers = new Map<string, Breaker>();
+// ⚠️ PINNED TO globalThis, AND THAT IS LOAD-BEARING (2026-08-20).
+//
+// Next does NOT give the server one module registry. A page route and an API
+// route resolve `http.ts` into different bundles, so a plain `new Map()` here
+// becomes SEVERAL maps — one per bundle — each with its own view of the world.
+//
+// Measured on prod, same cold-month workload through each path:
+//
+//                        rawg  tmdb  igdb
+//   before                  1     2     1
+//   after a PAGE route      1     2     1   ← its calls went somewhere else
+//   after an API route      2     4     2
+//
+// Two consequences, and the second is the one that bites:
+//
+//   1. `/api/health` only ever showed the API-route copy. Every provider call
+//      made while server-rendering a facet, item or calendar page — which is
+//      the bulk of them — was invisible. That is why the memory note says
+//      "`openProviderCircuits: {}` is not a health check": it was measuring one
+//      half of the process.
+//   2. The CIRCUIT BREAKER was per-bundle too. A dead provider had to fail
+//      FAILURE_THRESHOLD times separately in each bundle before each stopped
+//      calling it, so the breaker delivered a fraction of the protection it was
+//      built for in 2026-08-02.
+//
+// `globalThis` is per-process, which is what both actually want. Keep any future
+// cross-request state in http.ts on the same footing.
+const _breakers: Map<string, Breaker> =
+  ((globalThis as Record<string, unknown>).__fandexBreakers ??= new Map<string, Breaker>()) as Map<string, Breaker>;
 
 // ── Per-host call counters (2026-08-20) ────────────────────────────
 //
@@ -111,7 +139,9 @@ interface HostCalls {
   lastStatus: number | null;
 }
 
-const _calls = new Map<string, HostCalls>();
+// Same globalThis pinning as _breakers above, for the same reason — see there.
+const _calls: Map<string, HostCalls> =
+  ((globalThis as Record<string, unknown>).__fandexProviderCalls ??= new Map<string, HostCalls>()) as Map<string, HostCalls>;
 
 function callsFor(host: string): HostCalls {
   let c = _calls.get(host);
