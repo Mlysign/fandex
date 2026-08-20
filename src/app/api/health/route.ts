@@ -5,7 +5,7 @@ import {
   readDbFootprint,
   readProcessRss,
 } from "@/lib/containerMemory";
-import { providerBreakerSnapshot } from "@/lib/http";
+import { providerBreakerSnapshot, providerCallSnapshot } from "@/lib/http";
 
 // Reads live process/cgroup state — must never be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -61,6 +61,13 @@ export async function GET() {
     // provider in turn — the answer belongs in the probe we already have.
     // Host names only, never a key or a URL with one in it.
     openProviderCircuits: providerBreakerSnapshot(),
+    // Per-host provider call volume SINCE BOOT (2026-08-20). Added after RAWG's
+    // monthly quota ran out at pre-launch traffic and nothing in the app could
+    // say which surface spent it — `openProviderCircuits` answers "is it up",
+    // never "how much are we asking of it". Read `projectedPerMonth` against
+    // `uptime` above and distrust it under an hour; a deploy resets these.
+    // Host names and counts only, never a key or a URL carrying one.
+    providerCalls: providerCallSnapshot(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }

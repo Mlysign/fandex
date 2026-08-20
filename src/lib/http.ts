@@ -82,6 +82,66 @@ interface Breaker {
 
 const _breakers = new Map<string, Breaker>();
 
+// ── Per-host call counters (2026-08-20) ────────────────────────────
+//
+// Added because RAWG's monthly quota ran out and NOTHING in the app could say
+// how, or which surface was spending it. `api.rawg.io` answered
+// `401 {"error":"The monthly API limit reached"}` at what is still pre-launch
+// traffic, and the only honest answer to "what burned 20,000 requests" was a
+// shrug plus a plausible story about the crawler. A plausible story is exactly
+// what has mis-diagnosed a resource ramp here twice.
+//
+// This counts **fetch attempts**, which is what a provider quota counts: a
+// retried call is two requests upstream, so it is two here. `blocked` is the
+// opposite — the breaker short-circuited and NO request left the process, so it
+// costs no quota and is tracked separately rather than folded into the total.
+//
+// ⚠️ SINCE-BOOT, and a deploy resets it. That is fine for the question it
+// answers (a RATE, and which host dominates) and useless for "how many did we
+// send this calendar month". If the true monthly figure is ever needed, the
+// shape to copy is migration 17's telemetry: one pre-aggregated row per
+// (day, host), never a row per call. → [[telemetry-self-hosted]]
+interface HostCalls {
+  requests: number;
+  ok: number;
+  clientError: number;
+  serverError: number;
+  networkError: number;
+  blocked: number;
+  lastStatus: number | null;
+}
+
+const _calls = new Map<string, HostCalls>();
+
+function callsFor(host: string): HostCalls {
+  let c = _calls.get(host);
+  if (!c) {
+    c = { requests: 0, ok: 0, clientError: 0, serverError: 0, networkError: 0, blocked: 0, lastStatus: null };
+    _calls.set(host, c);
+  }
+  return c;
+}
+
+/**
+ * Per-host provider call volume since boot, for `/api/health`.
+ *
+ * `projectedPerMonth` extrapolates the since-boot rate over 730 h. It is a
+ * back-of-envelope figure and says so — on a young process it is wildly
+ * sensitive to whatever happened in the first minutes (a sync, a crawl burst).
+ * Read it against `uptimeSec`, and distrust it under an hour.
+ */
+export function providerCallSnapshot(): Record<string, HostCalls & { projectedPerMonth: number }> {
+  const uptimeSec = Math.max(process.uptime(), 1);
+  const out: Record<string, HostCalls & { projectedPerMonth: number }> = {};
+  for (const [host, c] of _calls) {
+    out[host] = { ...c, projectedPerMonth: Math.round((c.requests / uptimeSec) * 3600 * 730) };
+  }
+  return out;
+}
+
+/** Test-only: counters are module-global and would leak across cases. */
+export function __resetProviderCalls() { _calls.clear(); }
+
 /** Thrown instead of making a request while a host's breaker is open. */
 // ⚠️ The fields are declared and assigned explicitly rather than with TypeScript
 // PARAMETER PROPERTIES (`constructor(readonly host: string, …)`). Same class of
@@ -123,11 +183,11 @@ function enterBreaker(host: string): boolean {
   if (b.openUntil === 0) return false;
 
   const now = Date.now();
-  if (now < b.openUntil) throw new ProviderUnavailableError(host, b.openUntil - now);
+  if (now < b.openUntil) { callsFor(host).blocked++; throw new ProviderUnavailableError(host, b.openUntil - now); }
 
   // Half-open: let exactly ONE probe through; everyone else still fails fast,
   // so a burst of parallel callers can't re-flood a host that's still down.
-  if (b.probing) throw new ProviderUnavailableError(host, BASE_OPEN_MS);
+  if (b.probing) { callsFor(host).blocked++; throw new ProviderUnavailableError(host, BASE_OPEN_MS); }
   b.probing = true;
   return true;
 }
@@ -229,7 +289,17 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
       }
 
       try {
+        // Counted BEFORE the await: an attempt that times out still left the
+        // process and still cost the provider a request against our quota.
+        if (host) callsFor(host).requests++;
         const res = await fetch(input, { ...rest, signal: AbortSignal.timeout(perAttempt) });
+        if (host) {
+          const c = callsFor(host);
+          c.lastStatus = res.status;
+          if (res.status >= 500) c.serverError++;
+          else if (res.status >= 400) c.clientError++;
+          else c.ok++;
+        }
         if (attempt < maxRetries) {
           // Transient server errors: back off and retry.
           if (res.status >= 500) {
@@ -249,6 +319,7 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
         if (res.status >= 500) fail(`status_${res.status}`); else ok();
         return res;
       } catch (e) {
+        if (host) callsFor(host).networkError++;
         // AbortError (timeout) or a network failure. Retry idempotent requests.
         if (attempt < maxRetries) {
           const wait = BACKOFF_MS[attempt] ?? 500;

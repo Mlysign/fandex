@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { httpFetch, ProviderUnavailableError, providerBreakerSnapshot, isProviderCircuitOpen, __resetBreakers } from "./http";
+import { httpFetch, ProviderUnavailableError, providerBreakerSnapshot, providerCallSnapshot, isProviderCircuitOpen, __resetBreakers, __resetProviderCalls } from "./http";
 
 // P8: httpFetch must behave like fetch on success, retry only idempotent
 // requests on transient failures, and never retry writes or 429s.
@@ -13,6 +13,7 @@ const resp = (status: number) => new Response("body", { status });
 // the same host, and they fail in a confusing order-dependent way.
 beforeEach(() => {
   __resetBreakers();
+  __resetProviderCalls();
 });
 
 afterEach(() => {
@@ -240,5 +241,88 @@ describe("provider circuit breaker", () => {
     await expect(call).rejects.toBeInstanceOf(ProviderUnavailableError);
     // Belt and braces: it must not resolve to anything at all, Response or not.
     await expect(call).rejects.toThrow(/unavailable/i);
+  });
+});
+
+// 2026-08-20 — per-host call counters. Added after RAWG's monthly quota ran out
+// and nothing could say which host was spending it.
+describe("provider call counters", () => {
+  it("counts a fetch ATTEMPT, not a logical call — a retry is two requests upstream", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(resp(500))
+      .mockResolvedValueOnce(resp(200));
+    vi.stubGlobal("fetch", f);
+
+    await httpFetch("https://api.rawg.io/api/games");
+
+    const s = providerCallSnapshot()["api.rawg.io"];
+    // That is the number a provider quota bills, which is the whole point.
+    expect(s.requests).toBe(2);
+    expect(s.serverError).toBe(1);
+    expect(s.ok).toBe(1);
+  });
+
+  it("classifies by status class and remembers the last one", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(resp(401)));
+    await httpFetch("https://api.rawg.io/api/games");
+
+    const s = providerCallSnapshot()["api.rawg.io"];
+    expect(s.requests).toBe(1);
+    expect(s.clientError).toBe(1);
+    expect(s.ok).toBe(0);
+    // The quota-exhausted signal that started all this.
+    expect(s.lastStatus).toBe(401);
+  });
+
+  it("counts a network failure separately from an HTTP error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
+    await expect(httpFetch("https://api.rawg.io/x", { retries: 0 })).rejects.toThrow();
+
+    const s = providerCallSnapshot()["api.rawg.io"];
+    expect(s.requests).toBe(1);
+    expect(s.networkError).toBe(1);
+    expect(s.clientError).toBe(0);
+  });
+
+  it("counts a breaker-blocked call as blocked and NOT as a request — it costs no quota", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
+    // Drive the host to an open breaker.
+    for (let i = 0; i < 3; i++) {
+      await expect(httpFetch("https://api.rawg.io/x", { retries: 0 })).rejects.toThrow();
+    }
+    const before = providerCallSnapshot()["api.rawg.io"].requests;
+
+    await expect(httpFetch("https://api.rawg.io/x")).rejects.toThrow(ProviderUnavailableError);
+
+    const s = providerCallSnapshot()["api.rawg.io"];
+    expect(s.blocked).toBe(1);
+    // No request left the process, so the total must not move.
+    expect(s.requests).toBe(before);
+  });
+
+  it("keeps hosts separate, so one provider's volume is attributable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(resp(200)));
+    await httpFetch("https://api.rawg.io/a");
+    await httpFetch("https://api.rawg.io/b");
+    await httpFetch("https://api.themoviedb.org/3/x");
+
+    const s = providerCallSnapshot();
+    expect(s["api.rawg.io"].requests).toBe(2);
+    expect(s["api.themoviedb.org"].requests).toBe(1);
+  });
+
+  it("reports an empty object before any call, rather than inventing hosts", () => {
+    expect(providerCallSnapshot()).toEqual({});
+  });
+
+  it("projects a monthly figure from the since-boot rate", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(resp(200)));
+    await httpFetch("https://api.rawg.io/a");
+
+    const s = providerCallSnapshot()["api.rawg.io"];
+    // Can't assert a value (it divides by real uptime), but it must be a
+    // finite, non-negative number and never NaN — uptime is clamped to >= 1s.
+    expect(Number.isFinite(s.projectedPerMonth)).toBe(true);
+    expect(s.projectedPerMonth).toBeGreaterThanOrEqual(0);
   });
 });
