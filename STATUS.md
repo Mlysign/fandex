@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-20 (SEO shipped + Search Console verified; restore drill passed; RAWG quota found exhausted)._
+_Last updated: 2026-08-20 (SEO shipped + Search Console verified; restore drill passed; RAWG quota exhausted; scalability measured)._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -105,6 +105,19 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 
 **Still open, both internal-linking:** item pages link to ~25 facet pages and **no sibling items**, and facet pages stay out of the sitemap on purpose until that is fixed. Written up in docs/seo.md.
 
+## ⚠️ Scalability: provider quotas are the ceiling, and CRAWLERS spend them (2026-08-20)
+
+**Measured, not estimated** → [docs/scalability.md](docs/scalability.md) · provider cost/licence per platform → [PLATFORMS.md](PLATFORMS.md).
+
+`/api/health` now reports **`providerCalls`**, per host. It immediately answered a question nothing else could, and found two things:
+
+- **A cold `/tag/{genre}` page costs 14 provider requests, 4 of them RAWG.** RAWG's free quota is 20,000/month, so **~5,000 cold facet views exhaust the month** — and one crawl created 24,953 `facet_page_cache` rows. ⚠️ **The cost scales with CATALOG BREADTH × CRAWLER APPETITE, not with human pageviews.** Any capacity plan built on the 10,000-pageview ads gate is measuring the wrong variable.
+- **Three of six providers 401 on every call:** `api.rawg.io` (quota), `www.omdbapi.com` (invalid key), `api.letterboxd.com` (no key). Nothing surfaced that before the counters existed.
+
+**Money:** going commercial is **~$298/mo minimum** (TMDB $149 + RAWG $149) against a model of ~€150 per 1,000 monthly actives. ⚠️ **RAWG's paid tier does not fix RAWG** (2.5× the free quota) and **OMDb must be REMOVED, not paid for** — CC BY-NC 4.0 forbids commercial use at every tier. OMDb also contributes **zero** to the Fandex Score, which reads only facets. The cheapest real fix is engineering, not payment: cut the fan-out on cold facet pages.
+
+**A latent bug fell out of building the counter.** Next resolves `http.ts` into different bundles for page routes and API routes, so module-level state became several copies. That silently halved the **circuit breaker** since 2026-08-02 and made `openProviderCircuits` blind to page renders — which is exactly why memory says it "is not a health check". Fixed by pinning to `globalThis`. ⚠️ **~20 other module-level caches plausibly have the same duplication; that is NOT yet measured.**
+
 ## 🗺️ Roadmap
 
 | Area | Status |
@@ -126,7 +139,7 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 
 ## ✅ Quality bar (as of 2026-08-20)
 
-**872 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**881 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 

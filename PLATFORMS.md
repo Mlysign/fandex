@@ -6,14 +6,106 @@ platforms are assessed.
 
 > Current-state rows are authoritative from code (`src/lib/sources/catalog.ts`,
 > `types.ts`, `constants.ts`). Candidate rows are evaluations against the current
-> API landscape (last updated 2026-07-14).
+> API landscape. Capability rows last reviewed 2026-07-14; **cost, licence and
+> scale rows re-researched 2026-08-20** against each provider's published terms.
 
-## Two roles a platform can play
+## Three roles a platform can play
 
+- **Metadata / database provider** — read-only catalog, credits, tags, scores, enrichment. No per-user write-back.
 - **Connectable** — user authenticates and we sync both ways (pull wishlist/library, push ratings, status, wishlist add/remove). Backed by a `MediaSource` adapter.
-- **Metadata / database provider** — read-only catalog, scores, and enrichment. No per-user write-back.
+- **One-time import** *(new axis, 2026-08-20)* — no live connection, just a file the user exports once and uploads. This is how a backlogged library or wishlist arrives from a service Fandex will never integrate with. **Nothing in the app implements this yet**; the survey below exists so the cheapest route can be picked deliberately.
 
-A platform can be both. A capability is only claimed when the matching adapter method exists; consumers check capabilities declaratively.
+A platform can be more than one. A capability is only claimed when the matching adapter method exists; consumers check capabilities declaratively.
+
+---
+
+## ⚠️ Viability at 10,000 pageviews/month — read this before adding a provider
+
+**Measured 2026-08-20, not estimated.** Full workings → [docs/scalability.md](docs/scalability.md).
+
+**The finding that reframes the question: provider cost here is driven by CATALOG BREADTH × CRAWLER APPETITE, not by human pageviews.** A cold `/tag/{genre}` page costs **14 provider requests, 4 of them RAWG**. RAWG's free quota is 20,000/month, so **~5,000 cold facet page views exhaust the month** — and the crawler generated 24,953 `facet_page_cache` rows in a single incident. Fandex has almost no human traffic and has *already* exhausted RAWG. Ten thousand human pageviews would plausibly cost less than the crawler costs today.
+
+So "can this provider survive 10,000 pageviews" is the wrong question. The right one is **"what does this provider cost per COLD FACET PAGE, and can that be cached away."**
+
+### Cost and licence, per provider
+
+| Provider | Free tier | Paid | Licence catch | Verdict at scale |
+|---|---|---|---|---|
+| **IGDB** | Free, **no monthly cap**, 4 req/s | Partnership on request | Twitch account required | ✅ **The healthiest of the set.** The only games provider with no monthly ceiling. |
+| **TMDB** | Generous, but **non-commercial only** | **$149/mo** under $1M revenue | Ads make Fandex commercial, so the licence becomes mandatory | 🟡 Works, but **$149/mo the moment ads ship**. 9 calls per cold facet page. |
+| **RAWG** | **20,000 req/mo**, non-commercial | **$149/mo for 50,000 req/mo** | Attribution backlinks required; redistribution prohibited | 🔴 **Paying does not fix it.** 2.5× the free quota for $149; observed crawl volume needs roughly 100k. |
+| **Trakt** | Free | VIP is a *user* subscription, not an API tier | **Monetized apps need approval** | 🟡 Not a quota risk, an approval risk. |
+| **Steam** | Free | — | Store/API terms; no redistribution | ✅ Fine. Also the unique games TAG source. |
+| **OMDb** | 1,000 req/day | Patreon from $1/mo | 🔴 **CC BY-NC 4.0 — non-commercial ONLY, at every tier** | 🔴 **Must be REMOVED before ads ship.** Cannot be licensed into compliance. |
+| **Wikidata** | Free, CC0 | — | None | ✅ Ideal. Public domain. |
+| **AniList** | Free, 90 req/min | Licence needed above **$150/mo revenue** | ⚠️ See the re-evaluation note below | ⏸️ **Terms may disqualify it outright.** |
+
+**Two numbers worth carrying:** going commercial costs **~$298/mo minimum** (TMDB + RAWG) against a model of ~€150 per 1,000 monthly actives, and **OMDb has to be deleted rather than paid for**.
+
+### ⚠️ AniList needs re-evaluating before any work starts
+
+**This file already knew** — the Priority section below flags the clause, and the deep dive at the bottom does too. What is missing the caveat is **TASKS.md, which calls AniList "the lead candidate" with no mention of it**. Corrected there 2026-08-20. Restating it here because it is a cost/licence question and this is now the cost/licence section:
+
+> Use of the AniList API within competing, non-complementary services of the same nature is prohibited, including anime and manga list or tracker services.
+
+**Fandex is a tracker service.** So AniList is gated on *terms*, not on technology — the same way Hardcover and Backloggd were, and for the same underlying reason: the usage terms decided it, not the auth or the schema. The **metadata-only** half is unaffected and could ship independently.
+
+⚠️ **Verify by hand before acting.** `docs.anilist.co` returns 403 to automated fetching, so the quote above came from a search summary rather than a direct read. It is not yet a decision. It *is* enough that no AniList work should start until a human has read that page.
+
+---
+
+## What each provider actually gives the FANDEX SCORE
+
+**The Score reads one thing: facets off persisted `media_links`.** Tags, people, companies, franchise. It is forbidden by test from reading community ratings, popularity, or release date (`docs/fandex-score.md` §4). So a provider's value *to the Score* is not "how much data does it have", it is "does it carry tags, credits, companies or franchise".
+
+| Provider | Tags / keywords | Cast & crew | Companies | Franchise / IP | Release date | Ratings | **Score value** |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|---|
+| **TMDB** | ✅ genres + keywords | ✅ director, creator, writer, cast | ✅ production cos, networks | ✅ collections | ✅ | ✅ | **Highest.** Feeds all four facet kinds. |
+| **IGDB** | ✅ genres, themes, keywords, modes | ❌ | ✅ dev + publisher | ✅ franchises | ✅ | ✅ | **High for games.** Three of the four kinds. |
+| **Steam** | ✅ **unique** store tags | ❌ | ❌ | ❌ | ✅ | ✅ label | **Narrow but irreplaceable** — Deckbuilding and Tower Defense exist here and nowhere else. |
+| **RAWG** | ✅ genres + tags | ❌ | ✅ dev + publisher | ❌ | ✅ | ✅ | Medium, and **entirely overlapped by IGDB**. |
+| **Wikidata** | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | Narrow, free, CC0. Powers the `ip` facet. |
+| **OMDb** | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ only | 🔴 **ZERO.** Contributes nothing the Score is allowed to read. |
+| **Trakt** | ⚠️ thin | ❌ | ❌ | ❌ | ✅ | ✅ | Near zero. It is a *user data* platform, not a metadata one. |
+
+**Two conclusions fall straight out of that table.** OMDb contributes **nothing** to the Score, is licensed non-commercially, and its key is already invalid, so dropping it costs literally nothing. And **RAWG's metadata role is fully covered by IGDB**, which is free and uncapped, so RAWG's expensive half is also its redundant half. RAWG stays as a *connectable* platform; that is a different capability and a cheap one.
+
+---
+
+## Two-way user sync — who can actually do it
+
+| Platform | Wishlist | Library | Rating | Status write | Episodes | Notes |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| **Trakt** | R/W | R | R/W | ✅ | **R/W** | The reference implementation, and the only source of per-episode state. |
+| **TMDB** | R/W | R | R/W | ❌ | ❌ | No watched concept; "library" means rated items. |
+| **RAWG** | R/W | R | R/W | ✅ | ❌ | No review text. |
+| **Letterboxd** | R/W | R | R/W | ✅ | ❌ | 🔵 Built but **hidden — no working API key**, and it 401s on every call today. |
+| **Steam** | R | R | ❌ | ❌ | ❌ | Read-only by design; wishlist pull only. |
+
+⚠️ **Trakt tightened its 2026 limits, and a free account is smaller than you would guess:** watchlist **250 items** (up from 100), personal lists 250 items each with 5 lists max, ratings **10,000**, physical library 100, digital library 1,000. VIP raises these to 5,000 watchlist / 20,000 ratings / 100 lists. Prod's `user_watchlist` is 96, so this is not biting yet — **but any Fandex wishlist that round-trips through a free Trakt account is capped at 250 items**, and that ceiling belongs in the UI copy long before a user hits it.
+
+---
+
+## One-time list import — the cheapest way to absorb a backlog
+
+**Nothing here is built.** This is the survey, so the first implementation can target the best format rather than the first one tried. Every route below is a file the user exports themselves and uploads once, which means **no OAuth, no adapter, no ongoing quota, and no terms question about syncing** — by far the cheapest capability on this page.
+
+| Source | Format | Cost to the user | Carries | Difficulty |
+|---|---|---|---|---|
+| **IMDb** | CSV (list / watchlist / ratings export) | Free | title, year, IMDb id, your rating, dates | 🟢 **Easiest high-value win.** Stable IMDb ids map straight onto links we already store. |
+| **Letterboxd** | CSV in a ZIP (`diary`, `ratings`, `watchlist`, `lists`) | ⚠️ **Letterboxd Pro, $35/yr** | title, year, rating, watched date, review | 🟢 Trivial to parse, but the export is paywalled on their side. |
+| **Trakt** | API (already connectable) or VIP export | Free via the live integration | everything | 🟢 Already solved by the adapter. |
+| **Steam** | Web API (already connectable) | Free | owned games, wishlist, playtime | 🟢 Already solved. |
+| **MyAnimeList** | XML export, native | Free | title, MAL id, score, status, episodes watched | 🟡 Only useful once anime is a media type. |
+| **Backloggd** | CSV export | ⚠️ **Backers only** (paid) | title, rating, status | 🟡 Built on IGDB ids, so it maps cleanly. Paywalled export. |
+| **HowLongToBeat** / **Grouvee** | CSV / JSON export | Free | title, status, playtime | 🟡 Title-match only, no stable shared id. |
+| **Goodreads** | CSV export | Free | title, ISBN, rating, shelves | ⏸️ Books are postponed as a media type. |
+| **GOG** | ❌ no official export or API | — | — | 🔴 Unofficial endpoints only. |
+| **PSN / Xbox / Nintendo** | ❌ no public API | — | — | 🔴 Not available at any price. |
+
+**If the goal is getting your own backlog in:** **IMDb CSV for movies and shows** (free, stable ids, no paywall) plus **Steam for games** (already live). That covers most of a personal backlog without paying anyone or building an OAuth adapter. Letterboxd is the richer data but costs $35/yr to reach, and the title-matching problem is identical either way.
+
+⚠️ **However it is built, an importer is a WRITE PATH into `media_items`** and inherits the thin-write and pool rules in AGENTS.md: insert-only, `browsed` semantics respected, never a bulk write that bypasses `matcher.ts`. And note the trap that connects this page to the one above: **a CSV of 2,000 titles is also 2,000 title searches against a provider** if matching is done naively, which lands straight back on the quota problem. Match against the local catalog first, and only reach a provider for what is genuinely unknown.
 
 ## Status legend
 
