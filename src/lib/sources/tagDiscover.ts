@@ -45,6 +45,45 @@ const RAWG_GENRES: Record<string, string> = {
 export function tmdbGenreId(key: string, type: MediaType): number | undefined {
   return (type === "show" ? TMDB_TV_GENRES : TMDB_MOVIE_GENRES)[key];
 }
+
+/**
+ * One normalized tag key per distinct provider GENRE, across all three maps.
+ *
+ * SEO (2026-08-20): this is what the homepage hub links to, and the guarantee
+ * is the whole reason it reads the maps instead of a hand-picked list. A key in
+ * here resolves a provider genre pool by construction, so `/tag/{key}` cannot
+ * be one of the thin pages `facetRobots` noindexes — and the list grows by
+ * itself when a map does, rather than drifting away from it.
+ *
+ * ⚠️ Deduped by the provider TARGET, not by the key. The maps carry aliases
+ * that share one id or slug ("science fiction"/"sci fi" → 878, "rpg"/"role
+ * playing" → role-playing-games-rpg), and linking both would put two near-
+ * identical facet pages in front of a crawler competing for one query. The
+ * first key declared for a target wins, which is the primary spelling in every
+ * map above.
+ */
+export function providerGenreKeys(): string[] {
+  const out: string[] = [];
+  const seenTarget = new Set<string>();
+
+  const take = (entries: [string, string | number][], prefix: string) => {
+    for (const [key, target] of entries) {
+      const id = `${prefix}:${target}`;
+      if (seenTarget.has(id)) continue;
+      seenTarget.add(id);
+      out.push(key);
+    }
+  };
+
+  // TMDB movie and TV ids are separate namespaces (28 vs 10759 both mean
+  // "action"), so they are prefixed apart — but the KEY dedupe below still
+  // collapses "action" to one entry across the two.
+  take(Object.entries(TMDB_MOVIE_GENRES), "tmdb-movie");
+  take(Object.entries(TMDB_TV_GENRES), "tmdb-tv");
+  take(Object.entries(RAWG_GENRES), "rawg");
+
+  return [...new Set(out)];
+}
 export function rawgGenreSlug(key: string): string | undefined {
   return RAWG_GENRES[key];
 }
