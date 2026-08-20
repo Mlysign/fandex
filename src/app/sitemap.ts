@@ -3,6 +3,7 @@ import { BASE_URL } from "@/lib/baseUrl";
 import { listPublicItems } from "@/lib/detail/publicDetail";
 import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { LEGAL_LOCALES } from "@/lib/legal/types";
+import { indexableMonths } from "@/lib/calendarMonths";
 
 // P13 — sitemap: the landing page plus one entry per public item page.
 //
@@ -39,6 +40,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1,
     },
+    // SEO (2026-08-20) — the public release-calendar months. Deliberately the
+    // SAME window the pages navigate within (calendarMonths.ts): advertising a
+    // month the pages won't link to would open a crawl path with no way back,
+    // and advertising one outside the window would advertise a noindex page.
+    // Eight URLs, each a provider fan-out cached 6 h — do not widen this
+    // casually. `weekly` because a month's lineup genuinely moves.
+    ...indexableMonths().map((month) => ({
+      url: `${BASE_URL}/calendar/${month}`,
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    })),
     ...LEGAL_LOCALES.flatMap((locale) =>
       INDEXABLE_LEGAL_DOCS.map((doc) => ({
         url: `${BASE_URL}/legal/${locale}/${doc}`,

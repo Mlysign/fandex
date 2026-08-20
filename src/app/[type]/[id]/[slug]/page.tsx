@@ -10,6 +10,7 @@ import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import ItemView from "@/components/item/ItemView";
 import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
+import { buildItemJsonLd, jsonLdScript } from "@/lib/jsonLd";
 
 // P13 — THE item page: `/{type}/{id}/{slug}`. One url for everyone.
 //
@@ -110,8 +111,17 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
   const tagOverrides = Object.fromEntries(getTagCategoryOverrides());
   const tagCategories = getTagCategories().map((c) => ({ id: c.id, label: c.label, color: c.color }));
 
+  // schema.org markup. Emitted server-side beside the content it describes, so
+  // a crawler gets it on first byte like the rest of this page — and built from
+  // the SAME resolved item, so it can never describe a different render.
+  const canonical = `${BASE_URL}/${type}/${canonicalId}/${canonicalSlug}`;
+
   return (
     <div className="min-h-screen bg-surface text-text-primary">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildItemJsonLd(item, canonical)) }}
+      />
       <ItemView item={item} tagOverrides={tagOverrides} tagCategories={tagCategories} />
     </div>
   );

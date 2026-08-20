@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { initDb, run } from "@/lib/db";
 import type { PoolTitle, PublicFacetItem, PublicFacetPayload } from "./publicFacetDetail";
-import { personPool, sortPool, crowdAvg } from "./publicFacetDetail";
+import { personPool, sortPool, crowdAvg, facetRobots, MIN_INDEXABLE_TITLES } from "./publicFacetDetail";
 // Named up here rather than inline as `typeof import("…")` in the importOriginal
 // generics below: consistent-type-imports forbids import() type annotations, and
 // a type-only import is fully erased, so it can't interfere with vi.mock hoisting.
@@ -244,5 +244,24 @@ describe("leak boundary (compile-time)", () => {
   const _noLeakPayload: HasNoUserField<PublicFacetPayload> = true;
   it("public types carry no per-user field", () => {
     expect(_noLeakItem && _noLeakPayload).toBe(true);
+  });
+});
+
+// SEO (2026-08-20) — the noindex threshold for thin facet pages.
+describe("facetRobots", () => {
+  it("leaves a healthy facet page on the default (index, follow)", () => {
+    expect(facetRobots(35, true)).toBeUndefined();
+    expect(facetRobots(MIN_INDEXABLE_TITLES, true)).toBeUndefined();
+  });
+
+  it("noindexes a facet listing fewer than three titles, but keeps follow", () => {
+    expect(facetRobots(2, true)).toEqual({ index: false, follow: true });
+    expect(facetRobots(1, true)).toEqual({ index: false, follow: true });
+    expect(facetRobots(0, true)).toEqual({ index: false, follow: true });
+  });
+
+  it("the soft-launch switch overrides the threshold in both directions", () => {
+    expect(facetRobots(500, false)).toEqual({ index: false, follow: false });
+    expect(facetRobots(1, false)).toEqual({ index: false, follow: false });
   });
 });

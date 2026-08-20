@@ -7,7 +7,7 @@ import type { FacetPrefix } from "@/lib/facetUrl";
 import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref } from "@/lib/facetUrl";
 import { canonicalTagKey } from "@/lib/tagAlias";
 import type { FacetSort, PublicFacetPayload } from "@/lib/detail/publicFacetDetail";
-import { buildPublicFacetDetail, isFacetSort } from "@/lib/detail/publicFacetDetail";
+import { buildPublicFacetDetail, isFacetSort, facetRobots } from "@/lib/detail/publicFacetDetail";
 import { getSession } from "@/lib/session";
 import PublicFacetView from "@/components/facet/PublicFacetView";
 
@@ -63,10 +63,15 @@ export async function buildFacetMetadata(
     : `The best ${label} movies, shows and games, ranked — on Fandex.`;
   const canonical = `${BASE_URL}${publicFacetHref({ kind: found.kind, key: found.key })}`;
 
+  // SEO (2026-08-20) — the soft-launch switch, plus a noindex for the thin tail
+  // (a facet listing fewer than 3 titles). See facetRobots for why the test is
+  // pool size and not linkable count.
+  const robots = facetRobots(found.total, PUBLIC_ITEMS_INDEXABLE);
+
   return {
     title: label,
     description,
-    ...(PUBLIC_ITEMS_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
+    ...(robots ? { robots } : {}),
     alternates: { canonical },
     openGraph: { title: label, description, url: canonical, type: "website", images: found.person?.profileUrl ? [{ url: found.person.profileUrl, alt: label }] : undefined },
     twitter: { card: "summary", title: label, description },

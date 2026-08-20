@@ -35,7 +35,12 @@ export const dynamic = "force-dynamic";
 // H4.1 — /legal/ explicit rather than relying on the empty-ruleset default:
 // imprint's noindex (page.tsx) only works if crawlers can FETCH it to see the
 // tag, same reasoning as the P17 facet pages below.
-const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/", "/legal/"];
+// SEO (2026-08-20) — `/calendar/` (with the slash) is the PUBLIC month pages,
+// `/calendar` (without) is the interactive app, and they need opposite answers.
+// Both rules stay: a robots matcher takes the LONGEST matching pattern, so
+// `/calendar/2026-09` matches the 10-character Allow and `/calendar` matches
+// only the 9-character Disallow below. Do not "tidy" this into one rule.
+const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "/studio/", "/legal/", "/calendar/"];
 // H1.6c IA restructure: /wishlist (was /dashboard), plus new authed /calendar
 // and /profile — all private, keep crawlers out. /dashboard stays listed (it now
 // 308-redirects to /wishlist, harmless to keep disallowing).

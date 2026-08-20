@@ -57,6 +57,38 @@ export function isFacetSort(s: string | null | undefined): s is FacetSort {
 
 export const FACET_PAGE_SIZE = 60;
 
+// ── SEO: the index threshold for a public facet page ────────────────────────
+//
+// A facet page listing one or two titles says nothing the item pages it points
+// at don't already say, so it competes with them for the same query while
+// carrying less. Measured on prod 2026-08-20: those pages render ~33 KB, which
+// is the empty-shell size, while a real one runs 90–260 KB.
+//
+// ⚠️ The threshold is POOL SIZE, not how many titles are LINKABLE, and the
+// difference matters. `/person/angelina-jolie` renders a full filmography with
+// posters, roles and ratings — 175 KB — and links exactly 2 of them, because
+// `linkable` is true only for titles a logged-in visitor's page view happened
+// to persist (PR14 gates the write on a real session). That page is
+// under-linked, which is a crawl-graph problem; it is not thin, and noindexing
+// it would delete a genuinely useful page over an unrelated defect.
+//
+// `follow` stays TRUE. The page's few outbound item links are the only reason
+// the crawler is on it, and nofollow would throw them away along with the page.
+export const MIN_INDEXABLE_TITLES = 3;
+
+// The robots directive for a facet page, or undefined to leave the default
+// (index, follow) in place. `itemsIndexable` is PUBLIC_ITEMS_INDEXABLE, passed
+// in rather than imported so this stays a pure function the tests can drive.
+export function facetRobots(
+  total: number,
+  itemsIndexable: boolean
+): { index: boolean; follow: boolean } | undefined {
+  // Soft launch beats everything: nothing public is indexed at all.
+  if (!itemsIndexable) return { index: false, follow: false };
+  if (total < MIN_INDEXABLE_TITLES) return { index: false, follow: true };
+  return undefined;
+}
+
 // One title on a public facet page. NO per-user field exists on this type — that
 // is the leak boundary (asserted in publicFacetDetail.test.ts). `id` is a media
 // uuid when the title was persisted (then `linkable` is true and it links to
