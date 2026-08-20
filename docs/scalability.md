@@ -36,6 +36,30 @@ www.omdbapi.com      req=  1  ok=  0  4xx=  1   last=401   invalid key
 **Three of the six providers return 401 on every call, and nothing surfaced that
 until the counters existed.**
 
+### 1a. ⚠️ The same counters after 10.5 h of real traffic — much worse than the per-page maths implied
+
+Taken at the end of the session, on the same boot. **This is the number that matters**, and it is not an extrapolation from a handful of probes.
+
+| Host | Requests | OK | 401 | Projected / month |
+|---|--:|--:|--:|--:|
+| `api.themoviedb.org` | **40,231** | 40,231 | 0 | **2,793,323** |
+| `api.rawg.io` | 13,068 | **0** | **13,068** | 907,339 |
+| `www.omdbapi.com` | 4,343 | **0** | **4,343** | 301,544 |
+| `api.letterboxd.com` | 3,155 | **0** | **3,155** | 219,058 |
+| `api.igdb.com` | 232 | 41 | 0 (190 network) | 16,108 · **2,929 blocked by the breaker** |
+| `store.steampowered.com` | 88 | 88 | 0 | 6,110 |
+| `api.trakt.tv` | 26 | 26 | 0 | 1,805 |
+
+**Three findings, in order of how cheap they are to act on.**
+
+**1. ~20,600 requests — about a third of all provider traffic — went to three endpoints that 401 on EVERY call.** RAWG (quota gone), OMDb (invalid key), Letterboxd (no key). Nothing is learning from the failure, so the app re-asks roughly 2,000 times an hour and will keep doing so forever.
+
+⚠️ **This is a design consequence, not an accident.** `http.ts` deliberately treats a 4xx as "the provider working as designed" and refuses to open the breaker on one, so that our own bad request cannot take a healthy host offline for everyone. That rule is right for a *one-off* 4xx and clearly wrong for a *persistent* one: **a 401 repeated 13,068 times is not a bad request, it is a dead credential.** The fix is a latch — after N consecutive 401/403s on a host, stop calling it and surface it — and it would remove a third of all provider traffic in one change. **Highest-leverage item in this document.**
+
+**2. TMDB at 40,231 requests in 10.5 h projects to ~2.8 MILLION per month**, from an app with almost no human users. This is the crawler thesis confirmed far more strongly than §3.1 estimated. ⚠️ **Note the likely trigger: the sitemap was submitted to Search Console the same morning**, so some of this is the crawl that SEO work invited. Expect it to persist. TMDB has no hard monthly cap, which is the only reason this has not broken anything, but it is the volume a $149/mo commercial licence would be priced against.
+
+**3. The circuit breaker is visibly working now that it can be seen.** IGDB shows **2,929 blocked** calls against 232 attempted, i.e. the breaker short-circuited 93% of them after IGDB started failing (190 network errors, consistent with its 4 req/s limit). Before the `globalThis` fix this was invisible and, in the page-route bundle, largely ineffective.
+
 ---
 
 ## 2. Where it holds up
@@ -164,7 +188,8 @@ because it fails silently.
 
 ## 4. What to do, ranked by leverage
 
-1. **Cut the provider fan-out on cold facet pages.** This is the whole problem.
+1. **Latch off providers that keep returning 401/403.** Measured a third of all provider traffic (§1a). One change in `http.ts`, no product impact, removes ~20,600 wasted requests per 10.5 h.
+2. **Cut the provider fan-out on cold facet pages.** The other half of the problem.
    Options, cheapest first: serve facet pages from the local catalog only and
    drop the provider pool; persist the provider pool in the DB the way the page
    payload already is; or `noindex` far more of the long tail so it is crawled

@@ -40,6 +40,8 @@ Everything else in this file is either done or a standing constraint.
 
 3. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
 
+4. **⚠️ Latch off providers that keep returning 401 — measured, and it is a third of all provider traffic.** In 10.5 h prod sent **13,068** requests to RAWG, **4,343** to OMDb and **3,155** to Letterboxd, and **every single one returned 401**. `http.ts` never opens the breaker on a 4xx (deliberately: our own bad request must not take a healthy host down for everyone), but a 401 repeated 13,068 times is a dead credential, not a bad request. A consecutive-401 latch is one small change in `http.ts` with no product impact. **Claude can do this; it is only unstarted because the session ended.** → [docs/scalability.md](docs/scalability.md) §1a
+
 **Standing constraints — not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
 - **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative "it costs money to run" line stays; no number ever joins it.
