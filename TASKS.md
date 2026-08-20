@@ -29,11 +29,13 @@ Everything else in this file is either done or a standing constraint.
 
 1. **🔴 Prove the restore works.** Two Console commands, detailed in the backups section below. The only urgent item: backups replicate again, but "replicating" and "restorable" are different claims and only the first has been checked. **No Railway variable to set — the file already reclaimed itself, 331.4 → 154.2 MB.**
 
-2. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
+2. **🔴 Verify fandex.org in Google Search Console.** Ten minutes, no deploy, and **everything about reach is unmeasurable until it is done** — `/dev/analytics` is a client beacon, so crawlers are invisible to it by design and it can never answer "are we indexed". Step-by-step (Cloudflare DNS TXT, then submit the sitemap, then the three reports worth reading) → [docs/seo.md](docs/seo.md). This matters now because monetization went ads-first and the first gate is 10,000 pageviews/mo.
 
-3. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
+3. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
 
-4. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
+4. **Re-run the RAWG cross-link sweep once RAWG is back up.** It was down all of 2026-08-17 (timeouts, open circuit), so 168 games still lack a RAWG link. Same shape as the Steam and IGDB sweeps that did run: `POST /api/dev/crosslink {"source":"rawg","maxItems":25}` from the browser console on fandex.org while logged in, repeating with the returned `afterId` **until the cursor drains** — never chasing the `needing` count, which never reaches zero. Not urgent: those games now have IGDB as a second source, so they still score.
+
+5. **Optional, and no longer urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan (see H3 below). Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon** — its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
 
 **Standing constraints — not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
@@ -55,7 +57,7 @@ Migration 16 wrote `json_group_array(source ORDER BY source)` into the wishlist 
 
 **Confirmed working on prod:** new generation `c62d7dc17a0fd0cb`, `snapshot written` in 3.0 s, WAL segments streaming, zero schema errors in the boot log, and the bucket went **33.6 MB → 181.8 MB**.
 
-### ⬜ Your step, and it is now the ONLY one: the restore drill
+### ⬜ Your step here: the restore drill
 
 Railway → releaseradar → **Console** (I can drive the browser, but the harness blocks typing into a production shell, correctly):
 
@@ -95,10 +97,6 @@ Compare against live via `/api/dev/dbsize`, then `rm /tmp/restore-test.db`.
 **What is actually growing:** the in-process L1 caches, filling under a crawl. The largest is `_facetPageCache` (`max: 3000`, whose own comment budgets **~145 MB retained**), beside ~10 more `BoundedCache`s. The ramp begins with a traffic burst at ~15:30 UTC.
 
 **Not urgent, and do not "fix" it blind.** 289 MB against `--max-old-space-size=1536`; no OOM risk, and that heap is the cache doing its job. ⚠️ **NOT established: whether `fe12682` made it worse** — the burst began before that deploy, so the pre/post comparison is confounded. Settle it by comparing heap against **crawl volume**, not wall-clock. If a bound is ever wanted, the lever is `_facetPageCache`'s `max`, sized against measured retained bytes. → [[prod-incidents]]
-
-### Corrected belief
-
-STATUS and PR17 recorded the 340 MB WAL as a benign high-water mark that "cannot be reclaimed while Litestream runs" and "needs no action". **That was this bug.** Litestream could not advance its read position, so SQLite could not checkpoint past it, which is why `wal_checkpoint(TRUNCATE)` returned `busy: 1` twice. A WAL that will not truncate is a symptom worth chasing, not a quirk to document.
 
 ## Open — carried forward from Phase 6
 
