@@ -394,9 +394,9 @@ function catalogReason(d: CatalogDiagnostic | null): string | null {
   if (!d.tmdbLinked && !d.traktLinked) {
     return "This show isn't linked to TMDB or Trakt yet, so there's no episode list to show.";
   }
-  if (d.lastError) return `Couldn't load the episode list — ${d.lastError}`;
+  if (d.lastError) return `Couldn't load the episode list. ${d.lastError}`;
   if (d.tmdbLinked && d.tmdbCircuitOpen) {
-    return "TMDB is unreachable right now — episodes will fill in once it recovers.";
+    return "TMDB is unreachable right now. Episodes will fill in once it recovers.";
   }
   return null;
 }

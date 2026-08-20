@@ -151,7 +151,7 @@ export default function AuthOptions({
             </div>
           </form>
           <p className="text-xs text-text-secondary">
-            Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.
+            Your password is used only to sign in to RAWG and is never stored. Only the resulting session token is kept.
           </p>
         </div>
       )}

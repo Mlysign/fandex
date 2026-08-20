@@ -108,7 +108,7 @@ function DecadeChart({ data, baseline, selected, onSelect }: {
                   outline: selected === d.decade ? "1px solid var(--color-accent)" : undefined,
                   outlineOffset: 1,
                 }}
-                title={`${d.decade}s — avg ${d.avg.toFixed(1)} over ${d.count}`}
+                title={`${d.decade}s · avg ${d.avg.toFixed(1)} over ${d.count}`}
               />
               {/* Q4: full year — a library spanning 1890s→2020s repeats "90s"/"20s" otherwise. */}
               <span className="text-[10px] leading-none text-text-secondary mt-1">{`${d.decade}s`}</span>
@@ -206,7 +206,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
 
       {typeOrder.length > 0 && (
         <section>
-          <PanelHeader eyebrow="Distribution by type" hint="Your score distribution per medium — do you rate games like you rate films?" />
+          <PanelHeader eyebrow="Distribution by type" hint="Your score distribution per medium. Do you rate games like you rate films?" />
           <div className="grid sm:grid-cols-3 gap-3">
             {typeOrder.map((t) => (
               <div key={t} className="rounded-xl border border-border bg-surface-elevated p-3">
@@ -274,7 +274,7 @@ export default function InsightsView({ data }: { data: InsightsPayload }) {
       />
 
       <section>
-        <PanelHeader eyebrow="Most watched" hint="Who appears most often across your rated library — actors and directors, film and game studios." />
+        <PanelHeader eyebrow="Most watched" hint="Who appears most often across your rated library: actors and directors, film and game studios." />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { title: "Actors", facets: mostWatched.actors },

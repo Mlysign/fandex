@@ -155,7 +155,7 @@ function CalendarCell({
         <button
           type="button"
           onClick={() => onOpenDay(format(day, "yyyy-MM-dd"))}
-          aria-label={`${format(day, "MMMM d")} — show all ${dayItems.length} releases`}
+          aria-label={`${format(day, "MMMM d")}, show all ${dayItems.length} releases`}
           aria-expanded={selected}
           className="absolute inset-0 z-0 rounded-sm md:rounded-md cursor-pointer"
         />
@@ -192,7 +192,7 @@ function CalendarCell({
               ref={singleRef}
               tabIndex={0}
               role="button"
-              aria-label={`${single.title} — view details`}
+              aria-label={`${single.title}, view details`}
               className="flex-1 flex flex-col justify-end cursor-pointer"
               onMouseEnter={() => { singleTimer.current = setTimeout(() => setSingleHovered(true), 350); }}
               onMouseLeave={() => { if (singleTimer.current) clearTimeout(singleTimer.current); setSingleHovered(false); }}

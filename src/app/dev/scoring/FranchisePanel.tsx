@@ -106,8 +106,8 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
         A franchise contributes to the Fandex Score through its own weight (<span className="text-neutral-400">Franchise</span>,
         on the Weights tab). <span className="text-neutral-400">Bundle</span> two names for the same franchise so they share one
         average; <span className="text-neutral-400">attach or detach</span> an item when the provider data is wrong or missing.
-        Shows have no provider franchise data at all — TMDB has no collections for series and IGDB only covers games — so
-        attaching is the only way a series joins one.
+        Shows have no provider franchise data at all, because TMDB has no collections for series and IGDB only covers
+        games, so attaching is the only way a series joins one.
       </p>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
@@ -151,7 +151,7 @@ function SuggestionList({
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 space-y-2">
       <p className="text-xs text-neutral-400">
-        {suggestions.length} title match{suggestions.length === 1 ? "" : "es"} — items whose title says they belong to a
+        {suggestions.length} title match{suggestions.length === 1 ? "" : "es"}, meaning items whose title says they belong to a
         franchise the catalog already knows, but which carry no provider data. Nothing is applied until you accept it.
       </p>
       <div className="max-h-72 overflow-y-auto space-y-1">

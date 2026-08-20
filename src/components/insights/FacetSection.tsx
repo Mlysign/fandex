@@ -80,7 +80,7 @@ function FacetGroup({
               </button>
             )
           : sorted.length > PER_GROUP && (
-              <p className="text-[11px] text-text-secondary px-1 pt-1">+{sorted.length - PER_GROUP} more — search to find them</p>
+              <p className="text-[11px] text-text-secondary px-1 pt-1">+{sorted.length - PER_GROUP} more, search to find them</p>
             )}
       </div>
     </div>
@@ -197,7 +197,7 @@ export default function FacetSection({
                 baseline={baseline}
                 href={buildFacetHref(f)}
                 impact={f.impact}
-                title={`${f.label}${f.role ? ` · ${ROLE_LABELS[f.role] ?? f.role}` : ""} — ${f.ba.toFixed(1)} Bayesian avg (raw ${f.avg.toFixed(1)}) over ${f.count}`}
+                title={`${f.label}${f.role ? ` · ${ROLE_LABELS[f.role] ?? f.role}` : ""} · ${f.ba.toFixed(1)} Bayesian avg (raw ${f.avg.toFixed(1)}) over ${f.count}`}
               />
             ))}
           </div>

@@ -54,7 +54,7 @@ export default function FandexScoreBadge({
   if (score == null) return null;
   const rounded = Math.round(score);
   const color = fandexScoreColor(score, center);
-  const label = `Fandex Score ${rounded} — ${matchStrength(score, center)}`;
+  const label = `Fandex Score ${rounded}, ${matchStrength(score, center)}`;
 
   if (variant === "overlay") {
     const dims = size === "md" ? "text-sm px-2.5 py-1 gap-1.5" : "text-[11px] px-1.5 py-0.5 gap-1";

@@ -68,7 +68,7 @@ const imprint: LegalDocument = {
       heading: "Copyright",
       body: [
         "Content and works created by the site operator on these pages are subject to German copyright law. Third-party contributions are marked as such.",
-        "Metadata about films, shows and games — including titles, artwork, descriptions and ratings — comes from third-party providers and remains with the respective rights holders. Fandex is not endorsed or certified by any of them.",
+        "Metadata about films, shows and games, including titles, artwork, descriptions and ratings, comes from third-party providers and remains with the respective rights holders. Fandex is not endorsed or certified by any of them.",
       ],
     },
   ],

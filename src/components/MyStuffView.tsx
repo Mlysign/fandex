@@ -78,7 +78,7 @@ function OnboardingState({ identities }: { identities: any[] }) {
     <div className="max-w-md mx-auto mt-16 px-4">
       <div className="text-center mb-10">
         <p className="font-serif text-serif-lg text-text-primary mb-2">Welcome to Fandex</p>
-        <p className="text-text-secondary text-sm">Track every game, movie, and show you&apos;re waiting for — in one place.</p>
+        <p className="text-text-secondary text-sm">Every game, movie and show you&apos;re waiting for, in one place.</p>
       </div>
       <div className="space-y-3">
         {steps.map((step, i) => (
@@ -346,7 +346,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
             className="mt-20"
             icon={<Bookmark className="w-5 h-5" aria-hidden />}
             title={`Sign in to see your ${noun}`}
-            hint="Connect Trakt, Steam, RAWG or TMDB and Fandex brings in everything you've watched, played, saved or own — then tracks what's coming next."
+            hint="Connect Trakt, Steam, RAWG or TMDB and Fandex brings in everything you've watched, played, saved or own, then tracks what's coming next."
             actions={
               <>
                 <Button variant="primary" size="md" onClick={() => setShowSignIn(true)}>Sign in</Button>
@@ -440,7 +440,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
               <EmptyState
                 className="mt-20"
                 title="Your library is empty"
-                hint="Connect Trakt, Steam, or RAWG and sync to bring in everything you've watched, played, or own — with your personal scores."
+                hint="Connect Trakt, Steam or RAWG and sync to bring in everything you've watched, played or own, with your personal scores."
                 actions={
                   <>
                     <Link href="/settings" className={buttonClasses("secondary", "md")}>Go to Profile →</Link>

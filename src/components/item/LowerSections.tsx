@@ -69,7 +69,7 @@ function AffiliateMark() {
       /* The visual is tiny, so the accessible name carries the full word — a
          screen-reader user gets "affiliate link", not the letters "ad". */
       aria-label="affiliate link"
-      title="Affiliate link — Fandex may earn a commission"
+      title="Affiliate link. Fandex may earn a commission"
     >
       Ad
     </span>
@@ -80,7 +80,7 @@ function AffiliateMark() {
 function BuyDisclosure() {
   return (
     <p className="font-mono text-meta text-text-secondary mt-2">
-      Links marked <span className="uppercase">Ad</span> are affiliate links — Fandex may earn a
+      Links marked <span className="uppercase">Ad</span> are affiliate links. Fandex may earn a
       commission on a purchase, at no extra cost to you.
     </p>
   );
@@ -173,7 +173,7 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
           <SectionHeading>Where to watch</SectionHeading>
           <p className="text-sm text-text-secondary">
             {isUnreleased
-              ? "Not streaming anywhere yet — this hasn't been released."
+              ? "Not streaming anywhere yet. This hasn't been released."
               : "Not available on any streaming service in your region right now."}
           </p>
         </section>

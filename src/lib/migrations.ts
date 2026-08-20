@@ -350,7 +350,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 10,
-    name: "tag_alias — bundle synonym/misspelled tag spellings (H5.6)",
+    name: "tag_alias: bundle synonym/misspelled tag spellings (H5.6)",
     up: (db) => {
       // Tag bundling: map member spellings (scifi, science fiction) → one
       // canonical key (sci fi) so scoring, Insights, the facet page and the
@@ -371,7 +371,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 11,
-    name: "tag_category.color — collapse the 9-hue palette onto the 4 facet-class colours",
+    name: "tag_category.color: collapse the 9-hue palette onto the 4 facet-class colours",
     up: (db) => {
       // 2026-07-30: facets render in four gold-family colours chosen by facet
       // CLASS (src/lib/facetPalette.ts), so a per-category hex no longer drives
@@ -395,7 +395,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 12,
-    name: "media_links.projection_version — pre-stamp non-TMDB rows to v3 (P18)",
+    name: "media_links.projection_version: pre-stamp non-TMDB rows to v3 (P18)",
     up: (db) => {
       // PROJECTION_VERSION went 2 → 3 (project.ts, P18): watch/providers now
       // keeps the per-region JustWatch `link` + which bucket won (`offerType`).
@@ -430,7 +430,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 13,
-    name: "ip_alias + item_ip_override — franchise bundling and per-item corrections",
+    name: "ip_alias + item_ip_override: franchise bundling and per-item corrections",
     up: (db) => {
       // 2026-08-14. Two brand-new tables (like migrations 9 and 10) — table +
       // its own index together in this same migration, never split across two,

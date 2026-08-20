@@ -222,7 +222,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           ref={ref as React.RefObject<HTMLAnchorElement>}
           href={buildItemHref(item)}
           data-item-id={item.id}
-          aria-label={`${item.title} — view details`}
+          aria-label={`${item.title}, view details`}
           // T13 (2026-07-29): overflow-hidden removed — it was clipping the
           // rate quick-action's expanding 10-star popover at the card's
           // bottom edge (ActionCells' `picking` overlay is `absolute
@@ -262,7 +262,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           ref={ref as React.RefObject<HTMLDivElement>}
           data-item-id={item.id}
           title="Not yet in the catalog"
-          aria-label={`${item.title} — not yet in the catalog`}
+          aria-label={`${item.title}, not yet in the catalog`}
           className="overflow-hidden rounded-md border border-border bg-surface-elevated relative block opacity-80"
         >
           {body}

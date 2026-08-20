@@ -4,7 +4,8 @@ import { ImageResponse } from "next/og";
 // convention into both openGraph.images and twitter.images automatically.
 // Deliberately simple (satori supports flexbox + a CSS subset only).
 
-export const alt = "Fandex — your index of every game, movie & show";
+// Keep this in step with layout.tsx's TITLE.
+export const alt = "Fandex: your index of every game, movie & show";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

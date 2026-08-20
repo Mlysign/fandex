@@ -46,7 +46,7 @@ const OUTCOME_LABELS: Record<EnrichmentOutcome["outcome"], { text: string; cls: 
   "no-match": { text: "no title match found", cls: "text-amber-400" },
   "not-configured": { text: "not configured (missing API credentials)", cls: "text-red-400" },
   "error": { text: "lookup failed", cls: "text-red-400" },
-  "skipped-primary": { text: "primary catalog — never title-searched", cls: "text-neutral-500" },
+  "skipped-primary": { text: "primary catalog, never title-searched", cls: "text-neutral-500" },
 };
 
 const ORIGIN_LABELS: Record<string, string> = {
@@ -275,7 +275,7 @@ function DebugInspector() {
       {/* External scores appended after merge (not part of the matrix) */}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-neutral-300 uppercase tracking-wide">Post-merge (OMDB)</h2>
-        <p className="text-xs text-neutral-500">Fetched by IMDb id (from TMDB/Trakt) — else title + year — after merging.</p>
+        <p className="text-xs text-neutral-500">Fetched by IMDb id (from TMDB/Trakt), else title + year, after merging.</p>
         <div className="flex gap-4 text-sm text-neutral-300">
           <span>RT: {item.rtScore ?? "—"}</span>
           <span>IMDb: {item.imdbRating ?? "—"}</span>

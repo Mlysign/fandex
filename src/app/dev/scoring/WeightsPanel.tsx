@@ -187,7 +187,7 @@ export default function WeightsPanel({
                   onChange={(e) => setDraftConfig((c) => ({ ...c, mappingConstantUp: Number(e.target.value) }))} />
               </label>
               <p className="text-xs text-neutral-500">
-                Formula: <code className="text-neutral-400">yourAvgRating×10 + K · Σ(dev·weight)</code> — a raw sum
+                Formula: <code className="text-neutral-400">yourAvgRating×10 + K · Σ(dev·weight)</code>. A raw sum
                 over the selected facets below, not an average, and no longer clamped to 0–100. Applied when an
                 item&apos;s facets sum positive. Higher K_up = a good match swings up more dramatically.
               </p>
@@ -200,8 +200,8 @@ export default function WeightsPanel({
               </label>
               <p className="text-xs text-neutral-500">
                 Same formula, applied when an item scores below your average. Set lower than K_up to skew the visible
-                range toward enthusiasm — mismatches drop off gently instead of the score reading as &ldquo;you
-                won&apos;t like this.&rdquo; The center itself (your own average rating, ×10) is not a knob — only
+                range toward enthusiasm, so mismatches drop off gently instead of the score reading as &ldquo;you
+                won&apos;t like this.&rdquo; The center itself (your own average rating, ×10) is not a knob. Only
                 these two gains are.
               </p>
             </div>
@@ -211,7 +211,7 @@ export default function WeightsPanel({
         <section className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-4">
           <h2 className="text-sm font-semibold text-neutral-200">Selection (top-N)</h2>
           <p className="text-xs text-neutral-500">
-            The score is a raw sum, not an average — so it needs a fixed number of facets to sum, or a tag-dense
+            The score is a raw sum, not an average, so it needs a fixed number of facets to sum, or a tag-dense
             item (a 300-tag game) would swamp a sparse one (a 5-tag film). Each item&apos;s highest-contributing
             facets, up to these counts per bucket, are summed; everything else is shown greyed-out as
             &ldquo;not counted for this title.&rdquo;
@@ -281,7 +281,7 @@ export default function WeightsPanel({
             </button>
           </form>
           {pinnedItems.length >= MAX_PINNED && (
-            <p className="text-xs text-neutral-500 mt-1">Max {MAX_PINNED} items pinned — remove one to add another.</p>
+            <p className="text-xs text-neutral-500 mt-1">Max {MAX_PINNED} items pinned. Remove one to add another.</p>
           )}
           {searchResults.length > 0 && (
             <div className="mt-1.5 rounded-md border border-neutral-700 bg-neutral-950 max-h-48 overflow-y-auto divide-y divide-neutral-800">
@@ -319,8 +319,8 @@ export default function WeightsPanel({
         {previews.length === 0 && !previewError && (
           <p className="text-sm text-neutral-500">
             {pinnedItems.length > 0
-              ? "Hit Preview to score your pinned items against these draft weights — nothing is saved."
-              : "Scores your own top-rated library item against these draft weights — nothing is saved. Pin up to 3 specific items above to compare instead."}
+              ? "Hit Preview to score your pinned items against these draft weights. Nothing is saved."
+              : "Scores your own top-rated library item against these draft weights. Nothing is saved. Pin up to 3 specific items above to compare instead."}
           </p>
         )}
         {previewError && <p className="text-sm text-red-400">{previewError}</p>}

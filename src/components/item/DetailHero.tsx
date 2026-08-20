@@ -116,7 +116,7 @@ export default function DetailHero({
           // than a bare scrolling div. Each slide names its own position.
           role="group"
           aria-roledescription="carousel"
-          aria-label={`${meta.title} — images`}
+          aria-label={`${meta.title}, images`}
         >
           {images.map((src, i) => (
             <div

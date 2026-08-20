@@ -52,7 +52,7 @@ export default function Histogram({
                   outline: selected === d.bucket ? `1px solid ${color}` : undefined,
                   outlineOffset: 1,
                 }}
-                title={`${d.bucket.toFixed(1)} — ${d.count}`}
+                title={`${d.bucket.toFixed(1)} · ${d.count}`}
               />
               <span className="text-[9px] leading-none text-text-secondary mt-1 h-2.5 tabular-nums">
                 {isInt ? d.bucket : ""}

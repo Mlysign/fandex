@@ -86,7 +86,7 @@ const imprint: LegalDocument = {
       heading: "Urheberrecht",
       body: [
         "Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Beiträge Dritter sind als solche gekennzeichnet.",
-        "Metadaten zu Filmen, Serien und Spielen — einschließlich Titel, Bildmaterial, Beschreibungen und Bewertungen — stammen von Drittanbietern und verbleiben bei den jeweiligen Rechteinhabern. Fandex ist von diesen Anbietern weder unterstützt noch zertifiziert.",
+        "Metadaten zu Filmen, Serien und Spielen, einschließlich Titel, Bildmaterial, Beschreibungen und Bewertungen, stammen von Drittanbietern und verbleiben bei den jeweiligen Rechteinhabern. Fandex ist von diesen Anbietern weder unterstützt noch zertifiziert.",
       ],
     },
   ],

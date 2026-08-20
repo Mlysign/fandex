@@ -81,7 +81,7 @@ function CategoryList({ categories, onChanged }: { categories: TagCategoryConfig
     <section className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
       <h2 className="text-sm font-semibold text-neutral-200">Categories</h2>
       <p className="text-xs text-neutral-500">
-        Weight/ignored are edited in the Weights &amp; Tuning tab — this is id/label, and creating or removing a category.
+        Weight/ignored are edited in the Weights &amp; Tuning tab. This is id/label, and creating or removing a category.
         Colour is not per-category: every tag renders in the shared tag colour, except <code>genre</code>, which gets the brand gold.
       </p>
       <div className="space-y-1.5">

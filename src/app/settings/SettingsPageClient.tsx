@@ -238,7 +238,7 @@ function SettingsContent() {
                 className="w-full bg-surface-inset border border-border-strong rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
                 value={rawgPassword} onChange={(e) => setRawgPassword(e.target.value)} />
             </div>
-            <p className="text-xs text-text-secondary">Your password is used only to sign in to RAWG and is never stored — only the resulting session token is kept.</p>
+            <p className="text-xs text-text-secondary">Your password is used only to sign in to RAWG and is never stored. Only the resulting session token is kept.</p>
             <div className="flex gap-2 pt-1">
               <button type="submit" disabled={rawgLoading}
                 className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
@@ -288,7 +288,7 @@ function SettingsContent() {
               nobody has confirmed it. H4.3's privacy policy has to state the
               real figure — this text must not invent one first. */}
           <p className="text-xs text-text-secondary">
-            Your ratings and lists on Trakt, TMDB, Steam and RAWG are not affected — only what Fandex stores.
+            Your ratings and lists on Trakt, TMDB, Steam and RAWG are not affected. This clears only what Fandex stores.
             Your data is removed immediately; copies in the backups age out with the backup retention window.
           </p>
 
@@ -405,7 +405,7 @@ function SettingsContent() {
                   <p className="text-xs text-text-secondary mt-1">
                     {/* Template string, not JSX text: the space after {p.label} gets
                         swallowed in the compiled output (SM5). */}
-                    {`Read-only – ${p.label} doesn’t support adding to wishlist via API`}
+                    {`Read-only. ${p.label} doesn’t support adding to a wishlist via its API.`}
                   </p>
                 )}
               </div>
@@ -421,7 +421,7 @@ function SettingsContent() {
             eyebrow="Add login method"
             hint={
               getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg")
-                ? "All available login methods are connected — any of them can sign you in."
+                ? "All available login methods are connected. Any of them can sign you in."
                 : "Connect another account to log in with it in the future."
             }
           />
@@ -503,7 +503,7 @@ function SettingsContent() {
             <div className="min-w-0">
               <p className="font-medium text-sm text-text-primary">Download your data</p>
               <p className="text-xs text-text-secondary">
-                Everything Fandex stores about you — library, wishlist, ratings and connected accounts — as a JSON file.
+                Everything Fandex stores about you, as a JSON file: library, wishlist, ratings and connected accounts.
               </p>
             </div>
             <Button onClick={exportData} disabled={exporting}>

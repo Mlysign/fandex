@@ -64,7 +64,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const title = year ? `${item.title} (${year})` : item.title;
   const description =
     item.description?.slice(0, 200) ??
-    `${item.title} — release date, ratings and where to watch, on Fandex.`;
+    `${item.title}. Release date, ratings and where to watch, on Fandex.`;
   const image = item.posterUrl ?? item.backdropUrl;
   // Every item has a uuid now (H2b), so there is always exactly one canonical
   // url — no more "live item with nothing stable to index" case.

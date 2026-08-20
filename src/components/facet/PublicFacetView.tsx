@@ -242,7 +242,7 @@ export default function PublicFacetView({ initial, prefix, kind, roleLabel, isLo
             <h1 className="font-serif text-serif-2xl text-text-primary">{initial.label}</h1>
             {initial.nameCollision && (
               <p className="text-xs mt-0.5" style={{ color: "var(--color-warning)" }}>
-                Multiple people share this name — showing the most well-known match{person?.knownForDepartment ? ` (${person.knownForDepartment})` : ""}.
+                Multiple people share this name. Showing the most well-known match{person?.knownForDepartment ? ` (${person.knownForDepartment})` : ""}.
               </p>
             )}
             {person && (

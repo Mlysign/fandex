@@ -274,11 +274,11 @@ export default function ActionCells({
   const rateTitle = anon ? "Sign in to rate" : rated ? `Your rating ${fmt(rating!)}/10` : "Rate";
   const rateLabel = anon
     ? "Sign in to rate this"
-    : rated ? `Your rating ${fmt(rating!)} out of 10 — change rating` : "Rate this";
+    : rated ? `Your rating ${fmt(rating!)} out of 10, change rating` : "Rate this";
   const wishTitle = anon ? "Sign in to add to your wishlist" : onList ? "On wishlist" : "Add to wishlist";
   const wishLabel = anon
     ? "Sign in to add this to your wishlist"
-    : onList ? "On your wishlist — remove" : "Add to wishlist";
+    : onList ? "On your wishlist, remove" : "Add to wishlist";
 
   // 03-components.md §2's quick-action bar, literally: Rate = Star + "Rate",
   // flex:1; Bookmark = fixed 32px square. Both --radius-sm on the spec's

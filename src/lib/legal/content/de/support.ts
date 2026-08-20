@@ -5,13 +5,13 @@ const support: LegalDocument = {
   title: "Support",
   updated: "2026-07-30",
   intro: [
-    "Fandex wird von einer einzelnen Person als Hobbyprojekt neben allem anderen im Leben betrieben — kein Unternehmen mit einem Support-Team. Hier ist, was das für Sie konkret bedeutet.",
+    "Fandex wird von einer einzelnen Person als Hobbyprojekt neben allem anderen im Leben betrieben, nicht als Unternehmen mit einem Support-Team. Hier ist, was das für Sie konkret bedeutet.",
   ],
   sections: [
     {
       heading: "Kontakt",
       body: [
-        "hello@fandex.org — für Fehlermeldungen, Fragen zu Ihrem Konto (auch zu Ihren Daten) oder allgemeines Feedback.",
+        "hello@fandex.org, für Fehlermeldungen, Fragen zu Ihrem Konto (auch zu Ihren Daten) oder allgemeines Feedback.",
       ],
     },
     {
@@ -23,7 +23,7 @@ const support: LegalDocument = {
     {
       heading: "Bevor Sie schreiben",
       body: [
-        "Zwei Dinge sind bereits selbstbedienbar und benötigen keine E-Mail — beide unter Einstellungen → Ihre Daten:",
+        "Zwei Dinge sind bereits selbstbedienbar und benötigen keine E-Mail. Beide finden Sie unter Einstellungen → Ihre Daten:",
         {
           list: [
             "Alles herunterladen, was Fandex über Sie speichert, als Datei zum Behalten.",
@@ -36,7 +36,7 @@ const support: LegalDocument = {
     {
       heading: "Fehlermeldungen",
       body: [
-        "Je konkreter, desto schneller kann sich das tatsächlich jemand ansehen: was Sie gemacht haben, was Sie erwartet haben, was stattdessen passiert ist — und, falls es einen bestimmten Titel betrifft, welchen.",
+        "Je konkreter, desto schneller kann sich das tatsächlich jemand ansehen: was Sie gemacht haben, was Sie erwartet haben, was stattdessen passiert ist, und, falls es einen bestimmten Titel betrifft, welchen.",
       ],
     },
     // H3.3, 2026-08-03. Bewusst OHNE konkrete Kostenangabe (Nils) — eine Zahl
@@ -50,7 +50,7 @@ const support: LegalDocument = {
     {
       heading: "Fandex finanziell unterstützen",
       body: [
-        "Fandex ist kostenlos, zeigt keine Werbung und verkauft oder teilt Ihre Daten nicht — daran soll sich nichts ändern. Der Betrieb kostet trotzdem Geld: Hosting, Domain und die Dienste, aus denen die Daten stammen, gehen alle auf eigene Rechnung.",
+        "Fandex ist kostenlos, zeigt keine Werbung und verkauft oder teilt Ihre Daten nicht. Daran soll sich nichts ändern. Der Betrieb kostet trotzdem Geld: Hosting, Domain und die Dienste, aus denen die Daten stammen, gehen alle auf eigene Rechnung.",
         {
           rich: [
             "Wer dabei helfen möchte, findet eine Spendenseite unter ",
@@ -58,7 +58,7 @@ const support: LegalDocument = {
             ". Das ist ausdrücklich freiwillig.",
           ],
         },
-        "Was eine Spende nicht bewirkt: Es gibt keine Unterstützerstufen, keine Vorteile, keine Funktionen hinter einer Bezahlschranke und keinen früheren Zugang. Alle bekommen dasselbe Fandex. Eine Spende deckt Betriebskosten — sie kauft weder Vorrang noch Mitsprache darüber, was als Nächstes gebaut wird.",
+        "Was eine Spende nicht bewirkt: Es gibt keine Unterstützerstufen, keine Vorteile, keine Funktionen hinter einer Bezahlschranke und keinen früheren Zugang. Alle bekommen dasselbe Fandex. Eine Spende deckt Betriebskosten. Sie kauft weder Vorrang noch Mitsprache darüber, was als Nächstes gebaut wird.",
       ],
     },
   ],

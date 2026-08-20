@@ -179,7 +179,7 @@ function emptyReason(status: UpNextStatus | null): string {
 
   const lib = status.lastLibrarySync;
   if (lib?.status && lib.status !== "ok") {
-    return `Your last Trakt sync failed, so there's no episode history to show — ${lib.error ?? "no reason recorded"}.`;
+    return `Your last Trakt sync failed, so there's no episode history to show. ${lib.error ?? "No reason was recorded"}.`;
   }
 
   if (status.episodeRows === 0) {
@@ -190,14 +190,14 @@ function emptyReason(status: UpNextStatus | null): string {
     // exist. Either no sync has run since episode tracking shipped, or Trakt
     // reports nothing watched.
     return status.lastEpisodeSync
-      ? "Your last sync pulled no episode data from Trakt — the counts below say which part came back empty."
-      : "No episode history yet — sync Trakt to pull in what you've watched.";
+      ? "Your last sync pulled no episode data from Trakt. The counts below say which part came back empty."
+      : "No episode history yet. Sync Trakt to pull in what you've watched.";
   }
 
   if (status.showsAwaitingCatalog > 0) {
     return `Looking up episode lists for ${status.showsAwaitingCatalog} show${
       status.showsAwaitingCatalog === 1 ? "" : "s"
-    } — syncing fills these in.`;
+    }. Syncing fills these in.`;
   }
 
   return `You're caught up on all ${status.showsTracked} show${status.showsTracked === 1 ? "" : "s"} you're tracking.`;

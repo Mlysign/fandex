@@ -63,7 +63,7 @@ export default function WishlistPanel({
                 </div>
               ) : p.onList ? (
                 <button onClick={() => onToggle(p.provider, true)} disabled={platformAction === p.provider} className={`${ON_LIST_PILL} transition-colors disabled:opacity-40 hover:brightness-110`}>
-                  {platformAction === p.provider ? "..." : "✓ On list – Remove"}
+                  {platformAction === p.provider ? "..." : "✓ On list, remove"}
                 </button>
               ) : (
                 <button onClick={() => onToggle(p.provider, false)} disabled={platformAction === p.provider} className="text-xs px-2.5 py-1 rounded-full border border-border-strong text-text-secondary hover:border-neutral-400 hover:text-text-primary transition-colors disabled:opacity-40">

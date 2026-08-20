@@ -26,9 +26,17 @@ const spaceMono = Space_Mono({
   variable: "--font-space-mono",
 });
 
-const TITLE = "Fandex — your index of every game, movie & show";
+// The two strings a stranger is most likely to read, and for a long time the
+// only two: they are the Google result. Both were rewritten on 2026-08-20 after
+// the title's em-dash was called out for reading as machine-written. House rule
+// (~/.claude/CLAUDE.md): no em-dashes, no three-item lists with a rhythm, no
+// "not just X, it's Y". A colon does the title's job; the description says what
+// the thing is and then what it does, in two sentences.
+//
+// Keep DESCRIPTION under ~155 characters or Google truncates it mid-sentence.
+const TITLE = "Fandex: your index of every game, movie & show";
 const DESCRIPTION =
-  "Fandex is your personal index of games, movies, and shows — manage wishlists, get recommendations from your own taste, and track upcoming releases on a calendar. Connects Trakt, Steam, TMDB and more.";
+  "One index for every game, movie and show. Fandex tracks your wishlist and learns your taste, so you know what's out next. Connects Trakt, Steam and TMDB.";
 
 // P12 — SEO metadata. metadataBase makes OG/sitemap URLs absolute; the title
 // template lets authed pages set just their name (e.g. "Library · Fandex").

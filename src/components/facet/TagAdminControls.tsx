@@ -73,7 +73,7 @@ export default function TagAdminControls({
 
   return (
     <div className="rounded-xl border border-dashed border-warning/50 bg-warning-subtle p-3 space-y-3 text-xs">
-      <p className="font-mono font-semibold uppercase tracking-wide text-[10px]" style={{ color: "var(--color-warning)" }}>Admin — taxonomy editor</p>
+      <p className="font-mono font-semibold uppercase tracking-wide text-[10px]" style={{ color: "var(--color-warning)" }}>Admin · taxonomy editor</p>
 
       <div className="flex items-center gap-2">
         <span className="text-text-secondary shrink-0">Category</span>

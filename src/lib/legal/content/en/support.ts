@@ -5,13 +5,13 @@ const support: LegalDocument = {
   title: "Support",
   updated: "2026-07-30",
   intro: [
-    "Fandex is built and run by one person, as a hobby project alongside everything else in their life — not a company with a support team. Here's what that actually means for you.",
+    "Fandex is built and run by one person, as a hobby project alongside everything else in their life, not as a company with a support team. Here's what that actually means for you.",
   ],
   sections: [
     {
       heading: "Contact",
       body: [
-        "hello@fandex.org — for bug reports, account questions (including anything about your data), or general feedback.",
+        "hello@fandex.org, for bug reports, account questions (including anything about your data), or general feedback.",
       ],
     },
     {
@@ -23,7 +23,7 @@ const support: LegalDocument = {
     {
       heading: "Before you write in",
       body: [
-        "Two things are already self-serve and don't need an email — both live in Settings → Your data:",
+        "Two things are already self-serve and don't need an email. Both live in Settings → Your data:",
         {
           list: [
             "Downloading everything Fandex holds about you, as a file you can keep.",
@@ -36,7 +36,7 @@ const support: LegalDocument = {
     {
       heading: "Bug reports",
       body: [
-        "The more specific, the faster it can actually get looked at: what you were doing, what you expected, what happened instead, and — if it's about a specific title — which one.",
+        "The more specific, the faster it can actually get looked at: what you were doing, what you expected, what happened instead, and, if it's about a specific title, which one.",
       ],
     },
     // H3.3, 2026-08-03. Deliberately the LAST section: the page's job is help
@@ -56,7 +56,7 @@ const support: LegalDocument = {
     {
       heading: "Supporting Fandex financially",
       body: [
-        "Fandex is free, has no ads, and doesn't sell or share your data — none of that is planned to change. It does cost money to keep running, though: hosting, the domain, and the services it pulls data from all come out of pocket.",
+        "Fandex is free, has no ads, and doesn't sell or share your data. None of that is planned to change. It does cost money to keep running, though: hosting, the domain, and the services it pulls data from all come out of pocket.",
         {
           rich: [
             "If you'd like to help cover that, there's a donation page at ",
@@ -64,7 +64,7 @@ const support: LegalDocument = {
             ". It's genuinely optional.",
           ],
         },
-        "What a donation does not do: there are no supporter tiers, no perks, no features behind a paywall, and no early access. Everyone gets the same Fandex. A donation covers running costs and nothing else — it buys goodwill and server bills, not a say in what gets built.",
+        "What a donation does not do: there are no supporter tiers, no perks, no features behind a paywall, and no early access. Everyone gets the same Fandex. A donation covers running costs and nothing else. It buys goodwill and server bills, not a say in what gets built.",
       ],
     },
   ],

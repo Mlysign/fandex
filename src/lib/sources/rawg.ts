@@ -106,7 +106,7 @@ export async function getRawgUserToPlayAuth(token: string, slug: string): Promis
       headers: { "Token": `Token ${token}` },
     });
     if (!fetchRes.ok) {
-      if (fetchRes.status === 401) throw new Error("RAWG token invalid – please reconnect");
+      if (fetchRes.status === 401) throw new Error("RAWG token invalid, please reconnect");
       throw new Error(`RAWG API error: ${fetchRes.status}`);
     }
     const data: any = await fetchRes.json();
@@ -130,7 +130,7 @@ export async function getRawgUserPlayed(slug: string, token?: string): Promise<a
     const res: Response = await httpFetch(url, token ? { headers: { Token: `Token ${token}` } } : undefined);
     if (!res.ok) {
       if (res.status === 404) throw new Error(`RAWG user "${slug}" not found`);
-      if (res.status === 401) throw new Error("RAWG token invalid – please reconnect");
+      if (res.status === 401) throw new Error("RAWG token invalid, please reconnect");
       throw new Error(`RAWG API error: ${res.status}`);
     }
     const data: any = await res.json();

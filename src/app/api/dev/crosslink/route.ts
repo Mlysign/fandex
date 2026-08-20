@@ -73,7 +73,7 @@ export const POST = withScoringAdmin(async (req: NextRequest) => {
     result,
     survey: surveyGameCrossLinks(sources),
     hint: result.nextAfterId
-      ? `Repeat with {"afterId":"${result.nextAfterId}"} — ${result.remaining} still to visit.`
+      ? `Repeat with {"afterId":"${result.nextAfterId}"}. ${result.remaining} still to visit.`
       : "Sweep complete for these sources.",
   });
 });

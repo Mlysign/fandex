@@ -63,7 +63,7 @@ export default function ScopeFilter({ activeScopes, onToggleScope, anon, onReque
             // A locked chip is a sign-in button, not a toggle — announcing a
             // pressed state for it would be a lie.
             aria-pressed={locked ? undefined : active}
-            aria-label={locked ? `${title} — sign in to use` : label}
+            aria-label={locked ? `${title}, sign in to use` : label}
             title={locked ? `Sign in to see your ${title.toLowerCase()}` : title}
             className={`tap-44 w-10 h-10 shrink-0 rounded-full border flex items-center justify-center transition-colors ${active ? "" : INACTIVE_CLASS} ${locked ? "opacity-45" : ""}`}
             style={active ? { borderColor: "var(--color-accent)", background: "var(--color-accent)", color: "var(--color-text-on-accent)" } : undefined}

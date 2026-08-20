@@ -43,7 +43,7 @@ export default function ScoringAdmin() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-neutral-100">Fandex Score — Admin</h1>
+        <h1 className="text-xl font-bold text-neutral-100">Fandex Score · Admin</h1>
         <p className="text-sm text-neutral-500 mt-1">
           Tune the taste-match engine and edit the tag taxonomy. Changes here affect every user&apos;s Fandex Score.
         </p>

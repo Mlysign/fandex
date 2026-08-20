@@ -58,9 +58,9 @@ export async function buildFacetMetadata(
   }
   const label = found.label;
   const description =
-    prefix === "person" ? `Every movie & show ${label} worked on, with ratings and where to watch — on Fandex.`
-    : prefix === "studio" ? `Movies, shows and games from ${label}, ranked by rating — on Fandex.`
-    : `The best ${label} movies, shows and games, ranked — on Fandex.`;
+    prefix === "person" ? `Every movie and show ${label} worked on, with ratings and where to watch.`
+    : prefix === "studio" ? `Movies, shows and games from ${label}, ranked by rating.`
+    : `The best ${label} movies, shows and games, ranked by rating.`;
   const canonical = `${BASE_URL}${publicFacetHref({ kind: found.kind, key: found.key })}`;
 
   // SEO (2026-08-20) — the soft-launch switch, plus a noindex for the thin tail

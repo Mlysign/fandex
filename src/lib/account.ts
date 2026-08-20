@@ -108,7 +108,7 @@ export function deleteAccount(userId: string): AccountDeletionResult {
     if (leftovers.length > 0) {
       log.error("account_delete_incomplete", { userId, leftovers });
       throw new Error(
-        `Account deletion incomplete — rows remain in: ${leftovers.map((l) => `${l.table}(${l.n})`).join(", ")}`,
+        `Account deletion incomplete. Rows remain in: ${leftovers.map((l) => `${l.table}(${l.n})`).join(", ")}`,
       );
     }
 
@@ -334,7 +334,7 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       "Timestamps are Unix seconds (UTC) unless they end in 'Z'.",
       "'library' and 'watchlist' are the merged per-item view; 'itemState' is the same data split per connected provider.",
       "'episodes' lists the individual show episodes you have marked as watched.",
-      "Access tokens for connected accounts are deliberately excluded — they are credentials, not your data.",
+      "Access tokens for connected accounts are deliberately excluded. They are credentials, not your data.",
       "Titles are shown for convenience; the catalog itself is shared and is not part of your personal data.",
     ],
     user: {

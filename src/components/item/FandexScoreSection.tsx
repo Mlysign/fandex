@@ -129,7 +129,7 @@ function scoreReasonLine(score: number, center: number | null, top: Reason | und
   const capped = strength.charAt(0).toUpperCase() + strength.slice(1);
   if (!top) return `${capped} for your taste.`;
   const verb = top.contribution >= 0 ? "highly" : "lower than most";
-  return `${capped} — you rate ${top.label} ${verb}.`;
+  return `${capped}. You rate ${top.label} ${verb}.`;
 }
 
 export default function FandexScoreSection({
@@ -184,7 +184,7 @@ export default function FandexScoreSection({
         numberColor="var(--color-text-muted)" number="—" eyebrow="Fandex Score"
         reason={
           <span className="text-text-secondary font-normal">
-            Rate a few titles to unlock your Fandex Score — a personalized 0-100 taste match for everything you browse.
+            Rate a few titles to unlock your Fandex Score, a personalized 0-100 taste match for everything you browse.
           </span>
         }
       />
@@ -248,7 +248,7 @@ export default function FandexScoreSection({
                 <div key={`${r.kind}|${r.role ?? ""}|${r.label}`}>
                   {firstCapped && (
                     <p className="text-[10px] text-text-secondary uppercase tracking-wide pt-1 pb-1.5 border-t border-border mt-1">
-                      Not counted for this title — outside the top matches this item selects
+                      Not counted for this title, being outside the top matches this item selects
                     </p>
                   )}
                   <div className={`flex items-start justify-between gap-3 text-xs ${r.capped ? "opacity-40" : ""}`}>

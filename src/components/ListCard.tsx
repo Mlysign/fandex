@@ -92,7 +92,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
           ref={ref as React.RefObject<HTMLAnchorElement>}
           href={buildItemHref(item)}
           data-item-id={item.id}
-          aria-label={`${item.title} — view details`}
+          aria-label={`${item.title}, view details`}
           className={`flex items-stretch min-h-[60px] bg-surface-elevated hover:border-border-strong border rounded-lg overflow-hidden transition-colors duration-base cursor-pointer group ${
             highlight ? "border-accent/40" : "border-border"
           }`}
@@ -107,7 +107,7 @@ export default function ListCard({ item, onSelect, highlight }: ListCardProps) {
           ref={ref as React.RefObject<HTMLDivElement>}
           data-item-id={item.id}
           title="Not yet in the catalog"
-          aria-label={`${item.title} — not yet in the catalog`}
+          aria-label={`${item.title}, not yet in the catalog`}
           className="flex items-stretch min-h-[60px] bg-surface-elevated border border-border rounded-lg overflow-hidden opacity-80"
         >
           {body}

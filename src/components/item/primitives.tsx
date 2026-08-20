@@ -19,7 +19,7 @@ export function ScoreBadge({ r }: { r: { source: string; label: string; score: n
     : `${fmtScore(r.score)}`;
   const inner = (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-semibold bg-surface-elevated border border-border text-text-primary"
-      title={r.votes ? `${r.label} — ${r.votes.toLocaleString()} votes` : r.label}>
+      title={r.votes ? `${r.label} · ${r.votes.toLocaleString()} votes` : r.label}>
       <span className="text-[10px] uppercase tracking-wide font-bold text-text-secondary">{r.label}</span>
       {text}
     </span>

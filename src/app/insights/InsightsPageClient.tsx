@@ -62,7 +62,7 @@ export default function InsightsPageClient() {
           <EmptyState
             icon={<BarChart3 className="w-5 h-5" aria-hidden />}
             title="No rated items in your library yet"
-            hint="Rate a few games, movies or shows, then come back — every chart here is built from your ratings."
+            hint="Rate a few games, movies or shows, then come back. Every chart here is built from your ratings."
             actions={<Link href="/library" className="text-label text-accent hover:underline">Go to Library →</Link>}
           />
         )}

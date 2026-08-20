@@ -179,7 +179,7 @@ export default function HomePageClient() {
         ) : !hasAnyContent ? (
           <EmptyState
             title="Nothing to show right now"
-            hint="The providers didn't return any upcoming releases — try again in a bit."
+            hint="The providers didn't return any upcoming releases. Try again in a bit."
           />
         ) : (
           <div className="space-y-8">

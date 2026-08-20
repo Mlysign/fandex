@@ -35,7 +35,7 @@ export const POST = withScoringAdmin(async (req: NextRequest, session) => {
       );
 
   if (!itemRow) {
-    return NextResponse.json({ error: "No rated library item to preview against yet — rate something first." }, { status: 400 });
+    return NextResponse.json({ error: "No rated library item to preview against yet. Rate something first." }, { status: 400 });
   }
 
   const itemType = itemRow.type as MediaType;
