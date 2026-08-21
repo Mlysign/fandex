@@ -21,7 +21,7 @@ Provider requests made while serving one page, on a cold process:
 | `/tag/{genre}` warm | 0.16 s | **0** | | | | |
 | `/calendar/{month}` cold | 1.9 s | 5 | 1 | 2 | 1 | twitch 1 |
 | `/` (homepage) | 0.15 s | **0** | | | | |
-| `/{type}/{id}/{slug}` warm | 0.46 s | 2 | | | | letterboxd 1, omdb 1 |
+| `/{type}/{slug}` (item page) warm | 0.46 s | 2 | | | | letterboxd 1, omdb 1 |
 
 And the provider health that fell out of the same snapshot:
 

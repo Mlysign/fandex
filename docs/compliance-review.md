@@ -84,7 +84,7 @@ rendered content a visitor could click through from, so they're noted but not sc
 | `/item/debug` | ✅ (unlinked dev tool, no auth gate) | ✅ | ❌ |
 | `/dev/scoring` | ✅ (404s for non-admin via `notFound()`, `page.tsx:10`) | ✅ (admin only) | n/a — 404 |
 | `/legal/[locale]/[doc]` | ✅ | ✅ | ❌ |
-| `/[type]/[id]/[slug]` (item detail) | ✅ | ✅ | ❌ |
+| `/[type]/[slug]` (item detail; was `/[type]/[id]/[slug]` until 2026-08-21) | ✅ | ✅ | ❌ |
 | `/person/[slug]` | ✅ | ✅ | ❌ |
 | `/tag/[slug]` | ✅ | ✅ | ❌ |
 | `/studio/[slug]` | ✅ | ✅ | ❌ |

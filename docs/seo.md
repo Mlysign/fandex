@@ -230,6 +230,16 @@ They are already crawled heavily via item-page links — that crawl is what fill
 `force-dynamic` provider-fanout URLs would invite more of exactly that. **Fix the
 under-linking first, then reconsider.**
 
+### 🔵 A facet page renders ZERO `<a href>` in its server HTML
+
+Measured 2026-08-21 against a real `next start` build: `/tag/cyberpunk` ships its
+item data inside the flight payload (`\"slug\":\"the-matrix\",\"linkable\":true`) and
+renders **60 item links in the DOM after hydration, and none before it**. Googlebot
+renders, so those links are probably seen; a crawler that fetches HTML and stops
+sees a facet page with no outbound item links at all. That makes the under-linking
+above worse than it reads, and it is the same shape of problem: the internal link
+graph exists only for clients that run JS.
+
 ### 🔵 Item pages link to no other item pages
 
 Every item page links out to ~25 facet pages and to zero sibling items. A

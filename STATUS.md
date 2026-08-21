@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
 
-_Last updated: 2026-08-20 (SEO shipped + Search Console verified; **the ads gate was reading 80% crawler and is now filtered**; www folded onto the apex; restore drill passed; RAWG quota exhausted)._
+_Last updated: 2026-08-21 (**public item urls are now `/{type}/{slug}`** and no longer churn on every deploy; the item page gained a cross-media franchise rail; a franchise bundle now busts the pool cache immediately). Previously 2026-08-20: SEO shipped + Search Console verified; the ads gate was reading 80% crawler and is now filtered; www folded onto the apex; restore drill passed; RAWG quota exhausted._
 
 > **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -33,9 +33,11 @@ fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It wa
 
 **Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **That "days, not hours" gate is now MET** (continuous since 2026-08-12), which is what unparked the affiliate signups — every program reviews the applicant site, and it has been serving cleanly.
 
-## 🟡 `/library` + `/wishlist` do not work under `next dev` (DEV ONLY — prod is fine)
+## 🟡 `/library`, `/wishlist` and the FACET pages do not work under `next dev` (DEV ONLY — prod is fine)
 
 **Production is unaffected.** A `next start` build hydrates both pages and renders real items; fandex.org is fine and this was never a user-facing outage. It does mean **neither page can be developed or verified against the dev server**, which is exactly why it went unnoticed — the smoke sweeps run against prod.
+
+⚠️ **2026-08-21: it is not limited to those two pages.** `/tag/cyberpunk` behaves identically under `next dev` — `<main>` carries no `__react*` keys and the grid renders **zero** item links — while the SAME page on a `next start` build renders 60. **Cause not established**: the facet page does not call `useSearchParams()` at all, so the mechanism below does not explain it, and the item page and Home hydrate fine under dev in the same session. Recorded as a measurement, not a diagnosis. The practical rule is unchanged and now wider: **verify any page whose content is client-rendered against the `prod` launch config (:3100), not the dev server.**
 
 Under `next dev` both pages render their toolbar server-side and then sit on **“Loading…” forever**: React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing**. Cause is measured, not guessed: `useSearchParams()` postpones the Suspense boundary (React comment marker **`$~`**) and the dev client never resumes it. Swapping that one call for a plain `URLSearchParams` makes the page work instantly.
 
