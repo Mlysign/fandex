@@ -425,6 +425,53 @@ of "the OAuth works" — that was the exact mistake Hardcover taught.**
 
 ---
 
+## The item page's two related rails — franchise + "More like this" (2026-08-21)
+
+Two changes to `/api/detail/similar`, one session, both reported by Nils from prod.
+
+**1. The rail never carried your own rating.** The route built each card with title, poster, date and
+Fandex Score and then deliberately skipped user state, with a comment saying so: "these are
+catalog-wide recommendations, not a list the viewer already curated". That reasoning missed what
+`ActionCells` does with it — it reads `rating` / `onWatchlist` to decide whether its two buttons are
+INDICATORS or PROMPTS. So a title rated 9 showed a blank "Rate" button here and a 9 on Home, and
+rating from the rail read as a first rating rather than a change. Fixed with one
+`getUserStateMap()` pass before serializing; anonymous callers return before the queries.
+
+**2. The franchise rail.** Nils: "now that we have franchise data, can we add another carousel
+before the 'more like this' carousel that shows all entries of that franchise from all media types?"
+Built as `src/lib/franchise.ts` (pure, injected candidate lookup, same shape as `similarItems.ts`)
+plus a payload field on the same endpoint, rendered by `RelatedRails.tsx` (was `SimilarRail.tsx`).
+
+Decisions worth keeping:
+
+- **One endpoint, one component, because of the DEDUPE.** An `ip` facet is rare, so it carries a high
+  idf, so franchise siblings rank at the very TOP of "More like this" — two rails built independently
+  would show the same title twice on one page. The franchise members are dropped from the lower rail
+  and `rankSimilar` is asked for `RAIL_CAP + franchiseSize` candidates to absorb the loss (free: its
+  cost is the capped per-facet scan, not the final slice).
+- **Zero provider calls.** Everything is an in-memory read of the pool the Fandex Score already keeps
+  warm. Asking TMDB for the rest of a collection would give a more complete rail, and the item page
+  is public and crawlable — the one place a per-view provider call turns into a burnt free tier.
+- **Chronological, not ranked, and not filtered to the item's own type.** A franchise is a timeline
+  and the rail is an index, not a recommendation. Undated entries sort last.
+- **The largest franchise wins when an item carries several** (IGDB's `franchises` is an array).
+  Unioning would mislabel the header. Note the case this ISN'T: "Star Wars Collection" and
+  "Star Wars" already collapse to ONE key in `ipKey()`, which is the whole cross-media feature.
+- **`ipDisplayLabel()`** peels the same trailing words off the DISPLAY string, so the header reads
+  "More from Star Wars" rather than TMDB's "Star Wars Collection". It can't be derived from the key:
+  `personKey` lowercases and strips punctuation, so "Yu-Gi-Oh!" would come back "yu gi oh".
+- **The derived-facet path needed `applyIpFacets()`.** `getCatalogFacets` is alias- and
+  override-resolved by `buildEntries`; the `facetCache` fallback for a non-pool item deliberately is
+  not, so without it a franchise lookup there misses every bundled spelling and every hand-attached
+  show.
+
+**Sized against the real catalog before building** (628 franchises over 2,538 pool items): the median
+franchise holds ONE item, only 226 hold more than one, and just 42 span more than one media type. So
+most titles show no rail at all, and that is the DATA being thin rather than a bug. Star Wars is the
+largest at 24 (11 movies / 6 shows / 7 games) — the cap of 40 truncates nothing today. Verified
+logged in on prod's data: Star Wars renders 23 siblings across all three types in date order with his
+ratings attached, Fallout's show renders 18 games.
+
 ## Litestream outage, the fix, and the restore drill that closed it (2026-08-17 → 2026-08-20)
 
 **Backups were dead for two days and nothing alarmed.** Found in the Railway deploy log while checking something else. Litestream logged this once a second:

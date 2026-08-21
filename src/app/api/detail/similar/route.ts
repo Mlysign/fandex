@@ -5,11 +5,14 @@ import { getSession } from "@/lib/session";
 import { log, errorFields } from "@/lib/logger";
 import { getCatalogFacets, getCatalogIdf, itemsWithFacet, buildProfile, computeFandexScore } from "@/lib/discovery";
 import { rankSimilar } from "@/lib/similarItems";
+import { franchiseForItem } from "@/lib/franchise";
+import { applyIpFacets } from "@/lib/ipAlias";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { fetchTmdbSimilar, fetchIgdbSimilar, type FeedCandidate } from "@/lib/discoverFeed";
 import { persistDiscoverBatch } from "@/lib/annotateDiscover";
 import { getUserStateMap } from "@/lib/userState";
 import { readFacetCache, writeFacetCache } from "@/lib/facetCacheStore";
+import type { DiscoveryVector } from "@/lib/discovery";
 import type { MediaLink, MediaType } from "@/types";
 
 // "More like this" (2026-07-31, T6) — the item-detail mockup drew this rail and
@@ -175,17 +178,45 @@ export async function GET(req: NextRequest) {
         "SELECT source, source_id, raw_data, last_synced FROM media_links WHERE media_item_id = ?",
         [id]
       );
-      if (rows.length === 0) return NextResponse.json({ items: [] });
+      if (rows.length === 0) return NextResponse.json({ franchise: null, items: [] });
       const rawLinks: RawLink[] = rows.map((r) => ({
         source: r.source as MediaLink["source"], sourceId: r.source_id,
         releaseDate: null, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
       }));
-      facets = getDerivedForItem(id, rawLinks, type).facets;
+      // getCatalogFacets is already alias- and override-resolved (buildEntries
+      // does it once per pool build); the facetCache path deliberately is NOT,
+      // so a franchise lookup off it would miss every bundled spelling and every
+      // hand-attached franchise. See the warning at the top of ipAlias.ts.
+      facets = applyIpFacets(getDerivedForItem(id, rawLinks, type).facets, id);
     }
-    if (!facets.length) return NextResponse.json({ items: [] });
+    if (!facets.length) return NextResponse.json({ franchise: null, items: [] });
 
     const idf = getCatalogIdf();
-    const ranked = rankSimilar(id, facets, idf, itemsWithFacet);
+
+    // ── The franchise rail (2026-08-21) ─────────────────────────────────────
+    // Nils: "now that we have franchise data, can we add another carousel
+    // before the 'more like this' carousel that shows all entries of that
+    // franchise from all media types?"
+    //
+    // It runs BEFORE the similar ranking because it CHANGES it: an ip facet is
+    // rare, so it carries a high idf, so franchise siblings rank at the very
+    // top of "More like this" — they would render twice on one page, once in
+    // each rail, which reads as a bug. So they're dropped from the lower rail,
+    // and rankSimilar is asked for enough extra candidates to absorb the drop.
+    // That widening is free: its cost is the per-facet candidate SCAN, which is
+    // already capped, not the final slice.
+    //
+    // Zero provider calls, deliberately. Everything here is an in-memory read
+    // of the catalog pool that the Fandex Score already keeps warm, and the
+    // item page is a public, crawlable surface — the one place a per-view
+    // provider call turns into a burnt free tier (docs/scalability.md). Asking
+    // TMDB for the rest of a collection would give a more complete rail; it is
+    // not worth putting a quota-priced call on this path to get it.
+    const franchise = franchiseForItem(id, facets, itemsWithFacet);
+    const inFranchise = new Set(franchise?.items.map((v) => v.id) ?? []);
+    const ranked = rankSimilar(id, facets, idf, itemsWithFacet, RAIL_CAP + inFranchise.size)
+      .filter(({ vector }) => !inFranchise.has(vector.id))
+      .slice(0, RAIL_CAP);
 
     // Fandex Score column: only when signed in. computeFandexScore already
     // returns null for a profile with no signal (cold start / no rated items),
@@ -197,7 +228,7 @@ export async function GET(req: NextRequest) {
 
     // Every row carries the viewer's own rating / wishlist state — see
     // attachUserState() below.
-    const items = ranked.map(({ vector }) => {
+    const toRow = (vector: DiscoveryVector): RailItem => {
       const fx = profile ? computeFandexScore(vector.facets, profile, undefined, { mediaItemId: vector.id }) : null;
       return {
         id: vector.id, type: vector.type, title: vector.title,
@@ -205,15 +236,24 @@ export async function GET(req: NextRequest) {
         communityScore: vector.communityScore, sources: vector.sources,
         fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null,
       };
-    });
+    };
+    const items = ranked.map(({ vector }) => toRow(vector));
+    const franchiseItems = franchise?.items.map(toRow) ?? [];
 
     // MB11 (2026-08-14) — top up from the provider when the local catalog can't
     // field a rail. See the block comment at the top of this file.
+    // The top-up sees BOTH rails, so the provider can't re-offer a title the
+    // franchise rail is already showing.
     const topped = items.length >= MIN_RAIL
       ? items
-      : [...items, ...(await providerTopUp(id, type, items, userId))];
+      : [...items, ...(await providerTopUp(id, type, [...franchiseItems, ...items], userId))];
 
-    return NextResponse.json({ items: attachUserState(topped, userId) });
+    // ONE user-state pass over both rails — two queries, not four.
+    const annotated = attachUserState([...franchiseItems, ...topped], userId);
+    return NextResponse.json({
+      franchise: franchise ? { label: franchise.label, items: annotated.slice(0, franchiseItems.length) } : null,
+      items: annotated.slice(franchiseItems.length),
+    });
   } catch (e: any) {
     log.error("similar_items_error", { ...errorFields(e) });
     return NextResponse.json({ error: e.message }, { status: 500 });

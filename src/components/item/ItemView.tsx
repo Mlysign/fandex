@@ -12,7 +12,7 @@ import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
 import EpisodeTracker from "./EpisodeTracker";
-import SimilarRail from "./SimilarRail";
+import RelatedRails from "./RelatedRails";
 import BackButton from "@/components/ui/BackButton";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { TagDisplayCategory } from "@/lib/tags";
@@ -226,11 +226,11 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
         {/* Full-width band below both columns, one rhythm with the stack above. */}
         <LowerSections enriched={enriched} type={item.type} tagOverrides={tagOverrides} tagCategories={tagCategories} />
 
-        {/* "More like this" — the mockup's placeholder rail, built 2026-07-31.
-            Mounted ONCE here (not per breakpoint — see SimilarRail's own
-            comment for why that distinction matters). */}
+        {/* "More from {franchise}" + "More like this". Mounted ONCE here (not
+            per breakpoint — see RelatedRails' own comment for why that
+            distinction matters). */}
         <div className="mt-10">
-          <SimilarRail itemId={item.id} type={item.type} />
+          <RelatedRails itemId={item.id} type={item.type} />
         </div>
       </div>
     </main>

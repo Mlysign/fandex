@@ -111,6 +111,16 @@ export function ipKey(name: string): string {
   return parts.join(" ");
 }
 
+// The same peel applied to the DISPLAY string, for a rail header that reads
+// "More from Star Wars" instead of TMDB's "Star Wars Collection". The key can't
+// be used for this: personKey lowercases it and strips punctuation, so
+// "Yu-Gi-Oh!" would come back as "yu gi oh".
+export function ipDisplayLabel(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  while (parts.length > 1 && IP_STRIP.has(parts[parts.length - 1].toLowerCase())) parts.pop();
+  return parts.join(" ");
+}
+
 // TMDB crew jobs that count as "writer".
 const WRITER_JOBS = new Set([
   "Writer", "Screenplay", "Story", "Novel", "Author", "Comic Book",
