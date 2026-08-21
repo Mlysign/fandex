@@ -4,7 +4,9 @@ import { upsertMediaItem, upsertWatchlistEntry, clearWatchlist } from "./matcher
 import { persistDiscoverItems } from "./discoverPersist";
 import {
   find, getCatalogFacets, getCatalogIdf, getRawTagCounts, getTagVocab, invalidateDiscoveryCache,
+  itemsWithFacet,
 } from "./discovery";
+import { setIpAlias, setItemIpOverride } from "./ipAlias";
 
 // 2026-08-02 — docs/archive/performance-audit.md §A. `buildCache` no longer re-parses
 // the whole pool: it reads metadata + a freshness token in pass 1 and SELECTs
@@ -190,5 +192,66 @@ describe("catalog pool — incremental membership patch", () => {
 
     expect(after).toEqual(before);
     expect(after.titles).toEqual(["Pooled A", "Pooled B"]);
+  });
+});
+
+// 2026-08-21 — the pool cache guarded itself with the TAG alias signature only,
+// so a franchise bundle (or a hand-attached franchise) in /dev/scoring did
+// nothing visible for up to five minutes.
+//
+// Worse than stale: INCONSISTENT. buildEntries() bakes the resolved ip key into
+// each cached vector, but an item OUTSIDE the pool has its facets derived per
+// request and resolved fresh — so during the window the item asked with the new
+// canonical key while every vector still carried the old one, and the franchise
+// rail matched only titles whose ORIGINAL key happened to equal the canonical.
+// Nils bundled the Spider-Man franchises and the rail showed one film.
+//
+// Both tests deliberately DO NOT call invalidateDiscoveryCache() after the edit.
+// That call is what hid the bug: it is the thing production has no way to make.
+describe("catalog pool — franchise bundling and per-item attachment", () => {
+  const withCollection = (id: number, title: string, collection: string | null) => ({
+    ...tmdb(id, title, "Some Director"),
+    belongs_to_collection: collection ? { id, name: collection } : undefined,
+  });
+
+  beforeEach(() => {
+    run("DELETE FROM ip_alias");
+    run("DELETE FROM item_ip_override");
+    invalidateDiscoveryCache();
+  });
+
+  it("reflects an ip_alias bundle immediately, not on the 5-minute TTL", () => {
+    const alpha = upsertMediaItem({
+      source: "tmdb", sourceId: "40", type: "movie", title: "Alpha One",
+      releaseDate: "2025-01-01", rawData: withCollection(40, "Alpha One", "Alpha Collection"),
+    });
+    const beta = upsertMediaItem({
+      source: "tmdb", sourceId: "41", type: "movie", title: "Beta One",
+      releaseDate: "2025-01-01", rawData: withCollection(41, "Beta One", "Beta Collection"),
+    });
+    invalidateDiscoveryCache();
+
+    // Warm the cache with the pre-bundle world: two separate franchises.
+    expect(itemsWithFacet({ kind: "ip", key: "alpha" }).map((v) => v.id)).toEqual([alpha]);
+    expect(itemsWithFacet({ kind: "ip", key: "beta" }).map((v) => v.id)).toEqual([beta]);
+
+    setIpAlias("beta", "alpha");
+
+    expect(itemsWithFacet({ kind: "ip", key: "alpha" }).map((v) => v.id).sort())
+      .toEqual([alpha, beta].sort());
+    expect(itemsWithFacet({ kind: "ip", key: "beta" })).toHaveLength(0);
+  });
+
+  it("reflects an item_ip_override attach immediately — the only way a SHOW ever joins a franchise", () => {
+    const show = upsertMediaItem({
+      source: "tmdb", sourceId: "42", type: "show", title: "Some Series",
+      releaseDate: "2025-01-01", rawData: withCollection(42, "Some Series", null),
+    });
+    invalidateDiscoveryCache();
+    expect(itemsWithFacet({ kind: "ip", key: "alpha" })).toHaveLength(0);
+
+    setItemIpOverride(show, "Alpha", "add");
+
+    expect(itemsWithFacet({ kind: "ip", key: "alpha" }).map((v) => v.id)).toEqual([show]);
   });
 });

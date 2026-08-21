@@ -15,7 +15,7 @@ import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/li
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
-import { applyIpFacets, getIpAliases, getItemIpOverrides } from "@/lib/ipAlias";
+import { applyIpFacets, getIpAliases, getItemIpOverrides, ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import type { ScoringConfigValues } from "@/lib/scoringDefaults";
 import type { MediaLink, MediaType } from "@/types";
@@ -447,7 +447,21 @@ function getCache() {
   // H5.6: a bundle edit doesn't change the catalog, so guard on the alias
   // signature too — otherwise bundled vocab/vectors would stay stale until the
   // 5-min TTL expired.
-  const aliasSig = tagAliasSignature();
+  //
+  // 2026-08-21: the two IP signatures belong here for the same reason and were
+  // missing, so bundling a franchise in /dev/scoring did nothing visible for up
+  // to five minutes. buildEntries() resolves ip aliases + item overrides into
+  // the cached vectors, so a bundle edit changes what this cache should hold
+  // while changing nothing it was watching.
+  //
+  // The window was worse than "stale", it was INCONSISTENT — exactly what the
+  // warning at the top of ipAlias.ts is about. An item outside the pool has its
+  // facets derived per request and resolved fresh, so its ip key was already
+  // canonical while every pool vector still carried the pre-bundle key: the
+  // franchise rail on such an item matched only titles whose ORIGINAL key
+  // happened to equal the new canonical one. Nils bundled the Spider-Man
+  // franchises and the rail showed exactly one film.
+  const aliasSig = `${tagAliasSignature()}|${ipAliasSignature()}|${itemIpOverrideSignature()}`;
   if (!_cache || _cache.sig !== sig || _cache.aliasSig !== aliasSig || Date.now() - _cache.at >= CANDIDATE_TTL_MS) {
     return rebuild(sig, membershipSignature(), aliasSig);
   }
