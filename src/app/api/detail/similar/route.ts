@@ -55,6 +55,9 @@ const TOPUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type RailItem = {
   id: string; type: string; title: string;
+  /** The public url address segment; absent on a provider top-up row that has
+   *  no local item yet, which is also non-linkable. */
+  slug?: string | null;
   posterUrl: string | null; releaseDate: string | null;
   communityScore?: number | null; sources?: unknown;
   fandexScore: number | null; fandexCenter: number | null;
@@ -231,7 +234,7 @@ export async function GET(req: NextRequest) {
     const toRow = (vector: DiscoveryVector): RailItem => {
       const fx = profile ? computeFandexScore(vector.facets, profile, undefined, { mediaItemId: vector.id }) : null;
       return {
-        id: vector.id, type: vector.type, title: vector.title,
+        id: vector.id, slug: vector.slug, type: vector.type, title: vector.title,
         posterUrl: vector.posterUrl, releaseDate: vector.releaseDate,
         communityScore: vector.communityScore, sources: vector.sources,
         fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null,

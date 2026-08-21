@@ -12,7 +12,7 @@ import type { DiscoveryVector } from "@/lib/discovery";
 
 function vector(id: string, type: string, releaseDate: string | null, title = id): DiscoveryVector {
   return {
-    id, type: type as DiscoveryVector["type"], title, posterUrl: null, backdropUrl: null,
+    id, type: type as DiscoveryVector["type"], title, slug: title.toLowerCase(), posterUrl: null, backdropUrl: null,
     releaseDate, year: releaseDate ? Number(releaseDate.slice(0, 4)) : null,
     communityScore: null, communityAvg: null, communityVotes: 0,
     runtimeMinutes: null, addedAt: 0, sources: [], facets: [],

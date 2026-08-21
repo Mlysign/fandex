@@ -197,7 +197,7 @@ function recommendFor(
     if (!best || fx.score > best.score) {
       best = {
         title: v.title,
-        href: buildItemHref({ id: v.id, type: v.type, title: v.title }),
+        href: buildItemHref({ id: v.id, type: v.type, title: v.title, slug: v.slug }),
         score: fx.score,
         posterUrl: v.posterUrl,
       };

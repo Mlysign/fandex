@@ -16,7 +16,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
     // Fetch user's watchlist with all linked source data
     let sql = `
       SELECT
-        mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
+        mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url,
         uw.platform_sources, uw.added_at,
         ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date, ml.last_synced
       FROM user_watchlist uw
@@ -38,6 +38,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         itemMap.set(row.id, {
           item: {
             id: row.id,
+            slug: row.slug ?? null,
             type: row.type,
             title: row.title,
             releaseDate: row.release_date,
@@ -72,6 +73,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       const { sources, ...rest } = merged;
       enriched.push({
         id: item.id,
+        slug: item.slug ?? null,
         type: item.type,
         platformSources: item.platformSources,
         ...rest,

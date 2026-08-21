@@ -37,4 +37,8 @@ export interface MediaCardItem {
   // Identity for quick actions (rate / wishlist) without opening the detail page.
   sources?: { source: string; sourceId: string }[];
   ids?: Record<string, string | number>;
+  /** The public url address segment (media_items.slug). Optional only because
+   *  not every payload carries it yet: publicItemHref falls back to the legacy
+   *  uuid url, which 308s. Thread it wherever a card is built. */
+  slug?: string | null;
 }

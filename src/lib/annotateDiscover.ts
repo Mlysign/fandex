@@ -5,6 +5,7 @@
 
 import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
+import { slugsForItemIds } from "@/lib/itemSlug";
 
 /**
  * Give every item a media_items row (and so a uuid) and hand that uuid back as
@@ -38,9 +39,15 @@ export function persistDiscoverBatch<T extends { id: string; raw?: unknown }>(
     : userId
       ? persistDiscoverItems(items as any)
       : lookupExistingUuids(items as any);
+  // The slug too, so a card links straight to the canonical url instead of
+  // through the legacy uuid one (which 308s). Same shape as the uuid: a title
+  // we do not hold has neither, and is already non-linkable.
+  const slugs = slugsForItemIds([...idMap.values()]);
   return items.map(({ raw: _raw, ...it }) => {
     const uuid = idMap.get(it.id);
-    return (uuid ? { ...it, id: uuid } : { ...it, linkable: false }) as Omit<T, "raw">;
+    return (uuid
+      ? { ...it, id: uuid, slug: slugs.get(uuid) ?? null }
+      : { ...it, linkable: false }) as Omit<T, "raw">;
   });
 }
 

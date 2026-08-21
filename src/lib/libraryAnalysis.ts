@@ -107,7 +107,7 @@ function personalRating(rating: number | null, metadata: string | null): number 
 
 export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   const rows = query<ItemRow>(
-    `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
+    `SELECT mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url,
             ul.rating, ul.metadata, ul.status,
             ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date,
             ml.last_synced

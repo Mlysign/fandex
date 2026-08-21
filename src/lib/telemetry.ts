@@ -87,18 +87,23 @@ export function normalizePathKey(rawPath: string): string | null {
     if (seg[0] === "tag") return "/tag/[slug]";
     if (seg[0] === "studio") return "/studio/[slug]";
     if (seg[0] === "calendar") return "/calendar/[month]";
-    // A bare /{type}/{uuid} is not a URL the app ever links, but it resolves,
-    // so it gets the same key as the canonical three-segment form below.
+    // THE canonical item url since 2026-08-21: /{type}/{slug}. (A bare
+    // /{type}/{uuid} also lands here and redirects.) The key string still says
+    // `[id]` on purpose — renaming it would split every item page's history
+    // across two keys in the dashboard for no gain.
     if (MEDIA_TYPES.has(seg[0])) return "/[type]/[id]";
   }
   if (seg.length === 3) {
     if (seg[0] === "legal") return "/legal/[locale]/[doc]";
-    // The real item URL, and the shape the sitemap ships: /{type}/{uuid}/{slug}.
-    // This arm was missing until 2026-08-20, so every one of the 2,022 item pages
-    // counted as "other" and the dashboard's top-pages panel could not show a
-    // single item view. The two-segment arm above had been standing in for a URL
-    // nothing emits. Lesson: template a route against the SITEMAP, not against
-    // the route file's folder name.
+    // The LEGACY item url, /{type}/{uuid}/{slug}, which now only redirects. It
+    // was the real one until 2026-08-21 and is still what every shared link and
+    // every indexed url points at, so it keeps counting under the same key.
+    //
+    // This arm was missing until 2026-08-20, when it was the canonical shape, so
+    // every one of the 2,022 item pages counted as "other" and the top-pages
+    // panel could not show a single item view. Lesson, and it is the reason both
+    // arms are still here: template a route against the SITEMAP, not against the
+    // route folder's name.
     if (MEDIA_TYPES.has(seg[0])) return "/[type]/[id]";
   }
 

@@ -31,6 +31,7 @@ import type DatabaseT from "better-sqlite3";
 import { projectRawData, PROJECTION_VERSION } from "@/lib/sources/project";
 import { DEFAULT_SCORING_CONFIG, DEFAULT_TAG_CATEGORIES } from "@/lib/scoringDefaults";
 import { createCacheViews } from "@/lib/cacheViews";
+import { pickSlug } from "@/lib/publicUrl";
 import type { Source } from "@/types";
 type DB = DatabaseT.Database;
 
@@ -718,6 +719,66 @@ export const MIGRATIONS: Migration[] = [
       // and `PRAGMA wal_checkpoint` — where the same CLI could not so much as
       // count `users` against the old schema.
       createCacheViews(db);
+    },
+  },
+  {
+    version: 19,
+    name: "media_items.slug: the public url address segment",
+    up: (db) => {
+      // 2026-08-21. The public item url was `/{type}/{uuid}/{cosmetic-slug}`,
+      // and the uuid is a ROW id: the boot prune deletes browsed-only rows on
+      // every deploy, so re-opening such a title minted a new row, a new uuid
+      // and a new url, leaving the old one a hard 404. Nils hit it twice in one
+      // afternoon on the same film. A stored, title-derived slug is stable
+      // across that delete-and-recreate, because it names the work rather than
+      // our storage — see publicUrl.ts.
+      //
+      // Column guarded (db.ts's schema block declares it too, for a fresh DB),
+      // index created HERE and only here.
+      const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "slug")) {
+        db.exec("ALTER TABLE media_items ADD COLUMN slug TEXT");
+      }
+
+      // Backfill. Order is load-bearing twice over: `browsed ASC` gives the bare
+      // slug to a real catalog item rather than to a title someone scrolled
+      // past (both Draculas want `dracula`; the pooled one should win it), and
+      // created_at/id make the whole assignment deterministic, so a re-run on a
+      // copy of the database produces byte-identical slugs.
+      //
+      // `taken` is built once in memory instead of querying per row: 2,570 rows
+      // on the live catalog, and the unique index doesn't exist yet to make
+      // those lookups cheap.
+      const taken = new Set(
+        (db.prepare("SELECT type, slug FROM media_items WHERE slug IS NOT NULL").all() as { type: string; slug: string }[])
+          .map((r) => r.type + "/" + r.slug)
+      );
+      // The COALESCE mirrors ensureItemSlug exactly, and it has to: the year is
+      // the collision tie-break, and a thin first write leaves media_items.
+      // release_date null while the LINK row has the date. If the two paths
+      // disagreed, a row backfilled here as `nosferatu-1` would come back as
+      // `nosferatu-2024` the next time it was pruned and re-created, which is
+      // the exact url churn this migration exists to end.
+      const rows = db.prepare(
+        `SELECT mi.id, mi.type, mi.title,
+                COALESCE(mi.release_date, (SELECT MIN(ml.release_date) FROM media_links ml
+                                            WHERE ml.media_item_id = mi.id AND ml.release_date IS NOT NULL)) AS release_date
+           FROM media_items mi
+          WHERE mi.slug IS NULL
+          ORDER BY mi.browsed ASC, mi.created_at ASC, mi.id ASC`
+      ).all() as { id: string; type: string; title: string; release_date: string | null }[];
+      const upd = db.prepare("UPDATE media_items SET slug = ? WHERE id = ?");
+      for (const r of rows) {
+        const slug = pickSlug(r.title, r.release_date, (c) => taken.has(r.type + "/" + c));
+        taken.add(r.type + "/" + slug);
+        upd.run(slug, r.id);
+      }
+
+      // Unique per TYPE, not globally: a movie and a game can both be
+      // `spider-man` because the type is a separate url segment. Created after
+      // the backfill — before it the column is all NULLs, which a unique index
+      // permits any number of, so the order only matters for speed.
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_type_slug ON media_items(type, slug)");
     },
   },
 ];

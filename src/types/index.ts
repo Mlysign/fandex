@@ -87,6 +87,10 @@ export interface BuyLink {
 // Enriched item returned to the client
 export interface EnrichedItem {
   id: string;
+  /** The public url address segment (media_items.slug). Optional because not
+   *  every builder threads it yet; publicItemHref falls back to the legacy uuid
+   *  url, which 308s. See publicUrl.ts. */
+  slug?: string | null;
   type: MediaType;
   title: string;
   releaseDate: string | null;

@@ -56,6 +56,7 @@ interface Props {
 function toCardItem(item: PublicFacetItem, mine: MineState | undefined, fandexScore: number | undefined, fandexCenter: number | null | undefined): MediaCardItem {
   return {
     id: item.id,
+    slug: item.slug ?? null,
     type: item.type,
     title: item.title,
     releaseDate: item.releaseDate,

@@ -12,7 +12,7 @@ import type { DiscoveryVector } from "@/lib/discovery";
 
 function vector(id: string, facets: Facet[]): DiscoveryVector {
   return {
-    id, type: "movie", title: id, posterUrl: null, backdropUrl: null,
+    id, type: "movie", title: id, slug: id, posterUrl: null, backdropUrl: null,
     releaseDate: "2020-01-01", year: 2020, communityScore: null, communityAvg: null,
     communityVotes: 0, runtimeMinutes: null, addedAt: 0, sources: [], facets,
   };

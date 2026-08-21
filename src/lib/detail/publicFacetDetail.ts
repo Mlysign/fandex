@@ -33,6 +33,7 @@
 import type { MediaType } from "@/types";
 import type { LinkableFacetKind } from "@/lib/facetUrl";
 import { personKey } from "@/lib/facets";
+import { slugsForItemIds } from "@/lib/itemSlug";
 import type { PersonMeta, FacetScope } from "@/lib/facetDetail";
 import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId } from "@/lib/facetDetail";
 import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
@@ -96,6 +97,8 @@ export function facetRobots(
 // not link.
 export interface PublicFacetItem {
   id: string;
+  /** Public url address segment; see publicUrl.ts. */
+  slug?: string | null;
   linkable: boolean;
   type: MediaType;
   title: string;
@@ -553,7 +556,12 @@ export async function buildPublicFacetDetail(
   const page = Math.max(0, opts.page ?? 0);
   const sort = opts.sort ?? "popular";
   const persist = opts.persist ?? false;
-  const cacheKey = `${ref.kind}:${ref.key}:${page}:${sort}:${persist ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
+  // `v2` because the payload SHAPE changed on 2026-08-21 (items gained `slug`).
+  // The L2 cache is persisted with a 24 h TTL, so without a version bump every
+  // already-cached facet page would keep serving slug-less items for a day, and
+  // each of their cards would link through the legacy uuid url and its 308.
+  // Bump this whenever a field is added to the payload.
+  const cacheKey = `v2:${ref.kind}:${ref.key}:${page}:${sort}:${persist ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
   const cachedPayload = _facetPageCache.get(cacheKey);
   if (cachedPayload) return cachedPayload;
   // L2 before the fan-out. A hit re-populates L1 so the next request on this
@@ -636,10 +644,12 @@ export async function buildPublicFacetDetail(
     ? persistDiscoverItems(persistable)
     : lookupExistingUuids(persistable);
 
+  const slugs = slugsForItemIds([...uuidByKey.values()]);
   const items: PublicFacetItem[] = slice.map((t) => {
     const uuid = uuidByKey.get(`${t.source}:${t.sourceId}`);
     return {
       id: uuid ?? `${t.source}-${t.type}-${t.sourceId}`,
+      slug: uuid ? slugs.get(uuid) ?? null : null,
       linkable: uuid != null,
       type: t.type,
       title: t.title,

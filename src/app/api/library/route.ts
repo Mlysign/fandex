@@ -22,7 +22,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
     let sql = `
       SELECT
-        mi.id, mi.type, mi.title, mi.release_date, mi.poster_url,
+        mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url,
         ul.platform_sources, ul.status, ul.rating, ul.review, ul.reviewed_at, ul.added_at, ul.metadata,
         ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date, ml.last_synced
       FROM user_library ul
@@ -46,6 +46,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         itemMap.set(row.id, {
           item: {
             id: row.id,
+            slug: row.slug ?? null,
             type: row.type,
             title: row.title,
             releaseDate: row.release_date,
@@ -99,6 +100,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       // is carried separately as `reviewedAt`.
       enriched.push({
         id: item.id,
+        slug: item.slug ?? null,
         type: item.type,
         platformSources: item.platformSources,
         ...rest,

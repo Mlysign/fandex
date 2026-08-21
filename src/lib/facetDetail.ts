@@ -43,6 +43,8 @@ export interface FacetRefIn { kind: string; role?: FacetRole; key: string; label
 
 export interface FacetDetailItem {
   id: string;
+  /** Public url address segment; see publicUrl.ts. */
+  slug?: string | null;
   type: MediaType;
   title: string;
   releaseDate: string | null;
@@ -670,7 +672,7 @@ function assemble(
   for (const v of catVectors) {
     const st = state.get(v.id);
     map.set(`mid:${v.id}`, {
-      id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl,
+      id: v.id, slug: v.slug, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl,
       communityScore: v.communityScore,
       platformSources: st?.platformSources ?? [], onWatchlist: st?.onWatchlist ?? false,
       libraryStatus: st?.libraryStatus ?? null, rating: st?.rating ?? null, sources: v.sources,

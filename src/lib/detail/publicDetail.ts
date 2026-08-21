@@ -33,16 +33,30 @@ export interface PublicItemRow {
   id: string;
   type: MediaType;
   title: string;
+  /** The public url's address segment. Null only for a row created before
+   *  migration 19 ran, or by a path that forgot ensureItemSlug. */
+  slug: string | null;
 }
 
 // The item's stored row, or null. The caller checks `type` against the URL's
 // type segment so /movie/<a-game-uuid>/x 404s instead of rendering.
 export function loadPublicItemRow(id: string): PublicItemRow | null {
-  const row = get<{ id: string; type: string; title: string }>(
-    "SELECT id, type, title FROM media_items WHERE id = ?",
+  const row = get<{ id: string; type: string; title: string; slug: string | null }>(
+    "SELECT id, type, title, slug FROM media_items WHERE id = ?",
     [id]
   );
-  return row ? { id: row.id, type: row.type as MediaType, title: row.title } : null;
+  return row ? { id: row.id, type: row.type as MediaType, title: row.title, slug: row.slug } : null;
+}
+
+// The row a `/{type}/{slug}` url addresses. Type-scoped because the slug is
+// unique per type, not globally — /movie/spider-man and /game/spider-man are
+// two different works and both are allowed to exist.
+export function loadPublicItemRowBySlug(type: MediaType, slug: string): PublicItemRow | null {
+  const row = get<{ id: string; type: string; title: string; slug: string | null }>(
+    "SELECT id, type, title, slug FROM media_items WHERE type = ? AND slug = ?",
+    [type, slug]
+  );
+  return row ? { id: row.id, type: row.type as MediaType, title: row.title, slug: row.slug } : null;
 }
 
 // Cross-request cache for the built public detail (2026-07-20, post-P13b:
@@ -126,8 +140,11 @@ export function findItemBySourceId(source: string, sourceId: string): PublicItem
 
 export interface ResolvedPublic {
   item: PublicEnrichedItem;
-  /** The DB uuid. Always set — kept so the page can canonical-redirect on slug drift. */
+  /** The DB uuid. Still the row's identity; no longer the url's. */
   canonicalId: string;
+  /** The url's address segment — what the canonical link and every redirect
+   *  target is built from. Null for a row that predates migration 19. */
+  slug: string | null;
 }
 
 /**
@@ -142,7 +159,22 @@ export async function resolvePublicDetail(
   const row = loadPublicItemRow(id);
   if (!row || row.type !== type) return null;
   const item = await loadPublicDetail(id, region);
-  return item ? { item, canonicalId: id } : null;
+  return item ? { item, canonicalId: id, slug: row.slug } : null;
+}
+
+/**
+ * Resolve a `/{type}/{slug}` url. The uuid variant above is kept for the legacy
+ * url shape, which now only redirects here.
+ */
+export async function resolvePublicDetailBySlug(
+  type: MediaType,
+  slug: string,
+  region: string = DEFAULT_COUNTRY
+): Promise<ResolvedPublic | null> {
+  const row = loadPublicItemRowBySlug(type, slug);
+  if (!row) return null;
+  const item = await loadPublicDetail(row.id, region);
+  return item ? { item, canonicalId: row.id, slug: row.slug } : null;
 }
 
 // Every item eligible for a public page — drives sitemap.xml.
@@ -155,13 +187,13 @@ export async function resolvePublicDetail(
 // still has a working page (it 404s only if it truly has no links) — it's just
 // not advertised for crawling, matching what recommendIngest already treats as
 // "not a catalog entry" everywhere else.
-export function listPublicItems(): { id: string; type: MediaType; title: string; updatedAt: number | null }[] {
+export function listPublicItems(): { id: string; type: MediaType; title: string; slug: string | null; updatedAt: number | null }[] {
   return query<any>(
-    `SELECT mi.id, mi.type, mi.title, MAX(ml.last_synced) AS updated_at
+    `SELECT mi.id, mi.type, mi.title, mi.slug, MAX(ml.last_synced) AS updated_at
        FROM media_items mi
        JOIN media_links ml ON ml.media_item_id = mi.id
       WHERE ${POOL_WHERE}
       GROUP BY mi.id
       ORDER BY mi.id`
-  ).map((r: any) => ({ id: r.id, type: r.type as MediaType, title: r.title, updatedAt: r.updated_at ?? null }));
+  ).map((r: any) => ({ id: r.id, type: r.type as MediaType, title: r.title, slug: r.slug ?? null, updatedAt: r.updated_at ?? null }));
 }

@@ -9,6 +9,9 @@ export interface InspectableItem {
   id: string;
   type: string;
   title?: string | null;
+  /** The public url address segment. When absent, buildItemHref emits the
+   *  legacy uuid url, which permanently redirects to the slug one. */
+  slug?: string | null;
   releaseDate?: string | null;
   posterUrl?: string | null;
   // Watchlist / library shape

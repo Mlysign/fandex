@@ -126,6 +126,8 @@ function airUnix(airDate: string | null): number | null {
 export interface ShowState {
   mediaItemId: string;
   title: string;
+  /** Public url address segment; see publicUrl.ts. */
+  slug: string | null;
   posterUrl: string | null;
   /** episode key → watched_at (null when the provider gave no date) */
   watched: Map<string, number | null>;
@@ -140,12 +142,13 @@ function loadShowStates(userId: string): ShowState[] {
   const rows = query<{
     media_item_id: string;
     title: string;
+    slug: string | null;
     poster_url: string | null;
     season_number: number;
     episode_number: number;
     watched_at: number | null;
   }>(
-    `SELECT s.media_item_id, m.title, m.poster_url, s.season_number, s.episode_number, s.watched_at
+    `SELECT s.media_item_id, m.title, m.slug, m.poster_url, s.season_number, s.episode_number, s.watched_at
        FROM user_episode_state s
        JOIN media_items m ON m.id = s.media_item_id
       WHERE s.user_id = ? AND m.type = 'show'`,
@@ -159,6 +162,7 @@ function loadShowStates(userId: string): ShowState[] {
       st = {
         mediaItemId: r.media_item_id,
         title: r.title,
+        slug: r.slug ?? null,
         posterUrl: r.poster_url,
         watched: new Map(),
         lastWatchedAt: null,
@@ -318,7 +322,7 @@ export function nextForShow(
       previousWatchedAt: prevWatchedAt,
       eventAt,
       eventKind,
-      href: publicItemHref({ id: st.mediaItemId, type: "show", title: st.title }),
+      href: publicItemHref({ id: st.mediaItemId, type: "show", title: st.title, slug: st.slug }),
     };
   }
   return null;

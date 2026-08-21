@@ -72,7 +72,69 @@ export function slugify(title: string): string {
   return s || "untitled";
 }
 
-// ── The id segment: a UUID. That's the whole rule. ───────────────────────────
+// ── The address: a stored, unique-per-type SLUG (2026-08-21) ────────────────
+//
+// `/movie/spider-man-brand-new-day`, not `/movie/<uuid>/spider-man-brand-new-day`.
+//
+// Nils: "does the url change? isnt that bad for SEO? can we get rid of the long
+// random string?" Yes to the first, and that answer is why this changed rather
+// than being prettified: the uuid is a ROW id, and a browsed-only row is deleted
+// by the boot prune on every deploy. Re-opening the title minted a NEW row with a
+// NEW uuid, so one film had two dead urls in a single afternoon.
+//
+// A title-derived slug survives that, because it names the WORK rather than our
+// storage: prune the row, browse it again, and the recreated row lands on the
+// same address. That is the fix for the 404 churn, not just a shorter url.
+//
+// The slug is STORED (media_items.slug, unique per type) rather than computed at
+// read time, because of the collision the old note below is right about: 40 of
+// 2,530 titles collide within a type on the real catalog, all genuine remakes
+// (Dracula, Nosferatu, Godzilla, The Lion King). Computing it would send both
+// Draculas to one page. Stored, first-come keeps the bare slug and the newcomer
+// takes `-{year}` — see pickSlug.
+//
+// It is also IMMUTABLE once assigned, the opposite of the old cosmetic slug
+// (which re-derived from the current title and canonical-redirected on drift). A
+// url that moves when a provider retitles a film is a url you cannot share.
+
+/** Bounded so a pathological title can't spin. Not reached in practice. */
+const MAX_SLUG_ATTEMPTS = 50;
+
+/**
+ * The n-th candidate slug for a title. Deterministic, which is what makes a
+ * pruned-then-recreated row land back on its own address.
+ *
+ *   0 → `dracula`
+ *   1 → `dracula-1992`   (release year, when there is one)
+ *   n → `dracula-1992-2` (same title AND same year: vanishingly rare)
+ */
+export function slugCandidate(title: string, releaseDate: string | null | undefined, attempt: number): string {
+  const base = slugify(title ?? "untitled");
+  if (attempt === 0) return base;
+  const year = (releaseDate ?? "").slice(0, 4);
+  const dated = /^[0-9]{4}$/.test(year) ? base + "-" + year : null;
+  if (attempt === 1 && dated) return dated;
+  return (dated ?? base) + "-" + attempt;
+}
+
+/**
+ * The first candidate `isTaken` says is free. The lookup is injected so this
+ * stays pure — the migration's backfill and the runtime insert path call the
+ * same function against different db handles.
+ */
+export function pickSlug(
+  title: string,
+  releaseDate: string | null | undefined,
+  isTaken: (slug: string) => boolean
+): string {
+  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const candidate = slugCandidate(title, releaseDate, attempt);
+    if (!isTaken(candidate)) return candidate;
+  }
+  return slugify(title ?? "untitled") + "-" + Date.now().toString(36);
+}
+
+// ── The LEGACY id segment: a UUID. ───────────────────────────────────────────
 //
 // It used to also accept `{source}-{sourceId}` (`tmdb-693134`), because
 // /discover rendered LIVE provider results with no media_items row and so no
@@ -84,6 +146,11 @@ export function slugify(title: string): string {
 // H2b closed the gap at the source. /api/discover writes a row for every item it
 // returns and hands back the uuid, so an item HAS a uuid before anyone can click
 // it, and all of that machinery was deleted. One url form, always canonical.
-export function publicItemHref(item: { id: string; type: string; title?: string | null }): string {
-  return `/${item.type}/${item.id}/${slugify(item.title ?? "untitled")}`;
+export function publicItemHref(item: { id: string; type: string; title?: string | null; slug?: string | null }): string {
+  // The uuid form is still a live route and 308s to the slug, so an item whose
+  // slug hasn't been threaded through a payload yet still links correctly — it
+  // just costs a redirect hop. Never emit it when a slug is present.
+  return item.slug
+    ? `/${item.type}/${item.slug}`
+    : `/${item.type}/${item.id}/${slugify(item.title ?? "untitled")}`;
 }

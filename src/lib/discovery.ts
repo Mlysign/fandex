@@ -40,6 +40,9 @@ export interface DiscoveryVector {
   id: string;
   type: MediaType;
   title: string;
+  /** The public url address segment, carried so every card built from a vector
+   *  links straight to the canonical url instead of through the legacy 308. */
+  slug: string | null;
   posterUrl: string | null;
   backdropUrl: string | null;
   releaseDate: string | null;
@@ -215,7 +218,7 @@ function actedBrowsedIds(): Set<string> {
 // `raw_len` is LENGTH(raw_data), not the blob itself: half of facetCache's
 // freshness token, and the half that catches a same-second rewrite.
 interface VecRow {
-  id: string; type: MediaType; title: string; release_date: string | null; poster_url: string | null;
+  id: string; type: MediaType; title: string; slug: string | null; release_date: string | null; poster_url: string | null;
   created_at: number; source: string | null; source_id: string | null; link_release_date: string | null;
   last_synced: number | null; raw_len: number | null;
 }
@@ -250,7 +253,7 @@ interface PoolEntry { vector: DiscoveryVector; rawFacets: Facet[] }
 // item must be derived identically whether it arrived via a rebuild or a patch.
 function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
   const rows = query<VecRow>(
-    `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url, mi.created_at,
+    `SELECT mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url, mi.created_at,
             ml.source, ml.source_id, ml.release_date as link_release_date, ml.last_synced,
             LENGTH(ml.raw_data) as raw_len
      FROM media_items mi
@@ -354,6 +357,7 @@ function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
       rawFacets,
       vector: {
         id: row.id, type: row.type,
+        slug: row.slug ?? null,
         title: row.title ?? merged.title,
         posterUrl: row.poster_url ?? merged.posterUrl,
         backdropUrl: merged.backdropUrl,
@@ -977,6 +981,8 @@ function passesFilters(
 // ── Public: find ───────────────────────────────────────────────────
 export interface DiscoverResultItem {
   id: string;
+  /** Public url address segment; see publicUrl.ts. */
+  slug?: string | null;
   type: MediaType;
   title: string;
   releaseDate: string | null;
@@ -1077,7 +1083,7 @@ export function find(userId: string, req: FindRequest): FindResult {
   const items: DiscoverResultItem[] = page.map(({ v, score, reasons, fandexScore, fandexCenter }) => {
     const st = state.get(v.id);
     return {
-      id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
+      id: v.id, slug: v.slug, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
       communityScore: v.communityScore,
       communityAvg: v.communityAvg,
       communityVotes: v.communityVotes,

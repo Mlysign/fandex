@@ -425,6 +425,72 @@ of "the OAuth works" — that was the exact mistake Hardcover taught.**
 
 ---
 
+## Public item urls moved to `/{type}/{slug}` (2026-08-21)
+
+Nils, twice in one afternoon, on the same film: **the url I gave you is now a 404.**
+
+**The cause was not the url shape, it was what the url was made of.** The address
+segment was the `media_items` uuid, a ROW id. Spider-Man: Brand New Day was a
+browsed-only row (`browsed = 1`, nothing rated or wishlisted on it), and the boot
+prune deletes exactly those on every container start. Re-opening the title minted
+a NEW row with a NEW uuid. So: browse it, get a url, deploy, url 404s, browse it
+again, get a different url for the same film. Verified three times, with prod
+`uptime` matching each deploy, and Homecoming (a pool item) returning 200
+throughout.
+
+Exposure at the time was small and that is the only reason this was cheap: those
+urls were never in the sitemap (`listPublicItems` is pool-scoped, a deliberate
+PR13 call), and Google had indexed essentially nothing. But item pages carry no
+noindex and public facet pages link any title that has a row, browsed ones
+included, so there WAS a crawl path to a url that would 404 on the next deploy.
+
+**A title-derived slug survives a delete-and-recreate because it names the work
+rather than our storage.** That is why this fixes the churn and is not merely a
+prettier url. Nils chose the slug-only option over a provider-id one
+(`/movie/tmdb-969681/...`), which would also have fixed it.
+
+What shipped:
+
+- `media_items.slug`, unique per TYPE (a movie and a game may both be
+  `spider-man`), assigned by `ensureItemSlug` in matcher.ts's create path after
+  `remergeItem` so it uses the merged title, and **immutable** thereafter.
+- Migration 19: column (guarded, as `browsed` is), backfill, then the unique
+  index. Backfill order is `browsed ASC, created_at, id` so a real catalog item
+  wins the bare slug over a title someone scrolled past, and so the whole
+  assignment is deterministic.
+- `pickSlug`: bare slug, else `-{year}`, else `-{year}-{n}`. **40 of 2,530 titles
+  collide within a type** on the real catalog, all genuine remakes. Storing the
+  slug is what handles that; computing it at read time would send both Draculas
+  to one page.
+- Routes: `[type]/[slug]/page.tsx` renders, `[type]/[slug]/[legacy]/page.tsx`
+  308s the old 3-segment url and never renders. The segment names read oddly
+  because Next requires sibling dynamic segments at one depth to share a name.
+- `slug` threaded through every card payload (pool vectors, library, calendar,
+  discover, facet pages, both item-page rails, up-next). `publicItemHref` falls
+  back to the legacy uuid url when a payload lacks it, so nothing can break; it
+  just costs a 308.
+- `facet_page_cache` key bumped to `v2:` — the payload gained a field and that
+  cache is persisted for 24 h.
+
+Verified: **both apply paths produce byte-identical slugs over 2,636 rows** (the
+in-process one via `getDb()`, then a copy rewound to `user_version = 18` and run
+through `node scripts/migrate.mjs`), zero duplicate `(type, slug)`, unique index
+present. On a real prod build: `/movie/the-matrix` 200; the 3-segment url, a
+stale-slug 3-segment url and a bare `/movie/{uuid}` all land on it; canonical,
+og:url and JSON-LD all carry the slug url; the sitemap ships 2,538 items with
+**zero** uuids; and every card on a facet page and both item-page rails link
+slug-first with no uuid links left.
+
+Telemetry note: `normalizePathKey` keeps the key string `/[type]/[id]` for both
+arms. Renaming it to `[slug]` would split every item page's history across two
+keys in the dashboard for nothing.
+
+**Found while verifying, not fixed:** a facet page ships its item data in the
+flight payload but renders **zero `<a href>` in the server HTML** — the grid only
+exists after hydration. Googlebot renders, so the links are probably seen, but a
+crawler that fetches HTML and stops sees a facet page with no outbound item
+links. Related to the open `docs/seo.md` item about item pages linking to no
+siblings.
 ## The item page's two related rails — franchise + "More like this" (2026-08-21)
 
 Two changes to `/api/detail/similar`, one session, both reported by Nils from prod.

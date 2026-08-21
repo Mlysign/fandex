@@ -3,6 +3,7 @@ import { projectRawData, PROJECTION_VERSION } from "./sources/project";
 import { query, run, get, transaction } from "./db";
 import { normalizeName, extractYear, mergeForCanonical } from "./merge";
 import { averageFromMetadata } from "./ratings";
+import { ensureItemSlug } from "./itemSlug";
 import type { Source, MediaType } from "@/types";
 
 interface SourceItem {
@@ -99,6 +100,11 @@ export function upsertMediaItem(item: SourceItem): string {
       [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
     );
     remergeItem(newId);
+    // The public url's address segment, assigned once and never again (see
+    // itemSlug.ts). AFTER remergeItem deliberately: the insert above wrote the
+    // SOURCE's title and the merge may have replaced it with a better one, and
+    // the slug should be built from the title the page will show.
+    ensureItemSlug(newId);
     return newId;
   });
 }

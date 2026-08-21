@@ -214,6 +214,11 @@ every view of every item page landed in the `other` bucket and the dashboard cou
 not show one. `/calendar/{month}` had the same gap. **Template a route against the
 sitemap, not against the route folder's name.**
 
+> **2026-08-21:** the item url is now **two** segments, `/{type}/{slug}` (below),
+> so the two-segment arm is the canonical one again and the three-segment arm
+> counts the legacy redirect. Both still map to the key `/[type]/[id]`, which is
+> deliberately NOT renamed: a new key would split every item page's history.
+
 ---
 
 ## Still open

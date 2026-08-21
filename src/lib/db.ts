@@ -118,6 +118,10 @@ function ensureSchema(db: Database.Database) {
       -- 1 = only ever seen in a /discover feed. The catalog surfaces and the IDF
       -- weights read the pool only; see migration 8 and discovery.ts.
       browsed INTEGER NOT NULL DEFAULT 0,
+      -- The public url's address segment: /{type}/{slug}. Unique per type,
+      -- assigned on insert, IMMUTABLE afterwards. Its index is created by
+      -- migration 19, never here. See publicUrl.ts for why it's stored.
+      slug TEXT,
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
       updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
