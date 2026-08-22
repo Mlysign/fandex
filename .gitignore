@@ -59,3 +59,8 @@ data/
 # H2a verification artifacts (see migration7.dryrun.test.ts)
 migration7-out.txt
 probe-out.txt
+
+# Android TWA package (P15/P16). NEVER commit this: signing.keystore is the
+# upload key and signing-key-info.txt holds its passwords in PLAINTEXT.
+# The folder is inside OneDrive, so it is backed up without being in git.
+android-package/
