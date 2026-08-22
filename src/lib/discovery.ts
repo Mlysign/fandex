@@ -790,7 +790,13 @@ export function facetImpact(id: string, profile: Profile, config?: ScoringConfig
   return Math.round(gain * w * 10) / 10;
 }
 
-interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
+// `category` is the profile's EFFECTIVE category (post tag_category_override),
+// i.e. the one that supplied `classWeight`. The item's own facet can disagree
+// with it: extractFacets categorises from whatever the provider said on THIS
+// title, while buildProfile categorises the same tag key from the library
+// analysis. Carrying it here is what lets the breakdown label a row with the
+// category it was actually scored under. See the reasons[] mapping below.
+interface FandexContrib { f: Facet; dev: number; classWeight: number; category?: string; BA?: number; n?: number }
 
 // `configOverride` (H5.4 live preview): use the draft mappingConstant/top-N
 // selection instead of the persisted ones — pass the SAME override object
@@ -830,7 +836,7 @@ export function computeFandexScore(
     // they're the lead in THIS title than if they were a cameo. Absent/1 for
     // every non-cast facet.
     const classWeight = meta.classWeight * (f.prominence ?? 1);
-    matched.push({ f, dev: w / meta.classWeight, classWeight, BA: meta.BA, n: meta.n });
+    matched.push({ f, dev: w / meta.classWeight, classWeight, category: meta.category, BA: meta.BA, n: meta.n });
   }
   if (!matched.length) return null;
 
@@ -848,13 +854,34 @@ export function computeFandexScore(
   const companies = matched.filter((c) => c.f.kind === "company");
   const ips = matched.filter((c) => c.f.kind === "ip");
 
-  const tagsPositive = tags.filter((c) => c.dev > 0).sort((a, b) => b.dev - a.dev);
-  const tagsNegative = tags.filter((c) => c.dev < 0).sort((a, b) => a.dev - b.dev); // most negative first
-  const peopleSorted = [...people].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
-  const companiesSorted = [...companies].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+  // 2026-08-22 — SELECT BY THE SAME QUANTITY THE SCORE IS MADE OF. These five
+  // sorts ranked by the raw `dev` until today, while a facet's contribution
+  // (and the number the breakdown prints) is `dev · classWeight · gain`. The
+  // two orderings agree only when every class weight is 1, and they are not:
+  // roleWeights ships director 1.3 against cast 0.6, and tag category weights
+  // are an admin knob. So a facet in a heavy category could be worth more
+  // points and still lose its slot to a lighter one with a bigger raw
+  // deviation, which is exactly what it did: on Mortal Shell II, Souls-like
+  // (+1.3) took a slot from Dark Fantasy (+2.6) and the panel showed both
+  // numbers side by side with no way to explain the order. The role weights
+  // exist to say a director outranks a cameo; a selection that ignores them
+  // spends the top-N slots on the wrong facets and only the SCORE noticed.
+  //
+  // Note this brings cast prominence in too, since `classWeight` here is the
+  // per-item value (meta.classWeight × f.prominence). That is the intended
+  // reading: a lead in THIS title should out-rank a bit part in it.
+  //
+  // The sign split is unaffected. classWeight is always > 0 (a 0-weight
+  // category is skipped in buildProfile, prominence has a floor), so
+  // `dev · classWeight` carries dev's sign.
+  const weighted = (c: FandexContrib) => c.dev * c.classWeight;
+  const tagsPositive = tags.filter((c) => c.dev > 0).sort((a, b) => weighted(b) - weighted(a));
+  const tagsNegative = tags.filter((c) => c.dev < 0).sort((a, b) => weighted(a) - weighted(b)); // most negative first
+  const peopleSorted = [...people].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a)));
+  const companiesSorted = [...companies].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a)));
   // Signed like people/companies, not split by sign like tags: a franchise you
   // rate BELOW your average should pull the next entry down just as hard.
-  const ipsSorted = [...ips].sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+  const ipsSorted = [...ips].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a)));
 
   const kept: FandexContrib[] = [
     ...tagsPositive.slice(0, cfg.topTagsPositive),
@@ -902,7 +929,12 @@ export function computeFandexScore(
   const reasons: Reason[] = kept
     .sort((a, b) => b.dev * b.classWeight - a.dev * a.classWeight)
     .map((c) => ({
-      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category,
+      // 2026-08-22: the EFFECTIVE category, not the item's own. These used to
+      // read `c.f.category`, so a row could be labelled (and coloured, via
+      // facetColorVar) with a category it was not weighted under. Measured on
+      // Mortal Shell II: "Role-playing (RPG)" printed as OTHER while scoring as
+      // genre, and "Singleplayer" printed as OTHER while scoring as modes.
+      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.category ?? c.f.category,
       contribution: Math.round(gain * c.dev * c.classWeight * 10) / 10,
       impact: facetImpact(facetId(c.f), profile, cfg),
       BA: c.BA, n: c.n,
@@ -915,7 +947,7 @@ export function computeFandexScore(
   // canonical worth instead of the flat 0 `contribution` implies.
   for (const c of capped.sort((a, b) => Math.abs(b.dev * b.classWeight) - Math.abs(a.dev * a.classWeight))) {
     reasons.push({
-      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: 0,
+      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.category ?? c.f.category, contribution: 0,
       impact: facetImpact(facetId(c.f), profile, cfg),
       BA: c.BA, n: c.n, capped: true,
     });

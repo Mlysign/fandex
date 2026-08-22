@@ -12,11 +12,52 @@ export interface SyncSliceResult {
   remaining: string[];
 }
 
+// How long a connected provider may go unsynced before a visit to My Stuff
+// pulls it again. Lives here rather than in the view because staleProviders()
+// below is the thing that has to agree with it.
+export const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
+
+// Which connected providers are overdue.
+//
+// 2026-08-22 — the caller used to collapse the whole log with
+// `Math.max(...syncLogs.map(l => l.last_sync))` and sync EVERYTHING if that one
+// timestamp was over a day old. That made any single-provider sync refresh the
+// clock guarding every other provider, and one shipped on 2026-08-16: the Home
+// progress rail runs `syncToCompletion("trakt")`. From that day Steam, RAWG and
+// TMDB never synced again. It surfaced as a Steam game staying on the wishlist
+// after it was bought (Steam had already dropped it; nothing asked Steam). The
+// per-provider breakdown was always in the response, from /api/auth/me's
+// `GROUP BY provider`; only the client threw it away.
+//
+// A provider writes several sync_log rows per pass: its own id, plus
+// `${id}-library`, `${id}-episodes`, `${id}-episode-catalog`. Hence the prefix
+// match. No source id is a prefix of another, so this cannot bleed across
+// providers, and a provider that has NEVER synced reads as stale by design.
+export function staleProviders(
+  identities: { provider: string }[],
+  syncLogs: { provider: string; last_sync: number }[],
+  now: number,
+  staleMs: number = SYNC_STALE_MS,
+): string[] {
+  return identities
+    .map((i) => i.provider)
+    .filter((id) => {
+      const last = syncLogs
+        .filter((l) => l.provider === id || l.provider.startsWith(`${id}-`))
+        .reduce((max, l) => Math.max(max, l.last_sync * 1000), 0);
+      return now - last > staleMs;
+    });
+}
+
 export async function syncToCompletion(
-  provider: string = "all",
+  provider: string | string[] = "all",
   onProgress?: (slice: SyncSliceResult) => void,
 ): Promise<void> {
-  let body: Record<string, unknown> = { provider };
+  // An explicit EMPTY list means "nothing is due", never "sync everything".
+  // /api/sync's providerQueue falls back to the full registry on an empty
+  // `providers`, so sending one would turn a no-op into a full sync.
+  if (Array.isArray(provider) && provider.length === 0) return;
+  let body: Record<string, unknown> = Array.isArray(provider) ? { providers: provider } : { provider };
   for (let guard = 0; guard < 25; guard++) {
     const res = await fetch("/api/sync", {
       method: "POST",

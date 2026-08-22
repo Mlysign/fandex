@@ -3333,3 +3333,100 @@ Worth re-testing on the next Next.js bump before spending effort — this looks 
 - **P18** ✅ 2026-08-03 — **JustWatch clickable streaming links.** Its original blocker (a JustWatch Content Partner API + a full-catalog re-projection) turned out to be wrong on both counts: TMDB already returns a per-region `link` in the payload already fetched, and the existing lazy self-heal path (`ensureTmdbDetail`) delivers it one detail view at a time — no mass op needed. → [archive](docs/archive/history.md), grep `P18 streaming links`.
 
 ---
+
+## Two "the decider and the measurement drifted apart" bugs, 2026-08-22 ✅ FIXED
+
+Both came out of one report from Nils: a Steam game he had bought was still on
+his Fandex wishlist, and the item's Score breakdown counted Souls-like (+1.3)
+while greying out Dark Fantasy (+2.6) directly beneath it.
+
+### 1. The Fandex Score's top-N selection ranked by a different quantity than the score
+
+`computeFandexScore`'s five bucket sorts (tags positive/negative, people,
+companies, ips) ranked by the RAW `dev`, the deviation of the user's average for
+that facet from their baseline. A facet's contribution to the score, and the
+number the breakdown panel prints beside it, is `dev · classWeight · gain`.
+
+The two orderings agree only when every class weight is 1, and they never were:
+`roleWeights` ships director 1.3 against cast 0.6, publisher 0.8, network 0.6,
+and prod is hand-tuned further (`ip` 3, `director` 2). Tag category weights are
+an admin knob in /dev/scoring's Weights panel. So a facet in a heavier category
+could be worth more points and still lose its slot to a lighter one with a
+bigger raw deviation. On Mortal Shell II that produced a panel where a greyed
+"not counted" row was worth twice the counted row above it, with nothing on
+screen able to explain the order.
+
+It bit people and companies hardest, because their weights differ *by design*:
+the role weights exist to say a director outranks a cameo, and the selection
+ignored them entirely. Only the SCORE ever noticed the weights; the choice of
+which facets to score did not.
+
+Fixed by sorting every bucket on `dev * classWeight`, the same quantity
+`contribution` is computed from and the same one the reasons list is already
+sorted by. Side effect, and intended: `classWeight` in that struct is the
+per-item value (`meta.classWeight × f.prominence`), so cast prominence now
+counts in the selection too. A lead in THIS title out-ranks a bit part in it.
+
+**This moves scores** anywhere a weight is not 1, generally widening the spread
+(heavier facets now fill the slots). That is compatible with the 2026-08-17
+locked decision on the Score's range: 0–100 is a target, and the overflow is
+deliberate. It is NOT a re-tune and it does not change any top-N *size*.
+
+### 2. A reason named the item's category, not the one it was weighted under
+
+Same file, found while checking the above. `reasons[].category` read
+`c.f.category`, the category `extractFacets` assigned from whatever the provider
+said on THAT title. The weight came from `meta.classWeight`, derived from the
+profile's effective category (post `tag_category_override`, computed from the
+library analysis). Those disagree routinely. Measured on Mortal Shell II:
+"Role-playing (RPG)" printed as OTHER while scoring as genre, and "Singleplayer"
+printed as OTHER while scoring as modes. The chip COLOUR followed the wrong
+field too, since `facetColorVar` reads `category`.
+
+Fixed by carrying `meta.category` on `FandexContrib` and using it, falling back
+to the item's own.
+
+That exposed a third, older thing: `CATEGORY_LABELS` in `tags.ts` is a static
+map of the nine built-in categories, but the taxonomy is editable and the live
+DB already holds three it has never heard of (`modes`, `objects-elements`,
+`people-characters`). Rendering the effective category would have printed
+"Singleplayer" under a flat "Tag". `FandexScoreSection` now resolves against the
+live category list threaded down from the page (ItemView → PersonalSection →
+FandexScoreSection, viewer-independent so the SSR rule holds), exactly as
+`homeHighlights`' `categoryLabel` does, and falls back to the id rather than
+"Tag".
+
+### 3. A single-provider sync refreshed the staleness clock for every provider
+
+Steam last synced **2026-08-02**. Trakt synced on the 16th and the 18th. Nothing
+else ran in between, and nobody noticed for three weeks.
+
+`MyStuffView` decided whether to auto-sync by collapsing the whole sync log with
+`Math.max(...syncLogs.map(l => l.last_sync))` and firing `syncToCompletion("all")`
+only if that ONE timestamp was over 24 h old. On 2026-08-16 the Home progress
+rail shipped with `syncToCompletion("trakt")`. From that day every Trakt-only run
+refreshed the clock guarding Steam, RAWG and TMDB, so the all-provider sync never
+fired again.
+
+The per-provider breakdown was in the payload the whole time: `/api/auth/me`
+returns `MAX(synced_at) ... GROUP BY provider`. Only the client threw it away.
+
+Fixed with `staleProviders()` in `syncClient.ts` (per connected identity, prefix-
+matching a provider's suffixed rows like `steam-library`), and
+`syncToCompletion()` now accepts a provider LIST so only the overdue ones run.
+An empty list is an explicit no-op, because `/api/sync`'s `providerQueue` falls
+back to the whole registry on an empty `providers` and would have turned
+"nothing is due" into a full sync on every visit.
+
+**Verified end to end**, not just by test: Steam's live API had already dropped
+appid 2584270 from the wishlist and listed it as owned with 14 minutes played;
+one Steam sync pruned the stale `user_item_state` wishlist row and replaced it
+with `library / played`. Against the real account's rows, the old check syncs
+NOTHING while the new one returns `[rawg, trakt, tmdb]`.
+
+**The general shape of all three:** the value that DECIDES and the value that is
+DISPLAYED (or scored, or trusted) were computed from different inputs, and every
+individual piece looked correct on its own. Tests, `tsc`, lint and `next build`
+were green throughout, and the existing 912-test suite passed unchanged after the
+fixes, which is why each one shipped with new tests that fail against the old
+behaviour.

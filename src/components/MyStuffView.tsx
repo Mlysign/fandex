@@ -16,7 +16,7 @@ import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePe
 import { useDebouncedValue } from "@/lib/useDebounced";
 import type { WishlistToggledDetail } from "@/lib/useQuickActions";
 import { WISHLIST_TOGGLED_EVENT } from "@/lib/useQuickActions";
-import { syncToCompletion } from "@/lib/syncClient";
+import { staleProviders, syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
 import type { MyStuffTab } from "@/lib/myStuffMerge";
 import { mergeMyStuff, filterByTab, parseTab } from "@/lib/myStuffMerge";
@@ -30,7 +30,6 @@ import ProgressTabPanel from "@/components/ProgressTabPanel";
 import SignInDialog from "@/components/auth/SignInDialog";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 
-const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 const TAB_LABEL: Record<MyStuffTab, string> = { wishlist: "Wishlist", progress: "Progress", library: "Library" };
 // The noun the toolbar counts in. "progress" counts EPISODES, not titles — and
 // its count comes from its own panel, so the toolbar's number is suppressed for
@@ -194,11 +193,13 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
     if (!data.user) { setAnon(true); return; }
     setAnon(false);
     setIdentities(data.identities ?? []);
-    const syncLogs: { last_sync: number }[] = data.syncLogs ?? [];
-    const latestSyncMs = syncLogs.length > 0 ? Math.max(...syncLogs.map((l) => l.last_sync * 1000)) : 0;
-    if (Date.now() - latestSyncMs > SYNC_STALE_MS && (data.identities ?? []).length > 0) {
+    // Per connected provider, not one collapsed timestamp for all of them. See
+    // staleProviders() for why: a trakt-only sync used to make Steam look fresh.
+    const syncLogs: { provider: string; last_sync: number }[] = data.syncLogs ?? [];
+    const due = staleProviders(data.identities ?? [], syncLogs, Date.now());
+    if (due.length > 0) {
       setAutoSyncing(true);
-      syncToCompletion("all").finally(() => setAutoSyncing(false));
+      syncToCompletion(due).finally(() => setAutoSyncing(false));
     }
     setAuthChecked(true);
   }

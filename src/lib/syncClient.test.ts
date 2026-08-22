@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { syncToCompletion } from "./syncClient";
+import { staleProviders, syncToCompletion, SYNC_STALE_MS } from "./syncClient";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -47,5 +47,72 @@ describe("syncToCompletion", () => {
     const calls = stubFetch([{ ok: true, results: [], remaining: [] }]);
     await syncToCompletion("all");
     expect(calls).toHaveLength(1);
+  });
+
+  it("starts from a provider LIST when given one, instead of a fresh full run", async () => {
+    const calls = stubFetch([{ ok: true, results: [], done: true, remaining: [] }]);
+    await syncToCompletion(["steam", "rawg"]);
+    expect(calls).toEqual([{ providers: ["steam", "rawg"] }]);
+  });
+
+  it("does nothing at all for an EMPTY list", async () => {
+    // /api/sync's providerQueue falls back to the whole registry on an empty
+    // `providers`, so a naive pass-through would turn "nothing is due" into a
+    // full sync of everything on every visit.
+    const calls = stubFetch([{ ok: true, results: [], done: true, remaining: [] }]);
+    await syncToCompletion([]);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// 2026-08-22 — My Stuff used to collapse the whole sync log with
+// `Math.max(...)` and re-sync everything only if that ONE timestamp was over a
+// day old. The Home progress rail syncs Trakt alone, so from the day it shipped
+// (2026-08-16) every Trakt-only run refreshed the clock guarding Steam, RAWG and
+// TMDB, and none of them ever synced again. It surfaced as a Steam game staying
+// on the wishlist weeks after it was bought.
+describe("staleProviders", () => {
+  const HOUR = 60 * 60 * 1000;
+  const NOW = 1_000_000 * HOUR;
+  const secs = (ms: number) => ms / 1000;
+  const ident = (...ids: string[]) => ids.map((provider) => ({ provider }));
+
+  it("does NOT let one provider's fresh sync cover another's stale one", () => {
+    const logs = [
+      { provider: "trakt", last_sync: secs(NOW - HOUR) },
+      { provider: "trakt-library", last_sync: secs(NOW - HOUR) },
+      { provider: "steam", last_sync: secs(NOW - 20 * 24 * HOUR) },
+      { provider: "steam-library", last_sync: secs(NOW - 20 * 24 * HOUR) },
+    ];
+    expect(staleProviders(ident("trakt", "steam"), logs, NOW)).toEqual(["steam"]);
+  });
+
+  it("counts a provider's suffixed rows (`steam-library`) as that provider's own freshness", () => {
+    const logs = [{ provider: "steam-library", last_sync: secs(NOW - HOUR) }];
+    expect(staleProviders(ident("steam"), logs, NOW)).toEqual([]);
+  });
+
+  it("treats a provider that has never synced as stale", () => {
+    expect(staleProviders(ident("steam"), [], NOW)).toEqual(["steam"]);
+  });
+
+  it("returns nothing when every connected provider is fresh", () => {
+    const logs = [
+      { provider: "trakt", last_sync: secs(NOW - HOUR) },
+      { provider: "steam", last_sync: secs(NOW - HOUR) },
+    ];
+    expect(staleProviders(ident("trakt", "steam"), logs, NOW)).toEqual([]);
+  });
+
+  it("ignores log rows for providers that are no longer connected", () => {
+    const logs = [{ provider: "letterboxd", last_sync: secs(NOW - 99 * 24 * HOUR) }];
+    expect(staleProviders(ident("trakt"), logs, NOW)).toEqual(["trakt"]);
+  });
+
+  it("uses a 24 h window", () => {
+    const fresh = [{ provider: "steam", last_sync: secs(NOW - SYNC_STALE_MS + HOUR) }];
+    const old = [{ provider: "steam", last_sync: secs(NOW - SYNC_STALE_MS - HOUR) }];
+    expect(staleProviders(ident("steam"), fresh, NOW)).toEqual([]);
+    expect(staleProviders(ident("steam"), old, NOW)).toEqual(["steam"]);
   });
 });

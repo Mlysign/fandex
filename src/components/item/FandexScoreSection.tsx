@@ -31,8 +31,18 @@ import { tagKey } from "@/lib/facets";
 function reasonColor(r: Reason): string {
   return facetColorVar(r);
 }
-function reasonGroupLabel(r: Reason): string {
-  return r.kind === "tag" ? (CATEGORY_LABELS[r.category ?? "other"] ?? "Tag") : (ROLE_LABELS[r.role ?? ""] ?? "Person");
+// 2026-08-22 — CATEGORY_LABELS is the nine categories baked into tags.ts, but
+// the taxonomy is editable in /dev/scoring and the live DB already carries three
+// the static map has never heard of (modes, objects-elements,
+// people-characters). Resolve against the live list first, exactly as
+// homeHighlights' categoryLabel does, and fall back to the id rather than the
+// flat "Tag": a category named after itself still tells you which one it is.
+// This became visible the same day reasons started naming their EFFECTIVE
+// category: "Singleplayer" is scored as `modes`, so it would have read "Tag".
+function reasonGroupLabel(r: Reason, categories: { id: string; label: string }[]): string {
+  if (r.kind !== "tag") return ROLE_LABELS[r.role ?? ""] ?? "Person";
+  const id = r.category ?? "other";
+  return categories.find((c) => c.id === id)?.label ?? CATEGORY_LABELS[id] ?? id;
 }
 
 // The panel shell every state shares: 44px-ish serif number/dash on the left,
@@ -133,9 +143,16 @@ function scoreReasonLine(score: number, center: number | null, top: Reason | und
 }
 
 export default function FandexScoreSection({
-  score, center, reasons, coldStart, anon, onRequestSignIn,
+  score, center, reasons, coldStart, anon, onRequestSignIn, tagCategories = [],
 }: {
   score: number | null; center: number | null; reasons: Reason[]; coldStart: boolean; anon?: boolean;
+  /**
+   * The live tag taxonomy, for naming a reason's category. Viewer-independent
+   * (read on the server and threaded down through ItemView, the same route
+   * LowerSections' tag groups take), so it doesn't compromise the SSR rule that
+   * nothing above PersonalSection may depend on the viewer.
+   */
+  tagCategories?: { id: string; label: string }[];
   /**
    * Open the sign-in dialog. Anon-only — the gated panel says "Sign in to see
    * your taste-match Score", and 2026-08-18 (Nils: "on a details page, the
@@ -254,7 +271,7 @@ export default function FandexScoreSection({
                   <div className={`flex items-start justify-between gap-3 text-xs ${r.capped ? "opacity-40" : ""}`}>
                     <span className="min-w-0 space-y-0.5">
                       <span className="flex items-center gap-1.5 flex-wrap">
-                        <span className="uppercase tracking-wide text-[10px] font-bold shrink-0" style={{ color: c }}>{reasonGroupLabel(r)}</span>
+                        <span className="uppercase tracking-wide text-[10px] font-bold shrink-0" style={{ color: c }}>{reasonGroupLabel(r, tagCategories)}</span>
                         {linkable ? (
                           r.kind === "tag" ? (
                             // T9 (2026-07-29): admin-only inline category picker, hover-revealed —

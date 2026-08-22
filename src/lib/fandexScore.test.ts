@@ -557,3 +557,128 @@ describe("fandexCenterFor (S11)", () => {
     expect(fandexCenterFor({ ...base, ratedItemCount: 0 })).toBeNull();
   });
 });
+
+// 2026-08-22 — the top-N selection used to rank by the RAW `dev`, while a
+// facet's contribution (and the number the breakdown prints) is
+// `dev · classWeight · gain`. Found on Mortal Shell II: Souls-like was counted
+// at +1.3 while Dark Fantasy sat greyed out at +2.6 underneath it, with the
+// panel offering no way to explain the order. Every one of these fails if the
+// sorts go back to comparing `dev`.
+describe("computeFandexScore — top-N selects by the weighted contribution (2026-08-22)", () => {
+  const meta = (over: Partial<NonNullable<ReturnType<Profile["meta"]["get"]>>> & { classWeight: number }) =>
+    ({ kind: "tag", key: "x", label: "X", ...over });
+
+  it("keeps the tag that is worth MORE POINTS, not the one with the bigger raw deviation", () => {
+    // Light has the larger dev (0.7 vs 0.5) and would have won on the old sort.
+    // Heavy sits in a category the admin weighted up, so it is worth 0.75 to
+    // the score against Light's 0.28. w = dev · classWeight, as buildProfile
+    // stores it.
+    const facets: Facet[] = [
+      { kind: "tag", key: "light", label: "Light", category: "mood" },
+      { kind: "tag", key: "heavy", label: "Heavy", category: "genre" },
+    ];
+    const profile: Profile = {
+      w: new Map([["tag||light", 0.7 * 0.4], ["tag||heavy", 0.5 * 1.5]]),
+      meta: new Map([
+        ["tag||light", meta({ key: "light", label: "Light", category: "mood", classWeight: 0.4 })],
+        ["tag||heavy", meta({ key: "heavy", label: "Heavy", category: "genre", classWeight: 1.5 })],
+      ]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+
+    const cfg = { ...DEFAULT_SCORING_CONFIG, topTagsPositive: 1 };
+    const result = computeFandexScore(facets, profile, cfg)!;
+    expect(result.reasons.filter((r) => !r.capped).map((r) => r.label)).toEqual(["Heavy"]);
+    expect(result.reasons.filter((r) => r.capped).map((r) => r.label)).toEqual(["Light"]);
+    expect(result.score).toBeCloseTo(Math.round((50 + K_UP * 0.75) * 10) / 10, 6);
+  });
+
+  it("honours the role weights when picking people, so a director outranks a cameo it used to lose to", () => {
+    // roleWeights ship director 1.3 against cast 0.6. The actor's raw dev is
+    // higher, the director's contribution is more than twice as large.
+    const facets: Facet[] = [
+      { kind: "person", role: "director", key: "d", label: "Director" },
+      { kind: "person", role: "cast", key: "a", label: "Actor" },
+    ];
+    const profile: Profile = {
+      w: new Map([["person|director|d", 0.45 * 1.3], ["person|cast|a", 0.5 * 0.6]]),
+      meta: new Map([
+        ["person|director|d", meta({ kind: "person", key: "d", role: "director", label: "Director", classWeight: 1.3 })],
+        ["person|cast|a", meta({ kind: "person", key: "a", role: "cast", label: "Actor", classWeight: 0.6 })],
+      ]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+
+    const cfg = { ...DEFAULT_SCORING_CONFIG, topPeople: 1 };
+    const result = computeFandexScore(facets, profile, cfg)!;
+    expect(result.reasons.filter((r) => !r.capped).map((r) => r.label)).toEqual(["Director"]);
+    expect(result.reasons.filter((r) => r.capped).map((r) => r.label)).toEqual(["Actor"]);
+  });
+
+  it("drops the most-negative tag by weighted contribution too", () => {
+    const facets: Facet[] = [
+      { kind: "tag", key: "light", label: "Light", category: "mood" },
+      { kind: "tag", key: "heavy", label: "Heavy", category: "genre" },
+    ];
+    const profile: Profile = {
+      w: new Map([["tag||light", -0.7 * 0.4], ["tag||heavy", -0.5 * 1.5]]),
+      meta: new Map([
+        ["tag||light", meta({ key: "light", label: "Light", category: "mood", classWeight: 0.4 })],
+        ["tag||heavy", meta({ key: "heavy", label: "Heavy", category: "genre", classWeight: 1.5 })],
+      ]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+
+    const cfg = { ...DEFAULT_SCORING_CONFIG, topTagsNegative: 1 };
+    const result = computeFandexScore(facets, profile, cfg)!;
+    expect(result.reasons.filter((r) => !r.capped).map((r) => r.label)).toEqual(["Heavy"]);
+    expect(result.reasons.filter((r) => r.capped).map((r) => r.label)).toEqual(["Light"]);
+  });
+});
+
+// 2026-08-22 — a reason carried the ITEM's facet category, which is whatever
+// the provider said on that one title, not the category the profile weighted it
+// under (post tag_category_override). The breakdown printed "Role-playing
+// (RPG)" as OTHER while scoring it as genre, and the chip colour followed the
+// wrong one too, since facetColorVar reads the same field.
+describe("computeFandexScore — a reason names the category it was SCORED under (2026-08-22)", () => {
+  const meta = (over: Partial<NonNullable<ReturnType<Profile["meta"]["get"]>>> & { classWeight: number }) =>
+    ({ kind: "tag", key: "x", label: "X", ...over });
+
+  const facets: Facet[] = [
+    { kind: "tag", key: "rpg", label: "Role-playing (RPG)", category: "other" },
+    { kind: "tag", key: "solo", label: "Singleplayer", category: "other" },
+  ];
+  const profile: Profile = {
+    w: new Map([["tag||rpg", 2], ["tag||solo", 1]]),
+    meta: new Map([
+      ["tag||rpg", meta({ key: "rpg", label: "Role-playing (RPG)", category: "genre", classWeight: 1 })],
+      ["tag||solo", meta({ key: "solo", label: "Singleplayer", category: "modes", classWeight: 1 })],
+    ]),
+    baseline: 5, hasSignal: true, ratedItemCount: 10,
+  };
+
+  it("uses the profile's effective category on a counted reason", () => {
+    const result = computeFandexScore(facets, profile)!;
+    expect(result.reasons.find((r) => r.label === "Role-playing (RPG)")!.category).toBe("genre");
+    expect(result.reasons.find((r) => r.label === "Singleplayer")!.category).toBe("modes");
+  });
+
+  it("uses it on a capped reason as well", () => {
+    const cfg = { ...DEFAULT_SCORING_CONFIG, topTagsPositive: 1 };
+    const result = computeFandexScore(facets, profile, cfg)!;
+    const solo = result.reasons.find((r) => r.label === "Singleplayer")!;
+    expect(solo.capped).toBe(true);
+    expect(solo.category).toBe("modes");
+  });
+
+  it("falls back to the item's own category when the profile has none (people, companies)", () => {
+    const personFacets: Facet[] = [{ kind: "person", role: "director", key: "d", label: "Director" }];
+    const personProfile: Profile = {
+      w: new Map([["person|director|d", 1]]),
+      meta: new Map([["person|director|d", meta({ kind: "person", key: "d", role: "director", label: "Director", classWeight: 1 })]]),
+      baseline: 5, hasSignal: true, ratedItemCount: 10,
+    };
+    expect(computeFandexScore(personFacets, personProfile)!.reasons[0].category).toBeUndefined();
+  });
+});

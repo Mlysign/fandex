@@ -130,6 +130,7 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
         releaseDate={item.releaseDate}
         posterUrl={item.posterUrl}
         steamStoreUrl={steamAppId ? `https://store.steampowered.com/app/${steamAppId}` : null}
+        tagCategories={tagCategories}
       />
 
       {item.tagline && <p className="text-base text-text-secondary italic max-w-[68ch]">{item.tagline}</p>}

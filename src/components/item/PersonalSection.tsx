@@ -46,6 +46,7 @@ export default function PersonalSection({
   releaseDate,
   posterUrl,
   steamStoreUrl,
+  tagCategories,
 }: {
   /** Always a uuid since H2b (discover persists → every item has one). */
   itemId: string;
@@ -56,6 +57,8 @@ export default function PersonalSection({
   releaseDate: string | null;
   posterUrl: string | null;
   steamStoreUrl: string | null;
+  /** Live tag taxonomy, for naming a Score reason's category. Viewer-independent. */
+  tagCategories?: { id: string; label: string }[];
 }) {
   const [state, setState] = useState<"loading" | "anon" | "user">("loading");
   const [detail, setDetail] = useState<DetailResponse | null>(null);
@@ -255,6 +258,7 @@ export default function PersonalSection({
         center={anon ? null : (detail?.fandexCenter ?? null)}
         reasons={anon ? [] : (detail?.fandexReasons ?? [])}
         coldStart={!anon && !!detail?.fandexColdStart}
+        tagCategories={tagCategories}
       />
 
       {/* B6 (2026-07-28) — the mockup's two-button pair: Rate it / Save.
