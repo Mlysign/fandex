@@ -27,7 +27,7 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 Everything else in this file is either done or a standing constraint.
 
-1. **Android TWA (P15/P16): do it, or park it explicitly.** Full context is in the P15/P16 section below — it is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision), and it needs a signing key plus a one-off $25 Play account. Either answer is fine; it blocks nothing. Right now it just reads as in-progress work that isn't progressing.
+1. **Android TWA (P15/P16): do it, or park it explicitly.** **Step-by-step instructions written 2026-08-22 → [docs/twa-play-store.md](docs/twa-play-store.md).** It is Fandex shipped as a thin Play Store wrapper of the website (your 2026-06-18 decision). ⚠️ **The real cost is not the $25 or the signing key. It is that a new PERSONAL Play developer account cannot publish anything until it has run a closed test with 12 testers opted in continuously for 14 days**, a rule that covers every personal account created after 2023-11-13. An *organization* account is exempt but needs a registered business and a D-U-N-S number, and the account type cannot be changed later. Decide with that in front of you; either answer is fine and it blocks nothing.
 
 2. **⚠️ RAWG is NOT down — its monthly API quota is exhausted. The sweep cannot run, and this is a different problem from 2026-08-17.** Measured 2026-08-20: `api.rawg.io` answers **`401 {"error": "The monthly API limit reached"}`** in 0.17 s. Not the timeouts and Cloudflare 522s of the August outage.
 
@@ -58,6 +58,23 @@ Everything else in this file is either done or a standing constraint.
 
 ⚠️ **Railway volume backups remain Pro-plan only** (re-confirmed on the Backups tab, 2026-08-20), so **Litestream is still the only copy**. And **a drill proves the backup you had THAT DAY** — the 2026-08-12 drill was invalidated by a schema change five days later and nobody noticed for two more. **Re-run it after ANY schema change.**
 
+### ⏸️ The drill is DUE again — migration 19 landed after the last one
+
+**Migration 19 (`media_items.slug`, `abfc4de`, 2026-08-21) is a schema change, and it landed the day AFTER the 2026-08-20 drill.** By the rule directly above, that drill no longer proves anything about today's backup. Attempted 2026-08-22 and **blocked by the harness**: typing shell commands into the Railway Console is denied in auto mode, and routing around that is not the right move.
+
+**What IS verified as of 2026-08-22, and what it does not prove.** Migration 19 is a plain `ALTER TABLE` + `CREATE UNIQUE INDEX`, so it carries none of the 3.44-only syntax that killed Litestream in migration 16; the replica bucket grew 136.8 → 137.1 MB across two deploys, so replication is live; and the deploy log shows the litestream v0.3.13 start line with **zero** errors, `malformed`, or `syntax error` matches. That is "replicating". **The whole lesson of 2026-08-17 is that replicating and RESTORABLE are different claims**, and only the second one is a backup.
+
+**The drill, to paste into the Railway Console (service → Console):**
+
+```
+litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
+ls -l /app/data/rr.db /tmp/restore-test.db
+node -e 'const D=require("better-sqlite3");const a=new D("/app/data/rr.db",{readonly:true}),b=new D("/tmp/restore-test.db",{readonly:true});console.log("integrity",b.pragma("integrity_check",{simple:true}));for(const t of ["users","user_identities","user_item_state","media_items","user_episode_state","show_episodes","media_links"])console.log(t,a.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c,b.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c);'
+rm /tmp/restore-test.db
+```
+
+Pass = `integrity ok`, the two file sizes equal, and both columns equal on all seven tables. ⚠️ **Check free space before restoring** — it writes a second copy of the database into `/tmp`. `/app/data/rr.db` is never touched.
+
 ### ✅ The file already reclaimed itself — there is no VACUUM step, and there never was
 
 **`rr.db` went 331.4 MB → 154.2 MB on the fix deploy, unprompted.** `src/lib/db.ts` VACUUMs whenever a migration actually applies (H2a), migration 18 applied, so it fired — **with Litestream attached, completing fine.** A `VACUUM_ON_BOOT` entrypoint flag was added and removed the same day: a third, worse copy, resting on a premise that drop disproves. The manual lever is `POST /api/dev/prune {"action":"vacuum","confirm":"VACUUM"}`, which checks free space first. **The WAL is still 340.8 MB** — that one does need the last connection to close with Litestream detached.
@@ -87,18 +104,15 @@ Everything else in this file is either done or a standing constraint.
 
 ### P15/P16 — the Android app. Read this before deciding; "Bubblewrap" needed context.
 
+**→ The click-by-click version is [docs/twa-play-store.md](docs/twa-play-store.md)** (2026-08-22). The section below is the *why*; that doc is the *how*, plus the two traps: the 12-testers/14-days gate on new personal accounts, and the fact that the SHA-256 the assetlinks file needs is the one Play Console shows under **App integrity**, not the one in the package PWABuilder hands you — Google re-signs every upload.
+
 **This is Fandex, not a different project.** It traces back to a decision you locked on **2026-06-18**: *"public website first, Android as a PWA/TWA wrapper"* — i.e. Fandex ships to the Play Store as a **thin Android app that just displays fandex.org**, not as a separate codebase. Two months on, the name of the tool (Bubblewrap) carried none of that context. Fair.
 
 **What a TWA is.** A *Trusted Web Activity* is an Android app whose entire content is your website, rendered by the user's Chrome. No second codebase, no rewrite, no separate release of features — you ship the website, the app shows it. The only reason it isn't just a browser shortcut is that a TWA can **hide the browser address bar**, so it looks like a native app. Hiding that bar is exactly what needs proving you own the domain — which is what P15 is.
 
 **What's already built (by Claude, done):** `src/app/.well-known/assetlinks.json/route.ts` serves the Digital Asset Links file Google's verifier fetches. It's env-driven and currently returns an empty `[]`, which is valid JSON and simply means "no app claims this origin yet". **P14 (PWA manifest + service worker) is also done** — that's the prerequisite that makes the site installable at all.
 
-**What only you can do, and why.** Generating the Android package requires creating a **signing key** and a **Play Console account** — a credential and an account tied to your identity, so Claude does not do it. The mechanical shape:
-1. Run **Bubblewrap** (Google's CLI) or **PWABuilder** (a website that does the same thing without installing anything) against `https://fandex.org/manifest.webmanifest`. Output: a signed `.aab` plus two values — the **package name** (e.g. `org.fandex.twa`) and the signing cert's **SHA-256 fingerprint**.
-2. Set those as `TWA_PACKAGE_NAME` and `TWA_CERT_FINGERPRINT` on Railway. The route above starts serving a real claim; verify at `/.well-known/assetlinks.json`.
-3. Upload the `.aab` to the Play Console. (Google charges a **one-off $25** developer registration.)
-
-**The rest of the context** (what a TWA is and is not, Bubblewrap, the signing key, the one-off $25 Play account) → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
+**What only you can do, and why.** The **signing key** and the **Play Console account** are a credential and an account tied to your identity, so Claude does not make either. Everything mechanical after that is [docs/twa-play-store.md](docs/twa-play-store.md). Older context (what a TWA is and is not, Bubblewrap) → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
 
 ## Closed epics — pointers only (full write-ups in the archive)
 
