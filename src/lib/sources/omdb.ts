@@ -64,7 +64,7 @@ async function omdbGet(params: Record<string, string>): Promise<OmdbResult> {
   if (cached) return cached;
   try {
     const p = new URLSearchParams({ apikey: API_KEY, ...params });
-    const res = await httpFetch(`https://www.omdbapi.com/?${p}`);
+    const res = await httpFetch(`https://www.omdbapi.com/?${p}`, { appScopedAuth: true });
     if (!res.ok) return EMPTY;
     const data = await res.json();
     const result = data.Response === "False" ? EMPTY : parse(data);

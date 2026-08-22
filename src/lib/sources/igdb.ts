@@ -26,7 +26,7 @@ async function getToken(): Promise<string> {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.token;
   const p = new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: "client_credentials" });
-  const res = await httpFetch(`${TWITCH_TOKEN_URL}?${p}`, { method: "POST" });
+  const res = await httpFetch(`${TWITCH_TOKEN_URL}?${p}`, { method: "POST", appScopedAuth: true });
   if (!res.ok) throw new Error(`Twitch token failed: ${res.status}`);
   const data = await res.json();
   cachedToken = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) * 1000 };
@@ -56,6 +56,7 @@ async function igdbQuery(endpoint: string, body: string, budgetMs?: number): Pro
       Accept: "application/json",
     },
     body,
+    appScopedAuth: true,
     ...(budgetMs != null ? { budgetMs } : {}),
   });
   if (!res.ok) throw new Error(`IGDB ${endpoint}: ${res.status}`);

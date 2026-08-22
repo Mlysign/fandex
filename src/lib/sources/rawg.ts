@@ -10,7 +10,7 @@ const KEY = process.env.RAWG_API_KEY!;
 
 async function rawgGet(endpoint: string, params: Record<string, string> = {}) {
   const p = new URLSearchParams({ key: KEY, ...params });
-  const res = await httpFetch(`${BASE}${endpoint}?${p}`);
+  const res = await httpFetch(`${BASE}${endpoint}?${p}`, { appScopedAuth: true });
   if (!res.ok) throw new Error(`RAWG error: ${res.status} ${endpoint}`);
   return res.json();
 }
@@ -84,7 +84,8 @@ export async function getRawgUserToPlay(slug: string): Promise<any[]> {
   let url: string | null = `${BASE}/users/${encodeURIComponent(slug)}/games?key=${KEY}&statuses=toplay&page_size=40`;
 
   while (url) {
-    const fetchRes: Response = await httpFetch(url);
+    // Public endpoint: the app key is the only credential on it.
+    const fetchRes: Response = await httpFetch(url, { appScopedAuth: true });
     if (!fetchRes.ok) {
       if (fetchRes.status === 404) throw new Error(`RAWG user "${slug}" not found`);
       throw new Error(`RAWG API error: ${fetchRes.status}`);

@@ -357,3 +357,154 @@ describe("cross-bundle state", () => {
     expect(providerBreakerSnapshot()["api.rawg.io"]).toBeDefined();
   });
 });
+
+// 2026-08-22 — the 401/403 auth latch. Measured on prod: 13,068 requests to
+// RAWG, 4,343 to OMDb and 3,155 to Letterboxd in 10.5 h, every one a 401,
+// roughly a third of all provider traffic. The breaker deliberately ignores a
+// 4xx; a 401 repeated 13,068 times is a dead credential, not a bad request.
+describe("401/403 auth latch", () => {
+  const unauth = (status = 401) => new Response("nope", { status });
+
+  it("latches a host after repeated app-scoped 401s and stops calling it", async () => {
+    const f = vi.fn().mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+
+    for (let i = 0; i < 5; i++) await httpFetch("https://deadkey.test", { appScopedAuth: true });
+    expect(f).toHaveBeenCalledTimes(5);
+
+    f.mockClear();
+    await expect(httpFetch("https://deadkey.test", { appScopedAuth: true }))
+      .rejects.toBeInstanceOf(ProviderUnavailableError);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("counts a 403 the same way", async () => {
+    const f = vi.fn().mockResolvedValue(unauth(403));
+    vi.stubGlobal("fetch", f);
+    for (let i = 0; i < 5; i++) await httpFetch("https://forbidden.test", { appScopedAuth: true });
+    expect(providerBreakerSnapshot()["forbidden.test"]?.latchedOnAuth).toBe(true);
+  });
+
+  // The reason `appScopedAuth` exists at all. RAWG and TMDB serve app-key
+  // metadata and per-user calls from the SAME host, so latching on a user's
+  // dead token would stop the provider for everybody else.
+  it("does NOT latch on a 401 carrying a USER's token — that is one user's problem", async () => {
+    const f = vi.fn().mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+
+    for (let i = 0; i < 20; i++) await httpFetch("https://usertoken.test");
+    expect(providerBreakerSnapshot()["usertoken.test"]).toBeUndefined();
+
+    // Still calling, because nothing about OUR credential has been disproved.
+    f.mockClear();
+    const res = await httpFetch("https://usertoken.test");
+    expect(res.status).toBe(401);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets the run on any other response, so a flaky 401 never latches", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(unauth()).mockResolvedValueOnce(unauth())
+      .mockResolvedValueOnce(unauth()).mockResolvedValueOnce(unauth())
+      .mockResolvedValueOnce(resp(200))   // the run is broken here
+      .mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+
+    for (let i = 0; i < 9; i++) await httpFetch("https://flakyauth.test", { appScopedAuth: true });
+    // 4 + 4 consecutive, never 5 in a row.
+    expect(providerBreakerSnapshot()["flakyauth.test"]).toBeUndefined();
+  });
+
+  it("tells /api/health it is a rejected credential, not an outage", async () => {
+    const f = vi.fn().mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+    for (let i = 0; i < 5; i++) await httpFetch("https://latched.test", { appScopedAuth: true });
+
+    const snap = providerBreakerSnapshot()["latched.test"];
+    expect(snap.latchedOnAuth).toBe(true);
+    expect(snap.authFailures).toBe(5);
+    // An outage opens on `failures`; this one did not.
+    expect(snap.failures).toBe(0);
+    // And it holds for far longer than an outage window, because a dead
+    // credential does not fix itself in 30 seconds.
+    expect(snap.openForMs).toBeGreaterThan(10 * 60_000);
+  });
+
+  // THE PRUNE INVARIANT again (see the breaker block above): a latched host must
+  // THROW. A synthetic 401 Response would be read as `!res.ok` by a pull adapter
+  // and, by any `if (!res.ok) return []`, as an empty library.
+  it("THROWS with reason 'auth' rather than returning a response", async () => {
+    const f = vi.fn().mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+    for (let i = 0; i < 5; i++) await httpFetch("https://throws.test", { appScopedAuth: true });
+
+    await expect(httpFetch("https://throws.test", { appScopedAuth: true })).rejects.toMatchObject({
+      name: "ProviderUnavailableError",
+      reason: "auth",
+      host: "throws.test",
+    });
+  });
+
+  it("blocked calls are counted as blocked, not as requests — they cost no quota", async () => {
+    const f = vi.fn().mockResolvedValue(unauth());
+    vi.stubGlobal("fetch", f);
+    for (let i = 0; i < 5; i++) await httpFetch("https://quota.test", { appScopedAuth: true });
+    for (let i = 0; i < 10; i++) {
+      await httpFetch("https://quota.test", { appScopedAuth: true }).catch(() => {});
+    }
+    const c = providerCallSnapshot()["quota.test"];
+    expect(c.requests).toBe(5);   // the only five that left the process
+    expect(c.blocked).toBe(10);
+  });
+
+  it("recovers on its own: one probe per window, and a working key closes it", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = vi.fn().mockResolvedValue(unauth());
+      vi.stubGlobal("fetch", f);
+      for (let i = 0; i < 5; i++) await httpFetch("https://recovers.test", { appScopedAuth: true });
+
+      // Inside the window: no request leaves.
+      f.mockClear();
+      await expect(httpFetch("https://recovers.test", { appScopedAuth: true })).rejects.toThrow();
+      expect(f).not.toHaveBeenCalled();
+
+      // Window elapsed. Exactly ONE probe goes out, and it succeeds because the
+      // quota reset / the key was replaced.
+      vi.advanceTimersByTime(16 * 60_000);
+      f.mockResolvedValue(resp(200));
+      const res = await httpFetch("https://recovers.test", { appScopedAuth: true });
+      expect(res.status).toBe(200);
+      expect(f).toHaveBeenCalledTimes(1);
+
+      // Closed, and back to normal service.
+      expect(providerBreakerSnapshot()["recovers.test"]).toBeUndefined();
+      await httpFetch("https://recovers.test", { appScopedAuth: true });
+      expect(f).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("backs off harder when the probe is rejected too", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = vi.fn().mockResolvedValue(unauth());
+      vi.stubGlobal("fetch", f);
+      for (let i = 0; i < 5; i++) await httpFetch("https://stilldead.test", { appScopedAuth: true });
+      const firstWindow = providerBreakerSnapshot()["stilldead.test"].openForMs;
+
+      // The probe goes out and comes back 401. It RESOLVES — a probe is a real
+      // call and its caller sees the real response; only the breaker learns
+      // from it.
+      vi.advanceTimersByTime(16 * 60_000);
+      expect((await httpFetch("https://stilldead.test", { appScopedAuth: true })).status).toBe(401);
+
+      // The probe 401'd, so the next window is longer — the point of the latch
+      // is that a permanently dead credential costs a handful of calls a day.
+      expect(providerBreakerSnapshot()["stilldead.test"].openForMs).toBeGreaterThan(firstWindow);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -53,6 +53,21 @@ export interface HttpFetchInit extends RequestInit {
    * Latency-sensitive callers pass a real budget — see BROWSE_BUDGET_MS.
    */
   budgetMs?: number;
+  /**
+   * True when the ONLY credential this request carries is the APP's own - an
+   * API key, a `client_credentials` token - and no per-user token.
+   *
+   * It gates the 401/403 AUTH LATCH below, and the default is deliberately
+   * false. A 401 on a request carrying a USER's token means that one user's
+   * token is dead; latching the host on it would stop the provider for
+   * everybody else. Opting in per CALL SITE rather than per host is the only
+   * honest split, because RAWG and TMDB serve both kinds of request from the
+   * same host.
+   *
+   * Forgetting it on a new app-scoped call site costs wasted requests, which is
+   * the safe direction. Setting it on a user-scoped one is the bug.
+   */
+  appScopedAuth?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -73,10 +88,41 @@ const FAILURE_THRESHOLD = 3;   // consecutive hard failures before opening
 const BASE_OPEN_MS = 30_000;   // first open window
 const MAX_OPEN_MS = 5 * 60_000; // ceiling for the doubling on a failed probe
 
+// -- The 401/403 auth latch (2026-08-22) ----------------------------
+//
+// A 4xx deliberately does NOT open the breaker above: our own bad request must
+// not take a healthy host offline for everyone. That rule is right for a ONE-OFF
+// 4xx and wrong for a persistent one. Measured on prod over 10.5 h: 13,068
+// requests to RAWG, 4,343 to OMDb, 3,155 to Letterboxd, and every single one
+// returned 401. About a third of all provider traffic, re-asked roughly 2,000
+// times an hour forever, with nothing in the app learning from it. A 401
+// repeated 13,068 times is a dead credential, not a bad request.
+//
+// So: after AUTH_FAILURE_THRESHOLD consecutive 401/403s on APP-scoped requests
+// (see `appScopedAuth` - a single user's dead token must never latch a host for
+// everybody), the host's breaker opens on a much longer schedule than an outage
+// gets. It still recovers on its own: one half-open probe per window, doubling
+// to AUTH_MAX_OPEN_MS on each failed probe. RAWG's quota resets monthly, so the
+// worst case is games metadata staying off for up to 6 h into the new month,
+// against ~5,600 wasted calls a day. That is the right trade.
+//
+// Any response that is not a 401/403 resets the run (`recordSuccess`), so a
+// provider that starts answering is picked straight back up. A network error
+// leaves the run alone: it says nothing about the credential.
+const AUTH_FAILURE_THRESHOLD = 5;
+const AUTH_OPEN_MS = 15 * 60_000;
+const AUTH_MAX_OPEN_MS = 6 * 60 * 60_000;
+
 interface Breaker {
   failures: number;
+  /** Consecutive 401/403s on APP-scoped requests. Reset by any other response. */
+  authFailures: number;
   openUntil: number;
   openMs: number;
+  /** Ceiling for the probe backoff doubling. Raised while latched on auth. */
+  maxOpenMs: number;
+  /** Why this breaker is open: an outage, or a credential the provider rejects. */
+  latchedOnAuth: boolean;
   probing: boolean;
 }
 
@@ -185,11 +231,15 @@ export function __resetProviderCalls() { _calls.clear(); }
 export class ProviderUnavailableError extends Error {
   readonly host: string;
   readonly retryInMs: number;
-  constructor(host: string, retryInMs: number) {
-    super(`Provider ${host} is unavailable (circuit open, retry in ${Math.ceil(retryInMs / 1000)}s)`);
+  /** "auth" = the provider rejects our credential; "circuit" = it looks down. */
+  readonly reason: "circuit" | "auth";
+  constructor(host: string, retryInMs: number, reason: "circuit" | "auth" = "circuit") {
+    const why = reason === "auth" ? "credential rejected" : "circuit open";
+    super(`Provider ${host} is unavailable (${why}, retry in ${Math.ceil(retryInMs / 1000)}s)`);
     this.name = "ProviderUnavailableError";
     this.host = host;
     this.retryInMs = retryInMs;
+    this.reason = reason;
   }
 }
 
@@ -199,7 +249,10 @@ function hostOf(input: string | URL): string | null {
 
 function breakerFor(host: string): Breaker {
   let b = _breakers.get(host);
-  if (!b) { b = { failures: 0, openUntil: 0, openMs: BASE_OPEN_MS, probing: false }; _breakers.set(host, b); }
+  if (!b) {
+    b = { failures: 0, authFailures: 0, openUntil: 0, openMs: BASE_OPEN_MS, maxOpenMs: MAX_OPEN_MS, latchedOnAuth: false, probing: false };
+    _breakers.set(host, b);
+  }
   return b;
 }
 
@@ -213,11 +266,17 @@ function enterBreaker(host: string): boolean {
   if (b.openUntil === 0) return false;
 
   const now = Date.now();
-  if (now < b.openUntil) { callsFor(host).blocked++; throw new ProviderUnavailableError(host, b.openUntil - now); }
+  if (now < b.openUntil) {
+    callsFor(host).blocked++;
+    throw new ProviderUnavailableError(host, b.openUntil - now, b.latchedOnAuth ? "auth" : "circuit");
+  }
 
   // Half-open: let exactly ONE probe through; everyone else still fails fast,
   // so a burst of parallel callers can't re-flood a host that's still down.
-  if (b.probing) { callsFor(host).blocked++; throw new ProviderUnavailableError(host, BASE_OPEN_MS); }
+  if (b.probing) {
+    callsFor(host).blocked++;
+    throw new ProviderUnavailableError(host, b.openMs, b.latchedOnAuth ? "auth" : "circuit");
+  }
   b.probing = true;
   return true;
 }
@@ -228,8 +287,11 @@ function recordSuccess(host: string, wasProbe: boolean) {
     log.info("provider_circuit_closed", { host, afterFailures: b.failures });
   }
   b.failures = 0;
+  b.authFailures = 0;
   b.openUntil = 0;
   b.openMs = BASE_OPEN_MS;
+  b.maxOpenMs = MAX_OPEN_MS;
+  b.latchedOnAuth = false;
   if (wasProbe) b.probing = false;
 }
 
@@ -238,7 +300,7 @@ function recordFailure(host: string, wasProbe: boolean, reason: string) {
   if (wasProbe) {
     // The probe failed — still down. Back off harder, up to the ceiling.
     b.probing = false;
-    b.openMs = Math.min(b.openMs * 2, MAX_OPEN_MS);
+    b.openMs = Math.min(b.openMs * 2, b.maxOpenMs);
     b.openUntil = Date.now() + b.openMs;
     log.warn("provider_circuit_reopened", { host, openMs: b.openMs, reason });
     return;
@@ -247,6 +309,32 @@ function recordFailure(host: string, wasProbe: boolean, reason: string) {
   if (b.failures >= FAILURE_THRESHOLD && b.openUntil === 0) {
     b.openUntil = Date.now() + b.openMs;
     log.warn("provider_circuit_opened", { host, failures: b.failures, openMs: b.openMs, reason });
+  }
+}
+
+/**
+ * A 401/403 on an APP-scoped request: the provider is up and rejecting our own
+ * credential. Counted separately from an outage and latched on a much longer
+ * schedule - see AUTH_FAILURE_THRESHOLD above for why.
+ */
+function recordAuthFailure(host: string, wasProbe: boolean, status: number) {
+  const b = breakerFor(host);
+  if (wasProbe) {
+    // The probe was rejected too, so the credential is still dead. Back off
+    // harder, up to the auth ceiling.
+    b.probing = false;
+    b.openMs = Math.min(b.openMs * 2, b.maxOpenMs);
+    b.openUntil = Date.now() + b.openMs;
+    log.warn("provider_auth_latch_held", { host, status, openMs: b.openMs });
+    return;
+  }
+  b.authFailures++;
+  if (b.authFailures >= AUTH_FAILURE_THRESHOLD && b.openUntil === 0) {
+    b.latchedOnAuth = true;
+    b.maxOpenMs = AUTH_MAX_OPEN_MS;
+    b.openMs = AUTH_OPEN_MS;
+    b.openUntil = Date.now() + b.openMs;
+    log.warn("provider_auth_latched", { host, status, authFailures: b.authFailures, openMs: b.openMs });
   }
 }
 
@@ -272,11 +360,26 @@ export function isProviderCircuitOpen(host: string): boolean {
 }
 
 /** Open breakers, for /api/health. Empty object = every provider looks healthy. */
-export function providerBreakerSnapshot(): Record<string, { openForMs: number; failures: number }> {
+interface BreakerReport {
+  openForMs: number;
+  failures: number;
+  authFailures: number;
+  /** True = the provider is up and rejecting our credential, not down. */
+  latchedOnAuth: boolean;
+}
+
+export function providerBreakerSnapshot(): Record<string, BreakerReport> {
   const now = Date.now();
-  const out: Record<string, { openForMs: number; failures: number }> = {};
+  const out: Record<string, BreakerReport> = {};
   for (const [host, b] of _breakers) {
-    if (b.openUntil > now) out[host] = { openForMs: b.openUntil - now, failures: b.failures };
+    if (b.openUntil > now) {
+      out[host] = {
+        openForMs: b.openUntil - now,
+        failures: b.failures,
+        authFailures: b.authFailures,
+        latchedOnAuth: b.latchedOnAuth,
+      };
+    }
   }
   return out;
 }
@@ -293,7 +396,7 @@ function retryAfterMs(res: Response, attempt: number): number {
 }
 
 export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): Promise<Response> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, retries, budgetMs, ...rest } = init;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, retries, budgetMs, appScopedAuth, ...rest } = init;
   const method = (rest.method ?? "GET").toUpperCase();
   const idempotent = method === "GET" || method === "HEAD";
   const maxRetries = retries ?? (idempotent ? 2 : 0);
@@ -307,6 +410,7 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
   const remaining = () => (budgetMs == null ? Infinity : budgetMs - (Date.now() - startedAt));
 
   const fail = (reason: string) => { if (host) recordFailure(host, isProbe, reason); };
+  const failAuth = (status: number) => { if (host) recordAuthFailure(host, isProbe, status); };
   const ok = () => { if (host) recordSuccess(host, isProbe); };
 
   try {
@@ -346,7 +450,13 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
         // 429 we chose not to wait out) is the provider working as designed and
         // must NOT open the breaker — that would let our own burst rate, or one
         // bad request, take a healthy host offline for everyone.
-        if (res.status >= 500) fail(`status_${res.status}`); else ok();
+        //
+        // The one exception is a 401/403 on an APP-scoped request, repeated:
+        // that is not our burst rate and not one bad request, it is a credential
+        // the provider has stopped accepting. See the auth latch above.
+        if (res.status >= 500) fail(`status_${res.status}`);
+        else if (appScopedAuth && (res.status === 401 || res.status === 403)) failAuth(res.status);
+        else ok();
         return res;
       } catch (e) {
         if (host) callsFor(host).networkError++;

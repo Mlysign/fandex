@@ -98,7 +98,7 @@ const _keywordCache = new BoundedCache<string, number | null>({ max: 5000 });
 export async function resolveTmdbKeywordId(name: string): Promise<number | null> {
   if (_keywordCache.has(name)) return _keywordCache.get(name)!;
   try {
-    const r = await httpFetch(`https://api.themoviedb.org/3/search/keyword?api_key=${TMDB}&query=${encodeURIComponent(name)}`);
+    const r = await httpFetch(`https://api.themoviedb.org/3/search/keyword?api_key=${TMDB}&query=${encodeURIComponent(name)}`, { appScopedAuth: true });
     const d = await r.json();
     // Prefer an exact (case-insensitive) name match, else the first result.
     const hit = (d.results ?? []).find((k: any) => k.name?.toLowerCase() === name.toLowerCase()) ?? d.results?.[0];
@@ -121,7 +121,7 @@ async function tmdbDiscover(type: "movie" | "tv", params: Record<string, string>
       "vote_count.gte": "40",
       ...params,
     });
-    const r = await httpFetch(`https://api.themoviedb.org/3/discover/${type}?${p}`);
+    const r = await httpFetch(`https://api.themoviedb.org/3/discover/${type}?${p}`, { appScopedAuth: true });
     if (!r.ok) return [];
     const d = await r.json();
     const mt: MediaType = type === "tv" ? "show" : "movie";
@@ -143,7 +143,7 @@ export function discoverTmdbByKeyword(keywordId: number, type: MediaType): Promi
 async function rawgGames(params: Record<string, string>): Promise<CandidateRef[]> {
   try {
     const p = new URLSearchParams({ key: RAWG, ordering: "-rating", page_size: "30", ...params });
-    const r = await httpFetch(`https://api.rawg.io/api/games?${p}`);
+    const r = await httpFetch(`https://api.rawg.io/api/games?${p}`, { appScopedAuth: true });
     if (!r.ok) return [];
     const d = await r.json();
     return (d.results ?? []).map((g: any) => ({ source: "rawg" as const, sourceId: String(g.id), type: "game" as MediaType }));

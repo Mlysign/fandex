@@ -8,7 +8,7 @@ const KEY = process.env.TMDB_API_KEY!;
 
 async function tmdbGet(endpoint: string, params: Record<string, string> = {}) {
   const p = new URLSearchParams({ api_key: KEY, ...params });
-  const res = await httpFetch(`${BASE}${endpoint}?${p}`);
+  const res = await httpFetch(`${BASE}${endpoint}?${p}`, { appScopedAuth: true });
   if (!res.ok) throw new Error(`TMDB error: ${res.status} ${endpoint}`);
   return res.json();
 }
@@ -61,7 +61,7 @@ export function tmdbPosterUrl(path: string | null, size = "w500"): string | null
 // session_id (obtained via the OAuth-like approval flow), stored on the identity.
 
 export async function createTmdbRequestToken(): Promise<string> {
-  const res = await httpFetch(`${BASE}/authentication/token/new?api_key=${KEY}`);
+  const res = await httpFetch(`${BASE}/authentication/token/new?api_key=${KEY}`, { appScopedAuth: true });
   const data = await res.json();
   if (!data.request_token) throw new Error("TMDB request token failed");
   return data.request_token;

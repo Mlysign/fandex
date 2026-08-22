@@ -39,13 +39,13 @@ export async function verifySteamOpenId(searchParams: URLSearchParams): Promise<
 // ── Player info ───────────────────────────────────────────────────
 
 export async function getSteamPlayerSummary(steamId: string) {
-  const res = await httpFetch(`${STEAM_API}/ISteamUser/GetPlayerSummaries/v2/?key=${API_KEY}&steamids=${steamId}`);
+  const res = await httpFetch(`${STEAM_API}/ISteamUser/GetPlayerSummaries/v2/?key=${API_KEY}&steamids=${steamId}`, { appScopedAuth: true });
   const data = await res.json();
   return data.response?.players?.[0] ?? null;
 }
 
 export async function resolveVanityUrl(vanity: string): Promise<string> {
-  const res = await httpFetch(`${STEAM_API}/ISteamUser/ResolveVanityURL/v1/?key=${API_KEY}&vanityurl=${encodeURIComponent(vanity)}`);
+  const res = await httpFetch(`${STEAM_API}/ISteamUser/ResolveVanityURL/v1/?key=${API_KEY}&vanityurl=${encodeURIComponent(vanity)}`, { appScopedAuth: true });
   const data = await res.json();
   if (data.response?.success === 1) return data.response.steamid;
   throw new Error(`Could not resolve Steam vanity URL: ${vanity}`);
@@ -54,7 +54,7 @@ export async function resolveVanityUrl(vanity: string): Promise<string> {
 // ── Wishlist ──────────────────────────────────────────────────────
 
 export async function getSteamWishlistIds(steamId: string): Promise<number[]> {
-  const res = await httpFetch(`${STEAM_API}/IWishlistService/GetWishlist/v1?steamid=${steamId}&key=${API_KEY}`);
+  const res = await httpFetch(`${STEAM_API}/IWishlistService/GetWishlist/v1?steamid=${steamId}&key=${API_KEY}`, { appScopedAuth: true });
   if (!res.ok) throw new Error(`Steam wishlist fetch failed: ${res.status}`);
   const data = await res.json();
   const items = data.response?.items ?? [];
@@ -80,7 +80,7 @@ export async function getSteamOwnedGames(steamId: string): Promise<SteamOwnedGam
     include_played_free_games: "1",
     format: "json",
   });
-  const res = await httpFetch(`${STEAM_API}/IPlayerService/GetOwnedGames/v1/?${params}`);
+  const res = await httpFetch(`${STEAM_API}/IPlayerService/GetOwnedGames/v1/?${params}`, { appScopedAuth: true });
   if (!res.ok) throw new Error(`Steam owned games fetch failed: ${res.status}`);
   const data = await res.json();
   const games: SteamOwnedGame[] = data.response?.games ?? [];
@@ -126,7 +126,8 @@ export async function getSteamAppDetails(appIds: number[]): Promise<Record<numbe
       },
     });
     const res = await httpFetch(
-      `${STEAM_API}/IStoreBrowseService/GetItems/v1?key=${API_KEY}&input_json=${encodeURIComponent(inputJson)}`
+      `${STEAM_API}/IStoreBrowseService/GetItems/v1?key=${API_KEY}&input_json=${encodeURIComponent(inputJson)}`,
+      { appScopedAuth: true }
     );
     if (!res.ok) {
       log.error("steam_appdetails_failed", { status: res.status, batchStart: i, batchSize: batch.length });
@@ -148,7 +149,7 @@ let tagCache: Record<number, string> = {};
 export async function getSteamTagMap(): Promise<Record<number, string>> {
   if (Object.keys(tagCache).length > 0) return tagCache;
   try {
-    const res = await httpFetch(`${STEAM_API}/IStoreService/GetTagList/v1/?key=${API_KEY}&language=english`);
+    const res = await httpFetch(`${STEAM_API}/IStoreService/GetTagList/v1/?key=${API_KEY}&language=english`, { appScopedAuth: true });
     if (!res.ok) return tagCache;
     const data = await res.json();
     tagCache = {};

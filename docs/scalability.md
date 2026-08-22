@@ -36,6 +36,22 @@ www.omdbapi.com      req=  1  ok=  0  4xx=  1   last=401   invalid key
 **Three of the six providers return 401 on every call, and nothing surfaced that
 until the counters existed.**
 
+> ✅ **Fixed 2026-08-22 — the auth latch shipped.** After **5 consecutive
+> 401/403s on app-scoped requests**, `http.ts` opens the host's breaker for 15
+> minutes, doubling to a 6 h ceiling on each rejected probe. A permanently dead
+> credential now costs about **8 calls a day** instead of ~5,600. It recovers by
+> itself: any response that is not a 401/403 clears the run, so RAWG comes back
+> within 6 h of its monthly quota resetting, with no deploy. `/api/health`'s
+> `openProviderCircuits` now carries `latchedOnAuth`, which separates "the
+> provider is down" from "the provider is up and rejecting us" — a distinction
+> nothing in the app could previously make.
+>
+> ⚠️ **The latch counts only APP-scoped requests, and that is load-bearing.**
+> RAWG and TMDB serve app-key metadata and per-user calls from the *same host*,
+> so a single user's expired token would otherwise latch the provider for
+> everybody. Call sites opt in with `appScopedAuth: true`; missing one costs
+> wasted requests (safe), setting it on a user-scoped call is the bug.
+
 ### 1a. ⚠️ The same counters after 10.5 h of real traffic — much worse than the per-page maths implied
 
 Taken at the end of the session, on the same boot. **This is the number that matters**, and it is not an extrapolation from a handful of probes.
@@ -188,16 +204,22 @@ because it fails silently.
 
 ## 4. What to do, ranked by leverage
 
-1. **Latch off providers that keep returning 401/403.** Measured a third of all provider traffic (§1a). One change in `http.ts`, no product impact, removes ~20,600 wasted requests per 10.5 h.
+1. ✅ **Latch off providers that keep returning 401/403** — **DONE 2026-08-22.**
+   Measured a third of all provider traffic (§1a). One change in `http.ts`, no
+   product impact, removes ~20,600 wasted requests per 10.5 h. See the box in §1.
+   ⚠️ **Re-measure §1a on the next boot** — every figure in it was taken before
+   the latch existed, so the "a third of traffic" split is now historical.
 2. **Cut the provider fan-out on cold facet pages.** The other half of the problem.
    Options, cheapest first: serve facet pages from the local catalog only and
    drop the provider pool; persist the provider pool in the DB the way the page
    payload already is; or `noindex` far more of the long tail so it is crawled
    less. Anything that lowers "14 calls per cold facet page" is worth more than
    every other item here combined.
-2. **Stop calling unconfigured providers.** Make `omdbConfigured()` and the
-   Letterboxd equivalent reflect whether the provider actually *works*, e.g. by
-   latching off after a 401. Two wasted calls per item page view.
+3. ✅ **Stop calling unconfigured providers** — **covered by the latch, 2026-08-22.**
+   `omdbConfigured()` and the Letterboxd equivalent still only test whether a key
+   is *present*, but a key that is present and rejected now latches off after five
+   calls rather than being re-tried forever. Tightening the config predicates is
+   no longer worth a change of its own.
 3. **Decide RAWG's future as a metadata source.** IGDB is free, has no monthly
    cap and already carries the games catalog through RAWG's outage. RAWG must
    stay as a *connectable* platform (user library sync), but its metadata role is
