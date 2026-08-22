@@ -22,6 +22,33 @@ everyone who installed it. There is no separate release to hold back.
 
 ---
 
+## ✅ Steps 1-8 are DONE (2026-08-22)
+
+The package is built, the app is installed on the Pixel 8, and **it runs with no address
+bar** — so the whole Digital Asset Links chain is proven working end to end, on a real
+device, before the Play upload.
+
+- Package lives at **`android-package/`** in this repo, **gitignored** (`signing.keystore`
+  is the upload key and `signing-key-info.txt` holds its passwords in plaintext). It is
+  inside OneDrive, so it is backed up without ever reaching GitHub. Contents: `Fandex.aab`
+  (the upload), `Fandex.apk` (sideload/testing), the keystore, the key info, and
+  PWABuilder's own generated `assetlinks.json`.
+- **Upload key SHA-256:**
+  `F7:75:02:5D:E1:BA:DB:ED:3A:27:FA:31:BF:61:D3:DD:54:C8:5E:DC:6C:82:03:30:E7:62:D9:44:54:38:B3:5E`
+- `TWA_PACKAGE_NAME=org.fandex.twa` and `TWA_CERT_FINGERPRINT=<the above>` are **set on
+  Railway**, and `https://fandex.org/.well-known/assetlinks.json` serves the real claim.
+- Sideload verified: `adb install`, launch, **no address bar**, already signed in (Custom
+  Tabs shares Chrome's cookie jar, which is the payoff for that setting).
+
+⚠️ **Android caches the asset-link verification result.** It ran once against the old `[]`
+and kept the failure, so the bar stayed until a full uninstall/reinstall. If you ever
+change the fingerprint, reinstall — do not just relaunch and conclude it is broken.
+
+**What is left:** the App content forms, upload the `.aab` to a closed track, **append the
+Play App Signing fingerprint** to `TWA_CERT_FINGERPRINT` (comma-separated — Google re-signs
+the store build with a different cert, so the sideload fingerprint alone will NOT verify
+the Play copy), then twelve testers for fourteen days.
+
 ## Where you already are (2026-08-22)
 
 **You have a Play Console account, and it is 4 days into a 12-tester / 14-day closed test
