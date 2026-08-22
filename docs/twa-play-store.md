@@ -69,21 +69,62 @@ Account exists, $25 paid, identity verified. Skip.
 Go to **pwabuilder.com**, paste `https://fandex.org`, let it scan, then choose to package
 for **Android / Google Play**.
 
-- Package ID: `org.fandex.twa`
-- App name: `Fandex`
-- Leave everything else at its default. The manifest at
-  `https://fandex.org/manifest.webmanifest` already has the name, the colours and all
-  three icons, so there is nothing to fill in by hand.
+**Walked through together on 2026-08-22.** PWABuilder reads the manifest, so nearly
+everything fills itself in correctly: package ID `org.fandex.twa` (it derives that from the
+domain, and it happens to match what the assetlinks route expects), app + short name
+`Fandex`, host `fandex.org`, start URL `/`, all seven colour fields `#100E0C`, both icon
+URLs, manifest URL, version `1.0.0.0` / version code `1`.
+
+Under **All Settings**, four things are worth a decision and three of those were wrong or
+worth changing out of the box:
+
+| Setting | Default | Use | Why |
+|---|---|---|---|
+| **Fallback behavior** | Custom Tabs | **Custom Tabs** — do not switch | This is what runs when a device's browser can't do a TWA. Web View is an embedded browser with its own cookie jar, and **Google blocks OAuth sign-in inside WebViews**. Fandex's only way in is OAuth, so Web View would ship an app nobody can log into. |
+| **Notification delegation** | ✅ on | **off** | It routes web notifications to the Android notification tray. Fandex has no push at all — no `PushManager`, no `showNotification`, nothing. Leaving it on declares a notification permission the app never uses, which is one more thing to justify on the Data safety form for zero benefit. Turn it back on the day push actually ships. |
+| **Key country code** | `US` | **`DE`** | Goes into the signing cert. Cosmetic, and wrong. |
+| **Key alias** | `my-key-alias` | **`fandex`** | Cosmetic. You will read it in `signing-key-info.txt` later and want it to say something. |
+
+Everything else is already right: **Signing key: New** (you have no key for this app yet),
+**Display mode: Standalone** (Fullscreen is for games — you want the clock and battery
+visible), **Location delegation off** (region comes from `users.country`, not GPS),
+**Google Play billing off** (turning it on commits you to Play's billing and its cut; a
+decision for if premium ever sells *inside* the app), ChromeOS-only and Meta Quest off.
+`Include source code` is off and can stay off unless you ever want to rebuild the Android
+side without PWABuilder. Monochrome icon URL is empty, which is fine — it is only for
+Android 13 themed icons and we don't ship one.
+
+⚠️ **Version code must increase on every future upload.** Since the content is the
+website, you will rarely upload again at all.
 
 Download the zip. Inside you get an **`.aab`** (the thing you upload) and a
 **`signing.keystore`** plus **`signing-key-info.txt`**.
 
-### 3. ⚠️ Back up the keystore, now, before you do anything else
+### ⚠️ Ignore PWABuilder's "no service worker" warning
 
-`signing.keystore` and the passwords in `signing-key-info.txt` are the only proof that a
-future update is really from you. **Lose them and you can never update the app again** —
-not "it's annoying", you have to publish a new app under a new name and everyone has to
-reinstall. Put both in your password manager and somewhere offline.
+Its report card says Fandex has no service worker. **It does** — `public/sw.js`, served at
+200, registered at runtime by `src/components/ServiceWorkerRegister.tsx`. PWABuilder scans
+for a registration it can see statically and misses one that a client component makes on
+mount. **Do not click "Generate Service Worker"** on that page; it would hand you a second,
+conflicting one. A TWA does not require a service worker in any case.
+
+The other three warnings (no screenshots, no orientation, no manifest `id`) are all
+optional and none of them block packaging. Screenshots are worth adding one day because
+they improve the Android install prompt, but they are not the store listing screenshots and
+not on this critical path.
+
+### 3. Back up the keystore
+
+`signing.keystore` and the passwords in `signing-key-info.txt`. Put both in your password
+manager and somewhere offline.
+
+**Correcting an earlier version of this doc:** it said losing them means you can never
+update the app again. That is the old pre-2021 rule and it is not your situation. Every
+new app must enroll in **Play App Signing**, which means Google holds the *app signing*
+key and what PWABuilder gave you is only the *upload* key. An upload key can be reset —
+Play Console → Play Store protection → Manage Play app signing → request an upload key
+reset. So losing it costs you a support round-trip and some days, not the app. Back it up
+anyway, because those days are real.
 
 ### 4. Upload it
 
