@@ -22,31 +22,47 @@ everyone who installed it. There is no separate release to hold back.
 
 ---
 
-## ⚠️ Read this before you spend the $25
+## Where you already are (2026-08-22)
 
-**A brand-new personal Play developer account cannot publish anything until it has run a
-closed test with at least 12 people, opted in continuously for 14 days.** This applies to
-every personal account created after 13 November 2023, so it applies to you. The 14 days
-only start counting once Google has approved the build *and* 12 testers have actually
-opted in. Testers who install and then uninstall still count, but you need twelve real
-Google accounts that are not yours.
+**You have a Play Console account, and it is 4 days into a 12-tester / 14-day closed test
+for Bubblewrap, under the mobilegameportfolio project.** That changes the cost of this
+task, in both directions.
 
-There is one way around it: an **organization** account is exempt. That needs a registered
-business and a D-U-N-S number. If you already have a Gewerbe, this is worth checking
-before you register as an individual, because you cannot switch afterwards.
+**Cheaper than it looked.** The $25 is paid. Identity verification is done. You have run
+this flow once, so none of it is unfamiliar. Most importantly you have already recruited
+twelve testers, and recruiting is the only genuinely hard part.
 
-**So the honest cost is: $25, about two hours of clicking, and then a two-week wait during
-which you have to find twelve people.** That last part is the real cost, and it is the
-reason to decide "do it" or "park it" rather than leaving it open.
+**⚠️ But Fandex still needs its own 14 days.** The requirement is **per app, not per
+account** — Google's help page says "your app" throughout, and you apply for production
+access separately for each one. Bubblewrap clearing its test does not carry over. Fandex
+gets its own closed track, its own opt-in link, its own twelve testers (the same twelve
+people are fine, they just have to opt in again) and its own fourteen days.
+
+**So the move is to start Fandex's clock now, in parallel with Bubblewrap's.** Nothing
+stops two apps testing at once, the fourteen days run unattended, and the work to produce
+an uploadable package is about an hour. Every day you wait is a day the clock is not
+running.
+
+⚠️ **Before the clock can start, the App content section has to be complete** — privacy
+policy URL, Data safety, content rating questionnaire, target audience, ads declaration.
+A closed-track release will not roll out until those are answered, so do them first, not
+after. Step 9 has the values.
+
+### A naming note, because it has already cost one round-trip
+
+**"Bubblewrap" is two different things here.** It is your game, and it is also the name of
+Google's command-line tool for building this kind of app. That collision is why the TWA
+task read as belonging to another project when it came up on 2026-08-17. These
+instructions use **PWABuilder** instead, which does the same job in a browser, so the word
+does not need to appear again.
 
 ---
 
 ## Step by step
 
-### 1. Register (one-off, $25)
+### 1. Register — ✅ already done
 
-Go to the Play Console and sign up. Google will ask for ID and an address and can take a
-few days to verify. Nothing else can start until this clears.
+Account exists, $25 paid, identity verified. Skip.
 
 ### 2. Make the app package
 
@@ -123,8 +139,14 @@ file and the fingerprint disagree: go back to step 5.
 
 ### 10. Twelve testers, fourteen days, then apply
 
-Get twelve Google accounts opted in via the closed-test link. Wait fourteen days without
-them dropping out. Then **Dashboard → apply for production access**.
+Send the Fandex closed-test opt-in link to the same twelve people testing Bubblewrap. They
+have to opt in again — it is a different app, so a different link and a separate count.
+Wait fourteen days. Then **Dashboard → apply for production access**.
+
+The fourteen days only start once Google has approved the build *and* twelve testers have
+actually opted in, so the real finish date is "roughly two weeks after the last person
+clicks the link", not two weeks after upload. Testers who install and then uninstall still
+count.
 
 ---
 
