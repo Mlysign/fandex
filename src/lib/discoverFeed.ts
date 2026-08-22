@@ -141,7 +141,7 @@ async function rawgGamePage(page: number, direction: Direction, window?: DateRan
   const res = await httpFetch(
     `https://api.rawg.io/api/games?key=${RAWG_KEY}` +
       `&dates=${gte},${lte}&ordering=-added&page_size=40&page=${page}`,
-    { budgetMs: BROWSE_BUDGET_MS }
+    { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -175,7 +175,7 @@ async function tmdbMoviePage(page: number, direction: Direction, region: string,
     `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${region}` +
       `&release_date.gte=${gte}&release_date.lte=${lte}&page=${page}`,
-    { budgetMs: BROWSE_BUDGET_MS }
+    { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -203,7 +203,7 @@ async function tmdbShowPage(page: number, direction: Direction, window?: DateRan
     `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_KEY}` +
       `&sort_by=popularity.desc&first_air_date.gte=${gte}` +
       `&first_air_date.lte=${lte}&page=${page}`,
-    { budgetMs: BROWSE_BUDGET_MS }
+    { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -340,7 +340,7 @@ async function tmdbTrending(
   const path = type === "movie" ? "movie" : "tv";
   const res = await httpFetch(
     `https://api.themoviedb.org/3/trending/${path}/${window}?api_key=${TMDB_KEY}&page=${page}`,
-    { budgetMs: BROWSE_BUDGET_MS }
+    { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -406,7 +406,7 @@ async function tmdbSimilar(type: "movie" | "show", tmdbId: number): Promise<Feed
   for (const endpoint of ["recommendations", "similar"]) {
     const res = await httpFetch(
       `https://api.themoviedb.org/3/${path}/${tmdbId}/${endpoint}?api_key=${TMDB_KEY}&page=1`,
-      { budgetMs: BROWSE_BUDGET_MS }
+      { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
     );
     if (!res.ok) continue;
     const data = await res.json();

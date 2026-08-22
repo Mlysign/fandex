@@ -61,7 +61,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
       const tmdbMovies: any[] = [];
       try {
         const res = await httpFetch(
-          `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`
+          `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`,
+          { appScopedAuth: true }
         );
         const data = await res.json();
         tmdbMovies.push(...(data.results ?? []).slice(0, 8));
@@ -122,7 +123,8 @@ export const GET = withUser(async (req: NextRequest, session) => {
       const tmdbShows: any[] = [];
       try {
         const res = await httpFetch(
-          `https://api.themoviedb.org/3/search/tv?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`
+          `https://api.themoviedb.org/3/search/tv?api_key=${process.env.TMDB_API_KEY}&query=${encodeURIComponent(q)}&page=1`,
+          { appScopedAuth: true }
         );
         const data = await res.json();
         tmdbShows.push(...(data.results ?? []).slice(0, 8));

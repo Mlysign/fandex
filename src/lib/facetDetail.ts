@@ -144,7 +144,7 @@ export async function tmdbJson(path: string): Promise<any | null> {
   try {
     const r = await httpFetch(
       `https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`,
-      { budgetMs: BROWSE_BUDGET_MS }
+      { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
     );
     return r.ok ? await r.json() : null;
   } catch { return null; }
@@ -154,7 +154,7 @@ export async function rawgJson(path: string): Promise<any | null> {
   try {
     const r = await httpFetch(
       `https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`,
-      { budgetMs: BROWSE_BUDGET_MS }
+      { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
     );
     return r.ok ? await r.json() : null;
   } catch { return null; }

@@ -228,7 +228,7 @@ export async function searchSteamByTags(tagNames: string[], limit = 40): Promise
   try {
     const res = await httpFetch(
       `${STEAM_API}/IStoreQueryService/Query/v1/?key=${API_KEY}&input_json=${encodeURIComponent(JSON.stringify(input))}`,
-      { budgetMs: BROWSE_BUDGET_MS }
+      { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
     );
     if (!res.ok) return [];
     const data = await res.json();

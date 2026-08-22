@@ -87,7 +87,7 @@ export function traktConfigured(): boolean {
 // enrichment would rather wait than lose an item's metadata. Sync paths must
 // never inherit a browse budget.
 async function traktGetPublic(endpoint: string, init: HttpFetchInit = {}) {
-  const res = await httpFetch(`${BASE}${endpoint}`, { headers: HEADERS, ...init });
+  const res = await httpFetch(`${BASE}${endpoint}`, { headers: HEADERS, appScopedAuth: true, ...init });
   if (!res.ok) throw new Error(`Trakt API error: ${res.status} ${endpoint}`);
   return res.json();
 }

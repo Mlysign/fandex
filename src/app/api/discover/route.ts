@@ -23,7 +23,8 @@ async function searchAll(q: string, type: string | null) {
   if (!type || type === "game") {
     try {
       const res = await httpFetch(
-        `https://api.rawg.io/api/games?key=${RAWG_KEY}&search=${encodeURIComponent(q)}&page_size=12&search_precise=true`
+        `https://api.rawg.io/api/games?key=${RAWG_KEY}&search=${encodeURIComponent(q)}&page_size=12&search_precise=true`,
+        { appScopedAuth: true }
       );
       const data = await res.json();
       for (const g of data.results ?? []) {
@@ -64,7 +65,8 @@ async function searchAll(q: string, type: string | null) {
   if (!type || type === "movie") {
     try {
       const res = await httpFetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`
+        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`,
+        { appScopedAuth: true }
       );
       const data = await res.json();
       for (const m of (data.results ?? []).slice(0, 10)) {
@@ -82,7 +84,8 @@ async function searchAll(q: string, type: string | null) {
   if (!type || type === "show") {
     try {
       const res = await httpFetch(
-        `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`
+        `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}`,
+        { appScopedAuth: true }
       );
       const data = await res.json();
       for (const s of (data.results ?? []).slice(0, 10)) {
