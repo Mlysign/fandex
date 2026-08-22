@@ -143,9 +143,9 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 | Android TWA (P15/P16) | 🟡 **built + running on-device 2026-08-22**; needs the Play upload + 14-day test → [docs/twa-play-store.md](docs/twa-play-store.md) |
 | **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar and the homepage hub shipped; Search Console verified. Internal linking still thin → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (as of 2026-08-20)
+## ✅ Quality bar (as of 2026-08-22)
 
-**881 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**937 tests** · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
