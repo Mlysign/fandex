@@ -1,5 +1,5 @@
 import { httpFetch } from "@/lib/http";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 
 const API_KEY = process.env.OMDB_API_KEY!;
 
@@ -55,7 +55,7 @@ function parse(data: any): OmdbResult {
 // added latency and would burn through the 1k/day free tier under a full site
 // crawl. EMPTY results are cached too (negative caching): an unmatched title
 // would otherwise re-fire on every crawl pass forever.
-const _omdbCache = new BoundedCache<string, OmdbResult>({ max: 5000, ttlMs: 24 * 60 * 60 * 1000 });
+const _omdbCache = sharedCache<string, OmdbResult>("omdb", { max: 5000, ttlMs: 24 * 60 * 60 * 1000 });
 
 async function omdbGet(params: Record<string, string>): Promise<OmdbResult> {
   if (!omdbConfigured()) return EMPTY;

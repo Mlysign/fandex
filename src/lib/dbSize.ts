@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { get, query } from "@/lib/db";
+import { PROJECTION_VERSION } from "@/lib/sources/project";
 
 // Where the 2.5 GB went (2026-07-22).
 //
@@ -36,6 +37,23 @@ export type DbSizeReport = {
   freePct: number | null;
   /** Cheap tier: per-table row counts. */
   tables: TableRowCount[];
+  /**
+   * How much of the catalog is projected with CURRENT logic (2026-08-23).
+   *
+   * `media_links.projection_version` is stamped by project.ts, and the self-heal
+   * is LAZY — it only fires when someone opens an item's detail page. So the
+   * long tail of never-opened titles keeps whatever projection it was written
+   * with, indefinitely. Measured the day this was added: **618 of 5,250 rows
+   * (12%)** sat below the current version, 532 of them two versions back.
+   *
+   * That matters because facets are derived from these blobs, facets feed the
+   * Fandex Score, and the Score feeds discovery ranking — so a stale row is a
+   * quietly mis-scored title, not just an old one. Nothing measured it before:
+   * not /api/health, not this report, and every test was green.
+   *
+   * A cheap GROUP BY on an indexed-ish column, so it rides the cheap tier.
+   */
+  projectionVersions: { current: number; byVersion: { version: number; rows: number }[]; stalePct: number | null };
   // libRowsWithoutState / wishRowsWithoutState were RETIRED by migration 16
   // (2026-08-17) after doing exactly the job they were added for. They counted
   // cache rows in user_library / user_watchlist with no backing user_item_state
@@ -109,6 +127,28 @@ export function readDbSize(opts: { deep?: boolean } = {}): DbSizeReport {
     tables = [];
   }
 
+  // Projection staleness. Wrapped because a database predating migration 10
+  // has no projection_version column at all, and a missing metric must not
+  // take down the whole size report.
+  let projectionVersions: DbSizeReport["projectionVersions"] = {
+    current: PROJECTION_VERSION, byVersion: [], stalePct: null,
+  };
+  try {
+    const rows = query<{ v: number; n: number }>(
+      `SELECT projection_version AS v, COUNT(*) AS n
+         FROM media_links GROUP BY projection_version ORDER BY projection_version`,
+    );
+    const total = rows.reduce((acc, r) => acc + r.n, 0);
+    const stale = rows.filter((r) => r.v < PROJECTION_VERSION).reduce((acc, r) => acc + r.n, 0);
+    projectionVersions = {
+      current: PROJECTION_VERSION,
+      byVersion: rows.map((r) => ({ version: r.v, rows: r.n })),
+      stalePct: total > 0 ? Math.round((stale / total) * 1000) / 10 : null,
+    };
+  } catch {
+    // leave the default
+  }
+
   let bytesByObject: TableBytes[] | null = null;
   let deepError: string | null = null;
   if (opts.deep) {
@@ -139,6 +179,7 @@ export function readDbSize(opts: { deep?: boolean } = {}): DbSizeReport {
     freeMb,
     freePct,
     tables,
+    projectionVersions,
     bytesByObject,
     deepError,
   };

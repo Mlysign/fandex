@@ -292,6 +292,34 @@ function ensureSchema(db: Database.Database) {
       // Non-fatal: the data is already correct and the freelist gets reused by
       // later writes, so a failed VACUUM only means the file stays large.
     }
+    // ── And truncate the WAL the VACUUM just inflated (2026-08-23) ─────────
+    //
+    // A VACUUM rewrites the ENTIRE database through the write-ahead log, so the
+    // WAL file takes the database's size as its high-water mark. SQLite then
+    // reuses that file from the start rather than shrinking it, so the size
+    // persists indefinitely while the contents recycle. Measured on prod after
+    // migration 19: **DB 81.3 MB, WAL 340.8 MB** — four times the database, for
+    // nothing, on a Railway volume.
+    //
+    // ⚠️ THIS IS THE BENIGN CASE AND IT LOOKS EXACTLY LIKE THE BAD ONE. A WAL
+    // that will not truncate is otherwise a real symptom: in 2026-08-17
+    // Litestream could not parse the schema, so it could not advance its read
+    // position, so SQLite could not checkpoint past it, and backups silently
+    // stopped for two days. The discriminator is `dbFilesMb.shadowWalMb` in
+    // /api/health — if it moves across a restart, Litestream is replicating and
+    // the WAL is just a high-water mark. Do not skip that check.
+    //
+    // TRUNCATE (not PASSIVE) is the mode that actually returns the space; it is
+    // also the one that can answer `busy: 1` when another connection holds a
+    // read lock, which in production is Litestream. That is fine and expected:
+    // this runs at BOOT, before the app has served anything, and a busy answer
+    // is a no-op that leaves the file exactly as it was.
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // Non-fatal for the same reason as the VACUUM above: worst case the file
+      // stays large, which is a cost rather than a correctness problem.
+    }
   }
 
   _initialized = true;

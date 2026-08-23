@@ -2,7 +2,7 @@ import { get, query, run, transaction } from "@/lib/db";
 import { getTmdbShowSeasons, getTmdbSeasonEpisodes, tmdbPosterUrl } from "@/lib/sources/tmdb";
 import { getTraktShowSeasons } from "@/lib/sources/trakt";
 import { log, errorFields } from "@/lib/logger";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { isProviderCircuitOpen } from "@/lib/http";
 import { TMDB_HOST } from "@/lib/sources/tmdb";
 
@@ -40,7 +40,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 // refusing us" and "this show genuinely has no seasons" became the same blank
 // section on every show page. The message is surfaced to the item's own viewer
 // through /api/episodes; it is our own error text, never a provider payload.
-const _catalogError = new BoundedCache<string, string>({ max: 500, ttlMs: 60 * 60 * 1000 });
+const _catalogError = sharedCache<string, string>("episodes.catalogError", { max: 500, ttlMs: 60 * 60 * 1000 });
 
 function recordCatalogError(mediaItemId: string, e: unknown): void {
   const msg = e instanceof Error ? e.message : String(e);

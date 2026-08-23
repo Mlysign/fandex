@@ -1,7 +1,7 @@
 import type { MediaType } from "@/types";
 import { query } from "@/lib/db";
 import { POOL_WHERE } from "@/lib/discovery";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { providerGenreKeys } from "@/lib/sources/tagDiscover";
 import { canonicalTagKey } from "@/lib/tagAlias";
 
@@ -49,7 +49,7 @@ const HUB_GENRE_MAX = 60;
 
 // The catalog barely moves between syncs and this feeds the busiest page, so a
 // long TTL is right. One entry — the query takes no parameters.
-const _hubCache = new BoundedCache<string, HubItem[]>({ max: 1, ttlMs: 30 * 60 * 1000 });
+const _hubCache = sharedCache<string, HubItem[]>("homeHub", { max: 1, ttlMs: 30 * 60 * 1000 });
 
 /**
  * The most recently refreshed catalog titles, newest first.

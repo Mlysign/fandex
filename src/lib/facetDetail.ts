@@ -14,7 +14,7 @@
 // Sampling blends popularity with recency on purpose: popularity-only over-
 // represents hits and inflates the crowd average.
 
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import type { DiscoveryVector } from "@/lib/discovery";
 import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId } from "@/lib/discovery";
@@ -160,7 +160,7 @@ export async function rawgJson(path: string): Promise<any | null> {
   } catch { return null; }
 }
 
-const _personCache = new BoundedCache<number, PersonMeta | null>({ max: 2000 });
+const _personCache = sharedCache<number, PersonMeta | null>("facetDetail.person", { max: 2000 });
 export async function fetchPersonMeta(id: number): Promise<PersonMeta | null> {
   if (_personCache.has(id)) return _personCache.get(id)!;
   const d = await tmdbJson(`/person/${id}`);
@@ -412,7 +412,7 @@ async function tagTitles(keys: string[]): Promise<ExtTitle[]> {
   return out;
 }
 
-const _tmdbCompanyCache = new BoundedCache<string, number | null>({ max: 5000 });
+const _tmdbCompanyCache = sharedCache<string, number | null>("facetDetail.tmdbCompany", { max: 5000 });
 export async function resolveTmdbCompanyId(label: string): Promise<number | null> {
   const ck = label.toLowerCase();
   if (_tmdbCompanyCache.has(ck)) return _tmdbCompanyCache.get(ck)!;

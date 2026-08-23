@@ -47,7 +47,7 @@ import { getTagCategories, getTagCategoryOverrides, scoringConfigSignature } fro
 import { categorizeTag } from "@/lib/tags";
 import { canonicalTagKey, listTagBundles } from "@/lib/tagAlias";
 import { bayesRating, NEUTRAL_PRIOR } from "@/lib/ratingsSort";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { log, errorFields } from "@/lib/logger";
 
 export type FacetSort = "popular" | "newest" | "rating";
@@ -212,7 +212,7 @@ const CAST_SELF_RE = /^(self|himself|herself|narrator)\b/i;
 // true when more than one distinct person shares the exact key (Q12) — the
 // caller surfaces this so a wrong guess ("which Tom?") is obvious, not silent.
 interface PersonResolution { id: number | null; ambiguous: boolean }
-const _personSearchCache = new BoundedCache<string, PersonResolution>({ max: 5000 });
+const _personSearchCache = sharedCache<string, PersonResolution>("publicFacet.personSearch", { max: 5000 });
 async function searchPersonId(key: string): Promise<PersonResolution> {
   if (_personSearchCache.has(key)) return _personSearchCache.get(key)!;
   const d = await tmdbJson(`/search/person?query=${encodeURIComponent(key)}&include_adult=false`);
@@ -294,7 +294,7 @@ async function tmdbCompanyPool(companyId: number): Promise<PoolTitle[]> {
 // NEW — RAWG dev/publisher search by name, then their catalog (blended
 // added+recent). A studio may be both a developer and a publisher, so we search
 // and union both.
-const _rawgEntityCache = new BoundedCache<string, { developers: number[]; publishers: number[] }>({ max: 5000 });
+const _rawgEntityCache = sharedCache<string, { developers: number[]; publishers: number[] }>("publicFacet.rawgEntity", { max: 5000 });
 // Q25: takes the recovered display LABEL, not the normalized key — "focus"
 // vs. "Focus Entertainment" is the difference between matching the wrong
 // company on RAWG's search and matching the right one.
@@ -500,7 +500,7 @@ export interface PublicFacetRef { kind: LinkableFacetKind; key: string; label?: 
 //   Note the key includes page + sort + persist, so one facet can occupy several
 //   entries — 3,000 entries is fewer than 3,000 distinct facets.
 const FACET_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 3000, ttlMs: FACET_CACHE_TTL_MS });
+const _facetPageCache = sharedCache<string, PublicFacetPayload>("publicFacet.page", { max: 3000, ttlMs: FACET_CACHE_TTL_MS });
 
 // ── L2: the SAME cache, persisted (2026-08-13) ──────────────────────────────
 // L1 above dies with the process and is bounded by heap; the slug surface is far

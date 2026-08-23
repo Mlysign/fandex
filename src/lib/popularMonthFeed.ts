@@ -12,7 +12,7 @@
 // /shows/anticipated take no date parameter, so they can't answer "this month"
 // and can never answer a month in the past.
 
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { rankCrossSourcePopularity, POPULAR_PER_MONTH } from "@/lib/popularMonth";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import {
@@ -22,7 +22,7 @@ import {
 // Past months never change and future months move slowly, so a 6h TTL is
 // generous. `max` holds a few years of months across a couple of regions.
 const POPULAR_TTL_MS = 6 * 60 * 60 * 1000;
-const _monthCache = new BoundedCache<string, FeedCandidate[]>({ max: 120, ttlMs: POPULAR_TTL_MS });
+const _monthCache = sharedCache<string, FeedCandidate[]>("popularMonthFeed", { max: 120, ttlMs: POPULAR_TTL_MS });
 
 /**
  * How deep the cached ranking goes. Deliberately deeper than POPULAR_PER_MONTH:

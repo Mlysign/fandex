@@ -5,7 +5,8 @@ import {
   readDbFootprint,
   readProcessRss,
 } from "@/lib/containerMemory";
-import { providerBreakerSnapshot, providerCallSnapshot } from "@/lib/http";
+import { providerBreakerSnapshot, providerCallSnapshot, hostGateSnapshot } from "@/lib/http";
+import { cacheSnapshot } from "@/lib/boundedCache";
 
 // Reads live process/cgroup state — must never be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -68,6 +69,23 @@ export async function GET() {
     // `uptime` above and distrust it under an hour; a deploy resets these.
     // Host names and counts only, never a key or a URL carrying one.
     providerCalls: providerCallSnapshot(),
+    // Per-host concurrency gates (2026-08-23). IGDB publishes a 4 req/s limit
+    // and we were exceeding it — 64 network errors in 175 requests, and 190 of
+    // 232 in an earlier reading — which matters more than latency because with
+    // RAWG's quota exhausted IGDB is the ONLY games source left.
+    //
+    // `queuedTotal: 0` means the gate never bound and the concurrency was not
+    // the problem. A rising `maxQueued` means it is doing real work. This is
+    // here because the fix shipped on a documented rate limit plus a visible
+    // fan-out rather than on a fresh measurement (the browse page cache landed
+    // the same day and cut IGDB volume), so the next reading is what settles it.
+    hostGates: hostGateSnapshot(),
+    // Live entry count per SHARED cache (2026-08-23). These were bare
+    // module-scope caches, which Next duplicates per route bundle — so the
+    // budgeted figure was never the retained figure, and nothing could see the
+    // difference from inside one bundle. Now that they are process-wide, THIS
+    // is the true number: read it against the `max` each cache was sized to.
+    caches: cacheSnapshot(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }

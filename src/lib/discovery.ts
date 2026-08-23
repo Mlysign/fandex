@@ -6,7 +6,7 @@
 // catalog with explainable reasons — plus extensive filtering and sorting.
 
 import { query, get } from "@/lib/db";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
@@ -592,7 +592,7 @@ export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
 // Per-user; sig-invalidated on read. Capped so many distinct users can't grow it
 // without bound (single-instance, P2).
-const _profileCache = new BoundedCache<string, { sig: string; profile: Profile }>({ max: 500 });
+const _profileCache = sharedCache<string, { sig: string; profile: Profile }>("discovery.profile", { max: 500 });
 
 // H5.2: the Bayesian shrinkage average (§3.1) — replaces the old
 // `raw · count/(count+K)` shortcut with a textbook Bayesian average, shrunk
@@ -1221,7 +1221,7 @@ export function itemsWithFacet(ref: { kind: string; role?: FacetRole; key: strin
 
 // Resolve a person facet to its TMDB person id by reading the credits of one
 // catalog item that carries them — so the detail page can fetch bio/age. Cached.
-const _personIdCache = new BoundedCache<string, number | null>({ max: 5000 });
+const _personIdCache = sharedCache<string, number | null>("discovery.personId", { max: 5000 });
 export function resolvePersonTmdbId(role: string, key: string): number | null {
   const ck = `${role}:${key}`;
   if (_personIdCache.has(ck)) return _personIdCache.get(ck)!;
@@ -1241,7 +1241,7 @@ export function resolvePersonTmdbId(role: string, key: string): number | null {
 
 // Resolve a game developer/publisher facet to its RAWG entity id (for pulling
 // their catalog), by reading one carrying item's rawg raw_data. Cached.
-const _rawgEntityCache = new BoundedCache<string, number | null>({ max: 5000 });
+const _rawgEntityCache = sharedCache<string, number | null>("discovery.rawgEntity", { max: 5000 });
 export function resolveRawgEntityId(role: string, key: string): number | null {
   const ck = `${role}:${key}`;
   if (_rawgEntityCache.has(ck)) return _rawgEntityCache.get(ck)!;

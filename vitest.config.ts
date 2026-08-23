@@ -7,6 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
     // Tests that touch the DB run against a throwaway in-memory SQLite db, so
     // they never see or mutate the real data/rr.db. db.ts reads DB_PATH at import.
     env: { DB_PATH: ":memory:" },

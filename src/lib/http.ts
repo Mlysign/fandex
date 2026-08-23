@@ -198,6 +198,105 @@ function callsFor(host: string): HostCalls {
   return c;
 }
 
+// ── Per-host CONCURRENCY gate (2026-08-23) ─────────────────────────
+//
+// A different failure from the breaker, and the breaker cannot fix it: this is
+// about OUR request rate being too high for a provider, not about the provider
+// being down.
+//
+// IGDB documents a hard **4 requests per second**. `liveDiscover` fans out
+// PAGES_PER_SOURCE pages under one `Promise.all`, several surfaces can do that
+// at once, and the franchise sweep adds more — so we routinely exceed it.
+// Measured on prod: **64 network errors out of 175 IGDB requests**, plus 230
+// further calls blocked by the breaker those failures had opened. An earlier
+// reading in docs/scalability.md §1a was worse: 190 of 232.
+//
+// That is a CATALOG COMPLETENESS problem, not just a latency one — with RAWG's
+// monthly quota exhausted, IGDB is the only games metadata source we have, so a
+// third of games lookups failing is a third of games data missing.
+//
+// ⚠️ THE FIX IS FEWER CONCURRENT REQUESTS, NOT MORE RETRIES. A retry ladder
+// against a rate limit makes the rate worse, which is how 190-of-232 happens.
+//
+// ⚠️ THE GATE IS TAKEN AROUND THE WHOLE RETRY LOOP, not per attempt. A retry is
+// part of the same logical request and must not have to re-queue behind a burst
+// that arrived while it was backing off.
+//
+// ⚠️ Pinned to globalThis for the reason `_breakers` is — a per-bundle
+// semaphore would let each Next bundle run its own 4, which is 4 x nothing.
+//
+// Honest about what is measured: the numbers above predate the browse page
+// cache (2026-08-23), which cut IGDB volume substantially, so the CURRENT error
+// rate is unmeasured. This is justified by the documented limit and the visible
+// fan-out rather than by a fresh reading; `maxQueued`/`maxInFlight` in the
+// health snapshot are what will settle it.
+const HOST_CONCURRENCY: Record<string, number> = {
+  "api.igdb.com": 4,
+};
+
+interface Gate {
+  limit: number;
+  inFlight: number;
+  waiters: (() => void)[];
+  /** High-water marks since boot, for the health snapshot. */
+  maxInFlight: number;
+  maxQueued: number;
+  /** Total acquisitions that had to wait. Zero means the gate is not binding. */
+  queuedTotal: number;
+}
+
+const _gates: Map<string, Gate> =
+  ((globalThis as Record<string, unknown>).__fandexHostGates ??= new Map<string, Gate>()) as Map<string, Gate>;
+
+function gateFor(host: string): Gate | null {
+  const limit = HOST_CONCURRENCY[host];
+  if (!limit) return null;
+  let g = _gates.get(host);
+  if (!g) {
+    g = { limit, inFlight: 0, waiters: [], maxInFlight: 0, maxQueued: 0, queuedTotal: 0 };
+    _gates.set(host, g);
+  }
+  return g;
+}
+
+async function acquire(g: Gate): Promise<void> {
+  if (g.inFlight < g.limit) {
+    g.inFlight++;
+    if (g.inFlight > g.maxInFlight) g.maxInFlight = g.inFlight;
+    return;
+  }
+  g.queuedTotal++;
+  if (g.waiters.length + 1 > g.maxQueued) g.maxQueued = g.waiters.length + 1;
+  await new Promise<void>((res) => g.waiters.push(res));
+  g.inFlight++;
+  if (g.inFlight > g.maxInFlight) g.maxInFlight = g.inFlight;
+}
+
+function release(g: Gate): void {
+  g.inFlight--;
+  const next = g.waiters.shift();
+  // The waiter increments inFlight itself when it resumes, so this only hands
+  // over the right to do so. Releasing in a `finally` is what makes a throw
+  // (timeout, breaker, budget) unable to leak a permanently-held slot.
+  if (next) next();
+}
+
+/** Test seam: forget every gate. */
+export function __resetHostGates(): void {
+  _gates.clear();
+}
+
+export function hostGateSnapshot(): Record<string, { limit: number; inFlight: number; queued: number; maxInFlight: number; maxQueued: number; queuedTotal: number }> {
+  const out: Record<string, { limit: number; inFlight: number; queued: number; maxInFlight: number; maxQueued: number; queuedTotal: number }> = {};
+  for (const [host, g] of _gates) {
+    out[host] = {
+      limit: g.limit, inFlight: g.inFlight, queued: g.waiters.length,
+      maxInFlight: g.maxInFlight, maxQueued: g.maxQueued, queuedTotal: g.queuedTotal,
+    };
+  }
+  return out;
+}
+
 /**
  * Per-host provider call volume since boot, for `/api/health`.
  *
@@ -413,6 +512,17 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
   const failAuth = (status: number) => { if (host) recordAuthFailure(host, isProbe, status); };
   const ok = () => { if (host) recordSuccess(host, isProbe); };
 
+  // Rate gate, for hosts that publish one (IGDB: 4 req/s). Taken around the
+  // WHOLE retry loop and released in the finally below, so a throw anywhere —
+  // timeout, budget exhaustion, breaker — cannot leak a slot. See the block
+  // comment on HOST_CONCURRENCY.
+  //
+  // Acquired AFTER the breaker check above on purpose: a host whose breaker is
+  // open should be refused immediately, not made to queue for a slot it is
+  // about to be denied anyway.
+  const gate = host ? gateFor(host) : null;
+  if (gate) await acquire(gate);
+
   try {
     for (let attempt = 0; ; attempt++) {
       // A budget that's already spent means we never even start this attempt.
@@ -470,6 +580,11 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
       }
     }
   } finally {
+    // Hand the rate-gate slot on before anything else can throw. A leaked slot
+    // is unrecoverable without a restart: the gate would run one permit short
+    // for the life of the process, and at limit 4 that is a 25% throughput cut
+    // nothing reports.
+    if (gate) release(gate);
     // A probe that threw before reaching recordFailure/recordSuccess (only
     // possible on a programming error) must not pin the breaker half-open
     // forever, blocking every future probe.

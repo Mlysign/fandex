@@ -13,7 +13,7 @@
 // with only a wishlist still gets a feed) + a gentle original-language affinity
 // and a crowd-vote floor.
 
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import type { Reason, Profile } from "@/lib/discovery";
 import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
@@ -112,7 +112,7 @@ function listFacets(c: FeedCandidate): Facet[] {
 interface Hydrated { facets: Facet[]; posterUrl: string | null }
 // LRU-capped: hydration is expensive (a TMDB detail fetch) so we keep recent
 // results, but the cap prevents unbounded growth over long uptime (P2).
-const _facetCache = new BoundedCache<string, Hydrated>({ max: 3000 });
+const _facetCache = sharedCache<string, Hydrated>("liveDiscover.hydrated", { max: 3000 });
 
 // G3 (2026-08-02): hydration reaches the provider through `fetchById`, which is
 // SHARED with enrichment — so the budget can't go in the adapter the way it did
@@ -447,7 +447,7 @@ export function decorateSection<T extends FeedCandidate>(
 const FEED_TTL_MS = 45 * 60 * 1000;
 // Keyed by `${userId}:${region}`. TTL expiry + a size cap so stale/for-many-users
 // entries can't accumulate on the long-lived process (P2).
-const _feedCache = new BoundedCache<string, PersonalizedItem[]>({ max: 500, ttlMs: FEED_TTL_MS });
+const _feedCache = sharedCache<string, PersonalizedItem[]>("liveDiscover.feed", { max: 500, ttlMs: FEED_TTL_MS });
 
 export function invalidatePersonalizedFeed(userId?: string) {
   if (!userId) { _feedCache.clear(); return; }

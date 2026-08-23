@@ -4,7 +4,7 @@
 // preference model. Generalizes the old tag-only `analyzeLibraryTags`.
 
 import { query, get } from "@/lib/db";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
@@ -246,7 +246,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
 
 // Per-user; sig-invalidated on read. Size-capped so it can't grow unbounded
 // across many users on the single long-lived process (P2).
-const _cache = new BoundedCache<string, { sig: string; data: LibraryFacetAnalysis }>({ max: 500 });
+const _cache = sharedCache<string, { sig: string; data: LibraryFacetAnalysis }>("libraryAnalysis.facets", { max: 500 });
 
 export function librarySignature(userId: string): string {
   // D6: COUNT/MAX(reviewed_at)/SUM(rating) alone miss two offsetting edits
@@ -422,7 +422,7 @@ function membershipSignature(userId: string): string {
 // so many distinct users can't grow it without bound — this one was missed in
 // the BoundedCache migration and leaked one entry per userId for the life of
 // the process.
-const _memberCache = new BoundedCache<string, { sig: string; data: MembershipSignal }>({ max: 500 });
+const _memberCache = sharedCache<string, { sig: string; data: MembershipSignal }>("libraryAnalysis.membership", { max: 500 });
 
 export function getMembershipSignal(userId: string): MembershipSignal {
   const sig = membershipSignature(userId);

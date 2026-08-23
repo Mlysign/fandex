@@ -2,7 +2,7 @@ import { get, query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import type { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { POOL_WHERE } from "@/lib/discovery";
 import { decorateItemLinks } from "@/lib/affiliate";
 import type {
@@ -66,7 +66,7 @@ export function loadPublicItemRowBySlug(type: MediaType, slug: string): PublicIt
 // cannot carry per-user data, and region is an explicit input, so two viewers
 // with the same key see identical bytes. Misses (null) are deliberately NOT
 // cached: a just-persisted uuid must resolve on its very first visit.
-const _detailCache = new BoundedCache<string, PublicEnrichedItem>({ max: 1000, ttlMs: 30 * 60 * 1000 });
+const _detailCache = sharedCache<string, PublicEnrichedItem>("publicDetail", { max: 1000, ttlMs: 30 * 60 * 1000 });
 
 // Full public detail for a stored item. Returns null when the item doesn't
 // exist or has no links to merge (nothing to show → the page 404s).

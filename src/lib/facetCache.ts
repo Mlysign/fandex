@@ -42,7 +42,7 @@
 // failure mode is an item silently missing from the pool until the TTL expires;
 // caching the DERIVATION instead gets the same saving with no such mode.
 
-import { BoundedCache } from "@/lib/boundedCache";
+import { sharedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { extractFacets, type Facet } from "@/lib/facets";
 import { scoringConfigSignature } from "@/lib/scoringConfig";
@@ -74,7 +74,7 @@ export interface RawLink {
 // discovery.ts's `_personIdCache`) — a few thousand entries covers the pool
 // (~2,500 items) across a couple of regions with headroom, without growing
 // unbounded across many users/regions over the long-lived process (P2).
-const _cache = new BoundedCache<string, Derived>({ max: 6000 });
+const _cache = sharedCache<string, Derived>("facetCache.derived", { max: 6000 });
 
 // scoringConfigSignature() already folds tagAliasSignature() + the category/
 // override signatures in (scoringConfig.ts) — including it here costs nothing

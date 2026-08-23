@@ -1,6 +1,6 @@
 import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
-import { BoundedCache } from "./boundedCache";
+import { sharedCache } from "./boundedCache";
 
 // In-process rate limiting (S3/P7). Single-instance only (P1 = one long-lived
 // Node process), so a plain in-memory counter is correct and shared across all
@@ -17,7 +17,7 @@ interface Bucket {
   resetAt: number;
 }
 
-const _buckets = new BoundedCache<string, Bucket>({ max: 20000, ttlMs: 60 * 60 * 1000 });
+const _buckets = sharedCache<string, Bucket>("rateLimit.buckets", { max: 20000, ttlMs: 60 * 60 * 1000 });
 
 export interface RateDecision {
   allowed: boolean;
