@@ -79,7 +79,7 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 | **IMDb** | movie, show | CSV export (list / watchlist / ratings) | **Free** | title, year, **IMDb id**, your rating, dates | 🟢 stable id we already store | 🟢 **Best target, and DECIDED 2026-08-23: build it next** (PL4). Match local-first via an `imdb` pseudo-source row in `media_links`; budget the provider fallback per IMPORT, not per row. |
 | **Steam** | game | Web API | Free | owned games, wishlist, playtime | 🟢 appid | ✅ Already live as a connector. |
 | **Trakt** | movie, show | API / VIP export | Free | everything | 🟢 trakt+imdb+tmdb ids | ✅ Already live as a connector. |
-| **Letterboxd** | movie | CSV in ZIP (`diary`, `ratings`, `watchlist`, `lists`) | ⚠️ **Pro, $35/yr** | title, year, rating, watched date, review | 🟡 title+year | 🟡 Richer than IMDb, but paywalled on their side. |
+| **Letterboxd** | movie | CSV in ZIP (`diary`, `ratings`, `watchlist`, `reviews`, `lists`) | 🟢 **FREE for all members** (corrected 2026-08-23) | title, year, Letterboxd URI, rating (0.5–5.0), dates | 🟢 title+year, and it is a GOOD key here | 🟢 **Best target for reaching a real userbase.** See the box below. |
 | **MyAnimeList** | anime | XML export, native | Free | title, MAL id, score, status, episodes | 🟢 MAL id | 🟡 Only once anime is a media type. |
 | **AniList** | anime | Export via API / 3rd-party → MAL XML | Free | same as MAL | 🟢 | 🟡 Import is unaffected by the connector terms clause. |
 | **Backloggd** | game | CSV export | ⚠️ **Backers only** (paid) | title, rating, status | 🟢 IGDB ids | 🟡 Maps cleanly, paywalled export. |
@@ -89,6 +89,18 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 | **Simkl** | movie, show, anime | Native export | Free | watchlist, history, ratings | 🟢 | 🟡 Easiest competitor migration path if ever wanted. |
 | **GOG / Epic / itch.io** | game | ❌ none | – | – | – | 🔴 Unofficial endpoints only. |
 | **PSN / Xbox / Nintendo** | game | ❌ none | – | – | – | 🔴 Not available. |
+
+### ⚠️ Letterboxd: the export is FREE, and the API is closed to us BY POLICY (both verified 2026-08-23)
+
+**This row said "Pro, $35/yr" and that was WRONG.** Letterboxd’s own [Pro page](https://letterboxd.com/about/pro/) lists nine Pro benefits and five Patron benefits; **data export is not among them.** The help centre says plainly: *"there’s an account export option in Settings that bundles your entire account ... into a single ZIP file of CSV documents."* Settings → **Import & Export** → *Export your data*, free, about four clicks.
+
+**The API is not merely keyless.** [letterboxd.com/api-beta](https://letterboxd.com/api-beta/): access is by request only, and *"we are not granting access for data-analysis, visualization or recommendation projects ... or for any usage that recreates current or planned features of our paid subscription tiers."* **Fandex is a recommendation project** (the Fandex Score) **and its stats surfaces overlap Pro’s stats pages**, so an application is declinable on two of their own listed grounds. Treat the hidden connector as dead weight, not as code awaiting a key. The same page points you at the answer: *"If you require your account data in a machine-readable format, we provide import and export facilities."* **The CSV import is the route Letterboxd itself sanctions.**
+
+**Why title+year is a GOOD key here, not a fallback.** The export carries **no TMDB or IMDb id**, only title, year and a Letterboxd URI, and third-party converters solve that by fetching each film page to scrape the IMDb link (one request per title). We do not need to: **Letterboxd "sources all film-related data from The Movie Database (TMDb)"**, so its title and year strings ARE TMDB’s, matched against a movie catalog that is **99.6% TMDB-linked**. Measured on the catalog 2026-08-23: **1,112 movies, 1,108 with a TMDB link, 100% carrying `norm_title` and `release_date`, and exactly ONE `norm_title`+year collision in the whole movie table.**
+
+⚠️ **The quota warning below does NOT apply to movies.** It was reasoned from RAWG’s 20k/month cap. **TMDB has no monthly cap** (50 req/s, IP-based; the old 40-per-10s limit was dropped in 2019), so resolving a few thousand unmatched titles is a rate-shaping problem measured in minutes, not a quota problem. **Movies are the cheap medium to import.**
+
+**Also available, not yet worth building:** every member profile has a public **RSS feed** of new diary entries, needing no auth and no key. That is a *forward* channel after a CSV backfill, and it carries no watchlist.
 
 ⚠️ **An importer is a WRITE PATH into `media_items`** and inherits the thin-write/pool rules in AGENTS.md: insert-only, `browsed` semantics respected, never bypassing `matcher.ts`. **A CSV of 2,000 titles is 2,000 provider searches if matched naively** — which lands straight back on the quota problem. Match against the local catalog first.
 
