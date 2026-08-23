@@ -3,6 +3,17 @@
 Whole-project sweep: code read, prod driven in a browser, every number below
 measured on fandex.org rather than reasoned about. Ranked by leverage.
 
+> ## ✅ ALL SIX ITEMS ARE DONE (2026-08-23, same day)
+>
+> `8518b77` · `25a3d96` · `9255b1f` · `742fdbe`. §2 below is kept as the record
+> of what each one was and why it was worth doing, not as open work. What is
+> still open is the short list in §5 at the bottom.
+>
+> The headline results: **`/api/discover` 930 ms → 95 ms** and 20 TMDB calls per
+> 10 browse requests → **0**; item pages went from **zero** server-rendered links
+> to any other item page to **3–14** on most; and the franchise rail now shows
+> what a franchise actually contains rather than the slice we happened to hold.
+
 **Companion docs.** `docs/scalability.md` holds the per-surface provider-cost
 model and is still correct; this file extends its §4 list with three levers it
 did not have. `docs/seo.md` holds the crawl picture. Neither is superseded.
@@ -72,7 +83,7 @@ gone it would have returned no games at all.
 
 ---
 
-## 2. Do next, ranked by leverage
+## 2. The six items, ranked by leverage. ALL SHIPPED 2026-08-23
 
 ### 2.1 Item pages link to zero other item pages (highest value)
 
@@ -224,3 +235,52 @@ of this.
   there is an LCP hint: all 30 homepage posters are `loading="lazy"`, including
   the first one. Small, and worth doing when someone is already in
   `PosterCard.tsx`.
+
+---
+
+## 5. What is still open after all six
+
+Short, and none of it is a leftover from §2.
+
+1. **Re-read `hostGates` and `caches` in `/api/health` after a day of traffic.**
+   Both shipped as instruments, not just fixes. `hostGates["api.igdb.com"]` with
+   `queuedTotal: 0` would mean IGDB concurrency was never the problem after the
+   browse page cache landed; a rising `maxQueued` means the gate is doing real
+   work. And `caches` now reports the TRUE process-wide entry count, so a figure
+   above the `max` each cache was sized to is the per-bundle duplication finally
+   showing itself.
+
+2. **Decide whether the 12% stale projection is worth a sweep.** Now visible in
+   `/api/dev/dbsize` as `projectionVersions`. Visibility was the whole of item
+   2.4 on purpose; re-projecting is a separate call, and a version bump does not
+   automatically deserve a heavy migration.
+
+3. **The 340 MB WAL is NOT reclaimable in prod, and that is the right answer.**
+   Attempted and measured, rather than assumed. `POST /api/dev/prune
+   {"action":"wal-truncate"}` returned `busy: 1` with the file unchanged at
+   340.8 MB, because `docker-entrypoint.sh` runs `litestream replicate -exec
+   "node server.js"` so Litestream attaches BEFORE node and holds a read lock
+   that TRUNCATE cannot take. The `db.ts` checkpoint added in 2.5 is therefore
+   a no-op in prod; it is kept because it works locally, in tests, and on the
+   no-backup path.
+
+   Making it work would mean checkpointing in the entrypoint before Litestream
+   starts. Weighed and rejected: 340 MB on a 4,614 MB volume with 4,174 MB free,
+   priced at ~$0.155/GB-month, is about **five cents a month**. It is not a
+   memory cost either, since the file is one frame of data plus untouched empty
+   space that the kernel never caches (`fileMb` stayed at 81–113 MB).
+
+   ⚠️ And it is emphatically NOT the 2026-08-17 stall, which looked identical
+   from outside. The wal-probe showed `logFrames: 1, pendingMb: 0` and
+   `shadowWalMb` moved 0.1 → 5 MB across the deploy: Litestream is replicating,
+   the WAL is simply large and empty.
+
+4. **The restore drill is still due**, and has been since migration 19.
+   Replicating is verified. Restorable is not. Different claims.
+
+5. **Re-run the franchise sweep monthly.** `POST /api/dev/franchise-sweep`
+   treats anything swept more than 30 days ago as due, so re-running it is
+   idempotent and cheap: it only re-asks what has aged out.
+
+6. **RAWG's metadata role** and **removing OMDb before ads** are unchanged from
+   §3. Neither was in scope here.

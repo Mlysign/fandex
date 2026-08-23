@@ -309,11 +309,35 @@ function ensureSchema(db: Database.Database) {
     // /api/health — if it moves across a restart, Litestream is replicating and
     // the WAL is just a high-water mark. Do not skip that check.
     //
-    // TRUNCATE (not PASSIVE) is the mode that actually returns the space; it is
-    // also the one that can answer `busy: 1` when another connection holds a
-    // read lock, which in production is Litestream. That is fine and expected:
-    // this runs at BOOT, before the app has served anything, and a busy answer
-    // is a no-op that leaves the file exactly as it was.
+    // ⚠️ AND IN PRODUCTION THIS IS EXPECTED TO BE A NO-OP. Measured on prod the
+    // day it was added, via POST /api/dev/prune {"action":"wal-truncate"}:
+    // `busy: 1`, `walMbBefore` and `walMbAfter` both 340.8. TRUNCATE is the mode
+    // that actually returns the space, and it is refused while any other
+    // connection holds a read lock. docker-entrypoint.sh runs
+    // `litestream replicate -exec "node server.js"`, so Litestream attaches
+    // BEFORE node boots and is holding that lock by the time this line runs.
+    //
+    // It is kept anyway because it is free and it DOES work where Litestream is
+    // not attached: local development, tests, and the no-backup path the
+    // entrypoint takes when AWS_S3_BUCKET_NAME is unset.
+    //
+    // Making it work in prod would mean checkpointing in the entrypoint before
+    // Litestream starts. That was weighed and rejected: the stranded WAL is
+    // ~340 MB on a 4,614 MB volume with 4,174 MB free, and Railway prices volume
+    // at ~$0.155/GB-month, so the whole problem is worth about five cents a
+    // month. It is also not memory: the file is one frame of data and 340 MB of
+    // untouched empty space, so the kernel never caches it (`fileMb` stayed at
+    // 81–113 MB throughout). A boot-order change to the container is not worth
+    // that, and the entrypoint's own comment already warns against adding a
+    // third copy of a mechanism.
+    //
+    // ⚠️ Do NOT read a `busy` answer here as the 2026-08-17 Litestream stall.
+    // That incident looked identical from the outside and was the opposite
+    // situation: Litestream could not parse the schema, so it could not advance,
+    // so nothing could checkpoint past it and backups silently stopped for two
+    // days. The discriminator is `dbFilesMb.shadowWalMb` in /api/health — it
+    // moved 0.1 → 5 MB across this deploy, and the wal-probe showed
+    // `logFrames: 1, pendingMb: 0`, i.e. the WAL is empty and merely large.
     try {
       db.pragma("wal_checkpoint(TRUNCATE)");
     } catch {
