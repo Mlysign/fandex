@@ -14,9 +14,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 //      what made the feature look like it had reverted.
 //
 // So these pin the two properties the surface lacked: an AND that holds ACROSS
-// SOURCES (a game can come back from RAWG under one tag and IGDB under the
-// other — intersecting on source ids would drop exactly the titles that match
-// both), and a candidate set that lands in the catalog so it can be scored.
+// SOURCES (a game can come back from one provider under one tag and another
+// under the other — intersecting on source ids would drop exactly the titles
+// that match both), and a candidate set that lands in the catalog so it can be
+// scored.
+//
+// ⚠️ PL3 (2026-08-23) removed RAWG from this surface, and TWO cases went with
+// it rather than being rewritten: "keeps only RAWG results that actually carry
+// EVERY tag" and "does not apply that filter to a single tag". Both pinned a
+// guard that existed because RAWG's comma semantics for genres/tags were OR in
+// some places and undocumented in others, so its results had to be re-verified
+// against the payload. IGDB and Steam express the conjunction natively, so
+// there is no such guard left to protect. The cases were deleted, not ported,
+// because porting them would have asserted a behaviour the code no longer has.
+// The AND-across-sources property itself is still pinned below.
 
 // facetDetail.ts reads the provider keys at MODULE LOAD (`const RAWG =
 // process.env.RAWG_API_KEY`), so a beforeEach stub lands far too late — rawgJson
@@ -56,22 +67,18 @@ initDb();
 
 const USER = "u-facet-and";
 
-const rawgGame = (id: number, name: string, released: string, tags: string[] = []) => ({
-  id, name, released,
-  background_image: `https://media.rawg.io/${id}.jpg`,
-  rating: 4, ratings_count: 500, platforms: [],
-  genres: [], tags: tags.map((t) => ({ name: t })),
+/** An IGDB game as `discoverIgdbByTags` returns it. `__date` is what the
+ *  mocked `igdbReleaseDate` reads. */
+const igdbGame = (id: number, name: string, date: string) => ({
+  id, name, __date: date, total_rating: 80, total_rating_count: 500,
 });
 
-let rawgUrls: string[] = [];
-
-/** RAWG answering with one fixed set for every /games query. */
-function serveRawg(games: any[]) {
-  rawgUrls = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    rawgUrls.push(String(url));
-    return new Response(JSON.stringify({ results: games }), { status: 200 });
-  }));
+/** Every remaining provider on this path answers empty. TMDB is stubbed out by
+ *  the tagDiscover mock (no genre, no keyword), Steam's tag search needs a key
+ *  it does not have here, so this only has to keep a stray fetch from escaping. */
+function serveNoProviders() {
+  vi.stubGlobal("fetch", vi.fn(async () =>
+    new Response(JSON.stringify({ results: [] }), { status: 200 })));
 }
 
 const tag = (key: string) => ({ kind: "tag", key, label: key });
@@ -93,47 +100,24 @@ afterEach(() => {
 });
 
 describe("buildExternalSets — tags are ANDed AT THE PROVIDER", () => {
-  it("asks each provider for the conjunction, not for one tag at a time", async () => {
-    serveRawg([]);
+  it("asks the provider for the conjunction, not for one tag at a time", async () => {
+    serveNoProviders();
     await buildExternalSets(USER, [tag("deckbuilding"), tag("tower defense")]);
 
-    // IGDB gets both terms in ONE query so its `&` does the work.
+    // IGDB gets both terms in ONE query so its `&` does the work. Asking once
+    // per tag and intersecting afterwards is the bug this pins: each pull is a
+    // ~40-row sample of a tag with thousands, so two samples intersect to
+    // nothing even when matching games plainly exist.
     expect(igdbByTag).toHaveBeenCalledTimes(1);
     expect(igdbByTag.mock.calls[0][0]).toEqual(["deckbuilding", "tower defense"]);
-    // RAWG likewise — every request names both, none names just one.
-    expect(rawgUrls.length).toBeGreaterThan(0);
-    for (const u of rawgUrls) {
-      expect(u).toContain("deckbuilding");
-      expect(u).toContain("tower-defense");
-    }
-  });
-
-  it("keeps only RAWG results that actually carry EVERY tag", async () => {
-    // The load-bearing guard: RAWG's comma semantics are not dependable, so the
-    // result is verified against the payload's own tag list rather than trusted.
-    serveRawg([
-      rawgGame(1, "Both Of Them", "2021-01-01", ["Deckbuilding", "Tower Defense"]),
-      rawgGame(2, "Deck Only", "2020-01-01", ["Deckbuilding"]),
-      rawgGame(3, "Untagged", "2019-01-01"),
-    ]);
-
-    const out = await buildExternalSets(USER, [tag("deckbuilding"), tag("tower defense")]);
-
-    expect(out.map((i) => i.title)).toEqual(["Both Of Them"]);
-  });
-
-  it("does not apply that filter to a single tag — the provider's own filter stands", async () => {
-    // A single-tag pull is RAWG's own genre/tag query, and its payload does not
-    // always echo the tag it matched on. Filtering there would empty the page.
-    serveRawg([rawgGame(1, "Deck Only", "2020-01-01")]);
-
-    const out = await buildExternalSets(USER, [tag("deckbuilding")]);
-
-    expect(out.map((i) => i.title)).toEqual(["Deck Only"]);
   });
 
   it("an empty conjunction ANDs to nothing rather than widening", async () => {
-    serveRawg([rawgGame(1, "Deck Only", "2020-01-01", ["Deckbuilding"])]);
+    // The provider returns nothing for the conjunction, which is the honest
+    // answer for a pair almost nothing carries. The failure this guards against
+    // is widening to "either tag" and showing titles that match neither filter.
+    serveNoProviders();
+    igdbByTag.mockResolvedValue([]);
     expect(await buildExternalSets(USER, [tag("deckbuilding"), tag("tower defense")])).toEqual([]);
   });
 
@@ -150,7 +134,8 @@ describe("buildExternalSets — tags are ANDed AT THE PROVIDER", () => {
 
 describe("buildExternalSets — candidates land in the catalog so they can be scored", () => {
   it("thin-writes each candidate and returns its uuid, flagged pending", async () => {
-    serveRawg([rawgGame(42, "Storable Game", "2023-03-03")]);
+    serveNoProviders();
+    igdbByTag.mockResolvedValue([igdbGame(42, "Storable Game", "2023-03-03")]);
     // Enough rated signal that a profile exists — without one, nothing is ever
     // pending (there is no score coming for a cold start).
     const { upsertMediaItem, upsertLibraryEntry } = await import("@/lib/matcher");
@@ -165,7 +150,7 @@ describe("buildExternalSets — candidates land in the catalog so they can be sc
 
     const [item] = await buildExternalSets(USER, [tag("deckbuilding")]);
 
-    // A real uuid, not a synthetic `rawg-game-42` — that is what makes the card
+    // A real uuid, not a synthetic `igdb-game-42` — that is what makes the card
     // linkable AND lets /api/discover/scores heal it by media_items.id.
     expect(item.id).toMatch(/^[0-9a-f-]{36}$/);
     const row = get<{ id: string; browsed: number }>("SELECT id, browsed FROM media_items WHERE id = ?", [item.id]);
@@ -189,14 +174,15 @@ describe("buildExternalSets — candidates land in the catalog so they can be sc
   it("never degrades an already-enriched row it happens to rediscover", async () => {
     const { upsertMediaItem } = await import("@/lib/matcher");
     const { PROJECTION_VERSION } = await import("@/lib/sources/project");
-    const rich = { id: 42, name: "Storable Game", released: "2023-03-03", description_raw: "the full blob" };
+    const rich = { id: 42, name: "Storable Game", __date: "2023-03-03", summary: "the full blob" };
     const id = upsertMediaItem({
-      source: "rawg", sourceId: "42", type: "game", title: "Storable Game",
+      source: "igdb", sourceId: "42", type: "game", title: "Storable Game",
       releaseDate: "2023-03-03", rawData: rich,
     });
     run("UPDATE media_links SET projection_version = ? WHERE media_item_id = ?", [PROJECTION_VERSION, id]);
 
-    serveRawg([rawgGame(42, "Storable Game", "2023-03-03")]);
+    serveNoProviders();
+    igdbByTag.mockResolvedValue([igdbGame(42, "Storable Game", "2023-03-03")]);
     const [item] = await buildExternalSets(USER, [tag("deckbuilding")]);
 
     expect(item.id).toBe(id); // resolved to the EXISTING row, not a duplicate
@@ -204,7 +190,7 @@ describe("buildExternalSets — candidates land in the catalog so they can be sc
       "SELECT projection_version, raw_data FROM media_links WHERE media_item_id = ?", [id]
     );
     expect(link?.projection_version).toBe(PROJECTION_VERSION); // not reset to 0
-    expect(JSON.parse(link!.raw_data).description_raw).toBe("the full blob");
+    expect(JSON.parse(link!.raw_data).summary).toBe("the full blob");
     expect(get<{ n: number }>("SELECT COUNT(*) n FROM media_items")?.n).toBe(1);
   });
 });

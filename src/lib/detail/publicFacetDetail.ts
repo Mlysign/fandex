@@ -35,8 +35,8 @@ import type { LinkableFacetKind } from "@/lib/facetUrl";
 import { personKey } from "@/lib/facets";
 import { slugsForItemIds } from "@/lib/itemSlug";
 import type { PersonMeta, FacetScope } from "@/lib/facetDetail";
-import { tmdbJson, rawgJson, fetchPersonMeta, resolveTmdbCompanyId } from "@/lib/facetDetail";
-import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
+import { tmdbJson, fetchPersonMeta, resolveTmdbCompanyId } from "@/lib/facetDetail";
+import { tmdbGenreId, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTag, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { normalizeName, extractYear } from "@/lib/merge";
 import type { PersistableItem } from "@/lib/discoverPersist";
@@ -177,19 +177,6 @@ function tmdbTitle(c: any, mediaHint?: "movie" | "tv", roles: string[] = []): Po
   };
 }
 
-function rawgTitle(g: any, roles: string[] = []): PoolTitle {
-  return {
-    source: "rawg", sourceId: String(g.id), type: "game",
-    title: g.name || "Untitled",
-    releaseDate: g.released || null,
-    posterUrl: g.background_image || null,
-    vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0-5 → 0-10
-    votes: g.ratings_count ?? 0,
-    roles,
-    raw: g,
-  };
-}
-
 function igdbTitle(g: any, roles: string[] = []): PoolTitle {
   return {
     source: "igdb", sourceId: String(g.id), type: "game",
@@ -291,44 +278,6 @@ async function tmdbCompanyPool(companyId: number): Promise<PoolTitle[]> {
   return out;
 }
 
-// NEW — RAWG dev/publisher search by name, then their catalog (blended
-// added+recent). A studio may be both a developer and a publisher, so we search
-// and union both.
-const _rawgEntityCache = sharedCache<string, { developers: number[]; publishers: number[] }>("publicFacet.rawgEntity", { max: 5000 });
-// Q25: takes the recovered display LABEL, not the normalized key — "focus"
-// vs. "Focus Entertainment" is the difference between matching the wrong
-// company on RAWG's search and matching the right one.
-async function searchRawgEntityIds(query: string): Promise<{ developers: number[]; publishers: number[] }> {
-  if (_rawgEntityCache.has(query)) return _rawgEntityCache.get(query)!;
-  const [dev, pub] = await Promise.all([
-    rawgJson(`/developers?search=${encodeURIComponent(query)}&page_size=1`),
-    rawgJson(`/publishers?search=${encodeURIComponent(query)}&page_size=1`),
-  ]);
-  const ids = {
-    developers: (dev?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
-    publishers: (pub?.results ?? []).slice(0, 1).map((r: any) => r.id).filter(Boolean),
-  };
-  _rawgEntityCache.set(query, ids);
-  return ids;
-}
-async function rawgEntityPool(query: string): Promise<PoolTitle[]> {
-  const { developers, publishers } = await searchRawgEntityIds(query);
-  const reqs: Promise<any>[] = [];
-  for (const [param, list] of [["developers", developers], ["publishers", publishers]] as const) {
-    for (const id of list) for (const ordering of ["-added", "-released"]) {
-      reqs.push(rawgJson(`/games?${param}=${id}&ordering=${ordering}&page_size=40&page=1`));
-    }
-  }
-  const seen = new Set<string>();
-  const out: PoolTitle[] = [];
-  for (const d of await Promise.all(reqs)) {
-    for (const g of d?.results ?? []) {
-      if (!seen.has(String(g.id))) { seen.add(String(g.id)); out.push(rawgTitle(g)); }
-    }
-  }
-  return out;
-}
-
 // ── TAG ─────────────────────────────────────────────────────────────────────
 // A genre/keyword is effectively unbounded, so we build a bounded, sorted pool
 // (a few provider pages blended across popularity + recency) and paginate within
@@ -339,9 +288,6 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
   const out: PoolTitle[] = [];
   const pushTmdb = (media: "movie" | "tv", results: any[] | undefined) => {
     for (const m of results ?? []) { const t = tmdbTitle({ ...m, media_type: media }); const k = `${t.type}:${t.sourceId}`; if (!seen.has(k)) { seen.add(k); out.push(t); } }
-  };
-  const pushRawg = (results: any[] | undefined) => {
-    for (const g of results ?? []) { const k = `game:${g.id}`; if (!seen.has(k)) { seen.add(k); out.push(rawgTitle(g)); } }
   };
   const reqs: Promise<void>[] = [];
   const movieGid = tmdbGenreId(key, "movie");
@@ -357,10 +303,9 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
       for (const sort of ["popularity.desc", recency]) for (const page of TAG_POOL_PAGES)
         reqs.push(tmdbJson(`/discover/${media}?with_keywords=${kwId}&sort_by=${sort}&vote_count.gte=10&page=${page}`).then((d) => pushTmdb(media, d?.results)));
   }
-  const gslug = rawgGenreSlug(key);
-  const rawgParam = gslug ? `genres=${gslug}` : `tags=${rawgTagSlug(key)}`;
-  for (const ordering of ["-added", "-released"]) for (const page of TAG_POOL_PAGES)
-    reqs.push(rawgJson(`/games?${rawgParam}&ordering=${ordering}&page_size=40&page=${page}`).then((d) => pushRawg(d?.results)));
+  // PL3 (2026-08-23): the RAWG tag pool is gone. This is the crawlable surface,
+  // and a crawler walking the facet long tail is what actually spent RAWG's
+  // 20,000/month quota. IGDB and Steam cover games here.
 
   // Q27 (2026-07-19): IGDB alongside RAWG on the public tag page too — see
   // facetDetail.ts's tagTitles for the same wiring + the reason it's a
@@ -415,16 +360,20 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
 
   await Promise.all(reqs);
 
-  const rawgTitleYears = new Set(
-    out.filter((t) => t.source === "rawg").map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
+  // The title+year set still guards IGDB against whatever else landed in the
+  // pool, which after PL3 is Steam rather than RAWG. Keeping the guard rather
+  // than deleting it: the sources still use independent id spaces, so title+year
+  // remains the only key that spans them.
+  const settledTitleYears = new Set(
+    out.map((t) => `${normalizeName(t.title)}|${extractYear(t.releaseDate) ?? "?"}`)
   );
   for (const g of igdbGames) {
-    // Prefixed (unlike RAWG's plain `game:${id}` key above) — RAWG and IGDB ids
-    // are independent numeric spaces, so an unprefixed key could collide.
+    // Prefixed deliberately: provider id spaces are independent, so an
+    // unprefixed numeric key could collide across sources.
     const k = `game:igdb:${g.id}`;
     if (seen.has(k)) continue;
     const dupeKey = `${normalizeName(g.name ?? "")}|${extractYear(igdbReleaseDate(g)) ?? "?"}`;
-    if (rawgTitleYears.has(dupeKey)) continue;
+    if (settledTitleYears.has(dupeKey)) continue;
     seen.add(k);
     out.push(igdbTitle(g));
   }
@@ -647,9 +596,11 @@ export async function buildPublicFacetDetail(
       // never the lossy key ("focus") — companyKey() strips trailing legal/role
       // tokens, so searching with the bare key can match an entirely different
       // company (e.g. "focus" -> Focus Features on TMDB, not Focus Entertainment).
-      const [tmdbId, rawgPool] = await Promise.all([resolveTmdbCompanyId(label), rawgEntityPool(label)]);
-      const tmdbPool = tmdbId != null ? await tmdbCompanyPool(tmdbId) : [];
-      pool = [...tmdbPool, ...rawgPool];
+      // PL3: the RAWG developer/publisher pool is gone. A game company now
+      // serves from TMDB (where it has a studio entry) plus the local catalog,
+      // which already carries dev/pub facets from IGDB and Steam.
+      const tmdbId = await resolveTmdbCompanyId(label);
+      pool = tmdbId != null ? await tmdbCompanyPool(tmdbId) : [];
       if (pool.length) scope = "sample";
     } else {
       pool = await tagPool(key);

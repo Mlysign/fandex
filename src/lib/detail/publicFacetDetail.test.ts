@@ -8,18 +8,23 @@ import { personPool, sortPool, crowdAvg, facetRobots, MIN_INDEXABLE_TITLES } fro
 import type * as FacetDetailModule from "@/lib/facetDetail";
 import type * as DiscoverPersistModule from "@/lib/discoverPersist";
 
-// PR14 (2026-07-22) mocks — buildPublicFacetDetail fans out to live TMDB/RAWG
-// calls; stub the exact seams so a "tag" build resolves via the static genre
-// map (tmdbGenreId/rawgGenreSlug — no network) with one controlled result per
-// provider. persistDiscoverItems is mocked directly: it's the write path this
+// PR14 (2026-07-22) mocks — buildPublicFacetDetail fans out to live TMDB calls;
+// stub the exact seam so a "tag" build resolves via the static genre map
+// (tmdbGenreId, no network) with controlled results. PL3 (2026-08-23) removed
+// the RAWG half of this surface, so there is no rawgJson left to stub. persistDiscoverItems is mocked directly: it's the write path this
 // test exists to assert is (or isn't) called, not something to exercise for
 // real against the in-memory test DB.
 vi.mock("@/lib/facetDetail", async (importOriginal) => {
   const actual = await importOriginal<typeof FacetDetailModule>();
   return {
     ...actual,
-    tmdbJson: vi.fn().mockResolvedValue({ results: [{ id: 101, title: "Mock Movie", vote_average: 7, vote_count: 100 }] }),
-    rawgJson: vi.fn().mockResolvedValue({ results: [{ id: 202, name: "Mock Game", rating: 4, ratings_count: 50 }] }),
+    // TWO results on purpose: the SM38 case below needs one title with a local
+    // row (linkable) and one without (inert), which is what pins the gate as
+    // PER-ITEM. The inert one used to come from RAWG.
+    tmdbJson: vi.fn().mockResolvedValue({ results: [
+      { id: 101, title: "Mock Movie", vote_average: 7, vote_count: 100 },
+      { id: 202, title: "Mock Movie Two", vote_average: 6, vote_count: 80 },
+    ] }),
   };
 });
 vi.mock("@/lib/discoverPersist", async (importOriginal) => {
@@ -166,7 +171,7 @@ describe("buildPublicFacetDetail — persist gate (PR14)", () => {
     const known = payload!.items.find((i) => i.id === "uuid-known");
     expect(known, "the pre-existing tmdb:101 row should resolve to its uuid").toBeDefined();
     expect(known!.linkable).toBe(true);
-    // The rawg title has no row, so it stays inert — the gate is per-item.
+    // The second tmdb title has no row, so it stays inert — the gate is per-item.
     expect(payload!.items.some((i) => i.linkable === false)).toBe(true);
   });
 
@@ -175,39 +180,37 @@ describe("buildPublicFacetDetail — persist gate (PR14)", () => {
   // provider calls on the second build with L1 empty".
   it("serves from the SQLite L2 with ZERO provider calls after L1 is cleared", async () => {
     const { buildPublicFacetDetail } = await import("./publicFacetDetail");
-    const { tmdbJson, rawgJson } = await import("@/lib/facetDetail");
+    const { tmdbJson } = await import("@/lib/facetDetail");
 
     const first = await buildPublicFacetDetail({ kind: "tag", key: "western" }, { persist: false });
     expect(first).not.toBeNull();
-    const callsAfterCold = (tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length;
+    const callsAfterCold = (tmdbJson as any).mock.calls.length;
     expect(callsAfterCold).toBeGreaterThan(0); // it really did fan out
 
     // Simulate a restart: L1 is in-process, L2 is the DB row that outlives it.
     const { _resetFacetPageCacheForTests } = await import("./publicFacetDetail");
     _resetFacetPageCacheForTests();
     (tmdbJson as any).mockClear();
-    (rawgJson as any).mockClear();
 
     const second = await buildPublicFacetDetail({ kind: "tag", key: "western" }, { persist: false });
     expect(second).not.toBeNull();
-    expect((tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length).toBe(0);
+    expect((tmdbJson as any).mock.calls.length).toBe(0);
     expect(second!.items.length).toBe(first!.items.length);
   });
 
   it("does not persist a payload degraded by a provider failure", async () => {
     const { buildPublicFacetDetail, _resetFacetPageCacheForTests } = await import("./publicFacetDetail");
-    const { tmdbJson, rawgJson } = await import("@/lib/facetDetail");
+    const { tmdbJson } = await import("@/lib/facetDetail");
     (tmdbJson as any).mockRejectedValueOnce(new Error("tmdb down"));
-    (rawgJson as any).mockRejectedValueOnce(new Error("rawg down"));
+    (tmdbJson as any).mockRejectedValueOnce(new Error("tmdb down"));
 
     await buildPublicFacetDetail({ kind: "tag", key: "documentary" }, { persist: false });
     _resetFacetPageCacheForTests();
     (tmdbJson as any).mockClear();
-    (rawgJson as any).mockClear();
 
     // A cached failure would serve 0 calls; a correctly-uncached one retries.
     await buildPublicFacetDetail({ kind: "tag", key: "documentary" }, { persist: false });
-    expect((tmdbJson as any).mock.calls.length + (rawgJson as any).mock.calls.length).toBeGreaterThan(0);
+    expect((tmdbJson as any).mock.calls.length).toBeGreaterThan(0);
   });
 
   it("writes when persist is true (real session)", async () => {

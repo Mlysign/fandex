@@ -8,8 +8,8 @@
 //   - CROWD average → the broadest sensible set (payload.scope):
 //       person  → full TMDB filmography (combined_credits)        "filmography"
 //       studio  → TMDB titles, popularity + recency sample        "sample"
-//       dev/pub → RAWG titles, most-added + most-recent sample     "sample"
-//       tag     → TMDB genre/keyword + RAWG genre/tag, pop+recent  "sample"
+//       dev/pub → local catalog only (PL3 dropped the RAWG sample)  "catalog"
+//       tag     → TMDB genre/keyword + IGDB + Steam, pop+recent     "sample"
 //       (network / failed resolution / no external) → catalog      "catalog"
 // Sampling blends popularity with recency on purpose: popularity-only over-
 // represents hits and inflates the crowd average.
@@ -17,12 +17,12 @@
 import { sharedCache } from "@/lib/boundedCache";
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import type { DiscoveryVector } from "@/lib/discovery";
-import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId } from "@/lib/discovery";
+import { itemsWithFacet, resolvePersonTmdbId } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
 import { fandexForPage } from "@/lib/liveDiscover";
 import { persistDiscoverItems } from "@/lib/discoverPersist";
-import { tmdbGenreId, rawgGenreSlug, rawgTagSlug, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
+import { tmdbGenreId, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
 import { discoverIgdbByTags, igdbImageUrl, igdbReleaseDate, igdbConfigured } from "@/lib/sources/igdb";
 import { searchSteamByTags, extractSteamDate } from "@/lib/sources/steam";
 import { normalizeName, extractYear } from "@/lib/merge";
@@ -31,7 +31,6 @@ import { tagKey } from "@/lib/facets";
 import type { MediaType } from "@/types";
 
 const TMDB = process.env.TMDB_API_KEY;
-const RAWG = process.env.RAWG_API_KEY;
 const MAX_ITEMS = 150;
 const COMPANY_PAGES = [1, 2]; // sample depth for a studio/dev (≈40 per sort order)
 const TAG_PAGES = [1];        // tags are huge → 20 popular + 20 recent per source
@@ -128,9 +127,12 @@ function ageFrom(birthday: string | null, deathday: string | null): number | nul
 }
 
 // Exported so the public facet layer (publicFacetDetail.ts) shares the exact same
-// TMDB/RAWG plumbing (key handling, error swallowing) instead of duplicating it.
+// TMDB plumbing (key handling, error swallowing) instead of duplicating it. Its
+// RAWG twin was removed by PL3 (2026-08-23) along with every facet-path RAWG
+// call; RAWG remains a CONNECTOR and its stored rows still project, but this
+// surface makes no RAWG requests at all now.
 //
-// Both pass BROWSE_BUDGET_MS (2026-08-13). Every caller of these two is a browse
+// It passes BROWSE_BUDGET_MS (2026-08-13). Every caller is a browse
 // path — advanced search's database results and the public facet pages — and
 // every one of them already degrades to "this source contributed nothing this
 // round" via the `catch` right here. Without a budget they paid the full retry
@@ -144,16 +146,6 @@ export async function tmdbJson(path: string): Promise<any | null> {
   try {
     const r = await httpFetch(
       `https://api.themoviedb.org/3${path}${path.includes("?") ? "&" : "?"}api_key=${TMDB}`,
-      { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
-    );
-    return r.ok ? await r.json() : null;
-  } catch { return null; }
-}
-export async function rawgJson(path: string): Promise<any | null> {
-  if (!RAWG) return null;
-  try {
-    const r = await httpFetch(
-      `https://api.rawg.io/api${path}${path.includes("?") ? "&" : "?"}key=${RAWG}`,
       { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
     );
     return r.ok ? await r.json() : null;
@@ -190,17 +182,6 @@ function tmdbCredit(c: any): ExtTitle {
     vote: typeof c.vote_average === "number" ? c.vote_average : null,
     votes: c.vote_count ?? 0,
     raw: c,
-  };
-}
-function rawgGame(g: any): ExtTitle {
-  return {
-    source: "rawg", sourceId: String(g.id), type: "game",
-    title: g.name || "Untitled",
-    releaseDate: g.released || null,
-    posterUrl: g.background_image || null,
-    vote: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // RAWG rating is 0-5
-    votes: g.ratings_count ?? 0,
-    raw: g,
   };
 }
 // A Steam store item, from the tag search. `resolvedTags` is already attached by
@@ -276,24 +257,6 @@ async function tmdbCompanyTitles(companyId: number): Promise<ExtTitle[]> {
   return out;
 }
 
-// Game devs/publishers: RAWG titles, blended across most-added + most-recent.
-async function rawgEntityTitles(role: string, id: number): Promise<ExtTitle[]> {
-  const param = role === "developer" ? "developers" : "publishers";
-  const reqs: Promise<any>[] = [];
-  for (const ordering of ["-added", "-released"]) {
-    for (const page of COMPANY_PAGES) reqs.push(rawgJson(`/games?${param}=${id}&ordering=${ordering}&page_size=40&page=${page}`));
-  }
-  const out: ExtTitle[] = [];
-  const seen = new Set<string>();
-  for (const d of await Promise.all(reqs)) {
-    for (const g of d?.results ?? []) {
-      const sid = String(g.id);
-      if (!seen.has(sid)) { seen.add(sid); out.push(rawgGame(g)); }
-    }
-  }
-  return out;
-}
-
 // Tags: a popularity + recency sample from TMDB (genre or keyword), RAWG (genre
 // or tag) and IGDB. A tag's full catalog is the whole platform, so we sample.
 //
@@ -312,9 +275,6 @@ async function tagTitles(keys: string[]): Promise<ExtTitle[]> {
   const seen = new Set<string>();
   const pushTmdb = (media: "movie" | "tv", results: any[] | undefined) => {
     for (const m of results ?? []) { const t = tmdbCredit({ ...m, media_type: media }); const k = `${t.type}:${t.sourceId}`; if (!seen.has(k)) { seen.add(k); out.push(t); } }
-  };
-  const pushRawg = (results: any[] | undefined) => {
-    for (const g of results ?? []) { const k = `game:${g.id}`; if (!seen.has(k)) { seen.add(k); out.push(rawgGame(g)); } }
   };
   const reqs: Promise<void>[] = [];
 
@@ -346,25 +306,12 @@ async function tagTitles(keys: string[]): Promise<ExtTitle[]> {
         .then((d) => pushTmdb(media, d?.results)));
   }
 
-  // RAWG: send every key it can address, then VERIFY each result carries all of
-  // them. The verification is the load-bearing half — RAWG's comma semantics for
-  // `genres`/`tags` are OR in some places and undocumented in others, and its
-  // list payloads already include the full `genres[]`/`tags[]` arrays, so
-  // checking is free and makes correctness independent of what the query did.
-  const rawgParams = [
-    keys.map(rawgGenreSlug).every(Boolean) ? `genres=${keys.map(rawgGenreSlug).join(",")}` : "",
-    keys.map(rawgGenreSlug).some((s) => !s) ? `tags=${keys.map(rawgTagSlug).join(",")}` : "",
-  ].filter(Boolean).join("&");
-  const carriesAllKeys = (g: any) => {
-    const owned = new Set<string>([
-      ...(g.genres ?? []).map((x: any) => tagKey(String(x.name ?? ""))),
-      ...(g.tags ?? []).map((x: any) => tagKey(String(x.name ?? ""))),
-    ]);
-    return keys.every((k) => owned.has(tagKey(k)));
-  };
-  for (const ordering of ["-added", "-released"]) for (const page of TAG_PAGES)
-    reqs.push(rawgJson(`/games?${rawgParams}&ordering=${ordering}&page_size=20&page=${page}`)
-      .then((d) => pushRawg((d?.results ?? []).filter((g: any) => keys.length === 1 || carriesAllKeys(g)))));
+  // PL3 (2026-08-23): RAWG used to contribute FOUR requests here, which is the
+  // entire measured RAWG cost of a cold tag page (docs/scalability.md §1). Its
+  // 20,000/month free quota was being spent by a crawler walking the facet long
+  // tail, not by people, and the paid tier is only 2.5x larger. IGDB and Steam
+  // below cover games for this surface, and Steam is the better tag vocabulary
+  // anyway.
 
   // Q27 (2026-07-19): IGDB alongside RAWG — a tag like "anime" is a real IGDB
   // theme/keyword but not a RAWG genre, and IGDB's game catalog covers titles
@@ -460,11 +407,11 @@ export async function buildFacetDetail(userId: string, ref: FacetRefIn): Promise
       const cid = await resolveTmdbCompanyId(ref.label);
       const ext = cid != null ? await tmdbCompanyTitles(cid) : null;
       if (ext && ext.length) return assemble(userId, ref, null, "sample", catVectors, ext);
-    } else if (ref.role === "developer" || ref.role === "publisher") {
-      const rid = resolveRawgEntityId(ref.role, ref.key);
-      const ext = rid != null ? await rawgEntityTitles(ref.role, rid) : null;
-      if (ext && ext.length) return assemble(userId, ref, null, "sample", catVectors, ext);
     }
+    // PL3: a game developer/publisher used to get a RAWG sample here. It now
+    // serves from the local catalog, which is a deliberate trade: the sample
+    // cost provider calls on a crawlable page, and our own catalog already
+    // carries dev/pub facets from IGDB and Steam.
     return assemble(userId, ref, null, "catalog", catVectors, null); // network / failed
   }
 
@@ -554,10 +501,8 @@ async function externalTitlesFor(ref: FacetRefIn): Promise<ExtTitle[]> {
     if (ref.role === "studio") {
       const cid = await resolveTmdbCompanyId(ref.label);
       if (cid != null) external = await tmdbCompanyTitles(cid);
-    } else if (ref.role === "developer" || ref.role === "publisher") {
-      const rid = resolveRawgEntityId(ref.role, ref.key);
-      if (rid != null) external = await rawgEntityTitles(ref.role, rid);
     }
+    // PL3: game dev/publisher has no external sample any more, by design.
   } else {
     external = await tagTitles([ref.key]);
   }
