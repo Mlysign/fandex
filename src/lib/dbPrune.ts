@@ -435,12 +435,21 @@ export type VolumeInfo = {
  * file-size-based check would refuse to run the very VACUUM that fixes it —
  * exactly when the volume is most likely to be tight.
  */
+// ⚠️ Every `fs.*Sync` in this file carries `/*turbopackIgnore: true*/` and it is
+// NOT cosmetic (2026-08-23). `DB_PATH` is an env var, so the path is not
+// statically analysable; without the comment Turbopack gives up and traces the
+// WHOLE PROJECT into `.next/standalone`, and its own build warning says what
+// that costs — "all source files (including the public folder) deployed as part
+// of the server code". This module is reached from `instrumentation.ts`, which
+// every route loads, so it was pulling that trace into the entire app. It shows
+// up as a fatter Docker image and a slower Railway deploy, never as a failure.
+// Do not remove the comments; the path genuinely cannot be scoped statically.
 export function volumeInfo(): VolumeInfo {
   const dbPath = process.env.DB_PATH || path.join(process.cwd(), "data", "rr.db");
   const mb = (b: number) => Math.round(b / 1048576);
   let dbMb: number | null = null;
   try {
-    dbMb = mb(fs.statSync(dbPath).size);
+    dbMb = mb(fs.statSync(/*turbopackIgnore: true*/ dbPath).size);
   } catch {
     dbMb = null;
   }
@@ -459,7 +468,7 @@ export function volumeInfo(): VolumeInfo {
   }
 
   try {
-    const s = fs.statfsSync(path.dirname(dbPath));
+    const s = fs.statfsSync(/*turbopackIgnore: true*/ path.dirname(dbPath));
     const freeMb = mb(Number(s.bavail) * Number(s.bsize));
     const totalMb = mb(Number(s.blocks) * Number(s.bsize));
     // 1.5x the live data, plus a floor: the rewrite needs the compacted copy
@@ -589,7 +598,7 @@ export function walDiagnostics(opts: { probe?: boolean } = {}): WalDiagnostics {
 
   let walMb: number | null = null;
   try {
-    walMb = Math.round((fs.statSync(`${dbPath}-wal`).size / 1048576) * 10) / 10;
+    walMb = Math.round((fs.statSync(/*turbopackIgnore: true*/ `${dbPath}-wal`).size / 1048576) * 10) / 10;
   } catch {
     walMb = null;
   }
@@ -622,7 +631,7 @@ export function checkpointTruncate(): { busy: number | null; logFrames: number |
   const dbPath = process.env.DB_PATH || path.join(process.cwd(), "data", "rr.db");
   const walMb = (): number | null => {
     try {
-      return Math.round((fs.statSync(`${dbPath}-wal`).size / 1048576) * 10) / 10;
+      return Math.round((fs.statSync(/*turbopackIgnore: true*/ `${dbPath}-wal`).size / 1048576) * 10) / 10;
     } catch {
       return null;
     }

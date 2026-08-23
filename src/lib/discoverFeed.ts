@@ -9,6 +9,7 @@
 
 import type { MediaType, Source } from "@/types";
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
+import { BoundedCache } from "@/lib/boundedCache";
 import { log } from "@/lib/logger";
 import { normalizeName, extractYear } from "@/lib/merge";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
@@ -57,6 +58,60 @@ async function bestEffort<T>(source: string, fn: () => Promise<T[]>): Promise<T[
     log.warn("discover_feed_source_skipped", { source, error: e instanceof Error ? e.message : String(e) });
     return [];
   }
+}
+
+// ── The browse page cache (2026-08-23) ───────────────────────────────────────
+// Every OTHER provider boundary in the app already caches: `popularMonthFeed`
+// has POPULAR_TTL_MS, `homeHub` 30 min, the facet pages got a two-layer cache in
+// August. This file had none, and it is the busiest one — measured on prod that
+// day, `/api/discover` answered in **930 ms warm and 955 ms cold**, i.e. it did
+// the full provider fan-out on every single request, while `/api/home` (cached)
+// answered the same shape in 37 ms. TMDB was projecting **158,257 calls/month**
+// off pre-launch traffic.
+//
+// Cached HERE, at the page primitive, rather than at each route: the same
+// "TMDB movies, future, page 1, US" page is wanted by the anonymous browse, by
+// EVERY signed-in user's personalized feed rebuild (liveDiscover fans out
+// PAGES_PER_SOURCE × 5 sources), and by the calendar's popular chip. One entry
+// now serves all three — the multiplier is the point, not the single-request
+// latency.
+//
+// ⚠️ PINNED TO globalThis for the reason http.ts's `_breakers` is: Next resolves
+// a module into a different bundle per route kind, so a bare `new BoundedCache()`
+// at module scope becomes SEVERAL caches — a page route would never see what an
+// API route just cached, which is most of the win.
+//
+// ⚠️ A FAILED FETCH IS NEVER CACHED. `bestEffort` and the `!res.ok` guards both
+// answer `[]`, so caching an empty array would pin a provider outage in place
+// for the whole TTL — the opposite of the degradation this file is built for.
+// Only a non-empty page is stored. A legitimately empty page (past the end of a
+// window) is therefore re-asked, which is cheap and rare.
+//
+// These are browse fetchers only — no sync/pull adapter imports them (verified
+// against every caller), so the prune invariant is not in play here.
+const BROWSE_PAGE_TTL_MS = 15 * 60 * 1000;
+const _pageCache: BoundedCache<string, FeedCandidate[]> =
+  ((globalThis as Record<string, unknown>).__fandexBrowsePages ??=
+    new BoundedCache<string, FeedCandidate[]>({ max: 600, ttlMs: BROWSE_PAGE_TTL_MS })) as BoundedCache<string, FeedCandidate[]>;
+
+async function cachedPage(
+  key: string,
+  fn: () => Promise<FeedCandidate[]>
+): Promise<FeedCandidate[]> {
+  const hit = _pageCache.get(key);
+  // A shallow copy on the way out: callers concat/sort/dedupe these arrays
+  // freely. The ITEM objects are treated as immutable by every consumer
+  // (persistDiscoverBatch, annotateUserState and decorateSection all rebuild
+  // each item with a spread rather than assigning into it) — keep it that way.
+  if (hit) return [...hit];
+  const fresh = await fn();
+  if (fresh.length) _pageCache.set(key, fresh);
+  return fresh;
+}
+
+/** Test seam: drop every cached browse page. */
+export function clearBrowsePageCache(): void {
+  _pageCache.clear();
 }
 
 /** An explicit provider date range, overriding the direction-derived one. */
@@ -164,7 +219,8 @@ async function rawgGamePage(page: number, direction: Direction, window?: DateRan
 }
 
 export function fetchGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
-  return bestEffort("rawg", () => rawgGamePage(page, direction, window));
+  return cachedPage(`rawg:${page}:${direction}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
+    () => bestEffort("rawg", () => rawgGamePage(page, direction, window)));
 }
 
 async function tmdbMoviePage(page: number, direction: Direction, region: string, window?: DateRange): Promise<FeedCandidate[]> {
@@ -194,7 +250,11 @@ async function tmdbMoviePage(page: number, direction: Direction, region: string,
 }
 
 export function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY, window?: DateRange): Promise<FeedCandidate[]> {
-  return bestEffort("tmdb", () => tmdbMoviePage(page, direction, region, window));
+  // `region` is in the key: TMDB filters by AND returns that country's release
+  // date (T22), so two regions are genuinely different pages, not one page
+  // relabelled. Dropping it here would serve a German visitor US dates.
+  return cachedPage(`tmdb-movie:${page}:${direction}:${region}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
+    () => bestEffort("tmdb", () => tmdbMoviePage(page, direction, region, window)));
 }
 
 async function tmdbShowPage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
@@ -222,7 +282,8 @@ async function tmdbShowPage(page: number, direction: Direction, window?: DateRan
 }
 
 export function fetchShowPage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
-  return bestEffort("tmdb", () => tmdbShowPage(page, direction, window));
+  return cachedPage(`tmdb-show:${page}:${direction}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
+    () => bestEffort("tmdb", () => tmdbShowPage(page, direction, window)));
 }
 
 // IGDB upcoming games (second game source). Covers/genres/themes come straight
@@ -270,7 +331,8 @@ async function igdbGamePage(page: number, direction: Direction, window?: DateRan
 }
 
 export function fetchIgdbGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
-  return bestEffort("igdb", () => igdbGamePage(page, direction, window));
+  return cachedPage(`igdb:${page}:${direction}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
+    () => bestEffort("igdb", () => igdbGamePage(page, direction, window)));
 }
 
 // Trakt "anticipated" → candidates keyed by their TMDB id (source "tmdb") so they

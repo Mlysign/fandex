@@ -36,7 +36,7 @@ vi.mock("@/lib/sources/igdb", () => ({
   igdbReleaseDate: (g: any) => g.__date ?? null,
 }));
 
-import { fetchGamePageAllSources, fetchTrendingGames, dedupeGames } from "./discoverFeed";
+import { fetchGamePageAllSources, fetchTrendingGames, dedupeGames, fetchMoviePage, fetchShowPage, clearBrowsePageCache } from "./discoverFeed";
 import { __resetBreakers } from "./http";
 import type { FeedCandidate } from "./discoverFeed";
 
@@ -57,6 +57,13 @@ beforeEach(() => {
   // Breaker state is per-host and module-global; a test that drives RAWG to
   // failure would otherwise open it for every test after it.
   __resetBreakers();
+  // Same reason, and the browse page cache is pinned to globalThis so it
+  // survives module reloads too: without this, the "RAWG is DOWN" test above
+  // seeds the IGDB page cache and the both-up test below reads ITS result
+  // instead of its own stub. Both currently pass either way only because the
+  // fixture data happens to match — which is exactly the kind of accident that
+  // turns into a mystery failure the first time someone edits a fixture.
+  clearBrowsePageCache();
 });
 
 afterEach(() => {
@@ -124,5 +131,72 @@ describe("dedupeGames", () => {
   it("treats a missing release date as its own bucket rather than collapsing them", () => {
     const out = dedupeGames([c("Untitled", null), c("Untitled", "2026-01-01")]);
     expect(out).toHaveLength(2);
+  });
+});
+
+// ── The browse page cache (2026-08-23) ───────────────────────────────────────
+//
+// Measured on prod that day: `/api/discover` answered in 930 ms WARM and 955 ms
+// cold — i.e. it re-ran the whole provider fan-out on every request — while the
+// cached `/api/home` served the same shape in 37 ms. TMDB was on track for
+// 158,257 calls/month at pre-launch traffic, and `docs/scalability.md` is
+// explicit that provider quota, not compute, is the ceiling here.
+//
+// These assert a CALL COUNT rather than a payload, deliberately. The repo has
+// been burned by a mocked test of an assumed provider shape passing while the
+// feature attached nothing (AGENTS.md, the Trakt episodes entry) — a call count
+// is a fact the test environment can actually observe, and "did we ask the
+// provider twice" is the entire claim being made here.
+describe("the browse page cache", () => {
+  it("asks TMDB ONCE for the same page, and serves the second caller from cache", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ results: [
+        { id: 7, title: "Cached Movie", release_date: "2026-09-01", genre_ids: [], vote_count: 5, vote_average: 7, popularity: 10 },
+      ] }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const first = await fetchMoviePage(1, "future", "US");
+    const second = await fetchMoviePage(1, "future", "US");
+
+    expect(first).toEqual(second);
+    expect(first.map((m) => m.title)).toEqual(["Cached Movie"]);
+    // The whole point. Before this cache existed it was 2.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keys on region, so a German visitor is not served US release dates", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ results: [
+        { id: 8, title: "Regional", release_date: "2026-09-01", genre_ids: [], vote_count: 5, vote_average: 7, popularity: 10 },
+      ] }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await fetchMoviePage(1, "future", "US");
+    await fetchMoviePage(1, "future", "DE");
+
+    // TMDB filters by AND returns the requested country's date (T22), so these
+    // are two different pages. Collapsing them would be a data-correctness bug
+    // wearing a cache-hit's clothes.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("NEVER caches an empty page, so a provider outage is not pinned in place", async () => {
+    // A 522 is what Cloudflare served during the real RAWG outage; `!res.ok`
+    // turns it into []. If that [] were cached, one bad minute would blank the
+    // section for the whole TTL and the recovery would be invisible.
+    const down = vi.fn().mockResolvedValue(new Response("origin down", { status: 522 }));
+    vi.stubGlobal("fetch", down);
+    expect(await fetchShowPage(1, "future")).toEqual([]);
+
+    const up = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ results: [
+        { id: 9, name: "Back Up", first_air_date: "2026-10-01", genre_ids: [], vote_count: 5, vote_average: 7, popularity: 10 },
+      ] }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", up);
+    // Recovers on the very next call rather than after the TTL expires.
+    expect((await fetchShowPage(1, "future")).map((s) => s.title)).toEqual(["Back Up"]);
   });
 });
