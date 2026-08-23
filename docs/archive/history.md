@@ -23,6 +23,64 @@ full history.
 
 ---
 
+## PL1 / PL2 / PL3 / PL5 — the platform capability findings, shipped (2026-08-23)
+
+Four of the five `PL` tasks from the `PLATFORMS.md` re-read. PL4 (the Letterboxd
+import) is the one still open and stays in TASKS.md. All four landed on
+2026-08-23 and reached prod the same day. The full reasoning for each is in its
+commit message, which is longer and better than what was in TASKS.md.
+
+- **PL1 — OMDb removed entirely** (`21cfa92`). CC BY-NC 4.0 at every tier, so
+  there was no commercial licence to buy and removal was the only option. It
+  contributed **zero** to the Fandex Score (which reads facets, and has a test
+  forbidding it from reading ratings), and its key had 401'd since before
+  2026-08-20, so nothing it provided was reaching a page anyway. Gone:
+  `sources/omdb.ts` + its test, `applyOmdbScores`, both call sites, the
+  `OMDB_API_KEY` row, the README env row. **Four fields had OMDb as their only
+  producer and were deleted from the type rather than left permanently null:**
+  `rtScore`, `imdbRating`, `boxOffice`, `awards`. Box office still renders from
+  TMDB's revenue (already the fallback); **awards had no second source and is
+  simply gone from the item page**; Metacritic survives for games via RAWG and is
+  absent for movies and shows, which was accepted. **Certification survives** —
+  TMDB appends `release_dates` / `content_ratings` with no extra call, and OMDb
+  only unioned into the same field. `imdbId` survives too, from TMDB and Trakt
+  external_ids, which PL4's IMDb import matches on. The merge characterization
+  snapshots changed, deliberately, because the merged shape lost two fields.
+  ⚠️ **`src/lib/noOmdb.test.ts` pins it removed** — a re-add would be one import
+  and one call, would pass tsc, lint and the suite, would make the item page look
+  *better*, and would only surface as a licence problem once ads ship.
+- **PL2 — Trakt's free caps are visible instead of silent** (`9a08b68`). The
+  2026 free tier is watchlist 250 / ratings 10k / 5 lists, and nothing inspected
+  a rejected write, so a user past 250 got a silent partial push. Surfaced as a
+  per-provider sync warning, **not** thrown: the *pull* is what must throw, and a
+  throwing push would take the pull down with it and hand `syncProvider` an
+  outage under the prune invariant. → `src/lib/traktAccountLimit.test.ts`.
+- **PL3 — RAWG dropped from the FACET paths, and deliberately not from browse**
+  (`5fdc0c1`). The measurement narrowed the scope: a cold `/tag/{genre}` page
+  cost 14 provider requests of which **4 were RAWG**, the homepage cost 0, and
+  browse is page-cached, so the entire measured RAWG cost of the app was the
+  crawler-driven facet surface. Removed the RAWG tag pull in `facetDetail`'s
+  `tagTitles`, the developer/publisher sample, the tag and company pools in
+  `publicFacetDetail`, and `rawgJson` itself. **Kept: RAWG as a CONNECTOR** (auth,
+  sync adapter, `crossLink`) and `normalizeRawg`, because stored rows must still
+  project. ⚠️ **Cutting RAWG from browse too was tried and `discoverFeedSources.test.ts`
+  failed — correctly.** Browse is the only place games have two *paginating*
+  sources: Steam has no date-windowed pagination primitive, so browse would have
+  gone single-source, which is the exact invariant the 2026-08-02 outage bought.
+  → `src/lib/noRawgOnFacetPaths.test.ts`.
+- **PL5 — Steam's Web API terms read** (`022f94e`). **Commercial use is NOT
+  prohibited**, with no non-commercial clause of the OMDb or TMDB kind, which
+  makes Steam the only games provider with no monetization cliff. Limit is
+  100,000 calls/day, far above anything measured here. Two obligations were
+  already met and were *verified* rather than assumed (no outbound Steam link
+  carries `nofollow`; the privacy policy names Steam and says what is read). Two
+  stayed open and are carried in TASKS.md. ⚠️ **The terms cover
+  `api.steampowered.com` and NOT `IStoreQueryService`**, the undocumented store
+  endpoint behind the tag search, which remains the larger separate risk. Full
+  terms box → `PLATFORMS.md`.
+
+---
+
 ## Platform deep dives + the pre-2026-08-20 capability tables (archived 2026-08-20)
 
 PLATFORMS.md was streamlined to three tables (metadata / two-way sync / one-time
