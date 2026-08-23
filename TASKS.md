@@ -25,7 +25,7 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 ## ⚠️ Needs Nils — this is the whole list
 
-Everything else in this file is either done or a standing constraint. **The four platform questions on this list were answered 2026-08-23 and are now the `PL` section below. Nothing platform-related is waiting on you.**
+Everything else in this file is either done or a standing constraint. **Every platform question was answered AND built on 2026-08-23 (the PL sweep, all six shipped). Nothing platform-related is waiting on you.**
 
 1. **Android TWA (P15/P16): ⏸️ PAUSED BY NILS 2026-08-23 until the developer account is a BUSINESS account.** The app package is built and proven (sideloaded on the Pixel 8 with no address bar), and **the Play Console entry now exists**: created 2026-08-23, name `Fandex`, package `org.fandex.twa`, App, Free. Nothing else on the Play side is done, deliberately.
 
@@ -64,30 +64,11 @@ Migration 16 put SQLite 3.44+ syntax in a view and Litestream v0.3.13 embeds ~3.
 
 ---
 
-## PL: platform capability findings, turned into work (2026-08-23)
+## ✅ PL: the platform capability sweep, ALL SIX SHIPPED 2026-08-23
 
-**Source:** the `PLATFORMS.md` re-read. **Nils decided every open question on 2026-08-23** and those answers are baked into the tasks below; the "decided against" list at the end is as load-bearing as the tasks.
+Turned the `PLATFORMS.md` analysis into work and finished it. OMDb removed (CC BY-NC, unlicensable), RAWG off the facet paths, Trakt's account limits made visible, Steam's terms read, the **Letterboxd/IMDb list import built**, and platform colour-coding closed out. Tests 1006 green, lint and build clean.
 
-✅ **PL1 through PL6 ALL SHIPPED on 2026-08-23**, tests 1006 green, lint clean, build clean. **Nothing in this section is open.** The done ones are one-line pointers below; their full reasoning is in the commit messages and in the [archive](docs/archive/history.md) (grep `PL1 / PL2 / PL3 / PL5`).
-
-- **PL1. Remove OMDb entirely. ✅ 2026-08-23** (`21cfa92`). Gone, with `src/lib/noOmdb.test.ts` pinning it removed. Certification and `imdbId` survive via TMDB/Trakt; **awards had no second source and is gone from the item page**, and Metacritic is now games-only.
-- **PL2. Trakt's free caps. ✅ 2026-08-23** (`9a08b68`). A rejected write is now a per-provider sync warning the user can read, deliberately **not** a throw — the pull is what must throw. → `src/lib/traktAccountLimit.test.ts`.
-- **PL3. Drop RAWG's metadata role. ✅ 2026-08-23** (`5fdc0c1`). Dropped from the FACET paths (the 4 RAWG calls on a cold `/tag/` page) and **deliberately kept in browse**, where it is the only second *paginating* games source; RAWG stays a connector. → `src/lib/noRawgOnFacetPaths.test.ts`. ⚠️ **Re-measure when the quota window resets:** a cold `/tag/` page should now cost 10 provider calls, not 14.
-- **PL5. Steam's API terms. ✅ 2026-08-23** (`022f94e`). **Commercial use is not prohibited**, 100k calls/day, no NC clause — the only games provider with no monetization cliff. Terms box → [PLATFORMS.md](PLATFORMS.md). ⚠️ **Two obligations came with it and are still open:** the data-residency sentence (needs the Railway region from Nils — item 5 on the Needs-Nils list above), and **the Valve name/logo requirement has not been audited page by page** — `<BrandGlyph source="steam">` likely satisfies it, but "likely" is not an audit. ⚠️ **The terms cover `api.steampowered.com` and NOT `IStoreQueryService`**, the undocumented store endpoint behind the tag search; that stays the larger separate risk.
-
-- **PL4. The list import. ✅ BUILT 2026-08-23** (`1ea3619` engine + migration 20, `f875b70` the page). **Design and every verified fact → [docs/letterboxd-import.md](docs/letterboxd-import.md); read it before touching this.** The only item here that adds reach while LOWERING provider cost per user: free to the user, no OAuth, no ongoing quota. **Nils promoted Letterboxd above IMDb on 2026-08-23** because it is the userbase most worth reaching and the import is the whole switching cost. One importer, two parsers.
-  - **Three verified facts that decide the build, all measured rather than read.** The Letterboxd export is **free** (their Pro page lists nine Pro and five Patron benefits; export is not one). The **username import is closed**: their terms forbid scrapers, require access "through the interface we provide", and bar exporting content that is not your own, and a username box has no proof of ownership anyway. And **Android is a silent dead end**: their app claims every `letterboxd.com` URL with no path filter and beats Chrome in the resolver, so the link opens their in-app webview where **Export Data downloads nothing at all** (verified on a Pixel 8).
-  - ✅ **Import before signup: APPROVED** (Nils, 2026-08-23). Parse while logged out, show the matched films and a taste preview, then ask for the account. ⚠️ **Nothing may touch the DB until signup** (PR15's anon write gate), and the staging store is a table **written on a request path by anonymous strangers**, which is the shape that filled `facet_page_cache` to 222 MB: it needs a row or byte ceiling, an **interval** sweep in bounded batches rather than boot-only, and eviction by write time. It holds personal data before an account exists, so `deleteAccount()` will not cover it (no `user_id`) and the TTL is the only protection.
-  - ✅ **Mobile: offer BOTH paths and let the person choose** (Nils, 2026-08-23). "Continue here" with the accurate Android warning, and "Continue on a computer". Pair the handoff with a `share_target` on `src/app/manifest.ts`, which has none today and which also carries into the TWA.
-  - ⚠️ **Confirm the CSV filenames and column headers against a REAL export before writing the parser.** Every schema claim in the doc is from secondary sources; Letterboxd publishes none. Same rule `/api/dev/trakt-shape` exists to enforce.
-
-- **PL6. Platform colour-coding, finished. ✅ DONE 2026-08-23** (`bce4611` + this session). The 2026-08-18 rule is "no brand hue in ANY state; identify a provider by its LOGO". Four leftovers, all now gone: the Steam trailer link's inline `#1b9af7` in `LowerSections.tsx`; the **dead source-filter branch in `SubBar.tsx`** (⚠️ the earlier note said three callers, there are **four** including `MyStuffView.tsx`, and none passed `availableSources`/`onToggleSource`, so the chips never rendered); an **unused `SOURCE_COLORS` import** in `ItemView.tsx`; and the **`--color-steam/-rawg/-trakt/-tmdb` CSS tokens**, which nothing read and whose own comment promised a sweep to make components reference them, the exact opposite of the decision that followed. **The only `SOURCE_COLORS` readers left are `/item/debug` and `Badges.tsx`'s `SourcePill`, which only that page calls**, the accepted internal exception. `TYPE_COLORS` (game/movie/show) is a **different axis and stays**. → [[platform-brand-marks-not-colours]]
-
-**Decided AGAINST on 2026-08-23, and not to be re-raised without new information:**
-- **GiantBomb for game credits.** It is the only free fix for games having no cast/crew (so the Score's people axis is movie/show only), but commercial use needs **written permission**, the same terms class that parked Hardcover and Backloggd. Not opened. MobyGames stays rejected at $4,999.99/mo.
-- **Anime as a media type via MyAnimeList.** MAL is the viable connector, since AniList's is barred by its competing-service clause while its metadata half is unaffected. Not opened: a whole new media type, and ~9 enumeration points `tsc` will not flag.
-- **Letterboxd stays built and dark.** No working key, but the 401/403 latch (2026-08-22) means it costs nothing now, and deleting working code to chase a key that may still arrive is the worse trade. `HIDDEN_PROVIDERS` already covers it.
-- **Books stay parked** (Hardcover's terms, 2026-08-03). Open Library remains the best metadata whenever they revive.
+**Two things survived into the reference docs rather than staying here:** the import's design and every verified fact about it → **[docs/letterboxd-import.md](docs/letterboxd-import.md)** (read it before touching `src/lib/import/`), and the scope split on the two-provider games invariant → AGENTS.md. Full write-up → grep the [archive](docs/archive/history.md) for `PL: the platform capability sweep`.
 
 ## Open — carried forward from Phase 6
 

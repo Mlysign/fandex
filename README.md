@@ -32,7 +32,7 @@ missing.
 | `JWT_SECRET` | ✅ (prod) | Session signing. Generate: `openssl rand -hex 32`. **The server refuses to start in production without it.** |
 | `TOKEN_ENCRYPTION_KEY` | ✅ (prod) | OAuth-token encryption at rest (S2). Generate: `openssl rand -hex 32`. **Must differ from `JWT_SECRET`.** |
 | `TMDB_API_KEY` | ✅ | Movies & TV (core data source) |
-| `RAWG_API_KEY` | ✅ | Games (core data source) |
+| `RAWG_API_KEY` | ✅ | Games: the browse feed and the RAWG connector. Not the facet pages since PL3 |
 | `NEXT_PUBLIC_BASE_URL` | ✅ | Public origin, no trailing slash (e.g. `https://app.example.com`) — used for OAuth redirects |
 | `DB_PATH` | — | SQLite file path. Defaults to `./data/rr.db`; **set to the mounted volume in production** (e.g. `/app/data/rr.db`) |
 | `STEAM_API_KEY` | ⬚ | Steam integration |
