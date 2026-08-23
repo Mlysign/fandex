@@ -27,7 +27,11 @@ Nils answered the full open-decision list in one pass. Treat every line here as 
 
 Everything else in this file is either done or a standing constraint.
 
-1. **Android TWA (P15/P16): the app is BUILT and RUNNING; only the Play side is left.** Steps → [docs/twa-play-store.md](docs/twa-play-store.md). ✅ 2026-08-22: packaged, `android-package/` (gitignored, holds the upload keystore), Railway serving a real `assetlinks.json`, sideloaded on the Pixel 8 **with no address bar** — the whole asset-links chain is proven on real hardware before any upload. **Four things remain, in order:** (a) the App content forms — privacy policy `https://fandex.org/legal/en/privacy`, Data safety, content rating, target audience — which gate the closed release rolling out and therefore gate the clock starting at all; (b) upload `android-package/Fandex.aab` to a closed track; (c) ⚠️ **APPEND the Play App Signing SHA-256** to `TWA_CERT_FINGERPRINT`, comma-separated, because **Google re-signs the store build** and the sideload fingerprint will not verify the copy testers install; (d) twelve testers for fourteen days. ⚠️ **The 12-testers/14-days rule is PER APP, not per account** (Google’s help page says “your app” throughout), so Bubblewrap clearing its own test carries nothing over. The same twelve people can serve, they just opt in again, and **two apps can test in parallel** — so this is a countdown that runs unattended once started, not two weeks of attention.
+1. **Android TWA (P15/P16): ⏸️ PAUSED BY NILS 2026-08-23 until the developer account is a BUSINESS account.** The app package is built and proven (sideloaded on the Pixel 8 with no address bar), and **the Play Console entry now exists**: created 2026-08-23, name `Fandex`, package `org.fandex.twa`, App, Free. Nothing else on the Play side is done, deliberately.
+
+   ⚠️ **The upgrade is not only about invoicing, and this is the part worth knowing: the 12-testers/14-days gate applies to PERSONAL developer accounts ONLY.** Google's wording is "Google Play requires *personal* developer accounts created after November 13, 2023, to test their apps before those apps are eligible for distribution" (support.google.com/googleplay/android-developer/answer/14151465, checked 2026-08-23). InFlucx is currently a **Personal account**. An organization account is not subject to it. **So running a closed test now would very likely be throwaway work** — do the account upgrade first, then re-check whether the gate still applies at all.
+
+   **When the account is upgraded, the remaining steps are, in order:** (a) `Test and release → App content` — privacy policy `https://fandex.org/legal/en/privacy`, Data safety, content rating, target audience; (b) upload `android-package/Fandex.aab`; (c) ⚠️ **APPEND the Play App Signing SHA-256** (`Test and release → Setup → App integrity`) to `TWA_CERT_FINGERPRINT` in Railway, comma-separated — **Google re-signs the store build**, so the fingerprint already live in `assetlinks.json` (`F7:75:02:5D:…`) is the upload key and will NOT verify the copy testers install; (d) confirm `https://fandex.org/.well-known/assetlinks.json` lists BOTH fingerprints; (e) testers, only if the gate still applies. Full walkthrough → [docs/twa-play-store.md](docs/twa-play-store.md).
 
 2. **⚠️ RAWG is NOT down — its monthly API quota is exhausted. The sweep cannot run, and this is a different problem from 2026-08-17.** Measured 2026-08-20: `api.rawg.io` answers **`401 {"error": "The monthly API limit reached"}`** in 0.17 s. Not the timeouts and Cloudflare 522s of the August outage.
 
@@ -58,24 +62,15 @@ Everything else in this file is either done or a standing constraint.
 
 ⚠️ **Railway volume backups remain Pro-plan only** (re-confirmed on the Backups tab, 2026-08-20), so **Litestream is still the only copy**. And **a drill proves the backup you had THAT DAY** — the 2026-08-12 drill was invalidated by a schema change five days later and nobody noticed for two more. **Re-run it after ANY schema change.**
 
-### ⏸️ The drill is DUE again — migration 19 landed after the last one
+### ✅ The drill RAN and PASSED, 2026-08-23
 
-**Migration 19 (`media_items.slug`, `abfc4de`, 2026-08-21) is a schema change, and it landed the day AFTER the 2026-08-20 drill.** By the rule directly above, that drill no longer proves anything about today's backup. Attempted 2026-08-22 and **blocked by the harness**: typing shell commands into the Railway Console is denied in auto mode, and routing around that is not the right move.
+Nils ran it in the Railway Console (Claude prepared the command; the harness denies the Enter keypress, so this step always needs a human). Restored from the replica into `/tmp`, compared every table against live, removed the scratch file.
 
-⚠️ **Re-attempted 2026-08-23 and blocked again**, this time with the console itself proven fine: it connects as a live root shell (`root@e461da052244:/app#`) and accepts typed input, but the harness denies the Enter keypress that would run it. So the obstacle is the automation, not Railway. **This needs you, and it is one paste.** Everything else that session was driven through the app's own admin endpoints instead, which the harness does allow (the franchise sweep and the WAL probe both ran that way).
+**`ALL TABLES MATCH`**, all eight, including the `franchise_members` rows written that same day: `media_items` 2023, `user_episode_state` 12343, `show_episodes` 7055, `media_links` 4478, **`franchise_members` 10841**, plus `users` / `user_identities` / `user_item_state`. So the backup covers today's franchise sweep, not just the pre-existing catalog.
 
-**What IS verified as of 2026-08-22, and what it does not prove.** Migration 19 is a plain `ALTER TABLE` + `CREATE UNIQUE INDEX`, so it carries none of the 3.44-only syntax that killed Litestream in migration 16; the replica bucket grew 136.8 → 137.1 MB across two deploys, so replication is live; and the deploy log shows the litestream v0.3.13 start line with **zero** errors, `malformed`, or `syntax error` matches. That is "replicating". **The whole lesson of 2026-08-17 is that replicating and RESTORABLE are different claims**, and only the second one is a backup.
+⚠️ **It is due again after the NEXT schema change**, by the rule above. The one-paste command is in the archive; grep for `restore drill`. Note the catalog counts have fallen since the 2026-08-20 drill (`media_items` 2770 → 2023, `media_links` 5224 → 4478) — that is `PRUNE_ON_BOOT` doing its job on browsed-only rows, not data loss.
 
-**The drill, to paste into the Railway Console (service → Console):**
-
-```
-litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
-ls -l /app/data/rr.db /tmp/restore-test.db
-node -e 'const D=require("better-sqlite3");const a=new D("/app/data/rr.db",{readonly:true}),b=new D("/tmp/restore-test.db",{readonly:true});console.log("integrity",b.pragma("integrity_check",{simple:true}));for(const t of ["users","user_identities","user_item_state","media_items","user_episode_state","show_episodes","media_links","franchise_members"])console.log(t,a.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c,b.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c);'
-rm /tmp/restore-test.db
-```
-
-Pass = `integrity ok`, the two file sizes equal, and both columns equal on all seven tables. ⚠️ **Check free space before restoring** — it writes a second copy of the database into `/tmp`. `/app/data/rr.db` is never touched.
+**The command itself** (for next time, one paste into Railway → service → Console): grep the archive for `restore drill`. Pass = `integrity ok`, the two file sizes equal, and live/restored equal on every table. ⚠️ It writes a second copy of the database into `/tmp`, so check free space first; `/app/data/rr.db` is never touched.
 
 ### ✅ The file already reclaimed itself — there is no VACUUM step, and there never was
 

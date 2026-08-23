@@ -153,6 +153,22 @@ Play Console → Play Store protection → Manage Play app signing → request a
 reset. So losing it costs you a support round-trip and some days, not the app. Back it up
 anyway, because those days are real.
 
+### ⚠️ Before any of this: check the account type
+
+**The 12-testers/14-days gate applies to PERSONAL developer accounts only.** Google:
+"Google Play requires **personal** developer accounts created after November 13, 2023, to
+test their apps before those apps are eligible for distribution on Google Play."
+(support.google.com/googleplay/android-developer/answer/14151465, checked 2026-08-23.)
+
+InFlucx was a **Personal account** as of 2026-08-23, and Nils paused the Play work that day
+to upgrade it to a **business/organization** account first. That is the right order: an
+organization account is not subject to the gate, so a closed test started beforehand is
+probably throwaway work. **Re-read the policy after the upgrade** rather than assuming
+either way — this page has already been wrong once by treating the gate as unavoidable.
+
+The Play Console entry itself already exists: created 2026-08-23, name `Fandex`, package
+`org.fandex.twa`, App, Free. Step 4 below picks up from there.
+
 ### 4. Upload it
 
 In the Play Console: **Create app** → name it Fandex, App, Free. Then go to
