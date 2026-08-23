@@ -7,6 +7,7 @@ import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";
 import { facetChipStyle, nonFacetChipStyle } from "@/lib/facetPalette";
 import { tagKey } from "@/lib/facets";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
+import BrandGlyph from "@/components/BrandGlyph";
 import StoreLink from "./StoreLink";
 import { SectionHeading } from "./primitives";
 
@@ -136,7 +137,18 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
           </div>
         </section>
       ) : steamTrailerUrl ? (
-        <a href={steamTrailerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg" style={{ background: "#1b9af720", color: "#1b9af7" }}>
+        // 2026-08-23: this carried Steam's brand blue inline (#1b9af7), the last
+        // hardcoded provider hex in this file. Platform colour-coding is removed
+        // site-wide (Nils, 2026-08-18): a provider is identified by its LOGO, not
+        // its hue, in any state including hover. The surface treatment is the one
+        // the "Where to buy" rows below already use.
+        <a
+          href={steamTrailerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-surface-elevated border border-border text-text-primary hover:border-border-strong transition-colors"
+        >
+          <BrandGlyph source="steam" size={18} className="text-current" />
           Watch trailer on Steam →
         </a>
       ) : null}
