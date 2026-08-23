@@ -1,6 +1,6 @@
 # The list import: Letterboxd first, IMDb alongside
 
-**Status: designed, not built (2026-08-23).** This is PL4's design doc. `TASKS.md` carries the one-line pointer; everything below is the detail, and every factual claim here was verified against Letterboxd's own pages, their app association files, a real Pixel 8, or the live database. **Nothing here is quoted from documentation alone**, because the last three platform surprises in this repo all came from trusting a doc over a measurement.
+**Status: BUILT 2026-08-23** (`1ea3619` engine + migration 20, `f875b70` the page). Verified end to end against the running app and the real database, not just by tests. ⚠️ **The one thing still owed: confirm the CSV column headers against a REAL export** (§6). The parser is header-driven and fails loudly rather than silently, so a rename is survivable, but the names themselves are still unverified. This is PL4's design doc. `TASKS.md` carries the one-line pointer; everything below is the detail, and every factual claim here was verified against Letterboxd's own pages, their app association files, a real Pixel 8, or the live database. **Nothing here is quoted from documentation alone**, because the last three platform surprises in this repo all came from trusting a doc over a measurement.
 
 Visual version of the flow: `https://claude.ai/code/artifact/d641d234-4f2d-41e0-8a4f-54b7188c7d79`
 
