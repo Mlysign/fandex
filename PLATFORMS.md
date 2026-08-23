@@ -2,6 +2,10 @@
 
 Every platform Fandex uses or has considered, in three tables: **metadata**, **two-way sync**, **one-time import**. Capability rows are authoritative from code (`src/lib/sources/catalog.ts`); **cost, licence and scale re-researched 2026-08-20** against published terms. Prose and deep dives → grep the [archive](docs/archive/history.md) for `platform deep dives`.
 
+**Decisions taken 2026-08-23** (Nils): remove OMDb now · drop RAWG’s metadata role now, keeping it as a connector · build the IMDb CSV import next · open neither GiantBomb nor anime. The work is the `PL` section of [TASKS.md](TASKS.md).
+
+⚠️ **Two rows on this page were WRONG until 2026-08-23, and both were load-bearing.** Steam’s Companies column said ❌ and Steam has contributed developer + publisher facets all along (`src/lib/facets.ts:208-211`). And this page implied games depend on RAWG more than they do: measured on the catalog, IGDB covers 907 of 1,035 games, Steam 808, RAWG 741, and the **IGDB ∪ Steam union is 965**, leaving RAWG uniquely reaching **70**. A capability cell is a claim about code; check it against `facets.ts` before planning around it.
+
 **Status** ✅ live · 🔵 built, hidden · ⏸️ parked · ❔ unevaluated · ❌ rejected  **·  Score value** ●●● high · ●● medium · ● narrow · – none
 **R** read · **W** write · **`*`** exists in their data model but not via a supported official API
 
@@ -17,13 +21,13 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 |---|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | **TMDB** | movie, show | ✅ | ✅ genres+keywords | ✅ dir/creator/writer/cast | ✅ prod cos, networks | ✅ collections | ✅ | ✅ | ●●● | Free **non-commercial only** · **$149/mo** commercial <$1M rev | **Keep.** All four facet kinds. 9 calls per cold facet page. $149/mo the moment ads ship. |
 | **IGDB** | game | ✅ | ✅ genres, themes, keywords, modes | ❌ | ✅ dev+pub | ✅ franchises | ✅ | ✅ | ●●● | **Free, no monthly cap**, 4 req/s · Twitch account | **Keep + prefer.** Healthiest provider on this page. |
-| **Steam** | game | ✅ | ✅ **unique** store tags | ❌ | ❌ | ❌ | ✅ | ✅ label | ●● | Free · re-read terms before going commercial | **Keep.** Deckbuilding/Tower Defense exist here and nowhere else. |
-| **RAWG** | game | ✅ | ✅ genres+tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ | ●● | **20k req/mo** free NC · **$149/mo for 50k** | 🔴 **Drop the metadata role.** Fully overlapped by IGDB; paid tier is only 2.5× free. Keep as connector. |
+| **Steam** | game | ✅ | ✅ **unique** store tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ label | ●● | Free · ⚠️ **terms still unread for commercial use** (PL5), and PL3 makes Steam more load-bearing | **Keep, and it is a fuller source than this page said.** Deckbuilding/Tower Defense exist here and nowhere else, and it carries companies (corrected 2026-08-23), which is what makes dropping RAWG safe. |
+| **RAWG** | game | ✅ | ✅ genres+tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ | ●● | **20k req/mo** free NC · **$149/mo for 50k** | 🔴 **DECIDED 2026-08-23: drop the metadata role NOW** (PL3). Fully overlapped by IGDB + Steam, which cover 965 of 1,035 games between them, so games stay dual-source. RAWG uniquely reaches 70; stored rows and their facets survive, only new calls stop. Stays a connector. |
 | **Wikidata** | all | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ● | **Free, CC0** | **Keep.** Powers the `ip` facet. Ideal licence. |
-| **OMDb** *(the only source of IMDb, Rotten Tomatoes & Metacritic scores)* | movie, show | ✅⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ only | **–** | 1k/day free · **CC BY-NC 4.0** | 🔴 **REMOVE before ads.** NC at every tier, contributes **zero** to the Score, and the key is already invalid (401s today). |
+| **OMDb** *(the only source of IMDb, Rotten Tomatoes & Metacritic scores)* | movie, show | ✅⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ only | **–** | 1k/day free · **CC BY-NC 4.0** | 🔴 **DECIDED 2026-08-23: remove NOW, not at ads** (PL1). NC at every tier so it cannot be paid for, contributes **zero** to the Score, and the key already 401s. Certification survives via TMDB; RT, IMDb rating, awards and box office do not. |
 | **JustWatch** *(via TMDB)* | movie, show | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | – | Free via TMDB watch-providers | Keep as-is. Direct partner API not needed. |
 | **MobyGames** | game | ❔ | ✅ genres | ✅ **deep game credits** | ✅ | ❌ | ✅ | ✅ | ●●● | 720 req/h NC · **commercial $4,999.99/mo** | 🔴 **Rejected on cost.** Would fill IGDB's missing credits, at 33× TMDB+RAWG combined. |
-| **GiantBomb** | game | ❔ | ✅ concepts, themes | ✅ people | ✅ | ✅ franchises | ✅ | ✅ | ●●● | Free, no hard limit · **commercial needs written permission** | 🟡 **Best free fix for game credits.** Same class of terms risk that parked Backloggd/Hardcover. Ask before building. |
+| **GiantBomb** | game | ❔ | ✅ concepts, themes | ✅ people | ✅ | ✅ franchises | ✅ | ✅ | ●●● | Free, no hard limit · **commercial needs written permission** | 🟡 **Best free fix for game credits, and DECIDED AGAINST 2026-08-23.** Not opened: commercial use needs written permission, the same terms class that parked Backloggd/Hardcover. Re-raise only with new information. |
 | **TVmaze** | show | ❔ | ✅ genres | ✅ cast+crew | ✅ networks | ❌ | ✅ | ✅ | ●● | Free, **CC BY-SA 4.0** · commercial licence for high volume | 🟡 Viable show backup. ⚠️ Share-alike licence needs reading before use. |
 | **TheTVDB** | show | ❔ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ●● | Licence-based; **paid for commercial**; $11.99/yr user-PIN model | 🟡 Redundant with TMDB, which is better and cheaper here. |
 | **OpenCritic** | game | ❔ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | – | Free; terms unverified | Ratings only → **zero Score value**. Skip. |
@@ -46,13 +50,13 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 
 | Platform | Media | Status | Auth | Wishlist | Library | Rating | Review | Status W | Episodes | Cost / limits & blockers |
 |---|---|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|
-| **Trakt** | movie, show | ✅ | oauth | R/W | R | R/W | – | ✅ | **R/W** | Free. ⚠️ **2026 free caps: watchlist 250, ratings 10k, 5 lists.** VIP 5,000/20k/100. **Monetized apps need approval.** Only source of per-episode state. |
+| **Trakt** | movie, show | ✅ | oauth | R/W | R | R/W | – | ✅ | **R/W** | Free. ⚠️ **2026 free caps: watchlist 250, ratings 10k, 5 lists, and NOTHING in the adapter handles a rejected write** (PL2, a live bug: a user past 250 gets a silent partial push). VIP 5,000/20k/100. **Monetized apps need approval.** Only source of per-episode state. |
 | **TMDB** | movie, show | ✅ | oauth | R/W | R | R/W | – | – | – | No watched concept; "library" = rated items. Commercial licence as in table 1. |
 | **RAWG** | game | ✅ | credentials | R/W | R | R/W | – | ✅ | – | No review text. ⚠️ **Quota exhausted today — 401 on every call.** |
 | **Steam** | game | ✅ | openid | R | R | – | – | – | – | Free. Read-only by design. |
 | **Letterboxd** | movie | 🔵 | oauth | R/W | R | R/W | R | ✅ | – | 🔴 **No working API key; 401s on every call.** Built and hidden. |
 | **AniList** | anime, manga | ⏸️ | oauth | R/W | R | R/W | R | ✅ | – | 🔴 **Barred by terms:** API prohibited "within competing, non-complementary services of the same nature… anime and manga list or tracker services". Fandex is one. ⚠️ Verify by hand — `docs.anilist.co` 403s to automated fetch. |
-| **MyAnimeList** | anime, manga | ❔ | oauth | R/W | R | R/W | – | ✅ | – | Free. Viable AniList alternative **without** the competing-service clause. |
+| **MyAnimeList** | anime, manga | ❔ | oauth | R/W | R | R/W | – | ✅ | – | Free. Viable AniList alternative **without** the competing-service clause. ⏸️ **Anime as a media type was decided against 2026-08-23** (new type, ~9 enumeration points `tsc` will not flag). |
 | **Simkl** | movie, show, anime | ❔ | oauth | R/W | R | R/W | – | ✅ | R/W | Freemium. 🔴 Direct competitor; expect terms friction. |
 | **Hardcover** | book | ⏸️ | personal token only | R/W | R | R/W | R/W | ✅ | – | ⏸️ Parked: no OAuth, tokens expire on a shared Jan 1 reset, no app credential, writes undocumented. |
 | **Backloggd** | game | ❔ | none (scrape) | R* | R* | R* | R* | – | – | Unofficial scraper on public profiles. Built on IGDB ids so it dedupes cleanly. Blocker is access method. |
@@ -72,7 +76,7 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 
 | Source | Media | Format | Cost to user | Carries | Matching | Verdict |
 |---|---|---|---|---|---|---|
-| **IMDb** | movie, show | CSV export (list / watchlist / ratings) | **Free** | title, year, **IMDb id**, your rating, dates | 🟢 stable id we already store | 🟢 **Best target. Build this first.** |
+| **IMDb** | movie, show | CSV export (list / watchlist / ratings) | **Free** | title, year, **IMDb id**, your rating, dates | 🟢 stable id we already store | 🟢 **Best target, and DECIDED 2026-08-23: build it next** (PL4). Match local-first via an `imdb` pseudo-source row in `media_links`; budget the provider fallback per IMPORT, not per row. |
 | **Steam** | game | Web API | Free | owned games, wishlist, playtime | 🟢 appid | ✅ Already live as a connector. |
 | **Trakt** | movie, show | API / VIP export | Free | everything | 🟢 trakt+imdb+tmdb ids | ✅ Already live as a connector. |
 | **Letterboxd** | movie | CSV in ZIP (`diary`, `ratings`, `watchlist`, `lists`) | ⚠️ **Pro, $35/yr** | title, year, rating, watched date, review | 🟡 title+year | 🟡 Richer than IMDb, but paywalled on their side. |

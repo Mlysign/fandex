@@ -3430,3 +3430,60 @@ individual piece looked correct on its own. Tests, `tsc`, lint and `next build`
 were green throughout, and the existing 912-test suite passed unchanged after the
 fixes, which is why each one shipped with new tests that fail against the old
 behaviour.
+
+---
+
+## Backups: broken 2026-08-17, fixed 2026-08-19, proven restorable 2026-08-20 and again 2026-08-23
+
+_Archived from TASKS.md on 2026-08-23. Fully closed; the two live rules that came
+out of it (re-run the drill after ANY schema change, and Litestream is still the
+only copy because Railway volume backups are Pro-plan only) are carried forward
+as a three-line pointer in TASKS.md. The memory-ramp measurement below was
+superseded on 2026-08-23 by `GET /api/dev/dbsize?caches=1`, which measures cache
+BYTES directly: `facetCache.derived` is 33 MB and the discovery pool is 5.2 MB.
+The methodological lesson (take a time series, never a spot sample) is the part
+worth keeping._
+
+## ✅ Backups: broken 2026-08-17, fixed 2026-08-19, and PROVEN RESTORABLE 2026-08-20
+
+**Closed.** Migration 16 put SQLite 3.44+ syntax in a view; Litestream v0.3.13 embeds ~3.40, so it replicated **nothing** for two days while every other check stayed green. Fixed in `9d63a68` (migration 18).
+
+**The drill ran on 2026-08-20 and passed:** restored from generation `c62d7dc17a0fd0cb` into `/tmp`, `integrity_check: ok`, the file byte-for-byte the same size as live (161,644,544), and **all seven tables matching live exactly** — `users` 1, `user_identities` 4, `user_item_state` 2419, `media_items` 2770, `user_episode_state` 12342, `show_episodes` 7055, `media_links` 5224. Scratch file removed; `/app/data/rr.db` untouched. Full record → grep the archive for `restore drill`.
+
+⚠️ **Railway volume backups remain Pro-plan only** (re-confirmed on the Backups tab, 2026-08-20), so **Litestream is still the only copy**. And **a drill proves the backup you had THAT DAY** — the 2026-08-12 drill was invalidated by a schema change five days later and nobody noticed for two more. **Re-run it after ANY schema change.**
+
+### ✅ The drill RAN and PASSED, 2026-08-23
+
+Nils ran it in the Railway Console (Claude prepared the command; the harness denies the Enter keypress, so this step always needs a human). Restored from the replica into `/tmp`, compared every table against live, removed the scratch file.
+
+**`ALL TABLES MATCH`**, all eight, including the `franchise_members` rows written that same day: `media_items` 2023, `user_episode_state` 12343, `show_episodes` 7055, `media_links` 4478, **`franchise_members` 10841**, plus `users` / `user_identities` / `user_item_state`. So the backup covers today's franchise sweep, not just the pre-existing catalog.
+
+⚠️ **It is due again after the NEXT schema change**, by the rule above. The one-paste command is in the archive; grep for `restore drill`. Note the catalog counts have fallen since the 2026-08-20 drill (`media_items` 2770 → 2023, `media_links` 5224 → 4478) — that is `PRUNE_ON_BOOT` doing its job on browsed-only rows, not data loss.
+
+**The command itself** (for next time, one paste into Railway → service → Console): grep the archive for `restore drill`. Pass = `integrity ok`, the two file sizes equal, and live/restored equal on every table. ⚠️ It writes a second copy of the database into `/tmp`, so check free space first; `/app/data/rr.db` is never touched.
+
+### ✅ The file already reclaimed itself — there is no VACUUM step, and there never was
+
+**`rr.db` went 331.4 MB → 154.2 MB on the fix deploy, unprompted.** `src/lib/db.ts` VACUUMs whenever a migration actually applies (H2a), migration 18 applied, so it fired — **with Litestream attached, completing fine.** A `VACUUM_ON_BOOT` entrypoint flag was added and removed the same day: a third, worse copy, resting on a premise that drop disproves. The manual lever is `POST /api/dev/prune {"action":"vacuum","confirm":"VACUUM"}`, which checks free space first. **The WAL is still 340.8 MB** — that one does need the last connection to close with Litestream detached.
+
+### ⚠️ The memory ramp: measured, and it is the JS HEAP. Both of my earlier answers were wrong.
+
+`/api/health` sampled every 5 min for ~6.5 h. **Read `heapTotal`, not `heapUsed` at boot** — that is the mistake that produced two wrong diagnoses in a row.
+
+| | 12:24 (boot) | 18:18 (6 h later) |
+|--|--|--|
+| node RSS | 95 MB | **420 MB** |
+| **`heapTotal`** | **33 MB** | **289 MB** |
+| `rss − heapTotal` (native) | 60 MB | 126 MB |
+| litestream RSS | 33 MB | 25 MB (flat throughout) |
+| `cgroupMb.fileMb` | 60 | oscillates 38–546, repeatedly reclaimed |
+
+**The heap grew 256 MB; native grew 66 MB.** So it is a JS-side ramp, and the two answers I gave before it were sampled properly are both retracted:
+
+1. **Not page cache.** `fileMb` is noise around a flat mean and gets reclaimed; it is not the trend. That was the 2026-07-22 answer being reached for out of habit.
+2. **Not native memory either.** I said "`heapUsed` flat at 30 MB ⇒ native, stop reading cache code" (the 2026-07-21 rule). That was drawn from three or four spot checks that **all happened to land minutes after a container boot**, where the heap genuinely is 30 MB. The time series shows heap climbing the whole way. **A rule of thumb applied to unrepresentative samples is worse than no rule** — the samples were the problem, not the rule.
+
+**What is actually growing:** the in-process L1 caches, filling under a crawl. The largest is `_facetPageCache` (`max: 3000`, whose own comment budgets **~145 MB retained**), beside ~10 more `BoundedCache`s. The ramp begins with a traffic burst at ~15:30 UTC.
+
+**Not urgent, and do not "fix" it blind.** 289 MB against `--max-old-space-size=1536`; no OOM risk, and that heap is the cache doing its job. ⚠️ **NOT established: whether `fe12682` made it worse** — the burst began before that deploy, so the pre/post comparison is confounded. Settle it by comparing heap against **crawl volume**, not wall-clock. If a bound is ever wanted, the lever is `_facetPageCache`'s `max`, sized against measured retained bytes. → [[prod-incidents]]
+
