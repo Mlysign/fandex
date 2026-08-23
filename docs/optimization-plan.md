@@ -162,6 +162,9 @@ problem twice by acting on a spot sample.
 
 `PROJECTION_VERSION` is 3. Of 5,250 `media_links` rows: 4,632 at v3, 532 at v1,
 78 at v0, 8 at v2. So **618 rows (12%)** are projected with two-versions-old
+⚠️ **That 12% was the LOCAL database. Prod reads 2.4%** (measured 2026-08-23, see
+§5.2). The finding below still stands as a description of the mechanism; the
+number does not. Nothing about it warrants a sweep.
 logic. Those feed facets, which feed the Fandex Score, which feeds discovery
 ranking.
 
