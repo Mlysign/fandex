@@ -3,8 +3,6 @@ import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { linkSourceToItem } from "@/lib/matcher";
 import { extractYear } from "@/lib/merge";
 import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
-import type { OmdbResult } from "@/lib/sources/omdb";
-import { fetchOmdbScores, fetchOmdbByImdbId, omdbConfigured } from "@/lib/sources/omdb";
 import { METADATA, metadataForType } from "@/lib/metadata/registry";
 import type { MetaLink } from "@/lib/metadata/types";
 import { isProviderCircuitOpen } from "@/lib/http";
@@ -444,47 +442,4 @@ export async function enrichMissingSources(
     }
   }
   return outcomes;
-}
-
-// Fetch OMDB scores (RT + IMDb + Metacritic + certification + awards + box
-// office) and attach them to an enriched item in-place. Prefers an exact lookup
-// by the IMDb id the merge already resolved (from TMDB/Trakt); falls back to a
-// title+year search. Only applies to movies and shows.
-//
-// Takes PublicEnrichedItem: every field it touches is catalog data, and
-// EnrichedItem is structurally assignable, so /api/detail passes its own item.
-export async function applyOmdbScores(item: PublicEnrichedItem): Promise<void> {
-  if (item.type === "game") return;
-  if (!omdbConfigured()) return; // no key configured — skip the call entirely, not just the fetch
-  try {
-    let scores: OmdbResult;
-    if (item.imdbId) {
-      scores = await fetchOmdbByImdbId(item.imdbId);
-    } else {
-      const year = item.releaseDate ? parseInt(item.releaseDate.slice(0, 4)) : undefined;
-      scores = await fetchOmdbScores(item.title, year, item.type === "show" ? "series" : "movie");
-    }
-    item.rtScore = scores.rtScore;
-    item.imdbRating = scores.imdbRating;
-    item.imdbId = scores.imdbID ?? item.imdbId;
-    item.awards = scores.awards;
-    item.boxOffice = scores.boxOffice;
-    // OMDB metascore for movies/shows fills the gap left by RAWG (games-only).
-    if (item.metacritic == null && scores.metascore != null) item.metacritic = scores.metascore;
-    // OMDB certification (US rating) — add it to the union if not already there.
-    if (scores.rated && !item.certification.includes(scores.rated)) item.certification.push(scores.rated);
-    // Surface the IMDb score in the unified ratings row too.
-    if (scores.imdbRating != null) {
-      item.communityRatings = [
-        ...item.communityRatings.filter((r) => r.source !== "imdb"),
-        { source: "imdb", label: "IMDb", score: scores.imdbRating, outOf: 10, votes: scores.imdbVotes, url: scores.imdbID ? `https://www.imdb.com/title/${scores.imdbID}/` : null },
-      ];
-    }
-    if (scores.rtScore != null) {
-      item.communityRatings = [
-        ...item.communityRatings.filter((r) => r.source !== "rt"),
-        { source: "rt", label: "Rotten Tomatoes", score: scores.rtScore, outOf: 100 },
-      ];
-    }
-  } catch { /* silently skip */ }
 }

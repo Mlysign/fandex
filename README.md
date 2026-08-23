@@ -38,7 +38,6 @@ missing.
 | `STEAM_API_KEY` | ⬚ | Steam integration |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
-| `OMDB_API_KEY` | ⬚ | Rotten Tomatoes / IMDb scores |
 | `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
 | `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
 | `HEAL_BUDGET_MS` | ⬚ | Per-request wall-clock budget for `/api/discover/scores`' heal loop (default 10 000). Ids it can't heal in time come back as `deferred`, not scored |

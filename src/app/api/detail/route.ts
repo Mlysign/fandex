@@ -18,7 +18,7 @@ import { decorateItemLinks } from "@/lib/affiliate";
 import {
   UUID_RE, SourceIds, readSourceIds, resolveBySourceIds, loadLinks,
   buildLiveLinks, ensureTmdbDetail, ensureGameDetail, enrichMissingSources,
-  applyOmdbScores, linksForScoring,
+  linksForScoring,
 } from "@/lib/detail/enrich";
 
 // ── Canonical detail resolver ─────────────────────────────────────────────────
@@ -138,7 +138,6 @@ export const GET = withUser(async (req: NextRequest, session) => {
       })() : {}),
       fandexScore: fandex?.score ?? null,
     };
-    await applyOmdbScores(enriched);
 
     // H3.4 — affiliate decoration. Applied HERE and in lib/detail/publicDetail.ts,
     // the only two places store links reach a viewer; deliberately not in

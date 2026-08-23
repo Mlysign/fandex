@@ -8,16 +8,16 @@ import { decorateItemLinks } from "@/lib/affiliate";
 import type {
   PublicEnrichedItem} from "./enrich";
 import { loadLinks, ensureTmdbDetail,
-  ensureGameDetail, enrichMissingSources, applyOmdbScores,
+  ensureGameDetail, enrichMissingSources,
 } from "./enrich";
 
 // P13 — the PUBLIC read path for an item, behind `/{type}/{uuid}/{slug}`.
 //
 // This runs the SAME enrichment pipeline as /api/detail (lib/detail/enrich.ts):
 // refresh stale stored blobs, live-search the metadata providers that aren't
-// linked yet, merge, then attach OMDB scores. An earlier version read stored
+// linked yet, then merge. An earlier version read stored
 // data only — it rendered a fraction of the page (no cast, trailers,
-// where-to-watch, RT/IMDb) even though every one of those is public data. The
+// where-to-watch) even though every one of those is public data. The
 // public page and the authed page now differ ONLY in the per-user overlay.
 //
 // THE BOUNDARY: this returns PublicEnrichedItem, which omits rating / ratings /
@@ -96,7 +96,6 @@ export async function loadPublicDetail(
     type: row.type,
     ...mergeLinks(links, row.type, region),
   };
-  await applyOmdbScores(enriched);
 
   // H3.4 — affiliate decoration, the public half of the pair with /api/detail.
   // Safe to sit INSIDE the cached value: affiliate tags are global config, not

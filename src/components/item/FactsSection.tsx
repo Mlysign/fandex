@@ -28,8 +28,6 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
   const country        = enriched?.country ?? null;
   const budget         = enriched?.budget ?? null;
   const revenue        = enriched?.revenue ?? null;
-  const boxOffice      = enriched?.boxOffice ?? null;
-  const awards         = enriched?.awards ?? null;
   const network        = enriched?.network ?? null;
   const seasonCount    = enriched?.seasonCount ?? null;
   const episodeCount   = enriched?.episodeCount ?? null;
@@ -40,8 +38,8 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
   const hasAny =
     developer || publisher || director || runtimeMinutes || certification.length || status ||
     network || seasonCount || episodeCount || collection || originalLanguage || country ||
-    budget || revenue || boxOffice || playtimeHours || timeToBeat != null ||
-    nextEpisode?.airDate || awards;
+    budget || revenue || playtimeHours || timeToBeat != null ||
+    nextEpisode?.airDate;
   if (!hasAny) return null;
 
   return (
@@ -84,12 +82,7 @@ export default function FactsSection({ enriched, type }: { enriched: EnrichedIte
       {playtimeHours && <Fact label="Avg playtime">{playtimeHours}h</Fact>}
       {timeToBeat?.normally != null && <Fact label="Time to beat">{timeToBeat.normally}h</Fact>}
       {budget && <Fact label="Budget">{fmtMoney(budget)}</Fact>}
-      {(boxOffice || revenue) && <Fact label="Box office">{boxOffice ?? fmtMoney(revenue!)}</Fact>}
-      {awards && (
-        <Fact label="Awards" align="start">
-          <span style={{ color: "var(--color-warning)" }}>{awards}</span>
-        </Fact>
-      )}
+      {revenue && <Fact label="Box office">{fmtMoney(revenue)}</Fact>}
     </div>
   );
 }

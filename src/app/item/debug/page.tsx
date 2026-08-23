@@ -277,8 +277,6 @@ function DebugInspector() {
         <h2 className="text-sm font-semibold text-neutral-300 uppercase tracking-wide">Post-merge (OMDB)</h2>
         <p className="text-xs text-neutral-500">Fetched by IMDb id (from TMDB/Trakt), else title + year, after merging.</p>
         <div className="flex gap-4 text-sm text-neutral-300">
-          <span>RT: {item.rtScore ?? "—"}</span>
-          <span>IMDb: {item.imdbRating ?? "—"}</span>
           <span className="font-mono text-xs self-center text-neutral-500">{item.imdbId ?? ""}</span>
         </div>
       </section>

@@ -107,8 +107,6 @@ export interface EnrichedItem {
   tagline: string | null;
   metacritic: number | null;
   steamReviewLabel: string | null;
-  rtScore?: number | null;
-  imdbRating?: number | null;
   imdbId?: string | null;
   letterboxdRating?: number | null;
   // Unified per-source community scores (TMDB, Trakt, IGDB, RAWG, Steam, …)
@@ -122,8 +120,6 @@ export interface EnrichedItem {
   country: string | null;
   budget: number | null;             // USD (TMDB)
   revenue: number | null;            // USD (TMDB)
-  boxOffice?: string | null;         // formatted (OMDB)
-  awards?: string | null;            // OMDB awards summary
   // Shows
   network: string | null;
   seasonCount: number | null;

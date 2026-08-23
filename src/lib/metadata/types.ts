@@ -6,7 +6,7 @@ import type { MediaType, Source } from "@/types";
 // A MediaSource models "this user's wishlist/library/ratings on a platform they
 // logged into"; a MetadataProvider models "fetch this item's public metadata
 // from a catalog by id or title". The two registries are deliberately separate:
-// metadata sources include TMDB (and could include OMDB), which are not user
+// metadata sources include TMDB, which are not user
 // accounts at all and have no wishlist/login.
 //
 // Used by: persistItemFromIds (create an item from ids), the /api/detail resolver

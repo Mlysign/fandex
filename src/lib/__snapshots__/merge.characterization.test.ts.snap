@@ -1566,7 +1566,6 @@ exports[`mergeLinks characterization > game: steam + rawg + igdb 1`] = `
     "https://images.igdb.com/igdb/image/upload/t_1080p/ar1.jpg",
   ],
   "imdbId": null,
-  "imdbRating": null,
   "keywords": [],
   "letterboxdRating": null,
   "links": [
@@ -1610,7 +1609,6 @@ exports[`mergeLinks characterization > game: steam + rawg + igdb 1`] = `
   "publisher": "CD Projekt",
   "releaseDate": "2020-12-10",
   "revenue": null,
-  "rtScore": null,
   "runtimeMinutes": null,
   "seasonCount": null,
   "sources": [
@@ -1967,7 +1965,6 @@ exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
     "https://letterboxd.com/inception.jpg",
   ],
   "imdbId": "tt1375666",
-  "imdbRating": null,
   "keywords": [
     "dream",
     "heist",
@@ -2009,7 +2006,6 @@ exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
   "publisher": null,
   "releaseDate": "2010-07-16",
   "revenue": 829895144,
-  "rtScore": null,
   "runtimeMinutes": 148,
   "seasonCount": null,
   "sources": [
@@ -2295,7 +2291,6 @@ exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
     "https://image.tmdb.org/t/p/w500/bb.jpg",
   ],
   "imdbId": "tt0903747",
-  "imdbRating": null,
   "keywords": [],
   "letterboxdRating": null,
   "links": [
@@ -2322,7 +2317,6 @@ exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
   "publisher": null,
   "releaseDate": "2008-01-20",
   "revenue": null,
-  "rtScore": null,
   "runtimeMinutes": 47,
   "seasonCount": 5,
   "sources": [

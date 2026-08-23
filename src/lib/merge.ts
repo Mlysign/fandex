@@ -166,8 +166,6 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
     tagline,
     metacritic,
     steamReviewLabel,
-    rtScore: null,
-    imdbRating: null,
     imdbId,
     letterboxdRating,
     communityRatings,
