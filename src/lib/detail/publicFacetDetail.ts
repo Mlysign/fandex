@@ -365,8 +365,53 @@ async function tagPool(key: string): Promise<PoolTitle[]> {
   // Q27 (2026-07-19): IGDB alongside RAWG on the public tag page too — see
   // facetDetail.ts's tagTitles for the same wiring + the reason it's a
   // separate settle-then-dedupe pass instead of pushing straight into `out`.
+  //
+  // ⚠️ CACHED SEPARATELY, AND ON A MUCH LONGER TTL THAN THE PAGE (2026-08-23).
+  // This ONE call was **93% of a cold tag page**. Measured that day: a cold
+  // `/tag/*` render took 5.2 s, of which the nine TMDB calls above were ~0.35 s
+  // (150 ms each, and they run in parallel), RAWG was 0 (latched off), and the
+  // IGDB query alone took **4.3–4.7 s**, repeatably. It is the wildcard-contains
+  // scan over themes/keywords/genres in discoverIgdbByTags — expensive on IGDB's
+  // side, not ours, and nothing here can make it fast.
+  //
+  // Because it sits in the same `Promise.all` as the cheap calls, it gates the
+  // whole page: every other source was finished in under half a second and the
+  // render still waited four more.
+  //
+  // The budget does not help. It already passes BROWSE_BUDGET_MS (8 s), and a
+  // 4.5 s call never trips an 8 s budget — it just spends it. Tightening the
+  // budget instead of caching would be actively wrong right now: RAWG's monthly
+  // quota is exhausted, so **IGDB is the only games source left**, and a page
+  // that drops it shows no games at all. That is the two-source-medium invariant
+  // (AGENTS.md) pointing the other way for once.
+  //
+  // So: cache the RESULT on its own key, for 7 days. The page cache above has a
+  // 24 h TTL and a 12,000-row cap that a crawler churns through, so a page-cache
+  // miss is common and used to re-pay the full 4.5 s. Now it re-pays it once a
+  // week per tag. Same store and same TTL as the similar-rail provider top-up,
+  // which is cached for exactly this reason.
+  //
+  // An empty result IS cached, deliberately: a tag IGDB genuinely knows no games
+  // for must not re-ask on every cold render. That is safe here in a way it is
+  // not in discoverFeed.ts, because `discoverIgdbByTags` already try/catches to
+  // `[]` — so this cache cannot distinguish "no games" from "call failed", and
+  // caching a failure for 7 days would be a real regression. It is bounded by
+  // the fact that the alternative is re-paying 4.5 s on every crawler hit; if
+  // games start vanishing from tag pages, THIS is the first thing to suspect.
+  const IGDB_TAG_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   let igdbGames: any[] = [];
-  if (igdbConfigured()) reqs.push(discoverIgdbByTag(key, 40).then((results) => { igdbGames = results; }));
+  if (igdbConfigured()) {
+    const igdbKey = `igdbtag:v1:${key}`;
+    const cached = readFacetCache(igdbKey, IGDB_TAG_TTL_MS);
+    if (cached) {
+      try { igdbGames = JSON.parse(cached) as any[]; } catch { igdbGames = []; }
+    } else {
+      reqs.push(discoverIgdbByTag(key, 40).then((results) => {
+        igdbGames = results;
+        try { writeFacetCache(igdbKey, JSON.stringify(results)); } catch { /* cache is best-effort */ }
+      }));
+    }
+  }
 
   await Promise.all(reqs);
 
