@@ -242,18 +242,21 @@ of this.
 
 Short, and none of it is a leftover from §2.
 
-1. **Re-read `hostGates` and `caches` in `/api/health` after a day of traffic.**
-   Both shipped as instruments, not just fixes. `hostGates["api.igdb.com"]` with
-   `queuedTotal: 0` would mean IGDB concurrency was never the problem after the
-   browse page cache landed; a rising `maxQueued` means the gate is doing real
-   work. And `caches` now reports the TRUE process-wide entry count, so a figure
-   above the `max` each cache was sized to is the per-bundle duplication finally
-   showing itself.
+1. ✅ **Cache and pool weights are measured** (2026-08-23, `docs/scalability.md` §6).
+   `GET /api/dev/dbsize?caches=1` samples them. The result inverted the
+   assumption: the discovery pool, the one thing that cannot be capped, is
+   **5.2 MB**, while `facetCache.derived` is **33 MB** and the three big caches
+   are authorised to reach **~188 MB**. Not urgent (2.5% of the ceiling), but
+   catalog growth now has a known slope of **2.6 MB per 1,000 items**.
 
-2. **Decide whether the 12% stale projection is worth a sweep.** Now visible in
-   `/api/dev/dbsize` as `projectionVersions`. Visibility was the whole of item
-   2.4 on purpose; re-projecting is a separate call, and a version bump does not
-   automatically deserve a heavy migration.
+   ⏸️ **The IGDB gate is still unmeasured.** `queuedTotal: 0, maxInFlight: 1`
+   after 13 minutes and one request is evidence of no traffic, not of a
+   pointless gate. Re-read it after a real crawler sweep.
+
+2. ✅ **Projection staleness: no sweep needed.** Prod reads **2.4%** (94 rows at
+   v0, 13 at v1, 4,406 at v3), not the 12% quoted in §2.4. That figure came from
+   the LOCAL database, which is a different and staler catalog. Now visible in
+   `/api/dev/dbsize` either way.
 
 3. **The 340 MB WAL is NOT reclaimable in prod, and that is the right answer.**
    Attempted and measured, rather than assumed. `POST /api/dev/prune

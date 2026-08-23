@@ -247,3 +247,58 @@ The standing guidance not to contact TMDB or Trakt while operating on their free
 tiers still applies. The point here is only that the cost side of the ads model
 is larger and lumpier than the doc currently assumes, and the largest single
 lever on it is §4.1, which is an engineering change rather than a payment.
+
+---
+
+## 6. Cache and pool WEIGHTS, measured at last (2026-08-23)
+
+§3.5 said "cache bounds are entry counts, not bytes" and stayed open because
+nothing could answer what a `max: 3000` was actually authorising.
+`GET /api/dev/dbsize?caches=1` answers it now, by sampling 25 entries per holder
+and multiplying.
+
+| Holder | Entries | Cap | Mean each | Now | **At its cap** |
+|---|--:|--:|--:|--:|--:|
+| `facetCache.derived` | 2,023 | 6,000 | 16.8 KB | 33 MB | **98 MB** |
+| `publicFacet.page` | 1 | 3,000 | 18.9 KB | ~0 | **55 MB** |
+| `publicDetail` | 1 | 1,000 | 36.5 KB | ~0 | **35 MB** |
+| discovery pool | 2,023 items | **none** | 2.6 KB | 5.2 MB | +2.6 MB / 1,000 items |
+
+**The structure that cannot be capped is the small one.** `_cache.vectors` in
+`discovery.ts` is one `DiscoveryVector` per pool item plus a `byId` Map over the
+same objects, bounded by nothing but catalog size, and it is **5 MB**.
+`facetCache.derived` is six times larger. That inverts the assumption §3.5 was
+written under.
+
+**Do not cap the pool.** It IS the candidate set for the Fandex Score, "More
+like this" and the IDF weights, so evicting from it does not lose a cache entry,
+it silently changes everyone's scores. Correctness-bearing structures get
+measured and planned for. The number to carry forward is the slope: **2.6 MB of
+resident memory per 1,000 catalog items.**
+
+**The three caches together are authorised to reach ~188 MB** while using 33 MB.
+Against a 7,629 MB ceiling that is 2.5%, so this is not urgent and the caps are
+not dangerous. They were simply unexamined, and now catalog growth has a known
+slope instead of an unknown one.
+
+⚠️ These are **sampled serialised sizes**, not retained heap. JSON has no object
+headers or Map overhead so it under-counts; sub-objects shared between entries
+are counted once in heap and once per entry here so it over-counts. Good for an
+order of magnitude and for budgeting. For an actual memory figure read
+`memoryMb.heapUsed` as a time series, which this repo has got wrong twice from
+spot samples.
+
+### The IGDB concurrency gate is still unmeasured
+
+`hostGates` reports `queuedTotal: 0, maxInFlight: 1` after 13 minutes of uptime
+and **one** IGDB request. That is not evidence the gate is unnecessary; it is
+evidence there is no traffic. IGDB projects to ~3,351 calls/month and has no
+monthly cap, so the gate is cheap insurance that has not yet had anything to
+insure against. **Re-read it after a real crawler sweep**, not after an idle
+container.
+
+### Projection staleness is 2.4% on prod, not the 12% measured locally
+
+`projectionVersions` on prod: 4,406 rows at v3, 13 at v1, 94 at v0 = **2.4%
+stale**. The 12% figure in `optimization-plan.md` §2.4 was measured against the
+LOCAL database, which is a different and staler catalog. No sweep is warranted.
