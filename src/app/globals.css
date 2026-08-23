@@ -279,10 +279,16 @@
    `:root` block, not `@theme`. See AGENTS.md's load-bearing invariants.
 
    `--color-game/-movie/-show` (no `media-` infix) duplicate the three above
-   1:1 and predate them; `--color-steam/-rawg/-trakt/-tmdb` are provider marks
-   with no token equivalent. All are still referenced as inline hex literals
-   throughout src/ rather than through var() — a sweep to make components
-   actually reference these tokens is H1.6d/e work, not a token-layer change. */
+   1:1 and predate them, and are kept because TYPE colour (game/movie/show) is a
+   live axis.
+
+   The per-provider marks `--color-steam/-rawg/-trakt/-tmdb` were REMOVED on
+   2026-08-23 (PL6). Platform colour-coding is gone site-wide (Nils,
+   2026-08-18): a provider is identified by its LOGO via `<BrandGlyph>`, in
+   every state including hover. Nothing read these tokens, and the older comment
+   here promised a sweep to make components reference them, which is the exact
+   opposite of the decision that followed. A dead brand token is an invitation,
+   so it goes rather than sitting here looking sanctioned. */
 :root {
   --color-media-game:  #4ade80;
   --color-media-movie: #f59e0b;
@@ -290,10 +296,6 @@
   --color-game: #4ade80;
   --color-movie: #f59e0b;
   --color-show: #a78bfa;
-  --color-steam: #1b9af7;
-  --color-rawg: #4ade80;
-  --color-trakt: #ed1c24;
-  --color-tmdb: #01b4e4;
 }
 
 /* ---- Interactive-surface hover fills (2026-08-18) --------------------------

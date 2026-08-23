@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { List, LayoutGrid, CalendarDays, SlidersHorizontal, ChevronDown, X } from "lucide-react";
-import { SOURCE_COLORS, SOURCE_LABELS, ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS } from "@/lib/constants";
 import SearchBar from "@/components/SearchBar";
 import FacetAutocomplete from "@/components/discovery/FacetAutocomplete";
 import type { FacetPill, VocabMatch } from "@/components/discovery/types";
@@ -31,9 +31,6 @@ interface SubBarProps {
   availableTypes?: string[];          // defaults to game/movie/show
 
   // Source filter chips (optional)
-  activeSources?: string[];
-  onToggleSource?: (s: string) => void;
-  availableSources?: string[];
 
   /** Tab strip (Library/Wishlist). Sits between the chips and the search box. */
   tabs?: React.ReactNode;
@@ -93,9 +90,6 @@ export default function SubBar({
   activeTypes,
   onToggleType,
   availableTypes = ["game", "movie", "show"],
-  activeSources = [],
-  onToggleSource,
-  availableSources = [],
   tabs,
   searchValue = "",
   onSearchChange,
@@ -216,23 +210,6 @@ export default function SubBar({
           <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-5">
             {/* 03-components.md §6a: circular icon chips, not text pills. */}
             <TypeFilter activeTypes={activeTypes} onToggleType={onToggleType} availableTypes={availableTypes} />
-
-            {availableSources.length > 0 && onToggleSource && (
-              <>
-                <div className="w-px h-4 bg-border-strong mx-1" />
-                {availableSources.map((s) => (
-                  <Chip
-                    key={s}
-                    active={activeSources.includes(s)}
-                    color={SOURCE_COLORS[s]}
-                    dot={SOURCE_COLORS[s]}
-                    onClick={() => onToggleSource(s)}
-                  >
-                    {SOURCE_LABELS[s] ?? s}
-                  </Chip>
-                ))}
-              </>
-            )}
 
             {hideRated && (
               <>

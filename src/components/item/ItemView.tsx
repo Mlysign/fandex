@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { EnrichedItem } from "@/types";
 import type { PublicEnrichedItem } from "@/lib/detail/enrich";
-import { SOURCE_COLORS, SOURCE_LABELS, TYPE_COLORS } from "@/lib/constants";
+import { SOURCE_LABELS, TYPE_COLORS } from "@/lib/constants";
 import BrandGlyph from "@/components/BrandGlyph";
 import { fmtDate, fmtRuntime } from "./format";
 import MediaGallery from "./MediaGallery";
