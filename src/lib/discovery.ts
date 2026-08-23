@@ -535,6 +535,61 @@ function getCache() {
 // Public: invalidate after a fetch-more ingest so new items appear immediately.
 export function invalidateDiscoveryCache() { _cache = null; }
 
+// ── What the POOL weighs, and how fast it grows (2026-08-23) ─────────────────
+//
+// ⚠️ THIS IS THE BIGGEST SINGLE THING IN MEMORY AND IT WAS COMPLETELY INVISIBLE.
+// `_cache.vectors` is one DiscoveryVector per pool item in a plain array, plus a
+// `byId` Map over the same objects, plus the vocab, IDF and tag counts derived
+// from them. It is bounded by NOTHING except how many items the catalog holds,
+// and `cacheWeights()` cannot see it because it is a bare module-level `let`,
+// not a `sharedCache`. Memory is 77% of the Railway bill, so "the largest
+// consumer is unmeasured" was the real gap behind scalability.md §3.5.
+//
+// ⚠️ AND IT MUST NOT BE CAPPED. A BoundedCache here would be actively wrong:
+// the pool IS the candidate set for the Fandex Score, "More like this" and the
+// IDF weights, so evicting from it does not lose a cache entry, it silently
+// changes everyone's scores and rankings. Correctness-bearing structures get
+// measured and planned for, not truncated. The right response to it growing is
+// to know the rate and the runway, which is what this reports.
+//
+// Sampled and estimated on the same terms as cacheWeights(): serialised size,
+// not retained heap, good for an order of magnitude and not to be quoted as a
+// memory figure. `perItemBytes` is the number that matters — multiply it by the
+// catalog size you are contemplating.
+export function poolWeight(): {
+  items: number;
+  sampled: number;
+  perItemBytes: number | null;
+  estimatedBytes: number | null;
+  vocabTerms: number;
+  /** Serialised bytes per 1,000 catalog items, for projecting growth. */
+  bytesPer1kItems: number | null;
+} {
+  const c = getCache();
+  const items = c.vectors.length;
+  if (items === 0) {
+    return { items: 0, sampled: 0, perItemBytes: null, estimatedBytes: 0, vocabTerms: c.vocab.length, bytesPer1kItems: null };
+  }
+  const n = Math.min(25, items);
+  let total = 0, ok = 0;
+  for (let i = 0; i < n; i++) {
+    // Spread the sample across the array rather than taking the head: the pool
+    // is built in a deterministic order, so the first 25 are systematically the
+    // same kind of row and would bias a mean.
+    const v = c.vectors[Math.floor((i * items) / n)];
+    try { total += JSON.stringify(v)?.length ?? 0; ok++; } catch { /* skip */ }
+  }
+  const per = ok > 0 ? Math.round(total / ok) : null;
+  return {
+    items,
+    sampled: ok,
+    perItemBytes: per,
+    estimatedBytes: per === null ? null : per * items,
+    vocabTerms: c.vocab.length,
+    bytesPer1kItems: per === null ? null : per * 1000,
+  };
+}
+
 // The catalog-wide IDF map (facetId → rarity weight). Exposed so the live
 // discover feed can score off-catalog (upcoming) items with the same rarity
 // signal; facets unseen in the catalog fall back to idf 1 at the call site.

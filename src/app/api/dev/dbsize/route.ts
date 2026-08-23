@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { readDbSize } from "@/lib/dbSize";
 import { cacheWeights } from "@/lib/boundedCache";
+import { poolWeight } from "@/lib/discovery";
 
 // Reads live DB state — never prerender this at build time.
 export const dynamic = "force-dynamic";
@@ -29,6 +30,6 @@ export const GET = withScoringAdmin(async (req: NextRequest) => {
   const wantCaches = req.nextUrl.searchParams.get("caches") === "1";
   return NextResponse.json({
     ...readDbSize({ deep }),
-    ...(wantCaches ? { cacheWeights: cacheWeights() } : {}),
+    ...(wantCaches ? { cacheWeights: cacheWeights(), poolWeight: poolWeight() } : {}),
   });
 });
