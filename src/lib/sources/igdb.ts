@@ -236,3 +236,36 @@ export function igdbReleaseDate(game: any): string | null {
   }
   return null;
 }
+
+// ── Franchise membership (2026-08-23) ────────────────────────────────────────
+//
+// Every game IGDB files under a franchise, whether or not we hold it. The
+// franchise rail could previously only list catalog rows, so it silently
+// understated most franchises.
+//
+// ⚠️ THESE LISTS ARE LARGE AND THAT IS THE WHOLE POINT OF MEASURING FIRST.
+// Sampled across 15 of our franchises that day: **average 78 games, largest
+// 394** (franchise 1, "Star Wars"), against 4.8 for a TMDB collection. So this
+// is deliberately capped, and the caller stores ~200-byte rows rather than
+// catalog entries — ingesting all of them would have grown the catalog 6.4x.
+//
+// `limit 500` is IGDB's own per-request maximum. Anything past it is truncated
+// rather than paginated, on purpose: a rail shows at most a few dozen, and a
+// franchise with more than 500 entries is one where the tail is ports and
+// bundles nobody is looking for.
+const FRANCHISE_MEMBER_CAP = 500;
+
+export async function getIgdbFranchiseGames(franchiseId: number): Promise<any[]> {
+  if (!igdbConfigured()) return [];
+  // NOT try/caught, unlike the browse helpers above. This one is driven by the
+  // sweep, which must be able to tell "this franchise has no games" from "the
+  // call failed" — swallowing the error here would write an empty membership
+  // and make an outage look like an authoritative answer. Same shape as the
+  // prune invariant, one layer out.
+  return igdbQuery(
+    "games",
+    `fields name,first_release_date,cover.image_id,total_rating_count,category;` +
+      ` where franchises = (${safeInt(franchiseId, 0)}) & version_parent = null;` +
+      ` sort total_rating_count desc; limit ${FRANCHISE_MEMBER_CAP};`
+  );
+}

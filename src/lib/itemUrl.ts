@@ -12,6 +12,11 @@ export interface InspectableItem {
   /** The public url address segment. When absent, buildItemHref emits the
    *  legacy uuid url, which permanently redirects to the slug one. */
   slug?: string | null;
+  /** An explicit destination that overrides the id/slug derivation entirely.
+   *  Set only by a card that is NOT a catalog row and so has no item url of its
+   *  own — today that is a franchise member we do not hold, pointing at the /r
+   *  resolver (2026-08-23). See buildItemHref. */
+  href?: string;
   releaseDate?: string | null;
   posterUrl?: string | null;
   // Watchlist / library shape
@@ -41,6 +46,11 @@ export const SOURCE_PARAM: Record<string, string> = Object.fromEntries(
 // into a source→id map and pick a "best" source to address a discover item by,
 // because those items had no row yet.
 export function buildItemHref(item: InspectableItem): string {
+  // An explicit href wins (2026-08-23). A franchise member we do not hold has
+  // no uuid and no slug, so publicItemHref has nothing to build from — it would
+  // emit a url that hard-404s. Such a card carries a /r resolver destination
+  // instead, which ingests the title on demand and redirects to its real page.
+  if (item.href) return item.href;
   return publicItemHref(item);
 }
 

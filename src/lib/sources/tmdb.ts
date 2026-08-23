@@ -138,3 +138,25 @@ export async function deleteTmdbRating(sessionId: string, mediaType: "movie" | "
   });
   if (!res.ok) throw new Error(`TMDB rating delete: ${res.status}`);
 }
+
+// ── Collection membership (2026-08-23) ───────────────────────────────────────
+//
+// Every film TMDB files under a collection, whether or not we hold it. The
+// franchise rail could previously only list catalog rows, and measured that day
+// **167 of our 249 distinct collections held exactly ONE title** — so for two
+// thirds of films with a franchise the rail showed nothing at all, while TMDB
+// knew the full list the whole time. We already stored the collection's NAME
+// (facets.ts reads belongs_to_collection.name as a label) and never once asked
+// what was in it.
+//
+// Cheap, unlike its IGDB counterpart: sampled over 25 of our real collections,
+// **4.8 members and ~4 KB per collection** (against IGDB's average of 78 games).
+//
+// THROWS on a bad response, like every other tmdbGet caller. The sweep needs to
+// tell "this collection has one film" from "the call failed" — writing an empty
+// membership on an error would turn an outage into an authoritative answer.
+export async function getTmdbCollection(id: number): Promise<{ name: string; parts: any[] } | null> {
+  const data = await tmdbGet(`/collection/${id}`);
+  if (!data || !Array.isArray(data.parts)) return null;
+  return { name: String(data.name ?? ""), parts: data.parts };
+}

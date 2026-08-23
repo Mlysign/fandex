@@ -41,4 +41,9 @@ export interface MediaCardItem {
    *  not every payload carries it yet: publicItemHref falls back to the legacy
    *  uuid url, which 308s. Thread it wherever a card is built. */
   slug?: string | null;
+  /** An explicit destination overriding the id/slug derivation (2026-08-23).
+   *  Set only on a card with no catalog row behind it — a franchise member we
+   *  do not hold — which points at the /r resolver instead of a url that would
+   *  hard-404. See buildItemHref. */
+  href?: string;
 }

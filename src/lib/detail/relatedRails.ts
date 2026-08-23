@@ -45,8 +45,9 @@ import {
   type DiscoveryVector, type Profile,
 } from "@/lib/discovery";
 import { rankSimilar } from "@/lib/similarItems";
-import { franchiseForItem } from "@/lib/franchise";
-import { applyIpFacets } from "@/lib/ipAlias";
+import { franchiseForItem, type FranchiseEntry } from "@/lib/franchise";
+import { getFranchiseMembers } from "@/lib/franchiseMembers";
+import { applyIpFacets, canonicalIpKey } from "@/lib/ipAlias";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import type { Facet } from "@/lib/facets";
 import type { MediaLink, MediaType } from "@/types";
@@ -80,6 +81,11 @@ export interface RailItem {
   fandexCenter: number | null;
   /** False = a top-up title with no local row, so `id` is a provider id. */
   linkable?: boolean;
+  /** An explicit destination, overriding the id/slug derivation. Set only on a
+   *  franchise member the catalog does not hold: it has no uuid and no slug, so
+   *  `publicItemHref` would emit a url that hard-404s. Points at the /r
+   *  resolver, which ingests on click. */
+  href?: string;
 }
 
 export interface LocalRails {
@@ -142,7 +148,21 @@ export function buildLocalRails(
   // rail, and rankSimilar is asked for enough extra candidates to absorb the
   // drop. That widening is free: its cost is the per-facet candidate SCAN,
   // which is already capped, not the final slice.
-  const franchise = franchiseForItem(id, facets, itemsWithFacet);
+  // `absentForFacet` is what makes the rail show a COMPLETE franchise rather
+  // than the slice we happen to hold. Measured 2026-08-23: 167 of the catalog's
+  // 249 TMDB collections held exactly one title. The rows come from the sweep
+  // (/api/dev/franchise-sweep), so this is a local read — the rail still makes
+  // zero provider calls, which is the property the whole design hangs on.
+  //
+  // Aliases resolve HERE, at read time: franchise_members stores the raw
+  // ipKey(), because a canonical key persisted in a row goes stale the moment
+  // somebody edits a bundle. See franchiseMembers.ts.
+  const franchise = franchiseForItem(id, facets, itemsWithFacet, undefined, (f) =>
+    getFranchiseMembers(canonicalIpKey(f.key)).map((m) => ({
+      source: m.source, sourceId: m.sourceId, type: m.type, title: m.title,
+      releaseDate: m.releaseDate, posterUrl: m.posterUrl, popularity: m.popularity,
+    }))
+  );
   const inFranchise = new Set(franchise?.items.map((v) => v.id) ?? []);
   const ranked = rankSimilar(id, facets, idf, itemsWithFacet, RAIL_CAP + inFranchise.size)
     .filter(({ vector }) => !inFranchise.has(vector.id))
@@ -160,8 +180,35 @@ export function buildLocalRails(
     };
   };
 
+  // A provider-only member has no catalog row, so it has no uuid, no slug and
+  // no Fandex Score. It carries an explicit `href` to the /r resolver instead,
+  // which ingests it on click and forwards to the real page — see
+  // app/r/[source]/[type]/[id]/page.tsx for why that is a doorway rather than a
+  // pre-ingest. `linkable` stays TRUE: the card genuinely goes somewhere.
+  const entryToRow = (e: FranchiseEntry): RailItem =>
+    e.kind === "held"
+      ? toRow(e.vector)
+      : {
+          id: `${e.outsider.source}:${e.outsider.sourceId}`,
+          type: e.outsider.type,
+          title: e.outsider.title,
+          slug: null,
+          posterUrl: e.outsider.posterUrl,
+          releaseDate: e.outsider.releaseDate,
+          communityScore: null,
+          sources: [{ source: e.outsider.source, sourceId: e.outsider.sourceId }],
+          href: `/r/${e.outsider.source}/${e.outsider.type}/${e.outsider.sourceId}`,
+          linkable: true,
+          // Null rather than pending. `fandexPending` means "signed in and the
+          // row is too thin to score honestly, so hydrate it" — but there is no
+          // row to hydrate here, so the client hook would fire a request that
+          // can never resolve. Null is the honest answer: no score is coming.
+          fandexScore: null,
+          fandexCenter: null,
+        };
+
   return {
-    franchise: franchise ? { label: franchise.label, items: franchise.items.map(toRow) } : null,
+    franchise: franchise ? { label: franchise.label, items: franchise.entries.map(entryToRow) } : null,
     items: ranked.map(({ vector }) => toRow(vector)),
   };
 }

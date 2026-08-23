@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { franchiseForItem } from "./franchise";
+import type { FranchiseOutsider } from "./franchise";
 import { ipDisplayLabel } from "@/lib/facets";
 import type { Facet } from "@/lib/facets";
 import type { DiscoveryVector } from "@/lib/discovery";
@@ -151,5 +152,95 @@ describe("franchiseForItem", () => {
     // Ties fall back to recency, so the newest two survive rather than an
     // arbitrary pair.
     expect(once.items.map((v) => v.id)).toEqual(["c", "b"]);
+  });
+});
+
+// ── Titles the provider has and the catalog does not (2026-08-23) ───────────
+//
+// THE GAP THIS CLOSES, measured on the real catalog that day: **167 of 249
+// distinct TMDB collections held exactly ONE title**, so two thirds of films
+// carrying a franchise showed no rail at all. Not because the franchise was
+// wrong — because `franchiseForItem` only ever looked at our own shelf, while
+// `belongs_to_collection.name` had been sitting in the stored payload as a
+// LABEL the whole time and nobody ever asked what was in the collection.
+//
+// `absentForFacet` is injected for the same reason `candidatesForFacet` is:
+// this module stays pure, so the merge is testable without a DB or a provider.
+describe("franchiseForItem with provider-only members", () => {
+  const outsider = (
+    sourceId: string, title: string, releaseDate: string | null, popularity: number | null = 0
+  ): FranchiseOutsider => ({
+    source: "tmdb", sourceId, type: "movie", title, releaseDate, posterUrl: null, popularity,
+  });
+
+  const held = (id: string, date: string, sourceId: string, votes = 0): DiscoveryVector => ({
+    ...vector(id, "movie", date),
+    communityVotes: votes,
+    sources: [{ source: "tmdb", sourceId }],
+  });
+
+  it("shows a rail for a franchise where the catalog holds ONLY the item itself", () => {
+    // The exact 167-of-249 case. Before this the rail was null.
+    const self = held("self", "2021-10-22", "438631");
+    const g = franchiseForItem("self", [STAR_WARS], () => [self], 40,
+      () => [outsider("693134", "Dune: Part Two", "2024-02-27")])!;
+    expect(g).not.toBeNull();
+    expect(g.entries).toHaveLength(1);
+    expect(g.entries[0].kind).toBe("absent");
+    expect(g.entries[0].title).toBe("Dune: Part Two");
+    // `items` is catalog rows only, so it is legitimately empty here — the rail
+    // still renders because `entries` is what it draws from.
+    expect(g.items).toHaveLength(0);
+  });
+
+  it("dedupes an outsider against a catalog row by (source, sourceId), not by title", () => {
+    // A franchise routinely contains a remake sharing a title, and the same
+    // film reaches us under different titles per provider, so a title match
+    // would be wrong in BOTH directions.
+    const g = franchiseForItem("self", [STAR_WARS],
+      () => [held("self", "1977-05-25", "11"), held("sibling", "1980-05-21", "1891", 500)], 40,
+      () => [outsider("1891", "The Empire Strikes Back", "1980-05-21", 900), outsider("1892", "Return of the Jedi", "1983-05-25", 800)]
+    )!;
+    // 1891 is already held, so it appears ONCE, as the catalog row.
+    expect(g.entries).toHaveLength(2);
+    expect(g.entries.filter((e) => e.kind === "absent").map((e) => e.title)).toEqual(["Return of the Jedi"]);
+    expect(g.entries.filter((e) => e.kind === "held")).toHaveLength(1);
+  });
+
+  it("never offers the VIEWED item back as an absent member of its own franchise", () => {
+    const self = held("self", "1977-05-25", "11");
+    const g = franchiseForItem("self", [STAR_WARS], () => [self], 40,
+      () => [outsider("11", "Star Wars", "1977-05-25"), outsider("1891", "Empire", "1980-05-21")])!;
+    expect(g.entries.map((e) => e.title)).toEqual(["Empire"]);
+  });
+
+  it("ranks held rows and provider-only titles in ONE pool, not two concatenated lists", () => {
+    // The failure being pinned: ranking separately puts every catalog row ahead
+    // of every provider row regardless of which title is more notable — the
+    // same "a selection must rank by the quantity that matters" mistake the
+    // Score's top-N buckets made (AGENTS.md, 2026-08-22).
+    const g = franchiseForItem("self", [STAR_WARS],
+      () => [held("obscure", "2005-01-01", "999", 3)], 1,
+      () => [outsider("1891", "Famous Sequel", "1980-05-21", 9000)]
+    )!;
+    expect(g.entries).toHaveLength(1);
+    expect(g.entries[0].title).toBe("Famous Sequel");
+    // And the derived `items` agrees rather than quietly keeping the held row.
+    expect(g.items).toHaveLength(0);
+  });
+
+  it("still displays the merged rail newest-first", () => {
+    const g = franchiseForItem("self", [STAR_WARS],
+      () => [held("old", "1999-05-19", "1893", 100)], 40,
+      () => [outsider("1894", "Attack of the Clones", "2002-05-16", 100)]
+    )!;
+    expect(g.entries.map((e) => e.title)).toEqual(["Attack of the Clones", "old"]);
+  });
+
+  it("is unchanged when no absentForFacet is supplied at all", () => {
+    const g = franchiseForItem("self", [STAR_WARS],
+      () => [held("self", "1977-05-25", "11"), held("sibling", "1980-05-21", "1891")], 40)!;
+    expect(g.entries).toHaveLength(1);
+    expect(g.entries[0].kind).toBe("held");
   });
 });

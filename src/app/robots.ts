@@ -44,7 +44,16 @@ const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "
 // H1.6c IA restructure: /wishlist (was /dashboard), plus new authed /calendar
 // and /profile — all private, keep crawlers out. /dashboard stays listed (it now
 // 308-redirects to /wishlist, harmless to keep disallowing).
-const DISALLOW = ["/api/", "/dashboard", "/wishlist", "/calendar", "/profile", "/discover", "/library", "/insights", "/settings", "/item", "/*?sort="];
+// 2026-08-23 — `/r/` is the franchise rail's resolver doorway
+// (/r/{source}/{type}/{id}). It is not content: it ingests one provider title
+// on demand and 307s to the real item page, which IS the canonical, indexable
+// url. Disallowing it and its own `noindex` are BOTH required and neither is
+// redundant — noindex is only seen by a crawler that fetches the page, and a
+// Disallow alone would not stop the destination being reached from a link
+// elsewhere. The point of the Disallow is that this route makes a provider call
+// and writes a catalog row, so a crawl of it would spend quota and grow the
+// catalog with titles nobody asked for.
+const DISALLOW = ["/api/", "/dashboard", "/wishlist", "/calendar", "/profile", "/discover", "/library", "/insights", "/settings", "/item", "/r/", "/*?sort="];
 
 export default function robots(): MetadataRoute.Robots {
   return {

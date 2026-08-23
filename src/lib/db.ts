@@ -193,6 +193,53 @@ function ensureSchema(db: Database.Database) {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_facet_page_cache_created ON facet_page_cache(created_at);
+
+    -- ── Franchise membership (2026-08-23) ─────────────────────────────────
+    -- What a franchise ACTUALLY contains, per provider, whether or not we hold
+    -- the title. The item page's "More from …" rail could only ever list
+    -- catalog rows before this, and the catalog is thin where franchises are
+    -- concerned: measured that day, 167 of our 249 distinct TMDB collections
+    -- held exactly ONE title, so two thirds of films with a franchise showed no
+    -- rail at all while TMDB knew the full list.
+    --
+    -- ⚠️ THIS IS WHY IT IS A SEPARATE TABLE AND NOT media_items ROWS. Two
+    -- reasons, either one sufficient:
+    --   1. COST. IGDB franchises average 78 games and the largest we touch
+    --      holds 394, against 4.8 for a TMDB collection. Ingesting every member
+    --      would take the catalog from 2,569 to ~16,500 items — a 6.4x resident
+    --      discovery pool (discovery.ts holds a DiscoveryVector per item) and a
+    --      6.4x crawl surface. Railway bills RAM at ~$10/GB-month against a $5
+    --      Hobby credit, so that is the line item that hurts; volume storage is
+    --      $0.155/GB-month and never was the problem. These rows are ~200 bytes,
+    --      so the whole membership set is a few MB.
+    --   2. IT WOULD NOT SURVIVE. A pre-ingested member is browsed = 1, and
+    --      dbPrune deletes browsed-only rows on every boot, so the franchise
+    --      would empty itself on the next deploy.
+    --
+    -- ⚠️ ip_key IS THE RAW ipKey(), NOT the canonical one. Aliases and bundles
+    -- are runtime-editable (ipAlias.ts), so a canonical key persisted here would
+    -- go stale the moment somebody edits a bundle, and re-canonicalising a
+    -- stored key is the trap AGENTS.md flags for tagKey. Callers resolve
+    -- aliases at READ time instead, exactly like facets do.
+    --
+    -- No user_id, deliberately: this is catalog data, so GDPR erasure correctly
+    -- skips it (deleteAccount finds personal tables by that column name). It
+    -- also does not reference media_items, so it is not a dbPrune PRUNABLE_WHERE
+    -- concern -- nothing here cascades off an item row.
+    CREATE TABLE IF NOT EXISTS franchise_members (
+      ip_key TEXT NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      release_date TEXT,
+      poster_url TEXT,
+      popularity REAL,
+      fetched_at INTEGER NOT NULL,
+      PRIMARY KEY (ip_key, source, source_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_franchise_members_key ON franchise_members(ip_key);
+    CREATE INDEX IF NOT EXISTS idx_franchise_members_fetched ON franchise_members(fetched_at);
   `);
 
   // ── Lightweight migrations for existing databases ──────────────
