@@ -71,6 +71,20 @@ export class BoundedCache<K, V> {
     return this.m.keys();
   }
 
+  /**
+   * Up to `n` live values, for the byte sampler below. Not `values()`: handing
+   * out the whole collection invites a caller to walk it on a request path,
+   * which for `facetCache.derived` is thousands of objects.
+   */
+  sample(n: number): V[] {
+    const out: V[] = [];
+    for (const e of this.m.values()) {
+      if (out.length >= n) break;
+      if (this.fresh(e)) out.push(e.v);
+    }
+    return out;
+  }
+
   get size(): number {
     return this.m.size;
   }
@@ -127,4 +141,70 @@ export function cacheSnapshot(): Record<string, number> {
 /** Test seam: empty every shared cache without discarding the instances. */
 export function __clearSharedCaches(): void {
   for (const c of _registry.values()) c.clear();
+}
+
+// ── What a cache actually WEIGHS (2026-08-23) ────────────────────────────────
+//
+// ⚠️ EVERY CACHE HERE IS BOUNDED BY ENTRY COUNT, NOT BY BYTES, and those are
+// very different budgets when the entries are payloads rather than ids.
+// `docs/scalability.md` §3.5 has flagged this since the `facet_page_cache`
+// incident, and it stayed open because nothing could answer "how many bytes is
+// `max: 3000` actually authorising?" — `cacheSnapshot()` reports 3000 either way.
+//
+// This is that answer, by SAMPLING rather than by walking. `JSON.stringify` over
+// every entry of `facetCache.derived` is thousands of objects and would be an
+// expensive thing to expose; a sample of 25 gives a mean that is easily good
+// enough to set a budget against, which is all this is for.
+//
+// ⚠️ IT IS AN ESTIMATE OF SERIALISED SIZE, NOT OF RETAINED HEAP, and the two
+// differ in both directions. JSON has no object headers, pointers or Map
+// overhead, so it UNDER-counts; but shared sub-objects (the same facet array
+// referenced by several entries) are counted once in heap and once per entry
+// here, so it OVER-counts. Treat it as an order of magnitude for budgeting, and
+// never quote it as a memory figure — for that, read `memoryMb.heapUsed`
+// against a time series (AGENTS.md: a spot sample has mis-diagnosed this twice).
+//
+// Admin-gated at the call site, and deliberately NOT in /api/health: that probe
+// is public and Railway hits it constantly.
+const SAMPLE_SIZE = 25;
+
+export interface CacheWeight {
+  entries: number;
+  /** How many entries the sample actually covered. */
+  sampled: number;
+  /** Mean serialised bytes per entry, from the sample. */
+  meanBytes: number | null;
+  /** meanBytes x entries. Null when nothing could be measured. */
+  estimatedBytes: number | null;
+}
+
+export function cacheWeights(): Record<string, CacheWeight> {
+  const out: Record<string, CacheWeight> = {};
+  for (const [name, c] of _registry) {
+    const entries = c.size;
+    if (entries === 0) {
+      out[name] = { entries: 0, sampled: 0, meanBytes: null, estimatedBytes: 0 };
+      continue;
+    }
+    const vals = c.sample(SAMPLE_SIZE);
+    let total = 0, ok = 0;
+    for (const v of vals) {
+      try {
+        // A cache of primitives (id lookups) stringifies to a few bytes, which
+        // is the correct answer for those and worth seeing next to the fat ones.
+        total += JSON.stringify(v)?.length ?? 0;
+        ok++;
+      } catch {
+        // Circular or non-serialisable: skip it rather than fail the report.
+      }
+    }
+    const mean = ok > 0 ? Math.round(total / ok) : null;
+    out[name] = {
+      entries,
+      sampled: ok,
+      meanBytes: mean,
+      estimatedBytes: mean === null ? null : mean * entries,
+    };
+  }
+  return out;
 }
