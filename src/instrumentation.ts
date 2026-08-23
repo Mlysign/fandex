@@ -57,5 +57,20 @@ export async function register() {
       void boundFacetCache().catch((e) => log.error("facet_cache_sweep_uncaught", errorFields(e)));
     }, FACET_CACHE_INTERVAL_MS);
     timer.unref?.();
+
+    // PL4 — the same treatment for import staging, and for the same reason.
+    // `import_staging` holds a parsed import for somebody who has no account
+    // yet, so it is written on a request path by anonymous callers: the exact
+    // shape that grew facet_page_cache above. It also holds personal data that
+    // account erasure can never reach, because it has no user_id to be found by,
+    // which makes this sweep a correctness requirement and not housekeeping.
+    const { startStagingSweep, sweepStaging } = await import("./lib/import/staging");
+    try {
+      const swept = sweepStaging();
+      if (swept > 0) log.info("import_staging_swept", { removed: swept });
+    } catch (e) {
+      log.error("import_staging_sweep_uncaught", errorFields(e));
+    }
+    startStagingSweep();
   }
 }

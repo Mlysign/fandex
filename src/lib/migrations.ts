@@ -781,6 +781,84 @@ export const MIGRATIONS: Migration[] = [
       db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_type_slug ON media_items(type, slug)");
     },
   },
+  {
+    version: 20,
+    name: "import staging + imdb pseudo-source links (PL4)",
+    up: (db) => {
+      // PL4, 2026-08-23. Two tables' worth of groundwork for the list import.
+      //
+      // 1. IMDB AS A PSEUDO-SOURCE.
+      //
+      // An IMDb CSV carries a tconst, which is the only hard id either import
+      // format gives us, and imdbId already lives inside the tmdb/trakt rows'
+      // raw_data rather than anywhere indexed. Rather than adding a column and
+      // an index, an `imdb` row in media_links fits the EXISTING
+      // UNIQUE(source, source_id) and idx_links_source, so the lookup is one
+      // indexed query with no new schema at all.
+      //
+      // Backfilled here from what we already hold. json_extract over two shapes:
+      // TMDB nests it under external_ids, Trakt under ids.
+      //
+      // ⚠️ ORDER BY stays out of any aggregate argument list in this file
+      // FOREVER (migration 18's incident). Nothing here aggregates, but the rule
+      // is why this uses plain INSERT ... SELECT.
+      db.exec(`
+        INSERT OR IGNORE INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data)
+        SELECT
+          lower(hex(randomblob(16))),
+          l.media_item_id,
+          'imdb',
+          imdb_id,
+          NULL, NULL, '{}'
+        FROM (
+          SELECT
+            media_item_id,
+            COALESCE(
+              json_extract(raw_data, '$.external_ids.imdb_id'),
+              json_extract(raw_data, '$.imdb_id'),
+              json_extract(raw_data, '$.ids.imdb')
+            ) AS imdb_id
+          FROM media_links
+          WHERE source IN ('tmdb','trakt')
+        ) AS l
+        WHERE l.imdb_id IS NOT NULL AND l.imdb_id LIKE 'tt%'
+      `);
+
+      // 2. THE PRE-SIGNUP STAGING TABLE.
+      //
+      // Nils approved importing BEFORE an account exists (2026-08-23): drop the
+      // archive, see the matched films, then sign up to keep them. So the parsed
+      // result has to live somewhere between those two moments, and that
+      // somewhere is written on a request path by anonymous strangers.
+      //
+      // ⚠️ That is precisely the shape that grew facet_page_cache to 222 MB, so
+      // this table is bounded three ways from the start rather than after an
+      // incident: a byte ceiling per row (enforced in the route), a row ceiling
+      // and an interval sweep (both in importStaging.ts, NOT boot-only, because
+      // prod runs for days), and eviction by WRITE time.
+      //
+      // ⚠️ It deliberately has NO user_id. It holds data for somebody who has no
+      // account yet, so account erasure cannot cover it by construction
+      // (deleteAccount finds tables by a literal user_id column). The TTL is the
+      // only thing protecting these rows, which makes the sweep a correctness
+      // requirement rather than housekeeping. It is also why nothing here is a
+      // catalog write: staging stores the PARSE, not media_items rows.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS import_staging (
+          token       TEXT PRIMARY KEY,
+          source      TEXT NOT NULL,
+          payload     TEXT NOT NULL,
+          row_count   INTEGER NOT NULL DEFAULT 0,
+          byte_size   INTEGER NOT NULL DEFAULT 0,
+          created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        )
+      `);
+      // Evicting by write time is the whole point, so this is the index the
+      // sweep uses. Tracking READ time would turn every hit into a write, which
+      // is the shape that caused the facet_page_cache growth.
+      db.exec("CREATE INDEX IF NOT EXISTS idx_import_staging_created ON import_staging(created_at)");
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own
