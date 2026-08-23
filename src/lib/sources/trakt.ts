@@ -276,6 +276,36 @@ export async function getTraktCalendarShows(accessToken: string, daysPast = 365,
   } catch { return []; }
 }
 
+// PL2 (2026-08-23) — Trakt's ACCOUNT LIMITS, made legible.
+//
+// Trakt caps a free account's watchlist, its ratings and its number of personal
+// lists, and it signals a cap with its own status code: **420, "Account Limit
+// Exceeded"**, alongside an `X-Upgrade-URL` header pointing at VIP. Every write
+// helper below already threw on a non-ok response, so this was never a silent
+// failure at THIS layer. It became one a level up, where /api/watchlist caught
+// the throw, logged it and answered `{ ok: true }` anyway — so the item vanished
+// from the user's Trakt watchlist while Fandex said it had been added.
+//
+// ⚠️ Deliberately no number in the message. The cap is not one value: Trakt has
+// published different limits for new members, existing members and VIP, and has
+// changed them. Quoting "250" here would be wrong for most accounts and would
+// rot silently. Say the list is full, hand over Trakt's own upgrade URL, and let
+// Trakt state its own numbers.
+export const TRAKT_ACCOUNT_LIMIT = 420;
+
+export async function traktWriteError(res: Response, what: string): Promise<Error> {
+  const body = await res.text().catch(() => "");
+  if (res.status === TRAKT_ACCOUNT_LIMIT) {
+    const upgrade = res.headers.get("x-upgrade-url");
+    return new Error(
+      `Your Trakt account is at its limit, so ${what} did not save there. ` +
+      `Trakt caps watchlists, ratings and lists on free accounts` +
+      (upgrade ? `. Raise the cap at ${upgrade}` : "") + ".",
+    );
+  }
+  return new Error(`Trakt: ${what} failed (${res.status}) ${body}`.trim());
+}
+
 // Write-back: add movie to Trakt watchlist
 export async function addMovieToTraktWatchlist(accessToken: string, traktId: number) {
   const res = await httpFetch(`${BASE}/sync/watchlist`, {
@@ -283,10 +313,7 @@ export async function addMovieToTraktWatchlist(accessToken: string, traktId: num
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ movies: [{ ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to add to Trakt watchlist: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "adding this film to your watchlist");
 }
 
 export async function removeMovieFromTraktWatchlist(accessToken: string, traktId: number) {
@@ -295,10 +322,7 @@ export async function removeMovieFromTraktWatchlist(accessToken: string, traktId
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ movies: [{ ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to remove from Trakt watchlist: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "removing this film from your watchlist");
 }
 
 export async function removeShowFromTraktWatchlist(accessToken: string, traktId: number) {
@@ -307,10 +331,7 @@ export async function removeShowFromTraktWatchlist(accessToken: string, traktId:
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ shows: [{ ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to remove show from Trakt watchlist: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "removing this show from your watchlist");
 }
 
 export async function addShowToTraktWatchlist(accessToken: string, traktId: number) {
@@ -319,10 +340,7 @@ export async function addShowToTraktWatchlist(accessToken: string, traktId: numb
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ shows: [{ ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Failed to add show to Trakt watchlist: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "adding this show to your watchlist");
 }
 
 // Look up Trakt ID by TMDB ID
@@ -363,10 +381,7 @@ export async function rateTraktItem(
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [{ rating, ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Trakt rate failed: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "saving this rating");
 }
 
 // POST to Trakt /sync/history to mark a movie/show as watched
@@ -384,10 +399,7 @@ export async function markTraktWatched(
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [item] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error("Trakt mark watched failed: " + res.status + " " + body);
-  }
+  if (!res.ok) throw await traktWriteError(res, "marking this watched");
 }
 
 // Remove a rating from Trakt (/sync/ratings/remove). Used when the user clears
@@ -404,10 +416,7 @@ export async function removeTraktRating(
     headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ [key]: [{ ids: { trakt: traktId } }] }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Trakt remove rating failed: ${res.status} ${body}`);
-  }
+  if (!res.ok) throw await traktWriteError(res, "clearing this rating");
 }
 
 // ── Per-episode history (MB14) ────────────────────────────────────────────────

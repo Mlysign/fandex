@@ -20,6 +20,21 @@ export interface QuickActionItem {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// PL2 (2026-08-23). The API reports a per-provider write-back failure as
+// `warnings: ["trakt: …", "tmdb: …"]`. Both /api/library and /api/watchlist can
+// return it and NOTHING rendered either, so a provider refusing a write looked
+// exactly like a write that worked.
+//
+// The message the server builds is already written for a person (see
+// traktWriteError in sources/trakt.ts), so the only job here is to strip the
+// machine prefix and not stack several into an unreadable wall.
+export function platformWarning(warnings: string[]): string {
+  const first = String(warnings[0] ?? "").replace(/^[a-z0-9-]+:\s*/i, "");
+  const rest = warnings.length - 1;
+  if (!first) return "Saved here, but one connected platform did not take it.";
+  return rest > 0 ? `${first} (+${rest} more)` : first;
+}
+
 // SM1 — fired after a successful wishlist add/remove so list pages can react
 // (the wishlist page drops the row instead of showing it until the next
 // reload). A window event, not a threaded callback: these cards render under
@@ -84,6 +99,12 @@ export function useQuickActions(item: QuickActionItem) {
           detail: { id: mediaIdRef.current ?? item.id, onList: false },
         }));
       }
+      // /api/library has returned `warnings` since H2 and nobody ever rendered
+      // them, so a rating that Trakt refused (420 once a free account hits its
+      // ratings cap) looked identical to one it accepted. PL2, 2026-08-23.
+      if (Array.isArray(d.warnings) && d.warnings.length) {
+        toast(platformWarning(d.warnings), "error");
+      }
     } catch {
       setRating(prev); // revert on failure
       toast(n === null ? "Couldn't remove your rating. Please try again." : "Couldn't save your rating. Please try again.", "error");
@@ -101,6 +122,14 @@ export function useQuickActions(item: QuickActionItem) {
         if (!res.ok) throw new Error();
         const d = await res.json();
         if (d.mediaItemId) mediaIdRef.current = d.mediaItemId;
+        // PL2 (2026-08-23): the add SUCCEEDED locally but a connected platform
+        // refused it — Trakt answers 420 once a free account's watchlist is full.
+        // Show it. The route has always been able to report this and nothing
+        // rendered it, which left the user believing a write happened that did
+        // not. Not an error toast: the item really is on their Fandex wishlist.
+        if (Array.isArray(d.warnings) && d.warnings.length) {
+          toast(platformWarning(d.warnings), "error");
+        }
       } else {
         // Send identity too: discover/feed cards may not carry the local
         // media_item UUID, so the server resolves it from the source ids.

@@ -36,6 +36,14 @@ export const POST = withUser(async (req: NextRequest, session) => {
     // (if set) narrows the write-back to a single provider.
     const shouldWriteTo = (p: string) => !targetProvider || targetProvider === p;
     const year = releaseDate ? parseInt(String(releaseDate).slice(0, 4)) : undefined;
+    // PL2 (2026-08-23): collected and RETURNED, the way /api/library has always
+    // done it. This loop used to catch, log and answer `{ ok: true }` regardless,
+    // so a provider refusing the write was invisible to the person who asked for
+    // it. Trakt makes that concrete: it caps a free account's watchlist and
+    // answers 420, so past the cap the item silently stopped reaching Trakt while
+    // Fandex kept saying it had been added. The log line was the only evidence,
+    // and the user is the one person who cannot read it.
+    const platformErrors: string[] = [];
 
     for (const src of sourcesForType(type)) {
       if (!src.capabilities.wishlist.write || !shouldWriteTo(src.id)) continue;
@@ -70,10 +78,21 @@ export const POST = withUser(async (req: NextRequest, session) => {
         await src.pushWishlist!(ctx, sourceId, type, true);
         upsertWatchlistEntry(session.userId, mediaItemId, src.id);
         log.info("watchlist_writeback", { op: "add", source: src.id, sourceId, mediaItemId });
-      } catch (e) { log.error("watchlist_writeback_failed", { op: "add", source: src.id, mediaItemId, ...errorFields(e) }); }
+      } catch (e) {
+        log.error("watchlist_writeback_failed", { op: "add", source: src.id, mediaItemId, ...errorFields(e) });
+        platformErrors.push(`${src.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
 
-    return NextResponse.json({ ok: true, mediaItemId });
+    // `ok` stays true: the item IS on the Fandex watchlist, which is the local
+    // truth and the thing the caller asked for. The warning says which provider
+    // did not take it, so the UI can say so without pretending the whole action
+    // failed. Same contract as /api/library's `warnings`.
+    return NextResponse.json({
+      ok: true,
+      mediaItemId,
+      ...(platformErrors.length > 0 && { warnings: platformErrors }),
+    });
 });
 
 export const DELETE = withUser(async (req: NextRequest, session) => {
