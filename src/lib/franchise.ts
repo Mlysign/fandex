@@ -40,21 +40,54 @@ export interface FranchiseGroup {
 }
 
 /**
- * Oldest first, undated last, ties broken by title.
+ * NEWEST first, undated last, ties broken by title.
  *
- * A franchise is a timeline, so chronological beats every ranking we could
- * apply here — and unlike "More like this" below it, this rail is a complete
- * index rather than a recommendation, so it deliberately does NOT sort by the
- * viewer's taste. releaseDate is ISO `YYYY-MM-DD`, so a string compare IS a
- * date compare.
+ * A franchise is a timeline, so a date order beats every ranking we could apply
+ * to the DISPLAY — and unlike "More like this" below it, this rail is a
+ * complete index rather than a recommendation, so it deliberately does not sort
+ * by the viewer's taste. releaseDate is ISO `YYYY-MM-DD`, so a string compare
+ * IS a date compare.
+ *
+ * It ran OLDEST-first until 2026-08-23. Nils' call, and it is the right one for
+ * a horizontal rail specifically: a rail is read left to right and almost never
+ * scrolled to its end, so oldest-first spent the only slots anyone actually
+ * looks at on the least current titles in the franchise. On a 24-member Star
+ * Wars rail that meant the visible cards were all from the 1970s and 80s.
  */
-function chronological(items: DiscoveryVector[]): DiscoveryVector[] {
+function byRecency(items: DiscoveryVector[]): DiscoveryVector[] {
   return [...items].sort((a, b) => {
     if (!a.releaseDate && !b.releaseDate) return a.title.localeCompare(b.title);
     if (!a.releaseDate) return 1;
     if (!b.releaseDate) return -1;
-    return a.releaseDate.localeCompare(b.releaseDate) || a.title.localeCompare(b.title);
+    return b.releaseDate.localeCompare(a.releaseDate) || a.title.localeCompare(b.title);
   });
+}
+
+/**
+ * Which members survive the cap, when a franchise has more members than the
+ * rail can show.
+ *
+ * ⚠️ THE CAP AND THE ORDER MUST BE DECIDED BY DIFFERENT QUANTITIES, and mixing
+ * them is a documented failure in this repo (AGENTS.md: "a cap applied after a
+ * sort is a silent filter", which cut every RAWG game genre out of the homepage
+ * hub). Sorting by date and then slicing answers "which 40" with "whichever 40
+ * happen to sit at one end of the timeline" — for IGDB's 394-member Star Wars
+ * franchise that is a near-arbitrary 10% of it.
+ *
+ * So: SELECT by crowd attention (`communityVotes`), then hand the survivors to
+ * byRecency for DISPLAY. Ties fall back to recency so the choice stays
+ * deterministic on the long tail of franchise entries with no votes at all,
+ * which on IGDB is most of them.
+ */
+function topByAttention(items: DiscoveryVector[], cap: number): DiscoveryVector[] {
+  if (items.length <= cap) return items;
+  return [...items]
+    .sort((a, b) =>
+      (b.communityVotes ?? 0) - (a.communityVotes ?? 0) ||
+      (b.releaseDate ?? "").localeCompare(a.releaseDate ?? "") ||
+      a.title.localeCompare(b.title)
+    )
+    .slice(0, cap);
 }
 
 /**
@@ -92,5 +125,7 @@ export function franchiseForItem(
   // an empty (or one-card) shelf is how a thin catalog reads as a broken
   // feature — the rail is hidden entirely instead.
   if (!best || best.items.length === 0) return null;
-  return { ...best, items: chronological(best.items).slice(0, cap) };
+  // Select on attention, display by recency. Never `sort().slice()` — see
+  // topByAttention's warning.
+  return { ...best, items: byRecency(topByAttention(best.items, cap)) };
 }

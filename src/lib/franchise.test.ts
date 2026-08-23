@@ -6,7 +6,7 @@ import type { DiscoveryVector } from "@/lib/discovery";
 
 // 2026-08-21 — the item page's "More from {franchise}" rail. The properties
 // that matter are the ones a reading of the code doesn't give you: the rail is
-// CHRONOLOGICAL (not ranked), CROSS-MEDIA (not filtered to the item's own
+// NEWEST-FIRST (not ranked), CROSS-MEDIA (not filtered to the item's own
 // type), and hidden entirely when the franchise holds nothing but the item
 // itself — which is the median case in the real catalog.
 
@@ -40,7 +40,7 @@ describe("ipDisplayLabel", () => {
 });
 
 describe("franchiseForItem", () => {
-  it("returns every media type, oldest first, without the item itself", () => {
+  it("returns every media type, NEWEST first, without the item itself", () => {
     const members = [
       vector("game", "game", "2003-03-01"),
       vector("self", "movie", "1977-05-25"),
@@ -50,7 +50,10 @@ describe("franchiseForItem", () => {
     const g = franchiseForItem("self", [STAR_WARS], () => members)!;
 
     expect(g.label).toBe("Star Wars");
-    expect(g.items.map((v) => v.id)).toEqual(["movie", "game", "show"]);
+    // Newest leftmost (2026-08-23, Nils). A rail is read left to right and
+    // rarely scrolled to its end, so oldest-first spent the only slots anyone
+    // looks at on the least current titles in the franchise.
+    expect(g.items.map((v) => v.id)).toEqual(["show", "game", "movie"]);
   });
 
   it("sorts undated (announced, no date yet) entries last", () => {
@@ -85,12 +88,68 @@ describe("franchiseForItem", () => {
 
     const g = franchiseForItem("self", [small, big], byFacet)!;
     expect(g.label).toBe("Metal Gear Solid");
-    expect(g.items.map((v) => v.id)).toEqual(["mgs1", "mgs2"]);
+    expect(g.items.map((v) => v.id)).toEqual(["mgs2", "mgs1"]);
   });
 
   it("caps a runaway franchise", () => {
     const members = Array.from({ length: 60 }, (_, i) => vector(`m${i}`, "game", `20${String(i).padStart(2, "0")}-01-01`));
     const g = franchiseForItem("self", [STAR_WARS], () => members, 40)!;
     expect(g.items).toHaveLength(40);
+  });
+
+  // ── The cap SELECTS by attention; the order is decided separately ─────────
+  //
+  // Measured 2026-08-23: IGDB franchises average **78 games** and the largest
+  // in our catalog ("Star Wars", id 1) holds **394**, against 4.8 for a TMDB
+  // collection. So for games the cap is the normal case, not an edge case, and
+  // which 40 survive it is most of what the rail actually says.
+  //
+  // The trap being pinned is AGENTS.md's "a cap applied after a sort is a
+  // silent filter" — the same shape that cut every RAWG game genre out of the
+  // homepage hub. A date sort followed by a slice answers "which 40" with
+  // "whichever end of the timeline", which on 394 members is arbitrary.
+  const withVotes = (id: string, date: string | null, votes: number): DiscoveryVector =>
+    ({ ...vector(id, "game", date), communityVotes: votes });
+
+  it("fills the capped slots by ATTENTION, not by where a date sort happened to land", () => {
+    const members = [
+      vector("self", "game", "1995-01-01"),
+      withVotes("obscure-new", "2026-01-01", 2),
+      withVotes("obscure-old", "1996-01-01", 1),
+      withVotes("famous-mid", "2010-01-01", 9000),
+    ];
+    const g = franchiseForItem("self", [STAR_WARS], () => members, 2)!;
+    // The well-known entry survives the cap whichever end of the timeline it
+    // sits at. Slicing a date sort would have dropped it for `obscure-new`
+    // (newest-first) or `obscure-old` (oldest-first).
+    expect(g.items.map((v) => v.id)).toContain("famous-mid");
+    expect(g.items).toHaveLength(2);
+  });
+
+  it("still DISPLAYS the survivors newest-first, not in attention order", () => {
+    const members = [
+      vector("self", "game", "1995-01-01"),
+      withVotes("newer", "2020-01-01", 10),
+      withVotes("older", "2000-01-01", 9000), // most attention, oldest
+    ];
+    const g = franchiseForItem("self", [STAR_WARS], () => members, 2)!;
+    // Both survive the cap, so this isolates the ORDER: recency wins the
+    // display even though `older` dominates on votes.
+    expect(g.items.map((v) => v.id)).toEqual(["newer", "older"]);
+  });
+
+  it("is deterministic when a whole franchise has no votes (most of IGDB)", () => {
+    const members = [
+      vector("self", "game", "1995-01-01"),
+      vector("a", "game", "2001-01-01"),
+      vector("b", "game", "2002-01-01"),
+      vector("c", "game", "2003-01-01"),
+    ];
+    const once = franchiseForItem("self", [STAR_WARS], () => members, 2)!;
+    const twice = franchiseForItem("self", [STAR_WARS], () => members, 2)!;
+    expect(once.items.map((v) => v.id)).toEqual(twice.items.map((v) => v.id));
+    // Ties fall back to recency, so the newest two survive rather than an
+    // arbitrary pair.
+    expect(once.items.map((v) => v.id)).toEqual(["c", "b"]);
   });
 });

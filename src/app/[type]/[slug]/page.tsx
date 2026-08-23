@@ -11,6 +11,8 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 import ItemView from "@/components/item/ItemView";
 import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
 import { buildItemJsonLd, jsonLdScript } from "@/lib/jsonLd";
+import { buildLocalRails } from "@/lib/detail/relatedRails";
+import { log, errorFields } from "@/lib/logger";
 
 // P13 — THE item page. `/{type}/{slug}` since 2026-08-21; `/{type}/{uuid}/{slug}`
 // before that, and that shape still resolves (see [legacy]/page.tsx) so every
@@ -127,6 +129,27 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
   const tagOverrides = Object.fromEntries(getTagCategoryOverrides());
   const tagCategories = getTagCategories().map((c) => ({ id: c.id, label: c.label, color: c.color }));
 
+  // Both related rails, server-rendered (2026-08-23). This is what stops the
+  // item page being a crawl dead-end: before it, `/movie/dune-part-two` emitted
+  // 39 internal links — 14 tags, 9 people, navigation — and NOT ONE sibling
+  // title, because the rails only ever existed after a client `useEffect`.
+  //
+  // Two properties keep it inside this page's rules. `profile` is null, so no
+  // Fandex Score and no user state are computed and the HTML stays
+  // viewer-independent exactly as the comment at the top of this file promises.
+  // And `buildLocalRails` makes ZERO provider calls — the MB11 provider top-up
+  // deliberately stays on the client fetch, because this is the most-crawled
+  // page type in the catalog and a quota-priced call here is the single most
+  // expensive thing we could add (docs/scalability.md §4.2).
+  //
+  // Failure is non-fatal on purpose: a broken rail must not 500 the item page.
+  let relatedRails;
+  try {
+    relatedRails = buildLocalRails(found.item.id, found.item.type, null);
+  } catch (e) {
+    log.warn("related_rails_ssr_failed", { itemId: found.item.id, ...errorFields(e) });
+  }
+
   // schema.org markup. Emitted server-side beside the content it describes, so
   // a crawler gets it on first byte like the rest of this page — and built from
   // the SAME resolved item, so it can never describe a different render.
@@ -138,7 +161,7 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(buildItemJsonLd(found.item, canonical)) }}
       />
-      <ItemView item={found.item} tagOverrides={tagOverrides} tagCategories={tagCategories} />
+      <ItemView item={found.item} tagOverrides={tagOverrides} tagCategories={tagCategories} relatedRails={relatedRails} />
     </div>
   );
 }

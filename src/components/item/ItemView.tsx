@@ -12,7 +12,7 @@ import FactsSection from "./FactsSection";
 import LowerSections from "./LowerSections";
 import PersonalSection from "./PersonalSection";
 import EpisodeTracker from "./EpisodeTracker";
-import RelatedRails from "./RelatedRails";
+import RelatedRails, { type RelatedPayload } from "./RelatedRails";
 import BackButton from "@/components/ui/BackButton";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import type { TagDisplayCategory } from "@/lib/tags";
@@ -46,12 +46,17 @@ import type { TagDisplayCategory } from "@/lib/tags";
 // is gone (rows now — see FactsSection), and there is ONE vertical rhythm token.
 const SECTION_GAP = "space-y-6";
 
-export default function ItemView({ item, tagOverrides, tagCategories }: {
+export default function ItemView({ item, tagOverrides, tagCategories, relatedRails }: {
   item: PublicEnrichedItem;
   // Global tag taxonomy, read on the server (see LowerSections). Viewer-
   // independent, so it doesn't compromise the SSR guarantee described above.
   tagOverrides?: Record<string, string>;
   tagCategories?: TagDisplayCategory[];
+  // Both related rails, built on the server (2026-08-23). Viewer-independent
+  // for the same reason the taxonomy above is: no score, no user state, just
+  // which titles are related and where they live. It is what puts real sibling
+  // links in the HTML a crawler reads.
+  relatedRails?: RelatedPayload;
 }) {
   const [idx, setIdx] = useState(0);
   // `lg` — matches the Tailwind breakpoint the two-column layout switches at,
@@ -231,7 +236,7 @@ export default function ItemView({ item, tagOverrides, tagCategories }: {
             per breakpoint — see RelatedRails' own comment for why that
             distinction matters). */}
         <div className="mt-10">
-          <RelatedRails itemId={item.id} type={item.type} />
+          <RelatedRails itemId={item.id} type={item.type} initial={relatedRails} />
         </div>
       </div>
     </main>
