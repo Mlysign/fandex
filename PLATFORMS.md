@@ -21,7 +21,7 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 |---|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | **TMDB** | movie, show | ✅ | ✅ genres+keywords | ✅ dir/creator/writer/cast | ✅ prod cos, networks | ✅ collections | ✅ | ✅ | ●●● | Free **non-commercial only** · **$149/mo** commercial <$1M rev | **Keep.** All four facet kinds. 9 calls per cold facet page. $149/mo the moment ads ship. |
 | **IGDB** | game | ✅ | ✅ genres, themes, keywords, modes | ❌ | ✅ dev+pub | ✅ franchises | ✅ | ✅ | ●●● | **Free, no monthly cap**, 4 req/s · Twitch account | **Keep + prefer.** Healthiest provider on this page. |
-| **Steam** | game | ✅ | ✅ **unique** store tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ label | ●● | Free · ⚠️ **terms still unread for commercial use** (PL5), and PL3 makes Steam more load-bearing | **Keep, and it is a fuller source than this page said.** Deckbuilding/Tower Defense exist here and nowhere else, and it carries companies (corrected 2026-08-23), which is what makes dropping RAWG safe. |
+| **Steam** | game | ✅ | ✅ **unique** store tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ label | ●● | Free · ✅ **terms READ 2026-08-23 (PL5): commercial use is NOT prohibited**, 100k calls/day, but attribution is mandatory | **Keep, and it is a fuller source than this page said.** Deckbuilding/Tower Defense exist here and nowhere else, and it carries companies (corrected 2026-08-23), which is what made dropping RAWG from the facet paths safe. See the terms box below. |
 | **RAWG** | game | ✅ | ✅ genres+tags | ❌ | ✅ dev+pub | ❌ | ✅ | ✅ | ●● | **20k req/mo** free NC · **$149/mo for 50k** | 🔴 **DECIDED 2026-08-23: drop the metadata role NOW** (PL3). Fully overlapped by IGDB + Steam, which cover 965 of 1,035 games between them, so games stay dual-source. RAWG uniquely reaches 70; stored rows and their facets survive, only new calls stop. Stays a connector. |
 | **Wikidata** | all | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ● | **Free, CC0** | **Keep.** Powers the `ip` facet. Ideal licence. |
 | **OMDb** *(the only source of IMDb, Rotten Tomatoes & Metacritic scores)* | movie, show | ✅⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ only | **–** | 1k/day free · **CC BY-NC 4.0** | 🔴 **DECIDED 2026-08-23: remove NOW, not at ads** (PL1). NC at every tier so it cannot be paid for, contributes **zero** to the Score, and the key already 401s. Certification survives via TMDB; RT, IMDb rating, awards and box office do not. |
@@ -103,6 +103,21 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 **Also available, not yet worth building:** every member profile has a public **RSS feed** of new diary entries, needing no auth and no key. That is a *forward* channel after a CSV backfill, and it carries no watchlist.
 
 ⚠️ **An importer is a WRITE PATH into `media_items`** and inherits the thin-write/pool rules in AGENTS.md: insert-only, `browsed` semantics respected, never bypassing `matcher.ts`. **A CSV of 2,000 titles is 2,000 provider searches if matched naively** — which lands straight back on the quota problem. Match against the local catalog first.
+
+---
+
+## ✅ Steam Web API terms, READ 2026-08-23 (PL5)
+
+**The headline: commercial use is not prohibited.** There is no non-commercial clause of the OMDb or TMDB kind, which makes Steam the only games provider with no monetization cliff. Limit is **100,000 calls/day**, far above anything measured here.
+
+Four obligations, and two are already met:
+
+- ✅ **No `nofollow` on links to Valve.** The terms say links to Valve "shall not" carry it. Checked across the codebase: every outbound Steam link uses `noopener noreferrer`, and none carries `nofollow`. ⚠️ Keep it that way, and note `StoreLink.tsx` adds `sponsored` to AFFILIATE links: Steam is not an affiliate merchant here (only GOG is), so no Steam link should ever get that token.
+- ✅ **A privacy policy covering non-public end-user data.** `/legal/{en,de}/privacy` names Steam explicitly and says what is read.
+- ⚠️ **"Store the Steam Data in a country identified in your privacy policy."** The policy names Railway as the host and says most providers are US-based, but it does not name the country the database actually sits in. **Not fixed here on purpose:** the Railway region is a runtime env var, not knowable from the repo, and inventing a data-residency claim in a legal document is worse than leaving the gap noted. → needs Nils to confirm the region, then one sentence.
+- ⚠️ **Valve name and logo must appear** on pages using the API. `BrandGlyph` renders the Steam mark, which likely satisfies this, but it has not been audited page by page.
+
+⚠️ **These terms cover `api.steampowered.com`. They do NOT cover `IStoreQueryService`**, the store front-end's own undocumented endpoint behind the tag search, which remains the separate and larger risk already noted below.
 
 ---
 
