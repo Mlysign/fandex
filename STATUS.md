@@ -146,6 +146,8 @@ problem and an SEO problem at once. Full write-up in
    over a window that SLIDES, so it *can* grow and its build explicitly deletes
    out-of-window months and out-of-use regions.
 
+**⚠️ Moving the public rails into the server render created a layout shift, and fixing it needed the server (`0463788`).** Both personal sections ("Up next", "Recommended for you") sit ABOVE the public rails and both rendered `null` until their own fetch landed, so a signed-in load painted and then shoved the page down by two rails. **A skeleton alone could not fix it**: the client does not learn anyone is signed in until `/api/home` answers, which is the same round-trip that causes the shift. `page.tsx` now reads the session for a `signedIn` boolean (nothing per-user is rendered, and a crawler is anonymous so its HTML is unchanged) and each section holds its real height while loading. Measured: the "Popular right now" heading sits at 823px in both the skeleton and loaded states, **shift 0px**. The anon "Guest mode" panel had the same bug and is server-rendered now.
+
 ⚠️ **Two traps this shipped through, both green on every check.**
 
 - A CLIENT component importing a module that touches `db.ts` drags
@@ -195,7 +197,7 @@ problem and an SEO problem at once. Full write-up in
 
 ## ✅ Quality bar (as of 2026-08-26)
 
-**1,043 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**1,049 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
