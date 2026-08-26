@@ -19,7 +19,7 @@ import { WISHLIST_TOGGLED_EVENT } from "@/lib/useQuickActions";
 import { staleProviders, syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
 import type { MyStuffTab } from "@/lib/myStuffMerge";
-import { mergeMyStuff, filterByTab, parseTab } from "@/lib/myStuffMerge";
+import { mergeMyStuff, filterByTab, parseTab, asWishlistAdds } from "@/lib/myStuffMerge";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EmptyState from "@/components/ui/EmptyState";
@@ -284,7 +284,12 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   };
 
   const merged = useMemo(() => mergeMyStuff(libraryItems, wishlistItems), [libraryItems, wishlistItems]);
-  const tabItems = useMemo(() => filterByTab(merged, activeTab), [merged, activeTab]);
+  const tabItems = useMemo(() => {
+    const items = filterByTab(merged, activeTab);
+    // On the Wishlist tab, "added" means added to the WISHLIST — not the day
+    // you also bought it. See asWishlistAdds in myStuffMerge.ts.
+    return activeTab === "wishlist" ? asWishlistAdds(items) : items;
+  }, [merged, activeTab]);
 
   // SM19 (2026-07-28): the search box used to re-filter + re-render this
   // (potentially ~2,000-item) list on every keystroke — 237ms for the first

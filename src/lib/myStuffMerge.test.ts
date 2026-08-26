@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeMyStuff, filterByTab, parseTab } from "./myStuffMerge";
+import { mergeMyStuff, filterByTab, parseTab, asWishlistAdds } from "./myStuffMerge";
 import type { EnrichedItem } from "@/types";
 
 // C8 (2026-07-28) — merged Library/Wishlist view's pure logic: an item present
@@ -124,5 +124,50 @@ describe("parseTab", () => {
 
   it("falls back for null", () => {
     expect(parseTab(null, "library")).toBe("library");
+  });
+});
+
+// 2026-08-26 — "Recently added" on the Wishlist tab.
+//
+// /api/calendar was dropping `addedAt` entirely, so the sort had nothing to
+// read and the wishlist stayed in release-date order (guarded separately by
+// listRouteSortFields.test.ts). Fixing that exposed the rest of the same
+// question: for an item in BOTH collections the merge keeps the library copy,
+// so the wishlist tab was sorting by the day the item entered the LIBRARY.
+// Two different events, and the tab has to pick the one it is named after.
+describe("wishlist addedAt vs library addedAt", () => {
+  const WISH = 1_780_682_331; // 2026-06-06
+  const LIB = 1_785_305_555;  // 2026-07-27, i.e. the day you bought it
+
+  it("records the wishlist timestamp when an item is in both", () => {
+    const merged = mergeMyStuff(
+      [base({ id: "both", addedAt: LIB, platformSources: ["steam"] })],
+      [base({ id: "both", addedAt: WISH })]
+    );
+    // The library copy still wins for the item's own fields...
+    expect(merged[0].addedAt).toBe(LIB);
+    // ...but the wishlist's event is not lost.
+    expect(merged[0].wishlistAddedAt).toBe(WISH);
+  });
+
+  it("asWishlistAdds re-points addedAt at the wishlist event", () => {
+    const merged = mergeMyStuff(
+      [base({ id: "both", addedAt: LIB, platformSources: ["steam"] })],
+      [base({ id: "both", addedAt: WISH })]
+    );
+    expect(asWishlistAdds(filterByTab(merged, "wishlist"))[0].addedAt).toBe(WISH);
+    // The library tab is untouched — that date IS the library event.
+    expect(filterByTab(merged, "library")[0].addedAt).toBe(LIB);
+  });
+
+  it("leaves a wishlist-only item's addedAt alone", () => {
+    const merged = mergeMyStuff([], [base({ id: "wish", addedAt: WISH })]);
+    expect(asWishlistAdds(merged)[0].addedAt).toBe(WISH);
+  });
+
+  it("does not invent a timestamp for a library-only item", () => {
+    const merged = mergeMyStuff([base({ id: "lib", addedAt: LIB })], []);
+    expect(merged[0].wishlistAddedAt).toBeUndefined();
+    expect(asWishlistAdds(merged)[0].addedAt).toBe(LIB);
   });
 });

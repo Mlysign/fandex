@@ -34,6 +34,12 @@ export function parseTab(raw: string | null | undefined, fallback: MyStuffTab): 
 export interface MyStuffItem extends EnrichedItem {
   inLibrary: boolean;
   inWishlist: boolean;
+  /**
+   * When the item reached the WISHLIST, kept alongside `addedAt` because for an
+   * item in both collections they are different dates and `addedAt` below is
+   * the library's. Null for a library-only item. See the note in the merge.
+   */
+  wishlistAddedAt?: number | null;
 }
 
 // Both `/api/library` and `/api/calendar` already cross-populate the OTHER
@@ -43,6 +49,16 @@ export interface MyStuffItem extends EnrichedItem {
 // item present in both fetches needs no field-by-field reconciliation: keep
 // the library fetch's copy (it has the richer library-side fields) and just
 // confirm `inWishlist`.
+//
+// ── ⚠️ `addedAt` is the ONE field that cannot be resolved by keeping one copy
+// (2026-08-26) ──────────────────────────────────────────────────────────────
+// Every other field describes the ITEM, so the richer copy is simply the better
+// one. `addedAt` describes an EVENT, and there are two of them: you wishlisted
+// Slay the Spire II in June and it entered your library in July. Keeping the
+// library copy therefore made "Recently added" on the WISHLIST tab report the
+// library date, floating a long-standing wish to the top the day you bought it.
+// So the wishlist's timestamp is carried separately and the tab picks. Rare but
+// not exotic: it is every game you own on Steam and still have wishlisted.
 export function mergeMyStuff(libraryItems: EnrichedItem[], wishlistItems: EnrichedItem[]): MyStuffItem[] {
   const byId = new Map<string, MyStuffItem>();
   for (const it of libraryItems) {
@@ -50,10 +66,23 @@ export function mergeMyStuff(libraryItems: EnrichedItem[], wishlistItems: Enrich
   }
   for (const it of wishlistItems) {
     const existing = byId.get(it.id);
-    if (existing) byId.set(it.id, { ...existing, inWishlist: true });
-    else byId.set(it.id, { ...it, inLibrary: it.libraryStatus != null, inWishlist: true });
+    if (existing) byId.set(it.id, { ...existing, inWishlist: true, wishlistAddedAt: it.addedAt ?? null });
+    else byId.set(it.id, { ...it, inLibrary: it.libraryStatus != null, inWishlist: true, wishlistAddedAt: it.addedAt ?? null });
   }
   return [...byId.values()];
+}
+
+/**
+ * Re-point `addedAt` at the wishlist's own timestamp, for the Wishlist tab.
+ *
+ * `sortItems` reads one field, and it is right to: a card shows one "added"
+ * date and the tab decides which event that is. Applied on the tab's items
+ * rather than inside the merge so the library tab keeps the library date.
+ */
+export function asWishlistAdds<T extends { addedAt?: number | null; wishlistAddedAt?: number | null }>(items: T[]): T[] {
+  return items.map((i) =>
+    i.wishlistAddedAt != null && i.wishlistAddedAt !== i.addedAt ? { ...i, addedAt: i.wishlistAddedAt } : i
+  );
 }
 
 export function filterByTab<T extends { inLibrary: boolean; inWishlist: boolean; rating?: number | null }>(

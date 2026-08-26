@@ -78,6 +78,16 @@ export const GET = withUser(async (req: NextRequest, session) => {
         platformSources: item.platformSources,
         ...rest,
         sources: (sources ?? []).map((s) => ({ source: s.source, sourceId: s.sourceId, data: {} })),
+        // `uw.added_at` is read into `item` above and MUST be carried onto the
+        // enriched item. It wasn't until 2026-08-26, so every wishlist item
+        // reached the client with `addedAt: undefined`; sortItems' "Recently
+        // added" then scored the whole list at -Infinity and Array.sort's
+        // stability left it in this route's release-date order. The default
+        // sort on /wishlist looked inert — a title added a minute ago sat
+        // wherever its release date put it. /api/library has always included
+        // the field, and the two lists render through one component, so only
+        // the wishlist half was wrong.
+        addedAt: item.addedAt,
         fandexScore: fx?.score ?? null,
         fandexCenter: fx?.center ?? null,
       });
