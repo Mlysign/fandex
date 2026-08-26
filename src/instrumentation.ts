@@ -75,13 +75,16 @@ export async function register() {
     }
     startStagingSweep();
 
-    // ── The daily home snapshot (2026-08-26) ───────────────────────────────
+    // ── The daily snapshots: home, then calendar (2026-08-26) ──────────────
     //
-    // `/` serves its public rails out of one `home_snapshot` row, built here
-    // rather than on a request path. That is the whole point: a crawler walking
-    // the homepage a thousand times now causes ZERO provider calls, where every
-    // cold cache entry used to cost a full TMDB + Trakt + IGDB + RAWG fan-out.
-    // → src/lib/homeSnapshot.ts for the three rules the builder holds.
+    // `/` serves its public rails out of one `home_snapshot` row, and the
+    // calendar serves its Popular scope out of twelve `calendar_snapshot` rows.
+    // Both are built here rather than on a request path. That is the whole
+    // point: a crawler walking the homepage or the month pages a thousand times
+    // now causes ZERO provider calls, where every cold cache entry used to cost
+    // a full TMDB + Trakt + IGDB + RAWG fan-out.
+    // → src/lib/homeSnapshot.ts and src/lib/calendarSnapshot.ts for the rules
+    //   each builder holds.
     //
     // ⚠️ BOOT *AND* INTERVAL, not either. Boot alone is not a schedule: prod
     // runs for days, which is exactly how the facet-cache sweep above shipped
@@ -95,10 +98,21 @@ export async function register() {
     // sit in front of the server accepting its first request.
     const HOME_SNAPSHOT_CHECK_MS = 60 * 60 * 1000;
 
-    const refreshHomeSnapshot = async () => {
+    // ⚠️ THE CALENDAR SNAPSHOT RUNS FIRST, AND THE ORDER IS WORTH KEEPING.
+    // `buildHomeSnapshot`'s Upcoming rail goes through `upcomingPool`, which
+    // calls `candidatesForMonth` for the current month and the two after it.
+    // All three are inside the calendar window, so building the calendar first
+    // means Home's upcoming rail costs ZERO additional provider calls. Reversed,
+    // the same three months get fetched twice every day.
+    const refreshSnapshots = async () => {
+      const { calendarSnapshotIsDue, buildCalendarSnapshot } = await import("./lib/calendarSnapshot");
+      if (calendarSnapshotIsDue()) {
+        const { fetchMonthCandidates } = await import("./lib/popularMonthFeed");
+        await buildCalendarSnapshot(fetchMonthCandidates);
+      }
+
       const { snapshotIsDue, buildHomeSnapshot } = await import("./lib/homeSnapshot");
-      if (!snapshotIsDue()) return;
-      await buildHomeSnapshot();
+      if (snapshotIsDue()) await buildHomeSnapshot();
     };
 
     // ⚠️ AFTER THE BOOT PRUNE, and this ordering is the whole reason
@@ -111,13 +125,13 @@ export async function register() {
     // 404 nobody would trace back to here. Sequencing them costs nothing:
     // neither is awaited by `register`, so boot is not delayed either way.
     void pruneDone
-      .then(() => refreshHomeSnapshot())
+      .then(() => refreshSnapshots())
       .catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
 
     // unref'd for the same reason as the facet-cache timer: a background
     // refresher must never hold the process open on shutdown.
     const homeTimer = setInterval(() => {
-      void refreshHomeSnapshot().catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
+      void refreshSnapshots().catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
     }, HOME_SNAPSHOT_CHECK_MS);
     homeTimer.unref?.();
   }

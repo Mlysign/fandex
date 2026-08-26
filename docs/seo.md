@@ -226,6 +226,78 @@ same public rails as everyone else. Region only ever reached `upcomingPool`'s
 calendar window, and one shared upcoming list is a far smaller loss than a
 per-region provider fan-out on `/`.
 
+### ✅ The daily calendar snapshot (2026-08-26)
+
+The same move as the home snapshot, applied to the calendar (Nils: "can we apply
+the same logic to the calendar page?"). `calendar_snapshot` (migration 22) holds
+the ranked popular-releases pool for **twelve months, per region in use**, built
+once a day. It buys three things, and only the first was asked for.
+
+| | before | after |
+|---|---|---|
+| paging 11 months, signed in | 10.4 s, **33 provider calls** | 1.3 s, **0** |
+| first hit on a month, fresh process | 1.24 s | 12–20 ms |
+| 20 anonymous month-page requests | a fan-out per cold month | **0** |
+| linkable items on `/calendar/2026-09` | **8 of 15** | **15 of 15** |
+
+The last row is the one nobody asked for and it is the SEO one.
+`/calendar/{YYYY-MM}` is public, indexed and in the sitemap, and it persists with
+a null user by design (PR15's write gate, held by construction), so any title we
+did not already hold rendered as **dead text with no href**. The daily builder
+persists the shown titles once, bounded, off the request path, so those pages
+ship real links.
+
+**Three layers now, and each answers a different question.** `candidatesForMonth`
+tries them in order:
+
+1. the in-memory cache: *have I already PARSED this month?*
+2. `calendar_snapshot`: *has the SERVER already fetched it today?*
+3. the provider fan-out: the only layer that costs quota.
+
+The table did not make the cache redundant and the cache did not make the table
+unnecessary. The cache dies on every deploy (`docs/scalability.md` §3.6) and prod
+deploys often; the table survives that. But a stored month is ~103 KB of JSON, so
+reading it on every request would trade a network call for a parse on the request
+path.
+
+⚠️ **Layer 3 stays.** The servable range is ±12 months while the snapshot covers
+−5..+6, and a link shared into one of those outer months must not rot. Those
+months are `noindex` and linked from nowhere, so the crawl volume reaching them is
+small. Do not "simplify" this into snapshot-only.
+
+⚠️ **The window is −5..+6, not ±5, and the extra future month is load-bearing.**
+`indexableMonths()` advertises −1..+6 in the sitemap. A five-month future window
+would leave `/calendar/{+6}` outside the snapshot while it is still a crawlable,
+indexed url, quietly falling back to a live fan-out on a crawler's request.
+Nothing would surface it: the page renders, the links work, the bill goes up. A
+test asserts the snapshot window stays a **superset** of the indexable one.
+
+⚠️ **It is built per REGION IN USE, and the first version was not.** That version
+built `DEFAULT_COUNTRY` only, copying the home snapshot, and every test passed.
+Paging eleven months while signed in still moved the provider counters by 33,
+because `/api/calendar/popular` passes the **viewer's** region through and the
+account testing it is `DE`. Every signed-in visitor outside the default country
+would have kept the old slow path and the full provider bill, from a change whose
+whole point was removing both. **It measured as working because the anonymous
+path genuinely was fixed.** The region set now comes from `users.country`, capped
+at 8 with a log line when the cap bites.
+
+⚠️ **This table can grow and `home_snapshot` cannot, and the difference is the
+key.** `home_snapshot` is keyed by region alone, so `INSERT OR REPLACE` makes
+growth structurally impossible. This one is keyed by region **and month** over a
+window that SLIDES: every month that passes retires one key and mints another. The
+build deletes out-of-window months and out-of-use regions on every run. A slow
+version of the shape that grew `facet_page_cache` to 222.8 MB, and slow is worse,
+because nobody would connect it back to this file.
+
+`calendar_snapshot_item` is the fifth clause in `dbPrune`'s `PRUNABLE_WHERE`. It
+pins only the titles a month page actually SHOWS (15 of the 40-deep pool), and the
+whole pin set is rebuilt on each build rather than edited per month, because a
+slipped release can sit in two months at once.
+
+**Measured footprint:** 12 months × 2 regions = 24 rows, ~2.2 MB, 215 pinned
+catalog rows.
+
 ### ✅ Popular people, and what it is honestly ranking (2026-08-26)
 
 The rail that replaced "Recently added". 20 faces, each linking `/person/{slug}`.

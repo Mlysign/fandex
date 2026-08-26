@@ -13,6 +13,7 @@
 // and can never answer a month in the past.
 
 import { sharedCache } from "@/lib/boundedCache";
+import { readMonthSnapshot } from "@/lib/calendarSnapshot";
 import { rankCrossSourcePopularity, POPULAR_PER_MONTH } from "@/lib/popularMonth";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import {
@@ -40,12 +41,54 @@ const MONTH_POOL_DEPTH = 40;
  *
  * Returns provider candidates — the caller decorates, persists and annotates
  * them (a session-gated step, so it can't live here).
+ *
+ * ── THREE LAYERS, AND EACH ONE ANSWERS A DIFFERENT QUESTION (2026-08-26) ────
+ *
+ *   1. the in-memory cache:  "have I already PARSED this month?"
+ *   2. `calendar_snapshot`:  "has the SERVER already fetched it today?"
+ *   3. the provider fan-out: the only layer that costs quota.
+ *
+ * The table did not replace the cache and the cache does not make the table
+ * redundant. The cache dies on every deploy (docs/scalability.md §3.6) and prod
+ * deploys often, so on its own it overstates how cached this really was; the
+ * table survives that and drops the fan-out to twelve months once a day, no
+ * matter how many people page the calendar or how many crawlers walk
+ * `/calendar/{YYYY-MM}`. But a stored month is ~103 KB of JSON, so reading it on
+ * every request would trade a network call for a parse on the request path. Hence
+ * both, in this order.
+ *
+ * ⚠️ Layer 3 stays. A month outside the snapshot window is still SERVABLE
+ * (`SERVABLE_PAST_MONTHS`/`SERVABLE_FUTURE_MONTHS` reach ±12 against the
+ * snapshot's -5..+6), and a shared link into one of those must not rot. Those
+ * months are `noindex` and linked from nowhere, so the crawl volume that reaches
+ * them is small, but do not "simplify" this into snapshot-only, or every one of
+ * them renders empty.
  */
 export async function candidatesForMonth(month: string, region: string): Promise<FeedCandidate[]> {
   const key = `${month}:${region}`;
   const hit = _monthCache.get(key);
   if (hit) return hit;
 
+  // Layer 2. Populates the memory cache so the parse happens once per process.
+  const stored = readMonthSnapshot(month, region);
+  if (stored) {
+    _monthCache.set(key, stored);
+    return stored;
+  }
+
+  return fetchMonthCandidates(month, region);
+}
+
+/**
+ * Layer 3: the actual provider fan-out, ranked and memory-cached.
+ *
+ * Split out from `candidatesForMonth` so the daily builder has a way to reach
+ * the providers without recursing back through its own snapshot. **Nothing on a
+ * request path should call this directly**. Go through `candidatesForMonth`,
+ * which tries the two cheap layers first.
+ */
+export async function fetchMonthCandidates(month: string, region: string): Promise<FeedCandidate[]> {
+  const key = `${month}:${region}`;
   const win = monthWindow(month);
   // Page 1 of each source is enough: each is already sorted by its own
   // popularity, so page 2 holds items that could never place in a top-15.

@@ -912,7 +912,73 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 22,
+    name: "calendar_snapshot: the daily month cache (SEO + provider cost)",
+    up: (db) => {
+      // 2026-08-26, the same treatment migration 21 gave the home page, applied
+      // to the calendar (Nils: "can we apply the same logic to the calendar
+      // page?").
+      //
+      // What it replaces: `popularForMonth` fanned out to TMDB, RAWG and IGDB
+      // per month, per region, behind a 6 h IN-MEMORY cache. Three problems with
+      // that, and only the first is the one you notice.
+      //
+      //   1. Paging the calendar waits on a provider fan-out. Measured cold:
+      //      1.24 s for one month.
+      //   2. The cache dies on every deploy, and prod deploys often, so "cached"
+      //      overstates it (docs/scalability.md 3.6).
+      //   3. `/calendar/{YYYY-MM}` is PUBLIC, crawlable and in the sitemap, and
+      //      it persists with a null user by design, so any title we do not
+      //      already hold renders with no href at all. Measured on 2026-09:
+      //      8 of 15 items linkable. The other 7 were dead text on an indexed
+      //      page.
+      //
+      // ONE ROW PER MONTH, not one row for the whole window, and that is an
+      // access-pattern decision rather than a stylistic one: every consumer wants
+      // exactly one month, and a single blob would mean parsing ~1.2 MB to serve
+      // 103 KB of it.
+      //
+      // The in-memory cache stays IN FRONT of this table. The table is what
+      // removes the provider call and survives a deploy; the cache is what
+      // avoids re-parsing a 103 KB payload on every request. Neither replaces
+      // the other.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS calendar_snapshot (
+          region     TEXT NOT NULL,
+          month      TEXT NOT NULL,
+          built_at   INTEGER NOT NULL,
+          payload    TEXT NOT NULL,
+          PRIMARY KEY (region, month)
+        )
+      `);
+
+      // WHY THIS ONE NEEDS A SWEEP AND home_snapshot DOES NOT.
+      //
+      // `home_snapshot` is keyed by region alone, so INSERT OR REPLACE makes
+      // growth structurally impossible. This one is keyed by region AND month,
+      // and the window SLIDES: every month that passes retires one key and mints
+      // another, so without an explicit delete the table gains a row a month
+      // forever. That is a slow version of exactly the shape that grew
+      // facet_page_cache to 222.8 MB. `buildCalendarSnapshot` deletes everything
+      // outside its window on every run, and a test asserts it.
+      db.exec("CREATE INDEX IF NOT EXISTS idx_calendar_snapshot_month ON calendar_snapshot(month)");
+
+      // The prune pin, same role as home_snapshot_item and for the same reason:
+      // the month pages link provider titles that arrive `browsed = 1` with
+      // nobody acting on them, which is precisely what the boot prune deletes.
+      // A separate table rather than a shared one so `PRUNABLE_WHERE` keeps
+      // naming its protections one by one instead of reasoning about which
+      // surface a row came from.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS calendar_snapshot_item (
+          media_item_id TEXT PRIMARY KEY
+        )
+      `);
+    },
+  },
 ];
+
 
 // Apply all pending migrations (version > current user_version), each in its own
 // transaction, bumping user_version as it goes. Returns the versions applied.

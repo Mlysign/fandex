@@ -18,6 +18,10 @@ const USER = "u-prune";
 beforeEach(() => {
   run("DELETE FROM media_items");
   run("DELETE FROM users");
+  // The two snapshot pin tables are not user-scoped, so nothing above clears
+  // them and a leftover row would silently protect the next test's fixtures.
+  run("DELETE FROM home_snapshot_item");
+  run("DELETE FROM calendar_snapshot_item");
   run("INSERT INTO users (id) VALUES (?)", [USER]);
 });
 
@@ -116,6 +120,40 @@ describe("previewPrune — what is in scope", () => {
 
     runPrune();
     expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-home'")).toBe(1);
+  });
+
+  it("protects a browsed title a public calendar month page links to (2026-08-26)", () => {
+    // The FIFTH clause. `/calendar/{YYYY-MM}` is public, in the sitemap, and
+    // links up to POPULAR_PER_MONTH provider titles per month across a 12-month
+    // window. They arrive exactly as this predicate's targets do, so without the
+    // clause the next deploy would delete them and leave a crawler a page of
+    // dead text on an indexed url.
+    addItem("browsed-on-calendar", 1);
+    run("INSERT INTO calendar_snapshot_item (media_item_id) VALUES ('browsed-on-calendar')");
+
+    const p = previewPrune();
+    expect(p.prunable).toBe(0);
+    expect(p.protectedByCalendarSnapshot).toBe(1);
+
+    runPrune();
+    expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-calendar'")).toBe(1);
+  });
+
+  it("keeps the two snapshot pins independent of each other", () => {
+    // Two tables rather than one shared one, so a title leaving the homepage
+    // does not take a calendar month's protection with it. Worth asserting: the
+    // tempting simplification is a single `snapshot_item` table, and it would
+    // fail exactly here.
+    addItem("home-only", 1);
+    addItem("calendar-only", 1);
+    run("INSERT INTO home_snapshot_item (media_item_id) VALUES ('home-only')");
+    run("INSERT INTO calendar_snapshot_item (media_item_id) VALUES ('calendar-only')");
+    expect(previewPrune().prunable).toBe(0);
+
+    run("DELETE FROM home_snapshot_item");
+    const p = previewPrune();
+    expect(p.prunable).toBe(1);
+    expect(p.protectedByCalendarSnapshot).toBe(1);
   });
 
   it("stops protecting a title once it drops out of the snapshot", () => {

@@ -109,6 +109,55 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 
 **Item pages link to sibling items since 2026-08-23** (`buildLocalRails`, server-rendered, zero provider calls). This file and docs/seo.md both still claimed otherwise until 2026-08-26. **Still open:** a facet page renders **zero `<a href>` in its server HTML** (its 60 item links appear only after hydration), and facet pages stay out of the sitemap until that is fixed. Written up in docs/seo.md.
 
+## ⚡ The daily snapshots: home and calendar are pre-built, not fetched (2026-08-26)
+
+**Two tables now hold a whole page each, built once a day on the server, so a
+visitor (or a crawler) costs zero provider calls.** `home_snapshot` (migration 21)
+and `calendar_snapshot` (migration 22). Nils's design, and it solved a cost
+problem and an SEO problem at once. Full write-up in
+[docs/seo.md](docs/seo.md); the rules each builder holds are commented in
+`src/lib/homeSnapshot.ts` and `src/lib/calendarSnapshot.ts`.
+
+| Surface | before | after |
+|---|---|---|
+| `/` server-rendered internal links | 74 | **94** |
+| 6 loads of `/` | a fan-out per cold cache entry | **0 provider calls** |
+| paging 11 calendar months, signed in | 10.4 s, 33 calls | **1.3 s, 0 calls** |
+| a month, first hit on a fresh process | 1.24 s | **12–20 ms** |
+| linkable items on `/calendar/2026-09` | 8 of 15 | **15 of 15** |
+
+**Four rules ride on both, and three are incidents already on file.**
+
+1. **A failed build never replaces a good snapshot.** "Clear the table, then
+   rebuild" is the obvious design and is exactly what turns a provider outage
+   into an empty page.
+2. **The builders write catalog rows deliberately, and PR15 still holds.** They
+   call `persistDiscoverItems` directly rather than handing `persistDiscoverBatch`
+   a fake user, so the request-path gate keeps its exact shape. Bounded at ~30
+   titles a day for home and 15 per month for the calendar, whatever the traffic.
+3. **`home_snapshot_item` and `calendar_snapshot_item` are the fourth and fifth
+   clauses in `dbPrune`'s `PRUNABLE_WHERE`,** and the first two that are not user
+   state. Both builders also run **after** `bootPrune` resolves: a row pinned
+   between the prune computing its id list and executing the delete is not
+   protected.
+4. **Bounded, but by different mechanisms, and that is worth knowing.**
+   `home_snapshot` is one row per region, so `INSERT OR REPLACE` makes growth
+   structurally impossible. `calendar_snapshot` is keyed by region **and month**
+   over a window that SLIDES, so it *can* grow and its build explicitly deletes
+   out-of-window months and out-of-use regions.
+
+⚠️ **Two traps this shipped through, both green on every check.**
+
+- A CLIENT component importing a module that touches `db.ts` drags
+  better-sqlite3 into the browser bundle. `/` returned a 500 on
+  `Can't resolve 'fs'` with tsc, lint and 1,019 tests clean, because nothing but
+  loading the page exercises the client/server module graph. Leaf modules with no
+  imports (`src/lib/personRail.ts`) are the fix.
+- The calendar snapshot was first built for `DEFAULT_COUNTRY` only. Paging while
+  signed in still cost 33 provider calls, because the route passes the **viewer's**
+  region through and this account is `DE`. **It measured as working because the
+  anonymous path really was fixed.** It is now built per region in use.
+
 ## ⚠️ Scalability: provider quotas are the ceiling, and CRAWLERS spend them (2026-08-20)
 
 **Measured, not estimated** → [docs/scalability.md](docs/scalability.md) · provider cost/licence per platform → [PLATFORMS.md](PLATFORMS.md).
@@ -142,11 +191,11 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
 | **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🟡 **built + running on-device 2026-08-22**; needs the Play upload + 14-day test → [docs/twa-play-store.md](docs/twa-play-store.md) |
-| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home snapshot** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages render no server-side item links → [docs/seo.md](docs/seo.md) |
+| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home + calendar snapshots** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages render no server-side item links → [docs/seo.md](docs/seo.md) |
 
 ## ✅ Quality bar (as of 2026-08-26)
 
-**1,019 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**1,043 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 
