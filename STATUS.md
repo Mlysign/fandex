@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
 
-_Last updated: 2026-08-26 (hygiene pass: the resolved-incident narratives moved to the archive, which already held them; nothing open was removed). Previously 2026-08-23, fifth pass._
+_Last updated: 2026-08-26 (12th smoke test: two 🟠 added below, SM49/SM50; no code changed). Previously 2026-08-26, hygiene pass._
 
 > **Ten decisions were locked on 2026-08-17.** Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do, the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, Score tuning approved as-is. **They are settled: see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -12,7 +12,9 @@ _Last updated: 2026-08-26 (hygiene pass: the resolved-incident narratives moved 
 
 | | Item | Blocked on |
 |--|------|--|
-| 🟡 | **`/library` + `/wishlist` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. |
+| 🟠 | **The Library tab renders its whole list on the route the nav links to** (SM49) | **Nobody.** `capRender` gates on `route === "library"`, so `/wishlist?tab=library` skips SM19's 300-card cap: 1,929 cards / 40,748 DOM nodes / 120,583px on the prod build, against 300 / 6,519 / 18,976 for the identical view at `/library`. `AppNav` has no `/library` link, so the uncapped route is the one people reach. One-line fix, not yet made. → [TASKS.md](TASKS.md) |
+| 🟠 | **Three Trakt SHOWS are merged onto MOVIE catalog rows** (SM50) | **Nobody**, but it is on a public page: `/movie/being-john-malkovich` serves "Official site" → `spongebob.nick.com` and a Trakt link to the show. Also House of Cards → Ratatouille, Legion → The Raid 2. 249 episode-watch rows sit on movies; the real show rows have 0 progress. 3 of 2,734 items. ⚠️ Root cause in `matcher.ts` is **not** diagnosed — main-loop work. → [[cross-type-identity-merge]] |
+| 🟡 | **`/library` + `/wishlist` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. ⚠️ **Still reproducing on 2026-08-26** (`/library` hard load under `next dev`: `main` 0 React fibers, `nav` 2), so the 2026-08-18 "may be fixed" note is settled — it is not. |
 | 🔵 | **H3: monetization, now ADS-FIRST** | **Nobody, yet.** The next move is traffic, not a signup. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | ⏸️ | **P15/P16: Android TWA, built and installed, then PAUSED** | ⏸️ **Nils, 2026-08-23**, until the developer account is upgraded Personal → Business. ⚠️ The 12-testers/14-days gate applies to **PERSONAL** accounts only, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. → [TASKS.md](TASKS.md) item 1 |
 | 🟡 | **RAWG monthly quota exhausted** | **Nobody.** PL3 shipped 2026-08-23, so the facet paths no longer touch RAWG. ⚠️ **Re-measure when the window resets**: a cold `/tag/` page should now cost 10 provider calls, not 14. ⚠️ **What SPENT the quota is still unidentified**, and the obvious answer is unproven, because every RAWG figure we hold was measured *after* the quota was gone. The 401/403 latch makes next month's counter readable. |

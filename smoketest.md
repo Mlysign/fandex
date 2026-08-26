@@ -268,6 +268,22 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     Also re-time a search keystroke (set `.value` via the native setter, dispatch `input`, measure
     around the dispatch, **especially clearing the box back to empty** — 1,426ms pre-fix) — the
     search filter now reads a 200ms-debounced value, so this should be well under 100ms.
+13e-i. **⚠️ Check the cap on BOTH routes, and note which one the nav links to (SM49, 2026-08-26).**
+    13e above names `/library`, and `/library` passes — which is exactly how this stayed open. The
+    cap is `capRender = route === "library" && …`, so the identical Library **tab** at
+    `/wishlist?tab=library` renders the whole list, and **`AppNav` has no `/library` link at all**,
+    so the uncapped route is the one a signed-in person actually reaches. Run the count on BOTH and
+    diff them; on the prod build it was 300 / 6,519 nodes vs **1,929 / 40,748**. Generalise it:
+    **whenever a fix is gated on `route ===`, in a component two routes share, the check must name
+    both.** Same probe catches SM51, the placeholder that still says "Search your wishlist…" while
+    the `<h1>` says Library. ⚠️ **Clear `rr_`-prefixed storage between the two measurements** — the
+    persisted `rr_mystuff_search` carried a search term across and the control read 2 cards.
+13e-ii. **Key an order/sort assertion on the SLUG, never the title.** 35 titles are duplicated in
+    the local catalog (a 1999 anime and a 2023 live-action *One Piece*, both legitimately present
+    and correctly slugged `-2023`). Title-keying the 13b sort check invented three phantom
+    "violations"; re-keying on `href.split('/')[2]` gave a clean strictly-descending pass over 500
+    cards. Two sibling rows that differ only by year are the DESIGNED collision behaviour, not a
+    duplicate — don't log them.
 13f. **B5 — NavSearch keyboard path.** Type a person's name in the desktop nav field, then test
     **Enter** (must navigate), **ArrowDown/Up** (must move a highlight and set
     `aria-activedescendant`), and whether suggestions are real `<a href>`. 6th-sweep note (SM24):
@@ -315,6 +331,27 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     with `*{transition:none !important}`, or `getBoundingClientRect` returns the START of every
     animated height and the collapse reads as not working at all. Same family as the hover trap.
 
+13jb. **What the 12th run cleared, and the one thing it could NOT (2026-08-26).** 13j/13ja both
+    pass in full — at 375 and 1280, anon and authed, dev and prod, with `scrollHeight - innerHeight`
+    and `scrollY` both 0 in every state and the rail exactly 395px whether the day is busy or empty.
+    Hit-testing found 0 misses over 30 points × 4 cell kinds. Swipe behaves on all four cases
+    (fast-horizontal pages; vertical, 900 ms-slow, and inside-the-rail all correctly don't) — drive
+    it with synthetic `TouchEvent`s built from `new Touch({identifier,target,clientX,clientY})`,
+    which works fine in the pane.
+    ⚠️ **UNVERIFIED, and not verifiable in the browser pane: does the height budget re-fit on a
+    VIEWPORT RESIZE?** `boxH` comes from a `ResizeObserver`, and the pane never delivers one (see
+    the tooling section). A real window drag, or a mobile URL bar hiding, is the untested case; if
+    it does not re-fit, the symptom is cells keeping their old height inside a shrunken
+    `overflow-hidden` box, i.e. **weeks clipped with no way to scroll to them**. Nils can settle it
+    in two seconds in a real browser: open `/calendar`, drag the window shorter, count the week rows.
+13jc. **Price the filter bar against the height budget (SM53, 2026-08-26).** The page is now a
+    fixed budget, so the sticky bar is competing with the grid for it. At 375×812 measure
+    `document.querySelector('main').getBoundingClientRect().top` — it was **175px, 22% of the
+    viewport** (two wrapped rows of seven 40px icon-only chips + a 38px toggle row), leaving 486px
+    of grid. Re-measure after any change to the chip set: one more chip wraps a row and costs
+    another 60px of calendar. Targets themselves are fine and don't need re-measuring (`.tap-44`
+    gives each chip a 44×44 `::after`; clearance 4px horizontal, 16px vertical, no overlap).
+
 **C3. Episode tracking + Home's progress rail (added 2026-08-16, MB14)** — brand new surfaces; nothing before this date exercised them.
 13k. **MB14 — per-episode tracking (2026-08-16), item page.** On a SHOW's item page, a
     "Your progress" section lists seasons collapsed with an `n/total` count. Expand one (the
@@ -330,13 +367,36 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     shrinks out and the list re-orders; (c) the show whose episode you just ticked jumps to the
     FRONT with its next episode, because the tick is a new event on the sort's timeline.
     Nothing to continue → the rail renders nothing at all (no empty-state panel).
-13n. **⚠️ EPISODE TRACKING IS LIVE BUT PULLS NOTHING (open as of 2026-08-16).** Every
-    surface renders; Trakt returns no episode data. Measured on prod:
-    `shows=280 withEpisodes=0 episodes=0`. **Before logging anything about the
-    rail or the progress section being empty, open
-    `/api/dev/trakt-shape`** (GET, admin-gated, shape-only) — it compares
-    `?extended=full` against the plain call and says which half is empty. An
-    empty rail is a SYMPTOM of this, not a separate finding.
+13n. **Episode tracking: "LIVE BUT PULLS NOTHING" NO LONGER REPRODUCES LOCALLY (updated 2026-08-26).**
+    The 2026-08-16 reading (`shows=280 withEpisodes=0 episodes=0`, measured on prod) is stale for
+    `data/rr.db`, which now holds **12,343 `user_episode_state` rows across 280 shows** and 7,053
+    `show_episodes` catalog rows. Verified end to end: Friends renders 10 seasons at 24/24 … 17/17
+    summing to the DB's 228, one tracker mount, expanding a season lazily fetches real episode
+    titles (~4 s once), and Home's "Up next" lists 10 real next-episodes with every tick box empty
+    at rest. **So an empty rail is a finding again, not a known symptom** — but check the DB first
+    (`SELECT COUNT(*) FROM user_episode_state`) and re-measure PROD separately before concluding
+    anything about prod. If it IS empty, `/api/dev/trakt-shape` (GET, admin-gated, shape-only)
+    still compares `?extended=full` against the plain call and says which half is empty.
+    ⚠️ `catalogEps` far below `watchedEps` (One Piece: 26 vs 1,157) is the LAZY FILL working as
+    designed — only expanded seasons are cached. Not a finding.
+13n-i. **Audit for cross-type identity merges — three were live and one was on a public page
+    (SM50, 2026-08-26).** Two cheap SQL probes, and run both; the first one is what makes the
+    second legible:
+    ```sql
+    -- a SHOW's episodes filed against a non-show row
+    SELECT m.type, m.slug, COUNT(*) FROM user_episode_state u
+      JOIN media_items m ON m.id = u.media_item_id WHERE m.type != 'show' GROUP BY 1,2;
+    -- one catalog row carrying two ids from the same provider
+    SELECT media_item_id FROM media_external_ids WHERE source='tmdb'
+      GROUP BY media_item_id HAVING COUNT(DISTINCT external_id) > 1;
+    ```
+    Both returned 3 rows: trakt show 386 *SpongeBob SquarePants* merged onto the MOVIE **Being John
+    Malkovich**, 1416 *House of Cards* onto **Ratatouille**, 113656 *Legion* onto **The Raid 2**.
+    ⚠️ **The user-visible half is the outbound links, not the episode counts** — `/movie/being-john-
+    malkovich` served "Official site" → `spongebob.nick.com` and a Trakt link to the show, plus the
+    show's genres, while correctly rendering NO "Your progress" section. So the type guard on the UI
+    passing is not evidence the data is clean; check `media_links.title != media_items.title` too
+    (most hits there are legitimate normalisation — *Atomic Heart 2* vs *II* — a cross-TYPE one is not).
 13m. **⚠️ The Trakt round-trip is the one thing no Claude session has verified.** The push/pull
     paths were exercised only by unit tests and a keyless local session (marks land as
     `source: "local"`). On a run with a real Trakt identity connected: tick a season, confirm it
@@ -599,6 +659,46 @@ _Consolidated 2026-08-02 from three dated lists (2026-07-18, 07-28, 08-02). Cont
 - **`/api/auth/me` wraps the user as `{user:{userId,…}}` — the field is `userId`, NOT `id`.** A probe reading `j.user.id` gets `undefined` and reads exactly like "anon". The 6th sweep spent its first probes believing it was logged out while looking at an obviously authenticated Home. Assert on `!!j.user`.
 - **To go anon, use `127.0.0.1` (see the Auth section above) — NEVER log out.** Logging out bumps `session_epoch` and ends the real session everywhere at once, recoverable only by a real OAuth round-trip. _(The 2026-07-18 list used to recommend the Log out button; that guidance is withdrawn.)_
 - **`curl.exe` from PowerShell sends no cookie**, so status codes, redirects (`-D -`), SSR HTML and API error shapes are reachable while staying logged in. It **cannot** cover anything client-side (the SM8 Back test, the sign-in dialog, the anon "You" slot) — say so explicitly rather than implying a full anon pass. Strip tags in PS 5.1 with `[regex]::Replace($h,'<script[\s\S]*?</script>',' ')` then `[regex]::Replace($t,'<[^>]+>',"`n")`.
+
+### 🚨 A pane that isn't DISPLAYED starves the rendering loop — check this FIRST
+
+Added 2026-08-26 (12th run), which produced **two confident false positives** before a control
+caught them. The plan already said "a browser pane that isn't displayed stops compositing"; what
+that costs is bigger than `getComputedStyle` returning start values. **Everything driven by the
+rendering lifecycle silently never runs:**
+
+- `computer{action:"screenshot"}` and every `computer` click → timeout, "the pane is not displayed"
+- `requestAnimationFrame` → **never fires** (a 60-frame rAF loop times out at 30 s)
+- **`ResizeObserver` → never fires**, so any layout that re-fits on resize looks permanently broken
+- **`IntersectionObserver` → never fires**, so lazy-load / infinite-scroll sentinels look dead
+- `tabs_select` does NOT reliably fix it; it can stay hidden for the whole session
+
+**The 30-second control, and run it before logging any of the above.** Attach your OWN observer,
+resize, and see whether *yours* fires either:
+```js
+window.__ro_log=[]; const el=document.querySelector('SELECTOR');
+window.__ro=new ResizeObserver(()=>window.__ro_log.push(el.clientHeight)); window.__ro.observe(el);
+// …resize_window… then read window.__ro_log
+```
+`__ro_log` empty while `el.clientHeight` demonstrably changed = **your tooling, not the app**. The
+12th run nearly filed "the calendar never re-fits on viewport resize" (its cells stayed 95px while
+its box went 613→333, clipping three weeks) and "the /library lazy-load sentinel is dead" — both
+were this. `resize_window` still changes layout, so `clientHeight`/`getBoundingClientRect` DO
+update; only the *notification* is lost, which is what makes it so convincing.
+
+**What still works, and is what the rest of a sweep should lean on:** `javascript_tool` probes,
+`.click()` on React handlers (state updates commit fine — they aren't frame-driven), `fetch`,
+`elementFromPoint` hit-testing, synthetic `TouchEvent` swipes, `curl`, `preview_logs`,
+`read_console_messages`. A whole calendar sweep ran on those alone.
+
+### 🚨 A background tab has NO VIEWPORT — every geometric number from it is garbage
+
+Same run. A tab opened by `preview_start` but never fronted reports **`innerWidth: 0,
+innerHeight: 0`**. `100dvh` then resolves to 0, so the page-root height collapses and
+`documentElement.scrollHeight - clientHeight` reads a plausible-looking **191** on a page whose
+whole invariant is that it never scrolls. **Assert `innerWidth > 0` in the same probe as any
+geometry** — the same measurement returned 0 the moment the tab got a real viewport. Cheap habit:
+always return `iw`/`ih` alongside whatever you measured.
 
 ### Browser tooling quirks
 
