@@ -213,12 +213,26 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
     strip is untouched and still expected), **`/calendar`** (type-chip filter + its
     month/agenda toggle), Home's **rotating highlight panels + "Up next" progress rail +
     Recommended rail** (Home's own three-counter strip was removed 2026-08-16 — see C3),
-    and the **Library ⇄ Wishlist tab** (switch both directions; each side
-    must keep its own filters/sort — they use separate persisted keys by design).
-13b. **Library's default sort is now "Recently added"** (H1.6f). Verify: it's the pre-selected
-    sort on a fresh visit, the list really is newest-added-first (not release-date order), and
-    items with no `added_at` sort last. Also verify Library **no longer auto-scrolls to today**
-    (Q3 fix — it should open at the top); Wishlist SHOULD still auto-scroll (that's intended).
+    and the **Library ⇄ Wishlist tab** (switch both directions). ⚠️ **The two tabs SHARE one
+    set of persisted filter/sort keys** (`rr_mystuff_sort`, `rr_mystuff_search`, … — see
+    `MyStuffView.tsx`), so a filter set on one side carries to the other. This check used to
+    say the opposite ("separate persisted keys by design"); that was written the day before
+    C8 (2026-07-28) merged the two pages into one component and was never updated. Carry-over
+    is the expected behaviour, not a finding.
+13b. **"Recently added" is the default sort, and it must be checked on BOTH tabs** (H1.6f).
+    Verify on Library AND on Wishlist: it's the pre-selected sort on a fresh visit, the list
+    really is newest-added-first (not release-date order), and items with no `added_at` sort
+    last. ⚠️ **Checking only Library is how this went a month with the wishlist half totally
+    inert** (H1.6f 2026-07-27 → fixed 2026-08-26): `/api/calendar` never sent `addedAt`, so
+    every wishlist item tied at -Infinity and the list kept the route's release-date order.
+    One component, two routes — the tab you skip is the one that breaks.
+13b-i. **An item on BOTH lists sorts by the right event.** Wishlist something, then rate or mark
+    it owned so it appears in both (a Steam game you own and still have wishlisted is the natural
+    case). On the **Wishlist** tab it must sit at its WISHLIST date; on **Library**, at its
+    library date. Both dates come from one `addedAt` field, so getting this wrong looks like a
+    correct sort with one item in a strange place.
+13b-ii. Also verify Library **no longer auto-scrolls to today** (Q3 fix — it should open at the
+    top); Wishlist SHOULD still auto-scroll (that's intended).
 13c. **A5 typed search groups, logged in**: search a person's name on Discover → a **People**
     group and (for a genre word) a **Tags** group render above a **Titles** header, each pill
     links to the right `/person/…` / `/tag/…` page. This is the half no anon sweep can reach.
