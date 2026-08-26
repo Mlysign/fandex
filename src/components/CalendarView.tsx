@@ -9,7 +9,6 @@ import {
 import { ChevronLeft, ChevronRight, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
 import { TypeIcon } from "@/components/Badges";
-import Tooltip from "@/components/Tooltip";
 import EmptyState from "@/components/ui/EmptyState";
 import ActionCells from "@/components/ActionCells";
 import Rail from "@/components/Rail";
@@ -61,7 +60,7 @@ function groupByDate(items: CalendarItem[]) {
 }
 
 // Compact type-icon + rating/wishlist/library indicator cluster shared by the
-// month grid's hover rows, its overflow drawer, and the Agenda view. Replaces
+// month grid's title rows and the Agenda view. Replaces
 // the old ItemBadges "calendar" variant (H1.6d) with token-driven colors:
 // accent for personal-preference signals (rating, wishlist), success for the
 // distinct in-library/completion signal — same convention ActionCells uses.
@@ -84,31 +83,21 @@ function ItemMeta({ item, size = 11 }: { item: CalendarItem; size?: number }) {
   );
 }
 
-// A title row inside a multi-release cell. Since 2026-08-26 its CLICK does the
-// same thing the cell does (it opens the day below the grid), so there is exactly
-// one outcome for a tap anywhere in the cell (see CalendarCell). It stays a
-// real button only so the desktop hover tooltip has an element to hang off and
-// so the row is keyboard-reachable; it is no longer a second, competing target.
-function HoverableCalendarItem({ item, onOpenDay }: { item: CalendarItem; onOpenDay: () => void }) {
-  const [hovered, setHovered] = useState(false);
-  const ref = useRef<HTMLButtonElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+// A title row inside a multi-release cell. Pure display: no click, no hover, no
+// pointer events at all, so the cell's own button takes every tap.
+//
+// It used to be a button carrying a hover tooltip (the score explainer). That
+// went on 2026-08-26 (Nils): a tooltip on a target you can only reach with a
+// thumb is triggered by accident and then covers the three days you were trying
+// to read. The rail below the grid shows the same title as a full PosterCard,
+// which keeps its own tooltip because a card is a thing you deliberately point
+// at. Removing it also removed the last exception to "one target per cell".
+function CalendarItemRow({ item }: { item: CalendarItem }) {
   return (
-    <>
-      <button
-        ref={ref}
-        tabIndex={-1}
-        className="pointer-events-auto flex items-center gap-1 text-left w-full hover:opacity-75 transition-opacity duration-fast"
-        onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
-        onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
-        onClick={onOpenDay}
-      >
-        <ItemMeta item={item} />
-        <span className="font-mono text-[10px] text-text-secondary truncate leading-tight">{item.title}</span>
-      </button>
-      {hovered && <Tooltip item={item} anchorRef={ref} />}
-    </>
+    <span className="flex items-center gap-1 w-full">
+      <ItemMeta item={item} />
+      <span className="font-mono text-[10px] text-text-secondary truncate leading-tight">{item.title}</span>
+    </span>
   );
 }
 
@@ -125,12 +114,12 @@ function HoverableCalendarItem({ item, onOpenDay }: { item: CalendarItem; onOpen
 // clickable layers in an 80px box, with the outcome decided by a few pixels of
 // thumb placement, and a third rule for days with one release.
 //
-// The layering survives, inverted in effect rather than in z-index: the
+// The layering survives, inverted in effect rather than in z-index: the whole
 // content layer is `pointer-events-none`, so a tap anywhere in the cell falls
-// through to the overlay button underneath it. The multi-release title rows
-// re-enable pointer events for themselves, purely so desktop keeps its hover
-// tooltip. Their click calls the same onOpenDay, so re-enabling them cannot
-// re-introduce a competing target.
+// through to the overlay button underneath it. There is no exception to that,
+// and there should not be one. The rows briefly kept their pointer events for
+// a hover tooltip; that tooltip is gone (see CalendarItemRow) and with it the
+// last way a tap could resolve to something other than "open this day".
 function CalendarCell({
   day,
   dayItems,
@@ -145,9 +134,6 @@ function CalendarCell({
   selected: boolean;
   isDesktop: boolean;
 }) {
-  const [singleHovered, setSingleHovered] = useState(false);
-  const cellRef = useRef<HTMLDivElement>(null);
-  const singleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const today = isToday(day);
   const single = dayItems.length === 1 ? dayItems[0] : null;
   // A mobile cell is 80px tall, which fits two title rows plus the "+N more"
@@ -167,17 +153,12 @@ function CalendarCell({
 
   return (
     <div
-      ref={cellRef}
       className={`h-20 md:h-32 rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
         today ? "ring-2 ring-accent ring-inset" : ""
       } ${selected ? "ring-2 ring-accent" : ""} ${
         single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"
       }`}
       style={single ? { borderColor: `${TYPE_COLORS[single.type] ?? "#888"}44` } : undefined}
-      // A single-release day shows its tooltip from the WHOLE cell rather than
-      // from the title block, because the whole cell is the target now.
-      onMouseEnter={single ? () => { singleTimer.current = setTimeout(() => setSingleHovered(true), 350); } : undefined}
-      onMouseLeave={single ? () => { if (singleTimer.current) clearTimeout(singleTimer.current); setSingleHovered(false); } : undefined}
     >
       {/* The cell-wide open target, on every day including empty ones. A real
           <button>, so it is keyboard- and screen-reader-reachable, and it
@@ -226,7 +207,7 @@ function CalendarCell({
         ) : dayItems.length > 0 ? (
           <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
             {dayItems.slice(0, VISIBLE).map((item) => (
-              <HoverableCalendarItem key={item.id} item={item} onOpenDay={openDay} />
+              <CalendarItemRow key={item.id} item={item} />
             ))}
             {overflow && (
               /* Kept as its own element because it carries the COUNT, which the
@@ -239,7 +220,6 @@ function CalendarCell({
           </div>
         ) : null}
       </div>
-      {singleHovered && single && <Tooltip item={single} anchorRef={cellRef} />}
     </div>
   );
 }
