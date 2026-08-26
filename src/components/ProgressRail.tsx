@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import Panel from "@/components/ui/Panel";
+import Skeleton from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
 import EpisodeRow, { EPISODE_ROW_GAP, EPISODE_ROW_H, entryKey } from "@/components/EpisodeRow";
 import type { EpisodeRowEntry } from "@/components/EpisodeRow";
@@ -100,9 +101,32 @@ export default function ProgressRail() {
     }
   }
 
-  // Still resolving — render nothing rather than flashing an empty state that
-  // is about to be replaced.
-  if (entries === null) return null;
+  // Still resolving. This used to `return null`, and that was the other half of
+  // the layout shift Nils reported on 2026-08-26: this section sits ABOVE Home's
+  // public rails, so occupying no space until the fetch landed meant every
+  // signed-in load painted and then shoved the whole page down.
+  //
+  // ⚠️ The height here is not a guess. It is the header plus SCROLLER_H, the
+  // exact box the loaded rail renders into, derived from EpisodeRow's own
+  // metrics — so filling it moves nothing. If the loaded layout changes, this
+  // has to change with it, which is why both read the same constants.
+  //
+  // Still not an empty state: `null` was right about not flashing "you're all
+  // caught up" at somebody who is not. A skeleton says "loading", which is true.
+  if (entries === null) {
+    return (
+      <section aria-hidden>
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <div className="font-serif text-serif-md text-text-primary">Up next</div>
+        </div>
+        <div style={{ height: SCROLLER_H, gap: EPISODE_ROW_GAP }} className="flex flex-col overflow-hidden">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="shrink-0 rounded-lg" style={{ height: EPISODE_ROW_H }} />
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   if (!entries.length) {
     return (

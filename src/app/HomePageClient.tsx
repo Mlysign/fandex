@@ -13,6 +13,7 @@ import Eyebrow from "@/components/ui/Eyebrow";
 import ProgressRail from "@/components/ProgressRail";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
+import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
 import { buildItemHref } from "@/lib/itemUrl";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { PopularPerson } from "@/lib/personRail";
@@ -35,11 +36,29 @@ import type { MediaType } from "@/types";
 // FIRST render (which is server HTML) already carries every link.
 //
 // The fetch stays, and its job changed: it no longer decides what is on the
-// page, only who is looking. It brings back the per-user overlay for the same
-// rails (watchlist / library / rating / the viewer's Fandex Score) plus the
-// recommendation rail, and it is what flips `authed`. If it fails, the public
+// page, only what the VIEWER's copy of it looks like. It brings back the
+// per-user overlay for the same rails (watchlist / library / rating / the
+// viewer's Fandex Score) plus the recommendation rail. If it fails, the public
 // page it replaces is still standing, which is why an error here no longer
 // blanks the rails.
+//
+// ── 2026-08-26, second pass: NOTHING ABOVE THE PUBLIC RAILS MAY APPEAR LATE ──
+//
+// Nils: *"the page first only shows the 2 public rails and then the user content
+// pops in and messes with the scroll position."* Both personal sections live
+// above the public ones and both rendered `null` until their own fetch landed,
+// so a signed-in load painted, then shoved everything down by two rails.
+//
+// The fix has two halves and BOTH are needed:
+//
+//   · `signedIn` comes from the SERVER (page.tsx). The client cannot reserve the
+//     space on its own, because "is anyone signed in" only arrives with the very
+//     round-trip that causes the shift.
+//   · Each personal section renders a SKELETON of its real height while its data
+//     is in flight, instead of nothing. See `RailSkeleton` here and the loading
+//     branch in ProgressRail.
+//
+// A skeleton alone would not have worked, and neither would the flag alone.
 
 interface HomeData {
   trending: any[];
@@ -56,10 +75,67 @@ interface HomePageClientProps {
   /** False when no snapshot exists yet. The poster rails' empty state needs
    *  to say WHY it is empty rather than reading as a broken feature. */
   hasSnapshot: boolean;
+  /**
+   * Whether the server saw a session, so the personal sections can hold their
+   * space from the very first paint. See the note above; this is the half of the
+   * layout-shift fix that a skeleton cannot supply on its own.
+   */
+  signedIn: boolean;
+}
+
+/**
+ * The body height of a real `<PosterCard>` at a 150px column: the block under
+ * the poster holding title, meta, rating and the action bar.
+ *
+ * ⚠️ MEASURED, not estimated, and it is the whole reason this skeleton is worth
+ * having. The first version composed its own stack of bars and came out **36px
+ * short of the real card**, which is a smaller version of exactly the shift this
+ * is here to prevent. Measured in the browser against a loaded rail: poster 223 +
+ * body 102 inside a 1px-bordered box, 327 total.
+ *
+ * If PosterCard's body ever grows a line, re-measure rather than reasoning: the
+ * gap only shows up as a jump on a real page load.
+ */
+const POSTER_CARD_BODY_H = 102;
+
+/**
+ * A rail-shaped hole, the size of the rail that is about to fill it.
+ *
+ * Mirrors `<Rail>` + `<PosterCard>`'s actual BOX — the same header, the same
+ * 150px columns, the same bordered card with a 2:3 poster over a fixed-height
+ * body — rather than approximating it with a stack of bars. The entire point is
+ * that swapping the real rail in moves nothing.
+ */
+function RailSkeleton({ title }: { title: string }) {
+  return (
+    <section aria-hidden>
+      <div className="flex items-center justify-between gap-3 mb-3 px-1">
+        <div className="font-serif text-serif-md text-text-primary">{title}</div>
+      </div>
+      {/* `pb-1` mirrors <Rail>'s scroller. It is 4px, and leaving it out was 4px
+          of the residual jump after the card body was fixed — worth copying
+          rather than eyeballing, since every one of these deltas is additive. */}
+      <div className="grid grid-flow-col auto-cols-[150px] gap-3 overflow-hidden pb-1">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="rounded-md border border-border bg-surface-elevated overflow-hidden">
+            <SkeletonPoster className="rounded-none" />
+            <div
+              className="px-2.5 py-2.5 flex flex-col gap-[7px]"
+              style={{ height: POSTER_CARD_BODY_H }}
+            >
+              <SkeletonText className="w-4/5" />
+              <SkeletonText className="w-2/5" />
+              <SkeletonText className="mt-auto h-7 w-full rounded-md" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 export default function HomePageClient({
-  initialTrending, initialUpcoming, people, hasSnapshot,
+  initialTrending, initialUpcoming, people, hasSnapshot, signedIn,
 }: HomePageClientProps) {
   const router = useRouter();
   const [data, setData] = useState<HomeData | null>(null);
@@ -78,13 +154,22 @@ export default function HomePageClient({
       .catch(() => setError(true));
   }, []);
 
-  // Fetch-on-mount: the server can't know the session, so the per-user overlay
-  // is resolved client-side. Same justified disable the discover/insights/
-  // item-detail islands already use for this pattern.
+  // Fetch-on-mount: the server tells us WHETHER someone is signed in, but the
+  // per-user payload still has to be resolved client-side. Same justified
+  // disable the discover/insights/item-detail islands already use.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  const authed = !!data?.authed;
+  // Optimistic from the server, corrected by the API once it answers. The
+  // correction only ever fires when a cookie expired between the render and the
+  // fetch, and getting it wrong the other way (assuming anon, then discovering a
+  // session) is exactly the shift being fixed.
+  const authed = data ? data.authed : signedIn;
+
+  // True while a signed-in viewer's personal sections are still in flight. Every
+  // section that is per-user reads this and holds its space.
+  const personalPending = authed && !data;
+
   const onSelect = (i: any) => router.push(buildItemHref(i));
 
   // Prefer the overlaid copy once it lands; until then (and for a crawler,
@@ -133,12 +218,12 @@ export default function HomePageClient({
             button stack (sign-in now runs through the same SignInDialog the
             nav's anon "You" slot opens, so there's one auth surface).
 
-            Rendered only once the session probe has answered. It used to key off
-            `!loading`, which was the same thing; now that the rails no longer
-            wait for a fetch, `data === null` is the only "we don't know yet"
-            left, and flashing "Guest mode" at a signed-in visitor for one
-            round-trip is worse than showing it a moment later. */}
-        {data && !authed && (
+            Keyed off `authed`, which the SERVER supplies, so it is present in the
+            first paint for an anonymous visitor and never appears for a signed-in
+            one. It used to wait for the fetch, which meant an anon load pushed
+            the rails down by a panel exactly the way the personal sections
+            pushed them down for everyone else. */}
+        {!authed && (
           <Panel className="px-4 py-4">
             <Eyebrow>Guest mode</Eyebrow>
             <div className="font-serif text-serif-lg text-text-primary mt-1.5 mb-3">
@@ -153,18 +238,20 @@ export default function HomePageClient({
           </Panel>
         )}
 
-        {/* Its own island + its own request: it may heal a show's episode
-            catalog from TMDB, and that must never sit in front of Home's rails.
-            Renders nothing when there's nothing to continue.
+        {/* "Up next" — its own island and its own request, because it may heal a
+            show's episode catalog from TMDB and that must never sit in front of
+            Home's rails. It holds its own space while loading (a skeleton, not
+            `null`), so mounting it early costs no shift and starts its fetch in
+            parallel with `/api/home` rather than after it.
 
             2026-08-26: the day's rotating highlight panels used to sit above
             this. Nils removed them ("they don't add as much as I'd hoped") and
             the progress rail took the slot outright. */}
         {authed && <ProgressRail />}
 
-        {/* Rails. There is no loading state any more: the public two are already
-            here, server-rendered, on the first paint. */}
-        {!hasRails ? (
+        {/* Rails. There is no page-level loading state: the public two are
+            already here, server-rendered, on the first paint. */}
+        {!hasRails && !personalPending ? (
           <EmptyState
             title="Nothing to show right now"
             hint={hasSnapshot
@@ -173,7 +260,13 @@ export default function HomePageClient({
           />
         ) : (
           <div className="space-y-8">
-            {rail("Recommended for you", data?.recommendation, "/discover", true)}
+            {/* Reserved from the first paint for a signed-in viewer. This rail
+                is the biggest of the two personal sections, so it was most of
+                the jump. */}
+            {personalPending
+              ? <RailSkeleton title="Recommended for you" />
+              : rail("Recommended for you", data?.recommendation, "/discover", true)}
+
             {/* "Popular right now" per the mockup's own headline — and now
                 literally true: real provider trending, released titles included. */}
             {rail("Popular right now", trending, "/discover")}
@@ -183,13 +276,9 @@ export default function HomePageClient({
                 director is not a movie, and hiding the whole rail because
                 somebody ticked "Games" would be a dead control, not a filter.
                 It also renders a wider column than a poster: these are circles
-                with two lines of text under them.
-
-                And no `seeAllHref`: there is no "all people" page to send
-                anyone to, and a "See all" landing on /discover (which lists
-                titles, not people) is a dead control dressed as navigation. */}
+                with two lines of text under them. */}
             {people.length > 0 && (
-              <Rail title="Popular people" colsClass="auto-cols-[110px]">
+              <Rail title="Popular people" seeAllHref="/discover" colsClass="auto-cols-[110px]">
                 {people.map((p) => <PersonCard key={p.key} person={p} />)}
               </Rail>
             )}
@@ -197,7 +286,7 @@ export default function HomePageClient({
         )}
 
         {/* The per-user overlay failed. Says so instead of hiding, and the
-            public page underneath is untouched, so this is a note, not a
+            public page underneath is untouched, so this is a note rather than a
             replacement for the content. */}
         {error && (
           <ErrorState
