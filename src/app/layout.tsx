@@ -94,7 +94,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               the content wrapper pads the bottom on mobile so the fixed bar can't
               cover the last of the page. `id="main"` is the skip-link target. */}
           <AppNav />
-          <div id="main" tabIndex={-1} className="outline-none pb-16 md:pb-0">
+          {/* The bottom padding is the bar's OWN height plus the safe-area
+              inset, from the same token the bar is sized against. It was a flat
+              `pb-16`, which was wrong in both directions: 11px too much on a
+              plain screen (dead space, and the reason a page that fit still
+              scrolled a little), and too little on a notched phone, where the
+              bar grows by the inset and covered the last of the content. */}
+          <div
+            id="main"
+            tabIndex={-1}
+            className="outline-none pb-[calc(var(--size-nav-bar-mobile)_+_env(safe-area-inset-bottom))] md:pb-0"
+          >
             {children}
           </div>
         </AppProviders>

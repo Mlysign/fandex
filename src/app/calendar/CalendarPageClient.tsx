@@ -299,7 +299,13 @@ export default function CalendarPageClient() {
   };
 
   return (
-    <div className="min-h-screen">
+    // No min-h-screen here (2026-08-26). <body> already carries it along with
+    // the surface background, so it bought nothing visually. But layout.tsx
+    // pads the content wrapper `pb-16` on mobile to clear the fixed bottom nav,
+    // so a 100vh page plus 64px of padding made the document 64px taller than
+    // the viewport on EVERY page. Harmless where the content scrolls anyway;
+    // on the calendar, which otherwise fits, it read as a page that wobbles.
+    <div>
       {/* Every list page's heading is now visually gone (Nils, 2026-07-28) —
           the filter row IS the header. Keep an sr-only one so the page still
           has a document outline for screen readers and the a11y tree isn't a
@@ -323,7 +329,7 @@ export default function CalendarPageClient() {
 
       {/* px-1 on mobile, not px-6: the grid needs the screen width more than it
           needs a margin. See CalendarView's grid comment. */}
-      <main className="max-w-6xl mx-auto px-1 md:px-6 py-4 md:py-6 space-y-3 md:space-y-4">
+      <main className="max-w-6xl mx-auto px-1 md:px-6 py-2 md:py-6 space-y-3 md:space-y-4">
         {popularLoading && !loading && (
           <p className="font-mono text-meta text-text-secondary text-center" role="status">Loading popular releases…</p>
         )}

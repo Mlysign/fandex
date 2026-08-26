@@ -289,6 +289,18 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     row, truncating most titles to ~12 chars. Re-measured 2026-07-28 (after L4 changed the row's
     density): the title box was still only 132px, so titles wrapped to 2 lines (`line-clamp-2`, T13)
     instead — expect ~30-36 chars now, not a fixed-width truncation. Screenshot at mobile.
+13j. **The calendar month grid is DAY-FIRST (2026-08-26).** At 375px, check all four cell kinds,
+    not one: a busy day, a 3+ day with "+N more", a single-release day, and an EMPTY day. Every one
+    must open the day rail below the grid, and nothing in the grid may navigate to an item:
+    a single-release day jumping straight to the item page is the old behaviour, i.e. a regression.
+    Tap a busy cell in several places (top corner, over a title line, the gap between lines): the
+    outcome must be identical every time. An empty day must say "Nothing releasing on this day"
+    rather than doing nothing. Then: **swipe** left/right anywhere on the grid to page the month
+    (a vertical scroll and a slow drag must NOT page it), and swipe sideways INSIDE the open day
+    rail, which must scroll the rail and leave the month alone. Finally, with no day open, check
+    the page does not scroll at all on a 6-week month: `document.documentElement.scrollHeight -
+    innerHeight` should be `0`. It was permanently 64px (a 100vh page under a `pb-16` wrapper) until
+    2026-08-26, so a small non-zero number here means that padding/height pair has drifted again.
 
 **C3. Episode tracking + Home's progress rail (added 2026-08-16, MB14)** — brand new surfaces; nothing before this date exercised them.
 13k. **MB14 — per-episode tracking (2026-08-16), item page.** On a SHOW's item page, a

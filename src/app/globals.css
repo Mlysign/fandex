@@ -151,7 +151,7 @@
   /* ---- Layout ---------------------------------------------------------------- */
   --breakpoint-desktop: 768px; /* nav flips: bottom-bar < 768px ≤ top-bar */
   --size-touch-min: 44px;      /* minimum interactive target (mobile) */
-  --size-nav-bar-mobile: 64px; /* bottom nav height (excl. safe-area inset) */
+  /* --size-nav-bar-mobile lives in the plain :root block below, not here. */
   --size-nav-bar-desktop: 60px;/* top nav height */
   --container-max: 1200px;     /* desktop content max-width */
 }
@@ -225,6 +225,19 @@
   --space-2xl: 24px;
   --space-3xl: 26px;
   --space-section: 44px; /* desktop section padding */
+
+  /* The mobile bottom bar's real height: AppNav's slots are min-h-[52px] and
+     the bar carries a 1px top border. Keep it in step with that min-height if
+     the bar is ever restyled — layout.tsx pads the content wrapper by this plus
+     the safe-area inset, so it is the only thing keeping the fixed bar off the
+     end of the page. It was declared 64px in @theme, read by nothing, while
+     layout.tsx separately hard-coded a matching `pb-16`: 11px of dead space on
+     every mobile page, and the reason a calendar month that otherwise fit still
+     scrolled by a couple of pixels.
+     Outside @theme for the same reason as --space-* above: it is only ever
+     consumed as a var() in a value position, which is exactly the shape
+     Tailwind tree-shakes (silently, resolving to an empty string at runtime). */
+  --size-nav-bar-mobile: 53px;
 }
 
 /* ---- Facet classes (2026-07-30) -------------------------------------------

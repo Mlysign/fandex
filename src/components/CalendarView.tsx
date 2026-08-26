@@ -84,7 +84,12 @@ function ItemMeta({ item, size = 11 }: { item: CalendarItem; size?: number }) {
   );
 }
 
-function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelect: (item: CalendarItem) => void }) {
+// A title row inside a multi-release cell. Since 2026-08-26 its CLICK does the
+// same thing the cell does (it opens the day below the grid), so there is exactly
+// one outcome for a tap anywhere in the cell (see CalendarCell). It stays a
+// real button only so the desktop hover tooltip has an element to hang off and
+// so the row is keyboard-reachable; it is no longer a second, competing target.
+function HoverableCalendarItem({ item, onOpenDay }: { item: CalendarItem; onOpenDay: () => void }) {
   const [hovered, setHovered] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,10 +98,11 @@ function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelec
     <>
       <button
         ref={ref}
-        className="flex items-center gap-1 text-left w-full hover:opacity-75 transition-opacity duration-fast"
+        tabIndex={-1}
+        className="pointer-events-auto flex items-center gap-1 text-left w-full hover:opacity-75 transition-opacity duration-fast"
         onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
         onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
-        onClick={() => onSelect(item)}
+        onClick={onOpenDay}
       >
         <ItemMeta item={item} />
         <span className="font-mono text-[10px] text-text-secondary truncate leading-tight">{item.title}</span>
@@ -106,24 +112,41 @@ function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelec
   );
 }
 
+// ── The cell is DAY-FIRST (2026-08-26, Nils) ────────────────────────────────
+// Every cell, busy or single-release or empty, has exactly ONE outcome: it
+// opens that day in the rail below the grid. Nothing inside a cell navigates
+// to an item any more; that is the rail's job, where a title is a full
+// PosterCard with artwork, score and quick actions.
+//
+// What this replaces and why. A multi-release cell used to stack a cell-wide
+// button at z-0 UNDER 10px title buttons at z-10, so a tap on a phone landed
+// on whichever title line the thumb happened to cover, and a single-release
+// cell bypassed the rail entirely and jumped straight to the item. Two
+// clickable layers in an 80px box, with the outcome decided by a few pixels of
+// thumb placement, and a third rule for days with one release.
+//
+// The layering survives, inverted in effect rather than in z-index: the
+// content layer is `pointer-events-none`, so a tap anywhere in the cell falls
+// through to the overlay button underneath it. The multi-release title rows
+// re-enable pointer events for themselves, purely so desktop keeps its hover
+// tooltip. Their click calls the same onOpenDay, so re-enabling them cannot
+// re-introduce a competing target.
 function CalendarCell({
   day,
   dayItems,
-  onSelect,
   onOpenDay,
   selected,
   isDesktop,
 }: {
   day: Date;
   dayItems: CalendarItem[];
-  onSelect: (item: CalendarItem) => void;
-  /** MB8 — open this day's carousel below the grid. `yyyy-MM-dd`. */
+  /** Open this day's rail below the grid. `yyyy-MM-dd`. */
   onOpenDay: (dateStr: string) => void;
   selected: boolean;
   isDesktop: boolean;
 }) {
   const [singleHovered, setSingleHovered] = useState(false);
-  const singleRef = useRef<HTMLDivElement>(null);
+  const cellRef = useRef<HTMLDivElement>(null);
   const singleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const today = isToday(day);
   const single = dayItems.length === 1 ? dayItems[0] : null;
@@ -131,50 +154,59 @@ function CalendarCell({
   // link; three would clip. Desktop's 128px still fits three.
   const VISIBLE = isDesktop ? 3 : 2;
   const overflow = dayItems.length > VISIBLE;
-  // MB8: a day with more than one release opens the carousel below the grid.
-  // A single-release day still goes straight to the item — a one-card carousel
-  // would be a worse version of the click you already made.
-  const multi = dayItems.length > 1;
+  const dateStr = format(day, "yyyy-MM-dd");
+  const openDay = () => onOpenDay(dateStr);
+  const count = dayItems.length;
+  // The content layer is aria-hidden (it duplicates this, and its title rows
+  // are no longer targets), so this string is the ONLY thing a screen reader
+  // gets for the cell. A single-release day names its title; a busy day gives
+  // the count, and the rail below reads out the rest once it's open.
+  const label = `${format(day, "EEEE, MMMM d")}, ${
+    count === 0 ? "no releases" : single ? `1 release: ${single.title}` : `${count} releases`
+  }`;
 
   return (
     <div
+      ref={cellRef}
       className={`h-20 md:h-32 rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
         today ? "ring-2 ring-accent ring-inset" : ""
       } ${selected ? "ring-2 ring-accent" : ""} ${
         single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"
       }`}
       style={single ? { borderColor: `${TYPE_COLORS[single.type] ?? "#888"}44` } : undefined}
+      // A single-release day shows its tooltip from the WHOLE cell rather than
+      // from the title block, because the whole cell is the target now.
+      onMouseEnter={single ? () => { singleTimer.current = setTimeout(() => setSingleHovered(true), 350); } : undefined}
+      onMouseLeave={single ? () => { if (singleTimer.current) clearTimeout(singleTimer.current); setSingleHovered(false); } : undefined}
     >
-      {/* The cell-wide open target for a multi-release day, UNDER the content
-          (z-0 vs the content's z-10) so the individual title buttons on desktop
-          still take their own clicks. On mobile those titles are 10px tall and
-          effectively unhittable, so nearly every tap lands here — which is the
-          point. A real <button>, so it's keyboard- and screen-reader-reachable
-          rather than a click handler on a div. */}
-      {multi && (
-        <button
-          type="button"
-          onClick={() => onOpenDay(format(day, "yyyy-MM-dd"))}
-          aria-label={`${format(day, "MMMM d")}, show all ${dayItems.length} releases`}
-          aria-expanded={selected}
-          className="absolute inset-0 z-0 rounded-sm md:rounded-md cursor-pointer"
-        />
-      )}
+      {/* The cell-wide open target, on every day including empty ones. A real
+          <button>, so it is keyboard- and screen-reader-reachable, and it
+          carries the whole cell's accessible name. The content above it is
+          decorative duplication of the same facts. */}
+      <button
+        type="button"
+        onClick={openDay}
+        aria-label={label}
+        aria-expanded={selected}
+        className="absolute inset-0 z-0 rounded-sm md:rounded-md cursor-pointer"
+      />
       {single && single.posterUrl && (
         <>
           <Image
             src={single.posterUrl}
-            alt={single.title}
+            alt=""
             fill
             sizes="(max-width: 768px) 14vw, 120px"
-            className="object-cover opacity-40 rounded-sm md:rounded-md"
+            className="pointer-events-none object-cover opacity-40 rounded-sm md:rounded-md"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/30 to-transparent rounded-sm md:rounded-md" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/30 to-transparent rounded-sm md:rounded-md" />
         </>
       )}
 
-      <div className="relative z-10 p-1 md:p-2 h-full flex flex-col">
+      {/* pointer-events-none is what makes the whole cell one target: taps pass
+          straight through this layer to the button beneath it. */}
+      <div className="pointer-events-none relative z-10 p-1 md:p-2 h-full flex flex-col" aria-hidden>
         {/* Day number */}
         <div className="mb-0.5 md:mb-1">
           {today ? (
@@ -187,42 +219,27 @@ function CalendarCell({
         </div>
 
         {single ? (
-          <>
-            <div
-              ref={singleRef}
-              tabIndex={0}
-              role="button"
-              aria-label={`${single.title}, view details`}
-              className="flex-1 flex flex-col justify-end cursor-pointer"
-              onMouseEnter={() => { singleTimer.current = setTimeout(() => setSingleHovered(true), 350); }}
-              onMouseLeave={() => { if (singleTimer.current) clearTimeout(singleTimer.current); setSingleHovered(false); }}
-              onClick={() => onSelect(single)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(single); } }}
-            >
-              <p className="font-serif text-[11px] md:text-[13px] leading-tight line-clamp-2 text-text-primary drop-shadow">{single.title}</p>
-              <div className="mt-0.5"><ItemMeta item={single} /></div>
-            </div>
-            {singleHovered && <Tooltip item={single} anchorRef={singleRef} />}
-          </>
+          <div className="flex-1 flex flex-col justify-end">
+            <p className="font-serif text-[11px] md:text-[13px] leading-tight line-clamp-2 text-text-primary drop-shadow">{single.title}</p>
+            <div className="mt-0.5"><ItemMeta item={single} /></div>
+          </div>
         ) : dayItems.length > 0 ? (
           <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
             {dayItems.slice(0, VISIBLE).map((item) => (
-              <HoverableCalendarItem key={item.id} item={item} onSelect={onSelect} />
+              <HoverableCalendarItem key={item.id} item={item} onOpenDay={openDay} />
             ))}
             {overflow && (
-              /* Now opens the same day carousel the cell does, rather than the
-                 old popover/bottom-sheet. Kept as its own control because it
-                 carries the COUNT, which the bare cell doesn't. */
-              <button
-                className="relative z-10 mt-auto self-start font-mono text-[10px] text-text-secondary hover:text-text-primary transition-colors"
-                onClick={(e) => { e.stopPropagation(); onOpenDay(format(day, "yyyy-MM-dd")); }}
-              >
+              /* Kept as its own element because it carries the COUNT, which the
+                 bare cell doesn't. Not a button any more: the cell underneath
+                 already opens the day, so this is just the label for it. */
+              <span className="mt-auto self-start font-mono text-[10px] text-text-secondary">
                 +{dayItems.length - VISIBLE} more
-              </button>
+              </span>
             )}
           </div>
         ) : null}
       </div>
+      {singleHovered && single && <Tooltip item={single} anchorRef={cellRef} />}
     </div>
   );
 }
@@ -337,6 +354,21 @@ function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (ite
   );
 }
 
+// Horizontal swipe to page months (2026-08-26, Nils). Deliberately plain touch
+// events rather than a gesture library: the whole rule is "a fast, mostly
+// sideways drag pages the month".
+//
+// Two guards matter and both are about NOT stealing a scroll. `DOMINANCE` means
+// a drag has to be half again as horizontal as it is vertical, so a normal
+// vertical scroll that wanders sideways never pages; `MAX_MS` means a slow drag
+// (someone holding the page still, or a long press that drifts) doesn't either.
+// The handlers stay passive, nothing calls preventDefault, and the container
+// carries `touch-action: pan-y`, so vertical scrolling inside the grid keeps
+// working natively at full speed.
+const SWIPE_MIN_PX = 48;
+const SWIPE_DOMINANCE = 1.5;
+const SWIPE_MAX_MS = 700;
+
 export default function CalendarView({ items, onSelect, onVisibleMonthChange, mode = "month" }: CalendarViewProps) {
   const [calMonth, setCalMonth] = useState(new Date());
   // MB8: the open day, as `yyyy-MM-dd`. A string, not a Date — two Dates for the
@@ -367,6 +399,16 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
 
   const selectedDayItems = selectedDay ? (groups[selectedDay] ?? []) : [];
   const selectedDayLabel = selectedDay ? format(parseISO(selectedDay), "EEEE, MMMM d") : "";
+  const closeDayButton = (
+    <button
+      onClick={() => setSelectedDay(null)}
+      aria-label="Close this day"
+      className="tap-44 inline-flex items-center gap-1 text-label text-text-secondary hover:text-text-primary transition-colors"
+    >
+      Close
+      <X className="w-3.5 h-3.5" aria-hidden />
+    </button>
+  );
 
   // Bring the rail into view when a day is opened. Without this the rail can
   // land below the fold on a tall month and the tap reads as doing nothing —
@@ -378,6 +420,26 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
 
   const monthItemCount = days.reduce((acc, day) => acc + (groups[format(day, "yyyy-MM-dd")]?.length ?? 0), 0);
 
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    // A second finger means a pinch/zoom, not a page.
+    if (e.touches.length !== 1) { swipeStart.current = null; return; }
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Date.now() - start.t > SWIPE_MAX_MS) return;
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_DOMINANCE) return;
+    // Drag left to move forward, matching the direction the content would move.
+    setCalMonth((m) => (dx < 0 ? addMonths(m, 1) : subMonths(m, 1)));
+  };
+
   // The "← Previous release" / "Next release →" jumps that used to sit in the
   // utility row (and again in the empty-month state) were removed 2026-07-28 at
   // Nils's request — obsolete now that the Popular scope means most months have
@@ -388,7 +450,14 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
       {mode === "agenda" ? (
         <AgendaView items={items} onSelect={onSelect} />
       ) : (
-        <>
+        <div
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          // pan-y, not auto: tells the browser up front that this element only
+          // scrolls vertically, so a sideways drag is ours to interpret and
+          // isn't first handed to a scroll container that can't use it.
+          style={{ touchAction: "pan-y" }}
+        >
           {/* Month navigation — 03-components.md's calendar.html shows a
               plain 3-part row (chevron / serif month / chevron); the
               "jump to nearest release" + "Today" controls the board flagged
@@ -421,7 +490,7 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
               a 44px hit area; as a bare text link squeezed between four other
               controls it was the smallest tap target on the page. */}
           {(monthItemCount > 0 || !isCurrentMonth) && (
-            <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 mb-4 font-mono text-meta text-text-secondary">
+            <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 mb-2 md:mb-4 font-mono text-meta text-text-secondary">
               {monthItemCount > 0 && <span>{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</span>}
               {!isCurrentMonth && (
                 <button
@@ -471,7 +540,6 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
                       key={day.toISOString()}
                       day={day}
                       dayItems={dayItems}
-                      onSelect={onSelect}
                       onOpenDay={setSelectedDay}
                       selected={selectedDay === dateStr}
                       isDesktop={isDesktop}
@@ -479,40 +547,48 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
                   );
                 })}
               </div>
-
-              {/* MB8 (2026-08-14) — Nils: "when clicking a day with multiple
-                  entries, I want them to open in a carousel below the month
-                  view." This replaces the popover/bottom-sheet the "+N more"
-                  link used to open. Below the grid rather than over it, so the
-                  month stays readable while you browse the day — the popover
-                  covered the following week and the sheet covered everything.
-                  Full PosterCards, so a day's titles get the same artwork,
-                  score and quick actions they have everywhere else; the cell's
-                  own 10px text lines never could. */}
-              {selectedDayItems.length > 0 && (
-                <div ref={dayRailRef} className="mt-5 pt-5 border-t border-border scroll-mt-24">
-                  <Rail
-                    title={selectedDayLabel}
-                    action={
-                      <button
-                        onClick={() => setSelectedDay(null)}
-                        aria-label="Close this day"
-                        className="tap-44 inline-flex items-center gap-1 text-label text-text-secondary hover:text-text-primary transition-colors"
-                      >
-                        Close
-                        <X className="w-3.5 h-3.5" aria-hidden />
-                      </button>
-                    }
-                  >
-                    {selectedDayItems.map((item) => (
-                      <PosterCard key={item.id} item={item as MediaCardItem} onSelect={() => onSelect(item)} />
-                    ))}
-                  </Rail>
-                </div>
-              )}
             </>
           )}
-        </>
+        </div>
+      )}
+
+      {/* MB8 (2026-08-14) — Nils: "when clicking a day with multiple entries, I
+          want them to open in a carousel below the month view." This replaced
+          the popover/bottom-sheet the "+N more" link used to open. Below the
+          grid rather than over it, so the month stays readable while you browse
+          the day — the popover covered the following week and the sheet covered
+          everything. Full PosterCards, so a day's titles get the same artwork,
+          score and quick actions they have everywhere else; the cell's own 10px
+          text lines never could.
+          2026-08-26: this is now the ONLY route from the grid to an item, so it
+          opens for EVERY day, empty ones included. An empty day answering
+          "nothing that day" is the point. A tap that silently does nothing is
+          indistinguishable from a tap that missed. It also sits outside the
+          swipe container above: the rail is a horizontal scroller, and a
+          sideways drag inside it belongs to the rail, not to the month.  */}
+      {mode === "month" && selectedDay && (
+        <div ref={dayRailRef} className="mt-5 pt-5 border-t border-border scroll-mt-24">
+          {selectedDayItems.length > 0 ? (
+            <Rail title={selectedDayLabel} action={closeDayButton}>
+              {selectedDayItems.map((item) => (
+                <PosterCard key={item.id} item={item as MediaCardItem} onSelect={() => onSelect(item)} />
+              ))}
+            </Rail>
+          ) : (
+            /* Rail's own header markup, repeated rather than rendering an empty
+               Rail: the scroller's chevrons and snap columns around a single
+               line of text would read as a broken carousel. */
+            <section>
+              <div className="flex items-center justify-between gap-3 mb-3 px-1">
+                <h2 className="font-serif text-serif-md text-text-primary">{selectedDayLabel}</h2>
+                <div className="shrink-0">{closeDayButton}</div>
+              </div>
+              <p className="px-1 pb-2 font-mono text-meta text-text-secondary" role="status">
+                Nothing releasing on this day.
+              </p>
+            </section>
+          )}
+        </div>
       )}
     </div>
   );
