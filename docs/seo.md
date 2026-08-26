@@ -404,17 +404,43 @@ sitemap, not against the route folder's name.**
 They are already crawled heavily via item-page links — that crawl is what filled
 `facet_page_cache` to 222 MB on 2026-08-19. Enumerating thousands of
 `force-dynamic` provider-fanout URLs would invite more of exactly that. **Fix the
-under-linking first, then reconsider.**
+under-linking first, then reconsider** (see below: the pages DO render links, they
+just link only the titles we already hold).
 
-### 🔵 A facet page renders ZERO `<a href>` in its server HTML
+### ✅ Facet pages DO server-render item links (re-measured 2026-08-26)
 
-Measured 2026-08-21 against a real `next start` build: `/tag/cyberpunk` ships its
-item data inside the flight payload (`\"slug\":\"the-matrix\",\"linkable\":true`) and
-renders **60 item links in the DOM after hydration, and none before it**. Googlebot
-renders, so those links are probably seen; a crawler that fetches HTML and stops
-sees a facet page with no outbound item links at all. That makes the under-linking
-above worse than it reads, and it is the same shape of problem: the internal link
-graph exists only for clients that run JS.
+This section used to say a facet page renders **zero** `<a href>` in its server
+HTML, measured 2026-08-21. **That is false now**, and it is the second doc claim
+in three days to describe a gap that was not there.
+
+Re-measured against a real `next start` build on 2026-08-26:
+
+| page | server-rendered item links |
+|---|---|
+| `/tag/action` | **40** |
+| `/tag/cyberpunk` | **35** |
+| `/person/christopher-nolan` | **13** |
+
+The reason is the one this session learned on Home: `PublicFacetView` is
+`"use client"`, but it seeds its state from `initial.items`: **props**, not a
+fetch. It has no `if (!hydrated) return null` guard either, and a client
+component's first
+render IS server HTML, so the links are in the first byte. Client-ness was never
+what hid them.
+
+⚠️ **What IS still open is the UNDER-LINKING, which is a different problem with a
+different fix.** Those pages render up to 60 items each and link only the ones we
+already hold: `persistDiscoverBatch` gets a null user on an anonymous render
+(PR15's write gate), so a provider title we have never ingested comes back
+`linkable: false` and renders without an href. `/person/christopher-nolan`
+linking 13 of 60 is that, not a rendering bug. See the `MIN_INDEXABLE_TITLES`
+note above for why the thin-page threshold deliberately tests pool size rather
+than linkable count.
+
+The fix, if it is worth doing, is the one the home and calendar snapshots
+already use: persist a bounded set once a day off the request path, so the
+crawler-visible page links rows that exist. Do not persist on the request path;
+that is the write amplification that grew `media_items` to ~676k rows.
 
 ### ✅ Item pages link to sibling items (shipped 2026-08-23)
 

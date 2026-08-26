@@ -107,7 +107,7 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 - **The release calendar had no indexable surface.** `/calendar/{YYYY-MM}` is new, server-rendered, eight months in the sitemap, with three crawl bounds. ⚠️ `robots.ts` now needs **both** `/calendar/` (allow) and `/calendar` (disallow) — longest match wins, so do not tidy them into one rule.
 - **Thin facet pages are `noindex, follow`** below 3 pooled titles. ⚠️ **The threshold is pool size, not linkable count.** `/person/angelina-jolie` renders a full filmography at 175 KB and links 2 of it — under-linked, not thin.
 
-**Item pages link to sibling items since 2026-08-23** (`buildLocalRails`, server-rendered, zero provider calls). This file and docs/seo.md both still claimed otherwise until 2026-08-26. **Still open:** a facet page renders **zero `<a href>` in its server HTML** (its 60 item links appear only after hydration), and facet pages stay out of the sitemap until that is fixed. Written up in docs/seo.md.
+**Item pages link to sibling items since 2026-08-23** (`buildLocalRails`, server-rendered, zero provider calls). This file and docs/seo.md both still claimed otherwise until 2026-08-26. ⚠️ **A second one fell the same way on 2026-08-26**: this file and docs/seo.md both said a facet page renders zero `<a href>` server-side. Re-measured against a real build, they render **35–40** (13 on a person page). `PublicFacetView` seeds from PROPS, and a client component's first render is server HTML. **Still open:** those pages link only the titles we already hold, so `/person/christopher-nolan` links 13 of 60. That is UNDER-LINKING, not a rendering bug, and facet pages stay out of the sitemap until it is fixed. Written up in docs/seo.md.
 
 ## ⚡ The daily snapshots: home and calendar are pre-built, not fetched (2026-08-26)
 
@@ -193,7 +193,7 @@ problem and an SEO problem at once. Full write-up in
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
 | **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🟡 **built + running on-device 2026-08-22**; needs the Play upload + 14-day test → [docs/twa-play-store.md](docs/twa-play-store.md) |
-| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home + calendar snapshots** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages render no server-side item links → [docs/seo.md](docs/seo.md) |
+| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home + calendar snapshots** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages link only titles we already hold (13 of 60 on a person page) → [docs/seo.md](docs/seo.md) |
 
 ## ✅ Quality bar (as of 2026-08-26)
 
