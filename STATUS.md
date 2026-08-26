@@ -1,122 +1,72 @@
-# Fandex — Status
+# Fandex: Status
 
-_Your index of every game, movie & show._ · **This file = current state only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it).
+_Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
 
-_Last updated: 2026-08-23, fifth pass (**the whole platform sweep is done, all six items, and the list import is built**). Headlines: **OMDb is gone** (CC BY-NC at every tier, so unlicensable rather than expensive; `noOmdb.test.ts` pins it out, and awards left the item page with it while box office falls back to TMDB). **RAWG is off the facet paths** (the 4 calls on a cold `/tag/` page) and **deliberately still in the browse feed**, because cutting it there failed the test that pins the two-source games invariant and browse costs 0 RAWG calls anyway. **Trakt's account limits are visible**, which uncovered that NOTHING rendered `warnings` at all, so `/api/library` had been reporting refused writes into the void since H2. **The Letterboxd/IMDb import exists**: `/import`, anonymous-first so someone can drop an export before making an account, verified end to end against the real database. **Steam's terms allow commercial use**, and the privacy policy now names the Netherlands as where the database sits, which is what those terms require. ⚠️ **Two facts corrected in `PLATFORMS.md` this session, both planned around before being checked**: Steam has carried company facets all along, and the Letterboxd export is FREE rather than Pro-only. A capability cell is a claim about code. Previously 2026-08-23, fourth pass._
+_Last updated: 2026-08-26 (hygiene pass: the resolved-incident narratives moved to the archive, which already held them; nothing open was removed). Previously 2026-08-23, fifth pass._
 
-> **Ten decisions were locked on 2026-08-17** — Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do (never quote a cost), the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, the Score tuning approved as-is. **They are settled — see the top of [TASKS.md](TASKS.md) and don't re-open them.**
+> **Ten decisions were locked on 2026-08-17.** Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do, the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, Score tuning approved as-is. **They are settled: see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
 ---
-
-## 🟢 Prod is up and deployed, and the restore drill has PASSED
-
-fandex.org is **up, serving, and running `main`'s HEAD** as of 2026-08-12. It was down from **2026-07-22** on a Railway compute-usage pause, and served only a ~32-minute window on 2026-08-07.
-
-**⚠️ The last blocker was CI, not billing — learn this one.** Railway auto-deploy has **Wait for CI ON**, so a red CI silently blocks every deploy. On 2026-08-12 the `npm audit` job began failing against an *unchanged* dependency tree (a nanoid advisory published after the last green run), and pushes stopped reaching prod — `uptime` climbed straight through them with no restart. Fixed by a lockfile-only bump; the deploy fired **automatically** the moment CI went green. **If a push doesn't seem to reach prod, check `gh run list --workflow=ci.yml` before suspecting Railway.** Everything committed since 2026-07-22 — H1, the mockup rebuild, PR13–PR16, the legal pages, Score calibration, the circuit breaker, all of H3/H4, P18 — is now live for the first time.
-
-**The 2026-07-22 root cause is now verified dead in production**, not just in theory:
-
-- **`rr.db` is 37.7 MB** (peak was 2,487 MB). The perf audit's §B inflation question is answered.
-- **The write gate holds under a replayed crawl** — 15 anonymous Googlebot-UA facet requests (~900 thin rows if broken) changed `media_items`/`media_links`/`media_external_ids` by **zero**.
-- **The memory ramp is dead** — `cgroupMb.fileMb` flat at **74–76 MB** across ~7 h of uptime, then **reclaimed to 25** as the box idled. Not a climb toward 2,000. First window long enough to prove a plateau.
-- **`libRowsWithoutState` / `wishRowsWithoutState` = 0/0** on prod — the cache-table drop is now unblocked.
-
-→ full readings in [the archive](docs/archive/history.md), grep `PR17 post-outage verification`.
-
-- ⏸️ **The 2026-08-20 proof no longer covers today — migration 19 (`media_items.slug`) landed 2026-08-21.** Verified 2026-08-22 that Litestream is *replicating* (no 3.44-only syntax in migration 19, the replica bucket growing across deploys, zero errors in the deploy log) — **which is not the same claim as restorable, and only the second one is a backup.** The four lines to paste are in [TASKS.md](TASKS.md). The last passing run, for reference:
-- **Backups were proven restorable on 2026-08-20.** The drill ran on the live container: restored from generation `c62d7dc17a0fd0cb`, `integrity_check: ok`, the restored file **byte-for-byte the same size as live** (161,644,544), and all seven tables matching exactly (`user_item_state` 2419, `media_items` 2770, `user_episode_state` 12342, `show_episodes` 7055, `media_links` 5224). `/app/data/rr.db` untouched throughout. ⚠️ **The previous proof, from 2026-08-12, expired five days later and nobody noticed** — migration 16 broke Litestream outright and nothing replicated until 08-19. **A restore drill proves the backup you had that day, not the one you have now. Re-run it after ANY schema change.**
-
-**Nothing is open on the infrastructure side.** ⚠️ But **Railway volume backups are Pro-plan only** (re-confirmed 2026-08-20: the Backups tab reads "No Backups"), so **Litestream is the only copy of the database.** There is no second net.
-
-**No prod sweeps left.** Steam cross-link ran 2026-08-17 (131 games, cursor drained), Wikidata franchise ran 2026-08-14. `PRUNE_ON_BOOT=0` is optional now the guard has held three times. Two things want your hands: **the restore drill** (one paste) and **the TWA** (~1 h, and it starts a 14-day clock that then runs itself). The affiliate signup is not the next step (direction changed 2026-08-19).
-
-⚠️ **The 340 MB WAL was never a benign high-water mark — it was the backup outage, and it is still 340.8 MB.** Litestream could not parse the schema, so it could not advance its read position, so SQLite could not checkpoint past it; that is why `wal_checkpoint(TRUNCATE)` answered `busy: 1` twice. This file recorded it as a quirk needing no action from 2026-08-12 to 2026-08-19. **A WAL that will not truncate is a symptom to chase.**
-
-**Watch that it STAYS up.** The app never crashed in either outage — `uptime` climbed monotonically both times, so it was **un-routed**, which reads as a billing/pause action, not a technical one. If usage is still near the cap, resumed traffic re-accrues. **That "days, not hours" gate is now MET** (continuous since 2026-08-12), which is what unparked the affiliate signups — every program reviews the applicant site, and it has been serving cleanly.
-
-## 🟡 `/library`, `/wishlist` and the FACET pages do not work under `next dev` (DEV ONLY — prod is fine)
-
-**Production is unaffected.** A `next start` build hydrates both pages and renders real items; fandex.org is fine and this was never a user-facing outage. It does mean **neither page can be developed or verified against the dev server**, which is exactly why it went unnoticed — the smoke sweeps run against prod.
-
-⚠️ **2026-08-21: it is not limited to those two pages.** `/tag/cyberpunk` behaves identically under `next dev` — `<main>` carries no `__react*` keys and the grid renders **zero** item links — while the SAME page on a `next start` build renders 60. **Cause not established**: the facet page does not call `useSearchParams()` at all, so the mechanism below does not explain it, and the item page and Home hydrate fine under dev in the same session. Recorded as a measurement, not a diagnosis. The practical rule is unchanged and now wider: **verify any page whose content is client-rendered against the `prod` launch config (:3100), not the dev server.**
-
-Under `next dev` both pages render their toolbar server-side and then sit on **“Loading…” forever**: React never hydrates the `<main>` subtree, no effect runs, `/api/library` is never requested, and **clicking a tab does nothing**. Cause is measured, not guessed: `useSearchParams()` postpones the Suspense boundary (React comment marker **`$~`**) and the dev client never resumes it. Swapping that one call for a plain `URLSearchParams` makes the page work instantly.
-
-**Workaround today:** verify those two pages against the prod build — `npm run build && npm start` (the `prod` launch config, :3100). Diagnosis, the ruled-out fixes, and the three real options → [TASKS.md](TASKS.md).
-
-⚠️ **Contradicting observation, 2026-08-18 — do not act on it yet, but do not assume the section above is still complete either.** During the AN batch, `/wishlist` **hydrated and rendered real items under `next dev`** (checked for a `__reactFiber` key on `<main>`, saw the item list). One observation, one page, one session — not enough to declare this fixed, and the cause is unknown: that session also added a state branch to `MyStuffView`, so the component itself changed. **Re-check both pages under `next dev` before spending any time on the three options in TASKS.md** — the bug may already be gone, or may be intermittent, which would itself change which fix is right.
 
 ## ▶ What's open
 
 | | Item | Blocked on |
 |--|------|--|
-| ✅ | **Backups: the drill PASSED 2026-08-23** | **Nobody.** `ALL TABLES MATCH` on all eight, including the 10,841 `franchise_members` rows written the same day, so the backup covers the current schema. ⚠️ It is due again after the **next** schema change; a drill proves the backup you had THAT DAY, which is the whole lesson of 2026-08-17. ⚠️ Railway volume backups are still Pro-only, so **Litestream remains the only copy**. |
-| 🟡 | **`/library` + `/wishlist` dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod unaffected; verify those pages on the `prod` launch config meanwhile. |
-| 🔵 | **H3 — monetization, now ADS-FIRST** | **Nobody, yet.** Direction changed 2026-08-19; the next move is traffic, not a signup. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md)<br>⚠️ **The ads gate on `/dev/analytics` was reading ~80% crawler until 2026-08-20.** It showed 5,365 pageviews / 30d, of which 4,314 were `/person`, `/tag` and `/studio` against **14** homepage views. A client beacon does not exclude crawlers: Googlebot and the SEO suites render the page and fire it. Now filtered by user agent. **Counts before 2026-08-20 are not comparable to later ones**, and the real human figure is two digits. → [docs/seo.md](docs/seo.md) |
-| ✅ | **PL: the platform sweep, ALL SIX shipped 2026-08-23** | **Nobody.** OMDb removed (`21cfa92`, pinned by `noOmdb.test.ts`), RAWG off the facet paths and kept as a connector (`5fdc0c1`), Trakt's free caps surfaced instead of silently dropping writes (`9a08b68`), Steam's terms read (`022f94e`: commercial use is **not** prohibited, 100k/day), the **Letterboxd/IMDb import BUILT** (`2f7c56a` + `fbea871`), and platform colour-coding closed (`bce4611` + `f0b84d7`). ⚠️ **The one thing still owed on the import: confirm the CSV column headers against a REAL export.** The parser is header-driven and fails loudly rather than silently, so a rename is survivable, but the names are from secondary sources. → [docs/letterboxd-import.md](docs/letterboxd-import.md) |
-| ⏸️ | **P15/P16 — Android TWA: built and installed, then PAUSED by Nils** | ⏸️ **PAUSED 2026-08-23** until the developer account is upgraded Personal → Business. ⚠️ **The 12-testers/14-days gate below applies to PERSONAL accounts only**, so running a closed test now would likely be throwaway work — upgrade first, then re-check whether the gate applies at all. The Play Console entry exists (`Fandex` / `org.fandex.twa`); nothing else on the Play side is done, deliberately. Full order of operations → [TASKS.md](TASKS.md) item 1. **Everything below is the pre-pause state and is still accurate about the package itself.** ✅ 2026-08-22 the app exists and works: packaged via PWABuilder, `android-package/` (gitignored — it holds the upload keystore), Railway serving a real `/.well-known/assetlinks.json`, sideloaded on the Pixel 8 **with no address bar**. Left: App content forms → upload the `.aab` to a closed track → **append the Play App Signing fingerprint** (Google re-signs, so the sideload one will not verify the store build) → twelve testers, fourteen days. **Earlier framing, still true:** Step-by-step → [docs/twa-play-store.md](docs/twa-play-store.md). Nils already has a Play Console account (4 days into Bubblewrap’s closed test as of 2026-08-22), so the $25, the ID check and the twelve recruited testers are all sunk cost already paid. ⚠️ **The 12-testers/14-days rule is PER APP**, so Fandex needs its own closed track and its own fourteen days — but two apps can test in parallel, so ~1 h of packaging starts a countdown that then runs unattended. |
-| 🟡 | **RAWG monthly API quota is EXHAUSTED, and the answer is now to stop depending on it** | **Nobody.** Measured 2026-08-20: `401 {"error": "The monthly API limit reached"}`. **Not the 2026-08-17 outage**, a different failure. ✅ **PL3 SHIPPED 2026-08-23** (`5fdc0c1`): RAWG is off the facet paths and stays a connector, because IGDB and Steam cover 965 of 1,035 games between them, so this stops being a recurring problem rather than a monthly one. ⚠️ **Re-measure when the window resets** — a cold `/tag/` page should now cost 10 provider calls, not 14. ⚠️ **What SPENT the quota is still unidentified** and the obvious answer (the facet crawler, 4 RAWG calls per cold `/tag/` page) is not proven: every RAWG figure we hold was measured *after* the quota was gone, so it counts wasted calls, not spent ones. The 401/403 latch (2026-08-22) makes next month’s counter readable, which is what will actually answer it. → [TASKS.md](TASKS.md) |
+| 🟡 | **`/library` + `/wishlist` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. |
+| 🔵 | **H3: monetization, now ADS-FIRST** | **Nobody, yet.** The next move is traffic, not a signup. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
+| ⏸️ | **P15/P16: Android TWA, built and installed, then PAUSED** | ⏸️ **Nils, 2026-08-23**, until the developer account is upgraded Personal → Business. ⚠️ The 12-testers/14-days gate applies to **PERSONAL** accounts only, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. → [TASKS.md](TASKS.md) item 1 |
+| 🟡 | **RAWG monthly quota exhausted** | **Nobody.** PL3 shipped 2026-08-23, so the facet paths no longer touch RAWG. ⚠️ **Re-measure when the window resets**: a cold `/tag/` page should now cost 10 provider calls, not 14. ⚠️ **What SPENT the quota is still unidentified**, and the obvious answer is unproven, because every RAWG figure we hold was measured *after* the quota was gone. The 401/403 latch makes next month's counter readable. |
+| 🟡 | **Facet pages link only titles we already hold** | **Nobody.** `/person/christopher-nolan` links 13 of 60. That is UNDER-LINKING, not a rendering bug, and facet pages stay out of the sitemap until it is fixed. → [docs/seo.md](docs/seo.md) |
+| 🟡 | **The list import's CSV headers are unconfirmed** | **Nobody**, but it wants a REAL Letterboxd export. The parser is header-driven and fails loudly rather than silently, so a rename is survivable; the names came from secondary sources. → [docs/letterboxd-import.md](docs/letterboxd-import.md) |
 
-**The mobile batch is COMPLETE, 15/15 (2026-08-17).** MB7 — "the bottom nav scrolls away on Insights" — was never the nav: the page **overflowed horizontally**, Chrome shrink-to-fit zoomed the *layout* viewport out (812 → ~1017) while the visual viewport stayed 812, and the `fixed bottom-0` bar pinned itself ~205px below the fold. Five sources, all `min-width: auto` on a flex/grid item. **Two rules worth keeping: `truncate` does nothing inside a flex row without `min-w-0`, and this class of bug must be verified at SEVERAL widths (320/360/412) — a single-width pass gave a false green and shipped an incomplete fix that Nils caught on his phone.**
+## 🟢 Prod
 
-**The cache tables are gone (migration 16, 2026-08-17).** `user_library` and `user_watchlist` are now VIEWS over `user_item_state`, so migration 3's expand-then-contract finally contracted and `rebuildCaches` is deleted — drift is no longer absent but impossible. Proven byte-exact on all 2,017 real rows through **both** apply paths (`scripts/verify-cache-views.mjs`, `scripts/rehearse-cache-view-migration.mjs`). **Two traps recorded in [TASKS.md](TASKS.md): a code-only rollback breaks every library write, and `CREATE INDEX` on these names now throws at boot.**
+fandex.org is **up, serving, and running `main`'s HEAD**, continuously since **2026-08-12**.
 
-**Episode tracking is LIVE and populated (MB14 + MB16, 2026-08-16).** Per-episode watched state for shows, two-way with Trakt: the item page's season tracker, Home's vertical **Up next** list, and the library's **Progress** tab. Prod synced 12,318 episodes across 280 shows.
+- **Litestream is the ONLY copy of the database.** Railway volume backups are Pro-plan only (re-confirmed 2026-08-20: the Backups tab reads "No Backups"). There is no second net.
+- **The restore drill PASSED 2026-08-23**, `ALL TABLES MATCH` on all eight, including the 10,841 `franchise_members` rows written the same day. ⚠️ **It is due again after the NEXT schema change.** A drill proves the backup you had that day, not the one you have now.
+- **No prod sweeps are outstanding.** Steam cross-link ran 2026-08-17, Wikidata franchise 2026-08-14. `PRUNE_ON_BOOT=0` is a preference now, not a precaution: the guard has held three times.
+- **A push that doesn't reach prod is a CI problem until proven otherwise.** Railway has Wait-for-CI ON, so a red CI silently blocks every deploy and `uptime` climbs straight through it. Check `gh run list --workflow=ci.yml` first. This has bitten twice, both times `npm audit` going red against an **unchanged** dependency tree.
+- **Watch that it STAYS up.** The app never crashed in either historical outage: `uptime` climbed monotonically, so it was **un-routed**, which reads as a billing action rather than a technical one.
 
-**⚠️ The lesson from MB14, because it cost five deploys:** `/sync/watched/shows` carries **no** episode data in any variant, though Trakt documents `seasons` as default-on. A mocked unit test of the *documented* shape passed the whole time. **Measure a provider's response against a real account before building on it** — episodes come from `/sync/history/episodes` (bulk) or `/shows/{id}/progress/watched` (per-show, `completed: true` only). → [[trakt-episode-endpoints]]
+## 🟡 `/library`, `/wishlist` and the FACET pages do not work under `next dev` (DEV ONLY)
 
-**The anonymous surface works (AN1–AN6, 2026-08-18, `f5bad29`, live).** Current state, not a changelog: **the release calendar is PUBLIC** (Popular only for anon; Wishlist/Library are locked chips that open the sign-in dialog), `/wishlist` shows a sign-in gate instead of redirecting, the nav search box works logged out, every Home card carries its Rate/Wishlist bar, and **platform colour-coding is gone from every surface that had it** in favour of `<BrandGlyph>` — `TYPE_COLORS` (game/movie/show) is a different axis and stays. ⚠️ **It was optimistic for five days:** a leftover brand hex sat on the item page's Steam trailer link until 2026-08-23 (fixed, `bce4611`). The audit that followed found the remaining `SOURCE_COLORS` readers are not live surfaces, so it is true now → PL6 in [TASKS.md](TASKS.md). `withOptionalUser` is the wrapper for a route serving both audiences; it does not weaken PR15's write gate. → [archive](docs/archive/history.md), grep `AN — the anonymous surface`.
+**Production is unaffected** and this was never user-facing. It does mean **those pages cannot be developed or verified against the dev server**, which is why it went unnoticed: the smoke sweeps run against prod.
 
-Everything else is done. **H1, H2, H4, H5, PR17, SM38–SM48, franchise/IP scoring (swept on prod), the facet-page compute + quota exposure, all five audit passes, all 11 smoke sweeps, every production incident, and the full performance audit.** Grep [the archive](docs/archive/history.md) for any of them.
+Under `next dev` the pages render their toolbar server-side and then sit on "Loading…" forever: React never hydrates the `<main>` subtree, no effect runs, and clicking a tab does nothing. For `/library` and `/wishlist` the cause is measured: `useSearchParams()` postpones the Suspense boundary (React comment marker `$~`) and the dev client never resumes it.
 
-**P18 closed 2026-08-03.** "Where to watch" rows are clickable + show an offer-type line, via TMDB's own per-region link and the existing lazy self-heal path — not the JustWatch Content Partner API or a full-catalog re-projection TASKS.md previously (incorrectly) had it blocked on. Same session: a **boot-time prune of the browsed tail, default ON** (`PRUNE_ON_BOOT=0` to disable — see below), `omdbConfigured()`, and cache-contraction drift counts in `/api/dev/dbsize`. → [archive](docs/archive/history.md), grep `P18 streaming links`.
+⚠️ **It is wider than that, and the cause is NOT established.** `/tag/cyberpunk` behaves identically under `next dev` (zero item links, no `__react*` keys on `<main>`) while the same page on a `next start` build renders 60, and that page never calls `useSearchParams()`. Recorded as a measurement, not a diagnosis.
 
-**⚠️ The boot prune has now run against prod.** Every server boot runs a bounded prune of browsed-only catalog rows nobody acted on (small batches, 5s budget, skips if free space is low, never VACUUMs), default ON. Prod booted with it enabled and **nothing broke** — `user_library` 1,912 and `user_watchlist` 96 are unchanged, `media_items` is 2,267. It has since run a second time (the 2026-08-12 redeploy) deleting 255 browsed-only rows with **zero** user rows touched, and **Litestream is now confirmed by a restore drill**, so the original reason to disable it is gone. `PRUNE_ON_BOOT=0` is now a preference, not a precaution.
+⚠️ **A contradicting observation, 2026-08-18: `/wishlist` hydrated and rendered real items under `next dev`.** One page, one session, and that session also added a state branch to `MyStuffView`. **Re-check both pages under `next dev` before spending any time on the three options in TASKS.md**: the bug may be gone, or intermittent, which would change which fix is right.
 
-**H3 v1 landed 2026-08-03.** Donations are **live** (Ko-fi, in the footer, the sign-in dialog and the `/profile` list). The affiliate layer is **built and dark** behind `MONETIZATION_ENABLED`, which defaults off — H3's legal gate expressed as code. H3.8's Path B trigger stays **defined but explicitly NOT approved**.
+**The practical rule, unchanged and now wider: verify any page whose content is client-rendered against the `prod` launch config (:3100), not the dev server.**
 
-**H4 closed 2026-08-03.** The Impressum is written and filled in both locales; German is the operative version.
+## 🧭 Monetization: ads-first since 2026-08-19
 
-**Performance is closed (2026-08-02).** The probes stay in `scripts/`; **measure before optimising** (§A was mis-sized by 100× once).
+**Nils's call: go live → wait for traction → ads → premium (ad-free + extras).** Affiliate is **demoted, not cancelled**, and the code stays built and dark behind `MONETIZATION_ENABLED`. The old plan (seven affiliate signups, GOG first) is retired.
 
-**Two admin dashboards are live and self-hosted (2026-08-19): `/dev/analytics` (traffic) and `/dev/users` (audience).** Both sit behind the existing `SCORING_ADMIN_USER_IDS` allowlist. `/dev/analytics` answers the two questions H3.8's thresholds ask and nothing else could: **pageviews/30d vs the 10,000 ads gate**, **signed-in WAU vs the 3,500 freemium gate**, and the **anonymous-vs-signed-in split** that decides which arm is even worth building. No Google Analytics, no third-party script, no cookie, no IP stored.
+The model that decided it, per **1,000 monthly active users**: **ads ~€150 · premium ~€60 · donations ~€14 · affiliate ~€3.** Affiliate is last by 20 to 50 times for reasons specific to this app: Fandex is **past-tense** (a buy link arrives after the purchase decision), only **GOG** appears in the catalog at all (295 of 1,033 games; six of seven programs appear on **zero** items), and Amazon pays **1%** on video games. The settling argument: covering upkeep once TMDB's $149/mo commercial tier applies takes ~1,000 users on ads and **~45,000 on affiliate**, so affiliate is the only method that cannot clear its own cliff.
 
-Two things to know before touching it. **The tables are pre-aggregated counters, never per-event rows** (migration 17): one row per (day, dimension), so cardinality is bounded by the dimension set instead of by traffic. A row per pageview is the exact shape that grew the DB to 2,487 MB on 2026-07-22. And **it counts real-browser pageviews only**, because it is a client beacon: crawlers and no-JS requests are invisible by design. That is the correct population for an ads decision and the wrong one for judging SEO reach, which belongs in Search Console.
+Both H3.8 gates are measurable now rather than theoretical. Full reasoning and the standing guard against self-referring → [docs/monetization-go-live.md](docs/monetization-go-live.md).
 
-**`/dev/users`** answers the audience half, read from rows that already exist and storing nothing: registered users, library/wishlist/rating totals with per-media-type splits, data provenance, connected providers, library-size distribution (the `0` bucket is the clearest onboarding drop-off the schema can show), recency buckets, stickiness, and a per-user table that deliberately shows a truncated id rather than the provider display name. **"How often do they use the app" has no exact answer in this schema**, because `last_seen_at` is a single timestamp rather than a visit history, so the page reports three labelled proxies instead of inventing a frequency number.
+**Two admin dashboards are live and self-hosted**, behind the `SCORING_ADMIN_USER_IDS` allowlist: `/dev/analytics` (pageviews/30d vs the 10,000 ads gate, signed-in WAU vs the 3,500 freemium gate, the anon-vs-signed-in split) and `/dev/users` (audience, read from rows that already exist and storing nothing). No Google Analytics, no third-party script, no cookie, no IP stored. ⚠️ **Counts before 2026-08-20 are not comparable to later ones**: the beacon was reading ~80% crawler until it was filtered by user agent, and the real human figure is two digits. "How often do they use the app" has **no exact answer in this schema**, so `/dev/users` reports three labelled proxies rather than inventing a frequency.
 
-**⚠️ The privacy policy changed, in both locales.** A "Usage statistics" / „Nutzungsstatistik" section now describes the counting, and `updated` moved to 2026-08-19. `docs/cookie-assessment.md` previously claimed **"zero analytics"**, which this work made false; it is corrected, and it now records why first-party cookieless counting does **not** trigger the consent banner (§25 TDDDG governs storing information on, or reading it from, the user's device, and the beacon does neither) plus the four changes that WOULD trigger it.
+## 🔎 Organic reach
 
+**Ads-first means the bottleneck is traffic.** The reference, the numbers, and what remains → **[docs/seo.md](docs/seo.md)**.
 
+- **Search Console is VERIFIED**, `fandex.org` as a Domain property via a DNS TXT record on the apex. ⚠️ **Deleting that record un-verifies the property and empties every report.**
+- **Structured data is live** on item pages (`Movie` / `TVSeries` / `VideoGame` + `BreadcrumbList`) and calendar months (`ItemList`), where there was previously zero `ld+json` across 2,022 indexable pages.
+- **The homepage is no longer a crawl dead end**: `/` serves **94 server-rendered links** at **0 provider calls per view**.
+- **`/calendar/{YYYY-MM}`** is server-rendered, eight months in the sitemap, with three crawl bounds.
+- **Thin facet pages are `noindex, follow`** below 3 pooled titles.
+- ⚠️ **Still open:** facet pages link only the titles we already hold (see the table above).
 
-## 🧭 Monetization changed direction (2026-08-19)
+⚠️ **Three stale claims in this file and docs/seo.md were corrected in three days** (item-page sibling rails, and twice on what facet pages server-render: they render 35–40 links, not zero). **Check the code before planning work around a documented gap.**
 
-**Nils's call: go live → wait for traction → ads → premium (ad-free + extras).** Affiliate is **demoted, not cancelled** and the code stays built and dark. The old plan (sign up for seven affiliate programs, GOG first, Amazon last) is retired.
+## ⚡ The daily snapshots (2026-08-26)
 
-The model that decided it, per **1,000 monthly active users**: **ads ~€150 · premium ~€60 · donations ~€14 · affiliate ~€3.** Affiliate is last by 20 to 50 times, for reasons specific to this app: Fandex is **past-tense** (people log what they already played or watched, so a buy link arrives after the purchase decision), only **GOG** appears in the catalog at all (295 of 1,033 games, while six of the seven programs appear on **zero** items), and Amazon pays **1% on video games**. The settling argument: covering upkeep once TMDB's $149/mo commercial tier applies takes ~1,000 users on ads and **~45,000 on affiliate**, so **affiliate is the only method that cannot clear its own cliff**.
-
-Both H3.8 gates are now measurable rather than theoretical, which is what the two dashboards below are for. Full reasoning + the standing guard against self-referring to beat Amazon's 180-day clock → [docs/monetization-go-live.md](docs/monetization-go-live.md).
-
-## 🔎 Organic reach: the surface is fixed, and it is now measured (2026-08-20)
-
-**Ads-first means the bottleneck is traffic, and nothing in the repo was about reach.** An audit of what fandex.org actually serves a crawler, measured against live prod rather than against the code's intentions, found five gaps. **Four are fixed and Search Console is verified**; the reference, the numbers and what remains live in **[docs/seo.md](docs/seo.md)**.
-
-- **Search Console is VERIFIED** — `fandex.org` as a Domain property, via a DNS TXT record on the apex. ⚠️ **Deleting that record un-verifies the property and empties every report.** The sitemap is submitted; its "Couldn't fetch" is the pending state, not a fault (the sitemap answers in 180 ms with a correct content type and serves Googlebot identically). Expect no useful data for several days.
-- **Structured data existed nowhere** — zero `ld+json` across 2,022 indexable pages. Item pages now emit `Movie` / `TVSeries` / `VideoGame` + `BreadcrumbList`, calendar months an `ItemList`. ⚠️ **`aggregateRating` is deliberately absent and a test keeps it absent** — every rating we could publish is somebody else's aggregate shown under attribution, and marking those up as our own earns a structured-data manual action, which is sitewide.
-- **The homepage was a crawl dead end** — priority 1.0, an `sr-only` h1, and zero catalog links, because the page was `"use client"` and fetched a robots-disallowed endpoint. Fixed in two passes. 2026-08-20 added a server-rendered hub at the BOTTOM (74 links). **2026-08-26 fixed the top**, which was still a client island: `/` now serves **94 server-rendered links** (30 titles from the day's rails, 20 people, 36 genres, 8 months) out of a daily `home_snapshot`, at **0 provider calls per view** (measured: 6 loads, delta 0). See the section below.
-- **The release calendar had no indexable surface.** `/calendar/{YYYY-MM}` is new, server-rendered, eight months in the sitemap, with three crawl bounds. ⚠️ `robots.ts` now needs **both** `/calendar/` (allow) and `/calendar` (disallow) — longest match wins, so do not tidy them into one rule.
-- **Thin facet pages are `noindex, follow`** below 3 pooled titles. ⚠️ **The threshold is pool size, not linkable count.** `/person/angelina-jolie` renders a full filmography at 175 KB and links 2 of it — under-linked, not thin.
-
-**Item pages link to sibling items since 2026-08-23** (`buildLocalRails`, server-rendered, zero provider calls). This file and docs/seo.md both still claimed otherwise until 2026-08-26. ⚠️ **A second one fell the same way on 2026-08-26**: this file and docs/seo.md both said a facet page renders zero `<a href>` server-side. Re-measured against a real build, they render **35–40** (13 on a person page). `PublicFacetView` seeds from PROPS, and a client component's first render is server HTML. **Still open:** those pages link only the titles we already hold, so `/person/christopher-nolan` links 13 of 60. That is UNDER-LINKING, not a rendering bug, and facet pages stay out of the sitemap until it is fixed. Written up in docs/seo.md.
-
-## ⚡ The daily snapshots: home and calendar are pre-built, not fetched (2026-08-26)
-
-**Two tables now hold a whole page each, built once a day on the server, so a
-visitor (or a crawler) costs zero provider calls.** `home_snapshot` (migration 21)
-and `calendar_snapshot` (migration 22). Nils's design, and it solved a cost
-problem and an SEO problem at once. Full write-up in
-[docs/seo.md](docs/seo.md); the rules each builder holds are commented in
-`src/lib/homeSnapshot.ts` and `src/lib/calendarSnapshot.ts`.
+**`home_snapshot` (migration 21) and `calendar_snapshot` (migration 22) each hold a whole page, built once a day, so a visitor or a crawler costs zero provider calls.** The rules each builder holds are stated in [AGENTS.md](AGENTS.md) and commented in `src/lib/homeSnapshot.ts` / `src/lib/calendarSnapshot.ts`. Measured:
 
 | Surface | before | after |
 |---|---|---|
@@ -126,88 +76,45 @@ problem and an SEO problem at once. Full write-up in
 | a month, first hit on a fresh process | 1.24 s | **12–20 ms** |
 | linkable items on `/calendar/2026-09` | 8 of 15 | **15 of 15** |
 
-**Four rules ride on both, and three are incidents already on file.**
+## ⚠️ Scalability: provider quotas are the ceiling, and CRAWLERS spend them
 
-1. **A failed build never replaces a good snapshot.** "Clear the table, then
-   rebuild" is the obvious design and is exactly what turns a provider outage
-   into an empty page.
-2. **The builders write catalog rows deliberately, and PR15 still holds.** They
-   call `persistDiscoverItems` directly rather than handing `persistDiscoverBatch`
-   a fake user, so the request-path gate keeps its exact shape. Bounded at ~30
-   titles a day for home and 15 per month for the calendar, whatever the traffic.
-3. **`home_snapshot_item` and `calendar_snapshot_item` are the fourth and fifth
-   clauses in `dbPrune`'s `PRUNABLE_WHERE`,** and the first two that are not user
-   state. Both builders also run **after** `bootPrune` resolves: a row pinned
-   between the prune computing its id list and executing the delete is not
-   protected.
-4. **Bounded, but by different mechanisms, and that is worth knowing.**
-   `home_snapshot` is one row per region, so `INSERT OR REPLACE` makes growth
-   structurally impossible. `calendar_snapshot` is keyed by region **and month**
-   over a window that SLIDES, so it *can* grow and its build explicitly deletes
-   out-of-window months and out-of-use regions.
+**Measured, not estimated** → [docs/scalability.md](docs/scalability.md) · per-platform cost and licence → [PLATFORMS.md](PLATFORMS.md). `/api/health` reports **`providerCalls`** per host, which is what makes any of this answerable.
 
-**⚠️ Moving the public rails into the server render created a layout shift, and fixing it needed the server (`0463788`).** Both personal sections ("Up next", "Recommended for you") sit ABOVE the public rails and both rendered `null` until their own fetch landed, so a signed-in load painted and then shoved the page down by two rails. **A skeleton alone could not fix it**: the client does not learn anyone is signed in until `/api/home` answers, which is the same round-trip that causes the shift. `page.tsx` now reads the session for a `signedIn` boolean (nothing per-user is rendered, and a crawler is anonymous so its HTML is unchanged) and each section holds its real height while loading. Measured: the "Popular right now" heading sits at 823px in both the skeleton and loaded states, **shift 0px**. The anon "Guest mode" panel had the same bug and is server-rendered now.
+**Money: going commercial is ~$298/mo minimum** (TMDB $149 + RAWG $149) against a model of ~€150 per 1,000 monthly actives. ⚠️ **RAWG's paid tier does not fix RAWG** (2.5× the free quota). OMDb was **removed** rather than paid for. **The cheapest real fix is engineering, not payment.**
 
-⚠️ **Two traps this shipped through, both green on every check.**
-
-- A CLIENT component importing a module that touches `db.ts` drags
-  better-sqlite3 into the browser bundle. `/` returned a 500 on
-  `Can't resolve 'fs'` with tsc, lint and 1,019 tests clean, because nothing but
-  loading the page exercises the client/server module graph. Leaf modules with no
-  imports (`src/lib/personRail.ts`) are the fix.
-- The calendar snapshot was first built for `DEFAULT_COUNTRY` only. Paging while
-  signed in still cost 33 provider calls, because the route passes the **viewer's**
-  region through and this account is `DE`. **It measured as working because the
-  anonymous path really was fixed.** It is now built per region in use.
-
-## ⚠️ Scalability: provider quotas are the ceiling, and CRAWLERS spend them (2026-08-20)
-
-**Measured, not estimated** → [docs/scalability.md](docs/scalability.md) · provider cost/licence per platform → [PLATFORMS.md](PLATFORMS.md).
-
-`/api/health` now reports **`providerCalls`**, per host. It immediately answered a question nothing else could, and found two things:
-
-- **A cold `/tag/{genre}` page costs 14 provider requests, 4 of them RAWG.** RAWG's free quota is 20,000/month, so **~5,000 cold facet views exhaust the month** — and one crawl created 24,953 `facet_page_cache` rows. ⚠️ **The cost scales with CATALOG BREADTH × CRAWLER APPETITE, not with human pageviews.** Any capacity plan built on the 10,000-pageview ads gate is measuring the wrong variable.
-- **Three of six providers 401 on every call:** `api.rawg.io` (quota), `www.omdbapi.com` (invalid key), `api.letterboxd.com` (no key). Nothing surfaced that before the counters existed.
-✅ **The 401/403 auth latch shipped 2026-08-22, which was the highest-leverage item on this list.** Five consecutive 401/403s on an app-scoped request now open the host's breaker for 15 minutes, doubling to a 6 h ceiling while the credential stays dead. A permanently rejected key costs ~8 calls a day instead of ~5,600, and it recovers with no deploy the moment the provider starts answering. `openProviderCircuits` now says `latchedOnAuth`, separating "down" from "up and rejecting us". ⚠️ **Only APP-scoped calls count toward it** — RAWG and TMDB serve app-key and per-user requests from one host, so a user's expired token must never latch a provider for everybody; call sites opt in with `appScopedAuth: true`.
-
-- ⚠️ **After 10.5 h of real traffic the scale is far worse than the per-page maths implied.** TMDB **40,231** requests (projecting **~2.8 M/month**), RAWG 13,068 (**all 401**), OMDb 4,343 (**all 401**), Letterboxd 3,155 (**all 401**). **~20,600 requests — a third of all provider traffic — went to endpoints that fail every time**, because `http.ts` deliberately never opens the breaker on a 4xx. That rule is right for a one-off and wrong for a dead credential. **A 401/403 latch is the single highest-leverage fix on the list** and removes a third of provider traffic in one change. The sitemap submission the same morning is the likely trigger for the crawl volume.
-
-**Money:** going commercial is **~$298/mo minimum** (TMDB $149 + RAWG $149) against a model of ~€150 per 1,000 monthly actives. ⚠️ **RAWG's paid tier does not fix RAWG** (2.5× the free quota). ✅ **OMDb is now REMOVED** (PL1, 2026-08-23) rather than paid for — CC BY-NC 4.0 forbids commercial use at every tier, and it contributed **zero** to the Fandex Score, which reads only facets. The cheapest real fix is engineering, not payment: cut the fan-out on cold facet pages.
-
-**A latent bug fell out of building the counter.** Next resolves `http.ts` into different bundles for page routes and API routes, so module-level state became several copies. That silently halved the **circuit breaker** since 2026-08-02 and made `openProviderCircuits` blind to page renders — which is exactly why memory says it "is not a health check". Fixed by pinning to `globalThis`. ⚠️ **~20 other module-level caches plausibly have the same duplication; that is NOT yet measured.**
+⚠️ **~20 module-level caches beyond `http.ts` plausibly duplicate per bundle, and that is NOT yet measured.** If they do, retained memory is a multiple of the budgeted figure and hit rates are lower than assumed.
 
 ## 🗺️ Roadmap
 
 | Area | Status |
 |------|:--|
-| Hosting + deploy (Railway) | ✅ built · 🟢 back up 2026-08-12 — watch it stays, see above |
+| Hosting + deploy (Railway) | ✅ built · 🟢 up since 2026-08-12 |
 | Domain + OAuth + email (fandex.org) | ✅ |
-| Backups (Litestream → Railway bucket) | ✅ (24h retention, v0.3.13) |
-| Observability (`/api/health`, structured logs) | ✅ incl. `openProviderCircuits` |
+| Backups (Litestream → Railway bucket) | ✅ 24h retention, v0.3.13 |
+| Observability (`/api/health`, structured logs) | ✅ incl. `openProviderCircuits` + `providerCalls` |
 | Security (S1–S13, CSP enforced) | ✅ |
 | Sync completeness + TMDB enrichment | ✅ |
-| SEO — public item pages (P13) + facet pages (P17) | ✅ live + fully indexed |
-| **H1** — UI/UX overhaul (mobile-first) | ✅ 2026-07-27. Direction 2a "Ticket · Calm". Design system → [docs/design/fandex-handoff/](docs/design/fandex-handoff/) |
-| **H2** — data-model hardening | ✅ |
-| **H5** — Fandex Score | ✅ 2026-07-27 incl. calibration; **franchise/IP added 2026-08-14** (§3.6). Design → [docs/fandex-score.md](docs/fandex-score.md) |
-| **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
-| **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
-| Android TWA (P15/P16) | 🟡 **built + running on-device 2026-08-22**; needs the Play upload + 14-day test → [docs/twa-play-store.md](docs/twa-play-store.md) |
-| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home + calendar snapshots** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages link only titles we already hold (13 of 60 on a person page) → [docs/seo.md](docs/seo.md) |
+| SEO: public item pages (P13) + facet pages (P17) | ✅ live + fully indexed |
+| **H1** UI/UX overhaul (mobile-first) | ✅ 2026-07-27. Direction 2a "Ticket · Calm" → [docs/design/fandex-handoff/](docs/design/fandex-handoff/) |
+| **H2** data-model hardening | ✅ |
+| **H5** Fandex Score | ✅ 2026-07-27 incl. calibration; franchise/IP added 2026-08-14 → [docs/fandex-score.md](docs/fandex-score.md) |
+| **H4** legal & compliance | ✅ 2026-08-03, epic closed |
+| **H3** monetization | 🔵 ads-first since 2026-08-19; donations live, affiliate built + dark + demoted |
+| **PL** platform capability sweep | ✅ all six shipped 2026-08-23 |
+| **MB** mobile batch | ✅ 15/15, 2026-08-17 |
+| **AN** anonymous surface | ✅ 2026-08-18 |
+| Android TWA (P15/P16) | ⏸️ built + running on-device; paused on the account upgrade → [docs/twa-play-store.md](docs/twa-play-store.md) |
+| **SEO / organic reach** | 🔵 open since 2026-08-20; one hole left (facet under-linking) → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (as of 2026-08-26)
+## ✅ Quality bar (re-run and confirmed 2026-08-26)
 
-**1,049 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**1,049 tests pass** (101 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar. Don't land work below it.**
 
-**Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
+⚠️ **Expect `npm audit` to go red again on an UNCHANGED tree.** It has happened twice, both times an advisory published after the last green run widening to cover the exact version an override pinned, and **it silently blocks the Railway deploy**. The current fix uses two *nested* overrides (`1.1.18` under `eslint`, `5.0.9` under `@typescript-eslint/typescript-estree`) because the two consumers need different major lines and one flat override cannot satisfy both. **Pinning an exact version is a bet that the next advisory won't include it.**
 
-**Dependencies are current as of 2026-08-14** — all four open Dependabot PRs merged after a full local bar *plus* a real JWT sign/verify round-trip, because `jose` is the session library and the suite never exercises a live token. Now on `next` 16.3.0, `react` 19.2.8, `jose` 6.2.8, `@types/node` 26, with CI on `actions/checkout@v7` + `setup-node@v7`. `npm audit` 0 vulnerabilities.
+**Dependencies were current as of 2026-08-14**: `next` 16.3.0, `react` 19.2.8, `jose` 6.2.8, `@types/node` 26, CI on `actions/checkout@v7` + `setup-node@v7`. Merged after a full local bar *plus* a real JWT sign/verify round-trip, because `jose` is the session library and the suite never exercises a live token.
 
-**11th smoke sweep (2026-08-12, live prod, both auth states)** — all five findings (`SM38`–`SM42`) fixed → [archive](docs/archive/history.md), grep `Smoke test 2026-08-12 11th run`. Ran during a genuine RAWG outage, which re-verified the three 2026-08-02 single-source games bugs as **fixed** under the exact condition that exposed them.
-
-**⚠️ `npm audit` went red again on an UNCHANGED tree (2026-08-14) — the second time.** Two `brace-expansion` advisories published since the last green run widened their ranges to cover the exact version the existing override pinned (`5.0.8`), and eslint's own `minimatch@3` chain (`1.1.16`). **This silently blocks the Railway deploy** — Wait-for-CI is ON. Fixed with two *nested* overrides, `1.1.18` under `eslint` and `5.0.9` under `@typescript-eslint/typescript-estree`: the two consumers need different major lines, so one flat override cannot satisfy both. Back to 0 vulnerabilities. **Expect this again — pinning an exact version is a bet that the next advisory won't include it.**
-
-**One dependency added 2026-08-14: `simple-icons`, as a devDependency.** It feeds `scripts/gen-brand-marks.mjs`, which extracts 11 brand paths into the committed `src/lib/brandMarks.ts`. **Nothing in the shipped app imports it** — the package carries 3,453 icons and generating keeps the bundle cost exact rather than trusting a barrel export to tree-shake. Re-run the script after adding a store-link name; it throws on an unknown slug rather than silently skipping a brand.
+**`simple-icons` is a devDependency and nothing in the shipped app imports it.** It feeds `scripts/gen-brand-marks.mjs`, which extracts 11 brand paths into the committed `src/lib/brandMarks.ts`. Re-run it after adding a store-link name; it throws on an unknown slug rather than silently skipping a brand.
 
 ---
 _✅ done · 🔵 needs input / in progress · ⏸️ blocked · 🟢 later · 🔴 broken_
