@@ -291,6 +291,7 @@ export default function CalendarPageClient() {
         <CalendarView
           items={filtered}
           mode={mode}
+          loading={popularLoading}
           onVisibleMonthChange={onVisibleMonthChange}
           onSelect={(i) => router.push(buildItemHref(i as EnrichedItem))}
         />
@@ -299,13 +300,17 @@ export default function CalendarPageClient() {
   };
 
   return (
-    // No min-h-screen here (2026-08-26). <body> already carries it along with
-    // the surface background, so it bought nothing visually. But layout.tsx
-    // pads the content wrapper `pb-16` on mobile to clear the fixed bottom nav,
-    // so a 100vh page plus 64px of padding made the document 64px taller than
-    // the viewport on EVERY page. Harmless where the content scrolls anyway;
-    // on the calendar, which otherwise fits, it read as a page that wobbles.
-    <div>
+    // The calendar is EXACTLY one viewport tall and does not scroll (see
+    // CalendarView's sizing note for why). 100dvh less whatever the nav takes:
+    // on mobile the bar is fixed and layout.tsx pads #main by the same token
+    // plus the safe-area inset, so subtracting both lands on precisely 100dvh;
+    // on desktop the bar is in the flow above this, so subtracting its height
+    // does the same. `dvh` rather than `vh` because the mobile URL bar changes
+    // the viewport, though in practice it now stays put: it only collapses on
+    // a scroll, and there is no longer a scroll to trigger it.
+    <div
+      className="flex flex-col h-[calc(100dvh-var(--size-nav-bar-mobile)-env(safe-area-inset-bottom))] md:h-[calc(100dvh-var(--size-nav-bar-desktop))]"
+    >
       {/* Every list page's heading is now visually gone (Nils, 2026-07-28) —
           the filter row IS the header. Keep an sr-only one so the page still
           has a document outline for screen readers and the a11y tree isn't a
@@ -329,10 +334,16 @@ export default function CalendarPageClient() {
 
       {/* px-1 on mobile, not px-6: the grid needs the screen width more than it
           needs a margin. See CalendarView's grid comment. */}
-      <main className="max-w-6xl mx-auto px-1 md:px-6 py-2 md:py-6 space-y-3 md:space-y-4">
-        {popularLoading && !loading && (
-          <p className="font-mono text-meta text-text-secondary text-center" role="status">Loading popular releases…</p>
-        )}
+      {/* The "Loading popular releases…" line that used to sit here, above the
+          month, is gone: it appeared for about a second on every month change
+          and cost ~26px of layout on the way in and again on the way out, which
+          pushed the grid down and let it back up. The signal now lives in the
+          calendar's own utility row, which is always rendered at a fixed
+          height, so a fetch changes text and never geometry.
+          `overflow-y-auto` is a floor, not a scrollbar: on a viewport too short
+          for even the minimum row height, this scrolls INSIDE the page rather
+          than clipping, and the filter bar above still cannot be moved by it. */}
+      <main className="flex-1 min-h-0 w-full max-w-6xl mx-auto px-1 md:px-6 py-2 md:py-4 flex flex-col overflow-y-auto">
         {body()}
       </main>
 

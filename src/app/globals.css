@@ -152,7 +152,7 @@
   --breakpoint-desktop: 768px; /* nav flips: bottom-bar < 768px ≤ top-bar */
   --size-touch-min: 44px;      /* minimum interactive target (mobile) */
   /* --size-nav-bar-mobile lives in the plain :root block below, not here. */
-  --size-nav-bar-desktop: 60px;/* top nav height */
+  /* --size-nav-bar-desktop lives in the plain :root block below too. */
   --container-max: 1200px;     /* desktop content max-width */
 }
 
@@ -238,6 +238,9 @@
      consumed as a var() in a value position, which is exactly the shape
      Tailwind tree-shakes (silently, resolving to an empty string at runtime). */
   --size-nav-bar-mobile: 53px;
+  /* The desktop top bar: AppNav renders it `h-14`. Declared 60px in @theme and
+     read by nothing until the calendar needed to size itself against it. */
+  --size-nav-bar-desktop: 56px;
 }
 
 /* ---- Facet classes (2026-07-30) -------------------------------------------
@@ -432,3 +435,23 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Calendar month change (2026-08-26) -----------------------------------
+   The incoming month slides in from the side it came from, so paging reads as
+   a panel moving rather than a redraw. Deliberately the INCOMING half only:
+   animating the outgoing month out as well needs both months in the DOM at
+   once, and at 200ms nobody can tell the difference.
+
+   Transform and opacity only, so it composites and cannot move the layout.
+   The global prefers-reduced-motion block above already flattens the duration,
+   so there is nothing extra to do for that here. */
+@keyframes cal-slide-from-right {
+  from { transform: translateX(22px); opacity: 0; }
+  to   { transform: none;             opacity: 1; }
+}
+@keyframes cal-slide-from-left {
+  from { transform: translateX(-22px); opacity: 0; }
+  to   { transform: none;              opacity: 1; }
+}
+.cal-slide-from-right { animation: cal-slide-from-right 200ms var(--ease-emphasized) both; }
+.cal-slide-from-left  { animation: cal-slide-from-left  200ms var(--ease-emphasized) both; }

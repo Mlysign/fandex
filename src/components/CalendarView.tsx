@@ -3,7 +3,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   format, isToday, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval,
-  addMonths, subMonths, getDay, parseISO, startOfDay, startOfWeek, endOfWeek,
+  addMonths, subMonths, getDay, parseISO, startOfDay, endOfWeek,
   addWeeks, compareAsc,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, X, Star, Bookmark, Check, CalendarX } from "lucide-react";
@@ -15,7 +15,6 @@ import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
 import type { MediaCardItem } from "@/components/cardItem";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { scrollBehavior } from "@/lib/scrollBehavior";
 import { upcomingFrom } from "@/lib/upcoming";
 
 // CalendarView accepts any item that has the minimum required fields.
@@ -47,6 +46,9 @@ interface CalendarViewProps {
   // the shared SubBar with every other page-level control, and the page needs
   // to read the mode anyway to decide how far ahead to prefetch.
   mode?: CalendarMode;
+  /** A provider fetch is in flight. Shown in the utility row, which never
+   *  changes height, rather than as a line inserted above the month. */
+  loading?: boolean;
 }
 
 function groupByDate(items: CalendarItem[]) {
@@ -153,7 +155,7 @@ function CalendarCell({
 
   return (
     <div
-      className={`h-20 md:h-32 rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
+      className={`h-full rounded-sm md:rounded-md overflow-visible relative border transition-colors duration-base ${
         today ? "ring-2 ring-accent ring-inset" : ""
       } ${selected ? "ring-2 ring-accent" : ""} ${
         single ? "" : dayItems.length > 0 ? "border-border-strong bg-surface-elevated/40" : "border-border/60"
@@ -334,28 +336,62 @@ function AgendaView({ items, onSelect }: { items: CalendarItem[]; onSelect: (ite
   );
 }
 
+
 // Horizontal swipe to page months (2026-08-26, Nils). Deliberately plain touch
 // events rather than a gesture library: the whole rule is "a fast, mostly
 // sideways drag pages the month".
 //
 // Two guards matter and both are about NOT stealing a scroll. `DOMINANCE` means
-// a drag has to be half again as horizontal as it is vertical, so a normal
-// vertical scroll that wanders sideways never pages; `MAX_MS` means a slow drag
-// (someone holding the page still, or a long press that drifts) doesn't either.
-// The handlers stay passive, nothing calls preventDefault, and the container
-// carries `touch-action: pan-y`, so vertical scrolling inside the grid keeps
-// working natively at full speed.
+// a drag has to be half again as horizontal as it is vertical, so a vertical
+// drag that wanders sideways never pages; `MAX_MS` means a slow drag (someone
+// holding the page still, or a long press that drifts) doesn't either. The
+// handlers stay passive, nothing calls preventDefault, and the container
+// carries `touch-action: pan-y`.
 const SWIPE_MIN_PX = 48;
 const SWIPE_DOMINANCE = 1.5;
 const SWIPE_MAX_MS = 700;
 
-export default function CalendarView({ items, onSelect, onVisibleMonthChange, mode = "month" }: CalendarViewProps) {
+// ── Sizing: the page does not scroll, so the layout is a BUDGET ─────────────
+// (2026-08-26, second pass. Nils: "the constant scroll up/down and hide of the
+// header bar is jarring.") Every symptom he reported was the same fault. The
+// calendar used document height and scroll position as UI: opening a day added
+// ~390px to the page and auto-scrolled to it, closing it took them away again,
+// a month change dropped the rail, and a one-second "Loading popular releases"
+// line pushed the month down and let it back up. Each of those moved the
+// scroll position, and SubBar's hide-on-scroll reads a moving scroll position
+// as "the user is scrolling" and slides the filters away. Four symptoms, one
+// cause.
+//
+// So the whole calendar now lives inside the viewport and nothing scrolls: the
+// grid and the day rail SHARE one measured box and trade height with each
+// other. Nothing can be added to the page, so nothing can move it.
+//
+// The arithmetic is why the month COLLAPSES rather than shrinking. Measured on
+// a 375x812 phone: 499px is left for grid + rail after the nav, the filter bar
+// and the month header, and a PosterCard is 326px tall (its title/date/score/
+// actions body is ~100px of that, so a smaller poster barely helps). Six week
+// rows sharing what is left of 499 - 390 would be 17px each, which is not a
+// smaller cell, it is an unreadable one. Collapsing to whole weeks at their
+// NORMAL height is the only split that fits, and it keeps day-to-day movement
+// while you read a day. How many weeks survive falls out of the box: one on a
+// phone, two at 900px of desktop, three on a tall monitor.
+const RAIL_OPEN_PX = 400;   // seeded, then corrected by measurement below
+const RAIL_GAP_PX = 12;     // the separator between the grid and the rail
+const FALLBACK_ROW_PX = { mobile: 80, desktop: 128 };
+
+export default function CalendarView({ items, onSelect, onVisibleMonthChange, mode = "month", loading = false }: CalendarViewProps) {
   const [calMonth, setCalMonth] = useState(new Date());
-  // MB8: the open day, as `yyyy-MM-dd`. A string, not a Date — two Dates for the
-  // same day are never ===, so the cell's `selected` check would silently never
+  // The open day, as `yyyy-MM-dd`. A string, not a Date: two Dates for the same
+  // day are never ===, so the cell's `selected` check would silently never
   // match and the highlight would never appear.
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const dayRailRef = useRef<HTMLDivElement>(null);
+  // The day the rail is RENDERING, which lags `selectedDay` on close: the slot
+  // animates 400px down to 0, and unmounting the cards on the first frame would
+  // empty the box before it had finished collapsing.
+  const [railDay, setRailDay] = useState<string | null>(null);
+  // Which way the last month change went, so the incoming month slides in from
+  // the side it came from. 0 on first paint means no animation.
+  const [slide, setSlide] = useState<-1 | 0 | 1>(0);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
@@ -370,15 +406,26 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
     setSelectedDay(null);
   }, [calMonth]);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (selectedDay) setRailDay(selectedDay);
+  }, [selectedDay]);
+
+  const goMonth = (dir: -1 | 1) => {
+    setSlide(dir);
+    setCalMonth((m) => (dir === 1 ? addMonths(m, 1) : subMonths(m, 1)));
+  };
+
   const monthStart    = startOfMonth(calMonth);
   const monthEnd      = endOfMonth(calMonth);
   const days          = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const startPad      = getDay(monthStart);
   const groups        = groupByDate(items);
   const isCurrentMonth = isSameMonth(calMonth, new Date());
+  const monthKey      = format(calMonth, "yyyy-MM");
 
-  const selectedDayItems = selectedDay ? (groups[selectedDay] ?? []) : [];
-  const selectedDayLabel = selectedDay ? format(parseISO(selectedDay), "EEEE, MMMM d") : "";
+  const railItems = railDay ? (groups[railDay] ?? []) : [];
+  const railLabel = railDay ? format(parseISO(railDay), "EEEE, MMMM d") : "";
   const closeDayButton = (
     <button
       onClick={() => setSelectedDay(null)}
@@ -390,20 +437,69 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
     </button>
   );
 
-  // Bring the rail into view when a day is opened. Without this the rail can
-  // land below the fold on a tall month and the tap reads as doing nothing —
-  // the same "I thought nothing happened" failure MB6 fixed on Insights.
-  useEffect(() => {
-    if (!selectedDay) return;
-    dayRailRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
-  }, [selectedDay]);
-
   const monthItemCount = days.reduce((acc, day) => acc + (groups[format(day, "yyyy-MM-dd")]?.length ?? 0), 0);
 
+  // ── The budget ────────────────────────────────────────────────────────────
+  // `boxH` is measured from a flex-1 element, so it depends on the VIEWPORT and
+  // never on its own children. That is what stops the observer feeding itself:
+  // the two children below are given explicit pixel heights that sum back to it.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxH, setBoxH] = useState(0);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBoxH(el.clientHeight));
+    ro.observe(el);
+    setBoxH(el.clientHeight);
+    return () => ro.disconnect();
+  }, [mode, monthItemCount]);
+
+  // The rail's real height, corrected from the seed once it has rendered once.
+  // Both states of the rail (cards, and "nothing releasing") deliberately get
+  // the SAME height: an empty day moving the layout the opposite way to a busy
+  // one was half of what felt broken.
+  const railContentRef = useRef<HTMLDivElement>(null);
+  const [railH, setRailH] = useState(RAIL_OPEN_PX);
+  useEffect(() => {
+    const el = railContentRef.current;
+    if (!el || !railDay || railItems.length === 0) return;
+    const h = el.scrollHeight;
+    if (h > 0 && Math.abs(h - railH) > 4) setRailH(h);
+  }, [railDay, railItems.length, railH]);
+
+  const gap = isDesktop ? 6 : 2;
+  const weekCount = Math.max(1, Math.ceil((startPad + days.length) / 7));
+  const measured = boxH > 0;
+  const rowH = measured
+    ? Math.max(44, (boxH - (weekCount - 1) * gap) / weekCount)
+    : (isDesktop ? FALLBACK_ROW_PX.desktop : FALLBACK_ROW_PX.mobile);
+
+  // How many whole weeks still fit once the rail has taken its share.
+  const weeksOpen = measured
+    ? Math.min(weekCount, Math.max(1, Math.floor((boxH - railH - RAIL_GAP_PX + gap) / (rowH + gap))))
+    : 1;
+  const weeksShown = selectedDay ? weeksOpen : weekCount;
+
+  // Bring the selected week into the visible band, clamped so the last weeks of
+  // the month can't leave a gap under the grid.
+  const selectedWeek = selectedDay
+    ? Math.floor((startPad + parseISO(selectedDay).getDate() - 1) / 7)
+    : 0;
+  const firstWeek = Math.min(Math.max(0, selectedWeek), Math.max(0, weekCount - weeksShown));
+
+  const gridViewportH = weeksShown * rowH + (weeksShown - 1) * gap;
+  const railSlotH = selectedDay ? Math.max(0, boxH - gridViewportH - RAIL_GAP_PX) : 0;
+
+  // ── Swipe to page the month ───────────────────────────────────────────────
   const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
-    // A second finger means a pinch/zoom, not a page.
-    if (e.touches.length !== 1) { swipeStart.current = null; return; }
+    // A second finger means a pinch/zoom, not a page. A touch that begins in
+    // the day rail belongs to the rail: it is a horizontal scroller, and
+    // dragging sideways in it must move the cards, not the month.
+    if (e.touches.length !== 1 || (e.target as HTMLElement).closest?.("[data-day-rail]")) {
+      swipeStart.current = null;
+      return;
+    }
     const t = e.touches[0];
     swipeStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
   };
@@ -417,47 +513,51 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
     if (Date.now() - start.t > SWIPE_MAX_MS) return;
     if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_DOMINANCE) return;
     // Drag left to move forward, matching the direction the content would move.
-    setCalMonth((m) => (dx < 0 ? addMonths(m, 1) : subMonths(m, 1)));
+    goMonth(dx < 0 ? 1 : -1);
   };
 
-  // The "← Previous release" / "Next release →" jumps that used to sit in the
-  // utility row (and again in the empty-month state) were removed 2026-07-28 at
-  // Nils's request — obsolete now that the Popular scope means most months have
-  // something in them, and they were crowding "Today" out of its own row.
+  // The incoming month slides in from the side it came from. Keyed on the month
+  // so the animation restarts on every change; `slide === 0` on first paint, so
+  // the calendar does not animate itself in on load.
+  const slideClass = slide === 0 ? "" : slide === 1 ? "cal-slide-from-right" : "cal-slide-from-left";
 
   return (
-    <div>
+    <div
+      className="flex-1 min-h-0 flex flex-col"
+      onTouchStart={mode === "month" ? onTouchStart : undefined}
+      onTouchEnd={mode === "month" ? onTouchEnd : undefined}
+      // pan-y, not auto: tells the browser up front that this only scrolls
+      // vertically, so a sideways drag is ours to interpret and isn't first
+      // handed to a scroll container that can't use it.
+      style={mode === "month" ? { touchAction: "pan-y" } : undefined}
+    >
       {mode === "agenda" ? (
-        <AgendaView items={items} onSelect={onSelect} />
+        // The agenda is a long list and genuinely needs to scroll. It scrolls
+        // INSIDE this box rather than scrolling the document, so the filter bar
+        // above it still cannot be moved by it.
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <AgendaView items={items} onSelect={onSelect} />
+        </div>
       ) : (
-        <div
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-          // pan-y, not auto: tells the browser up front that this element only
-          // scrolls vertically, so a sideways drag is ours to interpret and
-          // isn't first handed to a scroll container that can't use it.
-          style={{ touchAction: "pan-y" }}
-        >
-          {/* Month navigation — 03-components.md's calendar.html shows a
-              plain 3-part row (chevron / serif month / chevron); the
-              "jump to nearest release" + "Today" controls the board flagged
-              as a real gap (H1.6d) don't fit in that row at mobile widths —
-              cramming all 5 into one flex row wrapped unpredictably and
-              split the corner arrows away from the month label (2026-07-27,
-              found via "the calendar looks broken"). Fixed by giving the
-              extra controls their OWN row underneath, which can wrap freely
-              without fracturing the primary nav. */}
-          <div className="flex items-center justify-between mb-1">
+        <>
+          {/* Month navigation — 03-components.md's calendar.html shows a plain
+              3-part row (chevron / serif month / chevron); the "jump to nearest
+              release" + "Today" controls the board flagged as a real gap
+              (H1.6d) don't fit in that row at mobile widths, so they have their
+              own row underneath, which can wrap without fracturing the nav. */}
+          <div className="flex-none flex items-center justify-between mb-1">
             <button
-              onClick={() => setCalMonth(subMonths(calMonth, 1))}
+              onClick={() => goMonth(-1)}
               aria-label="Previous month"
               className="tap-44 w-[30px] h-[30px] shrink-0 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors duration-fast"
             >
               <ChevronLeft className="w-3.5 h-3.5" aria-hidden />
             </button>
-            <h2 className="font-serif text-serif-md text-text-primary">{format(calMonth, "MMMM yyyy")}</h2>
+            <h2 key={monthKey} className={`font-serif text-serif-md text-text-primary ${slideClass}`}>
+              {format(calMonth, "MMMM yyyy")}
+            </h2>
             <button
-              onClick={() => setCalMonth(addMonths(calMonth, 1))}
+              onClick={() => goMonth(1)}
               aria-label="Next month"
               className="tap-44 w-[30px] h-[30px] shrink-0 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors duration-fast"
             >
@@ -465,110 +565,136 @@ export default function CalendarView({ items, onSelect, onVisibleMonthChange, mo
             </button>
           </div>
 
-          {/* Utility row — the release count, and "Today" with room to breathe
-              now that the two jump buttons are gone. Today is a real pill with
-              a 44px hit area; as a bare text link squeezed between four other
-              controls it was the smallest tap target on the page. */}
-          {(monthItemCount > 0 || !isCurrentMonth) && (
-            <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 mb-2 md:mb-4 font-mono text-meta text-text-secondary">
-              {monthItemCount > 0 && <span>{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</span>}
-              {!isCurrentMonth && (
-                <button
-                  onClick={() => setCalMonth(new Date())}
-                  className="tap-44 px-3 py-1 rounded-full border border-accent text-accent hover:bg-accent-subtle transition-colors duration-fast"
+          {/* Utility row — the release count, the loading state, and "Today".
+              ALWAYS rendered, at a fixed height, even with nothing in it. It
+              used to appear and disappear with its contents, and the loading
+              line lived in its own paragraph above the month: between them, one
+              fetch moved the whole grid down and then back up again. This row
+              changes its TEXT now. It never changes the layout. */}
+          <div className="flex-none h-6 flex items-center justify-center gap-x-3 font-mono text-meta text-text-secondary">
+            {loading ? (
+              <span role="status">Loading releases…</span>
+            ) : monthItemCount > 0 ? (
+              <span>{monthItemCount} release{monthItemCount !== 1 ? "s" : ""}</span>
+            ) : null}
+            {!isCurrentMonth && (
+              <button
+                onClick={() => { setSlide(0); setCalMonth(new Date()); }}
+                className="tap-44 px-3 py-0.5 rounded-full border border-accent text-accent hover:bg-accent-subtle transition-colors duration-fast"
+              >
+                Today
+              </button>
+            )}
+          </div>
+
+          {/* Day-of-week headers — single-letter per the mockup, full name kept
+              for screen readers via aria-label. */}
+          <div className="flex-none grid grid-cols-7 gap-0.5 md:gap-1.5 mt-1 mb-1 md:mb-1.5">
+            {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+              <div key={d} aria-label={d} className="text-center font-mono text-micro text-text-secondary py-1">
+                <span aria-hidden>{d[0]}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* THE BOX. Its height comes from flex, i.e. from the viewport, and
+              the grid and the rail divide it between them. */}
+          <div ref={boxRef} className="flex-1 min-h-0 overflow-hidden">
+            {monthItemCount === 0 ? (
+              <EmptyState
+                icon={<CalendarX className="w-5 h-5" aria-hidden />}
+                title={`No releases in ${format(calMonth, "MMMM yyyy")}`}
+                hint="Swipe or use the arrows to browse another month, or turn on another source above."
+              />
+            ) : (
+              <>
+                {/* The grid's window. Collapsing the month is this element
+                    getting shorter while the weeks inside keep their size and
+                    slide up: cells never resize, so nothing inside one has to
+                    re-flow or clip on the way. */}
+                <div
+                  className="overflow-hidden transition-[height] duration-base ease-emphasized motion-reduce:transition-none"
+                  style={measured ? { height: gridViewportH } : undefined}
                 >
-                  Today
-                </button>
-              )}
-            </div>
-          )}
-
-          {monthItemCount === 0 ? (
-            <EmptyState
-              icon={<CalendarX className="w-5 h-5" aria-hidden />}
-              title={`No releases in ${format(calMonth, "MMMM yyyy")}`}
-              hint="Use the arrows to browse another month, or turn on another source above."
-            />
-          ) : (
-            <>
-              {/* Day-of-week headers — single-letter per the mockup, full name
-                  kept for screen readers via aria-label. */}
-              <div className="grid grid-cols-7 gap-0.5 md:gap-1.5 mb-1 md:mb-1.5">
-                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
-                  <div key={d} aria-label={d} className="text-center font-mono text-micro text-text-secondary py-1">
-                    <span aria-hidden>{d[0]}</span>
+                  <div
+                    className="transition-transform duration-base ease-emphasized motion-reduce:transition-none"
+                    style={{ transform: `translateY(${-firstWeek * (rowH + gap)}px)` }}
+                  >
+                    <div key={monthKey} className={slideClass}>
+                      {/* The current month used to get a `bg-accent-subtle`
+                          tint here, removed 2026-07-28 on Nils's call. Today's
+                          cell keeps its accent ring and day-number pill, which
+                          is the signal that was doing the work. Mobile gaps are
+                          2px, not 6px: at 375px six 6px gaps plus the page's
+                          old px-6 ate a fifth of the screen width. */}
+                      <div
+                        className="grid grid-cols-7 gap-0.5 md:gap-1.5"
+                        style={{ gridTemplateRows: `repeat(${weekCount}, ${rowH}px)` }}
+                      >
+                        {Array.from({ length: startPad }).map((_, i) => (
+                          <div key={`pad-${i}`} className="rounded-sm md:rounded-md" />
+                        ))}
+                        {days.map((day) => {
+                          const dateStr  = format(day, "yyyy-MM-dd");
+                          const dayItems = groups[dateStr] || [];
+                          return (
+                            <CalendarCell
+                              key={day.toISOString()}
+                              day={day}
+                              dayItems={dayItems}
+                              onOpenDay={setSelectedDay}
+                              selected={selectedDay === dateStr}
+                              isDesktop={isDesktop}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              {/* Calendar grid. The current month used to get a `bg-accent-subtle`
-                  tint here (with a p-2/-m-2 pair whose ONLY job was letting that
-                  tint bleed past the cells) — removed 2026-07-28, Nils's call.
-                  Today's cell keeps its accent ring and day-number pill, which
-                  is the signal that was actually doing the work.
-                  Mobile gaps are 2px, not 6px: at 375px the six gaps plus the
-                  page's old px-6 were eating a fifth of the screen width. */}
-              <div className="grid grid-cols-7 gap-0.5 md:gap-1.5">
-                {Array.from({ length: startPad }).map((_, i) => (
-                  <div key={`pad-${i}`} className="h-20 md:h-32 rounded-sm md:rounded-md" />
-                ))}
-                {days.map((day) => {
-                  const dateStr  = format(day, "yyyy-MM-dd");
-                  const dayItems = groups[dateStr] || [];
-                  return (
-                    <CalendarCell
-                      key={day.toISOString()}
-                      day={day}
-                      dayItems={dayItems}
-                      onOpenDay={setSelectedDay}
-                      selected={selectedDay === dateStr}
-                      isDesktop={isDesktop}
-                    />
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* MB8 (2026-08-14) — Nils: "when clicking a day with multiple entries, I
-          want them to open in a carousel below the month view." This replaced
-          the popover/bottom-sheet the "+N more" link used to open. Below the
-          grid rather than over it, so the month stays readable while you browse
-          the day — the popover covered the following week and the sheet covered
-          everything. Full PosterCards, so a day's titles get the same artwork,
-          score and quick actions they have everywhere else; the cell's own 10px
-          text lines never could.
-          2026-08-26: this is now the ONLY route from the grid to an item, so it
-          opens for EVERY day, empty ones included. An empty day answering
-          "nothing that day" is the point. A tap that silently does nothing is
-          indistinguishable from a tap that missed. It also sits outside the
-          swipe container above: the rail is a horizontal scroller, and a
-          sideways drag inside it belongs to the rail, not to the month.  */}
-      {mode === "month" && selectedDay && (
-        <div ref={dayRailRef} className="mt-5 pt-5 border-t border-border scroll-mt-24">
-          {selectedDayItems.length > 0 ? (
-            <Rail title={selectedDayLabel} action={closeDayButton}>
-              {selectedDayItems.map((item) => (
-                <PosterCard key={item.id} item={item as MediaCardItem} onSelect={() => onSelect(item)} />
-              ))}
-            </Rail>
-          ) : (
-            /* Rail's own header markup, repeated rather than rendering an empty
-               Rail: the scroller's chevrons and snap columns around a single
-               line of text would read as a broken carousel. */
-            <section>
-              <div className="flex items-center justify-between gap-3 mb-3 px-1">
-                <h2 className="font-serif text-serif-md text-text-primary">{selectedDayLabel}</h2>
-                <div className="shrink-0">{closeDayButton}</div>
-              </div>
-              <p className="px-1 pb-2 font-mono text-meta text-text-secondary" role="status">
-                Nothing releasing on this day.
-              </p>
-            </section>
-          )}
-        </div>
+                {/* MB8 (2026-08-14) — Nils: "when clicking a day with multiple
+                    entries, I want them to open in a carousel below the month
+                    view." Full PosterCards, so a day's titles get the same
+                    artwork, score and quick actions they have everywhere else;
+                    the cell's own 10px text lines never could.
+                    It opens for EVERY day, empty ones included, and at the SAME
+                    height either way. An empty day answering "nothing that day"
+                    is the point: a tap that silently does nothing cannot be
+                    told apart from a tap that missed. */}
+                <div
+                  data-day-rail
+                  className="overflow-hidden transition-[height,margin] duration-base ease-emphasized motion-reduce:transition-none"
+                  style={{ height: railSlotH, marginTop: railSlotH > 0 ? RAIL_GAP_PX : 0 }}
+                  aria-hidden={!selectedDay}
+                >
+                  <div ref={railContentRef} className="border-t border-border pt-4">
+                    {railItems.length > 0 ? (
+                      <Rail title={railLabel} action={closeDayButton}>
+                        {railItems.map((item) => (
+                          <PosterCard key={item.id} item={item as MediaCardItem} onSelect={() => onSelect(item)} />
+                        ))}
+                      </Rail>
+                    ) : railDay ? (
+                      /* Rail's own header markup, repeated rather than an empty
+                         Rail: the scroller's chevrons and snap columns around a
+                         single line of text would read as a broken carousel. */
+                      <section>
+                        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+                          <h2 className="font-serif text-serif-md text-text-primary">{railLabel}</h2>
+                          <div className="shrink-0">{closeDayButton}</div>
+                        </div>
+                        <p className="px-1 font-mono text-meta text-text-secondary" role="status">
+                          Nothing releasing on this day.
+                        </p>
+                      </section>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

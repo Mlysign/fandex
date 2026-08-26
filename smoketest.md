@@ -301,6 +301,19 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     the page does not scroll at all on a 6-week month: `document.documentElement.scrollHeight -
     innerHeight` should be `0`. It was permanently 64px (a 100vh page under a `pb-16` wrapper) until
     2026-08-26, so a small non-zero number here means that padding/height pair has drifted again.
+13ja. **The calendar does not scroll AT ALL, in any state (2026-08-26, second pass).** It is one
+    viewport tall and the grid and day rail trade height with each other. The check is one line,
+    run in every state: `document.documentElement.scrollHeight - innerHeight` must be **0** with
+    the month closed, with a busy day open, with an empty day open, and straight after a swipe.
+    `scrollY` must stay 0 throughout, and the filter bar must never slide away (it hides on
+    scroll, so any movement here shows up as a disappearing header). Opening a day collapses the
+    month to the selected week on a phone, two weeks at 900px of desktop; closing it expands the
+    month back. A busy day and an EMPTY day must give the rail the SAME height, since an empty
+    day moving the layout the other way was half of what felt broken. The utility row under the
+    month name must stay 24px while a month fetch runs, changing only its text.
+    ⚠️ **Measuring any of this in the browser pane requires killing transitions first**,
+    with `*{transition:none !important}`, or `getBoundingClientRect` returns the START of every
+    animated height and the collapse reads as not working at all. Same family as the hover trap.
 
 **C3. Episode tracking + Home's progress rail (added 2026-08-16, MB14)** — brand new surfaces; nothing before this date exercised them.
 13k. **MB14 — per-episode tracking (2026-08-16), item page.** On a SHOW's item page, a
