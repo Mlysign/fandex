@@ -10,7 +10,8 @@ import { TypeIcon } from "@/components/Badges";
 // insight highlight panel as a foundation for the up next items, use the
 // calendar list view items instead."*
 //
-// So the anatomy is <ListCard>'s, not <HighlightPanel>'s — the same coloured
+// So the anatomy is <ListCard>'s, not the insight highlight panel's (a Home
+// component, removed 2026-08-26). The anatomy gives it the same coloured
 // type bar, the same flush full-height media, the same title-over-meta stack in
 // a full-width bordered row. Three deliberate departures, all from the spec:
 //

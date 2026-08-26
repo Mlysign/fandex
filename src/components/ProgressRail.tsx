@@ -15,7 +15,9 @@ import { syncToCompletion } from "@/lib/syncClient";
 // rated) that sat above the highlights.
 //
 // ── 2026-08-16 REBUILD (Nils) ───────────────────────────────────────────────
-// The first cut borrowed <HighlightPanel>'s anatomy in a horizontal <Rail>.
+// The first cut borrowed the insight highlight panel's anatomy in a horizontal
+// <Rail>. (That component was Home's, and went when Nils removed the highlights
+// on 2026-08-26.)
 // Nils: *"don't use the insight highlight panel as a foundation … use the
 // calendar list view items instead … render the list item full width and don't
 // use a horizontal carousel, use a vertical carousel instead."* So:

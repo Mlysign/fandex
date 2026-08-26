@@ -52,6 +52,13 @@ export default function ImportPageClient({ signedIn }: { signedIn: boolean }) {
 
   // Client-side, because the warning is device-specific and the page is
   // otherwise server-rendered. Not a UA sniff for behaviour, only for a hint.
+  //
+  // The disable is the repo's usual justified one for reading a browser-only
+  // global on mount: `navigator` does not exist during the server render, so
+  // this cannot be an initial-state value. It was missing when PL4 shipped
+  // (2026-08-23), which left `npm run lint` at 1 error and CI red, and CI red
+  // is what stops a push reaching prod. Added 2026-08-26.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setIsAndroid(/Android/i.test(navigator.userAgent)); }, []);
 
   async function upload(files: FileList | File[]) {

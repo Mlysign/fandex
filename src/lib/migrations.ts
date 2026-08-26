@@ -859,6 +859,59 @@ export const MIGRATIONS: Migration[] = [
       db.exec("CREATE INDEX IF NOT EXISTS idx_import_staging_created ON import_staging(created_at)");
     },
   },
+  {
+    version: 21,
+    name: "home_snapshot: the daily, crawler-safe home page (SEO)",
+    up: (db) => {
+      // 2026-08-26. Home's public rails were a client island fetching
+      // `/api/home`, and `/api/` is under the robots Disallow. Googlebot's
+      // renderer honours robots.txt for subresources, so it is not that those
+      // links were *probably* missed. The renderer was blocked from fetching
+      // the data that would produce them. Every poster on `/` was invisible to
+      // search by construction, on the highest-authority url on the domain.
+      //
+      // The fix is Nils's design: build the whole public home page ONCE A DAY on
+      // the server, store it, and serve every visitor (and every crawler) out of
+      // the table. One provider fan-out per day instead of one per cold cache
+      // entry, and a crawler causes none at all.
+      //
+      // ⚠️ ONE ROW PER REGION, replaced in place. This table is written off a
+      // schedule and read on the busiest page in the app, which is the exact
+      // pair of properties that grew `facet_page_cache` to 222.8 MB, so it is
+      // bounded by its PRIMARY KEY rather than by a sweep. `INSERT OR REPLACE`
+      // cannot add a row for a region that already has one, so there is no
+      // growth curve to get wrong and no timer to forget. Today exactly one
+      // region is ever written (DEFAULT_COUNTRY); the column exists so adding a
+      // second needs no migration.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS home_snapshot (
+          region     TEXT PRIMARY KEY,
+          day        TEXT NOT NULL,
+          built_at   INTEGER NOT NULL,
+          payload    TEXT NOT NULL
+        )
+      `);
+
+      // ⚠️ THE PRUNE INVARIANT, in its "new table referencing media_items" form.
+      //
+      // The snapshot links to catalog rows, and the titles it links are exactly
+      // the ones the boot prune deletes: provider trending/upcoming arrive as
+      // thin `browsed = 1` writes that nobody has acted on. Without this the
+      // next deploy would cascade away the rows `/` points at and leave the
+      // homepage serving 404s to the crawler we built it for.
+      //
+      // The ids live here as real rows rather than inside the payload JSON so
+      // `PRUNABLE_WHERE` can name this table in the same plain `id NOT IN
+      // (SELECT ...)` shape as the other three, instead of reaching into a blob.
+      // Rewritten with each snapshot, so it holds ~30 rows and pins nothing once
+      // a title drops off the page.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS home_snapshot_item (
+          media_item_id TEXT PRIMARY KEY
+        )
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

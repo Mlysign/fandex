@@ -4,21 +4,11 @@ import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
-import { get as dbGet } from "@/lib/db";
-import { resolveMediaIdsBySource } from "@/lib/userState";
-import { BoundedCache } from "@/lib/boundedCache";
-
 import { personalizedFeed, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
-import type { FeedCandidate } from "@/lib/discoverFeed";
-import {
-  fetchTmdbTrending, fetchTraktTrending, fetchTrendingGames,
-} from "@/lib/discoverFeed";
-import { candidatesForMonth, monthKey, nextMonthKey } from "@/lib/popularMonthFeed";
-import { rankCrossSourcePopularity } from "@/lib/popularMonth";
-import { upcomingFrom } from "@/lib/upcoming";
-import { dayISO, seedFor, rotationSlot, rotateRailFresh } from "@/lib/dailyRotation";
-import { buildHighlights } from "@/lib/homeHighlights";
+import { RAIL_SIZE } from "@/lib/homeRails";
+import { readHomeSnapshot, buildHomeSnapshot, type SnapshotItem } from "@/lib/homeSnapshot";
+import { seedFor, rotationSlot, rotateRailFresh } from "@/lib/dailyRotation";
 
 // Home's three rails + the signed-in stats strip. Reuses the exact discover-feed
 // + persist/annotate machinery /api/discover already ships (same shapes, so
@@ -49,123 +39,15 @@ import { buildHighlights } from "@/lib/homeHighlights";
 // /trending, Trakt /trending, RAWG recent-most-added); `upcoming` calls the
 // calendar's own candidatesForMonth; and every rail is drawn from a DEEPER
 // ranked pool via a day-seeded rotation instead of a prefix (lib/dailyRotation).
-const RAIL_SIZE = 15;
-/** Rank this deep, show RAIL_SIZE of it — the room the rotation draws from. */
-const POOL_DEPTH = 45;
+// Public rails are viewer-independent, and since 2026-08-26 they are also
+// PRE-BUILT: `home_snapshot` holds the day's trending + upcoming, assembled off
+// the request path so that `/` can server-render real links and a crawler costs
+// no provider calls at all. This route reads the same snapshot rather than
+// re-running the fan-out, so the two surfaces cannot disagree. It falls back
+// to a live build only when there is no snapshot at all (a fresh volume, or a
+// container whose first scheduled build has not landed yet).
+// → src/lib/homeSnapshot.ts
 
-// Public rails are viewer-independent, so they cache. Home is the one PUBLIC
-// route that hits providers: before this it fired 3 upstream calls on every
-// anonymous view and every crawler hit. Keyed by region + day (the rotation is
-// per-day, so a stale entry can't leak yesterday's pick into today).
-const PUBLIC_TTL_MS = 30 * 60 * 1000;
-const _publicCache = new BoundedCache<string, { trending: FeedCandidate[]; upcoming: FeedCandidate[] }>({
-  max: 40, ttlMs: PUBLIC_TTL_MS,
-});
-
-/**
- * Identity dedupe, run BEFORE the cross-source ranking.
- *
- * rankCrossSourcePopularity dedupes on `type|normalizeName(title)|releaseDate`,
- * which is right for RAWG-vs-IGDB (independent ids, same game) but fails for
- * TMDB-vs-Trakt: both key by the same tmdb id, yet Trakt's `released` and TMDB's
- * `release_date` can differ by a day — and then the title+date key doesn't match
- * and the rail shows the title twice. (Observed on the first live run: Supergirl
- * at 2026-06-26 and 2026-06-24.) Same `id` is the stronger signal, so use it
- * first and let the title+date pass handle the rest.
- *
- * First wins, so pass TMDB before Trakt: the Trakt candidates carry no poster.
- */
-function dedupeById(cands: FeedCandidate[]): FeedCandidate[] {
-  const seen = new Set<string>();
-  const out: FeedCandidate[] = [];
-  for (const c of cands) {
-    if (seen.has(c.id)) continue;
-    seen.add(c.id);
-    out.push(c);
-  }
-  return out;
-}
-
-/**
- * Fill missing posters from the local catalog, then drop whatever is still
- * blank.
- *
- * Trakt serves no images, so its candidates arrive with `posterUrl: null` and
- * normally get one from TMDB hydration — which the browse feed does but these
- * cheap rail paths do not. On the first live run that put three placeholder
- * letter-tiles (Spider-Man: No Way Home, The Mentalist, Criminal Minds) in the
- * middle of a poster rail. These are popular titles, so the catalog almost
- * always already has the artwork: one batched id→uuid lookup plus one indexed
- * read gets it for free, no provider call.
- *
- * Anything still poster-less is dropped rather than rendered: in a rail whose
- * entire job is visual, a blank tile is worse than one fewer card. The pool is
- * ranked deeper than the rail, so a drop costs nothing.
- */
-function withPosters(cands: FeedCandidate[]): FeedCandidate[] {
-  const missing = cands.filter((c) => !c.posterUrl);
-  if (missing.length > 0) {
-    const pairs: { source: string; sourceId: string }[] = [];
-    for (const c of missing) {
-      for (const [source, sid] of Object.entries(c.ids ?? {})) {
-        if (sid != null) pairs.push({ source, sourceId: String(sid) });
-      }
-    }
-    const idMap = resolveMediaIdsBySource(pairs);
-    for (const c of missing) {
-      for (const [source, sid] of Object.entries(c.ids ?? {})) {
-        if (sid == null) continue;
-        const mid = idMap.get(`${source}:${String(sid)}`);
-        if (!mid) continue;
-        const row = dbGet<{ poster_url: string | null }>(
-          "SELECT poster_url FROM media_items WHERE id = ?", [mid]
-        );
-        if (row?.poster_url) { c.posterUrl = row.poster_url; break; }
-      }
-    }
-  }
-  return cands.filter((c) => !!c.posterUrl);
-}
-
-// ── Trending: what's popular RIGHT NOW, released included ──────────
-async function trendingPool(region: string): Promise<FeedCandidate[]> {
-  // `.catch` per source: one provider being down costs its own titles, not the
-  // whole rail. Two pages of each TMDB endpoint so the pool is deep enough for
-  // the rotation to have somewhere to go.
-  const [tmdbMovies, tmdbMovies2, tmdbShows, traktMovies, traktShows, games] = await Promise.all([
-    fetchTmdbTrending("movie", 1).catch(() => []),
-    fetchTmdbTrending("movie", 2).catch(() => []),
-    fetchTmdbTrending("show", 1).catch(() => []),
-    fetchTraktTrending("movie", 1).catch(() => []),
-    fetchTraktTrending("show", 1).catch(() => []),
-    // SM36: was fetchRawgTrendingGames — RAWG only. During the 2026-08-02 RAWG
-    // outage this returned [], so the rail had zero games and, with the Games
-    // type filter on, the entire "Popular right now" section disappeared from
-    // Home with no explanation. fetchTrendingGames pulls IGDB alongside it.
-    fetchTrendingGames(1).catch(() => []),
-  ]);
-  void region; // trending isn't region-scoped upstream; kept in the cache key
-  // TMDB before Trakt — see dedupeById.
-  const merged = dedupeById([
-    ...tmdbMovies, ...tmdbMovies2, ...tmdbShows, ...traktMovies, ...traktShows, ...games,
-  ]);
-  return rankCrossSourcePopularity(withPosters(merged), POOL_DEPTH);
-}
-
-// ── Upcoming: the calendar's algorithm, not a lookalike ────────────
-async function upcomingPool(region: string, now: Date): Promise<FeedCandidate[]> {
-  // THREE months, not one: late in a month "this month" has almost nothing left
-  // in the future, which is exactly when the rail looked broken. Every month is
-  // 6h-cached and shared with /calendar's Popular chip, so the extra reach costs
-  // nothing after the first request.
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const months = [monthKey(now), nextMonthKey(now), nextMonthKey(next)];
-  const pools = await Promise.all(months.map((m) => candidatesForMonth(m, region).catch(() => [])));
-  // upcomingFrom is the ONE shared definition of upcoming (SM18 — /profile
-  // shipped 1954 releases as "coming up" by slicing an unfiltered feed).
-  const future = upcomingFrom(withPosters(dedupeById(pools.flat())), now);
-  return rankCrossSourcePopularity(future, POOL_DEPTH);
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -173,41 +55,36 @@ export async function GET(req: NextRequest) {
     try { userId = (await getSession())?.userId ?? null; } catch { /* anon */ }
     const region = userId ? getUserCountry(userId) : DEFAULT_COUNTRY;
 
-    // `?day=YYYY-MM-DD` forces the rotation seed, so a sweep can prove the rails
-    // really do rotate (and that they're stable for a given day) without waiting
-    // a day. Dev-only: on prod it would be an unbounded cache-key generator.
-    const dayParam = process.env.NODE_ENV !== "production" ? req.nextUrl.searchParams.get("day") : null;
     const now = new Date();
-    const today = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : dayISO(now);
 
-    // The rail rotation now turns over every 6 hours instead of once a day, and
-    // each slot draws from a pool the previous slot's picks were removed from
-    // (see lib/dailyRotation.ts — "different seed" does not mean "different
-    // items"). `?slot=N` is the dev-only equivalent of `?day=` for it.
-    // NOTE the pool cache below is deliberately still keyed by DAY, not slot:
-    // the expensive part is the provider fan-out, and re-fetching it four times
-    // a day to shuffle a list we already have would be pure waste.
-    const slotParam = process.env.NODE_ENV !== "production" ? req.nextUrl.searchParams.get("slot") : null;
-    const slot = slotParam && /^-?\d+$/.test(slotParam) ? Number(slotParam) : rotationSlot(now);
+    // ── The public rails come out of the daily snapshot ────────────────────
+    //
+    // Read, never build: a build is the provider fan-out, and putting it back on
+    // a request path is exactly what the snapshot exists to stop. The ONE
+    // exception is a missing snapshot (a fresh volume, or a container whose
+    // first scheduled build has not landed), where a live build is better than
+    // an empty homepage. `buildHomeSnapshot` stores what it makes, so this can
+    // happen at most once per process.
+    //
+    // ⚠️ ONE REGION. The snapshot is built for DEFAULT_COUNTRY, so a signed-in
+    // visitor whose country differs now sees the same public rails as everyone
+    // else. That is the deliberate cost of making the page cacheable and
+    // crawler-cheap: region only ever reached `upcomingPool`'s calendar window,
+    // and one shared upcoming list is a far smaller loss than a per-region
+    // provider fan-out on the busiest page in the app.
+    const snapshot = readHomeSnapshot() ?? await buildHomeSnapshot();
 
-    const cacheKey = `${region}:${today}`;
-    let pools = _publicCache.get(cacheKey);
-    if (!pools) {
-      const [trending, upcoming] = await Promise.all([trendingPool(region), upcomingPool(region, now)]);
-      pools = { trending, upcoming };
-      _publicCache.set(cacheKey, pools);
-    }
+    // `?day=`/`?slot=` used to force the rail rotation; the rotation now happens
+    // inside the daily build, so they are no longer read here. `region` is kept
+    // for the personalized feed below, which IS still per-user.
+    void region;
 
-    // Rotate, THEN decorate — rotation is pure and cheap, so it stays outside
-    // the cache and the cached pool remains the full ranked depth.
-    const trending = decorateSection(
-      rotateRailFresh(pools.trending, RAIL_SIZE, (e) => seedFor("trending", e), slot),
-      userId,
-    );
-    const upcoming = decorateSection(
-      rotateRailFresh(pools.upcoming, RAIL_SIZE, (e) => seedFor("upcoming", e), slot),
-      userId,
-    ).sort((a, b) => (a.releaseDate ?? "9999").localeCompare(b.releaseDate ?? "9999"));
+    // The snapshot's items already carry their catalog uuid and slug: they were
+    // persisted once, by the builder. Running `persistDiscoverBatch` over them
+    // again would key on `id`, find a uuid where it expects a provider id, and
+    // mark every card non-linkable. Only the per-user overlay is applied here.
+    const trending = withUserOverlay(snapshot?.trending ?? [], userId);
+    const upcoming = withUserOverlay(snapshot?.upcoming ?? [], userId);
 
     let recommendation: Awaited<ReturnType<typeof personalizedFeed>> = [];
     if (userId) {
@@ -218,7 +95,13 @@ export async function GET(req: NextRequest) {
       // keepTop 1, not 3: this is the rail Nils was looking at, and on a phone
       // three pinned cards are most of what's on screen. One pinned card still
       // guarantees the single best match is never rotated out.
-      const personalized = await personalizedFeed(userId, region);
+      //
+      // This rail stays live and per-user. It cannot go in the snapshot: it is
+      // built from the viewer's own taste profile, and a snapshot is by
+      // definition the half of the page that is the same for everybody.
+      const slotParam = process.env.NODE_ENV !== "production" ? req.nextUrl.searchParams.get("slot") : null;
+      const slot = slotParam && /^-?d+$/.test(slotParam) ? Number(slotParam) : rotationSlot(now);
+      const personalized = await personalizedFeed(userId, getUserCountry(userId));
       if (personalized) {
         const ranked = [...personalized].sort((a, b) => b.score - a.score);
         recommendation = rotateRailFresh(
@@ -228,22 +111,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2026-08-16: the libraryTotal/wishlistTotal/ratedTotal counters went with
-    // the StatStrip they fed (Home's progress rail took that slot). That also
-    // dropped a COUNT query and this route's only direct call into
-    // getLibraryFacetAnalysis — buildHighlights makes its own, cached.
-    // `stats` stays: a non-null value is what tells the page the viewer is
-    // signed in.
-    let stats: HomeStats | null = null;
-    if (userId) {
-      stats = { highlights: buildHighlights(userId, today) };
-    }
-
     return NextResponse.json({
-      trending: annotateUserState(persistDiscoverBatch(trending, userId), userId),
-      upcoming: annotateUserState(persistDiscoverBatch(upcoming, userId), userId),
+      trending,
+      upcoming,
       recommendation: annotateUserState(persistDiscoverBatch(recommendation, userId), userId),
-      stats,
+      // The signed-in marker. It used to be a `stats` object carrying the day's
+      // highlight panels; Nils removed those from Home on 2026-08-26 ("they
+      // don't add as much as I'd hoped"), leaving the flag they were bundled
+      // with. A plain boolean says what the page actually reads it for.
+      authed: !!userId,
+      // What the page is serving out of, so a stale or missing snapshot is
+      // diagnosable from the response instead of looking like "the rails are
+      // broken". That is the standing rule about empty states carrying a reason.
+      snapshot: snapshot
+        ? { day: snapshot.day, builtAt: snapshot.builtAt, ageMs: Date.now() - snapshot.builtAt }
+        : null,
     });
   } catch (e: any) {
     log.error("home_error", { ...errorFields(e) });
@@ -251,6 +133,16 @@ export async function GET(req: NextRequest) {
   }
 }
 
-interface HomeStats {
-  highlights: ReturnType<typeof buildHighlights>;
+/**
+ * Layer the viewer's own state and Fandex Score onto snapshot rails.
+ *
+ * The snapshot is decorated for nobody (`decorateSection(…, null)`), which is
+ * what makes it shareable across every visitor. This adds back the half that is
+ * per-user: watchlist / library / rating from `annotateUserState`, and the
+ * viewer's real Fandex Score in place of the snapshot's null.
+ */
+function withUserOverlay(items: SnapshotItem[], userId: string | null) {
+  if (!items.length) return [];
+  const scored = userId ? decorateSection(items as never, userId) : items;
+  return annotateUserState(scored as never, userId);
 }

@@ -40,10 +40,23 @@ import { log } from "@/lib/logger";
 // what THIS predicate would lose. Structurally that is 0. If either is ever
 // non-zero, something has turned these names back into real tables and this
 // predicate needs its clauses back before the next prune runs.
+//
+// 2026-08-26 (home_snapshot): the fourth table, and the first one that is NOT
+// user state. The daily home snapshot links ~30 provider titles from `/`, and
+// those arrive here exactly as this predicate's targets do: `browsed = 1`, with
+// nobody having acted on them. Without this clause the next deploy would
+// delete the rows the highest-authority page on the domain points at and leave a
+// crawler a page of 404s. `home_snapshot_item` is rewritten with each snapshot,
+// so the pin lasts exactly as long as the link does.
+//
+// Note this extends the list rather than reasoning about whether some other
+// clause already implies it. See the paragraph at the top of this comment for
+// why the predicate names tables one by one.
 const PRUNABLE_WHERE = `
   browsed = 1
   AND id NOT IN (SELECT media_item_id FROM user_item_state)
   AND id NOT IN (SELECT media_item_id FROM user_episode_state)
+  AND id NOT IN (SELECT media_item_id FROM home_snapshot_item)
 `;
 
 function n(sql: string): number {
@@ -61,6 +74,8 @@ export type PrunePreview = {
   protectedByWatchlist: number;
   /** Browsed shows kept because the user ticked episodes on them (MB14). */
   protectedByEpisodeState: number;
+  /** Browsed titles kept because today's home snapshot links to them. */
+  protectedByHomeSnapshot: number;
   /**
    * Library / wishlist rows the LIVE predicate would delete. Must be 0.
    *
@@ -93,6 +108,9 @@ export function previewPrune(): PrunePreview {
     ),
     protectedByEpisodeState: n(
       "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM user_episode_state)",
+    ),
+    protectedByHomeSnapshot: n(
+      "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM home_snapshot_item)",
     ),
     // Measured against the LIVE predicate, not a hypothetical narrower one —
     // see the field docs. Both are 0 by construction while these names are views.

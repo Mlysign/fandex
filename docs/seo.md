@@ -67,11 +67,11 @@ but free, and it feeds DuckDuckGo.
 | Surface | State |
 |---|---|
 | `sitemap.xml` | 2,037 URLs — 2,022 items, 8 calendar months, 6 legal, 1 root |
-| item pages | Title, description, canonical, OG, `index, follow`, **and JSON-LD since 2026-08-20**. Link out to ~25 facet pages, **0 to other items** |
+| item pages | Title, description, canonical, OG, `index, follow`, **and JSON-LD since 2026-08-20**. ~25 facet links, **plus sibling titles since 2026-08-23** (`buildLocalRails`, server-rendered, 0 provider calls; 6 of 10 sampled gained 3–14 links) |
 | facet pages | Crawlable, indexable, **not in the sitemap** (deliberate, see below). Thin ones are `noindex, follow` since 2026-08-20 |
 | `/calendar/{YYYY-MM}` | **New 2026-08-20.** SSR, 8 months in the sitemap |
 | `/calendar` | The interactive app. Client-rendered, robots-disallowed, correctly |
-| `/` | **74 outbound links since 2026-08-20** — 30 titles, 36 genres, 8 calendar months, all server-rendered |
+| `/` | **94 outbound links since 2026-08-26**: 30 titles and 20 people from the day's `home_snapshot`, plus 36 genres and 8 calendar months from the hub. All server-rendered, **0 provider calls per view** |
 
 ### ✅ Structured data (`src/lib/jsonLd.ts`)
 
@@ -131,8 +131,14 @@ to read the tag. It reduces index bloat. Do not cite it as a fix for the
 
 `/` used to link to **nothing**: priority 1.0, an `sr-only` h1, 36 KB, and zero
 catalog links, because the page was `"use client"` end to end and fetched
-`/api/home` — an endpoint under the `/api/` disallow. It now ships **74 outbound
-links** server-side: 30 catalog titles, 36 genre facet pages, 8 calendar months.
+`/api/home` — an endpoint under the `/api/` disallow. The hub added **44** of
+today's links server-side: 36 genre facet pages and 8 calendar months.
+
+⚠️ **"Recently added" (30 catalog titles) was removed from the hub on
+2026-08-26** (Nils). It was the hub's only item links, but the day's rails at the
+TOP of the page now server-render ~30 titles from the actual content, which is a
+better place for them. Do not re-add it: two lists of titles on one page compete
+for the same crawl budget and only one of them is something a person reads.
 
 `page.tsx` is a thin server shell; the interactive half lives in
 `HomePageClient.tsx`, unchanged. `/` is now `ƒ (Dynamic)`, which the DB read
@@ -156,6 +162,104 @@ Genre chips come from the provider genre maps (`providerGenreKeys`), deduped by
 provider **target** rather than by key: "science fiction"/"sci fi" share TMDB
 878 and "rpg"/"role playing" share one RAWG slug, and linking both would put two
 near-identical facet pages in front of a crawler competing for one query.
+
+### ✅ The daily home snapshot (2026-08-26)
+
+**The homepage hub above fixed the BOTTOM of `/` and left the top exactly as it
+was.** The rails are the page's actual content, and they arrived through a
+`useEffect` fetch of `/api/home`. `/api/` is under the robots `Disallow`, and
+**Googlebot's renderer honours robots.txt for subresources**, so this was never a
+"probably seen": the renderer was *blocked* from fetching the data that would
+have produced those links. Every poster on the highest-authority url on the
+domain was invisible to search, by construction.
+
+Nils's design, and it solves the cost problem in the same move: **build the whole
+public page once a day on the server, store it, serve every visitor and every
+crawler out of the table.**
+
+- `home_snapshot` (migration 21) holds one row per region: the day's trending,
+  upcoming and people rails as JSON. Written by a boot-plus-hourly job in
+  `src/instrumentation.ts`, read by `page.tsx` as one indexed SELECT.
+- The rails are handed to `HomePageClient` as **props**. Nothing about the
+  components had to change: `PosterCard` has always rendered a real `<a href>`
+  via `Link`, and a client component's first render *is* server HTML. Where the
+  data came from was the only thing making those links invisible.
+- The client fetch stays, and its job changed. It no longer decides what is on
+  the page, only who is looking: the per-user overlay (watchlist, rating, the
+  viewer's Fandex Score) and the recommendation rail.
+
+**Measured on the dev server against the real database, 2026-08-26:** `/` serves
+**94 server-rendered internal links** (30 items, 20 people, 36 genres, 8 months),
+and **six page loads moved the `/api/health` provider counters by 0**. Before
+this, every cold 30-minute cache entry cost a TMDB + Trakt + IGDB + RAWG fan-out.
+
+⚠️ **Four things about it are load-bearing.** All four are commented where they
+live; this is the index.
+
+1. **A failed build must never replace a good snapshot.** The sketch said "clear
+   the table, then rebuild"; clearing first is exactly what turns a provider
+   outage into an empty homepage. The write is a single atomic replace *after* a
+   build that validated, and a thin build keeps the previous row. Same shape as
+   the prune invariant.
+2. **The builder writes catalog rows on purpose, and PR15 still holds.** It calls
+   `persistDiscoverItems` directly rather than handing `persistDiscoverBatch` a
+   fake user, so the request-path gate keeps its exact shape. The write is bounded
+   at 30 titles a day regardless of traffic, which is the opposite of the
+   unbounded crawler-driven writes PR15 exists to stop. Without it the cards
+   resolve read-only and come back `linkable: false`, which defeats the point.
+3. **`home_snapshot_item` is the fourth entry in `dbPrune`'s `PRUNABLE_WHERE`,
+   and the first that is not user state.** The titles `/` links arrive
+   `browsed = 1` with nobody acting on them, so the boot prune would delete
+   exactly them and leave a crawler a page of 404s. Pinned by a test.
+   The snapshot refresh is also sequenced **after** `bootPrune` resolves: both
+   run at boot, and a row pinned between the prune computing its id list and
+   executing the delete is not protected.
+4. **The table is bounded by its PRIMARY KEY, not by a sweep.** One row per
+   region, `INSERT OR REPLACE`. It is written off a schedule and read on the
+   busiest page in the app, which is the pair of properties that grew
+   `facet_page_cache` to 222.8 MB; a bound that cannot be forgotten beats a timer
+   that can.
+
+**The cost of the design, stated plainly:** the snapshot is built for
+`DEFAULT_COUNTRY` only, so a signed-in visitor whose region differs now sees the
+same public rails as everyone else. Region only ever reached `upcomingPool`'s
+calendar window, and one shared upcoming list is a far smaller loss than a
+per-region provider fan-out on `/`.
+
+### ✅ Popular people, and what it is honestly ranking (2026-08-26)
+
+The rail that replaced "Recently added". 20 faces, each linking `/person/{slug}`.
+
+**Zero provider calls, portraits included**, and that is the part worth knowing:
+TMDB's item payload embeds `credits.cast[].profile_path` and
+`credits.crew[].profile_path`, and `projectRawData` keeps them, so the portrait is
+already in a `media_links` blob (measured: 297 of 300 sampled tmdb rows carry at
+least one). The obvious implementation, resolving each name through
+`/search/person` and then `/person/{id}`, would have put two TMDB calls per face
+on the most-hit page in the app.
+
+⚠️ **"Popular" here means weighted presence in OUR catalog, not a popularity
+feed.** A person scores the sum over their pool titles of role weight (director
+1.3, cast 0.6, scaled by billing prominence) times a mild recency factor. It moves
+as the catalog syncs and it favours people attached to current titles, but it is a
+statement about this catalog. `rotateRailFresh` at the daily build is what stops
+the same 20 faces sitting on `/` forever.
+
+⚠️ **The rail only links people at or above `MIN_INDEXABLE_TITLES` (3).**
+`/person/{slug}` is `noindex, follow` below that, and the whole point of the rail
+is to move link equity from the strongest page on the site into person pages.
+Linking a one-title person spends it on a page we asked Google to drop. Measured
+on the live catalog: 8,356 distinct people, **1,202 clear the threshold**, 453 have
+five or more. `popularPeople.MIN_TITLES` mirrors the constant rather than
+importing it (that module pulls the whole provider fan-out), and a test asserts
+the two agree.
+
+⚠️ **`src/lib/personRail.ts` has no imports, deliberately.** `roleLabel` started
+next to the ranking code, `PersonCard` imported it, and `HomePageClient` is a
+client component, so Turbopack followed `PersonCard → popularPeople → db.ts →
+better-sqlite3` into the browser bundle and `/` returned a 500 on
+`Can't resolve 'fs'`. `tsc`, lint and 1,019 tests were all green: nothing but
+loading the page exercises the client/server module graph.
 
 ---
 
@@ -240,10 +344,15 @@ sees a facet page with no outbound item links at all. That makes the under-linki
 above worse than it reads, and it is the same shape of problem: the internal link
 graph exists only for clients that run JS.
 
-### 🔵 Item pages link to no other item pages
+### ✅ Item pages link to sibling items (shipped 2026-08-23)
 
-Every item page links out to ~25 facet pages and to zero sibling items. A
-"related titles" block (same franchise, same director, same genre) would close the
-loop and is the cheapest remaining internal-linking win. Note it must use already
-persisted rows — the thin-write rule means a crawler-visible surface cannot mint
-new ones.
+`buildLocalRails` (`src/lib/detail/relatedRails.ts`) renders both related rails
+server-side, from the catalog pool, at **zero provider calls**. The MB11 provider
+top-up deliberately stays on the client path: the item page is the most-crawled
+page type, and SSR-ing the top-up would buy a quota-priced call per cold page and
+**approximately zero new links**, because a title we do not already hold comes
+back `linkable: false` under the PR15 write gate.
+
+⚠️ **This section said "still open" here and in STATUS.md until 2026-08-26,
+three days after it shipped.** If a doc claims a gap, check the code before
+planning work around it.

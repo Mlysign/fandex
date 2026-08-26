@@ -99,6 +99,38 @@ describe("previewPrune — what is in scope", () => {
     runPrune();
     expect(count("SELECT COUNT(*) n FROM user_episode_state")).toBe(1);
   });
+
+  it("protects a browsed title today's home snapshot links to (2026-08-26)", () => {
+    // The fourth clause, and the first that is not user state. The daily home
+    // snapshot links ~30 provider titles from the highest-authority url on the
+    // site, and they arrive in exactly the shape this predicate deletes:
+    // browsed = 1, with nobody having acted on them. Without the clause the next
+    // deploy would delete the rows `/` points at and hand a crawler a page of
+    // 404s, with every other test here still green.
+    addItem("browsed-on-home", 1);
+    run("INSERT INTO home_snapshot_item (media_item_id) VALUES ('browsed-on-home')");
+
+    const p = previewPrune();
+    expect(p.prunable).toBe(0);
+    expect(p.protectedByHomeSnapshot).toBe(1);
+
+    runPrune();
+    expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-home'")).toBe(1);
+  });
+
+  it("stops protecting a title once it drops out of the snapshot", () => {
+    // The pin must be exactly as long-lived as the link. `home_snapshot_item` is
+    // rewritten with each daily build, so a title that leaves the page goes back
+    // to being ordinary browsed tail. A pin that outlived its link would be a
+    // slow leak of un-prunable rows, which is the growth shape this repo has
+    // been bitten by twice.
+    addItem("was-on-home", 1);
+    run("INSERT INTO home_snapshot_item (media_item_id) VALUES ('was-on-home')");
+    expect(previewPrune().prunable).toBe(0);
+
+    run("DELETE FROM home_snapshot_item");
+    expect(previewPrune().prunable).toBe(1);
+  });
 });
 
 describe("runPrune — cascades reach links, never user rows", () => {

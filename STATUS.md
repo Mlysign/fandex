@@ -103,11 +103,11 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 
 - **Search Console is VERIFIED** — `fandex.org` as a Domain property, via a DNS TXT record on the apex. ⚠️ **Deleting that record un-verifies the property and empties every report.** The sitemap is submitted; its "Couldn't fetch" is the pending state, not a fault (the sitemap answers in 180 ms with a correct content type and serves Googlebot identically). Expect no useful data for several days.
 - **Structured data existed nowhere** — zero `ld+json` across 2,022 indexable pages. Item pages now emit `Movie` / `TVSeries` / `VideoGame` + `BreadcrumbList`, calendar months an `ItemList`. ⚠️ **`aggregateRating` is deliberately absent and a test keeps it absent** — every rating we could publish is somebody else's aggregate shown under attribution, and marking those up as our own earns a structured-data manual action, which is sitewide.
-- **The homepage was a crawl dead end** — priority 1.0, an `sr-only` h1, and zero catalog links, because the page was `"use client"` and fetched a robots-disallowed endpoint. It now ships **74 server-rendered links** (30 titles, 36 genres, 8 calendar months) from the local catalog: no provider call on the most-hit page, no session read, and it only ever SELECTs so it cannot mint a row.
+- **The homepage was a crawl dead end** — priority 1.0, an `sr-only` h1, and zero catalog links, because the page was `"use client"` and fetched a robots-disallowed endpoint. Fixed in two passes. 2026-08-20 added a server-rendered hub at the BOTTOM (74 links). **2026-08-26 fixed the top**, which was still a client island: `/` now serves **94 server-rendered links** (30 titles from the day's rails, 20 people, 36 genres, 8 months) out of a daily `home_snapshot`, at **0 provider calls per view** (measured: 6 loads, delta 0). See the section below.
 - **The release calendar had no indexable surface.** `/calendar/{YYYY-MM}` is new, server-rendered, eight months in the sitemap, with three crawl bounds. ⚠️ `robots.ts` now needs **both** `/calendar/` (allow) and `/calendar` (disallow) — longest match wins, so do not tidy them into one rule.
 - **Thin facet pages are `noindex, follow`** below 3 pooled titles. ⚠️ **The threshold is pool size, not linkable count.** `/person/angelina-jolie` renders a full filmography at 175 KB and links 2 of it — under-linked, not thin.
 
-**Still open, both internal-linking:** item pages link to ~25 facet pages and **no sibling items**, and facet pages stay out of the sitemap on purpose until that is fixed. Written up in docs/seo.md.
+**Item pages link to sibling items since 2026-08-23** (`buildLocalRails`, server-rendered, zero provider calls). This file and docs/seo.md both still claimed otherwise until 2026-08-26. **Still open:** a facet page renders **zero `<a href>` in its server HTML** (its 60 item links appear only after hydration), and facet pages stay out of the sitemap until that is fixed. Written up in docs/seo.md.
 
 ## ⚠️ Scalability: provider quotas are the ceiling, and CRAWLERS spend them (2026-08-20)
 
@@ -142,11 +142,11 @@ Both H3.8 gates are now measurable rather than theoretical, which is what the tw
 | **H4** — legal & compliance | ✅ 2026-08-03, epic closed |
 | **H3** — monetization | 🔵 **ads-first since 2026-08-19**; donations live, affiliate built + dark + demoted → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | Android TWA (P15/P16) | 🟡 **built + running on-device 2026-08-22**; needs the Play upload + 14-day test → [docs/twa-play-store.md](docs/twa-play-store.md) |
-| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar and the homepage hub shipped; Search Console verified. Internal linking still thin → [docs/seo.md](docs/seo.md) |
+| **SEO / organic reach** | 🔵 **open since 2026-08-20** — structured data, a crawlable calendar, the homepage hub, item-page sibling rails (2026-08-23) and the **daily home snapshot** (2026-08-26) all shipped; Search Console verified. One hole left: facet pages render no server-side item links → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (as of 2026-08-23)
+## ✅ Quality bar (as of 2026-08-26)
 
-**964 tests** (3 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
+**1,019 tests** (1 skipped) · `npx tsc --noEmit` clean · `npm run lint` 0 errors · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar — don't land work below it.**
 
 **Donations are LIVE (2026-08-12)** — Ko-fi renders on the support page, the sign-in dialog and `/profile`, as direct outbound `<a href>`. Setting the Railway variable was necessary but not sufficient: `NEXT_PUBLIC_*` is inlined into the **client bundle at build time**, and Railway only forwards a variable into a Dockerfile build when declared as `ARG`, so the server-rendered page worked while every client surface silently didn't. **Any future client-read `NEXT_PUBLIC_*` needs that Dockerfile line.**
 

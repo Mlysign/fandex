@@ -13,7 +13,9 @@ export async function register() {
     // still returns immediately and a prune failure can never crash boot.
     const { bootPrune } = await import("./lib/dbPrune");
     const { log, errorFields } = await import("./lib/logger");
-    void bootPrune().catch((e) => log.error("boot_prune_uncaught", errorFields(e)));
+    // Held so the home-snapshot refresh below can wait for it. See there.
+    const pruneDone = bootPrune().catch((e) => log.error("boot_prune_uncaught", errorFields(e)));
+    void pruneDone;
 
     // Bound the persisted facet cache (2026-08-13, rewritten 2026-08-19).
     // `readFacetCache` already treats an over-age row as a miss, so this is
@@ -72,5 +74,51 @@ export async function register() {
       log.error("import_staging_sweep_uncaught", errorFields(e));
     }
     startStagingSweep();
+
+    // ── The daily home snapshot (2026-08-26) ───────────────────────────────
+    //
+    // `/` serves its public rails out of one `home_snapshot` row, built here
+    // rather than on a request path. That is the whole point: a crawler walking
+    // the homepage a thousand times now causes ZERO provider calls, where every
+    // cold cache entry used to cost a full TMDB + Trakt + IGDB + RAWG fan-out.
+    // → src/lib/homeSnapshot.ts for the three rules the builder holds.
+    //
+    // ⚠️ BOOT *AND* INTERVAL, not either. Boot alone is not a schedule: prod
+    // runs for days, which is exactly how the facet-cache sweep above shipped
+    // broken and let that table reach 222.8 MB. Interval alone would leave a
+    // freshly deployed container serving whatever the volume happened to hold,
+    // which after a week of no deploys could be a week-stale page. The check is
+    // cheap (`snapshotIsDue` is one indexed SELECT), so it runs hourly and
+    // rebuilds only when the stored day has actually turned over.
+    //
+    // NOT awaited, same as bootPrune: this makes provider calls and must never
+    // sit in front of the server accepting its first request.
+    const HOME_SNAPSHOT_CHECK_MS = 60 * 60 * 1000;
+
+    const refreshHomeSnapshot = async () => {
+      const { snapshotIsDue, buildHomeSnapshot } = await import("./lib/homeSnapshot");
+      if (!snapshotIsDue()) return;
+      await buildHomeSnapshot();
+    };
+
+    // ⚠️ AFTER THE BOOT PRUNE, and this ordering is the whole reason
+    // `pruneDone` is held above. Both run at boot. The prune computes its list
+    // of prunable ids and then deletes them, so a title the snapshot pins in
+    // between those two steps is not protected by `PRUNABLE_WHERE`. It was
+    // already on the kill list. The window is milliseconds and the damage is a
+    // dead link on the highest-authority page in the app until tomorrow's
+    // build, which is exactly the kind of intermittent, unreproducible
+    // 404 nobody would trace back to here. Sequencing them costs nothing:
+    // neither is awaited by `register`, so boot is not delayed either way.
+    void pruneDone
+      .then(() => refreshHomeSnapshot())
+      .catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
+
+    // unref'd for the same reason as the facet-cache timer: a background
+    // refresher must never hold the process open on shutdown.
+    const homeTimer = setInterval(() => {
+      void refreshHomeSnapshot().catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
+    }, HOME_SNAPSHOT_CHECK_MS);
+    homeTimer.unref?.();
   }
 }

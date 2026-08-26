@@ -34,8 +34,8 @@ function reasonColor(r: Reason): string {
 // 2026-08-22 — CATEGORY_LABELS is the nine categories baked into tags.ts, but
 // the taxonomy is editable in /dev/scoring and the live DB already carries three
 // the static map has never heard of (modes, objects-elements,
-// people-characters). Resolve against the live list first, exactly as
-// homeHighlights' categoryLabel does, and fall back to the id rather than the
+// people-characters). Resolve against the live list first, and fall back to the
+// id rather than the
 // flat "Tag": a category named after itself still tells you which one it is.
 // This became visible the same day reasons started naming their EFFECTIVE
 // category: "Singleplayer" is scored as `modes`, so it would have read "Tag".

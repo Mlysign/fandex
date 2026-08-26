@@ -44,9 +44,11 @@ interface HomeStats {
   libraryTotal: number;
   wishlistTotal: number;
   ratedTotal: number;
-  // 2026-07-30: `bestGenre` became a rotating `highlights` array (see
-  // lib/homeHighlights.ts). /profile only ever used the three counters, so it
-  // just declares the field it doesn't read rather than pretending it's absent.
+  // 2026-07-30: `bestGenre` became a rotating `highlights` array on Home.
+  // /profile only ever used the three counters, so it declared the field it does
+  // not read rather than pretending it was absent. Home dropped the highlights
+  // entirely on 2026-08-26 (Nils) and the module went with them; the optional
+  // field stays because this shape is also what /api/insights returns.
   highlights?: unknown[];
 }
 
