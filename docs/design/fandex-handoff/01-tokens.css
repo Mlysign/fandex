@@ -148,6 +148,15 @@
   /* ---- Layout ------------------------------------------------------------- */
   --breakpoint-desktop: 768px; /* nav flips: bottom-bar < 768px ≤ top-bar */
   --size-touch-min: 44px;      /* minimum interactive target (mobile) */
+  /* ⚠️ AS-BUILT DIVERGENCE (2026-08-26). These two are the design intent and
+     stay as written; the app does NOT match them and did not from the start.
+     AppNav's bottom bar renders 53px (slots are min-h-[52px] + a 1px border)
+     and its top bar renders 56px (h-14), so src/app/globals.css now declares
+     53px/56px instead. That is deliberate: /calendar sizes itself to exactly
+     one viewport by subtracting these, so a token that is 11px off the real
+     bar puts the page permanently 11px into a scroll. Change the COMPONENT
+     first if the design values are the ones wanted; do not re-sync globals.css
+     to this file for these two lines alone. */
   --size-nav-bar-mobile: 64px; /* bottom nav height (excl. safe-area inset) */
   --size-nav-bar-desktop: 60px;/* top nav height */
   --container-max: 1200px;     /* desktop content max-width */

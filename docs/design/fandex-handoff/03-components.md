@@ -40,6 +40,12 @@ Wishlist (`/wishlist`) and Insights (`/insights`) are **not** top-level nav
 items — they are reached from Library and Profile respectively (see 05-DELTA
 §b). Settings (`/settings`) lives under Profile.
 
+> ⚠️ **As built, both bars are shorter than this** and always have been: the
+> bottom bar measures **53px** and the top bar **56px**. `globals.css` carries
+> those figures rather than the ones below, because `/calendar` subtracts them
+> to size itself to exactly one viewport. See the note on the two tokens in
+> `01-tokens.css` before changing either.
+
 **Mobile (< 768px): bottom bar.**
 - Height `--size-nav-bar-mobile` (64px) + `env(safe-area-inset-bottom)`.
 - Surface `--color-surface`, top border `--color-border`.
