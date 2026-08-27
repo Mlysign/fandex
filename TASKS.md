@@ -180,8 +180,10 @@ Checks are in [smoketest.md](smoketest.md) 13e-iii. Full write-up → grep the a
 3. **The Discover section fan-out** could skip a disabled section. ⚠️ **Saves latency and payload,
    NOT quota**: `_pageCache` keys carry no userId, so one other visitor wanting games in the same
    15-minute window makes the call anyway. Do not sell it as a quota fix.
-4. **Streaming is still empty on Discover** for the platform filter: that feed carries games
-   platforms but not watch providers. → docs/advanced-filters.md §3.
+4. ~~**Streaming is still empty on Discover**~~ ✅ **2026-08-27.** The chips no longer come from the
+   loaded set alone, so a service you use is listed with a 0 rather than vanishing.
+   → docs/advanced-filters.md §6. Real streaming COUNTS on Discover remain impossible without
+   per-item provider calls, and its feed is upcoming releases, which have no watch data anywhere.
 
 ## Still open elsewhere
 

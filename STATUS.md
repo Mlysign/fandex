@@ -57,7 +57,10 @@ Under `next dev` the pages render their toolbar server-side and then sit on "Loa
   Library 1,942 → 1,212; back on restores 239 links and 1,942.
 - **Your platforms** narrows the "Available on" filter to what you own: **185 chips to 2** on the
   live library. Its option list is surveyed from the user's OWN catalog, because a curated global
-  list misses every regional service he actually subscribes to.
+  list misses every regional service he actually subscribes to. That survey now also FEEDS the
+  filter sheet, so a service with nothing loaded on it shows a **0** instead of disappearing —
+  which is what made Discover look like it had lost its streaming half.
+  → [docs/advanced-filters.md](docs/advanced-filters.md) §6.
 
 ⚠️ **THREE LAYERS MUST NEVER SEE EITHER**, and each fails differently: a **sync pull** (the prune
 invariant would DELETE every matching row), the **snapshots** (viewer-independent by contract, and

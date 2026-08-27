@@ -175,11 +175,14 @@ export interface PlatformOption { key: string; label: string; group: PlatformGro
 /**
  * Build the option list from the items actually on screen, most common first.
  *
- * ⚠️ Derived from the LOADED set, not from a fixed catalogue of services, and
- * that is the honest thing to do: the filter can only ever act on what the
- * client holds (Discover and MyStuff both filter client-side — see
- * `passesYearMembership`). Offering "Disney+" when nothing loaded is on Disney+
- * would be a control that always returns nothing.
+ * Counts only what is loaded, because that is all the filter can act on
+ * (Discover and MyStuff both filter client-side — see `passesYearMembership`).
+ *
+ * ⚠️ This is no longer the whole option list. A platform with nothing loaded on
+ * it still gets a chip, at 0, via `withKnownPlatforms` below — the earlier rule
+ * ("do not offer a control that returns nothing") turned out to be worse in
+ * practice, because it made whole sections disappear. Read that function's note
+ * before reverting this to a loaded-only list.
  */
 export function platformOptions(
   items: { platforms?: string[] | null; streamingProviders?: { name: string }[] | null }[]
@@ -267,4 +270,45 @@ export function matchesPlatforms(
   const keys = availableOnKeys(item);
   if (keys.length === 0) return false;
   return keys.some((k) => selected.includes(k));
+}
+
+/**
+ * The option list the filter should OFFER: everything loaded, plus every
+ * platform the account is known to care about, carrying a 0.
+ *
+ * ⚠️ This deliberately reverses the "derived from the loaded set" rule the
+ * function above states, and Nils's reasoning is the better one: a service that
+ * quietly vanishes from the sheet reads as a broken filter, not as an empty
+ * shelf. Discover is the case that forced it — its feed is UPCOMING releases,
+ * which no provider holds watch data for, so the entire Movies & shows section
+ * disappeared and the panel looked like it had lost half its function.
+ *
+ * A 0 chip is honest and it is information: "we know you have Netflix, nothing
+ * here is on it". It stays pressable, because a disabled control explains even
+ * less than a missing one, and pressing it says so on screen.
+ *
+ * Ordering: what is actually here first (by count), then the rest by how much of
+ * the account's own catalog sits on them, so the tail behind "+N more" is the
+ * tail nobody uses rather than whatever sorts first alphabetically.
+ */
+export function withKnownPlatforms(
+  loaded: PlatformOption[],
+  known: PlatformOption[]
+): PlatformOption[] {
+  const byKey = new Map<string, PlatformOption>();
+  for (const o of loaded) byKey.set(o.key, o);
+  // The survey's own counts, kept only as a tie-break for the zero rows — never
+  // shown, because they answer a different question (the whole library) than
+  // the chip does (what is on screen).
+  const owned = new Map<string, number>();
+  for (const k of known) {
+    owned.set(k.key, k.count);
+    if (!byKey.has(k.key)) byKey.set(k.key, { ...k, count: 0 });
+  }
+  return [...byKey.values()].sort(
+    (a, b) =>
+      b.count - a.count ||
+      (owned.get(b.key) ?? 0) - (owned.get(a.key) ?? 0) ||
+      a.label.localeCompare(b.label)
+  );
 }

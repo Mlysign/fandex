@@ -13,6 +13,8 @@ import SignInGate from "@/components/auth/SignInGate";
 import PlatformPicker from "@/components/settings/PlatformPicker";
 import MediaTypePicker from "@/components/settings/MediaTypePicker";
 import type { PlatformOption } from "@/lib/platformKeys";
+import { resetKnownPlatforms } from "@/lib/useKnownPlatforms";
+import { resetSessionProbe } from "@/lib/sessionProbe";
 import { Settings as SettingsIcon } from "lucide-react";
 
 // Table → plain-language label for the delete dialog's counts. Tables not listed
@@ -156,6 +158,11 @@ function SettingsContent() {
     const d = await res.json();
     const stored: string[] = d.platforms ?? keys;
     setOwnedPlatforms(stored);
+    // Both client caches hold the OLD list, and the Filters sheet reads them
+    // both. Without this, changing your platforms here does nothing to the
+    // filter until a full reload — which reads as the setting not working.
+    resetKnownPlatforms();
+    resetSessionProbe();
     setNotice({ msg: stored.length ? "Platforms updated." : "Platform filter reset to show everything.", ok: true });
     return stored;
   }

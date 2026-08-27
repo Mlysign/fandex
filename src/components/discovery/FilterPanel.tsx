@@ -1,12 +1,16 @@
 "use client";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import BrandGlyph from "@/components/BrandGlyph";
 import FilterSection, { FilterDivider } from "./FilterSection";
 import type { UiFilters, Membership } from "./types";
 import { YEAR_MIN, YEAR_MAX } from "./types";
-import type { PlatformOption } from "@/lib/platformKeys";
-import { platformMarkName, narrowToOwned } from "@/lib/platformKeys";
+import type { PlatformOption, PlatformGroup } from "@/lib/platformKeys";
+import { platformMarkName, narrowToOwned, withKnownPlatforms, groupOfKey } from "@/lib/platformKeys";
+import { useKnownPlatforms } from "@/lib/useKnownPlatforms";
+import { useEnabledTypes } from "@/lib/useEnabledTypes";
+import { visibleTypes } from "@/lib/mediaTypes";
 
 // The Filters sheet's own controls: Available on, Your lists, Release year.
 // Must-include / must-exclude live in SubBar, which owns the facet props — the
@@ -92,14 +96,22 @@ function YearField({
 }
 
 function PlatformChip({ option, active, onToggle }: { option: PlatformOption; active: boolean; onToggle: () => void }) {
+  // A 0 is SHOWN, not hidden and not disabled. It answers the question a
+  // missing chip leaves hanging — "is Netflix gone, or is nothing here on
+  // Netflix" — which is the whole reason the chip is rendered at all. Muted, so
+  // the ones worth pressing still lead the eye.
+  const empty = option.count === 0;
   return (
     <button
       onClick={onToggle}
       aria-pressed={active}
+      title={empty ? `Nothing loaded here is on ${option.label}` : undefined}
       className={`inline-flex items-center gap-2 min-h-11 px-3 rounded-full border text-label transition-colors ${
         active
           ? "bg-accent-subtle border-accent text-text-primary"
-          : "border-border-strong text-text-secondary hover:text-text-primary"
+          : empty
+            ? "border-border text-text-muted hover:text-text-secondary"
+            : "border-border-strong text-text-secondary hover:text-text-primary"
       }`}
     >
       {/* A LOGO, never a brand hue — platform colour-coding is removed
@@ -117,9 +129,9 @@ export interface FilterPanelProps {
   filters: UiFilters;
   onChange: (patch: Partial<UiFilters>) => void;
   /**
-   * The platforms present in the CURRENTLY LOADED set, most common first.
-   * Omit (or pass an empty list) on a surface that holds no availability data —
-   * the section then says so instead of rendering an empty row.
+   * The platforms present in the CURRENTLY LOADED set, most common first. This
+   * supplies the COUNTS; the option list itself is this plus everything the
+   * account is known to use, at 0 (see withKnownPlatforms).
    */
   platformOptions?: PlatformOption[];
   /** Region the streaming half was resolved for, shown so the list isn't silently wrong elsewhere. */
@@ -143,8 +155,8 @@ export interface FilterPanelProps {
 const PLATFORM_PREVIEW = 8;
 
 function PlatformGroupRow({
-  label, options, selected, onToggle,
-}: { label: string; options: PlatformOption[]; selected: string[]; onToggle: (k: string) => void }) {
+  label, options, selected, onToggle, emptyHint,
+}: { label: string; options: PlatformOption[]; selected: string[]; onToggle: (k: string) => void; emptyHint: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   // A selected chip is always rendered, even when it falls outside the preview:
   // hiding an active filter behind "+N more" is how a list silently stops
@@ -154,10 +166,16 @@ function PlatformGroupRow({
     : options.filter((o, i) => i < PLATFORM_PREVIEW || selected.includes(o.key));
   const hidden = options.length - shown.length;
 
-  if (options.length === 0) return null;
+  // ⚠️ Was `return null`, and that is the defect this section is being fixed
+  // for: on Discover the streaming group had no options, so the heading and the
+  // whole group vanished and the sheet looked like it had lost the feature.
+  // A group with nothing in it now says why.
   return (
     <div className="flex flex-col gap-2">
       <span className="font-mono text-meta text-text-muted">{label}</span>
+      {options.length === 0 ? (
+        <p className="text-caption text-text-muted leading-relaxed">{emptyHint}</p>
+      ) : (
       <div className="flex flex-wrap gap-1.5">
         {shown.map((o) => (
           <PlatformChip key={o.key} option={o} active={selected.includes(o.key)} onToggle={() => onToggle(o.key)} />
@@ -179,6 +197,7 @@ function PlatformGroupRow({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -188,39 +207,81 @@ export default function FilterPanel({ filters, onChange, platformOptions = [], p
   const togglePlatform = (key: string) =>
     onChange({ platforms: selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key] });
 
-  const narrowed = narrowToOwned(platformOptions, ownedPlatforms, selected);
-  const narrowing = narrowed.length < platformOptions.length;
+  // The account's own survey: every service and console its library touches,
+  // plus what it owns and which region the streaming half was resolved for.
+  // Null for anonymous visitors and until the one request lands, in which case
+  // the sheet falls back to the loaded set exactly as before.
+  const known = useKnownPlatforms();
+  const owned = ownedPlatforms?.length ? ownedPlatforms : known?.selected ?? null;
+  const region = platformRegion ?? known?.region ?? null;
+
+  // Which groups this person is even looking at. Rendering a Games section to
+  // someone who has turned Games off in Settings, or who has "Movies" pressed
+  // in the chip row, is noise — the sections mirror the list, not the catalog.
+  const { stored: storedTypes } = useEnabledTypes();
+  const types = visibleTypes(filters.types, storedTypes);
+  const showStreaming = types.includes("movie") || types.includes("show");
+  const showGames = types.includes("game");
+
+  // Loaded counts first, then everything the account knows about at 0. See
+  // withKnownPlatforms: a service that disappears reads as a broken filter.
+  const all = withKnownPlatforms(platformOptions, known?.options ?? []);
+  const narrowed = narrowToOwned(all, owned, selected);
+  const narrowing = narrowed.length < all.length;
   const streaming = narrowed.filter((o) => o.group === "streaming");
   const games = narrowed.filter((o) => o.group === "games");
+
+  // Why a group came out empty, in its own words. Three causes with three
+  // different fixes, and one message for all of them sends people to the wrong
+  // one: you own nothing of that kind, we know of nothing of that kind, or
+  // nothing on screen carries the data.
+  const emptyHint = (group: PlatformGroup, none: string) => {
+    const ownsSome = (owned ?? []).some((k) => groupOfKey(k) === group);
+    if (owned?.length && !ownsSome) {
+      return (
+        <>
+          You haven&rsquo;t picked any of these in{" "}
+          <Link href="/settings" className="text-accent hover:text-accent-hover underline underline-offset-2">
+            your platforms
+          </Link>.
+        </>
+      );
+    }
+    return none;
+  };
 
   return (
     <>
       <FilterDivider />
 
-      <FilterSection label="Available on" hint={platformRegion ? `· ${platformRegion}` : undefined}>
-        {narrowed.length === 0 ? (
-          // Never an empty section, and never the SAME empty section for two
-          // different reasons: "nothing here carries availability data" and
-          // "none of it is on anything you own" are opposite problems with
-          // opposite fixes, and one message for both sends people to the wrong
-          // one.
-          platformOptions.length > 0 ? (
-            <p className="text-body-sm text-text-secondary leading-relaxed">
-              Nothing here is on a platform you own.{" "}
-              <Link href="/settings" className="text-accent hover:text-accent-hover underline underline-offset-2">
-                Change your platforms
-              </Link>{" "}
-              to widen this.
-            </p>
-          ) : (
-            <p className="text-body-sm text-text-secondary leading-relaxed">
-              Nothing loaded so far says where it can be watched or played. Scroll further, or open a title to fill this in.
-            </p>
-          )
+      <FilterSection label="Available on" hint={region ? `· ${region}` : undefined}>
+        {!showStreaming && !showGames ? (
+          <p className="text-body-sm text-text-secondary leading-relaxed">
+            Nothing to filter: no media types are switched on.
+          </p>
         ) : (
           <div className="flex flex-col gap-3">
-            <PlatformGroupRow label="Movies & shows" options={streaming} selected={selected} onToggle={togglePlatform} />
-            <PlatformGroupRow label="Games" options={games} selected={selected} onToggle={togglePlatform} />
+            {showStreaming && (
+              <PlatformGroupRow
+                label="Movies & shows"
+                options={streaming}
+                selected={selected}
+                onToggle={togglePlatform}
+                emptyHint={emptyHint(
+                  "streaming",
+                  "Nothing loaded here says where it streams. Upcoming releases usually don't yet."
+                )}
+              />
+            )}
+            {showGames && (
+              <PlatformGroupRow
+                label="Games"
+                options={games}
+                selected={selected}
+                onToggle={togglePlatform}
+                emptyHint={emptyHint("games", "Nothing loaded here says which platforms it runs on.")}
+              />
+            )}
             {narrowing && (
               // Say that the list is a subset, and say it where the subset is.
               // Without this a short list reads as "we only know about three

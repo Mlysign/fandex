@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  platformKey, platformLabel, availableOnKeys, platformOptions, matchesPlatforms, groupOfKey, narrowToOwned,
+  platformKey, platformLabel, availableOnKeys, platformOptions, matchesPlatforms, groupOfKey, narrowToOwned, withKnownPlatforms,
 } from "./platformKeys";
 
 // "Available on" (2026-08-27). The rules worth pinning are the ones that are
@@ -256,5 +256,42 @@ describe("a SELECTED platform is never hidden by the owned narrowing", () => {
 
   it("still passes everything when nothing is owned, selection or not", () => {
     expect(narrowToOwned(opts, [], ["p:nintendo-switch"])).toHaveLength(2);
+  });
+});
+
+describe("a known platform is offered even when nothing loaded is on it", () => {
+  // Discover's feed is upcoming releases, which no provider holds watch data
+  // for, so the streaming half of the sheet had no options and the section
+  // disappeared entirely. Nils: secretly hiding them is bad UX.
+  const known = [
+    { key: "s:netflix", label: "Netflix", group: "streaming" as const, count: 300 },
+    { key: "s:wow", label: "WOW", group: "streaming" as const, count: 12 },
+  ];
+
+  it("adds a zero-count chip rather than dropping the platform", () => {
+    const got = withKnownPlatforms(platformOptions([{ platforms: ["PC"] }]), known);
+    expect(got.map((o) => [o.key, o.count])).toEqual([
+      ["p:pc", 1],
+      ["s:netflix", 0],
+      ["s:wow", 0],
+    ]);
+  });
+
+  it("keeps the loaded count and label when both lists hold the platform", () => {
+    const loaded = platformOptions([{ streamingProviders: [{ name: "Netflix basic with Ads" }] }]);
+    const got = withKnownPlatforms(loaded, known);
+    expect(got).toHaveLength(2);
+    expect(got[0]).toMatchObject({ key: "s:netflix", label: "Netflix", count: 1 });
+  });
+
+  it("ranks the zero rows by how much of the account's catalog is on them", () => {
+    // So the tail hidden behind "+N more" is the tail nobody uses.
+    const got = withKnownPlatforms([], [known[1], known[0]]);
+    expect(got.map((o) => o.key)).toEqual(["s:netflix", "s:wow"]);
+  });
+
+  it("narrows to owned afterwards, so an owned service still shows its 0", () => {
+    const got = narrowToOwned(withKnownPlatforms([], known), ["s:netflix"]);
+    expect(got).toEqual([{ key: "s:netflix", label: "Netflix", group: "streaming", count: 0 }]);
   });
 });

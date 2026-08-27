@@ -195,3 +195,47 @@ against ~160 ms + 41 MB for the merge path warm, and 0.5 to 1.5 s cold.
 **Not done:** the streaming half is still empty on Discover, because the browse feed carries games
 platforms but not watch providers. → §3 above.
 
+
+---
+
+## 6. The chips come from the ACCOUNT, not from the screen (2026-08-27) — SHIPPED
+
+Nils, on the Discover filter sheet: *"the streaming platforms are not shown anymore. and it should
+also show streaming and game platforms if they have 0 results, just to give users that info,
+secretly hiding them is bad UX."*
+
+**Streaming was never "removed" from Discover; it had never had a row to count.** §5 recorded that
+as a known gap and the panel expressed it by rendering nothing, which is the part that was wrong.
+`platformOptions()` built the whole list from the items on screen, `PlatformGroupRow` returned
+`null` on an empty list, and Discover's feed is UPCOMING releases — which TMDB holds no watch
+providers for, and never will, because an unreleased film is not streaming anywhere. So the
+Movies & shows heading disappeared and the sheet looked like it had lost half its function.
+
+**What changed:**
+
+- `withKnownPlatforms(loaded, known)` (`platformKeys.ts`) merges the loaded counts with the
+  account's own survey and gives everything else a **0**. Sorted: what is actually here first, then
+  the rest by how much of the account's catalog sits on them, so the tail behind "+N more" is the
+  tail nobody uses. This deliberately reverses `platformOptions()`'s old rule ("never offer a
+  control that returns nothing") — the note is on both functions.
+- A 0 chip is muted but **pressable, not disabled**. Pressing it says what happened; a disabled
+  control explains even less than a missing one.
+- `useKnownPlatforms()` reads `/api/settings/platforms` — the same per-user survey Settings uses,
+  cached server-side per (user, region, signature) and module-cached client-side. **Behind
+  `probeSession()`**, so an anonymous sheet does not fire a call doomed to 401. The sheet mounts
+  only when it opens, so this costs one request per browser, and it also supplies `region` (the
+  `· DE` hint, whose prop had never been passed by either consumer) and a fresher `selected`.
+- **A group is never dropped, it explains itself**: three causes, three messages, because the fixes
+  are opposite — you own nothing of that kind (links to Settings), or nothing loaded carries the
+  data.
+- The two group headings are gated on the **visible media types** (`visibleTypes`), so "Movies only"
+  in the chip row, or Games off in Settings, hides the section that mirrors it rather than showing
+  an empty one.
+- Saving in Settings now calls `resetKnownPlatforms()` + `resetSessionProbe()`. Both client caches
+  held the old list, so changing your platforms did nothing to the filter until a full reload.
+
+⚠️ **Measured after, signed in, region DE:** the survey holds **185 options, 122 of them streaming**.
+With platforms configured (this account owns 2) the sheet shows `Movies & shows: Netflix 0` and
+`Games: PlayStation 5 6`. Unconfigured accounts get 8 chips per group with the rest behind "+N
+more", ordered by their own library's usage — the `PLATFORM_PREVIEW` cap is what keeps 185 rows
+from becoming the wall §2.4 was about.
