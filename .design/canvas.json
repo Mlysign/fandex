@@ -1,0 +1,45 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 375, "h": 812, "title": "Option A · Sectioned scroll" },
+    { "file": "OptionB.dc.html", "x": 495, "y": 0, "w": 375, "h": 812, "title": "Option B · Accordion" },
+    { "file": "OptionC.dc.html", "x": 990, "y": 0, "w": 375, "h": 812, "title": "Option C · Category tabs" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -210,
+      "w": 380,
+      "text": "Advanced filters, mobile (375x812).\nThree directions for the same feature set.\n\nAll three share: bottom sheet, drag handle, Reset all in the header, a sticky \"Show N titles\" footer, the year as two fields instead of a slider, and platform chips identified by monochrome mark + label (no brand colour, per the site-wide rule)."
+    },
+    {
+      "id": "note-a",
+      "x": 0,
+      "y": 852,
+      "w": 375,
+      "text": "OPTION A - Sectioned scroll\n\nEverything on one scroll, in labelled sections. Closest to what is there now, so the smallest build.\n\nFor: nothing hidden, scannable, easy to extend.\nAgainst: already ~550px of content before the platform list grows. The two platform groups both sit open, which is the least clever answer to the games / streaming split."
+    },
+    {
+      "id": "note-b",
+      "x": 495,
+      "y": 852,
+      "w": 375,
+      "text": "OPTION B - Accordion\n\nEvery filter is a one-line row showing its current value; one expands at a time.\n\nFor: the whole filter set fits with no scrolling, and you can read your current state at a glance. Best of the three for \"what did I set?\".\nAgainst: one extra tap to change anything, and you cannot see two filters' options at once."
+    },
+    {
+      "id": "note-c",
+      "x": 990,
+      "y": 852,
+      "w": 375,
+      "text": "OPTION C - Category tabs\n\nA chip strip picks a category; the pane below shows only that one.\n\nFor: scales best if filters keep being added, and gives each category room (note the per-platform title counts, which need the pool query but are the thing that makes this filter feel alive).\nAgainst: most chrome, and it hides the other categories entirely - you filter blind unless the chips carry counts."
+    },
+    {
+      "id": "caveat",
+      "x": 1485,
+      "y": 0,
+      "w": 330,
+      "text": "PLATFORM FILTER - read before building\n\nThe data is already derived per item (platforms / streamingProviders) and simply not copied onto the discovery vector. No migration, no provider re-fetch.\n\nFour things that change the design:\n1. Streaming data in the pool is resolved for DEFAULT_COUNTRY, not the viewer's region. Option C says this out loud; A and B do not yet.\n2. platforms is games-only, streamingProviders is movies/shows-only. Every option has to answer this - A shows both groups, B and C switch.\n3. storeLinks is a mixed bag (Steam, GOG, but also IMDb, Reddit) - not usable as a filter without an allowlist.\n4. Browsed rows may hold no provider data at all. Decide whether unknown is hidden or shown - a filter that silently drops them reads as broken.\n\nFull detail: docs/advanced-filters.md"
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

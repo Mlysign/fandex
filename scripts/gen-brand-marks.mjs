@@ -25,6 +25,19 @@ const WANT = {
   "Trakt": "siTrakt",
   "TMDB": "siThemoviedatabase",
   "IGDB": "siIgdb",
+
+  // Streaming + console marks for the "Available on" filter (2026-08-27).
+  // ⚠️ simple-icons no longer ships Nintendo, Xbox, Disney+, Prime Video or
+  // Hulu — checked, not assumed. Those fall back to BrandGlyph's globe with the
+  // provider's name beside it, which is the component's designed behaviour, not
+  // a bug to work around.
+  "Netflix": "siNetflix",
+  "HBO Max": "siHbomax",
+  "Max": "siMax",
+  "Apple TV": "siAppletv",
+  "PlayStation": "siPlaystation",
+  "Paramount+": "siParamountplus",
+  "Crunchyroll": "siCrunchyroll",
 };
 
 const entries = [];

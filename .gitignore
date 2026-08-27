@@ -64,3 +64,6 @@ probe-out.txt
 # upload key and signing-key-info.txt holds its passwords in PLAINTEXT.
 # The folder is inside OneDrive, so it is backed up without being in git.
 android-package/
+
+# /design working files: keep the .dc.html sources + canvas.json, never the ~2MB seeded canvas
+.design/fandex-*.html

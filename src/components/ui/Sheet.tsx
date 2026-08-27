@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // <Sheet> / <Modal> — 03-components.md §12. ONE component: bottom sheet on
 // mobile (<768px), centered modal on desktop (≥768px) — same breakpoint
@@ -84,7 +85,35 @@ export default function Sheet({ open, onClose, title, children, className = "" }
 
   if (!rendered) return null;
 
-  return (
+  // ── Why this is a PORTAL (2026-08-27) ────────────────────────────────────
+  // Nils: the filter sheet "renders too high and is cut off". It was not a
+  // sizing bug. Measured at 375×812: this backdrop is `fixed inset-0` and
+  // computed to 170px tall, against 812 for an identical fixed element
+  // appended to <body> on the same page.
+  //
+  // The cause is the SubBar this sheet was rendered inside. `useHideOnScroll`
+  // toggles Tailwind's `translate-y-0` / `-translate-y-full`, and in Tailwind
+  // v4 those set the standalone CSS `translate` property. **A non-`none`
+  // `translate` establishes a containing block for fixed-position descendants
+  // even when its value is ZERO**, so the bar trapped every sheet opened from
+  // it, retracted or not: `inset: 0` resolved against a 171px bar, and
+  // `items-end` then parked the sheet at the bottom of THAT box — near the top
+  // of the screen, with 118px of it above the viewport and no scroll to
+  // recover it.
+  //
+  // ⚠️ A `max-height` would have been the wrong fix: it only makes a clipped
+  // panel scrollable inside a 170px box, which reads as deliberate.
+  // ⚠️ Walking ancestors for `transform` will NOT find this — `transform`
+  // reads `none` while `translate` reads `0px`. Check `translate`, `rotate`
+  // and `scale` as separate properties.
+  //
+  // Portalling to <body> puts the sheet outside every such containing block,
+  // for this and for every other Sheet consumer (ConfirmDialog, the rate flow,
+  // where-to-watch), any of which could be opened from a transformed ancestor
+  // tomorrow. `typeof document` guards the server render.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center"
       role="presentation"
@@ -111,6 +140,7 @@ export default function Sheet({ open, onClose, title, children, className = "" }
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -7,6 +7,7 @@ import SubBar from "@/components/SubBar";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
+import { platformOptions, matchesPlatforms } from "@/lib/platformKeys";
 import FacetLink from "@/components/FacetLink";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import { readBrowseCache, writeBrowseCache } from "@/lib/discoverBrowseCache";
@@ -523,9 +524,17 @@ export default function DiscoverPageClient() {
     bottomLoadRef.current = newestFirst ? loadPrevious : loadMore;
   });
 
+  // A DATE sort walks a timeline (two loaders, either direction); every other
+  // sort is a ranking (one loader, forward). Declared up here because both the
+  // top-sentinel effect and the render read it.
+  const isDateSort = DATE_SORTS.includes(sort);
+
   // Browse filters applied client-side to the live upcoming feed (keeps Discover
-  // today-anchored): media type + membership (hide/only library & wishlist).
-  const browseFiltered = useMemo(() => {
+  // today-anchored): media type + membership (hide/only library & wishlist) +
+  // "available on" (2026-08-27).
+  // Everything EXCEPT the platform filter, so the chips can count the set they
+  // actually act on (see the note beside platformOpts).
+  const beforePlatform = useMemo(() => {
     let r = filters.types.length ? items.filter((i) => filters.types.includes(i.type)) : items;
     const m = filters.membership;
     if (m.library === "exclude") r = r.filter((i) => !i.libraryStatus);
@@ -536,6 +545,17 @@ export default function DiscoverPageClient() {
     else if (m.rated === "only") r = r.filter((i) => i.rating != null);
     return r;
   }, [items, filters.types, filters.membership]);
+
+  const browseFiltered = useMemo(
+    () => (filters.platforms?.length ? beforePlatform.filter((i) => matchesPlatforms(i as any, filters.platforms)) : beforePlatform),
+    [beforePlatform, filters.platforms]
+  );
+
+  // Options + counts from `beforePlatform`: every other filter applied, this one
+  // not. Counting the fully filtered set would delete every unpicked platform's
+  // chip as soon as you pick one; counting the raw feed would promise a number
+  // the type chips have already ruled out.
+  const platformOpts = useMemo(() => platformOptions(beforePlatform as any[]), [beforePlatform]);
 
   // Non-date sorts re-order the SAME browse set client-side instead of switching
   // to catalog search (see the searchActive comment above).
@@ -556,11 +576,14 @@ export default function DiscoverPageClient() {
   useEffect(() => {
     if (searchActive) return;
     const el = topSentinelRef.current;
-    if (!el) return;
+    // Null under a non-date sort: there is no top sentinel to observe, and
+    // wiring one up anyway is what auto-prepended on load and shoved the header
+    // off screen. `isDateSort` is in the deps so switching sorts re-runs this.
+    if (!el || !isDateSort) return;
     const obs = new IntersectionObserver((e) => { if (e[0].isIntersecting) topLoadRef.current(); }, { rootMargin: "200px" });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [loading, view, searchActive, browseFiltered.length > 0]);
+  }, [loading, view, searchActive, isDateSort, browseFiltered.length > 0]);
 
   useLayoutEffect(() => {
     if (!pendingPrependRef.current) return;
@@ -630,7 +653,6 @@ export default function DiscoverPageClient() {
 
   // Sort-driven layout (T8): rating sorts group by rating, best-match is flat,
   // date sorts keep the month timeline; calendar view is only for date sorts.
-  const isDateSort = DATE_SORTS.includes(sort);
   const groupBy: "month" | "rating" | "none" =
     sort === "rating" ? "rating" : sort === "releaseDate" ? "month" : "none";
   const descending = sort === "releaseDate";
@@ -646,10 +668,32 @@ export default function DiscoverPageClient() {
   const effView: ViewMode = "card";
 
   // Browse timeline sentinels — top/bottom map to past/future by sort direction.
+  // ── Which loaders the timeline gets, and why only a DATE sort gets two ────
+  //
+  // Nils, 2026-08-27: "load earlier releases makes no sense when sorted by
+  // popularity", and "on loading the search page the header bar disappears".
+  // Both are this. The pair of sentinels models a TIMELINE — you are somewhere
+  // in a run of dates and can walk either way — which is only true under a date
+  // sort. Under popularity or rating the list is a ranking, so a control at the
+  // top offering "earlier releases" describes nothing on screen.
+  //
+  // The header bug is the same fault. The top sentinel renders at scroll 0 with
+  // `rootMargin: "200px"`, so its observer fires immediately on a cold load,
+  // `loadPrevious()` prepends, and the layout effect below scrolls by the height
+  // delta to hold position — pushing the page down under someone who never
+  // asked. That scroll compensation is CORRECT for a user-initiated prepend; the
+  // bug was that a non-date sort had a top sentinel to trip over at all.
+  // ⚠️ It only reproduces on a COLD browse cache (measured scrollY 21 on a first
+  // load, 0 on every warm reload, because loadPrevious then returns nothing), so
+  // do not "verify" it on a second reload and conclude it is gone.
+  //
+  // Non-date sorts keep ONE bottom loader with neutral copy: the feed still
+  // pages, it just pages forward through a ranking rather than through time.
   const futureSentinel = { loading: loadingMore, has: hasMore, busy: "Loading newer releases…", cta: "Load newer releases", end: "No newer releases", onClick: () => loadMore() };
   const pastSentinel = { loading: loadingPrev, has: hasMoreBack, busy: "Loading earlier releases…", cta: "Load earlier releases", end: "No earlier releases", onClick: () => loadPrevious() };
-  const topSentinel = descending ? futureSentinel : pastSentinel;
-  const bottomSentinel = descending ? pastSentinel : futureSentinel;
+  const rankedSentinel = { loading: loadingMore, has: hasMore, busy: "Loading more…", cta: "Load more", end: "That's everything we have", onClick: () => loadMore() };
+  const topSentinel = isDateSort ? (descending ? futureSentinel : pastSentinel) : null;
+  const bottomSentinel = isDateSort ? (descending ? pastSentinel : futureSentinel) : rankedSentinel;
 
   return (
     <div className="min-h-screen">
@@ -664,8 +708,9 @@ export default function DiscoverPageClient() {
         searchPlaceholder="Search games, movies, shows…"
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: SORTS }}
-        advancedFilters={<FilterPanel filters={filters} onChange={patchFilters} />}
+        advancedFilters={<FilterPanel filters={filters} onChange={patchFilters} platformOptions={platformOpts} />}
         advancedActiveCount={countActiveAdvanced(filters)}
+        onResetFilters={resetFilters}
         view={effView}
         onViewChange={setView}
         availableViews={availableViews}
@@ -732,9 +777,11 @@ export default function DiscoverPageClient() {
 
             {!loading && browseSorted.length > 0 && (
               <>
-                <div ref={topSentinelRef} className="mb-6 flex justify-center">
-                  <SentinelBar {...topSentinel} />
-                </div>
+                {topSentinel && (
+                  <div ref={topSentinelRef} className="mb-6 flex justify-center">
+                    <SentinelBar {...topSentinel} />
+                  </div>
+                )}
 
                 <GroupedView items={browseSorted} view={effView} groupBy={groupBy} descending={descending} ratingOf={ratingOf} onSelect={(i) => router.push(buildItemHref(i as any))} autoScrollToToday={isDateSort && autoToday} />
 

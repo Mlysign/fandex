@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+  <style>
+    body { margin: 0; background: #0B0A08; }
+    a { color: #C8A24B; } a:hover { color: #D4B063; }
+    * { box-sizing: border-box; }
+    .eyebrow { font-family: 'Space Mono', ui-monospace, monospace; font-size: 9px; line-height: 1; letter-spacing: 0.13em; text-transform: uppercase; color: #9A8F80; }
+    .meta { font-family: 'Space Mono', ui-monospace, monospace; font-size: 10px; line-height: 1.4; color: #9A8F80; }
+    .label { font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 11px; line-height: 1; font-weight: 600; }
+  </style>
+</helmet>
+
+<div style="width: 375px; height: 812px; position: relative; overflow: hidden; background: #100E0C; font-family: 'Space Grotesk', system-ui, sans-serif;">
+
+  <div style="position: absolute; inset: 0; background: #100E0C;">
+    <div style="padding: 14px 24px 0; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="width: 40px; height: 40px; border-radius: 999px; background: rgb(200 162 75 / 0.14); border: 1px solid rgb(200 162 75 / 0.4);"></div>
+        <div style="width: 40px; height: 40px; border-radius: 999px; border: 1px solid rgb(237 231 220 / 0.14);"></div>
+        <div style="flex-grow: 1;"></div>
+        <div style="width: 40px; height: 40px; border-radius: 999px; border: 1px solid #C8A24B; background: rgb(200 162 75 / 0.14);"></div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 16px 24px;">
+      <div style="height: 130px; border-radius: 10px; background: #181512; border: 1px solid rgb(237 231 220 / 0.09);"></div>
+      <div style="height: 130px; border-radius: 10px; background: #181512; border: 1px solid rgb(237 231 220 / 0.09);"></div>
+    </div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgb(11 10 8 / 0.66);"></div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 660px; background: #201C18; border-top: 1px solid rgb(237 231 220 / 0.09); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px -8px rgb(0 0 0 / 0.55); display: flex; flex-direction: column;">
+
+    <div style="display: flex; justify-content: center; padding: 8px 0 6px;">
+      <div style="width: 36px; height: 4px; border-radius: 999px; background: rgb(237 231 220 / 0.18);"></div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; padding: 4px 20px 12px;">
+      <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 21px; line-height: 1.1; color: #EDE7DC;">Filters</span>
+      <div style="flex-grow: 1;"></div>
+      <button style="min-height: 44px; padding: 0 10px; background: none; border: 0; color: #C8A24B; font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 11px; font-weight: 600; cursor: pointer;">Reset all</button>
+      <button aria-label="Close" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: 0; cursor: pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A8F80" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- category tab strip -->
+    <div style="display: flex; gap: 8px; padding: 0 20px 12px; overflow: hidden; border-bottom: 1px solid rgb(237 231 220 / 0.09);">
+      <span class="label" style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid rgb(237 231 220 / 0.14); color: #9A8F80;">Facets
+        <span style="font-family: 'Space Mono', ui-monospace, monospace; font-size: 9px; background: rgb(200 162 75 / 0.14); color: #C8A24B; border-radius: 999px; padding: 2px 5px;">2</span>
+      </span>
+      <span class="label" style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border-radius: 999px; background: #C8A24B; color: #100E0C;">Available on
+        <span style="font-family: 'Space Mono', ui-monospace, monospace; font-size: 9px; background: rgb(16 14 12 / 0.22); border-radius: 999px; padding: 2px 5px;">3</span>
+      </span>
+      <span class="label" style="display: inline-flex; align-items: center; height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid rgb(237 231 220 / 0.14); color: #9A8F80;">Lists</span>
+      <span class="label" style="display: inline-flex; align-items: center; height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid rgb(237 231 220 / 0.14); color: #9A8F80;">Year</span>
+    </div>
+
+    <!-- pane -->
+    <div style="flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 8px;">
+
+      <div style="display: flex; gap: 6px;">
+        <span class="label" style="padding: 9px 14px; border-radius: 999px; background: rgb(200 162 75 / 0.14); color: #C8A24B;">Movies &amp; shows</span>
+        <span class="label" style="padding: 9px 14px; border-radius: 999px; color: #9A8F80;">Games</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 12px; border-radius: 12px; background: rgb(200 162 75 / 0.14); border: 1px solid #C8A24B;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#EDE7DC"><path d="M5 2h4l6 12V2h4v20h-4L9 10v12H5z"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; color: #EDE7DC; font-weight: 600;">Netflix</span>
+            <span class="meta" style="font-size: 9px;">41 titles</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 12px; border-radius: 12px; border: 1px solid rgb(237 231 220 / 0.14);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#9A8F80"><path d="M3 4h5l4 7 4-7h5l-6.5 10L21 24h-5l-4-7-4 7H3l6.5-10z"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; color: #EDE7DC; font-weight: 600;">HBO Max</span>
+            <span class="meta" style="font-size: 9px;">18 titles</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 12px; border-radius: 12px; background: rgb(200 162 75 / 0.14); border: 1px solid #C8A24B;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#EDE7DC"><path d="M16.2 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.9-3-.9c-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .7 1.1 1.6 2.3 2.8 2.2 1.1 0 1.5-.7 2.9-.7s1.7.7 2.9.7 2-1.1 2.7-2.2c.9-1.2 1.2-2.4 1.2-2.5 0 0-2.3-.9-2.3-3.5z"/><path d="M14 5.4c.6-.8 1-1.8.9-2.9-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.7-.9 2.8 1 0 2-.5 2.6-1.3z"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; color: #EDE7DC; font-weight: 600;">Apple TV+</span>
+            <span class="meta" style="font-size: 9px;">9 titles</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 12px; border-radius: 12px; border: 1px solid rgb(237 231 220 / 0.14);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#9A8F80"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M12 3v18M3 12h18" stroke="#9A8F80" stroke-width="1.6"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; color: #EDE7DC; font-weight: 600;">Disney+</span>
+            <span class="meta" style="font-size: 9px;">12 titles</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 12px; border-radius: 12px; border: 1px solid rgb(237 231 220 / 0.14);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#9A8F80"><path d="M2 7h20v10H2z" opacity=".3"/><path d="M4 17c5 3 11 3 16 0" stroke="#9A8F80" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; color: #EDE7DC; font-weight: 600;">Prime Video</span>
+            <span class="meta" style="font-size: 9px;">23 titles</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 12px; border: 1px dashed rgb(237 231 220 / 0.14);">
+          <span class="label" style="color: #C8A24B;">+ 5 more</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #181512; border: 1px solid rgb(237 231 220 / 0.09);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A8F80" stroke-width="1.8" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+        <span style="font-size: 11px; line-height: 1.5; color: #9A8F80;">Availability is for <span style="color: #EDE7DC;">Germany</span>, your account region. Titles we have not looked up yet are still shown.</span>
+      </div>
+
+    </div>
+
+    <div style="padding: 12px 20px 22px; border-top: 1px solid rgb(237 231 220 / 0.09);">
+      <div style="height: 48px; border-radius: 999px; background: #C8A24B; color: #100E0C; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600;">Show 134 titles</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

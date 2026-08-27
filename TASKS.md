@@ -143,6 +143,32 @@ are in [AGENTS.md](AGENTS.md) and their memory files ([[cross-type-identity-merg
 [[shared-view-two-routes]], [[anon-gates-must-ask-not-bounce]], [[unhydrated-page-diagnosis]]).
 The checks are in [smoketest.md](smoketest.md) 1c-i, 13e-i and 13n-i.
 
+## Nils's feedback, 2026-08-27 (post-smoketest) ⬜ logged, mockups in progress
+
+Nine points. **The analysis behind them is [docs/advanced-filters.md](docs/advanced-filters.md)** —
+read it before touching the panel; three of the nine had a different cause than the symptom, and
+one is a CSS trap that reaches well beyond this panel.
+
+- **A. The Fandex Score's colours disagree between the card and the tooltip.** `Tooltip.tsx:99`
+  hardcodes gold `var(--color-accent)` for the number where the card (`PosterCard.tsx:184`) and the
+  item page (`FandexScoreSection.tsx:220`) both call `fandexScoreColor()`, so the tooltip's number is
+  score-INDEPENDENT: an 88 and a 30 are the same gold. ⚠️ Not purely a bug fix — check the ramp
+  passes contrast on `--color-surface-overlay` first, and `--color-score-high/baseline/low` exist in
+  `globals.css:75-77` with **nothing referencing them**, so this is the moment to move all three onto
+  the tokens (the light theme is otherwise stuck with the dark hexes). `FandexScoreBadge.test.ts:8`
+  pins them. Adjacent: the 0–10 user rating colour is written twice with different palettes
+  (`ActionCells.tsx:32` brand, `QuickActions.tsx:6` stock Tailwind).
+- **B. The advanced filter panel** — six sub-points: it renders clipped (⚠️ cause is `translate: 0px`
+  on the SubBar trapping the Sheet's `fixed inset-0`, so the fix is a **portal**, not a max-height);
+  the year slider is unusable on touch; no reset; ugly wrapping; a platform filter; and "come from
+  the bottom on mobile", which ⚠️ **it already does** — §2.5. **Mockups first, mobile, Nils picks,
+  then desktop.**
+- **C. Discover's pagination.** The header disappears on a cold load (the top sentinel auto-fires and
+  `scrollBy`s the page down), and "Load earlier releases" renders under a Popularity sort where it is
+  meaningless. **One fix for both**: no top sentinel unless the sort is a date sort; everything else
+  gets a single "Load more" at the bottom, on scroll. → `docs/advanced-filters.md` §4.
+
+
 ## Still open elsewhere
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.

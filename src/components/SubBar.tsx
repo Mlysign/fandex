@@ -9,6 +9,8 @@ import Chip from "@/components/ui/Chip";
 import TypeFilter from "@/components/ui/TypeFilter";
 import Menu from "@/components/ui/Menu";
 import Sheet from "@/components/ui/Sheet";
+import Button from "@/components/ui/Button";
+import FilterSection from "@/components/discovery/FilterSection";
 import { useHideOnScroll } from "@/lib/useHideOnScroll";
 
 const VIEW_ICONS = { list: List, card: LayoutGrid, calendar: CalendarDays } as const;
@@ -57,6 +59,8 @@ interface SubBarProps {
    * cannot tell a filtered list from an unfiltered one.
    */
   advancedActiveCount?: number;
+  /** Clears every advanced filter. Omit to render no Reset control (MyStuffView had none). */
+  onResetFilters?: () => void;
 
   // View mode. Pass a single-entry `availableViews` (or omit both handlers) to
   // hide the toggle entirely — the mockups show a grid on every list page and
@@ -99,6 +103,7 @@ export default function SubBar({
   sort,
   advancedFilters,
   advancedActiveCount = 0,
+  onResetFilters,
   view = "card",
   onViewChange,
   availableViews = ["list", "card"],
@@ -133,25 +138,31 @@ export default function SubBar({
   // Discover now opts out entirely (2026-07-27).
   const showViewToggle = availableViews.length > 1 && !!onViewChange;
 
+  // The sheet body: one sectioned column, Option A of the 2026-08-27 mockups.
+  // Each label is its own eyebrow above a full-width control, which is what
+  // stops the wrapping Nils reported — the old layout put six controls in one
+  // flex row and the membership toggles broke the line on every viewport.
   const advancedContent = hasAdvanced ? (
-    <div className="space-y-2.5">
+    <div className="flex flex-col gap-4">
       {searchFacets && (
-        // Stacked, not a wrapping row: this content now only ever renders
-        // inside Sheet (≤480px on desktop, full-width on mobile), so the old
-        // side-by-side layout tuned for a full-width inline bar just wrapped
-        // awkwardly.
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must include</span>
-            <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#C8A24B" onPick={(m) => searchFacets.onAdd("include", m as VocabMatch)} /></div>
-            {searchFacets.include.map((p, i) => <FacetChip key={`i${i}`} pill={p} color="#C8A24B" onRemove={() => searchFacets.onRemove("include", i)} />)}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="font-mono text-meta text-text-secondary whitespace-nowrap">Must exclude</span>
-            <div className="w-44"><FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#E5674C" onPick={(m) => searchFacets.onAdd("exclude", m as VocabMatch)} /></div>
-            {searchFacets.exclude.map((p, i) => <FacetChip key={`e${i}`} pill={p} color="#E5674C" onRemove={() => searchFacets.onRemove("exclude", i)} />)}
-          </div>
-        </div>
+        <>
+          <FilterSection label="Must include">
+            <FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#C8A24B" onPick={(m) => searchFacets.onAdd("include", m as VocabMatch)} />
+            {searchFacets.include.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {searchFacets.include.map((p, i) => <FacetChip key={`i${i}`} pill={p} color="#C8A24B" onRemove={() => searchFacets.onRemove("include", i)} />)}
+              </div>
+            )}
+          </FilterSection>
+          <FilterSection label="Must exclude">
+            <FacetAutocomplete mode="facets" placeholder="tag, person, studio…" accent="#E5674C" onPick={(m) => searchFacets.onAdd("exclude", m as VocabMatch)} />
+            {searchFacets.exclude.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {searchFacets.exclude.map((p, i) => <FacetChip key={`e${i}`} pill={p} color="#E5674C" onRemove={() => searchFacets.onRemove("exclude", i)} />)}
+              </div>
+            )}
+          </FilterSection>
+        </>
       )}
       {advancedFilters}
     </div>
@@ -349,14 +360,54 @@ export default function SubBar({
       {/* The single advanced-filters instance, at every width. Sheet renders
           itself as a bottom sheet under 768px and a centered modal above it. */}
       {hasAdvanced && (
-        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters" className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-serif text-serif-md text-text-primary">Filters</h3>
-            <button onClick={() => setFiltersOpen(false)} aria-label="Close" className="text-text-secondary hover:text-text-primary">
-              <X className="w-4 h-4" aria-hidden />
-            </button>
+        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
+          {/* Header / body / footer, with only the BODY scrolling. The sheet is
+              capped at 85svh so a long platform list can never push the "Show N"
+              action off-screen — svh, not vh, because mobile Safari's vh counts
+              the collapsed toolbar and would hide it anyway.
+              ⚠️ The panel used to render clipped ABOVE the viewport; that was a
+              containing-block bug, not a height one, and Sheet portals to <body>
+              now. See the note in ui/Sheet.tsx before touching this. */}
+          <div className="flex flex-col max-h-[85svh]">
+            <div className="flex items-center gap-3 px-5 pt-3 pb-3.5 border-b border-border">
+              <h3 className="font-serif text-serif-md text-text-primary">Filters</h3>
+              {advancedActiveCount > 0 && (
+                <span className="font-mono text-meta leading-none px-1.5 py-1 rounded-full bg-accent text-text-on-accent tabular-nums">
+                  {advancedActiveCount}
+                </span>
+              )}
+              <div className="flex-1" />
+              {/* Reset is only rendered when there is something to reset — a
+                  permanently-present "Reset all" on an untouched panel is a
+                  control that does nothing, which is the same complaint as an
+                  auth gate that disappears. */}
+              {onResetFilters && advancedActiveCount > 0 && (
+                <button
+                  onClick={onResetFilters}
+                  className="min-h-11 px-2.5 text-label text-accent hover:text-accent-hover transition-colors"
+                >
+                  Reset all
+                </button>
+              )}
+              <button
+                onClick={() => setFiltersOpen(false)}
+                aria-label="Close"
+                className="w-11 h-11 -mr-2.5 flex items-center justify-center text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <X className="w-4.5 h-4.5" aria-hidden />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
+              {advancedContent}
+            </div>
+
+            <div className="px-5 pt-3 pb-5 border-t border-border">
+              <Button variant="primary" size="lg" pill onClick={() => setFiltersOpen(false)} className="w-full">
+                {resultCount == null ? "Show results" : `Show ${resultCount.toLocaleString()} ${resultNoun}`}
+              </Button>
+            </div>
           </div>
-          {advancedContent}
         </Sheet>
       )}
     </div>

@@ -108,6 +108,8 @@ export interface UiFilters {
   membership: MembershipFilters;
   includeFacets: FacetPill[];
   excludeFacets: FacetPill[];
+  /** "Available on" — platform keys from platformKeys.ts (`p:` games, `s:` streaming). */
+  platforms: string[];
 }
 
 export const YEAR_MIN = 1950;
@@ -118,7 +120,7 @@ export function defaultUiFilters(): UiFilters {
   return {
     types: [], sources: [],
     yearRange: [YEAR_MIN, YEAR_MAX], commRange: [0, 100], runtimeRange: [0, RUNTIME_MAX],
-    membership: {}, includeFacets: [], excludeFacets: [],
+    membership: {}, includeFacets: [], excludeFacets: [], platforms: [],
   };
 }
 
@@ -128,8 +130,15 @@ export function defaultUiFilters(): UiFilters {
 // range or a facet is still in effect — without it a filtered list is
 // indistinguishable from an unfiltered one. Deliberately excludes `types`,
 // which has its own always-visible chip row.
-export function countActiveAdvanced(f: Pick<UiFilters, "yearRange" | "membership" | "includeFacets" | "excludeFacets">): number {
+export function countActiveAdvanced(
+  f: Pick<UiFilters, "yearRange" | "membership" | "includeFacets" | "excludeFacets"> & { platforms?: string[] }
+): number {
   const yearNarrowed = f.yearRange[0] > YEAR_MIN || f.yearRange[1] < YEAR_MAX;
   const memberships = Object.values(f.membership ?? {}).filter(Boolean).length;
-  return (yearNarrowed ? 1 : 0) + memberships + f.includeFacets.length + f.excludeFacets.length;
+  // Platforms count as ONE narrowing, not one per chip: picking Netflix and
+  // Steam is a single "available on what I own" decision, and a badge reading 9
+  // because somebody owns nine platforms would be noise. Facets stay per-chip
+  // because each one is an independent constraint on its own.
+  const platforms = (f.platforms?.length ?? 0) > 0 ? 1 : 0;
+  return (yearNarrowed ? 1 : 0) + memberships + platforms + f.includeFacets.length + f.excludeFacets.length;
 }

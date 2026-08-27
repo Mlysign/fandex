@@ -1,0 +1,168 @@
+# The advanced filter panel: what it is, what is wrong with it, and what a platform filter costs
+
+**Read this before touching `FilterPanel.tsx`, `SubBar.tsx`'s Filters sheet, or `Sheet.tsx`.**
+Written 2026-08-27 from Nils's post-smoketest feedback. Everything here is measured; three of his
+nine points turned out to have a different cause than the symptom suggested, and one of them is a
+CSS trap worth knowing about far beyond this panel.
+
+Open work lives in [TASKS.md](../TASKS.md); this is the reference behind it.
+
+---
+
+## 1. What the panel is today
+
+`FilterPanel` is **not** a panel. It is a bare flex row (`FilterPanel.tsx:32`) handed to `SubBar` as
+the `advancedFilters` prop, which renders it inside a shared `<Sheet>` modal. Two consumers:
+`DiscoverPageClient.tsx:667` and `MyStuffView.tsx:421`.
+
+Six controls, in render order:
+
+| # | Label | Control |
+|---|---|---|
+| 1 | Must include | `FacetAutocomplete` (`tag, person, studio…`), accent `#C8A24B`, + removable chips |
+| 2 | Must exclude | same, accent `#E5674C` |
+| 3 | In library | 3-way segmented `Any` / `Only` / `Hide` |
+| 4 | On wishlist | same |
+| 5 | Rated | same |
+| 6 | Year | readout `1950–2027+` + `DualRangeSlider` in a fixed `w-40` box |
+
+The `Tri` control is deliberately **not** `ui/TriToggle`: it shows "Any" as its own pressed segment
+rather than as "nothing pressed" (`FilterPanel.tsx:10-14`).
+
+**State** (`discovery/types.ts:102-111`): `UiFilters` carries `types, sources, yearRange, commRange,
+runtimeRange, membership, includeFacets, excludeFacets`. ⚠️ **`sources`, `commRange` and
+`runtimeRange` are dead in the UI** — removed by T24, still in the type and still fully supported
+server-side (`discovery.ts:79-88`, predicate at `:1033-1047`). That is the working precedent for
+"add a field, wire the request builder": a new filter does not need new server plumbing invented
+from scratch.
+
+`countActiveAdvanced()` (`:131`) counts a narrowed year + memberships + both facet lists, and
+deliberately excludes `types` (those have their own visible chip row).
+
+---
+
+## 2. The five defects
+
+### 2.1 It renders too high and is cut off — and the cause is `translate: 0px`
+
+Measured at 375×812, transitions disabled: the `[role="dialog"]` is **288px tall at `top: −118`**,
+so 118px including the "Filters" heading sits above the viewport. `max-height: none`,
+`overflow-y: visible`, so nothing scrolls it back.
+
+The tell: the backdrop is `fixed inset-0` and computes to **170px tall**. An identical
+`position:fixed; inset:0` control element appended to `<body>` in the same page computes to **812**.
+So the pane is not lying and the sizing is not the problem — the backdrop's *containing block* is
+wrong.
+
+⚠️ **`useHideOnScroll` toggles Tailwind's `translate-y-0` / `-translate-y-full` on the SubBar, and
+in Tailwind v4 those set the standalone CSS `translate` property. A non-`none` `translate`
+establishes a containing block for fixed-position descendants EVEN WHEN ITS VALUE IS ZERO.** The
+SubBar therefore always traps them, retracted or not. The Sheet renders inside the SubBar's DOM, so
+`inset: 0` resolves against a 171px bar; `items-end` puts the sheet at the bottom of *that* box,
+which is near the top of the screen.
+
+**The fix is a portal to `document.body`.** A `max-height` would only make the clipped panel
+scrollable inside a 170px box, which is worse: it looks deliberate.
+
+⚠️ **This generalises.** Any `position: fixed` overlay rendered inside a component that uses a
+Tailwind translate utility is subject to it, and a walk of `getComputedStyle(...).transform` will
+NOT find it — `transform` reads `none` while `translate` reads `0px`. Check `translate`, `rotate`
+and `scale` as separate properties.
+
+### 2.2 The year slider is unusable on touch
+
+`DualRangeSlider` in a fixed `w-40` box. Two thumbs at ~4px apart at the extremes of a 160px track.
+Nils wants two date entries instead.
+
+### 2.3 There is no reset
+
+The only reset in the app is a `Clear search & filters` ghost button that appears **solely inside
+Discover's zero-results empty state** (`DiscoverPageClient.tsx:707` → `resetFilters()` at `:610`).
+MyStuffView has none at all (`patchAdvanced` only handles `yearRange` and `membership`). Individual
+facet chips have per-chip removers; the Tri toggles reset by clicking "Any".
+
+`countActiveAdvanced()` already produces the badge count, so a "Reset (N)" affordance has its number
+for free.
+
+### 2.4 The layout wraps ugly
+
+Six controls in a bare flex row. The three membership tri-toggles break the line, and the
+include/exclude autocompletes break it again once they hold chips.
+
+### 2.5 "On mobile it should come from the bottom" — it already does
+
+⚠️ `Sheet.tsx:88` is `items-end` + `translate-y-full → 0` with a drag handle below `sm`, and a
+centred scale-in modal at `sm`+. What makes it read as a top panel is §2.1. **Fix the portal and
+re-check this point before designing around it.**
+
+⚠️ **Do NOT reintroduce a `useMediaQuery` branch that mounts two different panels.** That existed
+and was removed 2026-07-28 (`SubBar.tsx:113-120`): crossing 768px remounted the panel and dropped
+in-flight facet queries. One component, two layouts, switched with CSS.
+
+---
+
+## 3. A platform filter: feasible, moderate, four caveats
+
+Nils wants to filter to platforms he owns — Netflix / HBO / Apple TV+ for movies and shows, Switch /
+Steam / Xbox for games.
+
+**The data is already derived and in memory; it is simply not copied onto the vector.**
+`getDerivedForItem()` returns a `MergedItem` (`facetCache.ts:53`) holding `platforms`, `storeLinks`
+and `streamingProviders`. `discovery.ts:352` destructures it and `:356-370` copies six fields —
+title, posters, release date, community ratings, runtime — and not those three. **No provider
+re-fetch, no migration, no new column.**
+
+Cheapest correct path: add the field to `DiscoveryVector` (`discovery.ts:39`), copy it at `:356`,
+add it to `DiscoverFilters` (`:79`) and to the predicate beside `filters.sources` (`:1047`).
+
+The alternative — a new `FacetKind` (`facets.ts:14`) — buys the existing include/exclude
+autocomplete, vocab counts and IDF machinery for free, but **platform is a poor IDF citizen**
+(nearly every game is on PC), so it would pollute scoring unless excluded from `ROLE_WEIGHT`. Facets
+live in no database table, so adding a kind is a code change plus a `derivedSignature` bump, not a
+migration.
+
+⚠️ **`platformSources` is a false friend.** `types/index.ts:99` — that is *which of the user's
+connected accounts* holds the item (trakt/steam/…), not a console or a store. It is already on every
+card and it is not what this filter is about.
+
+### The four caveats, each of which changes the design
+
+1. **Region.** `streamingProviders` is region-resolved by `pickRegion(...)` (`merge.ts:131`), and
+   `buildEntries` calls `getDerivedForItem` with `region: undefined` → `DEFAULT_COUNTRY`
+   (`discovery.ts:333`). **The pool's streaming data is for the default country, not the viewer's.**
+   A naive filter is wrong for every user outside it. The facet cache key already has a region slot
+   so a second dimension is tractable, but it multiplies pool memory — and the pool is the one thing
+   AGENTS.md forbids capping.
+2. **Type asymmetry.** `platforms` comes from steam/rawg/igdb and is games-only; `streamingProviders`
+   comes from TMDB and is movies/shows-only. **One "Available on" control has to swap its option set
+   off the active type chips, or render as two sections. This is the main thing a mockup has to
+   solve.**
+3. **`storeLinks` is not a store filter.** It is a mixed bag deduped by free-text `name` — "Steam",
+   "GOG", "Epic Games", but also "IMDb", "Reddit", "Metacritic", "Official site". It needs an
+   allowlist before it can be a dimension. `platforms` and `streamingProviders[].providerId` (stable
+   ids) are the clean fields.
+4. **Coverage is partial on the browsed half.** Discover writes thin list-payload rows at
+   `projection_version 0`, healed only on a first detail read (`enrich.ts:369-374`). Pool membership
+   is `browsed = 0 OR acted-on`, so the curated pool is mostly fine, but promoted `browsed = 1` items
+   may hold no watch-provider data at all. **A filter that silently drops them reads as broken.**
+   Decide up front whether "unknown availability" is excluded or shown.
+
+---
+
+## 4. Related: Discover's pagination (same feedback round)
+
+Not this panel, but reported together and fixed together.
+
+- **The header disappears on load.** The TOP sentinel renders at scroll 0 and its
+  `IntersectionObserver` has `rootMargin: "200px"`, so it fires immediately
+  (`DiscoverPageClient.tsx:556-563`); `loadPrevious()` prepends and the `useLayoutEffect` at `:565`
+  does `window.scrollBy(0, delta)` to hold position, which pushes the page down unasked. ⚠️
+  **Reproduces only on a COLD browse cache** — measured `scrollY: 21` on a first load and 0 on every
+  warm reload, because `loadPrevious` then returns nothing. Do not "verify" it on a second reload
+  and conclude it is gone. The `scrollBy` is correct for a *user-initiated* prepend.
+- **"Load earlier releases" under a popularity sort.** Confirmed on the prod build: sorting by
+  Popularity renders both "Load earlier releases" (top) and "Load newer releases" (bottom).
+  `topSentinel`/`bottomSentinel` (`:651-652`) are picked by `descending` alone and never consult
+  `isDateSort` (`:633`), which is computed one line above and already gates `autoScrollToToday`.
+- **The fix for both** is one change: no top sentinel unless the sort is a date sort; non-date sorts
+  get a single generic "Load more" at the bottom, on scroll.

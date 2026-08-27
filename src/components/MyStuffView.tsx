@@ -18,6 +18,7 @@ import type { WishlistToggledDetail } from "@/lib/useQuickActions";
 import { WISHLIST_TOGGLED_EVENT } from "@/lib/useQuickActions";
 import { staleProviders, syncToCompletion } from "@/lib/syncClient";
 import { buildItemHref } from "@/lib/itemUrl";
+import { platformOptions, matchesPlatforms } from "@/lib/platformKeys";
 import type { MyStuffTab } from "@/lib/myStuffMerge";
 import { mergeMyStuff, filterByTab, parseTab, asWishlistAdds } from "@/lib/myStuffMerge";
 import GroupedView from "@/components/GroupedView";
@@ -174,6 +175,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [sort, setSort] = usePersistedState<SortKey>("rr_mystuff_sort", "addedAt", normalizeSortAddedAt);
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_mystuff_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_mystuff_membership", {});
+  const [platforms, setPlatforms] = usePersistedState<string[]>("rr_mystuff_platforms", []);
 
 
   // SM1 — a card's quick-action remove used to leave the row on screen until
@@ -287,11 +289,25 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
     },
   };
 
-  const advFilters: UiFilters = { ...defaultUiFilters(), types, includeFacets, excludeFacets, yearRange, membership };
+  const advFilters: UiFilters = { ...defaultUiFilters(), types, includeFacets, excludeFacets, yearRange, membership, platforms };
   const advancedActiveCount = countActiveAdvanced(advFilters);
   const patchAdvanced = (patch: Partial<UiFilters>) => {
     if (patch.yearRange) setYearRange(patch.yearRange);
     if (patch.membership) setMembership(patch.membership);
+    if (patch.platforms) setPlatforms(patch.platforms);
+  };
+  // Everything the Filters sheet owns, back to its default. Deliberately NOT
+  // the search box or the type chips: both are visible outside the sheet, and a
+  // "Reset all" that silently clears a control the user can see is worse than
+  // one that doesn't. (Discover's own resetFilters DOES clear the query,
+  // because there it is the same gesture as leaving search.)
+  const resetAdvanced = () => {
+    const d = defaultUiFilters();
+    setIncludeFacets(d.includeFacets);
+    setExcludeFacets(d.excludeFacets);
+    setYearRange(d.yearRange);
+    setMembership(d.membership);
+    setPlatforms(d.platforms);
   };
 
   const merged = useMemo(() => mergeMyStuff(libraryItems, wishlistItems), [libraryItems, wishlistItems]);
@@ -309,14 +325,30 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // copy, so typing itself never lags but the expensive re-render does.
   const debouncedSearch = useDebouncedValue(search, 200);
   const q = debouncedSearch.trim().toLowerCase();
-  const filtered = tabItems.filter((item) => {
+  // Split in two so the platform chips can count the set they will actually act
+  // on. Everything EXCEPT the platform filter first:
+  const beforePlatform = tabItems.filter((item) => {
     if (types.length > 0 && !types.includes(item.type)) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
     if (!matchesFacets(item, includeFacets, excludeFacets)) return false;
     if (!passesYearMembership(item, yearRange, membership)) return false;
     return true;
   });
+  const filtered = platforms.length
+    ? beforePlatform.filter((item) => matchesPlatforms(item, platforms))
+    : beforePlatform;
   const sorted = sortItems(filtered, sort);
+
+  // Chip counts are built from `beforePlatform` — every other filter applied,
+  // this one not — so a chip reading 269 yields exactly 269.
+  //
+  // ⚠️ Both other candidates are wrong, and one of them shipped for an hour.
+  // Counting the fully FILTERED set deletes every unpicked platform's chip the
+  // moment you pick one, with no way back. Counting the whole MERGED set
+  // over-promises: it said "Netflix 270" on the Library tab and returned 269,
+  // because one of those 270 is wishlist-only. A count beside a control is a
+  // promise about what the control does.
+  const platformOpts = useMemo(() => platformOptions(beforePlatform), [beforePlatform]);
 
   const highlightId = q && sorted.length > 0 ? sorted[0].id : null;
 
@@ -418,12 +450,21 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         searchPlaceholder={TAB_SEARCH_PLACEHOLDER[activeTab]}
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
-        advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}
+        advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} platformOptions={platformOpts} />}
         advancedActiveCount={advancedActiveCount}
+        onResetFilters={resetAdvanced}
         // Progress counts episodes, and only its own panel knows how many — so
         // suppress the toolbar's number there rather than showing a library
         // total under an episode heading. The panel prints its own count.
-        resultCount={loading || activeTab === "progress" ? null : tabItems.length}
+        // `sorted`, not `tabItems`: the count has to be what you are actually
+        // looking at, after search, facets, year, lists and platforms.
+        // ⚠️ Caught 2026-08-27 by the new sheet footer, which renders this same
+        // number as "Show N titles" — picking Netflix left the button reading
+        // "Show 1,929 titles" while the list behind it dropped to a few hundred,
+        // so the primary action was describing a set that no longer existed.
+        // Discover already passed its filtered count (`browseSorted.length`);
+        // this was the odd one out.
+        resultCount={loading || activeTab === "progress" ? null : sorted.length}
         resultNoun={TAB_NOUN[activeTab]}
         view={effView}
         onViewChange={() => {}}
