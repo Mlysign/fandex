@@ -564,22 +564,44 @@ export function poolWeight(): {
   vocabTerms: number;
   /** Serialised bytes per 1,000 catalog items, for projecting growth. */
   bytesPer1kItems: number | null;
+  /** Of `perItemBytes`, how much is `facets` — the only part SCORING reads. */
+  facetBytes: number | null;
+  /** The rest: title, slug, posters, sources. Display data, needed for the
+   *  handful of items that reach a screen, not for the scan that ranks them. */
+  displayBytes: number | null;
+  facetsPerItem: number | null;
+  /** Distinct facet keys across the sample's items, vs total occurrences —
+   *  the interning ratio, i.e. what a shared dictionary would save. */
+  facetKeyReuse: number | null;
 } {
   const c = getCache();
   const items = c.vectors.length;
-  if (items === 0) {
-    return { items: 0, sampled: 0, perItemBytes: null, estimatedBytes: 0, vocabTerms: c.vocab.length, bytesPer1kItems: null };
-  }
+  const empty = {
+    items: 0, sampled: 0, perItemBytes: null, estimatedBytes: 0, vocabTerms: c.vocab.length,
+    bytesPer1kItems: null, facetBytes: null, displayBytes: null, facetsPerItem: null, facetKeyReuse: null,
+  };
+  if (items === 0) return empty;
   const n = Math.min(25, items);
-  let total = 0, ok = 0;
+  let total = 0, ok = 0, facetTotal = 0, facetCount = 0;
+  // Distinct facet KEYS across the sample against total occurrences: how much a
+  // shared dictionary would save, which is the question when projecting the pool
+  // to a catalog 20× this size.
+  const distinct = new Set<string>();
   for (let i = 0; i < n; i++) {
     // Spread the sample across the array rather than taking the head: the pool
     // is built in a deterministic order, so the first 25 are systematically the
     // same kind of row and would bias a mean.
     const v = c.vectors[Math.floor((i * items) / n)];
-    try { total += JSON.stringify(v)?.length ?? 0; ok++; } catch { /* skip */ }
+    try {
+      total += JSON.stringify(v)?.length ?? 0;
+      facetTotal += JSON.stringify(v.facets)?.length ?? 0;
+      facetCount += v.facets.length;
+      for (const f of v.facets) distinct.add(`${f.kind}:${f.key}`);
+      ok++;
+    } catch { /* skip */ }
   }
   const per = ok > 0 ? Math.round(total / ok) : null;
+  const perFacets = ok > 0 ? Math.round(facetTotal / ok) : null;
   return {
     items,
     sampled: ok,
@@ -587,6 +609,10 @@ export function poolWeight(): {
     estimatedBytes: per === null ? null : per * items,
     vocabTerms: c.vocab.length,
     bytesPer1kItems: per === null ? null : per * 1000,
+    facetBytes: perFacets,
+    displayBytes: per === null || perFacets === null ? null : per - perFacets,
+    facetsPerItem: ok > 0 ? Math.round((facetCount / ok) * 10) / 10 : null,
+    facetKeyReuse: facetCount > 0 ? Math.round((facetCount / distinct.size) * 100) / 100 : null,
   };
 }
 
