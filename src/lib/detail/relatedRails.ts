@@ -41,7 +41,7 @@
 
 import { query } from "@/lib/db";
 import {
-  getCatalogFacets, getCatalogIdf, itemsWithFacet, computeFandexScore,
+  getCatalogFacets, getCatalogIdf, itemsWithFacet, computeFandexScore, scoringContext,
   type DiscoveryVector, type Profile,
 } from "@/lib/discovery";
 import { rankSimilar } from "@/lib/similarItems";
@@ -168,9 +168,10 @@ export function buildLocalRails(
     .filter(({ vector }) => !inFranchise.has(vector.id))
     .slice(0, RAIL_CAP);
 
+  const ctx = scoringContext();
   const toRow = (vector: DiscoveryVector): RailItem => {
     const fx = profile
-      ? computeFandexScore(vector.facets, profile, undefined, { mediaItemId: vector.id })
+      ? computeFandexScore(vector.facets, profile, undefined, { mediaItemId: vector.id, ctx })
       : null;
     return {
       id: vector.id, slug: vector.slug, type: vector.type, title: vector.title,

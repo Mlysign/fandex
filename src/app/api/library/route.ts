@@ -5,7 +5,7 @@ import { query, get } from "@/lib/db";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap, resolveMediaItemFromIds } from "@/lib/userState";
-import { buildProfile, computeFandexScore } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, scoringContext } from "@/lib/discovery";
 import type { EnrichedItem, MediaLink, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
@@ -75,10 +75,12 @@ export const GET = withUser(async (req: NextRequest, session) => {
 
     const country = getUserCountry(session.userId);
     const profile = buildProfile(session.userId);
+    // One scoring context for the whole library — see discovery.ts scoringContext().
+    const ctx = scoringContext();
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const [id, { item, rawLinks }] of itemMap.entries()) {
       const { facets, merged } = getDerivedForItem(id, rawLinks, item.type, country);
-      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id });
+      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id, ctx });
 
       // ── LIST PROJECTION (2026-07-30 perf audit) ───────────────────────────
       // `...merged` used to spread wholesale, which shipped `sources[].data` —

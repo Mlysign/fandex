@@ -4,7 +4,7 @@ import { withUser } from "@/lib/withUser";
 import { buildFacetDetail } from "@/lib/facetDetail";
 import type { FacetKind, FacetRole} from "@/lib/facets";
 import { extractFacets } from "@/lib/facets";
-import { buildProfile, computeFandexScore, fandexCenterFor, facetImpact, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, scoringContext, fandexCenterFor, facetImpact, itemsWithFacet, getTagVocab, getCompanyVocab } from "@/lib/discovery";
 import { loadLinks, ensureTmdbDetail, ensureGameDetail } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
@@ -48,9 +48,11 @@ export const GET = withUser(async (req: NextRequest, session) => {
   // cache's facets); public pool items not in their library have none and sort
   // last. Combined view (no role), matching the public page.
   const profile = buildProfile(session.userId);
+  // One scoring context for both loops below — see discovery.ts scoringContext().
+  const ctx = scoringContext();
   const fandexById: Record<string, number> = {};
   for (const v of itemsWithFacet({ kind: kind as FacetKind, role: undefined, key })) {
-    const sc = computeFandexScore(v.facets, profile, undefined, { mediaItemId: v.id })?.score;
+    const sc = computeFandexScore(v.facets, profile, undefined, { mediaItemId: v.id, ctx })?.score;
     if (sc != null) fandexById[v.id] = sc;
   }
 
@@ -86,7 +88,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       await ensureTmdbDetail(links, item.type);
       await ensureGameDetail(links, item.type);
       const merged = mergeLinks(links, item.type);
-      const sc = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id })?.score;
+      const sc = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id, ctx })?.score;
       if (sc != null) fandexById[id] = sc;
     }
   }

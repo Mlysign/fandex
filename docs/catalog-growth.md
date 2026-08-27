@@ -1,7 +1,22 @@
 # Catalog growth: serving Fandex from its own database
 
-**Proposed by Nils 2026-08-27, measured and analysed the same day. Nothing here is built.**
-Read this before starting any of it, and before touching `discovery.ts`'s pool.
+**Proposed by Nils 2026-08-27, measured and analysed the same day, execution started the same
+evening.** Read this before starting any of it, and before touching `discovery.ts`'s pool.
+
+## Progress
+
+| phase | state |
+|---|---|
+| **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
+| 1. Enrich what we already store, and read it on Discover | ⬜ next |
+| 2. Serve anon Discover from the DB | ⬜ |
+| 3. Split the shelf from the scoring pool | ⬜ **gate: do not grow past ~10k items without it** |
+| 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
+| 5. Housekeeping by bytes | ⬜ |
+
+⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
+Absolute µs vary with machine load (a run with two dev servers up reads ~2× a quiet one); the RATIO
+between the two paths it prints is the stable number.
 
 Every number below is measured on `data/rr.db` (2,792 items) or prod `/api/health` unless it says
 PROJECTION. Two of them contradict what this project assumed, so re-measure rather than quote.
@@ -166,8 +181,16 @@ number, which is why it is necessary and not sufficient.
 
 ### The rest of the stack, in the order that actually matters
 
-1. **Hoist the three per-item cache checks** out of the scoring loop. Free, ~5×, and it makes
-   Discover faster today. Test: byte-identical scores over the whole pool before and after.
+1. ✅ **DONE 2026-08-27. Hoist the three per-item cache checks** out of the scoring loop.
+   `scoringContext()` is built once per pass and threaded through the eight loops that score more
+   than a handful of items (`find`, library, calendar, facet/mine, discover/scores, detail/similar,
+   relatedRails, liveDiscover). **Measured 105.2 → 20.6 µs per item (5.1×)**, `find()` warm from
+   384–610 ms down to 185–206 ms, and the projection at 50k items from 4.8–7.7 s to ~1.1 s.
+   Verified two ways: `scoringContext.test.ts` (five properties, including an ip alias and a
+   per-item override) and the probe scoring the whole real catalog both ways — **2,553 identical,
+   0 different**.
+   ⚠️ What it trades away: a scoring config or alias edit landing MID-PASS is now seen by the next
+   pass instead of the next item. No surface has ever relied on that, and the test pins it.
 2. **Precompute per-user scores.** A score changes only when the profile changes (a rating) or the
    item's facets change, so the per-request scan is recomputation of a value that was already known.
    Store one `Float32Array` (or table) per user: 50k items is 200 KB. Per request becomes a sort
@@ -231,7 +254,7 @@ catch-up burst, and **checking Railway usage is an explicit precondition for any
 
 | phase | what | why now |
 |---|---|---|
-| 0 | Hoist the three per-item cache checks out of scoring (§4) | ~5× off every scored request TODAY, and nothing above 10k items ships without it |
+| 0 ✅ | Hoist the three per-item cache checks out of scoring (§4) | Done 2026-08-27, measured 5.1×. See Progress above |
 | 1 | Enrich titles we already store, rather than adding rows | Nearly free, and it makes the "Available on" filter work |
 | 2 | Serve anon Discover from the DB, extending the snapshot pattern | Kills the crawler cost and the outage-blank-page failure |
 | 3 | Split the shelf from the scoring pool (§4 levers 1–3) | Load-bearing: everything after it is cheap, nothing before it is safe |

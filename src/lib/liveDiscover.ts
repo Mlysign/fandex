@@ -14,8 +14,8 @@
 // and a crowd-vote floor.
 
 import { sharedCache } from "@/lib/boundedCache";
-import type { Reason, Profile } from "@/lib/discovery";
-import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT } from "@/lib/discovery";
+import type { Reason, Profile, ScoringContext } from "@/lib/discovery";
+import { buildProfile, scoreFacets, computeFandexScore, scoringContext, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
 import { resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import { loadLinks } from "@/lib/detail/enrich";
@@ -178,8 +178,8 @@ interface Scored { c: FeedCandidate; score: number; reasons: Reason[]; fandexSco
 // hydration runs) — a documented, cheaper approximation than the catalog's fully
 // hydrated Fandex Score, consistent with this module's existing "no hydration on
 // the cheap path" tradeoff.
-function fandexFor(facets: Facet[], rawProfile: Profile): { score: number | null; center: number | null } {
-  const fx = computeFandexScore(facets, rawProfile);
+function fandexFor(facets: Facet[], rawProfile: Profile, ctx?: ScoringContext): { score: number | null; center: number | null } {
+  const fx = computeFandexScore(facets, rawProfile, undefined, { ctx });
   return { score: fx?.score ?? null, center: fx?.center ?? null };
 }
 
@@ -297,9 +297,11 @@ export function fandexForPage(
   // can hydrate it rather than render a number we know is depressed.
   const rawProfile = userId ? buildProfile(userId) : null;
   const catalog = rawProfile ? catalogFacets(items) : new Map<string, Facet[]>();
+  // One context for the batch — see discovery.ts scoringContext().
+  const ctx = scoringContext();
   for (const item of items) {
     const deep = catalog.get(item.id);
-    const fx = rawProfile && deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+    const fx = rawProfile && deep ? fandexFor(deep, rawProfile, ctx) : { score: null, center: null };
     out.set(item.id, { ...fx, pending: !!rawProfile && !deep });
   }
   return out;
@@ -327,6 +329,7 @@ async function rankType(
   // whichever candidates happen to be in the catalog would quietly reorder the
   // feed, which is a bigger behaviour change than the bug being fixed here.
   const deepByCandidate = catalogFacets(pool);
+  const ctx = scoringContext();
 
   if (!hydrate) {
     return pool
@@ -334,7 +337,7 @@ async function rankType(
         const facets = listFacets(c);
         const s = scoreFacets(facets, profile.w, idf);
         const deep = deepByCandidate.get(c.id);
-        const fx = deep ? fandexFor(deep, rawProfile) : { score: null, center: null };
+        const fx = deep ? fandexFor(deep, rawProfile, ctx) : { score: null, center: null };
         return {
           c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [],
           fandexScore: fx.score, fandexCenter: fx.center, fandexPending: !deep,
@@ -362,7 +365,7 @@ async function rankType(
       // Hydrated facets are still a fine second choice — they're deep too, so
       // nothing is left pending on this branch.
       const deep = deepByCandidate.get(c.id) ?? h.facets;
-      const fx = fandexFor(deep, rawProfile);
+      const fx = fandexFor(deep, rawProfile, ctx);
       return {
         c, score: (s?.score ?? 0) + langTerm(c.originalLanguage, profile), reasons: s?.reasons ?? [],
         fandexScore: fx.score, fandexCenter: fx.center, fandexPending: false,

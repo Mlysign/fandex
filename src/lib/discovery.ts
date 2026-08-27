@@ -15,6 +15,7 @@ import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/li
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
+import type { ItemIpOverride } from "@/lib/ipAlias";
 import { applyIpFacets, getIpAliases, getItemIpOverrides, ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import type { ScoringConfigValues } from "@/lib/scoringDefaults";
@@ -879,6 +880,36 @@ export function facetImpact(id: string, profile: Profile, config?: ScoringConfig
 // category it was actually scored under. See the reasons[] mapping below.
 interface FandexContrib { f: Facet; dev: number; classWeight: number; category?: string; BA?: number; n?: number }
 
+/**
+ * The three lookups every scored item needs, fetched ONCE for a whole pass.
+ *
+ * ⚠️ This exists because of a measurement, not for tidiness. `getScoringConfig`,
+ * `getIpAliases` and `getItemIpOverrides` each cache their result and run a
+ * signature `SELECT` to check that cache is still fresh. Each is fine on its
+ * own. `computeFandexScore` called all three PER ITEM, so a pass over the pool
+ * ran three signature queries per title, and **79% of Fandex Score CPU was
+ * cache validation rather than scoring** (`scripts/probe-score.mjs`,
+ * 2026-08-27): applyIpFacets 54.4 µs/item without the maps against 4.3 with,
+ * plus 19 µs for the config.
+ *
+ * Build one outside any loop that scores more than a handful of items and pass
+ * it in. It changes no score — same maps, same config, fetched once — which is
+ * why `scoringContextEquivalence.test.ts` can pin it by comparing both paths.
+ */
+export interface ScoringContext {
+  config: ScoringConfigValues;
+  aliases: Map<string, string>;
+  overrides: Map<string, ItemIpOverride[]>;
+}
+
+export function scoringContext(configOverride?: ScoringConfigValues): ScoringContext {
+  return {
+    config: configOverride ?? getScoringConfig(),
+    aliases: getIpAliases(),
+    overrides: getItemIpOverrides(),
+  };
+}
+
 // `configOverride` (H5.4 live preview): use the draft mappingConstant/top-N
 // selection instead of the persisted ones — pass the SAME override object
 // given to buildProfile so K/selection and the role/category weights that
@@ -887,10 +918,10 @@ export function computeFandexScore(
   facets: Facet[],
   profile: Profile,
   configOverride?: ScoringConfigValues,
-  opts?: { mediaItemId?: string | null }
+  opts?: { mediaItemId?: string | null; ctx?: ScoringContext }
 ): FandexScoreResult | null {
   if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
-  const cfg = configOverride ?? getScoringConfig();
+  const cfg = configOverride ?? opts?.ctx?.config ?? getScoringConfig();
 
   // 2026-08-14 — franchise resolution happens HERE, not at the nine
   // extractFacets() call sites, because this is the one function every scoring
@@ -902,7 +933,11 @@ export function computeFandexScore(
   //
   // No id means a live candidate with no catalog row: it can't have a per-item
   // override, but its provider-supplied franchise still gets aliased.
-  const resolved = applyIpFacets(facets, opts?.mediaItemId);
+  const resolved = applyIpFacets(
+    facets,
+    opts?.mediaItemId,
+    opts?.ctx ? { aliases: opts.ctx.aliases, overrides: opts.ctx.overrides } : undefined
+  );
 
   const matched: FandexContrib[] = [];
   for (const f of resolved) {
@@ -1154,13 +1189,17 @@ export function find(userId: string, req: FindRequest): FindResult {
 
   // Fandex Score is computed here (not just for the paged slice) so the whole
   // set can be SORTED by it. The badge uses the RAW profile (H5.3) regardless.
+  // ONE context for the whole pass — see scoringContext(). Inside the loop
+  // this was three signature queries per title, which was most of the cost of
+  // a Discover request.
+  const ctx = scoringContext();
   const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }[] = [];
   for (const v of vectors) {
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
     const s = scoreFacets(v.facets, profile.w, idf);
-    const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id });
+    const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
     scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null });
   }
 

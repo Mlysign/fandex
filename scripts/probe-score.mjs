@@ -35,7 +35,7 @@ for (const line of fs.readFileSync(path.join(REPO, ".env"), "utf8").split(/\r?\n
 }
 process.env.DB_PATH = process.env.BENCH_DB;
 
-const { getCatalogFacets, buildProfile, computeFandexScore, find, poolWeight, invalidateDiscoveryCache } =
+const { getCatalogFacets, buildProfile, computeFandexScore, scoringContext, find, poolWeight, invalidateDiscoveryCache } =
   await import("@/lib/discovery");
 
 const userId = process.env.DEV_LOGIN_USER_ID;
@@ -62,22 +62,23 @@ for (const id of ids) {
 }
 console.log(`facet sets resolved: ${facetSets.length}`);
 
-const scorePass = (reps) => {
+const ctxOnce = scoringContext();
+const scorePass = (reps, ctx) => {
   const t = performance.now();
   let n = 0;
   for (let r = 0; r < reps; r++) {
-    for (const [id, f] of facetSets) { computeFandexScore(f, profile, undefined, { mediaItemId: id }); n++; }
+    for (const [id, f] of facetSets) { computeFandexScore(f, profile, undefined, { mediaItemId: id, ctx }); n++; }
   }
   return [performance.now() - t, n];
 };
 
-scorePass(1); // jit warm
+scorePass(1, ctxOnce); // jit warm
 for (const reps of [1, 4, 20]) {
-  const [t, n] = scorePass(reps);
+  const [t, n] = scorePass(reps, ctxOnce);
   console.log(`score ${n} items (${reps}x pool): ${t.toFixed(0)} ms  →  ${(t / n * 1000).toFixed(1)} µs/item, ${(n / (t / 1000) / 1000).toFixed(0)}k items/s`);
 }
 
-const [t1] = scorePass(1);
+const [t1] = scorePass(1, ctxOnce);
 console.log(`\nPROJECTION at ${(t1 / facetSets.length).toFixed(4)} ms/item:`);
 for (const size of [2553, 10000, 30000, 50000, 85000]) {
   console.log(`  ${String(size).padStart(6)} items → ${(t1 / facetSets.length * size).toFixed(0)} ms of scoring per scored request`);
@@ -98,11 +99,25 @@ const bench = (label, fn, reps = 4) => {
   return each;
 };
 console.log("");
-const full = bench("full computeFandexScore", () => { for (const [id, f] of facetSets) computeFandexScore(f, profile, undefined, { mediaItemId: id }); });
+const full = bench("per-item lookups (the OLD path)", () => { for (const [id, f] of facetSets) computeFandexScore(f, profile, undefined, { mediaItemId: id }); });
+bench("one ScoringContext (the NEW path)", () => { for (const [id, f] of facetSets) computeFandexScore(f, profile, undefined, { mediaItemId: id, ctx: ctxOnce }); });
 const cfg = getScoringConfig();
 const withCfg = bench("...with the config passed in", () => { for (const [id, f] of facetSets) computeFandexScore(f, profile, cfg, { mediaItemId: id }); });
 bench("getScoringConfig() alone", () => { for (let i = 0; i < N; i++) getScoringConfig(); });
 bench("applyIpFacets() alone", () => { for (const [id, f] of facetSets) applyIpFacets(f, id); });
 console.log(`\nhoisting the config lookup alone saves ${(full - withCfg).toFixed(0)} ms of ${full.toFixed(0)} ms (${((full - withCfg) / full * 100).toFixed(0)}%)`);
+
+// ── Equivalence on REAL data ────────────────────────────────────────────────
+// scoringContext.test.ts pins the property on hand-built inputs. This checks it
+// against every item in the actual catalog, which is where a stale alias or a
+// per-item override would show up if the two paths ever diverged.
+let same = 0, diff = 0;
+for (const [id, f] of facetSets) {
+  const a = JSON.stringify(computeFandexScore(f, profile, undefined, { mediaItemId: id }));
+  const b = JSON.stringify(computeFandexScore(f, profile, undefined, { mediaItemId: id, ctx: scoringContext() }));
+  if (a === b) same++;
+  else { diff++; if (diff <= 3) console.log("  DIFF", id, String(a).slice(0, 120), "!=", String(b).slice(0, 120)); }
+}
+console.log(`\nequivalence over the real catalog: ${same} identical, ${diff} different`);
 
 invalidateDiscoveryCache();

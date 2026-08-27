@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
-import { buildProfile, computeFandexScore } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, scoringContext } from "@/lib/discovery";
 import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
 
 export const GET = withUser(async (req: NextRequest, session) => {
@@ -60,13 +60,16 @@ export const GET = withUser(async (req: NextRequest, session) => {
     // Build enriched items (region-aware release date + streaming, T22)
     const country = getUserCountry(session.userId);
     const profile = buildProfile(session.userId);
+    // One scoring context for the whole month, not three signature queries per
+    // title — see discovery.ts scoringContext().
+    const ctx = scoringContext();
     const enriched: EnrichedItem[] = [];
     for (const [id, { item, rawLinks }] of itemMap.entries()) {
       // Source filter
       if (sourceFilter && !item.platformSources.includes(sourceFilter)) continue;
 
       const { facets, merged } = getDerivedForItem(id, rawLinks, item.type, country);
-      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id });
+      const fx = computeFandexScore(facets, profile, undefined, { mediaItemId: id, ctx });
       // List projection, same as /api/library (2026-07-30 perf audit): drop
       // `sources[].data`, the raw provider blob per link, which no card or
       // calendar cell reads. Keep the identity pair for buildItemHref.

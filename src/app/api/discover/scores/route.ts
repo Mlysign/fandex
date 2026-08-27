@@ -2,7 +2,7 @@ import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { extractFacets } from "@/lib/facets";
-import { buildProfile, computeFandexScore, invalidateDiscoveryCache } from "@/lib/discovery";
+import { buildProfile, computeFandexScore, scoringContext, invalidateDiscoveryCache } from "@/lib/discovery";
 import { loadLinks, healLinks, createHealBudget } from "@/lib/detail/enrich";
 import { mergeLinks } from "@/lib/merge";
 import { get } from "@/lib/db";
@@ -84,6 +84,10 @@ export const POST = withUser(async (req: NextRequest, session) => {
   const skipped = requested.slice(MAX_IDS);
 
   const profile = buildProfile(session.userId);
+  // One context for the batch. Nothing in the heal loop below writes ip
+  // aliases, item overrides or the scoring config, so this is exactly as fresh
+  // as the per-item lookups it replaces.
+  const ctx = scoringContext();
   const scores: Record<string, { score: number; center: number } | null> = {};
   // The THIRD state, and the easiest thing here to get wrong. `scores[id] =
   // null` means "asked, and the answer is genuinely no score" — the client
@@ -113,7 +117,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
     if (heal.incomplete) { deferred.push(id); continue; }
 
     const merged = mergeLinks(links, item.type);
-    const fx = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id });
+    const fx = computeFandexScore(extractFacets(links, item.type, merged), profile, undefined, { mediaItemId: id, ctx });
     scores[id] = fx ? { score: fx.score, center: fx.center } : null;
   }
 

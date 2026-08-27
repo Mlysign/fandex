@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { log, errorFields } from "@/lib/logger";
-import { getCatalogFacets, buildProfile, computeFandexScore } from "@/lib/discovery";
+import { getCatalogFacets, buildProfile, computeFandexScore, scoringContext } from "@/lib/discovery";
 import { buildLocalRails, resolveItemFacets, MIN_RAIL, RAIL_CAP, type RailItem } from "@/lib/detail/relatedRails";
 import { fetchTmdbSimilar, fetchIgdbSimilar, type FeedCandidate } from "@/lib/discoverFeed";
 import { persistDiscoverBatch } from "@/lib/annotateDiscover";
@@ -95,6 +95,7 @@ async function providerTopUp(
 
   const resolved = persistDiscoverBatch(fresh.slice(0, RAIL_CAP - have.length), userId);
   const profile = userId ? buildProfile(userId) : null;
+  const ctx = scoringContext();
 
   return resolved.map((c: any): RailItem => {
     // A resolved uuid means we hold the item, so it can be scored against the
@@ -102,7 +103,7 @@ async function providerTopUp(
     // — it has no facets here yet — and gets a null score rather than a guess.
     const isLocal = c.linkable !== false;
     const fx = isLocal && profile
-      ? computeFandexScore(getCatalogFacets(c.id) ?? [], profile, undefined, { mediaItemId: c.id })
+      ? computeFandexScore(getCatalogFacets(c.id) ?? [], profile, undefined, { mediaItemId: c.id, ctx })
       : null;
     return {
       id: c.id, type: c.type, title: c.title,
