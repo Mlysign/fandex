@@ -134,5 +134,39 @@ export async function register() {
       void refreshSnapshots().catch((e) => log.error("home_snapshot_uncaught", errorFields(e)));
     }, HOME_SNAPSHOT_CHECK_MS);
     homeTimer.unref?.();
+
+    // ── Catalog fill (docs/catalog-growth.md phase 1) ──────────────────────
+    // Heals thin, list-payload rows on a timer instead of waiting for somebody
+    // to open the title. Same `healLinks` the detail route uses, a bounded
+    // batch per pass, and it costs one cheap SELECT once the backlog is empty
+    // — which is the steady state, not the exception.
+    //
+    // ⚠️ AFTER the boot prune, same ordering rule as the snapshots above: the
+    // prune computes its kill list and then deletes, so healing a row inside
+    // that window would spend a provider call on something about to vanish.
+    const runFill = async () => {
+      const { fillCatalogBatch, FILL_INTERVAL_MS } = await import("./lib/catalogFill");
+      const res = await fillCatalogBatch();
+      // Log only when something happened. A line every 30 minutes saying "0 of
+      // 0" is how a log stops being read.
+      if (res.considered > 0) log.info("catalog_fill", { ...res, everyMs: FILL_INTERVAL_MS });
+    };
+
+    const { FILL_INTERVAL_MS, FILL_START_DELAY_MS } = await import("./lib/catalogFill");
+    // ⚠️ And NOT immediately after the prune, unlike the snapshots. Boot is the
+    // slowest this process ever is, and the first measured pass healed 0 of 10
+    // items that heal fine a minute later — every call spent its budget waiting
+    // on a cold route and an unfetched Twitch token. The homepage needs its
+    // snapshot at boot; nothing needs this.
+    const firstFill = setTimeout(() => {
+      void pruneDone
+        .then(() => runFill())
+        .catch((e) => log.error("catalog_fill_uncaught", errorFields(e)));
+    }, FILL_START_DELAY_MS);
+    firstFill.unref?.();
+    const fillTimer = setInterval(() => {
+      void runFill().catch((e) => log.error("catalog_fill_uncaught", errorFields(e)));
+    }, FILL_INTERVAL_MS);
+    fillTimer.unref?.();
   }
 }

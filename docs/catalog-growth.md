@@ -8,7 +8,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | phase | state |
 |---|---|
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
-| **1. Read the availability we already hold, on Discover** | 🔵 **half done 2026-08-27.** The READ shipped (see §8). The daily job that fills gaps has not been built. |
+| **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | ⬜ next |
 | 3. Split the shelf from the scoring pool | ⬜ **gate: do not grow past ~10k items without it** |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
@@ -300,3 +300,36 @@ pulls out the winning region's small object and only that gets `JSON.parse`d.
 **Not done, and deliberately out of this step:** the daily job that FILLS availability for titles we
 hold but have never detail-read, and extending the same annotation to `/api/home` and the calendar.
 Those are the rest of phase 1.
+
+---
+
+## 9. Phase 1, part two: the catalog fill job (2026-08-27) — SHIPPED
+
+A row written from a provider list payload is thin: projection version 0, genres and a poster, no
+credits, no keywords, no watch providers. Until now those healed **only when somebody opened the
+title**, so an item nobody clicks stayed thin forever. `lib/catalogFill.ts` walks the same backlog on
+a timer.
+
+**It is not a new fetch path.** It calls the same `healLinks` the detail route does, so there is one
+definition of healed and one place that writes. What is new is the ordering and the pacing.
+
+- **Order**: items somebody acted on, then pool items (`browsed = 0`), then everything else by oldest
+  sync. Pinned by `catalogFill.test.ts`, because the order is the only judgement in the file.
+- **Pacing**: 10 items every 30 minutes, ~480/day, one provider call each. Local backlog was 680
+  items, so it drains in about a day and then costs one cheap SELECT per pass.
+- **Scheduling**: unref'd interval, after `pruneDone`, and **two minutes after boot rather than at
+  boot**.
+
+⚠️ **The boot-delay is a measurement, not caution.** The first scheduled pass reported `healed: 0`
+on ten items that heal fine in 600–1,200 ms when run by hand a minute later. Boot is the slowest the
+process ever is (cold routes, no Twitch token yet), and under the request path's 2.5 s per-call cap
+every item took the `timeout` branch. That branch still persists the late result, so no work was
+wasted, but the pass reported zero and looked broken. The fill now uses a **10 s per-call budget**,
+because the request-path cap exists for a person waiting on a page and nobody waits for this.
+
+⚠️ **This pacing is for a 680-item backlog, not for phase 4.** When 30–50k titles start arriving
+thin, 480/day drains far too slowly, and the right response is to re-derive the numbers against
+`docs/scalability.md`, not to turn the dial up and hope.
+
+**Still open in phase 1:** extending `annotateAvailability` to `/api/home` and the calendar, so their
+cards can show where a title streams too.
