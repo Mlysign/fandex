@@ -19,7 +19,7 @@ Everything else in this file is either done or a standing constraint.
 
 2. **RAWG's monthly quota is exhausted, so the cross-link sweep cannot run.** Measured 2026-08-20: `api.rawg.io` answers `401 {"error": "The monthly API limit reached"}` in 0.17 s. **Not** the timeouts and Cloudflare 522s of the 2026-08-17 outage.
 
-   ⚠️ **2026-08-27: IGDB is failing too, so the dual-source consolation below is currently FALSE and prod's browse feed has NO GAMES AT ALL.** `/api/health` after 15 min of uptime: `api.rawg.io` 5 requests / 5 clientError / `lastStatus 401` / `latchedOnAuth: true` / 21 blocked (the same quota 401 as below), and `api.igdb.com` 9 requests / **9 networkError** / 156 blocked, circuit open. `id.twitch.tv` answers 200, so the token is fine and the failures are on `api.igdb.com` itself — a timeout or an abort against `BROWSE_BUDGET_MS` counts as a network error (`http.ts:572`) and opens the breaker, which then blocks 17× more calls than it let through. Measured symptom: `GET /api/discover` on prod returns **20 movies + 20 shows, 0 games**, and `?section=games` returns `{"items":[]}`. That is also why the Filters sheet reads 0 on every chip. **Check whether IGDB is genuinely down before assuming the breaker is at fault** — and if it is a self-inflicted abort latch, that is a real bug in how browse treats a slow provider.
+   ⚠️ **2026-08-27: IGDB is failing too, so the dual-source consolation below is currently FALSE and prod's browse feed has NO GAMES AT ALL.** `/api/health` after 15 min of uptime: `api.rawg.io` 5 requests / 5 clientError / `lastStatus 401` / `latchedOnAuth: true` / 21 blocked (the same quota 401 as below), and `api.igdb.com` 9 requests / **9 networkError** / 156 blocked, circuit open. `id.twitch.tv` answers 200, so the token is fine and the failures are on `api.igdb.com` itself — a timeout or an abort against `BROWSE_BUDGET_MS` counts as a network error (`http.ts:572`) and opens the breaker, which then blocks 17× more calls than it let through. Measured symptom: `GET /api/discover` on prod returns **20 movies + 20 shows, 0 games**, and `?section=games` returns `{"items":[]}`. That is also why the Filters sheet reads 0 on every chip. **Check whether IGDB is genuinely down before assuming the breaker is at fault** — and if it is a self-inflicted abort latch, that is a real bug in how browse treats a slow provider. ⚠️ **Discover no longer goes empty when this happens** (2026-08-27): an empty provider section falls back to stored catalog rows, so the symptom is now "no NEW games arriving" rather than "no games at all". That makes this less urgent and easier to miss.
 
    **What to do: wait for the quota to reset, then run the sweep.** Survey as of 2026-08-20: **rawg 157**, steam 113, igdb 59 of 760 games. Not urgent for the sweep itself, because the dual-source design normally covers it (see the warning above for why it is not covering it today). ⚠️ **Do not use Steam as the control**: its cursor drained on 2026-08-17, so it links 0 whether or not anything is wrong.
 
@@ -147,9 +147,10 @@ The checks are in [smoketest.md](smoketest.md) 1c-i, 13e-i and 13n-i.
 
 ## Nils's feedback, 2026-08-27 (post-smoketest)
 
-**B and C are ✅ DONE** (the filter panel rebuilt to Option A, and Discover's pagination). **A is
-the one still open.** The analysis for all of it is [docs/advanced-filters.md](docs/advanced-filters.md);
-read it before touching the panel.
+**Everything is ✅ DONE except A**: the filter panel rebuilt to Option A, Discover's pagination, the
+platform chips (a service you use now shows a 0 instead of vanishing) and the Settings picker
+collapsed to two rows. Analysis → [docs/advanced-filters.md](docs/advanced-filters.md); read it
+before touching the panel.
 
 - **A. ⬜ The Fandex Score's colours disagree between the card and the tooltip.** `Tooltip.tsx:99`
   hardcodes gold `var(--color-accent)` for the number where the card (`PosterCard.tsx:184`) and the
@@ -162,34 +163,26 @@ read it before touching the panel.
   (`ActionCells.tsx:32` brand, `QuickActions.tsx:6` stock Tailwind).
 - **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
 
-### Settings: Your platforms + What you track ✅ 2026-08-27
+### Settings: Your platforms + What you track ✅ 2026-08-27 — archived
 
-Both shipped and verified on the prod build. What they are, the three layers they must never
-reach, and every measurement → [STATUS.md](STATUS.md) and [docs/advanced-filters.md](docs/advanced-filters.md) §3 and §5.
-The rules that outlive them are in [AGENTS.md](AGENTS.md) and [[user-display-preferences]].
-Checks are in [smoketest.md](smoketest.md) 13e-iii. Full write-up → grep the archive for
-`Two per-user preferences`.
+Both shipped and verified, and the streaming-chips follow-up is done too
+([docs/advanced-filters.md](docs/advanced-filters.md) §6–§6c, [docs/catalog-growth.md](docs/catalog-growth.md) §8).
+Write-up → grep the archive for `Two per-user preferences`; rules → [AGENTS.md](AGENTS.md) and
+[[user-display-preferences]]; checks → [smoketest.md](smoketest.md) 13e-iii.
 
-**What is still open, in value order:**
-
-1. **`/api/discover?q=` search still fetches disabled types.** The only surface with a real,
-   unconditional provider-call saving: search results are uncached and games are 2 of its 4 calls.
-   The client sends `type` only when exactly one chip is active, so a 2-of-3 selection pays full
-   price today. Worth doing while RAWG's quota is a live problem.
-2. **`/api/library` + `/api/calendar` already accept `?type=`** and push it into SQL. Defaulting
-   that predicate from the setting would cut the payload (1,942 items) instead of filtering it in
-   the browser. Free, indexed, no provider calls.
-3. **The Discover section fan-out** could skip a disabled section. ⚠️ **Saves latency and payload,
-   NOT quota**: `_pageCache` keys carry no userId, so one other visitor wanting games in the same
-   15-minute window makes the call anyway. Do not sell it as a quota fix.
-4. ~~**Streaming is still empty on Discover**~~ ✅ **2026-08-27.** The chips no longer come from the
-   loaded set alone, so a service you use is listed with a 0 rather than vanishing.
-   → docs/advanced-filters.md §6. Real streaming COUNTS on Discover remain impossible without
-   per-item provider calls, and its feed is upcoming releases, which have no watch data anywhere.
+**⬜ One thing left over: nothing uses the media-type setting to SPEND less.** Three places could,
+in value order: `/api/discover?q=` still fetches disabled types (the only real provider-call saving,
+since search is uncached and games are 2 of its 4 calls); `/api/library` and `/api/calendar` already
+take `?type=` and could default it from the setting, cutting a 1,942-item payload instead of
+filtering it in the browser; and the Discover fan-out could skip a disabled section. ⚠️ Only the
+first saves QUOTA — `_pageCache` keys carry no userId, so another visitor's games request in the
+same 15-minute window pays anyway.
 
 ## Still open elsewhere
 
-- **⬜ Catalog growth: serve anon pages from our own DB** (Nils, 2026-08-27, agreed in principle). Grow the catalog on a schedule instead of asking providers at request time, so a cold page costs 0 provider calls instead of 14 and a games outage stops emptying Discover. Measured sizing, the five phases, and the one part that genuinely does not scale (the scoring pool: 2,537 bytes/item today, 79% of it repeated facet strings) → [docs/catalog-growth.md](docs/catalog-growth.md). ⚠️ **Measured 2026-08-27 and it reordered the plan: scoring is 99-155 µs/item and strictly linear, so a 50k catalog is 5-8 SECONDS of blocking CPU per scored request** (single process, synchronous SQLite). ~79% of that is per-item cache-freshness SELECTs, not arithmetic. Phase 0 shipped 2026-08-27: one ScoringContext per pass instead of three lookups per item, measured **105 to 21 microseconds per item (5.1x)** and find() warm 384-610ms to 185-206ms, verified as 2,553 identical scores and 0 different over the real catalog. Phases 0, 1 and the first slice of 2 shipped the same evening. Phase 1: Discover reads stored streaming availability (17 of 20 past-window movies, 5 ms per response, zero provider calls) and a timer heals thin rows (10 per 30 min, backlog 680 and draining). Phase 2 slice one: an empty provider section falls back to stored rows, so a games outage no longer empties the page. Phase 3 half: Fandex Scores are precomputed per (user, profile, pool) and a cache-key query that materialised a VIEW three times per request was fixed — find() 384-610ms this morning to 32ms, /api/discover 198-248 to 81-92 ms, and the output is byte-identical across four request shapes (16,502 bytes). Progress table + what is next: the doc. Probe: scripts/probe-score.mjs.
+- **🔵 Catalog growth: serve anon pages from our own DB** (Nils, 2026-08-27, agreed in principle; phases 0–3 part-shipped the same evening, `4ab0066`…`18456c9`). Grow the catalog on a schedule instead of asking providers per request, so a cold page costs 0 provider calls instead of 14 and a provider outage stops emptying Discover. **The progress table, every measurement and the build order live in [docs/catalog-growth.md](docs/catalog-growth.md)** — read it rather than this entry.
+
+  **Next, in order:** phase 3's remainder (move the score recompute to a background job; then interning + columnar for pool memory), then phase 4's seeded backfill to 30–50k. ⚠️ Request latency no longer scales with the catalog, so the "do not grow past 10k" gate is cleared for that reason; what still scales is the ~20 µs/item recompute after a rating and 2.5 KB/item of pool memory. Probe before and after any scoring change: `BENCH_DB=<copy> node scripts/probe-score.mjs`.
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
 
