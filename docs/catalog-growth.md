@@ -122,13 +122,68 @@ catalog grows).
    ⚠️ `better-sqlite3` is synchronous and in-process, so a heavy query blocks the event loop for
    every other request.
 
-**Recommended order: 1 → 2 → 3, measure, then 4 if per-request CPU needs it, and only then 5.**
-Levers 1–3 are representation changes with identical output, which makes them testable the strongest
-way available: same catalog, same profile, byte-identical scores before and after.
+### ⚠️ MEASURED 2026-08-27: memory is not the wall. CPU is, and it arrives sooner.
 
-⚠️ **Measure at scale before building any of it.** Build a synthetic 50k pool and time both a
-personalized `/api/discover` (190 ms warm at 2,553 items today) and one "More like this". This repo
-has mis-sized a resource ramp by reasoning twice; §A of the 2026-07-30 audit was out by 100×.
+`scripts/probe-score.mjs`, dev machine, real DB. **Prod's container is slower, so read these as a
+floor, not a ceiling.** Two runs, hence the ranges.
+
+| | measured |
+|---|---|
+| Per item scored | **99–155 µs**, and strictly linear (checked at 1×, 4× and 20× the pool: 51,060 items scored in one pass) |
+| Scoring the whole pool (2,553) | **243–392 ms** |
+| `find()` warm, end to end | **384–610 ms**, so scoring is roughly two thirds of a Discover request already |
+
+PROJECTION, straight-line because the measurement is straight-line:
+
+| pool | scoring CPU per scored request |
+|---|---|
+| 2,553 (today) | 0.25–0.39 s |
+| 10,000 | **~1–1.5 s** |
+| 30,000 | 2.9–4.6 s |
+| 50,000 | **4.8–7.7 s** |
+| 85,000 | 8.1–13 s |
+
+`better-sqlite3` is synchronous and in-process, so that time is not "a slow request", it is the
+whole server blocked. **The plan in §7 is unshippable as written past roughly 10k items**, which the
+memory levers above do nothing about.
+
+### Why an item costs 100 µs, which is the good news
+
+| component | µs/item | share |
+|---|---|---|
+| `applyIpFacets()` | **91–101** | ~60–67% |
+| `getScoringConfig()` | 18–19 | 12–24% |
+| the actual arithmetic, sorts and `reasons` | ~30 | ~20% |
+
+`getScoringConfig()`, `getIpAliases()` and `getItemIpOverrides()` each cache their result and run a
+cheap signature `SELECT` to check freshness. Each is fine. **`computeFandexScore` calls them once per
+ITEM**, so scoring 50k items runs 100k+ signature queries, and ~79% of Fandex Score CPU is cache
+validation rather than scoring. Both helpers already accept pre-loaded maps (`applyIpFacets`'s `pre`
+parameter, which `buildEntries` uses and the scoring path does not), and `find()` already holds the
+profile, so hoisting all three out of the loop is a contained change that cannot alter a score.
+**PROJECTION: ~5× less CPU, so 50k items goes from ~5–8 s to ~1–1.6 s.** Still not a request-path
+number, which is why it is necessary and not sufficient.
+
+### The rest of the stack, in the order that actually matters
+
+1. **Hoist the three per-item cache checks** out of the scoring loop. Free, ~5×, and it makes
+   Discover faster today. Test: byte-identical scores over the whole pool before and after.
+2. **Precompute per-user scores.** A score changes only when the profile changes (a rating) or the
+   item's facets change, so the per-request scan is recomputation of a value that was already known.
+   Store one `Float32Array` (or table) per user: 50k items is 200 KB. Per request becomes a sort
+   over floats, single-digit ms at any catalog size we are contemplating. The full pass moves off
+   the request path to a background job on rating.
+3. **Inverted index (facet → item ids).** Two jobs: it makes step 2's recompute incremental (a new
+   rating only touches items carrying the affected facets), and it bounds a cold "score everything"
+   pass by scoring only candidates that share a facet with the profile. ⚠️ Check
+   `computeFandexScore`'s non-facet terms before assuming an unmatched item can be skipped rather
+   than visited.
+4. **The memory levers 1–3 above.** Still worth doing (columnar layout also speeds the scan through
+   cache locality), but they solve the smaller of the two problems.
+
+Levers 1–3 and steps 1–2 are all output-preserving, which makes them testable the strongest way
+available: same catalog, same profile, byte-identical scores before and after. Pool membership (§4
+lever 5) remains the only knob that changes what a score IS.
 
 ---
 
@@ -166,7 +221,9 @@ catch-up burst, and **checking Railway usage is an explicit precondition for any
    Litestream ships. Size the tiers deliberately.
 3. **Restore drill at the new size.** It is already due at 106 MB. Re-run it at 1–2 GB before
    trusting the backup, and remember any schema SQL must parse on Litestream's SQLite (~3.40).
-4. **Scoring at 50k.** See §4. Nothing gets built before this number exists.
+4. ~~**Scoring at 50k.**~~ Measured 2026-08-27, see §4: **4.8 to 7.7 s of blocking CPU per scored
+   request**, which is the finding that reorders this whole plan. Re-run `scripts/probe-score.mjs`
+   after phase 0 and after any change to `computeFandexScore`.
 
 ---
 
@@ -174,6 +231,7 @@ catch-up burst, and **checking Railway usage is an explicit precondition for any
 
 | phase | what | why now |
 |---|---|---|
+| 0 | Hoist the three per-item cache checks out of scoring (§4) | ~5× off every scored request TODAY, and nothing above 10k items ships without it |
 | 1 | Enrich titles we already store, rather than adding rows | Nearly free, and it makes the "Available on" filter work |
 | 2 | Serve anon Discover from the DB, extending the snapshot pattern | Kills the crawler cost and the outage-blank-page failure |
 | 3 | Split the shelf from the scoring pool (§4 levers 1–3) | Load-bearing: everything after it is cheap, nothing before it is safe |
