@@ -8,7 +8,7 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
-import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
+import { persistDiscoverBatch, annotateUserState, annotateAvailability } from "@/lib/annotateDiscover";
 import type { Direction } from "@/lib/discoverFeed";
 import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -161,7 +161,12 @@ export async function GET(req: NextRequest) {
     // the calendar's popular route since 2026-07-28); the `raw`-stripping and
     // session-gating rules and the incidents behind them are documented there.
     const persist = (items: any[]) => persistDiscoverBatch(items, userId);
-    const annotate = (items: any[]) => annotateUserState(items, userId);
+    // Availability rides along with the user-state annotation: same batch, one
+    // more query per response, no provider call. It is what makes the "Available
+    // on" filter's streaming half count anything on this feed — the provider
+    // LIST payloads these items are built from carry no watch providers at all.
+    // → docs/catalog-growth.md phase 1.
+    const annotate = (items: any[]) => annotateAvailability(annotateUserState(items, userId), region);
 
     // ── Search ────────────────────────────────────────────────────
     if (q && q.length >= 2) {

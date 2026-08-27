@@ -8,8 +8,8 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | phase | state |
 |---|---|
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
-| 1. Enrich what we already store, and read it on Discover | ⬜ next |
-| 2. Serve anon Discover from the DB | ⬜ |
+| **1. Read the availability we already hold, on Discover** | 🔵 **half done 2026-08-27.** The READ shipped (see §8). The daily job that fills gaps has not been built. |
+| 2. Serve anon Discover from the DB | ⬜ next |
 | 3. Split the shelf from the scoring pool | ⬜ **gate: do not grow past ~10k items without it** |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
 | 5. Housekeeping by bytes | ⬜ |
@@ -262,3 +262,41 @@ catch-up burst, and **checking Railway usage is an explicit precondition for any
 | 5 | Housekeeping by bytes, with the never-evict list | The size cap, which will not bind for years |
 
 Phases 1 and 2 stand alone and are worth doing whatever happens to the rest.
+
+---
+
+## 8. Phase 1, part one: Discover reads the availability we already hold (2026-08-27) — SHIPPED
+
+The reported symptom was the "Available on" filter counting 0 on every chip
+(`advanced-filters.md` §6c). Half of that was a games outage; the other half is that Discover's feed
+is built from provider LIST payloads, which carry no watch providers at all. **The data was already
+in the database**: 1,536 tmdb links locally hold a `watch/providers` blob.
+
+`lib/availability.ts` reads it, `annotateAvailability()` attaches it to a batch, and `/api/discover`
+calls it beside the user-state annotation. **No provider call. No merge. No full-blob parse:** SQL
+pulls out the winning region's small object and only that gets `JSON.parse`d.
+
+**Measured after (local dev, real DB):**
+
+| | |
+|---|---|
+| Query cost | 5 ms for 60 ids, 17 ms for 200, 30 ms for 400, 187 ms for all 2,781 (~0.07 ms/id) |
+| Past-window movies now carrying availability | **17 of 20** |
+| Default upcoming feed | 4 of 54, which is correct — an unreleased film streams nowhere |
+| End to end | picking a chip narrows the list and the sheet's button reads "Show 1 title" |
+
+⚠️ Rules this had to keep, each pinned by `availability.test.ts`:
+
+- **The region fallback must match `mergeLinks`/`pickRegion` exactly** (country → US → GB → first
+  key). If they drift, the filter and the item page disagree about the same title.
+- **Bucket precedence is flatrate → free → ads → rent → buy**, and a projected row's stored
+  `offerType` wins over re-deriving it. Getting this wrong says a film is "on Netflix" when it is
+  only rentable.
+- **Absent, never `[]`.** An empty array claims "on no service", and `matchesPlatforms` hides
+  exactly those.
+- **`linkable: false` items are skipped.** Their `id` is still a provider id, so a lookup would
+  match nothing at best and the wrong row at worst.
+
+**Not done, and deliberately out of this step:** the daily job that FILLS availability for titles we
+hold but have never detail-read, and extending the same annotation to `/api/home` and the calendar.
+Those are the rest of phase 1.

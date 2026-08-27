@@ -6,6 +6,7 @@
 import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
 import { getUserStateMap, resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import { slugsForItemIds } from "@/lib/itemSlug";
+import { availabilityForItems } from "@/lib/availability";
 
 /**
  * Give every item a media_items row (and so a uuid) and hand that uuid back as
@@ -90,5 +91,35 @@ export function annotateUserState<T extends { ids?: Record<string, unknown>; typ
       libraryStatus: st?.libraryStatus ?? null,
       rating: st?.rating ?? null,
     };
+  });
+}
+
+/**
+ * Attach the streaming availability we ALREADY hold for these items, in the
+ * viewer's region. DB-only, one query per batch, no provider call.
+ *
+ * Runs AFTER persistDiscoverBatch, which is what turns a provider id into the
+ * `media_items` uuid this reads by. An item we do not hold keeps no
+ * `streamingProviders` key at all rather than an empty array: absent means "we
+ * cannot say", and `[]` would claim "it is on nothing", which the filter reads
+ * as a reason to hide it.
+ *
+ * ⚠️ Movies and shows only, by construction — `watch/providers` is TMDB's, and
+ * games carry their `platforms` from the feed payload already.
+ *
+ * → docs/catalog-growth.md phase 1, and lib/availability.ts for the two stored
+ * shapes and the region rule this must keep in step with.
+ */
+export function annotateAvailability<T extends { id: string; linkable?: boolean; streamingProviders?: unknown }>(
+  items: T[],
+  region: string
+): T[] {
+  if (!items.length) return items;
+  const ids = items.filter((it) => it.linkable !== false).map((it) => it.id);
+  const byId = availabilityForItems(ids, region);
+  if (byId.size === 0) return items;
+  return items.map((it) => {
+    const hit = it.linkable === false ? undefined : byId.get(it.id);
+    return hit ? { ...it, streamingProviders: hit } : it;
   });
 }

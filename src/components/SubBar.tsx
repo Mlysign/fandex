@@ -404,7 +404,13 @@ export default function SubBar({
 
             <div className="px-5 pt-3 pb-5 border-t border-border">
               <Button variant="primary" size="lg" pill onClick={() => setFiltersOpen(false)} className="w-full">
-                {resultCount == null ? "Show results" : `Show ${resultCount.toLocaleString()} ${resultNoun}`}
+                {/* Singular when there is one of them. A filter that narrows to a
+                    single match is exactly when this button gets read carefully,
+                    and "Show 1 titles" is the moment it looks unfinished. The
+                    noun is a prop, so trim its plural rather than guessing one. */}
+                {resultCount == null
+                  ? "Show results"
+                  : `Show ${resultCount.toLocaleString()} ${resultCount === 1 ? resultNoun.replace(/s$/, "") : resultNoun}`}
               </Button>
             </div>
           </div>

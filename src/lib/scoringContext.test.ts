@@ -31,10 +31,10 @@ const profile: Profile = {
     ["tag||slow", -0.75],
     ["ip||canon", 2],
   ]),
-  meta: new Map([
+  meta: new Map<string, Profile["meta"] extends Map<string, infer V> ? V : never>([
     ["tag||action", meta({ key: "action", label: "Action", category: "genre", classWeight: 1, BA: 1.5, n: 6 })],
     ["tag||slow", meta({ key: "slow", label: "Slow", category: "mood", classWeight: 0.8, BA: -0.75, n: 3 })],
-    ["ip||canon", { kind: "ip" as const, key: "canon", label: "Canon", classWeight: 1.1, BA: 2, n: 2 }],
+    ["ip||canon", { kind: "ip", key: "canon", label: "Canon", classWeight: 1.1, BA: 2, n: 2 }],
   ]),
   baseline: 6,
   hasSignal: true,
