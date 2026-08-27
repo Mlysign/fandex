@@ -271,3 +271,26 @@ viewport emulation does not fire `resize`** — `window.__rs` stayed 0 across tw
 the page at the width you want to test instead. `NEXT_DIST_DIR=.next-prod npx next build` +
 `npm run start:alt` (:3110, `prod-alt`) builds and serves without touching a `.next` that another
 session's `next dev` is holding.
+
+### 6c. "Why does the filter find nothing?" — measured on prod, 2026-08-27
+
+Every chip read 0, games included, which §6 does not by itself explain. `/api/health` on prod did:
+
+| host | requests | outcome | blocked by the breaker |
+|---|---|---|---|
+| `api.rawg.io` | 5 | 5 × 401, `latchedOnAuth: true` | 21 |
+| `api.igdb.com` | 9 | 9 × networkError | 156 |
+| `id.twitch.tv` | 6 | 6 × 200 | 0 |
+
+Both games providers open at once, so `GET /api/discover` returned **20 movies + 20 shows and no
+games**, and `?section=games` returned `{"items":[]}`. With no games in the loaded set there is no
+`platforms` data either, and movies and shows never carry watch providers on this feed — hence
+twelve zeroes. The filter was reporting the outage accurately; it just had no way to say so.
+
+**It says so now:** when every chip in the sheet is at 0, the section prints one line rather than
+leaving the reader to interpret a wall of zeroes. → `FilterPanel.tsx`.
+
+⚠️ The RAWG 401 is the known quota exhaustion (TASKS.md, "Needs Nils" #2). The IGDB failures are
+NEW and are the reason games vanished entirely; `id.twitch.tv` answering 200 rules out the token.
+A timeout or a `BROWSE_BUDGET_MS` abort is counted as a network error (`http.ts:572`) and opens the
+breaker, so a merely SLOW provider can latch itself out for 15 minutes at a time.

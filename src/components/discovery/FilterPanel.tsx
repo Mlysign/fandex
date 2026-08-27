@@ -282,6 +282,19 @@ export default function FilterPanel({ filters, onChange, platformOptions = [], p
                 emptyHint={emptyHint("games", "Nothing loaded here says which platforms it runs on.")}
               />
             )}
+            {narrowed.length > 0 && narrowed.every((o) => o.count === 0) && (
+              // EVERY chip at 0 is a different statement from one chip at 0, and
+              // it is the one people ask about: "why does this filter find
+              // nothing?" It happens on Discover whenever nothing loaded carries
+              // availability at all — upcoming films have no watch providers,
+              // and a games provider being down takes the platform data with it.
+              // Say so once, at the top, instead of leaving twelve zeroes to be
+              // interpreted.
+              <p className="text-caption text-text-muted leading-relaxed">
+                Nothing loaded here says where it can be watched or played, so every count is 0. Your lists and the item
+                pages still have it.
+              </p>
+            )}
             {narrowing && (
               // Say that the list is a subset, and say it where the subset is.
               // Without this a short list reads as "we only know about three
