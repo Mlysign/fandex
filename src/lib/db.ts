@@ -155,6 +155,20 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_links_item ON media_links(media_item_id);
     CREATE INDEX IF NOT EXISTS idx_links_source ON media_links(source, source_id);
+    -- 2026-08-27 — COVERING, and that is the whole point. librarySignature
+    -- takes MAX(last_synced) across every link of a user's library; with
+    -- idx_links_item alone SQLite finds each row by id and then READS it, and a
+    -- media_links row carries ~7 KB of raw_data, so a 2,000-item library pulled
+    -- tens of MB of pages to read one integer per row. Measured on the real DB:
+    -- **41.5 ms → 1.0 ms**, index build 42 ms, no measurable file growth.
+    -- Both columns predate every migration, so this belongs here rather than in
+    -- one (the migration-owned indexes above exist because migration 23 rebuilt
+    -- the table). Note the standalone scripts/migrate.mjs does NOT create it
+    -- (verified) and does not need to: this block runs on every in-process
+    -- boot, which is the path prod actually takes.
+    -- NB: no backticks anywhere in this block. It is a template literal, and a
+    -- stray one ends the SQL string mid-comment.
+    CREATE INDEX IF NOT EXISTS idx_links_item_synced ON media_links(media_item_id, last_synced);
 
     -- user_watchlist and user_library are NOT created here. As of migration 16
     -- they are VIEWS over user_item_state (see src/lib/cacheViews.ts), and this

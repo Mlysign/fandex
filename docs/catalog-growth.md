@@ -10,7 +10,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **first slice done 2026-08-27** (§10): an empty provider section now falls back to stored rows. Serving the DB by DEFAULT still wants phase 3 first. |
-| 3. Split the shelf from the scoring pool | ⬜ **gate: do not grow past ~10k items without it** |
+| 3. Split the shelf from the scoring pool | 🔵 **half done 2026-08-27** (§11): scores precomputed per (user, profile, pool), and a 63 ms signature query fixed. find() 190 → 86 ms. Memory levers, inverted index and a background recompute still open. |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
 | 5. Housekeeping by bytes | ⬜ |
 
@@ -371,3 +371,49 @@ tests and by a scripted run through `decorateSection` → `persistDiscoverBatch`
 item linkable, slugged, scored). **The live trigger has NOT been exercised end to end**, because
 reproducing it needs both games providers down at once, and locally IGDB is healthy. The prod
 symptom that motivated it is recorded in TASKS.md "Needs Nils" #2.
+
+---
+
+## 11. Phase 3, first half: scores are computed once, not per request (2026-08-27) — SHIPPED
+
+`fandexScoresFor()` in `discovery.ts` computes one `Float64Array` of scores per (user, profile,
+pool) and `find()` reads it by index. A score only changes when the ratings, the scoring config or
+the item's facets change, so recomputing it on every page load was recomputing a known answer.
+
+**And then the measurement moved the target again.** Decomposing `find()` (190 ms warm) turned up
+something bigger than the scoring:
+
+| | before | after |
+|---|---|---|
+| `librarySignature()` | **63 ms** | **1.4 ms** |
+| `buildProfile()` (a cache HIT — the time was all signature) | 61 ms | 1.6 ms |
+| Fandex scoring inside `find()` | ~60 ms | ~0 (precomputed) |
+| **`find()` warm, whole** | **190 ms** | **86 ms** |
+| `GET /api/discover` end to end | 198–248 ms | **81–92 ms** |
+
+⚠️ **A cache key was more expensive than the thing it guarded, and it was a VIEW that made it so.**
+`librarySignature` asked `user_library` for a COUNT and a MAX. `user_library` is a view over
+`user_item_state` built from CTEs with `json_group_array` and two GROUP BYs, so every call
+materialised the whole thing: **69 ms**, three times per request, to produce a cache key.
+
+Two changes, both measured on the real DB:
+
+- Sign off the **base table**, not the view. The count differs (the view is one row per item, the
+  table one per item-and-source) and that is fine twice over: a signature only has to CHANGE when
+  the data changes, and per-source is strictly more sensitive. The value shifts once, so every
+  profile recomputes once.
+- Add **`idx_links_item_synced ON media_links(media_item_id, last_synced)`** (db.ts). Without a
+  covering index, `MAX(last_synced)` fetched every matching row, and a `media_links` row carries
+  ~7 KB of `raw_data` — tens of MB of pages read to collect one integer per row. **41.5 → 1.0 ms**,
+  42 ms to build, no measurable file growth.
+
+**Verified**: full suite green, and the four scores captured before the change come back identical
+(Pan's Labyrinth 83.6, Cars 55.7, Asterix and Cleopatra 65.6, The Twelve Tasks of Asterix 59.2).
+`FANDEX_NO_CACHE=1` bypasses the precompute so `scripts/probe-score.mjs` can measure both paths in
+one run: **193 ms with, 255 ms without**, at 2,553 items. That gap is the part that scaled with
+catalog size, and it is now flat.
+
+**Still open in phase 3**, and the reason it is half and not done: the memory levers (interning,
+dropping display data, columnar) and the inverted index. Also unbuilt: moving the recompute itself
+to a background job. At 2,553 items it costs ~55 ms on the first request after a rating; at 50k it
+would be ~1 s on that one request, which is when it stops being acceptable.

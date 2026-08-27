@@ -272,10 +272,25 @@ export function librarySignature(userId: string): string {
   // user_library — so a user_library-only signature would serve stale (pre-enrich)
   // facets. Fold in the linked rows' count + MAX(last_synced) so any re-sync of a
   // library item's links invalidates the cache.
+  //
+  // ⚠️ 2026-08-27 — off `user_item_state`, NOT `user_library`, and measured:
+  // `user_library` is a VIEW built from CTEs with json_group_array and two
+  // GROUP BYs, so asking it for a COUNT and a MAX materialised the whole thing
+  // **every call, 69 ms**. This signature is computed several times per
+  // request (buildProfile, getLibraryFacetAnalysis and discovery's score cache
+  // each key on it), which made it most of a warm Discover request.
+  //
+  // Against the base table plus the covering index `idx_links_item_synced`
+  // (db.ts) the same question answers in **1 ms**. The count differs — the view
+  // is one row per item, the table one per (item, source) — and that is fine
+  // twice over: a signature only has to CHANGE when the data changes, and the
+  // per-source count is strictly more sensitive, which is the same argument the
+  // note above makes for `r`. The value shifting once just recomputes each
+  // profile once.
   const l = get<{ lc: number; lmx: number }>(
     `SELECT COUNT(*) lc, COALESCE(MAX(ml.last_synced),0) lmx
-       FROM user_library ul JOIN media_links ml ON ml.media_item_id = ul.media_item_id
-      WHERE ul.user_id = ?`,
+       FROM user_item_state s JOIN media_links ml ON ml.media_item_id = s.media_item_id
+      WHERE s.user_id = ? AND s.relation = 'library'`,
     [userId]
   );
   return `${r?.n ?? 0}:${r?.mx ?? 0}:${r?.sm ?? 0}:${r?.wsm ?? 0}:${l?.lc ?? 0}:${l?.lmx ?? 0}`;

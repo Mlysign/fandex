@@ -1072,6 +1072,78 @@ export function computeFandexScore(
   return { score: Math.round(score * 10) / 10, center: Math.round(center * 10) / 10, reasons };
 }
 
+// ── Precomputed Fandex Scores (docs/catalog-growth.md phase 3) ─────
+//
+// A Fandex Score changes when the user's ratings change, when the scoring
+// config or the taxonomy changes, or when the item's facets change. It does NOT
+// change between two page loads. `find()` recomputed all of them on every
+// request anyway: measured 2026-08-27, scoring was ~two thirds of a warm
+// Discover request, and **strictly linear in catalog size** — 20 µs/item after
+// the phase-0 hoist, so a 50k catalog would be ~1 s of blocking CPU per request
+// on a synchronous single process.
+//
+// So compute once per (user, profile, pool) and reuse. The request cost stops
+// depending on catalog size, which is the whole point: everything else in the
+// growth plan is bounded by disk, and this was the one thing bounded by a
+// number that grows.
+//
+// ⚠️ Float64Array, not Float32Array. A score is rounded to one decimal and
+// serialized as-is; float32 cannot hold 83.6 exactly and the API payload would
+// change under a "no behaviour change" refactor. 8 bytes × pool size × cached
+// users: 20 KB per user today, 400 KB at 50k items.
+//
+// ⚠️ Aligned to `_cache.vectors` BY INDEX, which is only safe because the
+// signature below includes everything that can reorder or extend that array
+// (content, membership, acted-set, alias and length). Any new way to mutate the
+// pool has to appear in `poolSignature` or this silently hands one title's
+// score to another.
+//
+// ⚠️ NaN means "no score", which is a real state (a cold-start profile below
+// MIN_RATED_FOR_FANDEX_SCORE), not an error. `null` cannot be stored in a typed
+// array and 0 is a legitimate score.
+interface FandexScores {
+  sig: string;
+  /** Constant across items for one profile — it is `baseline × 10`. */
+  center: number | null;
+  scores: Float64Array;
+}
+
+// One entry per user. Bounded by user count, not by catalog size, and each
+// entry is 8 bytes per pool item — see the note above before raising `max`.
+const _fandexScores = sharedCache<string, FandexScores>("discovery.fandexScores", { max: 20 });
+
+/** Everything about the POOL that can change what an index means or what it scores. */
+function poolSignature(cache: { sig: string; memSig: string; aliasSig: string; actedSig: string; vectors: DiscoveryVector[] }): string {
+  return `${cache.sig}|${cache.memSig}|${cache.aliasSig}|${cache.actedSig}|${cache.vectors.length}`;
+}
+
+function fandexScoresFor(
+  userId: string,
+  rawProfile: Profile,
+  cache: { sig: string; memSig: string; aliasSig: string; actedSig: string; vectors: DiscoveryVector[] }
+): FandexScores {
+  // The profile half: what the user rated, and the knobs the score is computed
+  // with. Both already exist as cheap signatures — buildProfile keys its own
+  // cache on the same pair.
+  const sig = `${librarySignature(userId)}|${scoringConfigSignature()}|${poolSignature(cache)}`;
+  const hit = process.env.FANDEX_NO_CACHE ? undefined : _fandexScores.get(userId);
+  if (hit && hit.sig === sig) return hit;
+
+  const ctx = scoringContext();
+  const scores = new Float64Array(cache.vectors.length);
+  let center: number | null = null;
+  for (let i = 0; i < cache.vectors.length; i++) {
+    const v = cache.vectors[i];
+    const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
+    scores[i] = fx ? fx.score : NaN;
+    if (fx && center === null) center = fx.center;
+  }
+
+  const out: FandexScores = { sig, center, scores };
+  _fandexScores.set(userId, out);
+  return out;
+}
+
 // ── Filtering ──────────────────────────────────────────────────────
 function hasFacet(v: DiscoveryVector, ref: { kind: string; role?: FacetRole; key: string }): boolean {
   return v.facets.some((f) => f.kind === ref.kind && f.key === ref.key && (!ref.role || f.role === ref.role));
@@ -1165,7 +1237,10 @@ export interface FindResult {
 }
 
 export function find(userId: string, req: FindRequest): FindResult {
-  const { vectors, byId, idf } = getCache();
+  // The whole cache object, not just its fields: `fandexScoresFor` keys its
+  // per-user score array on the pool's own signatures.
+  const cache = getCache();
+  const { vectors, byId, idf } = cache;
   // H5.3: the visible Fandex Score badge uses the RAW rated-library profile,
   // never the refined one — a seed/manual-pill nudge changes what ranks well
   // in THIS search, not your actual taste-match number (D2's "fully
@@ -1189,18 +1264,27 @@ export function find(userId: string, req: FindRequest): FindResult {
 
   // Fandex Score is computed here (not just for the paged slice) so the whole
   // set can be SORTED by it. The badge uses the RAW profile (H5.3) regardless.
-  // ONE context for the whole pass — see scoringContext(). Inside the loop
-  // this was three signature queries per title, which was most of the cost of
-  // a Discover request.
-  const ctx = scoringContext();
+  //
+  // Precomputed once per (user, profile, pool) rather than per request — see
+  // fandexScoresFor(). ⚠️ Indexed by POSITION in `vectors`, so the loop below
+  // has to be an indexed one even though it skips filtered items: `continue`
+  // must not desynchronise `i` from the array the scores were computed over.
+  const fandex = fandexScoresFor(userId, rawProfile, cache);
   const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }[] = [];
-  for (const v of vectors) {
+  for (let i = 0; i < vectors.length; i++) {
+    const v = vectors[i];
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
     const s = scoreFacets(v.facets, profile.w, idf);
-    const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
-    scored.push({ v, score: s?.score ?? 0, reasons: s?.reasons ?? [], fandexScore: fx?.score ?? null, fandexCenter: fx?.center ?? null });
+    const fandexScore = Number.isNaN(fandex.scores[i]) ? null : fandex.scores[i];
+    scored.push({
+      v,
+      score: s?.score ?? 0,
+      reasons: s?.reasons ?? [],
+      fandexScore,
+      fandexCenter: fandexScore === null ? null : fandex.center,
+    });
   }
 
   // Unified sort model: releaseDate (newest) / popularity (votes) / rating
