@@ -10,7 +10,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **first slice done 2026-08-27** (§10): an empty provider section now falls back to stored rows. Serving the DB by DEFAULT still wants phase 3 first. |
-| 3. Split the shelf from the scoring pool | 🔵 **half done 2026-08-27** (§11): scores precomputed per (user, profile, pool), and a 63 ms signature query fixed. find() 190 → 86 ms. Memory levers, inverted index and a background recompute still open. |
+| 3. Split the shelf from the scoring pool | 🔵 **half done 2026-08-27** (§11): scores precomputed per (user, profile, pool), and a 63 ms signature query fixed. find() 190 → 32 ms (§11, §11b). Memory levers, inverted index and a background recompute still open. |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
 | 5. Housekeeping by bytes | ⬜ |
 
@@ -417,3 +417,32 @@ catalog size, and it is now flat.
 dropping display data, columnar) and the inverted index. Also unbuilt: moving the recompute itself
 to a background job. At 2,553 items it costs ~55 ms on the first request after a rating; at 50k it
 would be ~1 s on that one request, which is when it stops being acceptable.
+
+### 11b. …and then the two things that were left
+
+With scoring precomputed, `find()`'s remaining 86 ms was two queries and one loop, both of which
+also grew with the catalog. Same treatment:
+
+- **`getUserStateMap` asked two VIEWS with an `IN` list of every pool id.** 23 ms at 2,553 ids
+  against 15 ms for the user's whole state fetched in one go — and the user's state is bounded by
+  THEIR library (96 wishlist + 1,942 library rows here), not by the catalog. ⚠️ **It would also have
+  thrown past ~32k items**: SQLite's default variable limit is 32,766, and the growth plan targets
+  30–50k. Above 500 ids it now fetches the whole user; below that it still names them, which stays
+  cheaper for a detail page or one batch of cards.
+- **The ranking score (`scoreFacets`) is cached alongside the Fandex Score**, on the same key, for
+  the unrefined profile only — a seed or a manual pill rewrites the weights per request and takes
+  the recompute branch (verified: seeding moves the top score 21.64 → 27.05).
+- **`reasons` are built for the RETURNED PAGE only.** They were computed for every item in the pool
+  and all but ~60 thrown away, and nothing else reads them — not even the sort.
+
+| `find()` warm, same machine and DB | |
+|---|---|
+| This morning | 384–610 ms |
+| After the phase-0 hoist | 185–206 ms |
+| After the precompute + the signature/index fix | 86 ms |
+| After the state-map and rank-score fixes | **32 ms** |
+
+**Verified byte-identical**, which matters more than the number: four request shapes (default sort,
+date sort, type+year filtered, text query) captured against the committed code and again after,
+comparing ids, Fandex scores, ranking scores and every reason label and contribution. **16,502
+bytes, identical.**

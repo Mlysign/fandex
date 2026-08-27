@@ -14,20 +14,39 @@ export interface UserState {
 
 const EMPTY: UserState = { platformSources: [], onWatchlist: false, libraryStatus: null, rating: null, reviewedAt: null };
 
+// Past this many ids, ask for the user's WHOLE state instead of naming each id.
+//
+// ⚠️ Two reasons, and the second one is a hard limit rather than a speed-up.
+// `find()` calls this with every id in the discovery pool, so the `IN` list grew
+// with the catalog: measured 2026-08-27, 23 ms for 2,553 ids against 15 ms for
+// the same answer fetched whole (the user has 96 wishlist + 1,942 library rows,
+// and that is bounded by THEIR library, not by how big the catalog gets).
+// ⚠️ And SQLite's default variable limit is 32,766, so a catalog past ~32k items
+// would have made this THROW rather than merely slow down — which the growth
+// plan walks straight into (docs/catalog-growth.md targets 30–50k).
+//
+// The threshold keeps the narrow path for the callers that genuinely ask about a
+// handful of items (a detail page, one batch of cards), where naming the ids is
+// still cheaper than reading a whole library.
+const WHOLE_USER_ABOVE = 500;
+
 // Batch-read wishlist + library state for a set of media_item ids (two queries).
 export function getUserStateMap(userId: string, mediaItemIds: string[]): Map<string, UserState> {
   const map = new Map<string, UserState>();
   const ids = [...new Set(mediaItemIds.filter(Boolean))];
   if (ids.length === 0) return map;
 
-  const ph = ids.map(() => "?").join(",");
+  const whole = ids.length > WHOLE_USER_ABOVE;
+  const ph = whole ? "" : ids.map(() => "?").join(",");
+  const scope = whole ? "" : ` AND media_item_id IN (${ph})`;
+  const params = whole ? [userId] : [userId, ...ids];
   const watchlist = query<{ media_item_id: string; platform_sources: string }>(
-    `SELECT media_item_id, platform_sources FROM user_watchlist WHERE user_id = ? AND media_item_id IN (${ph})`,
-    [userId, ...ids]
+    `SELECT media_item_id, platform_sources FROM user_watchlist WHERE user_id = ?${scope}`,
+    params
   );
   const library = query<{ media_item_id: string; status: string | null; rating: number | null; reviewed_at: number | null }>(
-    `SELECT media_item_id, status, rating, reviewed_at FROM user_library WHERE user_id = ? AND media_item_id IN (${ph})`,
-    [userId, ...ids]
+    `SELECT media_item_id, status, rating, reviewed_at FROM user_library WHERE user_id = ?${scope}`,
+    params
   );
 
   const wl = new Map<string, Source[]>(watchlist.map((r) => [r.media_item_id, JSON.parse(r.platform_sources ?? "[]") as Source[]]));

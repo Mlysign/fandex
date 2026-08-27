@@ -1106,6 +1106,19 @@ interface FandexScores {
   /** Constant across items for one profile — it is `baseline × 10`. */
   center: number | null;
   scores: Float64Array;
+  /**
+   * The OTHER score: `scoreFacets`' idf-weighted ranking number, which `find()`
+   * returns as `score`. Cached on the same key and for the same reason.
+   *
+   * ⚠️ Valid for the UNREFINED profile only. A seed or a manual pill rewrites
+   * the weights per request, and `find()` recomputes rather than reading this
+   * when `req.refine` is set.
+   *
+   * ⚠️ Scores only, no `reasons`. Those are read for the RETURNED PAGE alone
+   * (~60 items), so they are recomputed there instead of being cached for
+   * thousands of items nobody will look at.
+   */
+  rank: Float64Array;
 }
 
 // One entry per user. Bounded by user count, not by catalog size, and each
@@ -1130,16 +1143,19 @@ function fandexScoresFor(
   if (hit && hit.sig === sig) return hit;
 
   const ctx = scoringContext();
+  const idf = getCache().idf;
   const scores = new Float64Array(cache.vectors.length);
+  const rank = new Float64Array(cache.vectors.length);
   let center: number | null = null;
   for (let i = 0; i < cache.vectors.length; i++) {
     const v = cache.vectors[i];
     const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
     scores[i] = fx ? fx.score : NaN;
     if (fx && center === null) center = fx.center;
+    rank[i] = scoreFacets(v.facets, rawProfile.w, idf)?.score ?? 0;
   }
 
-  const out: FandexScores = { sig, center, scores };
+  const out: FandexScores = { sig, center, scores, rank };
   _fandexScores.set(userId, out);
   return out;
 }
@@ -1270,18 +1286,19 @@ export function find(userId: string, req: FindRequest): FindResult {
   // has to be an indexed one even though it skips filtered items: `continue`
   // must not desynchronise `i` from the array the scores were computed over.
   const fandex = fandexScoresFor(userId, rawProfile, cache);
-  const scored: { v: DiscoveryVector; score: number; reasons: Reason[]; fandexScore: number | null; fandexCenter: number | null }[] = [];
+  // A seed or a manual pill rewrites the weights for THIS request only, so the
+  // cached ranking scores describe a different profile and cannot be used.
+  const refined = profile !== rawProfile && !!req.refine;
+  const scored: { v: DiscoveryVector; score: number; fandexScore: number | null; fandexCenter: number | null }[] = [];
   for (let i = 0; i < vectors.length; i++) {
     const v = vectors[i];
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
-    const s = scoreFacets(v.facets, profile.w, idf);
     const fandexScore = Number.isNaN(fandex.scores[i]) ? null : fandex.scores[i];
     scored.push({
       v,
-      score: s?.score ?? 0,
-      reasons: s?.reasons ?? [],
+      score: refined ? scoreFacets(v.facets, profile.w, idf)?.score ?? 0 : fandex.rank[i],
       fandexScore,
       fandexCenter: fandexScore === null ? null : fandex.center,
     });
@@ -1316,8 +1333,12 @@ export function find(userId: string, req: FindRequest): FindResult {
   const total = scored.length;
   const page = scored.slice(offset, offset + limit);
 
-  const items: DiscoverResultItem[] = page.map(({ v, score, reasons, fandexScore, fandexCenter }) => {
+  const items: DiscoverResultItem[] = page.map(({ v, score, fandexScore, fandexCenter }) => {
     const st = state.get(v.id);
+    // Reasons for the PAGE only. The loop above used to build them for every
+    // item in the pool and throw all but ~60 away — and `reasons` is read
+    // nowhere else, not even by the sort.
+    const reasons = scoreFacets(v.facets, profile.w, idf)?.reasons ?? [];
     return {
       id: v.id, slug: v.slug, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
       communityScore: v.communityScore,
