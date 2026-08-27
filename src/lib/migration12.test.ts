@@ -25,9 +25,14 @@ function seedDb(): Database.Database {
 
 function insertLink(db: Database.Database, id: string, source: string, version: number) {
   db.prepare(
-    `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, last_synced, projection_version)
-     VALUES (?, 'item-1', ?, 'src-1', 'Title', '2026-01-01', '{}', 0, ?)`
-  ).run(id, source, version);
+    // One source_id per row. This used to be a shared 'src-1' — the seed table
+    // here is hand-written and carried no UNIQUE, so two rawg rows could share
+    // it. Migration 23 rebuilds the table with UNIQUE(source, source_id,
+    // media_type), which the real schema has had all along, so the seed has to
+    // stop leaning on a constraint the app never actually lacked.
+    `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, release_date, raw_data, last_synced, projection_version)
+     VALUES (?, 'item-1', ?, ?, 'movie', 'Title', '2026-01-01', '{}', 0, ?)`
+  ).run(id, source, `src-${id}`, version);
 }
 
 // Run the full migration set once (builds the schema up through the latest

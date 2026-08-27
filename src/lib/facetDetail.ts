@@ -19,7 +19,7 @@ import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import type { DiscoveryVector } from "@/lib/discovery";
 import { itemsWithFacet, resolvePersonTmdbId } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
-import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
+import { getUserStateMap, resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import { fandexForPage } from "@/lib/liveDiscover";
 import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { tmdbGenreId, resolveTmdbKeywordId } from "@/lib/sources/tagDiscover";
@@ -536,14 +536,14 @@ function finishExternalCandidates(
     }));
   try { persistDiscoverItems(persistable); } catch { /* live-only this round */ }
 
-  const extMap = resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId })));
+  const extMap = resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId, type: t.type })));
   const state = getUserStateMap(userId, [...new Set(extMap.values())]);
 
   const seen = new Set<string>();
   const local = new Set<string>(); // ids that resolved to a real media_items row
   const out: FacetDetailItem[] = [];
   for (const t of external) {
-    const mid = extMap.get(`${t.source}:${t.sourceId}`);
+    const mid = extMap.get(sourceRefKey(t.source, t.sourceId, t.type));
     const key = mid ?? `${t.source}-${t.type}-${t.sourceId}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -606,7 +606,7 @@ function assemble(
   catVectors: DiscoveryVector[], external: ExtTitle[] | null
 ): FacetDetailPayload {
   // State for every media id we touch (catalog + external titles that resolve locally).
-  const extMap = external ? resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId }))) : new Map<string, string>();
+  const extMap = external ? resolveMediaIdsBySource(external.map((t) => ({ source: t.source, sourceId: t.sourceId, type: t.type }))) : new Map<string, string>();
   const mediaIds = new Set<string>(catVectors.map((v) => v.id));
   for (const mid of extMap.values()) mediaIds.add(mid);
   const state = getUserStateMap(userId, [...mediaIds]);
@@ -624,7 +624,7 @@ function assemble(
     });
   }
   for (const t of external ?? []) {
-    const mid = extMap.get(`${t.source}:${t.sourceId}`);
+    const mid = extMap.get(sourceRefKey(t.source, t.sourceId, t.type));
     const key = mid ? `mid:${mid}` : `${t.source}:${t.sourceId}`;
     const existing = map.get(key);
     if (existing) {

@@ -29,6 +29,35 @@ Everything else in this file is either done or a standing constraint.
 
 5. **Calendar: two things want your eyes on a real desktop browser, not a fix** (2026-08-26, `0bc9b7a` `d36952e` `1026550`). The page is now exactly one viewport tall and never scrolls, which meant **desktop day cells went from 128px to ~97px** so a six-week month fits without one; that is a visible change nobody has looked at outside the measurement. And the **rail cards' hover tooltip is unverified**: `(hover: hover)` is false in the browser pane, so neither the changed code nor a control can be exercised there. **A third joined them 2026-08-26:** does the height budget **re-fit when the window is resized**? `boxH` comes from a `ResizeObserver`, and the browser pane never delivers one, so no Claude session can test it. If it does not re-fit, the symptom is cells keeping their old height inside a shrunken `overflow-hidden` box, i.e. **weeks clipped with nothing to scroll to them**. Open `/calendar`, drag the window shorter, count the week rows. The other two are settled enough to state: desktop cells measure **95px** at 1280×900, and everything else in 13j/13ja passes at 375 and 1280, anon and authed, dev and prod. Checks are in [smoketest.md](smoketest.md) 13j/13ja/13jb.
 
+6. **SM50's data repair still has to run against PROD.** The code fix ships with this commit and
+   migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
+   from the moment it deploys**. The rows already merged there do not fix themselves.
+
+   **What to run, on the Railway box, after the deploy lands:**
+   ```
+   node scripts/repair-cross-type-links.mjs data/rr.db           # report only, read it first
+   node scripts/repair-cross-type-links.mjs data/rr.db --apply
+   ```
+   It is idempotent and prints its whole plan before touching anything. On the local database it
+   moved 4 links (with their episode rows and external ids) and scrubbed 4 merged payloads.
+   ⚠️ **Prod's numbers may differ** — it syncs the same Trakt account, so expect the same four, but
+   read the report rather than assuming. ⚠️ **Copy the `-wal` and `-shm` alongside the `.db` if you
+   rehearse on a copy**; a plain `cp data/rr.db` reads an older database and invented a 9-row
+   discrepancy while this was being written.
+   ⚠️ **A restore drill is due**: migration 23 rebuilds a table, which is a schema change, and the
+   standing rule is that a drill proves the backup you had that day.
+
+7. **SM53 is a design call, not a fix, and it is yours** (12th smoke test). At 375×812 the calendar's
+   sticky filter bar takes **175px, 22% of the viewport**: two wrapped rows of seven 40px icon-only
+   circles, plus a 38px view-toggle row, leaving the grid 486px. Nothing is broken (hit areas pass,
+   `.tap-44` gives each chip a 44×44 target with no overlap) — the point is that on the one page
+   whose whole design is now a fixed height budget, the chips are the biggest single claim on it.
+   **Deliberately not changed**: it is a visual decision on a page already waiting for your eyes
+   (item 5), and the standing rule here is no unprompted visual passes. Three ways out, cheapest
+   first: (a) shrink the chips so all seven fit ONE row, ~48px back; (b) collapse them into a single
+   "Filters" button with a count, ~90px back; (c) leave it, and accept the grid at 486px. Say which
+   and it is a small change.
+
 **Standing constraints. Not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
 - **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative line stays; no number ever joins it.
@@ -105,29 +134,18 @@ The three findings that decided it, so nobody re-derives them:
 
 ---
 
-## Smoke test — 2026-08-26 (12th run)
+## Smoke test — 2026-08-26 (12th run) ✅ WORKED THROUGH 2026-08-27
 
-Scope: local, both auth states. Dev server for the authed sweep, **production build** (`:3100`) for
-the anon half via `127.0.0.1` and to re-confirm SM49/SM51 off the dev build. Calendar 13j/13ja
-exercised in full (Needs Nils item 5). Overall health is good: the calendar rework holds up on
-every check it was written for, and the two 🟠s below are both the *shared-view-two-routes* trap,
-not the new work. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
-
-| ID | Sev | Type | Area | Finding (with repro) |
-|----|:--:|:--:|------|----------------------|
-| SM49 | 🟠 | perf | MyStuffView | **SM19's 300-card render cap never applies on the route the nav actually links to.** `capRender = route === "library" && …` (`MyStuffView.tsx:335`) gates on the ROUTE, but the Library **tab** is reachable at `/wishlist?tab=library` — and `AppNav` has no `/library` link at all, so that IS the signed-in path to your library. Measured on the prod build, same view, same data: `/library` = 300 cards / 6,519 nodes / 18,976px / 70 ms keystroke; `/wishlist?tab=library` = **1,929 cards / 40,748 nodes / 120,583px / 199 ms**. (Under `next dev` the keystroke is 1,544 ms, i.e. SM19's original number.) Repro: sign in → `/wishlist` → click the Library tab → `document.querySelectorAll('a[href^="/game/"],a[href^="/movie/"],a[href^="/show/"]').length`. |
-| SM50 | 🟠 | data | matcher / item page | **Three Trakt SHOWS are merged onto MOVIE catalog rows, and it is visible on a public item page.** `media_links` holds trakt show 386 *SpongeBob SquarePants* on the movie **Being John Malkovich**, trakt 1416 *House of Cards* on **Ratatouille**, trakt 113656 *Legion* on **The Raid 2**. Consequences, all verified: (a) `/movie/being-john-malkovich` renders **"Official site" → `https://spongebob.nick.com/`** and **"Trakt" → `trakt.tv/movies/spongebob-squarepants`**, plus SpongeBob's genres (Animation, Family) merged into the film's; (b) **249 `user_episode_state` rows sit on movies** (BJM 182 in 5 coherent seasons, Ratatouille 65, The Raid 2 two); (c) the real `spongebob-squarepants` and `house-of-cards` show rows have **0** episode progress. One row carries two different TMDB ids (`tmdb:387` the show + `tmdb:492` the movie). Blast radius is small — **3 of 2,734 items** — but it is on a crawlable page. The item-page type guard does hold: the movie shows no "Your progress" section. |
-| SM51 | 🟡 | ui | MyStuffView | Search placeholder is route-derived, not tab-derived: on `/wishlist?tab=library` the `<h1>` and header count correctly say **Library** while the box still reads **"Search your wishlist…"**. Same family as SM21 (which fixed the h1 and count) and the same root cause as SM49. |
-| SM52 | 🔵 | ux | anon gates | `/insights`, `/profile` and `/settings` still `router.replace("/")` for anon rather than asking on the page, which is the pattern AN2 replaced for `/library` and `/wishlist`. Mitigating: the destination is not silent (Home shows a "GUEST MODE · Sign in to unlock your Fandex Score" panel) and the redirect correctly uses `replace`, so Back is not trapped (SM8 re-verified: `/discover` → `/insights` → `/` → Back lands on `/discover`, `history.length` +1 not +2). Recorded because AGENTS.md states the bounce as fact while the invariant above it says a gate must ask; nothing tracks the gap as open. |
-| SM53 | 🔵 | ui | Calendar filter bar | At 375×812 the sticky filter bar takes **175px, 22% of the viewport**, as two wrapped rows of seven 40px icon-only circles plus a 38px view-toggle row, leaving the grid 486px. On the one page whose entire design is now a fixed height budget, the chips are the largest single claim on it. Hit areas are fine (`.tap-44` gives each a 44×44 `::after`; nearest-neighbour clearance 4px horizontal / 16px vertical, no overlap) — this is about the budget, not the targets. |
-
-**Held up well.** Calendar (the whole of 13j/13ja): one tap target per day proven by `elementFromPoint` over 30 points × 4 cell kinds (empty / single / 2-up / 3-up-with-"+1"), 0 misses; no cell navigates to an item; an empty day says "Nothing releasing on this day"; busy and empty rails are both exactly 395px; `scrollHeight - innerHeight === 0` and `scrollY === 0` in every state, at 375 and 1280, anon and authed, dev and prod; the month collapses to one week on open and back on close; swipe pages the month while a vertical drag, a 900 ms drag, and a sideways drag inside the rail all correctly do not. **13b (the 2026-08-26 `addedAt` fix): both halves.** Wishlist is strictly `addedAt`-descending over all 93 matched cards, Library over 500 — and 13b-i holds, an item in both collections carries two distinct dates (The Godfather, Slay the Spire II). ⚠️ Key the order check on the **slug**, not the title: 35 titles are duplicated in the catalog and title-keying invented three phantom violations. **Episode tracking now has real data locally** (12,343 watched rows, 280 shows) — 13n's "live but pulls nothing" no longer reproduces here: Friends renders 10 seasons at 24/24 etc. summing to the DB's 228, one tracker mount, season expand lazily fetches real episode titles, and Home's "Up next" rail lists 10 real next-episodes with every tick box empty at rest. Insights reconciles exactly (922 + 274 + 481 = 1,677 rated = the histogram's sum). Anon: Home/Discover/facet cards all carry sign-in controls (0 without), `/calendar` is public with dimmed chips that open the dialog, `/wishlist` + `/library` gate in place on their own paths, nav search works with real `<a href>` and a full keyboard path (Arrow keys move `aria-activedescendant`, Enter navigates), Discover search shows Titles only. Titles correct on hard load for all 10 routes; 404s branded; `/dashboard` 308 → `/wishlist`; `/calendar/1999-01` 404s; robots/sitemap dynamic. Provider degradation is genuinely covered — **RAWG's breaker is open right now** (quota, Needs Nils item 2) and games still arrive from IGDB on initial browse, games load-more, `/api/home` and `/api/calendar/popular`; the log shows one warn line per skip, no stack traces. Repeat calls return identical order and counts. No console errors anywhere.
-
-**Not exercised:** any write (episode ticks and ratings push to Nils's real Trakt account), so 13m's Trakt round trip is still unverified. Anything frame-driven — see the new tooling section in [smoketest.md](smoketest.md).
+**SM49, SM50, SM51 and SM52 are fixed; SM53 is a decision for Nils and lives in "Needs Nils" item 7
+above.** The findings, their measured before/after and the four things they taught are in
+[docs/archive/history.md](docs/archive/history.md) — grep `12th run`. The rules that outlived them
+are in [AGENTS.md](AGENTS.md) and their memory files ([[cross-type-identity-merge]],
+[[shared-view-two-routes]], [[anon-gates-must-ask-not-bounce]], [[unhydrated-page-diagnosis]]).
+The checks are in [smoketest.md](smoketest.md) 1c-i, 13e-i and 13n-i.
 
 ## Still open elsewhere
 
-- **`/library` + `/wishlist` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
+- **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
 
 - **Facet pages link only titles we already hold** (13 of 60 on `/person/christopher-nolan`). Under-linking, not a rendering bug; they stay out of the sitemap until it is fixed. → [docs/seo.md](docs/seo.md)
 

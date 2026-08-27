@@ -33,8 +33,8 @@ describe("persistDiscoverBatch — anonymous resolution (SM38)", () => {
     run("DELETE FROM media_items");
     run("INSERT INTO media_items (id, type, title) VALUES ('uuid-known', 'movie', 'Known Movie')");
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, raw_data)
-       VALUES ('link-known', 'uuid-known', 'tmdb', '555', '{}')`
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, raw_data)
+       VALUES ('link-known', 'uuid-known', 'tmdb', '555', 'movie', '{}')`
     );
   });
 

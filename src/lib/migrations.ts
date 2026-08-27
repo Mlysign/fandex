@@ -977,6 +977,93 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 23,
+    name: "media_links.media_type: a provider id is only unique WITHIN a media type (SM50)",
+    up: (db) => {
+      // WHAT WAS WRONG. `media_links` was UNIQUE(source, source_id), which reads
+      // as "a provider id names one work". For Trakt and TMDB it does not: both
+      // number movies and shows in SEPARATE sequences, so trakt movie 386
+      // (Being John Malkovich) and trakt show 386 (SpongeBob SquarePants) are
+      // two different works with the same (source, source_id).
+      //
+      // matcher.ts's first step is "if this exact source link already exists,
+      // update it", looked up on that pair alone. So the SpongeBob pull found
+      // the film's link row, took its media_item_id, and overwrote the row's
+      // payload — which merged the show's genres, certification and official
+      // site into the FILM's projection, and filed 182 episode-watch rows
+      // against a movie. Two more pairs did the same (House of Cards →
+      // Ratatouille, Legion → The Raid 2). The show rows exist and are correct;
+      // they simply have no Trakt link, because the movie is holding it.
+      //
+      // Nothing caught it. findMatchingItem() type-filters properly, the UI's
+      // type guard held (the movie page renders no episode UI despite the rows),
+      // tsc and 1,049 tests passed, and the only visible symptom was an
+      // "Official site" link to spongebob.nick.com on a public movie page.
+      //
+      // THE FIX is to say what is actually true in the key: uniqueness is per
+      // (source, source_id, media_type). SQLite cannot alter a table-level
+      // UNIQUE in place, so this is the standard 12-step rebuild. Cheap: 6,912
+      // rows, and nothing in sqlite_master references media_links but its own
+      // two indexes (checked before writing this).
+      //
+      // The bad rows are NOT repaired here. A migration must not decide which of
+      // two real works a user's watch history belongs to — that is a data call,
+      // and it lives in scripts/repair-cross-type-links.mjs where it can be run
+      // against a copy first and print what it would do.
+      const cols = db.pragma("table_info(media_links)") as { name: string }[];
+      if (cols.some((c) => c.name === "media_type")) return; // fresh DB: db.ts already built the new shape
+
+      // ⚠️ legacy_alter_table, and why it is not optional here. Since SQLite
+      // 3.25 an `ALTER TABLE … RENAME TO` re-parses EVERY view and trigger in
+      // the schema so it can rewrite references to the old name. If any view is
+      // unresolvable at that moment the rename throws — and this schema carries
+      // `user_watchlist` / `user_library`, which are VIEWS over `user_item_state`
+      // (migration 16). That table is created by db.ts's boot block, not by a
+      // migration, so on any path that runs migrations WITHOUT that block (the
+      // upgrade test, and anything standalone that grows one) the rename dies on
+      // "error in view user_watchlist: no such table: user_item_state" — a
+      // failure with nothing to do with media_links. This pragma is SQLite's own
+      // escape hatch for the 12-step rebuild: rename the table only, touch no
+      // view. Nothing references media_links by name anyway.
+      const legacy = db.pragma("legacy_alter_table", { simple: true });
+      db.pragma("legacy_alter_table = ON");
+      try {
+      db.exec(`
+        CREATE TABLE media_links_v23 (
+          id TEXT PRIMARY KEY,
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          media_type TEXT NOT NULL,
+          title TEXT,
+          release_date TEXT,
+          raw_data TEXT NOT NULL,
+          last_synced INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          projection_version INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(source, source_id, media_type)
+        );
+
+        INSERT INTO media_links_v23
+          (id, media_item_id, source, source_id, media_type, title, release_date, raw_data, last_synced, projection_version)
+        SELECT l.id, l.media_item_id, l.source, l.source_id, m.type,
+               l.title, l.release_date, l.raw_data, l.last_synced, l.projection_version
+          FROM media_links l JOIN media_items m ON m.id = l.media_item_id;
+
+        DROP TABLE media_links;
+        ALTER TABLE media_links_v23 RENAME TO media_links;
+
+        CREATE INDEX IF NOT EXISTS idx_links_item ON media_links(media_item_id);
+        CREATE INDEX IF NOT EXISTS idx_links_source ON media_links(source, source_id);
+      `);
+      } finally {
+        db.pragma(`legacy_alter_table = ${legacy ? "ON" : "OFF"}`);
+      }
+      // The JOIN above drops any link whose media_item is already gone. That can
+      // only be a row the ON DELETE CASCADE failed to take (an old pre-FK write);
+      // keeping it would break the NOT NULL media_type with nothing to fill it.
+    },
+  },
 ];
 
 

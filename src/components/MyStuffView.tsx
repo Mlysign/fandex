@@ -38,6 +38,17 @@ const TAB_LABEL: Record<MyStuffTab, string> = { wishlist: "Wishlist", progress: 
 // label, not a phrase — "in library · 1922" is clumsy where "titles · 1922"
 // isn't, and the tab is already called Library.
 const TAB_NOUN: Record<MyStuffTab, string> = { wishlist: "saved", progress: "episodes", library: "titles" };
+// SM51 (2026-08-27) — the placeholder was route-derived, so the Library tab at
+// /wishlist?tab=library sat under an <h1> reading "Library" while the search box
+// still offered to search your wishlist. Everything the toolbar says about the
+// visible set tracks the ACTIVE TAB, same as the heading and the count (SM21).
+// Progress doesn't filter by this box at all (MB16), so it borrows the library
+// wording rather than inventing a third noun.
+const TAB_SEARCH_PLACEHOLDER: Record<MyStuffTab, string> = {
+  wishlist: "Search your wishlist…",
+  progress: "Search your library…",
+  library: "Search your library…",
+};
 
 // usePersistedState's `normalize` param must be a STABLE reference (its own
 // hydrate effect is keyed on it) — a fresh arrow every render re-runs that
@@ -332,7 +343,15 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // than fight the restore — the (rare) cost is one full-list render on that
   // one navigation, not on every visit.
   const INCREMENTAL_PAGE = 300;
-  const capRender = route === "library" && autoTodaySampled;
+  // SM49 (2026-08-27): this was `route === "library"`, which is not where the
+  // Library tab actually lives. AppNav links no /library at all, so the
+  // signed-in path to it is /wishlist?tab=library — the one route the cap
+  // skipped. Measured on the prod build, same view and same data: capped 300
+  // cards / 6,519 DOM nodes / 18,976px / 70 ms keystroke, uncapped 1,929 /
+  // 40,748 / 120,583px / 199 ms. Gate on the ACTIVE TAB; a `route ===`
+  // condition in this component is a bug waiting for whichever route the nav
+  // happens to prefer.
+  const capRender = activeTab === "library" && autoTodaySampled;
 
   const isBusy = syncing || autoSyncing;
 
@@ -343,7 +362,12 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // to work. `anon === null` (probe in flight) falls through to the normal
   // loading spinner rather than flashing this.
   if (anon) {
-    const noun = route === "library" ? "library" : "wishlist";
+    // SM49/SM51's family again: the gate's copy and its return-to both used to
+    // be route-derived, so the Library tab at /wishlist?tab=library offered to
+    // show you your *wishlist* under an <h1> reading Library, and signing in
+    // dropped you back on the Wishlist tab you never asked for.
+    const noun = TAB_LABEL[activeTab].toLowerCase();
+    const returnTo = `/${route}${activeTab === initialTab ? "" : `?tab=${activeTab}`}`;
     return (
       <div className="min-h-screen">
         <h1 className="sr-only">{TAB_LABEL[activeTab]}</h1>
@@ -363,7 +387,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         </main>
         {showSignIn && (
           <SignInDialog
-            returnTo={`/${route}`}
+            returnTo={returnTo}
             onClose={() => setShowSignIn(false)}
             // RAWG signs in in-place with no redirect, so nothing re-mounts on
             // its own: drop the cached probe and re-run init(), which clears
@@ -391,7 +415,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         tabs={<LibraryWishlistTabs active={activeTab} onChange={changeTab} />}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder={route === "library" ? "Search your library…" : "Search your wishlist…"}
+        searchPlaceholder={TAB_SEARCH_PLACEHOLDER[activeTab]}
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} />}

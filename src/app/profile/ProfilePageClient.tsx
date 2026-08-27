@@ -19,6 +19,7 @@ import ErrorState from "@/components/ui/ErrorState";
 import Rail from "@/components/Rail";
 import PosterCard from "@/components/PosterCard";
 import LegalFooter from "@/components/legal/LegalFooter";
+import SignInGate from "@/components/auth/SignInGate";
 import { SUPPORT_URL, hasSupportLink, supportLabel } from "@/components/legal/SupportLink";
 
 // 2026-07-27 (Nils, mockup-vs-live pass) — the hub is a MERGE of two source
@@ -67,7 +68,12 @@ export default function ProfilePageClient() {
     setError(false);
     try {
       const meRes = await fetch("/api/auth/me").then((r) => r.json()) as Me;
-      if (!meRes.user) { router.replace("/"); return; }
+      // SM52 — this used to router.replace("/"). `undefined` is "still
+      // checking", `null` is "signed out, render the ask". The whole page is
+      // the visitor's own identity and counts, so there is no public half to
+      // keep. It also un-hides the legal footer for an anonymous visitor who
+      // reaches /profile by url, which the bounce used to swallow.
+      if (!meRes.user) { setMe(null); return; }
       setMe(meRes.user);
       const identities = meRes.identities ?? [];
       if (identities.length > 0) {
@@ -86,7 +92,7 @@ export default function ProfilePageClient() {
     } catch {
       setError(true);
     }
-  }, [router]);
+  }, []);
 
   // Fetch-on-mount: the server can't know the session, so identity + the hub's
   // stats/upcoming/recommendations are all resolved client-side. Same
@@ -105,6 +111,24 @@ export default function ProfilePageClient() {
   }
   if (error) {
     return <main className="min-h-screen"><div className="max-w-2xl mx-auto px-6 py-10"><ErrorState title="Couldn't load your profile" hint="Check your connection and try again." onRetry={load} /></div></main>;
+  }
+  if (me === null) {
+    return (
+      <main className="min-h-screen">
+        <div className="max-w-2xl mx-auto px-6 py-10">
+          <SignInGate
+            title="Sign in to see your profile"
+            hint="Your counts, what you added recently and what is coming up all live behind a sign-in. Nothing here exists without an account."
+            returnTo="/profile"
+            onAuthenticated={load}
+          />
+        </div>
+        {/* The legal links stay reachable on the signed-out page too. Every
+            other route reaches them through this footer, and the old bounce
+            meant an anonymous visitor who typed /profile got neither. */}
+        <LegalFooter />
+      </main>
+    );
   }
 
   const onSelect = (i: any) => router.push(buildItemHref(i));

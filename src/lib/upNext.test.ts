@@ -48,8 +48,8 @@ function show(
 ) {
   run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
   run(
-    `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-     VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+    `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+     VALUES (?, ?, 'tmdb', ?, 'show', ?, '{}')`,
     [`${id}-l`, id, id, title],
   );
   for (const s of seasons) {
@@ -276,8 +276,8 @@ describe("the bounded catalog heal", () => {
   function unopenedShow(id: string, title: string) {
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-       VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+       VALUES (?, ?, 'tmdb', ?, 'show', ?, '{}')`,
       [`${id}-l`, id, id, title],
     );
   }
@@ -426,8 +426,8 @@ describe("backfillUpNextCatalog — the bulk fill behind the rail", () => {
   function unopenedShow(id: string, title: string) {
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-       VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+       VALUES (?, ?, 'tmdb', ?, 'show', ?, '{}')`,
       [`${id}-l`, id, id, title],
     );
   }
@@ -523,8 +523,8 @@ describe("buildUpNextPage — the library's Progress tab", () => {
   function unopenedShow(id: string, title: string) {
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-       VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+       VALUES (?, ?, 'tmdb', ?, 'show', ?, '{}')`,
       [`${id}-l`, id, id, title],
     );
   }

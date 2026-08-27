@@ -68,9 +68,9 @@ function seed(id: string, type: "game" | "movie") {
   const sources = type === "game" ? ["igdb", "rawg"] : ["tmdb"];
   for (const source of sources) {
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data, projection_version)
-       VALUES (?, ?, ?, ?, ?, '{"name":"seed"}', 0)`,
-      [`${id}-${source}`, id, source, `${source}-${id}`, id]
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data, projection_version)
+       VALUES (?, ?, ?, ?, ?, ?, '{"name":"seed"}', 0)`,
+      [`${id}-${source}`, id, source, `${source}-${id}`, type, id]
     );
   }
 }
@@ -205,8 +205,8 @@ describe("POST /api/discover/scores — heal budget (SM44)", () => {
     const id = uuid(2);
     run(`INSERT INTO media_items (id, type, title, norm_title, browsed) VALUES (?, 'movie', 'M2', 'm2', 1)`, [id]);
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data, projection_version)
-       VALUES (?, ?, 'tmdb', 'tmdb-m2', 'M2', '{}', ?)`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data, projection_version)
+       VALUES (?, ?, 'tmdb', 'tmdb-m2', 'movie', 'M2', '{}', ?)`,
       [`${id}-tmdb`, id, PROJECTION_VERSION]
     );
 

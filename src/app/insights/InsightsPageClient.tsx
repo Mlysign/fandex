@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import InsightsView from "@/components/insights/InsightsView";
@@ -9,11 +8,11 @@ import Spinner from "@/components/ui/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import Eyebrow from "@/components/ui/Eyebrow";
+import SignInGate from "@/components/auth/SignInGate";
 
-type Status = "loading" | "ready" | "empty" | "error";
+type Status = "loading" | "ready" | "empty" | "error" | "anon";
 
 export default function InsightsPageClient() {
-  const router = useRouter();
   const [status, setStatus] = useState<Status>("loading");
   const [data, setData] = useState<InsightsPayload | null>(null);
 
@@ -21,7 +20,11 @@ export default function InsightsPageClient() {
     setStatus("loading");
     const me = await fetch("/api/auth/me");
     const meData = await me.json();
-    if (!meData.user) { router.replace("/"); return; }
+    // SM52 — this used to router.replace("/"). Every chart on this page is
+    // built from YOUR ratings, so there is no public half to show; the page
+    // becomes the ask instead of vanishing. See SignInGate for why a bounce
+    // reads as a broken link rather than as a gate.
+    if (!meData.user) { setStatus("anon"); return; }
     try {
       const res = await fetch("/api/insights");
       if (!res.ok) throw new Error("request failed");
@@ -32,7 +35,7 @@ export default function InsightsPageClient() {
     } catch {
       setStatus("error");
     }
-  }, [router]);
+  }, []);
 
   // Fetch-on-mount: the server can't know the session, so the auth-gate + the
   // insights payload are both resolved client-side. Same justified disable the
@@ -64,6 +67,15 @@ export default function InsightsPageClient() {
             title="No rated items in your library yet"
             hint="Rate a few games, movies or shows, then come back. Every chart here is built from your ratings."
             actions={<Link href="/library" className="text-label text-accent hover:underline">Go to Library →</Link>}
+          />
+        )}
+        {status === "anon" && (
+          <SignInGate
+            icon={<BarChart3 className="w-5 h-5" aria-hidden />}
+            title="Sign in to see your Insights"
+            hint="Every chart here is built from what you have rated. Connect Trakt, Steam, RAWG or TMDB and your taste profile fills itself in."
+            returnTo="/insights"
+            onAuthenticated={init}
           />
         )}
         {status === "ready" && data && <InsightsView data={data} />}

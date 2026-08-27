@@ -49,20 +49,29 @@ function mergeRawData(prevJson: string | null | undefined, next: any): any {
 // Returns the media_item_id.
 export function upsertMediaItem(item: SourceItem): string {
   return transaction(() => {
-    // 1. If this exact source link already exists, update its raw data
+    // 1. If this exact source link already exists, update its raw data.
+    //
+    // SM50 (2026-08-27) — "exact" includes the TYPE. Trakt and TMDB number
+    // movies and shows in separate sequences, so trakt movie 386 (Being John
+    // Malkovich) and trakt show 386 (SpongeBob SquarePants) are two works
+    // sharing a (source, source_id). Without `media_type` here, the show's pull
+    // found the film's row, took its media_item_id and overwrote the payload —
+    // which merged the show's genres and official site into the film and filed
+    // 182 episode rows against a movie. Migration 23 widened the UNIQUE to
+    // match, so the two can now coexist as separate rows.
     const existing = get<{ media_item_id: string; raw_data: string }>(
-      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ?",
-      [item.source, item.sourceId]
+      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ? AND media_type = ?",
+      [item.source, item.sourceId, item.type]
     );
     if (existing) {
       // A thin (list-payload) write never degrades a stored link — see SourceItem.thin.
       if (item.thin) return existing.media_item_id;
       run(
-        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ?",
+        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ? AND media_type = ?",
         // H2a: project AFTER merging, so the merge still sees the stored blob
         // (possibly a fat pre-projection one) and the result is stamped current.
         [JSON.stringify(projectRawData(item.source, mergeRawData(existing.raw_data, item.rawData))),
-         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId]
+         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId, item.type]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
@@ -72,9 +81,9 @@ export function upsertMediaItem(item: SourceItem): string {
     const mediaItemId = findMatchingItem(item);
     if (mediaItemId) {
       run(
-        `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
+        `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, release_date, raw_data, projection_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), mediaItemId, item.source, item.sourceId, item.type, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
       );
       remergeItem(mediaItemId);
       return mediaItemId;
@@ -95,9 +104,9 @@ export function upsertMediaItem(item: SourceItem): string {
       [newId, item.type, item.title, normalizeName(item.title), item.releaseDate, null, item.thin ? 1 : 0]
     );
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, release_date, raw_data, projection_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), newId, item.source, item.sourceId, item.type, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
     );
     remergeItem(newId);
     // The public url's address segment, assigned once and never again (see
@@ -197,25 +206,35 @@ function findMatchingItem(item: SourceItem): string | null {
 // landing on a different item that merely shares the title.
 export function linkSourceToItem(mediaItemId: string, item: SourceItem): string {
   return transaction(() => {
+    // SM50 — the link's `media_type` comes from the TARGET row, not from
+    // `item.type`. This function's whole job is "attach to the item I already
+    // identified", so the target is the authority; taking the type off the
+    // payload would let a mistyped enrich() write a row whose namespace
+    // disagrees with its owner, which is the same cross-type merge one door
+    // over. It also means the lookup below can't find a different type's row
+    // and overwrite it.
+    const owner = get<{ type: string }>("SELECT type FROM media_items WHERE id = ?", [mediaItemId]);
+    const mediaType = owner?.type ?? item.type;
+
     const existing = get<{ media_item_id: string; raw_data: string }>(
-      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ?",
-      [item.source, item.sourceId]
+      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ? AND media_type = ?",
+      [item.source, item.sourceId, mediaType]
     );
     if (existing) {
       run(
-        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ?",
+        "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ? AND media_type = ?",
         // H2a: project AFTER merging, so the merge still sees the stored blob
         // (possibly a fat pre-projection one) and the result is stamped current.
         [JSON.stringify(projectRawData(item.source, mergeRawData(existing.raw_data, item.rawData))),
-         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId]
+         item.title, item.releaseDate, PROJECTION_VERSION, item.source, item.sourceId, mediaType]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
     }
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, release_date, raw_data, projection_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), mediaItemId, item.source, item.sourceId, mediaType, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
     );
     remergeItem(mediaItemId);
     return mediaItemId;

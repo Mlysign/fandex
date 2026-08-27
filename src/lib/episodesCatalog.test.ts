@@ -22,8 +22,8 @@ beforeEach(() => {
   run("DELETE FROM media_items");
   run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', 'Andor', 'andor')", [SHOW]);
   run(
-    `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-     VALUES ('l1', ?, 'tmdb', '83867', 'Andor', '{}')`,
+    `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+     VALUES ('l1', ?, 'tmdb', '83867', 'show', 'Andor', '{}')`,
     [SHOW],
   );
 });
@@ -200,8 +200,8 @@ describe("Trakt as the episode catalog — for a show TMDB never linked", () => 
   const traktOnly = (id: string) => {
     run("DELETE FROM media_links");
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-       VALUES ('lt', ?, 'trakt', '155', 'Andor', '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+       VALUES ('lt', ?, 'trakt', '155', 'show', 'Andor', '{}')`,
       [id],
     );
   };
@@ -252,8 +252,8 @@ describe("Trakt as the episode catalog — for a show TMDB never linked", () => 
   it("prefers TMDB when both are linked — stills and overviews are worth the extra call", async () => {
     // media_links already has the TMDB row from the outer beforeEach.
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-       VALUES ('lt', ?, 'trakt', '155', 'Andor', '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+       VALUES ('lt', ?, 'trakt', '155', 'show', 'Andor', '{}')`,
       [SHOW],
     );
     const f = vi.fn().mockResolvedValue(ok(SEASONS));

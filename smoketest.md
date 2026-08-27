@@ -143,6 +143,16 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
     nothing matched must land on `/discover` with the query carried into its search field.
     **The tell for the whole class:** a non-OK response deliberately keeps the dropdown CLOSED, so
     a gating regression looks like "no matches", not like an error.
+1c-i. **`/insights`, `/profile` and `/settings` anon — same rule, fixed 2026-08-27 (SM52).** All
+    three used to `router.replace("/")`. Each must now stay on its own `location.pathname` and read
+    "Sign in to see your Insights" / "…your profile" / "…open your settings", with a working Sign in
+    button and a "Browse without an account →" link. They share one component,
+    `components/auth/SignInGate.tsx`, so check all three: a regression in the gate shows up on
+    whichever page you skip. `/profile` additionally must render the LEGAL FOOTER while signed out
+    (Privacy / Terms / Contact / Imprint) — the bounce used to swallow it, which is the
+    [[anon-legal-reachability]] gap. ⚠️ **Verify on the `prod` config, not `next dev`**: `/settings`
+    is a fourth page in the unhydrated-subtree family (`mainFibers` 0, `bodyFibers` 2 under dev), so
+    the dev server renders the signed-in chrome with everything empty for anon and authed alike.
 1e. **Every anon gate must ASK, never disappear.** Sweep the logged-out surface for controls that
     silently do nothing: the item page's "Sign in to see your Fandex Score" panel must be a real
     `<button>` (AN5), and card Rate/Wishlist must open the dialog rather than 401 into a
@@ -268,15 +278,22 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     Also re-time a search keystroke (set `.value` via the native setter, dispatch `input`, measure
     around the dispatch, **especially clearing the box back to empty** — 1,426ms pre-fix) — the
     search filter now reads a 200ms-debounced value, so this should be well under 100ms.
-13e-i. **⚠️ Check the cap on BOTH routes, and note which one the nav links to (SM49, 2026-08-26).**
-    13e above names `/library`, and `/library` passes — which is exactly how this stayed open. The
-    cap is `capRender = route === "library" && …`, so the identical Library **tab** at
-    `/wishlist?tab=library` renders the whole list, and **`AppNav` has no `/library` link at all**,
-    so the uncapped route is the one a signed-in person actually reaches. Run the count on BOTH and
-    diff them; on the prod build it was 300 / 6,519 nodes vs **1,929 / 40,748**. Generalise it:
+13e-i. **⚠️ Check the cap on BOTH routes, and note which one the nav links to (SM49, ✅ FIXED
+    2026-08-27).** The cap now reads `capRender = activeTab === "library"`, and
+    `src/components/myStuffRouteConditions.test.ts` fails on any `route ===` condition in that file.
+    Measured after the fix on the prod build, signed in: `/library` 300 cards / 6,519 nodes,
+    `/wishlist?tab=library` **300 / 6,519** (was 1,929 / 40,748 / 120,583px), `/wishlist` 95 / 2,222.
+    Keep running it anyway; the point below is what generalises.
+    13e above names `/library`, and `/library` passed — which is exactly how this stayed open. The
+    cap was `capRender = route === "library" && …`, so the identical Library **tab** at
+    `/wishlist?tab=library` rendered the whole list, and **`AppNav` has no `/library` link at all**,
+    so the uncapped route was the one a signed-in person actually reaches. Run the count on BOTH and
+    diff them. Generalise it:
     **whenever a fix is gated on `route ===`, in a component two routes share, the check must name
-    both.** Same probe catches SM51, the placeholder that still says "Search your wishlist…" while
-    the `<h1>` says Library. ⚠️ **Clear `rr_`-prefixed storage between the two measurements** — the
+    both.** Same probe catches SM51, the placeholder that said "Search your wishlist…" while
+    the `<h1>` said Library (✅ fixed the same day; it is `TAB_SEARCH_PLACEHOLDER[activeTab]` now,
+    and the anon gate's copy and its returnTo went with it). ⚠️ **Clear `rr_`-prefixed storage
+    between the two measurements** — the
     persisted `rr_mystuff_search` carried a search term across and the control read 2 cards.
 13e-ii. **Key an order/sort assertion on the SLUG, never the title.** 35 titles are duplicated in
     the local catalog (a 1999 anime and a 2023 live-action *One Piece*, both legitimately present
@@ -379,9 +396,15 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     still compares `?extended=full` against the plain call and says which half is empty.
     ⚠️ `catalogEps` far below `watchedEps` (One Piece: 26 vs 1,157) is the LAZY FILL working as
     designed — only expanded seasons are cached. Not a finding.
-13n-i. **Audit for cross-type identity merges — three were live and one was on a public page
-    (SM50, 2026-08-26).** Two cheap SQL probes, and run both; the first one is what makes the
-    second legible:
+13n-i. **Audit for cross-type identity merges (SM50).** ✅ **Root cause fixed and the rows repaired
+    2026-08-27**, so both probes below should now return ZERO. Keep running them: they are cheap,
+    and they are the only check that would catch a new door onto the same bug. `media_links` is
+    UNIQUE(source, source_id, **media_type**) since migration 23, and `scripts/repair-cross-type-
+    links.mjs` is the one-off repair (report-only without `--apply`).
+    ⚠️ **A fourth pair was found by the repair script that these two probes MISSED**: tmdb 1402
+    (*The Walking Dead* the show) on the movie *The Pursuit of Happyness*. It had zero episode rows
+    and one tmdb id, so probe 1 and probe 2 both passed it. Run the script's report as a third probe.
+    Two cheap SQL probes, and run both; the first one is what makes the second legible:
     ```sql
     -- a SHOW's episodes filed against a non-show row
     SELECT m.type, m.slug, COUNT(*) FROM user_episode_state u

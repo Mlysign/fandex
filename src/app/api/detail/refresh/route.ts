@@ -29,7 +29,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
 
     // Resolve the canonical item (UUID or any source id) and backfill ids from
     // its stored links so every provider can be matched.
-    let mediaItemId: string | null = UUID_RE.test(id) ? id : resolveBySourceIds(ids);
+    let mediaItemId: string | null = UUID_RE.test(id) ? id : resolveBySourceIds(type, ids);
     if (mediaItemId) {
       const links = query<{ source: string; source_id: string }>(
         "SELECT source, source_id FROM media_links WHERE media_item_id = ?",
@@ -68,7 +68,11 @@ export const POST = withUser(async (req: NextRequest, session) => {
     });
 });
 
-function resolveBySourceIds(ids: ItemIds): string | null {
+// SM50 — filtered by `type` because a provider id is unique only within a media
+// type: trakt movie 386 (Being John Malkovich) and trakt show 386 (SpongeBob
+// SquarePants) are different works. Without it this route could hand a refresh
+// of one to the other.
+function resolveBySourceIds(type: string, ids: ItemIds): string | null {
   const candidates: [string, string | null | undefined][] = [
     ["rawg", ids.rawg], ["tmdb", ids.tmdb], ["trakt", ids.trakt],
     ["steam", ids.steam], ["letterboxd", ids.letterboxd],
@@ -76,8 +80,8 @@ function resolveBySourceIds(ids: ItemIds): string | null {
   for (const [source, sid] of candidates) {
     if (!sid) continue;
     const link = get<{ media_item_id: string }>(
-      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
-      [source, sid]
+      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ? AND media_type = ?",
+      [source, sid, type]
     );
     if (link) return link.media_item_id;
   }

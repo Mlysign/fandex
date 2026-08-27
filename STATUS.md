@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
 
-_Last updated: 2026-08-26 (12th smoke test: two 🟠 added below, SM49/SM50; no code changed). Previously 2026-08-26, hygiene pass._
+_Last updated: 2026-08-27 (the 12th smoke test's findings worked through: SM49/SM50/SM51/SM52 fixed, SM53 handed back to Nils). Previously 2026-08-26, 12th smoke test._
 
 > **Ten decisions were locked on 2026-08-17.** Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do, the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, Score tuning approved as-is. **They are settled: see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -12,9 +12,9 @@ _Last updated: 2026-08-26 (12th smoke test: two 🟠 added below, SM49/SM50; no 
 
 | | Item | Blocked on |
 |--|------|--|
-| 🟠 | **The Library tab renders its whole list on the route the nav links to** (SM49) | **Nobody.** `capRender` gates on `route === "library"`, so `/wishlist?tab=library` skips SM19's 300-card cap: 1,929 cards / 40,748 DOM nodes / 120,583px on the prod build, against 300 / 6,519 / 18,976 for the identical view at `/library`. `AppNav` has no `/library` link, so the uncapped route is the one people reach. One-line fix, not yet made. → [TASKS.md](TASKS.md) |
-| 🟠 | **Three Trakt SHOWS are merged onto MOVIE catalog rows** (SM50) | **Nobody**, but it is on a public page: `/movie/being-john-malkovich` serves "Official site" → `spongebob.nick.com` and a Trakt link to the show. Also House of Cards → Ratatouille, Legion → The Raid 2. 249 episode-watch rows sit on movies; the real show rows have 0 progress. 3 of 2,734 items. ⚠️ Root cause in `matcher.ts` is **not** diagnosed — main-loop work. → [[cross-type-identity-merge]] |
-| 🟡 | **`/library` + `/wishlist` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. ⚠️ **Still reproducing on 2026-08-26** (`/library` hard load under `next dev`: `main` 0 React fibers, `nav` 2), so the 2026-08-18 "may be fixed" note is settled — it is not. |
+| 🟠 | **SM50's data repair has not run on PROD** | **Nobody, but it needs a shell on the Railway box.** The code fix is in (migration 23 makes the merge impossible), so nothing NEW can merge there once it deploys. The rows already merged do not fix themselves: run `node scripts/repair-cross-type-links.mjs data/rr.db` (report), then `--apply`. Locally it moved 4 links and scrubbed 4 payloads. ⚠️ **A restore drill is due** — migration 23 rebuilds a table. → [TASKS.md](TASKS.md) item 6 |
+| 🔵 | **Calendar filter bar: 22% of a fixed height budget** (SM53) | **Your call.** Not broken, and deliberately unchanged: it is a visual decision on a page already waiting for your eyes. Three options, cheapest first, in [TASKS.md](TASKS.md) item 7. |
+| 🟡 | **`/library` + `/wishlist` + `/settings` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. ⚠️ **Still reproducing 2026-08-27**, and `/settings` joined the list that day (`main` 0 React fibers, `body` 2, so anon and authed both render the signed-in chrome with everything empty). The 2026-08-18 "may be fixed" note is settled: it is not. |
 | 🔵 | **H3: monetization, now ADS-FIRST** | **Nobody, yet.** The next move is traffic, not a signup. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
 | ⏸️ | **P15/P16: Android TWA, built and installed, then PAUSED** | ⏸️ **Nils, 2026-08-23**, until the developer account is upgraded Personal → Business. ⚠️ The 12-testers/14-days gate applies to **PERSONAL** accounts only, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. → [TASKS.md](TASKS.md) item 1 |
 | 🟡 | **RAWG monthly quota exhausted** | **Nobody.** PL3 shipped 2026-08-23, so the facet paths no longer touch RAWG. ⚠️ **Re-measure when the window resets**: a cold `/tag/` page should now cost 10 provider calls, not 14. ⚠️ **What SPENT the quota is still unidentified**, and the obvious answer is unproven, because every RAWG figure we hold was measured *after* the quota was gone. The 401/403 latch makes next month's counter readable. |
@@ -31,7 +31,7 @@ fandex.org is **up, serving, and running `main`'s HEAD**, continuously since **2
 - **A push that doesn't reach prod is a CI problem until proven otherwise.** Railway has Wait-for-CI ON, so a red CI silently blocks every deploy and `uptime` climbs straight through it. Check `gh run list --workflow=ci.yml` first. This has bitten twice, both times `npm audit` going red against an **unchanged** dependency tree.
 - **Watch that it STAYS up.** The app never crashed in either historical outage: `uptime` climbed monotonically, so it was **un-routed**, which reads as a billing action rather than a technical one.
 
-## 🟡 `/library`, `/wishlist` and the FACET pages do not work under `next dev` (DEV ONLY)
+## 🟡 `/library`, `/wishlist`, `/settings` and the FACET pages do not work under `next dev` (DEV ONLY)
 
 **Production is unaffected** and this was never user-facing. It does mean **those pages cannot be developed or verified against the dev server**, which is why it went unnoticed: the smoke sweeps run against prod.
 
@@ -40,6 +40,8 @@ Under `next dev` the pages render their toolbar server-side and then sit on "Loa
 ⚠️ **It is wider than that, and the cause is NOT established.** `/tag/cyberpunk` behaves identically under `next dev` (zero item links, no `__react*` keys on `<main>`) while the same page on a `next start` build renders 60, and that page never calls `useSearchParams()`. Recorded as a measurement, not a diagnosis.
 
 ⚠️ **A contradicting observation, 2026-08-18: `/wishlist` hydrated and rendered real items under `next dev`.** One page, one session, and that session also added a state branch to `MyStuffView`. **Re-check both pages under `next dev` before spending any time on the three options in TASKS.md**: the bug may be gone, or intermittent, which would change which fix is right.
+
+⚠️ **`/settings` joined the list on 2026-08-27** (`main` 0 React fibers, `body` 2, `nav` 2), and it has a second symptom worth knowing: the effect never runs, so the page renders the SIGNED-IN chrome with every field empty — four "Connect" buttons and "Watchlist items 0" for an account that has all four providers connected and 95 items. **That reads as data loss, not as a dead page.** It is the same `useSearchParams()` + Suspense shape as `/library` and `/wishlist`, and prod is correct (verified the same day, both auth states). `/insights` and `/profile` hydrate fine under dev.
 
 **The practical rule, unchanged and now wider: verify any page whose content is client-rendered against the `prod` launch config (:3100), not the dev server.**
 
@@ -108,9 +110,9 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 | Android TWA (P15/P16) | ⏸️ built + running on-device; paused on the account upgrade → [docs/twa-play-store.md](docs/twa-play-store.md) |
 | **SEO / organic reach** | 🔵 open since 2026-08-20; one hole left (facet under-linking) → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (re-run and confirmed 2026-08-26)
+## ✅ Quality bar (re-run and confirmed 2026-08-27)
 
-**1,049 tests pass** (101 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar. Don't land work below it.**
+**1,053 tests pass** (102 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar. Don't land work below it.**
 
 ⚠️ **Expect `npm audit` to go red again on an UNCHANGED tree.** It has happened twice, both times an advisory published after the last green run widening to cover the exact version an override pinned, and **it silently blocks the Railway deploy**. The current fix uses two *nested* overrides (`1.1.18` under `eslint`, `5.0.9` under `@typescript-eslint/typescript-estree`) because the two consumers need different major lines and one flat override cannot satisfy both. **Pinning an exact version is a bet that the next advisory won't include it.**
 

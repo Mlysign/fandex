@@ -4,7 +4,7 @@
 // api/discover/route.ts and api/home/route.ts).
 
 import { persistDiscoverItems, lookupExistingUuids } from "@/lib/discoverPersist";
-import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
+import { getUserStateMap, resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import { slugsForItemIds } from "@/lib/itemSlug";
 
 /**
@@ -57,15 +57,19 @@ export function persistDiscoverBatch<T extends { id: string; raw?: unknown }>(
  * cross-source ids. DB-only — no extra external calls — so it stays fast under
  * infinite scroll.
  */
-export function annotateUserState<T extends { ids?: Record<string, unknown> }>(items: T[], userId: string | null) {
+// SM50 — `type` joined the constraint: a provider id names one work only within
+// a media type. Optional on T because a few callers pass rows that genuinely
+// carry no type; those fall back to matching on source + id alone.
+export function annotateUserState<T extends { ids?: Record<string, unknown>; type?: unknown }>(items: T[], userId: string | null) {
   if (!userId) {
     return items.map((it) => ({ ...it, platformSources: [] as string[], onWatchlist: false, libraryStatus: null as string | null, rating: null as number | null }));
   }
 
-  const pairs: { source: string; sourceId: string }[] = [];
+  const typeOf = (it: T) => (typeof it.type === "string" ? it.type : undefined);
+  const pairs: { source: string; sourceId: string; type?: string }[] = [];
   for (const it of items) {
     for (const [source, sid] of Object.entries(it.ids ?? {})) {
-      if (sid != null) pairs.push({ source, sourceId: String(sid) });
+      if (sid != null) pairs.push({ source, sourceId: String(sid), type: typeOf(it) });
     }
   }
   const idMap = resolveMediaIdsBySource(pairs);
@@ -75,7 +79,7 @@ export function annotateUserState<T extends { ids?: Record<string, unknown> }>(i
     let mediaItemId: string | undefined;
     for (const [source, sid] of Object.entries(it.ids ?? {})) {
       if (sid == null) continue;
-      const mid = idMap.get(`${source}:${sid}`);
+      const mid = idMap.get(sourceRefKey(source, String(sid), typeOf(it)));
       if (mid) { mediaItemId = mid; break; }
     }
     const st = mediaItemId ? stateMap.get(mediaItemId) : undefined;

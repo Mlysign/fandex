@@ -3585,3 +3585,57 @@ _Archived from TASKS.md the same session it completed, per the doc convention. E
 - **Letterboxd stays built and dark.** No working key, but the 401/403 latch (2026-08-22) means it costs nothing now, and deleting working code to chase a key that may still arrive is the worse trade. `HIDDEN_PROVIDERS` already covers it.
 - **Books stay parked** (Hardcover's terms, 2026-08-03). Open Library remains the best metadata whenever they revive.
 
+---
+
+## Smoke test 2026-08-26 12th run — SM49/SM50/SM51/SM52 fixed 2026-08-27
+
+SM53 stayed open as a decision for Nils; it lives in TASKS.md's "Needs Nils" list, not here.
+
+**SM49, SM50, SM51 and SM52 are ✅ DONE.** SM53 is the only one left and it is a decision for Nils,
+not a fix (see below). What landed:
+
+- **SM49 + SM51** — `capRender` and the search placeholder read `activeTab`, not `route`. Measured
+  after, prod build, signed in: `/wishlist?tab=library` **300 cards / 6,519 nodes** (was 1,929 /
+  40,748 / 120,583px), identical to `/library`; `/wishlist` still 95 / 2,222. The anon gate's copy
+  and its `returnTo` were route-derived too and went with it.
+  `src/components/myStuffRouteConditions.test.ts` now fails on any `route ===` in that component.
+- **SM50 — root cause found, fixed, and the rows repaired.** `media_links` was
+  `UNIQUE(source, source_id)`, but Trakt and TMDB number movies and shows in SEPARATE sequences, so
+  trakt movie 386 (*Being John Malkovich*) and trakt show 386 (*SpongeBob SquarePants*) are two
+  works with one key. `upsertMediaItem`'s first step looked up on that pair alone, so the second to
+  sync took the first's row. **Migration 23** rebuilds the table as
+  `UNIQUE(source, source_id, media_type)`; the matcher, both batch resolvers and the two detail
+  resolvers all match on the type now. **A FOURTH pair the smoke test missed** turned up in the
+  repair: tmdb 1402, *The Walking Dead* on *The Pursuit of Happyness* — zero episode rows and one
+  tmdb id, so both of 13n-i's probes passed it.
+  ⚠️ **The repair has NOT run on prod.** → "Needs Nils" item 6.
+- **SM52** — `/insights`, `/profile` and `/settings` ask instead of bouncing, through one shared
+  `components/auth/SignInGate.tsx`. `/profile` signed-out now also renders the legal footer, which
+  closes the [[anon-legal-reachability]] gap on that route.
+- **Found on the way:** `/settings` is a FOURTH page in the `next dev` unhydrated-subtree family
+  (`mainFibers` 0, `bodyFibers` 2). Prod is correct. Same `useSearchParams` + Suspense shape as
+  `/library` and `/wishlist`, and the same decision applies: leave it.
+
+Bar re-run and green: **1,053 tests** (102 files, 1 skipped) · `tsc` clean · lint 0 errors ·
+`npm audit` 0 · `npm run build` clean.
+
+### The findings as recorded on the 26th
+
+Scope: local, both auth states. Dev server for the authed sweep, **production build** (`:3100`) for
+the anon half via `127.0.0.1` and to re-confirm SM49/SM51 off the dev build. Calendar 13j/13ja
+exercised in full (Needs Nils item 5). Overall health is good: the calendar rework holds up on
+every check it was written for, and the two 🟠s below are both the *shared-view-two-routes* trap,
+not the new work. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| SM49 | ✅ | perf | MyStuffView | **SM19's 300-card render cap never applies on the route the nav actually links to.** `capRender = route === "library" && …` (`MyStuffView.tsx:335`) gates on the ROUTE, but the Library **tab** is reachable at `/wishlist?tab=library` — and `AppNav` has no `/library` link at all, so that IS the signed-in path to your library. Measured on the prod build, same view, same data: `/library` = 300 cards / 6,519 nodes / 18,976px / 70 ms keystroke; `/wishlist?tab=library` = **1,929 cards / 40,748 nodes / 120,583px / 199 ms**. (Under `next dev` the keystroke is 1,544 ms, i.e. SM19's original number.) Repro: sign in → `/wishlist` → click the Library tab → `document.querySelectorAll('a[href^="/game/"],a[href^="/movie/"],a[href^="/show/"]').length`. |
+| SM50 | ✅ | data | matcher / item page | **Three Trakt SHOWS are merged onto MOVIE catalog rows, and it is visible on a public item page.** `media_links` holds trakt show 386 *SpongeBob SquarePants* on the movie **Being John Malkovich**, trakt 1416 *House of Cards* on **Ratatouille**, trakt 113656 *Legion* on **The Raid 2**. Consequences, all verified: (a) `/movie/being-john-malkovich` renders **"Official site" → `https://spongebob.nick.com/`** and **"Trakt" → `trakt.tv/movies/spongebob-squarepants`**, plus SpongeBob's genres (Animation, Family) merged into the film's; (b) **249 `user_episode_state` rows sit on movies** (BJM 182 in 5 coherent seasons, Ratatouille 65, The Raid 2 two); (c) the real `spongebob-squarepants` and `house-of-cards` show rows have **0** episode progress. One row carries two different TMDB ids (`tmdb:387` the show + `tmdb:492` the movie). Blast radius is small — **3 of 2,734 items** — but it is on a crawlable page. The item-page type guard does hold: the movie shows no "Your progress" section. |
+| SM51 | ✅ | ui | MyStuffView | Search placeholder is route-derived, not tab-derived: on `/wishlist?tab=library` the `<h1>` and header count correctly say **Library** while the box still reads **"Search your wishlist…"**. Same family as SM21 (which fixed the h1 and count) and the same root cause as SM49. |
+| SM52 | ✅ | ux | anon gates | `/insights`, `/profile` and `/settings` still `router.replace("/")` for anon rather than asking on the page, which is the pattern AN2 replaced for `/library` and `/wishlist`. Mitigating: the destination is not silent (Home shows a "GUEST MODE · Sign in to unlock your Fandex Score" panel) and the redirect correctly uses `replace`, so Back is not trapped (SM8 re-verified: `/discover` → `/insights` → `/` → Back lands on `/discover`, `history.length` +1 not +2). Recorded because AGENTS.md states the bounce as fact while the invariant above it says a gate must ask; nothing tracks the gap as open. |
+| SM53 | 🔵 | ui | Calendar filter bar | At 375×812 the sticky filter bar takes **175px, 22% of the viewport**, as two wrapped rows of seven 40px icon-only circles plus a 38px view-toggle row, leaving the grid 486px. On the one page whose entire design is now a fixed height budget, the chips are the largest single claim on it. Hit areas are fine (`.tap-44` gives each a 44×44 `::after`; nearest-neighbour clearance 4px horizontal / 16px vertical, no overlap) — this is about the budget, not the targets. |
+
+**Held up well.** Calendar (the whole of 13j/13ja): one tap target per day proven by `elementFromPoint` over 30 points × 4 cell kinds (empty / single / 2-up / 3-up-with-"+1"), 0 misses; no cell navigates to an item; an empty day says "Nothing releasing on this day"; busy and empty rails are both exactly 395px; `scrollHeight - innerHeight === 0` and `scrollY === 0` in every state, at 375 and 1280, anon and authed, dev and prod; the month collapses to one week on open and back on close; swipe pages the month while a vertical drag, a 900 ms drag, and a sideways drag inside the rail all correctly do not. **13b (the 2026-08-26 `addedAt` fix): both halves.** Wishlist is strictly `addedAt`-descending over all 93 matched cards, Library over 500 — and 13b-i holds, an item in both collections carries two distinct dates (The Godfather, Slay the Spire II). ⚠️ Key the order check on the **slug**, not the title: 35 titles are duplicated in the catalog and title-keying invented three phantom violations. **Episode tracking now has real data locally** (12,343 watched rows, 280 shows) — 13n's "live but pulls nothing" no longer reproduces here: Friends renders 10 seasons at 24/24 etc. summing to the DB's 228, one tracker mount, season expand lazily fetches real episode titles, and Home's "Up next" rail lists 10 real next-episodes with every tick box empty at rest. Insights reconciles exactly (922 + 274 + 481 = 1,677 rated = the histogram's sum). Anon: Home/Discover/facet cards all carry sign-in controls (0 without), `/calendar` is public with dimmed chips that open the dialog, `/wishlist` + `/library` gate in place on their own paths, nav search works with real `<a href>` and a full keyboard path (Arrow keys move `aria-activedescendant`, Enter navigates), Discover search shows Titles only. Titles correct on hard load for all 10 routes; 404s branded; `/dashboard` 308 → `/wishlist`; `/calendar/1999-01` 404s; robots/sitemap dynamic. Provider degradation is genuinely covered — **RAWG's breaker is open right now** (quota, Needs Nils item 2) and games still arrive from IGDB on initial browse, games load-more, `/api/home` and `/api/calendar/popular`; the log shows one warn line per skip, no stack traces. Repeat calls return identical order and counts. No console errors anywhere.
+
+**Not exercised:** any write (episode ticks and ratings push to Nils's real Trakt account), so 13m's Trakt round trip is still unverified. Anything frame-driven — see the new tooling section in [smoketest.md](smoketest.md).
+

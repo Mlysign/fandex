@@ -1,5 +1,5 @@
 import { get as dbGet } from "@/lib/db";
-import { resolveMediaIdsBySource } from "@/lib/userState";
+import { resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import { fetchTmdbTrending, fetchTraktTrending, fetchTrendingGames } from "@/lib/discoverFeed";
 import { candidatesForMonth, monthKey, nextMonthKey } from "@/lib/popularMonthFeed";
@@ -68,17 +68,17 @@ export function dedupeById(cands: FeedCandidate[]): FeedCandidate[] {
 export function withPosters(cands: FeedCandidate[]): FeedCandidate[] {
   const missing = cands.filter((c) => !c.posterUrl);
   if (missing.length > 0) {
-    const pairs: { source: string; sourceId: string }[] = [];
+    const pairs: { source: string; sourceId: string; type?: string }[] = [];
     for (const c of missing) {
       for (const [source, sid] of Object.entries(c.ids ?? {})) {
-        if (sid != null) pairs.push({ source, sourceId: String(sid) });
+        if (sid != null) pairs.push({ source, sourceId: String(sid), type: c.type });
       }
     }
     const idMap = resolveMediaIdsBySource(pairs);
     for (const c of missing) {
       for (const [source, sid] of Object.entries(c.ids ?? {})) {
         if (sid == null) continue;
-        const mid = idMap.get(`${source}:${String(sid)}`);
+        const mid = idMap.get(sourceRefKey(source, String(sid), c.type));
         if (!mid) continue;
         const row = dbGet<{ poster_url: string | null }>(
           "SELECT poster_url FROM media_items WHERE id = ?", [mid]

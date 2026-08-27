@@ -81,8 +81,8 @@ describe("crossLinkGame", () => {
     const id = seedGame();
     for (const s of ["steam", "igdb"]) {
       run(
-        `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-         VALUES (?, ?, ?, '9', 'Test Game', '{}')`,
+        `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+         VALUES (?, ?, ?, '9', 'game', 'Test Game', '{}')`,
         [`${id}-${s}`, id, s]
       );
     }

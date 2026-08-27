@@ -47,8 +47,8 @@ function catalogItem(title: string, year: string, imdb?: string): string {
   });
   if (imdb) {
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, raw_data)
-       VALUES (?, ?, 'imdb', ?, '{}')`,
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, raw_data)
+       VALUES (?, ?, 'imdb', ?, 'movie', '{}')`,
       [`lnk-${imdb}-${seq}`, id, imdb],
     );
   }

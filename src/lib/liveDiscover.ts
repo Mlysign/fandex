@@ -17,7 +17,7 @@ import { sharedCache } from "@/lib/boundedCache";
 import type { Reason, Profile } from "@/lib/discovery";
 import { buildProfile, scoreFacets, computeFandexScore, getCatalogIdf, getCatalogFacets, ROLE_WEIGHT } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
-import { resolveMediaIdsBySource } from "@/lib/userState";
+import { resolveMediaIdsBySource, sourceRefKey } from "@/lib/userState";
 import { loadLinks } from "@/lib/detail/enrich";
 import type { Facet } from "@/lib/facets";
 import { extractFacets, tagKey } from "@/lib/facets";
@@ -218,10 +218,10 @@ function catalogFacets(candidates: FandexTarget[]): Map<string, Facet[]> {
   const out = new Map<string, Facet[]>();
   if (!candidates.length) return out;
 
-  const pairs: { source: string; sourceId: string }[] = [];
+  const pairs: { source: string; sourceId: string; type?: string }[] = [];
   for (const c of candidates) {
     for (const [source, sid] of Object.entries(c.ids ?? {})) {
-      if (sid != null) pairs.push({ source, sourceId: String(sid) });
+      if (sid != null) pairs.push({ source, sourceId: String(sid), type: c.type });
     }
   }
   if (!pairs.length) return out;
@@ -232,7 +232,7 @@ function catalogFacets(candidates: FandexTarget[]): Map<string, Facet[]> {
   for (const c of candidates) {
     for (const [source, sid] of Object.entries(c.ids ?? {})) {
       if (sid == null) continue;
-      const mid = idMap.get(`${source}:${String(sid)}`);
+      const mid = idMap.get(sourceRefKey(source, String(sid), c.type));
       if (!mid) continue;
       const facets = getCatalogFacets(mid);
       // Franchise resolution needs the MEDIA id, and this map is keyed by

@@ -9,6 +9,8 @@ import { COUNTRIES } from "@/lib/countries";
 import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
 import PanelHeader from "@/components/insights/PanelHeader";
+import SignInGate from "@/components/auth/SignInGate";
+import { Settings as SettingsIcon } from "lucide-react";
 
 // Table → plain-language label for the delete dialog's counts. Tables not listed
 // here (anything a future migration adds) are still deleted — they just don't
@@ -26,6 +28,8 @@ function SettingsContent() {
   const searchParams = useSearchParams();
   const confirm = useConfirm();
   const [user, setUser] = useState<any>(null);
+  /** SM52: signed out, render the ask. `user` alone can't carry it (it starts null). */
+  const [anon, setAnon] = useState(false);
   const [identities, setIdentities] = useState<any[]>([]);
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
   const [itemCount, setItemCount] = useState(0);
@@ -62,7 +66,13 @@ function SettingsContent() {
   async function fetchMe(initial = false) {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (!data.user) { router.replace("/"); return; }
+    // SM52 — this used to router.replace("/"). Settings is entirely the
+    // visitor's own account (connections, region, export, deletion), so the
+    // page becomes the ask rather than vanishing. A bounce here is worse than
+    // most: somebody arriving to DISCONNECT an account or delete their data is
+    // exactly the person who must not be told "nothing to see".
+    if (!data.user) { setAnon(true); return; }
+    setAnon(false);
     setUser(data.user);
     setIdentities(data.identities ?? []);
     setSyncLogs(data.syncLogs ?? []);
@@ -215,6 +225,22 @@ function SettingsContent() {
     { key: "steam",      label: "Steam",        description: "Games from your wishlist",         connectUrl: "/api/auth/steam",       canWrite: false },
     { key: "rawg",       label: "RAWG",         description: "Games from your Want to Play list", connectUrl: "rawg-form",           canWrite: true  },
   ];
+
+  if (anon) {
+    return (
+      <div className="min-h-screen">
+        <main className="max-w-2xl mx-auto px-6 py-10">
+          <SignInGate
+            icon={<SettingsIcon className="w-5 h-5" aria-hidden />}
+            title="Sign in to open your settings"
+            hint="Connections, region, your data export and account deletion all belong to an account. There is nothing here to change without one."
+            returnTo="/settings"
+            onAuthenticated={() => fetchMe(true)}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

@@ -136,16 +136,22 @@ function ensureSchema(db: Database.Database) {
     -- FRESH db; the indexes here must also hold for an OLD one.
 
     -- Raw data per source, linked to canonical item
+    -- media_type (migration 23, SM50): a provider id is unique only WITHIN a
+    -- media type. Trakt and TMDB number movies and shows in separate sequences,
+    -- so trakt movie 386 and trakt show 386 are two different works. Keying on
+    -- (source, source_id) alone let a show's pull overwrite a film's link row.
+    -- It mirrors media_items.type for this row's owner and is set at insert.
     CREATE TABLE IF NOT EXISTS media_links (
       id TEXT PRIMARY KEY,
       media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
       source TEXT NOT NULL,           -- steam | rawg | tmdb | trakt | igdb
       source_id TEXT NOT NULL,        -- ID in that source system
+      media_type TEXT NOT NULL,       -- game | movie | show: the id's namespace
       title TEXT,                     -- source's own title
       release_date TEXT,              -- source's own date
       raw_data TEXT NOT NULL,         -- full JSON from source
       last_synced INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-      UNIQUE(source, source_id)
+      UNIQUE(source, source_id, media_type)
     );
     CREATE INDEX IF NOT EXISTS idx_links_item ON media_links(media_item_id);
     CREATE INDEX IF NOT EXISTS idx_links_source ON media_links(source, source_id);

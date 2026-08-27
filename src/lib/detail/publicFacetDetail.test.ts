@@ -157,8 +157,8 @@ describe("buildPublicFacetDetail — persist gate (PR14)", () => {
     // Only media_links is read by the lookup; the uuid needn't resolve further.
     run("INSERT INTO media_items (id, type, title) VALUES ('uuid-known', 'movie', 'Mock Movie')");
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, raw_data)
-       VALUES ('link-1', 'uuid-known', 'tmdb', '101', '{}')`
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, raw_data)
+       VALUES ('link-1', 'uuid-known', 'tmdb', '101', 'movie', '{}')`
     );
 
     // A DIFFERENT key from the tests above on purpose: `_facetPageCache` is

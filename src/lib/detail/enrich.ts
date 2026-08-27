@@ -65,11 +65,21 @@ export function resolveBySourceIds(type: MediaType | null, ids: SourceIds): stri
   if (ids.steam) candidates.push({ source: "steam", id: ids.steam });
   if (ids.letterboxd) candidates.push({ source: "letterboxd", id: ids.letterboxd });
 
+  // SM50 — a provider id is unique only within a media type (trakt movie 386 and
+  // trakt show 386 are different works), so `type` is a real filter here, not a
+  // formality. It stayed unused for a while and this is exactly the resolution
+  // it was passed for. A caller with no type still gets the old behaviour: the
+  // first row for that id, whichever type it belongs to.
   for (const { source, id } of candidates) {
-    const link = get<{ media_item_id: string }>(
-      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
-      [source, id]
-    );
+    const link = type
+      ? get<{ media_item_id: string }>(
+          "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ? AND media_type = ?",
+          [source, id, type]
+        )
+      : get<{ media_item_id: string }>(
+          "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
+          [source, id]
+        );
     if (link) return link.media_item_id;
   }
   return null;

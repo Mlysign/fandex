@@ -15,8 +15,8 @@ function addItem(id: string, title: string, type: string, browsed: number, lastS
     [id, type, title, browsed]
   );
   run(
-    "INSERT INTO media_links (media_item_id, source, source_id, title, raw_data, last_synced) VALUES (?, 'tmdb', ?, ?, '{}', ?)",
-    [id, `src-${id}`, title, lastSynced]
+    "INSERT INTO media_links (media_item_id, source, source_id, media_type, title, raw_data, last_synced) VALUES (?, 'tmdb', ?, ?, ?, '{}', ?)",
+    [id, `src-${id}`, type, title, lastSynced]
   );
 }
 

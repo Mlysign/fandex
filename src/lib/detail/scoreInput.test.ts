@@ -30,8 +30,8 @@ function seedPersistedMovie() {
     [ITEM]
   );
   run(
-    `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data, projection_version)
-     VALUES (?, ?, 'tmdb', '129', 'Spirited Away', ?, 2)`,
+    `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data, projection_version)
+     VALUES (?, ?, 'tmdb', '129', 'movie', 'Spirited Away', ?, 2)`,
     [
       `${ITEM}-tmdb`,
       ITEM,

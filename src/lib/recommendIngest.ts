@@ -78,7 +78,7 @@ export async function ingestCandidatesForTags(tagKeys: string[]): Promise<Ingest
   // Drop anything already in the DB (this also excludes library/watchlist items,
   // since those already have media_links).
   const existing = existingLinkSet(unique);
-  const fresh = unique.filter((r) => !existing.has(`${r.source}:${r.sourceId}`));
+  const fresh = unique.filter((r) => !existing.has(`${r.source}:${r.sourceId}:${r.type}`));
   const toIngest = fresh.slice(0, MAX_INGEST);
 
   let ingested = 0;
@@ -94,7 +94,8 @@ export async function ingestCandidatesForTags(tagKeys: string[]): Promise<Ingest
 }
 
 // Which of these candidate refs already have a media_links row? Matched on the
-// exact source+source_id pair (tmdb 123 ≠ rawg 123).
+// exact source+source_id+type triple (tmdb 123 ≠ rawg 123, and SM50: tmdb MOVIE
+// 123 ≠ tmdb SHOW 123 — the providers number the two separately).
 function existingLinkSet(refs: CandidateRef[]): Set<string> {
   const set = new Set<string>();
   const ids = [...new Set(refs.map((r) => r.sourceId))];
@@ -102,11 +103,11 @@ function existingLinkSet(refs: CandidateRef[]): Set<string> {
   for (let i = 0; i < ids.length; i += CH) {
     const chunk = ids.slice(i, i + CH);
     const ph = chunk.map(() => "?").join(",");
-    const rows = query<{ source: string; source_id: string }>(
-      `SELECT source, source_id FROM media_links WHERE source_id IN (${ph})`,
+    const rows = query<{ source: string; source_id: string; media_type: string }>(
+      `SELECT source, source_id, media_type FROM media_links WHERE source_id IN (${ph})`,
       chunk
     );
-    for (const row of rows) set.add(`${row.source}:${row.source_id}`);
+    for (const row of rows) set.add(`${row.source}:${row.source_id}:${row.media_type}`);
   }
   return set;
 }

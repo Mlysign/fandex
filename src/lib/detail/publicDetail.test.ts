@@ -9,8 +9,8 @@ function seedBrowsedItem(id: string, title: string) {
     [id, title, title.toLowerCase()]
   );
   run(
-    `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
-     VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+    `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
+     VALUES (?, ?, 'tmdb', ?, 'movie', ?, '{}')`,
     [`${id}-link`, id, id, title]
   );
 }
