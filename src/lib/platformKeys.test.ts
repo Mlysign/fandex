@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  platformKey, platformLabel, availableOnKeys, platformOptions, matchesPlatforms, groupOfKey,
+  platformKey, platformLabel, availableOnKeys, platformOptions, matchesPlatforms, groupOfKey, narrowToOwned,
 } from "./platformKeys";
 
 // "Available on" (2026-08-27). The rules worth pinning are the ones that are
@@ -194,5 +194,67 @@ describe("one platform described three ways by three providers", () => {
     // The same game arrives with IGDB's and Steam's spelling on one row.
     const opts = platformOptions([{ platforms: ["PC (Microsoft Windows)", "Windows", "PC"] }]);
     expect(opts).toEqual([{ key: "p:pc", label: "PC", group: "games", count: 1 }]);
+  });
+});
+
+describe("narrowToOwned — the 'my platforms' setting", () => {
+  const opts = platformOptions([
+    { streamingProviders: [{ name: "Netflix" }] },
+    { streamingProviders: [{ name: "HBO Max" }] },
+    { platforms: ["PlayStation 5"] },
+    { platforms: ["Nintendo Switch"] },
+  ]);
+
+  it("offers only what the account owns", () => {
+    const got = narrowToOwned(opts, ["s:netflix", "p:playstation-5"]).map((o) => o.key).sort();
+    expect(got).toEqual(["p:playstation-5", "s:netflix"]);
+  });
+
+  it("treats an EMPTY owned list as 'not configured' and passes everything", () => {
+    // The distinction that matters: empty means the person never opened
+    // settings, not that they own nothing. Reading it the other way would empty
+    // the filter for every user who never touched it.
+    expect(narrowToOwned(opts, [])).toHaveLength(opts.length);
+    expect(narrowToOwned(opts, null)).toHaveLength(opts.length);
+    expect(narrowToOwned(opts, undefined)).toHaveLength(opts.length);
+  });
+
+  it("does NOT invent a chip for something owned but absent from the loaded set", () => {
+    // Owning Disney+ while nothing on screen is on Disney+ must not produce a
+    // chip that matches nothing.
+    expect(narrowToOwned(opts, ["s:disney"])).toEqual([]);
+  });
+
+  it("keeps the namespace honest — owning the Apple TV box is not Apple TV+", () => {
+    const both = platformOptions([
+      { platforms: ["Apple TV"] },
+      { streamingProviders: [{ name: "Apple TV+" }] },
+    ]);
+    expect(narrowToOwned(both, ["p:apple-tv"]).map((o) => o.group)).toEqual(["games"]);
+    expect(narrowToOwned(both, ["s:apple-tv"]).map((o) => o.group)).toEqual(["streaming"]);
+  });
+});
+
+describe("a SELECTED platform is never hidden by the owned narrowing", () => {
+  const opts = platformOptions([
+    { streamingProviders: [{ name: "Netflix" }] },
+    { platforms: ["Nintendo Switch"] },
+  ]);
+
+  it("keeps an active filter visible even when it is not owned", () => {
+    // Measured before this: select Nintendo Switch, then narrow "owns" to
+    // Netflix alone. The panel offered ONE chip while the list stayed filtered
+    // to 209 Switch titles, and the only way out was Reset all — an active
+    // filter with no control. Same rule as the "+N more" preview cap.
+    const got = narrowToOwned(opts, ["s:netflix"], ["p:nintendo-switch"]);
+    expect(got.map((o) => o.key).sort()).toEqual(["p:nintendo-switch", "s:netflix"]);
+  });
+
+  it("drops it again once it is deselected", () => {
+    expect(narrowToOwned(opts, ["s:netflix"], []).map((o) => o.key)).toEqual(["s:netflix"]);
+  });
+
+  it("still passes everything when nothing is owned, selection or not", () => {
+    expect(narrowToOwned(opts, [], ["p:nintendo-switch"])).toHaveLength(2);
   });
 });

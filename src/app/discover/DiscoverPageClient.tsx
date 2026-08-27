@@ -23,7 +23,7 @@ import { defaultUiFilters,
 } from "@/components/discovery/types";
 import { bayesRating, ratingPrior } from "@/lib/ratingsSort";
 import type { MediaType } from "@/types";
-import { probeSession } from "@/lib/sessionProbe";
+import { probeSession, sessionUser } from "@/lib/sessionProbe";
 
 const LIMIT = 60;
 
@@ -557,6 +557,12 @@ export default function DiscoverPageClient() {
   // the type chips have already ruled out.
   const platformOpts = useMemo(() => platformOptions(beforePlatform as any[]), [beforePlatform]);
 
+  // Settings → Your platforms. sessionUser() shares probeSession's single
+  // cached /api/auth/me, so this costs no extra request.
+  const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void sessionUser().then((u) => setOwnedPlatforms(u?.platforms ?? [])); }, []);
+
   // Non-date sorts re-order the SAME browse set client-side instead of switching
   // to catalog search (see the searchActive comment above).
   const browseSorted = useMemo(
@@ -708,7 +714,7 @@ export default function DiscoverPageClient() {
         searchPlaceholder="Search games, movies, shows…"
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: SORTS }}
-        advancedFilters={<FilterPanel filters={filters} onChange={patchFilters} platformOptions={platformOpts} />}
+        advancedFilters={<FilterPanel filters={filters} onChange={patchFilters} platformOptions={platformOpts} ownedPlatforms={ownedPlatforms} />}
         advancedActiveCount={countActiveAdvanced(filters)}
         onResetFilters={resetFilters}
         view={effView}

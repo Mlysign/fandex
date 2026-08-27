@@ -120,8 +120,12 @@ export const SyncPostSchema = z.object({
 });
 
 // POST /api/settings — profile settings (currently just country).
+// Both fields are OPTIONAL and the route acts on whichever arrived: the country
+// select and the platforms picker save independently, and requiring both would
+// make either save clobber the other with a stale value from the same render.
 export const SettingsPostSchema = z.object({
-  country: z.string().min(1),
+  country: z.string().min(1).optional(),
+  platforms: z.array(z.string()).optional(),
 });
 
 // DELETE /api/account — H4.6 erasure. The literal is the type-to-confirm value

@@ -169,6 +169,19 @@ one is a CSS trap that reaches well beyond this panel.
   gets a single "Load more" at the bottom, on scroll. → `docs/advanced-filters.md` §4.
 
 
+
+### Settings → Your platforms ✅ 2026-08-27
+
+Nils: *"if I only have netflix and prime, the 'available on' filter should only show those."*
+Stored on `users.platforms` (migration 24); the filter narrows through `narrowToOwned`. On the live
+library that is **185 chips down to 2**. The options are surveyed from the user's OWN catalog, not a
+curated list, because a global list misses every regional service he actually subscribes to.
+**The three traps it turned up, and the measurements, are in**
+[docs/advanced-filters.md](docs/advanced-filters.md) §5 — read it before touching the survey SQL.
+
+⚠️ **Still open:** the streaming half is empty on DISCOVER (that feed carries games platforms but
+not watch providers). → [docs/advanced-filters.md](docs/advanced-filters.md) §3.
+
 ## Still open elsewhere
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.

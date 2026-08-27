@@ -10,6 +10,8 @@ import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
 import PanelHeader from "@/components/insights/PanelHeader";
 import SignInGate from "@/components/auth/SignInGate";
+import PlatformPicker from "@/components/settings/PlatformPicker";
+import type { PlatformOption } from "@/lib/platformKeys";
 import { Settings as SettingsIcon } from "lucide-react";
 
 // Table → plain-language label for the delete dialog's counts. Tables not listed
@@ -47,6 +49,12 @@ function SettingsContent() {
   // T22 — region that drives release dates + streaming availability.
   const [country, setCountry] = useState<string>("");
   const [savingCountry, setSavingCountry] = useState(false);
+  // Your platforms. The option list is surveyed from the user's own catalog by
+  // /api/settings/platforms, so it includes the regional services a curated
+  // global list would miss (this account carries MagentaTV, WOW, Videoload).
+  const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
+  const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
+  const [platformsLoading, setPlatformsLoading] = useState(true);
   const [showRawgForm, setShowRawgForm] = useState(false);
   const [rawgEmail, setRawgEmail] = useState("");
   const [rawgPassword, setRawgPassword] = useState("");
@@ -60,6 +68,7 @@ function SettingsContent() {
 
   useEffect(() => {
     fetchMe(true);
+    void loadPlatforms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -99,6 +108,35 @@ function SettingsContent() {
     } finally {
       setSavingCountry(false);
     }
+  }
+
+  async function loadPlatforms() {
+    try {
+      const res = await fetch("/api/settings/platforms");
+      if (!res.ok) return;
+      const d = await res.json();
+      setPlatformOptions(d.options ?? []);
+      setOwnedPlatforms(d.selected ?? []);
+    } finally {
+      setPlatformsLoading(false);
+    }
+  }
+
+  async function savePlatforms(keys: string[]): Promise<string[] | void> {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platforms: keys }),
+    });
+    if (!res.ok) {
+      setNotice({ msg: "Could not save your platforms. Please try again.", ok: false });
+      return;
+    }
+    const d = await res.json();
+    const stored: string[] = d.platforms ?? keys;
+    setOwnedPlatforms(stored);
+    setNotice({ msg: stored.length ? "Platforms updated." : "Platform filter reset to show everything.", ok: true });
+    return stored;
   }
 
   function getIdentity(provider: string) {
@@ -505,6 +543,17 @@ function SettingsContent() {
             </select>
           </div>
         </section>
+
+        {/* Your platforms (2026-08-27) — narrows the "Available on" filter to
+            what you actually subscribe to and own. Sits under Region because it
+            depends on it: the streaming half of the list is resolved for that
+            country. */}
+        <PlatformPicker
+          options={platformOptions}
+          value={ownedPlatforms}
+          loading={platformsLoading}
+          onSave={savePlatforms}
+        />
 
         {/* Account info */}
         <section className="space-y-3">

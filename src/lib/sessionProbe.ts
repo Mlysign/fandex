@@ -9,13 +9,35 @@
 // Module-level cache: each page renders several of these islands and client
 // navigation remounts them, so an uncached probe would refetch on every hop.
 // Anything that changes the session (login, logout) must resetSessionProbe().
-let probe: Promise<boolean> | null = null;
+// The cache holds the PAYLOAD, not just the boolean, so a caller that needs a
+// field off the signed-in user (their platforms, their region) reuses this one
+// request instead of firing a second /api/auth/me. Callers that only want
+// "signed in?" keep the old boolean API.
+export interface SessionUser {
+  userId?: string;
+  displayName?: string;
+  provider?: string;
+  country?: string | null;
+  /** Platform/service keys this account says it owns. Empty = not narrowed. */
+  platforms?: string[] | null;
+}
 
-export function probeSession(): Promise<boolean> {
+let probe: Promise<SessionUser | null> | null = null;
+
+function load(): Promise<SessionUser | null> {
   return (probe ??= fetch("/api/auth/me")
     .then((r) => r.json())
-    .then((d) => Boolean(d.user))
-    .catch(() => false));
+    .then((d) => (d.user ?? null) as SessionUser | null)
+    .catch(() => null));
+}
+
+export function probeSession(): Promise<boolean> {
+  return load().then(Boolean);
+}
+
+/** The signed-in user's own row, or null. Shares probeSession's cached request. */
+export function sessionUser(): Promise<SessionUser | null> {
+  return load();
 }
 
 export function resetSessionProbe(): void {

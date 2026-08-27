@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import BrandGlyph from "@/components/BrandGlyph";
 import FilterSection, { FilterDivider } from "./FilterSection";
 import type { UiFilters, Membership } from "./types";
 import { YEAR_MIN, YEAR_MAX } from "./types";
 import type { PlatformOption } from "@/lib/platformKeys";
-import { platformMarkName } from "@/lib/platformKeys";
+import { platformMarkName, narrowToOwned } from "@/lib/platformKeys";
 
 // The Filters sheet's own controls: Available on, Your lists, Release year.
 // Must-include / must-exclude live in SubBar, which owns the facet props — the
@@ -123,6 +124,12 @@ export interface FilterPanelProps {
   platformOptions?: PlatformOption[];
   /** Region the streaming half was resolved for, shown so the list isn't silently wrong elsewhere. */
   platformRegion?: string | null;
+  /**
+   * Platform keys this account owns (Settings → Your platforms). When set, the
+   * chips are narrowed to these; empty/absent means "not configured" and shows
+   * everything. See narrowToOwned for why empty cannot mean "owns nothing".
+   */
+  ownedPlatforms?: string[] | null;
 }
 
 // How many chips a group shows before "+N more".
@@ -176,29 +183,56 @@ function PlatformGroupRow({
   );
 }
 
-export default function FilterPanel({ filters, onChange, platformOptions = [], platformRegion }: FilterPanelProps) {
+export default function FilterPanel({ filters, onChange, platformOptions = [], platformRegion, ownedPlatforms }: FilterPanelProps) {
   const selected = filters.platforms ?? [];
   const togglePlatform = (key: string) =>
     onChange({ platforms: selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key] });
 
-  const streaming = platformOptions.filter((o) => o.group === "streaming");
-  const games = platformOptions.filter((o) => o.group === "games");
+  const narrowed = narrowToOwned(platformOptions, ownedPlatforms, selected);
+  const narrowing = narrowed.length < platformOptions.length;
+  const streaming = narrowed.filter((o) => o.group === "streaming");
+  const games = narrowed.filter((o) => o.group === "games");
 
   return (
     <>
       <FilterDivider />
 
       <FilterSection label="Available on" hint={platformRegion ? `· ${platformRegion}` : undefined}>
-        {platformOptions.length === 0 ? (
-          // Never an empty section. "Nothing loaded yet" and "this surface holds
-          // no availability data" both read as a broken filter otherwise.
-          <p className="text-body-sm text-text-secondary leading-relaxed">
-            Nothing loaded so far says where it can be watched or played. Scroll further, or open a title to fill this in.
-          </p>
+        {narrowed.length === 0 ? (
+          // Never an empty section, and never the SAME empty section for two
+          // different reasons: "nothing here carries availability data" and
+          // "none of it is on anything you own" are opposite problems with
+          // opposite fixes, and one message for both sends people to the wrong
+          // one.
+          platformOptions.length > 0 ? (
+            <p className="text-body-sm text-text-secondary leading-relaxed">
+              Nothing here is on a platform you own.{" "}
+              <Link href="/settings" className="text-accent hover:text-accent-hover underline underline-offset-2">
+                Change your platforms
+              </Link>{" "}
+              to widen this.
+            </p>
+          ) : (
+            <p className="text-body-sm text-text-secondary leading-relaxed">
+              Nothing loaded so far says where it can be watched or played. Scroll further, or open a title to fill this in.
+            </p>
+          )
         ) : (
           <div className="flex flex-col gap-3">
             <PlatformGroupRow label="Movies & shows" options={streaming} selected={selected} onToggle={togglePlatform} />
             <PlatformGroupRow label="Games" options={games} selected={selected} onToggle={togglePlatform} />
+            {narrowing && (
+              // Say that the list is a subset, and say it where the subset is.
+              // Without this a short list reads as "we only know about three
+              // services" rather than "you told us you own three", and the
+              // setting that caused it is two screens away.
+              <p className="text-caption text-text-muted leading-relaxed">
+                Showing the platforms you own.{" "}
+                <Link href="/settings" className="text-accent hover:text-accent-hover underline underline-offset-2">
+                  Edit
+                </Link>
+              </p>
+            )}
             {selected.length > 0 && (
               // Stated up front, because it changes what the filter returns:
               // matchesPlatforms DROPS an item we hold no availability for.

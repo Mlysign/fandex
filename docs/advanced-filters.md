@@ -166,3 +166,32 @@ Not this panel, but reported together and fixed together.
   `isDateSort` (`:633`), which is computed one line above and already gates `autoScrollToToday`.
 - **The fix for both** is one change: no top sentinel unless the sort is a date sort; non-date sorts
   get a single generic "Load more" at the bottom, on scroll.
+
+---
+
+## 5. Settings → Your platforms (2026-08-27) — SHIPPED
+
+Nils: *"if I only have netflix and prime, the 'available on' filter should only show those."*
+Stored on `users.platforms` (migration 24, a JSON array of platformKeys); the filter reads it
+through `narrowToOwned`. On the live library it takes the chip list from **185 to 2**.
+
+**The option list is surveyed from the user's own catalog, not a curated list**, and that is not a
+shortcut: this account's library carries MagentaTV, WOW, Videoload, maxdome, RTL+, Joyn and Freenet
+meinVOD, and a global list written from memory contains none of them. `userPlatformSurvey.ts` reads
+the four provider shapes straight out of the stored JSON with `json_each` — **143 ms and ~1 MB**,
+against ~160 ms + 41 MB for the merge path warm, and 0.5 to 1.5 s cold.
+
+⚠️ Three things measured during the build that are easy to get wrong again:
+
+- **Steam's `platforms` is not only platforms.** It also carries `vr_support`, `steamos_linux` and
+  four `*_compat_category` keys, 730 rows each. A truthiness test offers "vr_support" as something
+  you own. `normalize.ts` allowlists windows/mac/linux; the SQL has to say the same thing.
+- **An empty owned list means NOT CONFIGURED**, never "owns nothing". The two are indistinguishable
+  in the column, and the wrong reading empties the filter for everyone who never opens settings.
+- **A SELECTED platform survives the narrowing even when it is not owned.** Without that, selecting
+  Nintendo Switch and then narrowing to Netflix left the list filtered to 209 titles with no chip to
+  un-press and only Reset all as an escape.
+
+**Not done:** the streaming half is still empty on Discover, because the browse feed carries games
+platforms but not watch providers. → [docs/advanced-filters.md](docs/advanced-filters.md) §3.
+

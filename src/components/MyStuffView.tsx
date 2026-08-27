@@ -176,6 +176,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_mystuff_year", defaultUiFilters().yearRange);
   const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_mystuff_membership", {});
   const [platforms, setPlatforms] = usePersistedState<string[]>("rr_mystuff_platforms", []);
+  const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
 
 
   // SM1 — a card's quick-action remove used to leave the row on screen until
@@ -205,6 +206,9 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
     // a sign-in prompt rather than a partial render.
     if (!data.user) { setAnon(true); return; }
     setAnon(false);
+    // Settings → Your platforms. Narrows the "Available on" chips to what this
+    // account owns; [] means not configured and the filter offers everything.
+    setOwnedPlatforms(data.user.platforms ?? []);
     setIdentities(data.identities ?? []);
     // Per connected provider, not one collapsed timestamp for all of them. See
     // staleProviders() for why: a trakt-only sync used to make Steam look fresh.
@@ -450,7 +454,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         searchPlaceholder={TAB_SEARCH_PLACEHOLDER[activeTab]}
         searchFacets={searchFacets}
         sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
-        advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} platformOptions={platformOpts} />}
+        advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} platformOptions={platformOpts} ownedPlatforms={ownedPlatforms} />}
         advancedActiveCount={advancedActiveCount}
         onResetFilters={resetAdvanced}
         // Progress counts episodes, and only its own panel knows how many — so

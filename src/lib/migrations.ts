@@ -1064,6 +1064,50 @@ export const MIGRATIONS: Migration[] = [
       // keeping it would break the NOT NULL media_type with nothing to fill it.
     },
   },
+  {
+    version: 24,
+    name: "users.platforms: the services and consoles this account owns",
+    up: (db) => {
+      // Which platforms the "Available on" filter should offer. A real library
+      // surfaces 116 platforms and services, most of which the person has no way
+      // to watch or play; this is how they say which ones are theirs.
+      //
+      // A JSON array of platformKeys.ts keys ("s:netflix", "p:playstation-5"),
+      // stored as TEXT. A column on `users` rather than a table because it is
+      // one small list per user with no per-row metadata, which is exactly what
+      // `country` (migration 5) is, and it inherits that shape's erasure
+      // behaviour for free: deleteAccount() drops the users row.
+      // ⚠️ /api/account/export builds explicit column lists, so this had to be
+      // added there BY HAND — it is not schema-derived like erasure is.
+      //
+      // NULL / "[]" both mean NOT CONFIGURED, and the filter then offers
+      // everything. "Owns nothing" is deliberately not expressible: it would be
+      // indistinguishable from the default and would empty the control for every
+      // user who never opens settings. See narrowToOwned().
+      //
+      // SQLite has no ADD COLUMN IF NOT EXISTS, so guard on the current columns
+      // for idempotency — same as migration 5.
+      //
+      // ⚠️ Guard on the TABLE too, which migration 5 does not have to. It sits
+      // at version 5, and `schemaUpgrade.test.ts` starts its synthetic old
+      // database at user_version 6, so migrations 2-6 are skipped there and 5
+      // never runs against a db without `users`. This one always runs, and
+      // `PRAGMA table_info` on a missing table returns an empty list rather than
+      // throwing — so without this check the empty list reads as "column
+      // absent", the ALTER fires, and it dies on "no such table: users".
+      // Every real database has `users` (db.ts's boot block creates it before
+      // any migration), so skipping is only ever the test's synthetic case.
+      const hasUsers = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+        .get();
+      if (!hasUsers) return;
+
+      const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "platforms")) {
+        db.exec("ALTER TABLE users ADD COLUMN platforms TEXT");
+      }
+    },
+  },
 ];
 
 

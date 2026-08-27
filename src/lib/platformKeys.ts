@@ -43,6 +43,33 @@ export function groupOfKey(key: string): PlatformGroup | null {
   return null;
 }
 
+/** A well-formed key: a known namespace and a non-empty slug. */
+export function isPlatformKey(v: unknown): v is string {
+  return typeof v === "string" && /^[ps]:[a-z0-9][a-z0-9-]*$/.test(v) && v.length <= 64;
+}
+
+/**
+ * Clean a list of keys arriving from a client: drop malformed and duplicate
+ * entries, keep the order, and cap the length.
+ *
+ * The cap is not paranoia about abuse — `withUser` rate-limits and this is the
+ * user's own row. It bounds a value that is read on the hot filter path and
+ * echoed in /api/auth/me, and 200 is far past any real collection (the largest
+ * catalog measured offers 116 platforms in total).
+ */
+export function sanitizePlatformKeys(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of input) {
+    if (!isPlatformKey(v) || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+
 // ── Collapsing the long tail ────────────────────────────────────────────────
 // Providers arrive with tier and delivery suffixes that are not different
 // services to a person choosing what they own: TMDB alone returns "Netflix",
@@ -187,6 +214,40 @@ export function platformOptions(
     }
   }
   return [...byKey.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/**
+ * Narrow the filter's options to the platforms this account says it owns.
+ *
+ * A real library offers 116 platforms and services, most of which the person
+ * has no way to watch or play. Once they have told us what they own, the filter
+ * should offer that and nothing else — which is the whole point of the setting.
+ *
+ * ⚠️ An EMPTY owned list means "not configured", not "owns nothing", and must
+ * pass everything through. The two are indistinguishable in the stored value and
+ * this is the only reading that leaves the filter working for the people who
+ * never open settings. If "owns nothing" ever needs saying, it needs its own
+ * flag, not an empty array.
+ *
+ * ⚠️ This is an INTERSECTION with what is loaded, not a replacement. Owning
+ * Netflix does not conjure a Netflix chip when nothing on screen is on Netflix —
+ * a chip that matches nothing is a control that does nothing.
+ */
+export function narrowToOwned(
+  options: PlatformOption[],
+  owned: string[] | null | undefined,
+  selected: readonly string[] = []
+): PlatformOption[] {
+  if (!owned || owned.length === 0) return options;
+  const set = new Set(owned);
+  // ⚠️ A SELECTED platform survives the narrowing even when it is not owned.
+  // Without this the filter can run on something with no chip to un-press:
+  // measured, after selecting Nintendo Switch and then narrowing "owns" to
+  // Netflix alone, the panel offered one chip while the list stayed filtered to
+  // 209 Switch titles and the only escape was Reset all. Same rule as the
+  // "+N more" preview cap — an active filter is always visible.
+  const keep = new Set(selected);
+  return options.filter((o) => set.has(o.key) || keep.has(o.key));
 }
 
 /**
