@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
 
-_Last updated: 2026-08-27 (the 12th smoke test's findings worked through: SM49/SM50/SM51/SM52 fixed, SM53 handed back to Nils). Previously 2026-08-26, 12th smoke test._
+_Last updated: 2026-08-27. The 12th smoke test worked through (SM49/SM50/SM51/SM52 fixed), the advanced filter sheet rebuilt to Option A, and two per-user settings shipped: **Your platforms** and **What you track**. Previously 2026-08-26, 12th smoke test._
 
 > **Ten decisions were locked on 2026-08-17.** Impressum approved, affiliate signups unparked (**superseded 2026-08-19: ads-first, affiliate demoted**), H3.0 closed as won't-do, the Score's 0–100 range relabelled as a target rather than re-tuned, H3.8 approved, `PRUNE_ON_BOOT` stays on, Score tuning approved as-is. **They are settled: see the top of [TASKS.md](TASKS.md) and don't re-open them.**
 
@@ -12,7 +12,8 @@ _Last updated: 2026-08-27 (the 12th smoke test's findings worked through: SM49/S
 
 | | Item | Blocked on |
 |--|------|--|
-| 🟠 | **SM50's data repair has not run on PROD** | **Nobody, but it needs a shell on the Railway box.** The code fix is in (migration 23 makes the merge impossible), so nothing NEW can merge there once it deploys. The rows already merged do not fix themselves: run `node scripts/repair-cross-type-links.mjs data/rr.db` (report), then `--apply`. Locally it moved 4 links and scrubbed 4 payloads. ⚠️ **A restore drill is due** — migration 23 rebuilds a table. → [TASKS.md](TASKS.md) item 6 |
+| 🟠 | **SM50's data repair has not run on PROD** | **Nobody, but it needs a shell on the Railway box.** The code fix is in (migration 23 makes the merge impossible), so nothing NEW can merge there once it deploys. The rows already merged do not fix themselves: run `node scripts/repair-cross-type-links.mjs data/rr.db` (report), then `--apply`. Locally it moved 4 links and scrubbed 4 payloads. ⚠️ **A restore drill is due**: this session added migrations **23, 24 and 25**, and 23 rebuilds a table. → [TASKS.md](TASKS.md) item 6 |
+| 🟡 | **The Fandex Score's colours disagree between the card and the tooltip** | **Nobody.** `Tooltip.tsx:99` hardcodes gold where the card and the item page both call `fandexScoreColor()`, so the tooltip's number is score-INDEPENDENT: an 88 and a 30 render identically. The last open item from the 12th smoke test. ⚠️ Not purely a bug fix, and the `--color-score-*` tokens are defined but unreferenced. → [TASKS.md](TASKS.md) |
 | 🔵 | **Calendar filter bar: 22% of a fixed height budget** (SM53) | **Your call.** Not broken, and deliberately unchanged: it is a visual decision on a page already waiting for your eyes. Three options, cheapest first, in [TASKS.md](TASKS.md) item 7. |
 | 🟡 | **`/library` + `/wishlist` + `/settings` + facet pages dead under `next dev`** | **Your call** which fix (see TASKS.md). Prod is unaffected; verify those pages on the `prod` launch config meanwhile. ⚠️ **Still reproducing 2026-08-27**, and `/settings` joined the list that day (`main` 0 React fibers, `body` 2, so anon and authed both render the signed-in chrome with everything empty). The 2026-08-18 "may be fixed" note is settled: it is not. |
 | 🔵 | **H3: monetization, now ADS-FIRST** | **Nobody, yet.** The next move is traffic, not a signup. Affiliate demoted; GOG is one optional email. → [docs/monetization-go-live.md](docs/monetization-go-live.md) |
@@ -26,7 +27,7 @@ _Last updated: 2026-08-27 (the 12th smoke test's findings worked through: SM49/S
 fandex.org is **up, serving, and running `main`'s HEAD**, continuously since **2026-08-12**.
 
 - **Litestream is the ONLY copy of the database.** Railway volume backups are Pro-plan only (re-confirmed 2026-08-20: the Backups tab reads "No Backups"). There is no second net.
-- **The restore drill PASSED 2026-08-23**, `ALL TABLES MATCH` on all eight, including the 10,841 `franchise_members` rows written the same day. ⚠️ **It is due again after the NEXT schema change.** A drill proves the backup you had that day, not the one you have now.
+- **The restore drill PASSED 2026-08-23**, `ALL TABLES MATCH` on all eight, including the 10,841 `franchise_members` rows written the same day. ⚠️ **IT IS DUE NOW.** 2026-08-27 added three migrations — 23 (`media_links` rebuilt with `media_type`), 24 (`users.platforms`), 25 (`users.media_types`) — and a drill proves the backup you had that day, not the one you have now. Both apply paths were verified from the pre-23 backup (in-process and `node scripts/migrate.mjs`, idempotent, `integrity_check ok`), which is not the same thing as proving the backup restores.
 - **No prod sweeps are outstanding.** Steam cross-link ran 2026-08-17, Wikidata franchise 2026-08-14. `PRUNE_ON_BOOT=0` is a preference now, not a precaution: the guard has held three times.
 - **A push that doesn't reach prod is a CI problem until proven otherwise.** Railway has Wait-for-CI ON, so a red CI silently blocks every deploy and `uptime` climbs straight through it. Check `gh run list --workflow=ci.yml` first. This has bitten twice, both times `npm audit` going red against an **unchanged** dependency tree.
 - **Watch that it STAYS up.** The app never crashed in either historical outage: `uptime` climbed monotonically, so it was **un-routed**, which reads as a billing action rather than a technical one.
@@ -44,6 +45,34 @@ Under `next dev` the pages render their toolbar server-side and then sit on "Loa
 ⚠️ **`/settings` joined the list on 2026-08-27** (`main` 0 React fibers, `body` 2, `nav` 2), and it has a second symptom worth knowing: the effect never runs, so the page renders the SIGNED-IN chrome with every field empty — four "Connect" buttons and "Watchlist items 0" for an account that has all four providers connected and 95 items. **That reads as data loss, not as a dead page.** It is the same `useSearchParams()` + Suspense shape as `/library` and `/wishlist`, and prod is correct (verified the same day, both auth states). `/insights` and `/profile` hydrate fine under dev.
 
 **The practical rule, unchanged and now wider: verify any page whose content is client-rendered against the `prod` launch config (:3100), not the dev server.**
+
+## 🎛️ Two per-user preferences, and the line they must not cross (2026-08-27)
+
+**Settings → What you track** (`users.media_types`, migration 25) and **Settings → Your platforms**
+(`users.platforms`, migration 24). Both filter what a person SEES.
+
+- **What you track** hides a media type from the chip row and from every list that reads it. One
+  injection point (`availableTypes`) covers Home, Discover, Calendar, Library and Wishlist, because
+  they already share one `rr_type_filter` key. Measured with Games off: 0 game links on all four,
+  Library 1,942 → 1,212; back on restores 239 links and 1,942.
+- **Your platforms** narrows the "Available on" filter to what you own: **185 chips to 2** on the
+  live library. Its option list is surveyed from the user's OWN catalog, because a curated global
+  list misses every regional service he actually subscribes to.
+
+⚠️ **THREE LAYERS MUST NEVER SEE EITHER**, and each fails differently: a **sync pull** (the prune
+invariant would DELETE every matching row), the **snapshots** (viewer-independent by contract, and
+they feed the SSR'd `/`), and the **Fandex Score** (every facet weight is a deviation from the
+global rating baseline, so dropping a type moves the score of everything else). Public item and
+facet pages render normally for a disabled type: a per-user 404 would 200 for a crawler and 404 for
+a visitor. → [[user-display-preferences]]
+
+⚠️ **`NULL` / `[]` means NOT CONFIGURED for both**, which yields everything. "Owns nothing" and
+"uses no media type" are deliberately inexpressible.
+
+**Built for the next media type.** `MEDIA_TYPES` is derived from a `Record<MediaType, string>`, so
+adding `"book"` is a build error rather than a silently-empty chip. The full enumeration-point map
+and the per-surface provider cost are in [docs/advanced-filters.md](docs/advanced-filters.md).
+
 
 ## 🧭 Monetization: ads-first since 2026-08-19
 
@@ -110,9 +139,9 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 | Android TWA (P15/P16) | ⏸️ built + running on-device; paused on the account upgrade → [docs/twa-play-store.md](docs/twa-play-store.md) |
 | **SEO / organic reach** | 🔵 open since 2026-08-20; one hole left (facet under-linking) → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (re-run and confirmed 2026-08-27)
+## ✅ Quality bar (re-run and confirmed 2026-08-27, end of session)
 
-**1,053 tests pass** (102 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar. Don't land work below it.**
+**1,105 tests pass** (105 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** · `npm run build` clean · `npm audit` 0 vulnerabilities. **This is the standing bar. Don't land work below it.**
 
 ⚠️ **Expect `npm audit` to go red again on an UNCHANGED tree.** It has happened twice, both times an advisory published after the last green run widening to cover the exact version an override pinned, and **it silently blocks the Railway deploy**. The current fix uses two *nested* overrides (`1.1.18` under `eslint`, `5.0.9` under `@typescript-eslint/typescript-estree`) because the two consumers need different major lines and one flat override cannot satisfy both. **Pinning an exact version is a bet that the next advisory won't include it.**
 

@@ -160,52 +160,28 @@ read it before touching the panel.
   (`ActionCells.tsx:32` brand, `QuickActions.tsx:6` stock Tailwind).
 - **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
 
-### Settings → Your platforms ✅ 2026-08-27
+### Settings: Your platforms + What you track ✅ 2026-08-27
 
-Nils: *"if I only have netflix and prime, the 'available on' filter should only show those."*
-Stored on `users.platforms` (migration 24); the filter narrows through `narrowToOwned`. On the live
-library that is **185 chips down to 2**. The options are surveyed from the user's OWN catalog, not a
-curated list, because a global list misses every regional service he actually subscribes to.
-**The three traps it turned up, and the measurements, are in**
-[docs/advanced-filters.md](docs/advanced-filters.md) §5 — read it before touching the survey SQL.
+Both shipped and verified on the prod build. What they are, the three layers they must never
+reach, and every measurement → [STATUS.md](STATUS.md) and [docs/advanced-filters.md](docs/advanced-filters.md) §3 and §5.
+The rules that outlive them are in [AGENTS.md](AGENTS.md) and [[user-display-preferences]].
+Checks are in [smoketest.md](smoketest.md) 13e-iii. Full write-up → grep the archive for
+`Two per-user preferences`.
 
-⚠️ **Still open:** the streaming half is empty on DISCOVER (that feed carries games platforms but
-not watch providers). → [docs/advanced-filters.md](docs/advanced-filters.md) §3.
+**What is still open, in value order:**
 
-### Settings → What you track ✅ 2026-08-27
-
-Nils: *"if users dont want to use fandex for games, we keep the games filter permanently disabled.
-this will be especially relevant later when we add books, board games etc."*
-
-Stored on `users.media_types` (migration 25), applied by seeding `availableTypes` on the type-chip
-row, so **one change covers Home, Discover, Calendar, Library and Wishlist** — they already share
-one `rr_type_filter` key. Verified on the prod build with Games off: the chip is gone on all four,
-0 game links anywhere, Library 1,942 → 1,212; turning it back on restores 239 game links and 1,942.
-
-⚠️ **Three places this must never be applied, and the reasons are load-bearing:**
-
-- **The Fandex Score / taste profile.** Every facet weight is a deviation from your GLOBAL rating
-  baseline, so dropping games from the profile moves the score of every movie and show you never
-  touched. "What you want to see" and "what you like" are different questions.
-- **`home_snapshot` / `calendar_snapshot`.** Both are viewer-independent by contract and feed the
-  SSR'd `/` for SEO. Per-user variants mean 8× rebuilds per region.
-- **Any sync pull.** `pruneWatchlist`/`pruneLibrary` read "absent from the pull" as "removed
-  upstream", so filtering a type there would DELETE every row of it.
-
-**Still open, in rough value order:**
-
-1. **`/api/discover?q=` search still fetches disabled types.** This is the only surface with a real,
-   unconditional provider-call saving (search results are uncached), and games are 2 of its 4 calls.
+1. **`/api/discover?q=` search still fetches disabled types.** The only surface with a real,
+   unconditional provider-call saving: search results are uncached and games are 2 of its 4 calls.
    The client sends `type` only when exactly one chip is active, so a 2-of-3 selection pays full
-   price. Worth doing while RAWG's quota is a live problem.
-2. **`/api/library` + `/api/calendar` already accept `?type=`** and push it into SQL. Defaulting that
-   predicate from the setting would cut the payload (1,942 items today) rather than filtering it in
+   price today. Worth doing while RAWG's quota is a live problem.
+2. **`/api/library` + `/api/calendar` already accept `?type=`** and push it into SQL. Defaulting
+   that predicate from the setting would cut the payload (1,942 items) instead of filtering it in
    the browser. Free, indexed, no provider calls.
-3. **The Discover section fan-out** (`/api/discover` route, 4 calls, games = 2) could skip a disabled
-   section. ⚠️ **Saves latency and payload, NOT quota**: `_pageCache` keys carry no userId, so as
-   long as one other visitor or crawler wants games in the same 15-minute window the call happens
-   anyway. Do not sell it as a quota fix.
-
+3. **The Discover section fan-out** could skip a disabled section. ⚠️ **Saves latency and payload,
+   NOT quota**: `_pageCache` keys carry no userId, so one other visitor wanting games in the same
+   15-minute window makes the call anyway. Do not sell it as a quota fix.
+4. **Streaming is still empty on Discover** for the platform filter: that feed carries games
+   platforms but not watch providers. → docs/advanced-filters.md §3.
 
 ## Still open elsewhere
 

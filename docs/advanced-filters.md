@@ -193,5 +193,5 @@ against ~160 ms + 41 MB for the merge path warm, and 0.5 to 1.5 s cold.
   un-press and only Reset all as an escape.
 
 **Not done:** the streaming half is still empty on Discover, because the browse feed carries games
-platforms but not watch providers. → [docs/advanced-filters.md](docs/advanced-filters.md) §3.
+platforms but not watch providers. → §3 above.
 

@@ -301,6 +301,30 @@ was the first to exercise them. Every one of these produced a finding; re-check 
     "violations"; re-keying on `href.split('/')[2]` gave a clean strictly-descending pass over 500
     cards. Two sibling rows that differ only by year are the DESIGNED collision behaviour, not a
     duplicate — don't log them.
+13e-iii. **The two per-user preferences (2026-08-27). Both are DISPLAY-only, and the check that
+    matters is that nothing was deleted.** Settings → *What you track* and *Your platforms*.
+    ⚠️ **Verify on the `prod` config**: `/settings` is in the `next dev` unhydrated family, so the
+    dev server never runs the effect that loads either one.
+    - **What you track**: turn Games off. The Games chip must vanish on **all four** surfaces (Home,
+      Discover, Calendar, Library/Wishlist) and `a[href^="/game/"]` must read 0 on each. Measured
+      2026-08-27: Library `TITLES · 1,942` → `1,212`. Turn it back on and confirm you get **the same
+      numbers back** (239 game links, 1,942) — that is the check that the preference never reached a
+      sync pull, where the prune invariant would have deleted the rows for real.
+    - ⚠️ **The picker must refuse to turn the LAST type off.** "Uses none" cannot round-trip (it is
+      indistinguishable from "never configured"), and an app with every list empty and no
+      explanation is the failure this guards.
+    - **Your platforms**: pick two. The "Available on" section must offer exactly those two, and say
+      "Showing the platforms you own". Measured: 185 options → 2.
+    - ⚠️ **A chip you have SELECTED must stay visible even after it stops being owned.** Repro:
+      select Nintendo Switch, then set owned to Netflix only. Before the fix the list stayed filtered
+      to 209 titles with no chip to un-press and only Reset all as an escape.
+    - ⚠️ **A count beside a chip is a promise.** `Netflix 269` must yield `Show 269 titles`, not 270.
+      Build option counts from the set with every OTHER filter applied but this one.
+    - **A Home rail that loses all its items to the filter must SAY so**, not return null. That is
+      SM36's failure mode and this setting reintroduces it from two screens away, since rails are
+      sliced to 15 at snapshot-build time.
+
+
 13f. **B5 — NavSearch keyboard path.** Type a person's name in the desktop nav field, then test
     **Enter** (must navigate), **ArrowDown/Up** (must move a highlight and set
     `aria-activedescendant`), and whether suggestions are real `<a href>`. 6th-sweep note (SM24):
