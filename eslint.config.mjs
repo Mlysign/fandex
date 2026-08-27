@@ -33,6 +33,13 @@ const eslintConfig = defineConfig([
     // this-aliasing) against generated code, silently breaking the repo's
     // standing "0 errors" bar. Any future alternate distDir needs a line here.
     ".next-alt/**",
+    // 2026-08-27 — and the third one, for the same reason, found the same way:
+    // `npm run start:alt` serves a build made in `.next-prod`, which is how a
+    // client-rendered page (`/settings`, `/library`, `/wishlist`) gets verified
+    // while another session's `next dev` holds `.next`. Scanning it reported
+    // 1,236 errors against generated chunks. The glob covers whatever the next
+    // one is called; the two above stay for the history.
+    ".next-*/**",
   ]),
   {
     rules: {

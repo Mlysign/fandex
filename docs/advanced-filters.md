@@ -239,3 +239,35 @@ With platforms configured (this account owns 2) the sheet shows `Movies & shows:
 `Games: PlayStation 5 6`. Unconfigured accounts get 8 chips per group with the rest behind "+N
 more", ordered by their own library's usage — the `PLATFORM_PREVIEW` cap is what keeps 185 rows
 from becoming the wall §2.4 was about.
+
+### 6b. Settings → Your platforms is collapsed to two rows
+
+Same session, same complaint one screen over: 195 chips, 122 of them streaming, is a wall you
+scroll past to reach the rest of Settings. Each group now shows **two rows** — your picks first,
+then the services the most of your library sits on (`options` arrives count-descending, so the
+"backfill with popular ones" order is free) — with `Show all N` per group.
+
+⚠️ Three things measured during the build, each of which the obvious implementation gets wrong:
+
+- **Two rows is a MEASUREMENT, not a chip count.** A row holds 3 chips at 375px and 6–8 at desktop.
+  The group renders the full list once, reads which chips landed in the first two rows by
+  `offsetTop`, and re-renders that many; `useLayoutEffect` keeps the long version off the screen.
+- **It SLICES, it does not `overflow: hidden`.** A clipped chip is still tabbable and still read
+  out, so keyboard focus walks into an invisible row and the browser scrolls the hidden box to
+  chase it. This was the first implementation, and it is why the second one exists.
+- **Measure again after `document.fonts.ready`.** Measured under the fallback font, the streaming
+  group fit 7 chips where the real font fits 6 and the games group fit 7 where it fits 8 — the
+  count then freezes, leaving row two ending 177px short. The other direction is worse: a narrower
+  fallback pushes a chip into a third row that nothing is clipping any more.
+- **The selected-first order is FROZEN while you work** (re-snapshotted on expand/collapse, on a
+  new option list, and when the selection first arrives). Re-sorting per toggle makes the chip you
+  just tapped jump to the front and pushes the next one you wanted out of the two visible rows.
+
+⚠️ Found while testing, and unrelated to the collapse: `toggle` computed the next list from
+`selected` state, so two toggles inside one render tick lost one of them. It reads a ref now.
+
+⚠️ **Verifying this needs a real build** (`/settings` is dead under `next dev`) **and the pane's
+viewport emulation does not fire `resize`** — `window.__rs` stayed 0 across two preset changes. Load
+the page at the width you want to test instead. `NEXT_DIST_DIR=.next-prod npx next build` +
+`npm run start:alt` (:3110, `prod-alt`) builds and serves without touching a `.next` that another
+session's `next dev` is holding.

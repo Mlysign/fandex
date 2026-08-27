@@ -36,6 +36,12 @@ const nextConfig: NextConfig = {
   // and a 500 on whichever route compiles next, NOT as a port conflict. When a
   // second Claude session needs its own dev server, give it its own build dir:
   //   NEXT_DIST_DIR=.next-alt npm run dev -- --port 3010   (see `dev:alt`)
+  // The same escape hatch covers the OTHER conflict: `/settings`, `/library`
+  // and `/wishlist` can only be verified against a real build, and `next build`
+  // must never run into a `.next` a live `next dev` is using. Build to a third
+  // dir and serve it beside everything else:
+  //   NEXT_DIST_DIR=.next-prod npx next build && npm run start:alt   (:3110,
+  //   `prod-alt` in .claude/launch.json)
   // Unset everywhere else, so prod/CI/Docker keep the default `.next`.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // Self-host build: emit `.next/standalone` (a minimal server.js + only the
