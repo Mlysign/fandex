@@ -1108,6 +1108,46 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 25,
+    name: "users.media_types: which media types this account uses Fandex for",
+    up: (db) => {
+      // Nils: "if users don't want to use fandex for games, we keep the games
+      // filter permanently disabled. this will be especially relevant later when
+      // we add books, board games etc."
+      //
+      // A JSON array of MediaType values ("movie", "show"), stored as TEXT.
+      // Same shape and same reasoning as `platforms` (migration 24): one small
+      // list per user, no per-row metadata, and erasure comes free because
+      // deleteAccount() drops the users row.
+      // ⚠️ /api/account/export builds explicit column lists, so this had to be
+      // added there BY HAND.
+      //
+      // NULL / "[]" both mean NOT CONFIGURED and yield every type. "Uses none"
+      // is deliberately not expressible: it is indistinguishable from the
+      // default here, and it would leave someone staring at an app whose every
+      // list is empty with nothing explaining why. See enabledMediaTypes().
+      //
+      // ⚠️ This is a DISPLAY preference and must never reach the sync layer.
+      // `pruneWatchlist`/`pruneLibrary` treat "absent from the pull" as "removed
+      // upstream", so filtering a type out of a pull would DELETE every item of
+      // that type from the user's library. Turning games off has to leave the
+      // rows exactly where they are, so turning it back on restores the view.
+      //
+      // Table guard as in migration 24: schemaUpgrade.test.ts starts at
+      // user_version 6, and PRAGMA table_info on a missing table returns an
+      // empty list rather than throwing.
+      const hasUsers = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+        .get();
+      if (!hasUsers) return;
+
+      const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "media_types")) {
+        db.exec("ALTER TABLE users ADD COLUMN media_types TEXT");
+      }
+    },
+  },
 ];
 
 

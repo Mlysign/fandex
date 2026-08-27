@@ -15,6 +15,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { SkeletonPoster, SkeletonText } from "@/components/ui/Skeleton";
 import { buildItemHref } from "@/lib/itemUrl";
+import { useEnabledTypes } from "@/lib/useEnabledTypes";
+import { typeIsVisible } from "@/lib/mediaTypes";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { PopularPerson } from "@/lib/personRail";
 import type { MediaType } from "@/types";
@@ -144,6 +146,7 @@ export default function HomePageClient({
   // / Wishlist / Calendar (2026-07-28). This was plain useState and reset on
   // every visit, so Home ignored a filter the user had set two pages ago.
   const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
+  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
   const [showSignIn, setShowSignIn] = useState(false);
 
   const load = useCallback(() => {
@@ -184,16 +187,46 @@ export default function HomePageClient({
   // controls). Purely client-side over already-fetched items — no refetch.
   const toggleType = (t: string) =>
     setActiveTypes((prev) => (prev.includes(t as MediaType) ? prev.filter((x) => x !== t) : [...prev, t as MediaType]));
+  // The chip selection AND the account's enabled types, resolved in one place:
+  // an empty chip row means "every type you use", not "every type there is".
   const byType = (items: any[] | undefined) =>
-    !items ? items : activeTypes.length === 0 ? items : items.filter((i) => activeTypes.includes(i.type));
+    !items ? items : items.filter((i) => typeIsVisible(i.type, activeTypes, storedTypes));
 
   const rail = (title: string, items: any[] | undefined, seeAllHref: string, forYou = false) => {
     const shown = byType(items);
-    return shown && shown.length > 0 ? (
-      <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
-        {shown.map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
-      </Rail>
-    ) : null;
+    if (shown && shown.length > 0) {
+      return (
+        <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
+          {shown.map((item) => <PosterCard key={item.id} item={item} onSelect={onSelect} />)}
+        </Rail>
+      );
+    }
+    // ⚠️ A rail that HAD items and lost them all to a filter must say so.
+    //
+    // This is SM36's failure mode: with the Games chip on and RAWG down, the
+    // whole "Popular right now" section vanished with nothing explaining it.
+    // "What you track" reintroduces the same risk from further away — the rails
+    // are sliced to 15 at snapshot-build time, so a games-heavy day plus Games
+    // turned off can empty one, and the setting that did it is on another
+    // screen. A silent `null` is indistinguishable from a broken rail.
+    //
+    // Only when the source list was non-empty: a genuinely empty rail (nothing
+    // fetched, still loading) keeps returning null, which is the existing and
+    // correct behaviour for that case.
+    if (items && items.length > 0) {
+      return (
+        <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
+          <p className="text-body-sm text-text-secondary py-6">
+            Nothing here matches the types you track.{" "}
+            <Link href="/settings" className="text-accent hover:text-accent-hover underline underline-offset-2">
+              Change that
+            </Link>
+            .
+          </p>
+        </Rail>
+      );
+    }
+    return null;
   };
 
   const hasRails = !!(trending.length || upcoming.length || data?.recommendation?.length);
@@ -209,7 +242,7 @@ export default function HomePageClient({
 
       {/* The shared page header, same order as every other list page: media type
           filters first. Home has no tabs, nothing to search and no sort. */}
-      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableViews={[]} />
+      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableTypes={enabledTypes} availableViews={[]} />
 
       <main className="px-5 py-4 md:py-8">
         <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">

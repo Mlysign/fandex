@@ -12,6 +12,8 @@ import { LIBRARY_SORTS, defaultUiFilters, normalizeSort, countActiveAdvanced } f
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
+import { useEnabledTypes } from "@/lib/useEnabledTypes";
+import { typeIsVisible } from "@/lib/mediaTypes";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import { useDebouncedValue } from "@/lib/useDebounced";
 import type { WishlistToggledDetail } from "@/lib/useQuickActions";
@@ -169,6 +171,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // shared `rr_mystuff_*` set (2026-07-28) — the tab now does the job the two
   // routes' separate filter state used to.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
+  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
   const [search, setSearch] = usePersistedState("rr_mystuff_search", "");
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_mystuff_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_mystuff_excFacets", []);
@@ -332,7 +335,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // Split in two so the platform chips can count the set they will actually act
   // on. Everything EXCEPT the platform filter first:
   const beforePlatform = tabItems.filter((item) => {
-    if (types.length > 0 && !types.includes(item.type)) return false;
+    if (!typeIsVisible(item.type, types, storedTypes)) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
     if (!matchesFacets(item, includeFacets, excludeFacets)) return false;
     if (!passesYearMembership(item, yearRange, membership)) return false;
@@ -448,6 +451,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
+        availableTypes={enabledTypes}
         tabs={<LibraryWishlistTabs active={activeTab} onChange={changeTab} />}
         searchValue={search}
         onSearchChange={setSearch}

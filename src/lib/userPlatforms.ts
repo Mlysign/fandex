@@ -1,9 +1,16 @@
 import { get, run } from "@/lib/db";
 import { sanitizePlatformKeys } from "@/lib/platformKeys";
+import { sanitizeMediaTypes, MEDIA_TYPES } from "@/lib/mediaTypes";
 
-// Server-side read/write of "the platforms and services this account owns"
-// (users.platforms, migration 24). Mirrors userCountry.ts's three-function
-// shape: raw stored value, effective value, validated writer.
+// Server-side read/write of the two "what do you actually use" preferences that
+// live on the users row: the platforms and services you own (users.platforms,
+// migration 24) and the media types you use Fandex for (users.media_types,
+// migration 25). Both mirror userCountry.ts's shape: raw stored value, a
+// validated writer, and the interpretation of the default left to a leaf module.
+//
+// ⚠️ Both are DISPLAY preferences. Neither may reach a sync pull —
+// `pruneWatchlist`/`pruneLibrary` read "absent from the pull" as "removed
+// upstream", so filtering either one there deletes the user's rows.
 //
 // The keys themselves and their validation live in platformKeys.ts, which is a
 // LEAF module with no imports so the client can use the same definitions. This
@@ -30,6 +37,41 @@ export function getUserPlatforms(userId: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * The media types this account uses Fandex for, as stored ([] = not configured).
+ *
+ * ⚠️ Read it through `enabledMediaTypes()` before acting on it — [] means every
+ * type, not none. This returns the raw stored value so the settings page can
+ * tell "never configured" from "configured to everything".
+ *
+ * ⚠️ DISPLAY ONLY. Never let this reach a sync pull: `pruneWatchlist` and
+ * `pruneLibrary` treat "absent from the pull" as "removed upstream", so
+ * filtering a type out of a pull deletes every row of that type.
+ */
+export function getUserMediaTypes(userId: string): string[] {
+  const row = get<{ media_types: string | null }>("SELECT media_types FROM users WHERE id = ?", [userId]);
+  if (!row?.media_types) return [];
+  try {
+    return sanitizeMediaTypes(JSON.parse(row.media_types));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Persist the media types (validated). Returns what was actually stored.
+ *
+ * ⚠️ Storing EVERY type is normalised to NULL, i.e. "not configured". They mean
+ * the same thing to every reader, and collapsing them keeps one spelling of the
+ * default rather than two that drift.
+ */
+export function setUserMediaTypes(userId: string, types: unknown): string[] {
+  const clean = sanitizeMediaTypes(types);
+  const store = clean.length > 0 && clean.length < MEDIA_TYPES.length ? JSON.stringify(clean) : null;
+  run("UPDATE users SET media_types = ? WHERE id = ?", [store, userId]);
+  return store ? clean : [];
 }
 
 /** Persist the list (validated). Returns what was actually stored. */

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query, get } from "@/lib/db";
 import { getStoredCountry } from "@/lib/userCountry";
-import { getUserPlatforms } from "@/lib/userPlatforms";
+import { getUserPlatforms, getUserMediaTypes } from "@/lib/userPlatforms";
 
 export async function GET() {
   try {
@@ -32,6 +32,7 @@ export async function GET() {
         provider: session.provider,
         country: getStoredCountry(session.userId), // null = not set → client auto-detects
         platforms: getUserPlatforms(session.userId), // [] = not configured → the filter offers everything
+        mediaTypes: getUserMediaTypes(session.userId), // [] = not configured → every type is on
       },
       identities,
       syncLogs,

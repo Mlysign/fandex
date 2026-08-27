@@ -7,6 +7,8 @@ import type { EnrichedItem, MediaType } from "@/types";
 import { buildItemHref } from "@/lib/itemUrl";
 import { normalizeName } from "@/lib/normalize";
 import { mergeMyStuff } from "@/lib/myStuffMerge";
+import { useEnabledTypes } from "@/lib/useEnabledTypes";
+import { typeIsVisible } from "@/lib/mediaTypes";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { CalendarItem, CalendarMode } from "@/components/CalendarView";
 import CalendarView from "@/components/CalendarView";
@@ -72,6 +74,7 @@ export default function CalendarPageClient() {
   // SM2's shared type-filter key, so Games-only set on Discover/Library/Home
   // still holds here (it used to be plain useState and reset on every visit).
   const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
+  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
   const [storedScopes, setScopes] = usePersistedState<CalendarScope[]>("rr_calendar_scopes", DEFAULT_SCOPES);
 
   // What's actually applied. For an anon visitor the two personal scopes can
@@ -236,7 +239,7 @@ export default function CalendarPageClient() {
     return out;
   }, [personal, popularByMonth, wantsWishlist, wantsLibrary, wantsPopular]);
 
-  const filtered = activeTypes.length === 0 ? scoped : scoped.filter((i) => activeTypes.includes(i.type as MediaType));
+  const filtered = scoped.filter((i) => typeIsVisible(i.type as MediaType, activeTypes, storedTypes));
 
   const modeToggle = (
     <button
@@ -320,6 +323,7 @@ export default function CalendarPageClient() {
       <SubBar
         activeTypes={activeTypes}
         onToggleType={toggleType}
+        availableTypes={enabledTypes}
         filters={
           <ScopeFilter
             activeScopes={scopes}

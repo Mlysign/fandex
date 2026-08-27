@@ -2,7 +2,7 @@ import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { setUserCountry } from "@/lib/userCountry";
-import { setUserPlatforms } from "@/lib/userPlatforms";
+import { setUserPlatforms, setUserMediaTypes } from "@/lib/userPlatforms";
 import { parseJsonBody } from "@/lib/validate";
 import { SettingsPostSchema } from "@/lib/schemas";
 
@@ -16,7 +16,7 @@ import { SettingsPostSchema } from "@/lib/schemas";
 // nothing changed, and 400ing it would be a distinction without a difference.
 export const POST = withUser(async (req: NextRequest, session) => {
   const body = await parseJsonBody(req, SettingsPostSchema);
-  const out: { ok: true; country?: string; platforms?: string[] } = { ok: true };
+  const out: { ok: true; country?: string; platforms?: string[]; mediaTypes?: string[] } = { ok: true };
 
   if (body.country !== undefined) {
     const country = setUserCountry(session.userId, body.country);
@@ -29,6 +29,10 @@ export const POST = withUser(async (req: NextRequest, session) => {
     // dropped, so the client should adopt the response rather than assume its
     // own list round-tripped intact.
     out.platforms = setUserPlatforms(session.userId, body.platforms);
+  }
+
+  if (body.mediaTypes !== undefined) {
+    out.mediaTypes = setUserMediaTypes(session.userId, body.mediaTypes);
   }
 
   return NextResponse.json(out);

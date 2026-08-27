@@ -126,6 +126,7 @@ export const SyncPostSchema = z.object({
 export const SettingsPostSchema = z.object({
   country: z.string().min(1).optional(),
   platforms: z.array(z.string()).optional(),
+  mediaTypes: z.array(z.string()).optional(),
 });
 
 // DELETE /api/account — H4.6 erasure. The literal is the type-to-confirm value

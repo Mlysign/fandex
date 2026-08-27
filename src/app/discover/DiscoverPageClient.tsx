@@ -9,6 +9,8 @@ import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
 import { platformOptions, matchesPlatforms } from "@/lib/platformKeys";
 import FacetLink from "@/components/FacetLink";
+import { useEnabledTypes } from "@/lib/useEnabledTypes";
+import { typeIsVisible } from "@/lib/mediaTypes";
 import { usePersistedState, useScrollRestore, hasSavedScroll } from "@/lib/usePersistedState";
 import { readBrowseCache, writeBrowseCache } from "@/lib/discoverBrowseCache";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -169,6 +171,7 @@ export default function DiscoverPageClient() {
   // in its own key; `filters` is merged from the rest + the shared types slice.
   // The types stored inside rr_discover_filters are ignored from now on.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
+  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
   const [filtersRest, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
   const filters: UiFilters = { ...filtersRest, types };
   // Default = "popularity" (S2, 2026-07-27): H1.1 locked "Popularity for
@@ -535,7 +538,7 @@ export default function DiscoverPageClient() {
   // Everything EXCEPT the platform filter, so the chips can count the set they
   // actually act on (see the note beside platformOpts).
   const beforePlatform = useMemo(() => {
-    let r = filters.types.length ? items.filter((i) => filters.types.includes(i.type)) : items;
+    let r = items.filter((i) => typeIsVisible(i.type, filters.types, storedTypes));
     const m = filters.membership;
     if (m.library === "exclude") r = r.filter((i) => !i.libraryStatus);
     else if (m.library === "only") r = r.filter((i) => !!i.libraryStatus);
@@ -544,7 +547,7 @@ export default function DiscoverPageClient() {
     if (m.rated === "exclude") r = r.filter((i) => i.rating == null);
     else if (m.rated === "only") r = r.filter((i) => i.rating != null);
     return r;
-  }, [items, filters.types, filters.membership]);
+  }, [items, filters.types, filters.membership, storedTypes]);
 
   const browseFiltered = useMemo(
     () => (filters.platforms?.length ? beforePlatform.filter((i) => matchesPlatforms(i as any, filters.platforms)) : beforePlatform),
@@ -709,6 +712,7 @@ export default function DiscoverPageClient() {
       <SubBar
         activeTypes={filters.types}
         onToggleType={toggleType}
+        availableTypes={enabledTypes}
         searchValue={q}
         onSearchChange={setQ}
         searchPlaceholder="Search games, movies, shows…"

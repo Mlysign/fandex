@@ -20,6 +20,8 @@ export interface SessionUser {
   country?: string | null;
   /** Platform/service keys this account says it owns. Empty = not narrowed. */
   platforms?: string[] | null;
+  /** Media types this account uses Fandex for. Empty = not configured, so all of them. */
+  mediaTypes?: string[] | null;
 }
 
 let probe: Promise<SessionUser | null> | null = null;

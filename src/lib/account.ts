@@ -130,10 +130,11 @@ export function deleteAccount(userId: string): AccountDeletionResult {
 
 // v2 (2026-08-16, MB14): adds `episodes` — per-episode watched state.
 // v3 (2026-08-27): adds `user.platforms` — the services and consoles you own.
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 3;
+// v4 (2026-08-27): adds `user.mediaTypes` — the media types you use Fandex for.
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 4;
 
-/** users.platforms is TEXT holding a JSON array; a malformed row exports as empty. */
-function parsePlatforms(raw: string | null): string[] {
+/** A users column holding a JSON string array; a malformed row exports as empty. */
+function parseStringList(raw: string | null): string[] {
   if (!raw) return [];
   try {
     const v = JSON.parse(raw);
@@ -175,7 +176,7 @@ export type AccountExport = {
   exportedAt: string;
   /** Plain-language notes so the file makes sense without this codebase. */
   readme: string[];
-  user: { id: string; createdAt: number | null; lastSeenAt: number | null; country: string | null; platforms: string[] };
+  user: { id: string; createdAt: number | null; lastSeenAt: number | null; country: string | null; platforms: string[]; mediaTypes: string[] };
   identities: Array<{
     provider: string;
     providerUserId: string;
@@ -241,7 +242,8 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
     last_seen_at: number | null;
     country: string | null;
     platforms: string | null;
-  }>("SELECT id, created_at, last_seen_at, country, platforms FROM users WHERE id = ?", [userId]);
+    media_types: string | null;
+  }>("SELECT id, created_at, last_seen_at, country, platforms, media_types FROM users WHERE id = ?", [userId]);
   if (!user) throw new Error("No such user");
 
   const identities = query<{
@@ -357,7 +359,8 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       country: user.country,
       // Stored as a JSON string; exported as the list it represents, so the file
       // reads as data rather than as our serialization.
-      platforms: parsePlatforms(user.platforms),
+      platforms: parseStringList(user.platforms),
+      mediaTypes: parseStringList(user.media_types),
     },
     identities: identities.map((i) => ({
       provider: i.provider,

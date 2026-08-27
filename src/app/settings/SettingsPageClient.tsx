@@ -11,6 +11,7 @@ import { syncToCompletion } from "@/lib/syncClient";
 import PanelHeader from "@/components/insights/PanelHeader";
 import SignInGate from "@/components/auth/SignInGate";
 import PlatformPicker from "@/components/settings/PlatformPicker";
+import MediaTypePicker from "@/components/settings/MediaTypePicker";
 import type { PlatformOption } from "@/lib/platformKeys";
 import { Settings as SettingsIcon } from "lucide-react";
 
@@ -55,6 +56,8 @@ function SettingsContent() {
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
   const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
   const [platformsLoading, setPlatformsLoading] = useState(true);
+  // What you track. [] = not configured, i.e. every type is on.
+  const [mediaTypes, setMediaTypes] = useState<string[]>([]);
   const [showRawgForm, setShowRawgForm] = useState(false);
   const [rawgEmail, setRawgEmail] = useState("");
   const [rawgPassword, setRawgPassword] = useState("");
@@ -88,6 +91,7 @@ function SettingsContent() {
     setItemCount(data.itemCount ?? 0);
     // Country: use the stored value; on first visit (none stored) auto-detect
     // from the browser and persist it once so region-aware data is correct.
+    setMediaTypes(data.user.mediaTypes ?? []);
     const stored = data.user.country as string | null;
     if (stored) setCountry(stored);
     else if (initial) { const d = detectCountry(); setCountry(d); saveCountry(d); }
@@ -120,6 +124,23 @@ function SettingsContent() {
     } finally {
       setPlatformsLoading(false);
     }
+  }
+
+  async function saveMediaTypes(types: string[]): Promise<string[] | void> {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaTypes: types }),
+    });
+    if (!res.ok) {
+      setNotice({ msg: "Could not save what you track. Please try again.", ok: false });
+      return;
+    }
+    const d = await res.json();
+    const stored: string[] = d.mediaTypes ?? [];
+    setMediaTypes(stored);
+    setNotice({ msg: "Updated what you track.", ok: true });
+    return stored;
   }
 
   async function savePlatforms(keys: string[]): Promise<string[] | void> {
@@ -543,6 +564,11 @@ function SettingsContent() {
             </select>
           </div>
         </section>
+
+        {/* What you track (2026-08-27). Above the platform picker because it is
+            the coarser choice: turning Games off makes the games half of that
+            list irrelevant. */}
+        <MediaTypePicker value={mediaTypes} onSave={saveMediaTypes} />
 
         {/* Your platforms (2026-08-27) — narrows the "Available on" filter to
             what you actually subscribe to and own. Sits under Region because it
