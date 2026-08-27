@@ -85,3 +85,46 @@ describe("persistDiscoverBatch — anonymous resolution (SM38)", () => {
     }
   });
 });
+
+/**
+ * The outage fallback (catalog-growth phase 2) hands this function items that
+ * ARE catalog rows: their `id` is already a media_items uuid and they carry no
+ * `raw`, because there is nothing to persist. Both resolvers skip anything
+ * without `raw`, so before 2026-08-27 every one of those cards shipped
+ * `linkable: false` with no slug — a whole page of titles nobody could click,
+ * which is precisely the defect the SM38 block above exists to prevent.
+ */
+describe("persistDiscoverBatch — items that are already catalog rows", () => {
+  initDb();
+
+  const UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    run("DELETE FROM media_links");
+    run("DELETE FROM media_items");
+    run("INSERT INTO media_items (id, type, title, slug) VALUES (?, 'game', 'Stored Game', 'stored-game')", [UUID]);
+  });
+
+  it("keeps the uuid, finds the slug, and stays linkable with no `raw`", async () => {
+    const { persistDiscoverBatch } = await import("@/lib/annotateDiscover");
+    const [item] = persistDiscoverBatch([{ id: UUID, type: "game", title: "Stored Game", releaseDate: null }] as any, "user-1");
+    expect(item.id).toBe(UUID);
+    expect((item as any).slug).toBe("stored-game");
+    expect((item as any).linkable).not.toBe(false);
+  });
+
+  it("works for an anonymous visitor too — that is who an outage page serves", async () => {
+    const { persistDiscoverBatch } = await import("@/lib/annotateDiscover");
+    const { persistDiscoverItems } = await import("@/lib/discoverPersist");
+    const [item] = persistDiscoverBatch([{ id: UUID, type: "game", title: "Stored Game", releaseDate: null }] as any, null);
+    expect((item as any).slug).toBe("stored-game");
+    expect(persistDiscoverItems).not.toHaveBeenCalled();
+  });
+
+  it("still marks a genuine first-sighting non-linkable", async () => {
+    const { persistDiscoverBatch } = await import("@/lib/annotateDiscover");
+    const [item] = persistDiscoverBatch([{ id: "tmdb-movie-999", type: "movie", title: "New", releaseDate: null }] as any, null);
+    expect((item as any).linkable).toBe(false);
+  });
+});

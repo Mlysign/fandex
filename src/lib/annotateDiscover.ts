@@ -31,6 +31,11 @@ import { availabilityForItems } from "@/lib/availability";
  * This does NOT weaken the gate: the lookup is a plain SELECT, so an anonymous
  * request still writes exactly nothing.
  */
+// A `media_items` id, which is the one kind of item id that needs no resolving.
+// Provider ids are composites (`tmdb-movie-693134`, `rawg-45`), so this can
+// never collide with one.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function persistDiscoverBatch<T extends { id: string; raw?: unknown }>(
   items: T[],
   userId: string | null
@@ -40,12 +45,19 @@ export function persistDiscoverBatch<T extends { id: string; raw?: unknown }>(
     : userId
       ? persistDiscoverItems(items as any)
       : lookupExistingUuids(items as any);
+  // ⚠️ An item that came from OUR catalog (the outage fallback in
+  // lib/catalogFeed.ts) already carries its uuid and has no `raw` to resolve
+  // by — and both helpers above skip anything without `raw`. Measured
+  // 2026-08-27: without this branch every fallback card shipped
+  // `linkable: false` with no slug, i.e. a whole page of titles nobody could
+  // click, which is the same defect [[anon-surface-has-no-item-links]] records.
+  const alreadyRows = items.filter((it) => UUID_RE.test(it.id)).map((it) => it.id);
   // The slug too, so a card links straight to the canonical url instead of
   // through the legacy uuid one (which 308s). Same shape as the uuid: a title
   // we do not hold has neither, and is already non-linkable.
-  const slugs = slugsForItemIds([...idMap.values()]);
+  const slugs = slugsForItemIds([...idMap.values(), ...alreadyRows]);
   return items.map(({ raw: _raw, ...it }) => {
-    const uuid = idMap.get(it.id);
+    const uuid = idMap.get(it.id) ?? (UUID_RE.test(it.id) ? it.id : undefined);
     return (uuid
       ? { ...it, id: uuid, slug: slugs.get(uuid) ?? null }
       : { ...it, linkable: false }) as Omit<T, "raw">;

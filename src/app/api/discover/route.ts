@@ -11,6 +11,7 @@ import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/live
 import { persistDiscoverBatch, annotateUserState, annotateAvailability } from "@/lib/annotateDiscover";
 import type { Direction } from "@/lib/discoverFeed";
 import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
+import { withCatalogFallback } from "@/lib/catalogFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
 
@@ -187,6 +188,17 @@ export async function GET(req: NextRequest) {
       if (section === "games")  results = await fetchGamePageAllSources(page, direction);
       if (section === "movies") results = await fetchMoviePage(page, direction, region);
       if (section === "shows")  results = await fetchShowPage(page, direction);
+
+      // Nothing back from the providers → serve what we already hold for this
+      // type and window. Measured 2026-08-27: with RAWG quota-latched and IGDB
+      // failing, `?section=games` returned `{"items":[]}` on prod and the whole
+      // category disappeared from Discover. → lib/catalogFeed.ts
+      const typeOf = { games: "game", movies: "movie", shows: "show" } as const;
+      const fallback = withCatalogFallback(results, typeOf[section], direction, page);
+      if (fallback.fellBack) {
+        log.info("discover_catalog_fallback", { section, page, direction, items: fallback.items.length });
+        results = fallback.items;
+      }
       // Q15/Q16: always decorate with community stats (+ Fandex Score when
       // signed in) so a loaded-more page stays sortable by Popularity/Rating/
       // Fandex Score, not just the initial batch.
@@ -213,7 +225,16 @@ export async function GET(req: NextRequest) {
       fetchMoviePage(1, "future", region),
       fetchShowPage(1, "future"),
     ]);
-    const all = sortByDate(decorateSection([...games, ...movies, ...shows], userId));
+    // Per SECTION, not for the batch: one dead provider must not be able to
+    // take the other two categories down with it, and one healthy one must not
+    // hide that a category is missing. This is the anonymous path, so it is
+    // also what a crawler sees.
+    const filled = [
+      ...withCatalogFallback(games, "game", "future").items,
+      ...withCatalogFallback(movies, "movie", "future").items,
+      ...withCatalogFallback(shows, "show", "future").items,
+    ];
+    const all = sortByDate(decorateSection(filled, userId));
     return NextResponse.json({ items: annotate(persist(all)) });
 
   } catch (e: any) {

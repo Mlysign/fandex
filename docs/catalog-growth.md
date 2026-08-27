@@ -9,7 +9,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 |---|---|
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
-| 2. Serve anon Discover from the DB | ⬜ next |
+| 2. Serve anon Discover from the DB | 🔵 **first slice done 2026-08-27** (§10): an empty provider section now falls back to stored rows. Serving the DB by DEFAULT still wants phase 3 first. |
 | 3. Split the shelf from the scoring pool | ⬜ **gate: do not grow past ~10k items without it** |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
 | 5. Housekeeping by bytes | ⬜ |
@@ -333,3 +333,41 @@ thin, 480/day drains far too slowly, and the right response is to re-derive the 
 
 **Still open in phase 1:** extending `annotateAvailability` to `/api/home` and the calendar, so their
 cards can show where a title streams too.
+
+---
+
+## 10. Phase 2, first slice: an outage stops emptying Discover (2026-08-27) — SHIPPED
+
+Not the whole of phase 2. The one brick worth laying immediately, because we were living inside the
+failure it fixes: on prod, RAWG latched on its quota 401 and IGDB answered 9 of 9 requests with
+network errors, `?section=games` returned `{"items":[]}`, and **the entire games category vanished
+from Discover while thousands of games sat in the database.**
+
+`lib/catalogFeed.ts` serves stored rows for a type and window when the provider hands back nothing.
+Wired into both places a section can come back empty: the `?section=` load-more branch and the
+anonymous browse fan-out, **per section**, so one dead provider cannot take the other two categories
+with it.
+
+Decisions worth not re-litigating, each pinned by `catalogFeed.test.ts`:
+
+- **Empty is the only trigger.** A short page is a real answer (the window genuinely holds few
+  releases). Topping it up would make one feed out of two sources with one order.
+- **Date order, not popularity.** `media_items` holds no popularity signal; votes live inside link
+  projections, and reading those is the merge path this file exists to avoid (41 MB for the real
+  library). Discover is a timeline, so date order is both the cheapest answer and an honest one.
+  Taste ranking still happens downstream, through the same `decorateSection` path.
+- **Pool membership is NOT applied.** The pool is a scoring candidate set; this asks "what do we
+  have to show", and a `browsed` row we hold is a fine thing to show during an outage.
+
+⚠️ **Found by running the pipeline rather than reading it**: the first version shipped 20 items that
+were all `linkable: false` with no slug. Both uuid resolvers skip items without `raw`, and a catalog
+row has none — it IS the row. `persistDiscoverBatch` now passes a uuid `id` straight through
+(provider ids are composites, so they can never collide). Without that check the fallback would have
+replaced an empty category with a full page of cards nobody could click, which is a worse failure
+than the one it fixes and would have looked fine in every test that did not click something.
+
+⚠️ **Verification honesty**: the fallback's own logic, shape and pipeline output are covered by
+tests and by a scripted run through `decorateSection` → `persistDiscoverBatch` → annotate (every
+item linkable, slugged, scored). **The live trigger has NOT been exercised end to end**, because
+reproducing it needs both games providers down at once, and locally IGDB is healthy. The prod
+symptom that motivated it is recorded in TASKS.md "Needs Nils" #2.
