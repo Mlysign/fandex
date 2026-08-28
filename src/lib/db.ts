@@ -260,6 +260,60 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_franchise_members_key ON franchise_members(ip_key);
     CREATE INDEX IF NOT EXISTS idx_franchise_members_fetched ON franchise_members(fetched_at);
+
+    -- ── The derived projection, on disk (2026-08-28) ────────────────────
+    -- facetCache.derived's L2. Same value (facets + merged); the difference is
+    -- that this one is not capped at 6,000 entries, and disk is ~75x cheaper
+    -- than RAM (railway-cost-shape), so breadth belongs here, not in memory.
+    --
+    -- ⚠️ WHY: buildEntries peeks the memory cache for EVERY pool item, so a pool
+    -- larger than the cap evicts what it just wrote and re-derives from blobs on
+    -- every rebuild. Measured 2026-08-28 by shrinking the cap instead of growing
+    -- the catalog (same ratio): a fully-cached rebuild is 64-72 ms, a
+    -- 5x-oversubscribed one is 436 ms, and it saturates around 7.7x, which is
+    -- just "cold rebuild": 590 ms, of which 107 ms is reading 49 MB of blobs,
+    -- 148 ms is JSON.parse-ing them, and most of the rest is mergeLinks plus
+    -- extractFacets. This table exists so a rebuild reads a third as many bytes
+    -- and re-derives nothing. See docs/catalog-growth.md 15.
+    --
+    -- ⚠️ THE KEY DELIBERATELY OMITS scoringConfigSignature(), which the MEMORY
+    -- cache's key includes. In RAM that is a free safety margin (facetCache's own
+    -- comment: raw facets do not actually depend on the config, entries just turn
+    -- over a little early). On disk it would mean every tweak in /dev/scoring
+    -- orphans the whole table and rewrites it, which at 50k items is ~315 MB of
+    -- WAL for Litestream to ship: the shape of the PR16 incident that blew the
+    -- spend cap. Freshness is (last_synced, raw_len), which is what actually
+    -- determines the value.
+    --
+    -- ⚠️ NOT a dbPrune PRUNABLE_WHERE entry, and this is the one place that rule
+    -- is deliberately not followed. That predicate lists tables whose rows would
+    -- take a USER'S OWN data with them; these rows are a pure function of
+    -- media_links and cost one re-derive to replace. Listing it would make every
+    -- browsed row unprunable the moment it was rendered once, i.e. it would turn
+    -- the boot prune off. ON DELETE CASCADE cleans up instead.
+    --
+    -- No user_id, deliberately: catalog data, so GDPR erasure correctly skips it
+    -- (deleteAccount finds personal tables by that column name), and
+    -- /api/account/export has nothing to add.
+    --
+    -- Note on the two apply paths: scripts/migrate.mjs calls runMigrations only,
+    -- never ensureSchema, so it does not create THIS block's tables at all (the
+    -- others are in an existing file because the app booted once). Verified
+    -- 2026-08-28 against a copy. Harmless, because every query goes through
+    -- getDb(), which runs this block before anything can read the table.
+    CREATE TABLE IF NOT EXISTS media_item_projection (
+      media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+      region TEXT NOT NULL,
+      last_synced INTEGER NOT NULL,
+      raw_len INTEGER NOT NULL,
+      facets TEXT NOT NULL,
+      merged TEXT NOT NULL,
+      written_at INTEGER NOT NULL,
+      PRIMARY KEY (media_item_id, region)
+    );
+    -- Eviction reads WRITE time, never read time: tracking reads would turn every
+    -- cache hit into a write, which is the invariant in AGENTS.md.
+    CREATE INDEX IF NOT EXISTS idx_projection_written ON media_item_projection(written_at);
   `);
 
   // ── Lightweight migrations for existing databases ──────────────

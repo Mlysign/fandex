@@ -10,7 +10,7 @@ import { sharedCache } from "@/lib/boundedCache";
 import { extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
-import { getDerivedForItem, peekDerived, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
+import { getDerivedForItem, peekDerivedBatch, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
 import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
@@ -277,17 +277,21 @@ function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
     }
   }
 
-  // Pass 1: what's already derived? `peekDerived` needs no raw_data.
+  // Pass 1: what is already derived? Neither layer needs raw_data.
   // The config signature is constant across the whole rebuild but costs
   // 0.061 ms a call — recomputing it per item was ~307 ms of a cold rebuild.
   const sig = derivedSignature();
-  const derivedById = new Map<string, Derived>();
+  // Memory, then the projection table, in ONE batched read (2026-08-28). Per
+  // item this was 2,553 statements on a rebuild and would be 50k at phase 4's
+  // target; `peekDerivedBatch` chunks it instead. A disk hit skips the blob
+  // read, the JSON.parse and the whole mergeLinks/extractFacets derivation.
+  const derivedById = peekDerivedBatch(
+    [...groups].map(([id, g]) => ({ id, maxLastSynced: g.maxSynced, rawLen: g.rawLen })),
+    undefined,
+    sig
+  );
   const missIds: string[] = [];
-  for (const [id, g] of groups) {
-    const hit = peekDerived(id, g.maxSynced, g.rawLen, undefined, sig);
-    if (hit) derivedById.set(id, hit);
-    else missIds.push(id);
-  }
+  for (const id of groups.keys()) if (!derivedById.has(id)) missIds.push(id);
 
   // Pass 2: raw_data for misses only.
   if (missIds.length) {

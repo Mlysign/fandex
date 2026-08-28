@@ -60,6 +60,25 @@ export async function register() {
     }, FACET_CACHE_INTERVAL_MS);
     timer.unref?.();
 
+    // media_item_projection — facetCache's disk L2 (2026-08-28), written on a
+    // request path, so it needs a ROW ceiling and not just a TTL. It has no TTL
+    // at all on purpose: a projection is stale only when its item's links
+    // change, and (last_synced, raw_len) already catches that on read.
+    //
+    // Same interval and the same bounded-batch shape as the sweep above, for the
+    // same reason: PR16 deleted 546,754 rows in one go for 12.8 GB of WAL churn
+    // to S3 and blew the Railway spend cap. The danger is the catch-up burst.
+    const boundProjections = async () => {
+      const { sweepProjections } = await import("./lib/facetCache");
+      const { rows, deleted } = sweepProjections();
+      if (deleted > 0) log.info("projection_table_bounded", { rows, deleted });
+    };
+    void boundProjections().catch((e) => log.error("projection_sweep_uncaught", errorFields(e)));
+    const projectionTimer = setInterval(() => {
+      void boundProjections().catch((e) => log.error("projection_sweep_uncaught", errorFields(e)));
+    }, FACET_CACHE_INTERVAL_MS);
+    projectionTimer.unref?.();
+
     // PL4 — the same treatment for import staging, and for the same reason.
     // `import_staging` holds a parsed import for somebody who has no account
     // yet, so it is written on a request path by anonymous callers: the exact

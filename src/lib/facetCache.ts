@@ -42,6 +42,7 @@
 // failure mode is an item silently missing from the pool until the TTL expires;
 // caching the DERIVATION instead gets the same saving with no such mode.
 
+import { query, run, get } from "@/lib/db";
 import { sharedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { extractFacets, type Facet } from "@/lib/facets";
@@ -181,7 +182,123 @@ export function peekDerived(
   sig: string = scoringConfigSignature()
 ): Derived | undefined {
   const hit = _cache.get(keyFor(mediaItemId, maxLastSynced, rawLen, region, sig));
-  return hit ? { facets: [...hit.facets], merged: hit.merged } : undefined;
+  if (hit) return { facets: [...hit.facets], merged: hit.merged };
+  return peekDerivedBatch([{ id: mediaItemId, maxLastSynced, rawLen }], region, sig).get(mediaItemId);
+}
+
+// ── The disk half (2026-08-28) ───────────────────────────────────────────────
+//
+// `media_item_projection` is this cache's L2 — same value, no 6,000-entry cap,
+// on a medium that costs ~75× less than RAM. See its comment in db.ts for why it
+// exists and why its key deliberately omits the scoring signature.
+//
+// ⚠️ BATCHED, not per item. A pool rebuild peeks for every pool item; at 50k
+// that is 50k prepared statements (~0.5 s) where one chunked read is a single
+// scan. `peekDerived` above routes through the same path with a batch of one,
+// so there is one definition of "is it on disk" rather than two.
+const PROJECTION_CHUNK = 400;
+
+/**
+ * Only the DEFAULT region is persisted, and the reasoning is the whole point of
+ * the table rather than a limitation of it.
+ *
+ * This exists for ONE caller: `buildEntries`, which iterates the entire catalog
+ * on every pool rebuild and always uses the default region. Every other caller
+ * is bounded by a single user's library or one calendar month, which the 6,000
+ * entries of memory already cover, and each has its own result cache on top.
+ *
+ * ⚠️ Measured 2026-08-28, which is why this guard exists at all: without it the
+ * real database stored **two** regions after one session (`DEFAULT_COUNTRY` from
+ * the pool, the user's own country from /api/library and /api/calendar) —
+ * 4,589 rows for a 2,553-item catalog. Regions multiply, and at the 30–50k
+ * phase 4 targets each one is another ~315 MB against a 2 GB tripwire.
+ *
+ * The `region` column stays in the schema so widening this is a policy change
+ * and not a migration.
+ */
+const PROJECTION_REGION = DEFAULT_COUNTRY;
+const persistable = (region: string) => region === PROJECTION_REGION;
+
+interface ProjectionRow {
+  media_item_id: string; last_synced: number; raw_len: number; facets: string; merged: string;
+}
+
+/** Freshness a caller already has from its metadata-only SELECT. */
+export interface PeekRef { id: string; maxLastSynced: number; rawLen: number }
+
+/**
+ * Memory first, then disk, for a whole batch. Anything found on disk is promoted
+ * into the memory cache, so a second pass in the same process pays neither.
+ *
+ * ⚠️ A row whose `(last_synced, raw_len)` no longer match is IGNORED, not
+ * deleted here: the caller is about to re-derive and overwrite it, and deleting
+ * on a read path would turn every stale hit into a write.
+ */
+export function peekDerivedBatch(
+  refs: PeekRef[],
+  region: string = DEFAULT_COUNTRY,
+  sig: string = scoringConfigSignature()
+): Map<string, Derived> {
+  const out = new Map<string, Derived>();
+  const misses: PeekRef[] = [];
+  for (const r of refs) {
+    const hit = _cache.get(keyFor(r.id, r.maxLastSynced, r.rawLen, region, sig));
+    if (hit) out.set(r.id, { facets: [...hit.facets], merged: hit.merged });
+    else misses.push(r);
+  }
+  // A non-default region is never written, so it is never worth a query.
+  if (!misses.length || !persistable(region)) return out;
+
+  const wanted = new Map(misses.map((m) => [m.id, m]));
+  for (let i = 0; i < misses.length; i += PROJECTION_CHUNK) {
+    const chunk = misses.slice(i, i + PROJECTION_CHUNK);
+    const rows = query<ProjectionRow>(
+      `SELECT media_item_id, last_synced, raw_len, facets, merged
+         FROM media_item_projection
+        WHERE region = ? AND media_item_id IN (${chunk.map(() => "?").join(",")})`,
+      [region, ...chunk.map((c) => c.id)]
+    );
+    for (const row of rows) {
+      const want = wanted.get(row.media_item_id);
+      if (!want || row.last_synced !== want.maxLastSynced || row.raw_len !== want.rawLen) continue;
+      let derived: Derived;
+      try {
+        derived = { facets: JSON.parse(row.facets), merged: JSON.parse(row.merged) };
+      } catch {
+        // A corrupt row is a cache miss, never a thrown request. The caller
+        // re-derives and overwrites it.
+        continue;
+      }
+      _cache.set(keyFor(row.media_item_id, row.last_synced, row.raw_len, region, sig), derived);
+      out.set(row.media_item_id, { facets: [...derived.facets], merged: derived.merged });
+    }
+  }
+  return out;
+}
+
+/**
+ * Write-through. Called on the derive path only, so it runs exactly as often as
+ * a real derivation does.
+ *
+ * ⚠️ Never throws. This is a cache write on a request path; a failure here must
+ * cost the next reader one re-derive, not the current reader their page.
+ */
+function writeProjection(
+  mediaItemId: string, region: string, lastSynced: number, rawLen: number, derived: Derived
+): void {
+  if (!persistable(region)) return;
+  try {
+    run(
+      `INSERT INTO media_item_projection
+         (media_item_id, region, last_synced, raw_len, facets, merged, written_at)
+       VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+       ON CONFLICT(media_item_id, region) DO UPDATE SET
+         last_synced = excluded.last_synced, raw_len = excluded.raw_len,
+         facets = excluded.facets, merged = excluded.merged,
+         written_at = excluded.written_at`,
+      [mediaItemId, region, lastSynced, rawLen, JSON.stringify(derived.facets), JSON.stringify(derived.merged)]
+    );
+  } catch { /* a cache write must never fail a request */ }
 }
 
 /**
@@ -213,6 +330,11 @@ export function getDerivedForItem(
   const hit = _cache.get(key);
   if (hit) return { facets: [...hit.facets], merged: hit.merged };
 
+  // L2 before the blobs: a stored projection is ~6.3 KB against ~17.5 KB of
+  // raw_data for the same item, and it skips mergeLinks + extractFacets outright.
+  const stored = peekDerivedBatch([{ id: mediaItemId, maxLastSynced, rawLen }], region, sig).get(mediaItemId);
+  if (stored) return stored;
+
   const links: MediaLink[] = rawLinks.map((l) => ({
     id: "", mediaItemId, source: l.source, sourceId: l.sourceId,
     title: null, releaseDate: l.releaseDate,
@@ -230,5 +352,55 @@ export function getDerivedForItem(
   };
 
   _cache.set(key, { facets, merged });
+  writeProjection(mediaItemId, region, maxLastSynced, rawLen, { facets, merged });
   return { facets: [...facets], merged };
+}
+
+// ── Holding the projection table to a size (2026-08-28) ──────────────────────
+//
+// The invariant this satisfies: any table written on a REQUEST path needs a row
+// or byte ceiling, not just a TTL, run on an unref'd interval in bounded
+// batches, evicting by WRITE time. An age cap is not a size cap, and a crawler
+// keeps every row inside a TTL window while the table grows all day.
+//
+// ⚠️ There is no TTL here at all, on purpose. A projection is not stale until
+// its item's links change, and `(last_synced, raw_len)` already detects that on
+// read. Age would evict rows that are perfectly good.
+//
+// ⚠️ The ceiling is ROWS, and it is generous by design: this table is the reason
+// a pool rebuild does not re-derive, so evicting a row the pool wants next
+// minute is the failure mode to avoid. At the measured ~6.3 KB a row, 120k rows
+// is ~750 MB against a 2 GB tripwire, which covers the 30-50k catalog phase 4
+// targets across a couple of regions.
+//
+// ⚠️ Deleting rows does not shrink the file; db.ts VACUUMs after any migration
+// applies, so this rarely needs acting on. And it deletes in bounded batches
+// because PR16 pruned 546,754 rows for 12.8 GB of WAL churn to S3 and blew the
+// Railway spend cap — the danger is exclusively the catch-up burst.
+const PROJECTION_MAX_ROWS = 120_000;
+const PROJECTION_SWEEP_BATCH = 2_000;
+
+export function sweepProjections(
+  maxRows = PROJECTION_MAX_ROWS,
+  batch = PROJECTION_SWEEP_BATCH
+): { rows: number; deleted: number } {
+  // Rows for a region this no longer persists are dead weight: nothing reads
+  // them, so no size ceiling would ever reach them. Cleared first, in the same
+  // bounded batch, so a policy change self-heals instead of leaking forever.
+  const stale = run(
+    `DELETE FROM media_item_projection WHERE rowid IN (
+       SELECT rowid FROM media_item_projection WHERE region <> ? LIMIT ?
+     )`,
+    [PROJECTION_REGION, batch]
+  ).changes;
+  const rows = get<{ n: number }>(`SELECT COUNT(*) n FROM media_item_projection`)?.n ?? 0;
+  if (rows <= maxRows) return { rows, deleted: stale };
+  const over = Math.min(rows - maxRows, batch);
+  run(
+    `DELETE FROM media_item_projection WHERE rowid IN (
+       SELECT rowid FROM media_item_projection ORDER BY written_at ASC LIMIT ?
+     )`,
+    [over]
+  );
+  return { rows, deleted: stale + over };
 }

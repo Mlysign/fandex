@@ -5,7 +5,7 @@
 
 import { query, get } from "@/lib/db";
 import { sharedCache } from "@/lib/boundedCache";
-import { getDerivedForItem, peekDerived, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
+import { getDerivedForItem, peekDerivedBatch, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
@@ -162,14 +162,16 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   // The signature is constant across the whole pass but costs ~0.06 ms a call,
   // so it is hoisted for the same reason buildEntries hoists it.
   const sig = derivedSignature();
-  const derivedById = new Map<string, Derived>();
-  const missIds: string[] = [];
+  const rated: { id: string; maxLastSynced: number; rawLen: number }[] = [];
   for (const [id, g] of groups) {
     if (personalRating(g.item.rating, g.item.metadata) == null) continue;
-    const hit = peekDerived(id, g.maxSynced, g.rawLen, undefined, sig);
-    if (hit) derivedById.set(id, hit);
-    else missIds.push(id);
+    rated.push({ id, maxLastSynced: g.maxSynced, rawLen: g.rawLen });
   }
+  // One batched read across memory and the projection table, same as
+  // buildEntries — see peekDerivedBatch.
+  const derivedById = peekDerivedBatch(rated, undefined, sig);
+  const missIds: string[] = [];
+  for (const r of rated) if (!derivedById.has(r.id)) missIds.push(r.id);
 
   // Pass 2: raw_data for the misses alone. Same bulk-vs-chunked choice as
   // buildEntries — a chunked `IN (?,?,…)` wins for a handful of misses and
