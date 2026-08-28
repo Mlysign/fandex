@@ -825,7 +825,7 @@ the wording matters more than this summary** — the links are there to be read.
 | provider | stored-data position | items | verdict for a 30–50k catalog |
 |---|---|--:|---|
 | **TMDB** | Cache capped at **6 months**; "make derivatives" prohibited; free tier non-commercial | 1,617 | 🟡 **conditional** — see below |
-| **IGDB** | Twitch DSA: storing copies needs **prior written authorization**, else a **24-hour** cache | 1,008 | 🔴 **unresolved** |
+| **IGDB** | Twitch DSA: storing copies needs **prior written authorization**, else a **24-hour** cache | 1,008 | 🟡 **open, running behind a kill switch** (§17c) |
 | **Steam** | Terms *contemplate* storage (declare it, name the country); **no retention limit** | 809 | 🟢 fine |
 | **RAWG** | non-commercial, 20k/mo | 741 | already dropped from the facet paths (PL3) |
 
@@ -877,8 +877,10 @@ monetizing yet, so the calculus differs — but it is still Nils's call to send.
 - **TMDB-sourced breadth is unblocked once the refresh guarantee exists**, which it now
   does (§17b). The non-commercial question is unchanged by scale and already tracked
   against H3.
-- **IGDB-sourced breadth is blocked on one email.** Until it is answered, do not scale
-  igdb storage — the honest position is that we are already past the literal limit.
+- **IGDB-sourced breadth runs, behind a kill switch** (Nils, 2026-08-28). The question is
+  open, not answered, so the decision was to keep going and make a "no" cheap:
+  **`IGDB_ENABLED=0`** stops every IGDB call at once, and **`scripts/purge-igdb.mjs`**
+  removes what is already stored. → §17c.
 
 ## 17b. Retention enforcement (2026-08-28) — SHIPPED
 
@@ -902,3 +904,61 @@ clock outranks an enrichment that is not.
   so a literal purge takes the public page with it. That is a data-loss decision for
   Nils, not one to encode from a reading of a contract. The lead time exists so it
   stays hypothetical; `expired > 0` in the logs is the signal that it did not.
+
+## 17c. The IGDB kill switch (2026-08-28) — SHIPPED, and ENABLED
+
+Nils's call: keep going with IGDB while the licence question is open, and make a "no"
+cheap to act on rather than waiting for an answer that may take weeks.
+
+**`IGDB_ENABLED=0` stops every IGDB call at once. The default is ON.** Default-on is
+deliberate for a KILL switch: a typo in the env var should leave the site working, not
+silently drop a third of the catalog's games. The failure direction that matters is the
+loud one.
+
+It hangs off `igdbConfigured()`, which this codebase already treats as "IGDB is
+optional, no-op cleanly". ⚠️ **Two exported functions did not honour that contract** —
+`getIgdbGame` and `searchIgdbGames` reached `igdbQuery` directly — so the switch would
+have been a **throw** on the `/r/` resolver page rather than a no-op. Both self-gate now.
+
+`igdbKillSwitch.test.ts` pins the property, not the pattern:
+
+- every async entry point resolves empty rather than throwing
+- **`fetch` is never called at all.** Asking is the half the licence question is about,
+  not only storing, so a call that reached IGDB and discarded the result would still be
+  wrong
+- the pure formatters keep working, so data we already hold still renders
+- a structural check fails any future `export async function` that reaches `igdbQuery`
+  without the guard — the exact shape that leaked the switch the first time
+
+All three behavioural checks were verified to go RED when a guard is removed.
+
+### If the answer is no: `scripts/purge-igdb.mjs`
+
+Flipping the switch stops the flow; it does nothing about what is on disk. That is a
+separate, explicit step, because deleting catalog data is not something a config flag
+should ever do by itself.
+
+**It deletes LINKS, not items.** Proven on a copy of the real database:
+
+| | |
+|---|--:|
+| igdb links deleted | 1,008 (5.0 MB of `raw_data`) |
+| derived projections deleted | 908 |
+| external ids deleted | 1,008 |
+| `media_items` surviving | **2,770 (all of them)** |
+| `user_item_state` surviving | **2,482 (all of them)** |
+| FK violations after | **0**, `integrity_check ok` |
+
+It reports the set that actually matters **before** touching anything: **100 items where
+IGDB is the only source**, none of them acted on by a user. Those keep their row, uuid,
+slug and title, but lose every provider link, so they have no refresh path left. That
+set is the real decision, and its size is not guessable in advance.
+
+⚠️ **Set `IGDB_ENABLED=0` and deploy it before purging.** Purging a running app that
+still calls IGDB just refills what you deleted, and burns quota doing it.
+
+⚠️ **A WAL-mode database is the `.db` file PLUS its `-wal`.** Copying only the `.db`
+gives a pre-WAL snapshot that reads as a perfectly valid database with stale contents.
+It bit this script's own dry run: **1,580 projections reported against the 908 actually
+there**, because a recent DELETE was still in the WAL. That is a bad way to decide what
+to purge, so the script now says what it is reading.
