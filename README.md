@@ -38,6 +38,7 @@ missing.
 | `STEAM_API_KEY` | ⬚ | Steam integration |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
+| `IGDB_ENABLED` | ⬚ | **IGDB kill switch. Default ON** — set to `0` to stop every IGDB call at once. It exists because the Twitch Developer Services Agreement, which IGDB's own docs name as its licence, allows storing copies only with prior written authorization or a 24-hour cache, while IGDB's own product ships webhooks for maintaining your local mirror. Awaiting an answer from `partner@igdb.com`. Flipping it stops the flow; `scripts/purge-igdb.mjs` removes what is already stored. See [docs/catalog-growth.md](docs/catalog-growth.md) §17. |
 | `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
 | `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
 | `HEAL_BUDGET_MS` | ⬚ | Per-request wall-clock budget for `/api/discover/scores`' heal loop (default 10 000). Ids it can't heal in time come back as `deferred`, not scored |

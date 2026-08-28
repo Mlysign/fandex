@@ -12,10 +12,42 @@ export const IGDB_HOST = new URL(IGDB_BASE).host;
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 
-// IGDB is optional — when Twitch credentials aren't configured, the provider
-// no-ops so the rest of the app (detail/merge) keeps working unaffected.
+// ── The IGDB kill switch (2026-08-28) ────────────────────────────────────────
+//
+// `IGDB_ENABLED=0` (or `false`) turns IGDB off completely: no calls, no new
+// stored rows, everywhere. **Default is ON** — set it only to switch IGDB off.
+//
+// ⚠️ WHY IT EXISTS, because "we might not be allowed to keep this data" is not a
+// reason a future session would guess. The Twitch Developer Services Agreement,
+// which IGDB's own docs name as its licence, permits storing copies of their
+// content only with prior written authorization or a TWENTY-FOUR HOUR cache
+// (read 2026-08-28, legal.twitch.com/legal/developer-agreement). Fandex holds
+// IGDB links indefinitely, so on a literal reading it is already outside that.
+//
+// It is not clear-cut, which is the whole reason for a switch rather than a
+// removal: IGDB's own API ships webhooks whose only purpose is keeping YOUR copy
+// of their data current, and its docs open on the accessibility of their data. A
+// product built for local mirrors does not square with a 24-hour cache limit.
+// Nils asked partner@igdb.com; until that is answered, IGDB runs and this switch
+// is what makes the answer cheap to act on.
+//
+// ⚠️ If the answer is NO, flipping this stops the flow but does NOT remove what
+// is already stored. That is `scripts/purge-igdb.mjs`, deliberately a separate
+// and explicit step. → docs/catalog-growth.md §17
+//
+// ⚠️ Default ON is the deliberate choice for a KILL switch: a typo in the env
+// var leaves the site working rather than silently dropping a third of the
+// catalog's games. The failure direction that matters is the loud one.
+function igdbKilled(): boolean {
+  const v = (process.env.IGDB_ENABLED ?? "").trim().toLowerCase();
+  return v === "0" || v === "false";
+}
+
+// IGDB is optional — when Twitch credentials aren't configured, or the kill
+// switch above is thrown, the provider no-ops so the rest of the app
+// (detail/merge) keeps working unaffected.
 export function igdbConfigured(): boolean {
-  return !!(CLIENT_ID && CLIENT_SECRET);
+  return !!(CLIENT_ID && CLIENT_SECRET) && !igdbKilled();
 }
 
 // Cached app access token (Twitch tokens last ~60 days — never mint per request).
@@ -108,11 +140,15 @@ export function sanitizeApicalypseSearch(raw: string): string {
 }
 
 export async function getIgdbGame(id: number): Promise<any | null> {
+  // Self-gated like its siblings: without this, an ungated caller (the /r/
+  // resolver page) turns the kill switch into a throw instead of a no-op.
+  if (!igdbConfigured()) return null;
   const rows = await igdbQuery("games", `${GAME_FIELDS} where id = ${safeInt(id, 0)};`);
   return withTimeToBeat(rows[0] ?? null);
 }
 
 export async function searchIgdbGames(title: string, limit = 10): Promise<any[]> {
+  if (!igdbConfigured()) return [];
   const safe = sanitizeApicalypseSearch(title);
   if (!safe) return []; // nothing meaningful to search → don't run a malformed query
   return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} limit ${safeInt(limit, 10)};`);

@@ -38,6 +38,11 @@ const ENV: EnvSpec[] = [
   // P15 — Android TWA Digital Asset Links (only needed once you ship the Android app).
   { name: "TWA_PACKAGE_NAME", required: false, note: "Android TWA package name for /.well-known/assetlinks.json (P15)" },
   { name: "TWA_CERT_FINGERPRINT", required: false, note: "Android signing-cert SHA-256(s) for assetlinks.json (P15); comma-separate multiple" },
+  // The IGDB kill switch (2026-08-28). Unlike MONETIZATION_ENABLED above, the
+  // correct production value here is ABSENT-meaning-ON: it exists to be thrown
+  // if IGDB answers that a stored mirror is not covered by their free tier.
+  // → src/lib/sources/igdb.ts, docs/catalog-growth.md §17
+  { name: "IGDB_ENABLED", required: false, quiet: true, note: "kill switch; set to 0 to stop all IGDB calls. Default ON" },
   // H3 — monetization. All optional and all inert by default; see lib/affiliate.ts.
   // MONETIZATION_ENABLED is the master switch and MUST stay unset until H4.2's
   // Impressum is live (the first affiliate link makes the site commercial under
