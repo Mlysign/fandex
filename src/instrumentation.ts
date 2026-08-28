@@ -164,6 +164,22 @@ export async function register() {
     // prune computes its kill list and then deletes, so healing a row inside
     // that window would spend a provider call on something about to vanish.
     const runFill = async () => {
+      // ── Retention first (2026-08-28) ────────────────────────────────────
+      // TMDB's terms cap caching at SIX MONTHS, and nothing enforced it:
+      // `healLinks` re-fetches on projection VERSION, never on age, so a healed
+      // row's last_synced never moved again. This marks ageing links
+      // un-projected, which is the queue `fillCatalogBatch` below already
+      // drains — so a contract deadline reuses the existing fetch path rather
+      // than adding a second one. It runs BEFORE the fill so a refresh that is
+      // on a clock outranks an enrichment that is not. → lib/retention.ts
+      const { retentionSweep, retentionStatus } = await import("./lib/retention");
+      const swept = retentionSweep();
+      const status = retentionStatus();
+      if (swept.marked > 0) log.info("retention_sweep", { ...swept, expired: status.expired, due: status.due });
+      // Not a warning: a provider term being breached. Unreachable while the
+      // fill drains, which is exactly why it is measured and not assumed.
+      if (status.expired > 0) log.error("retention_expired", { ...status });
+
       const { fillCatalogBatch, FILL_INTERVAL_MS } = await import("./lib/catalogFill");
       const res = await fillCatalogBatch();
       // Log only when something happened. A line every 30 minutes saying "0 of
