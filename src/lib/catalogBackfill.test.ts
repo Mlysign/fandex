@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { initDb, run, query, get } from "./db";
+// `import type`, not `typeof import(...)` inline: the repo forbids import() type
+// annotations (@typescript-eslint/consistent-type-imports, an ERROR here).
+import type * as DiscoverFeed from "./discoverFeed";
 
 // 2026-08-28, docs/catalog-growth.md phase 4 — the seeded backfill.
 //
@@ -23,7 +26,7 @@ import { initDb, run, query, get } from "./db";
 const fetchLanes = vi.hoisted(() => ({ movie: vi.fn(), show: vi.fn(), game: vi.fn() }));
 
 vi.mock("./discoverFeed", async (orig) => ({
-  ...(await orig<typeof import("./discoverFeed")>()),
+  ...(await orig<typeof DiscoverFeed>()),
   fetchMoviePage: fetchLanes.movie,
   fetchShowPage: fetchLanes.show,
   fetchGamePageAllSources: fetchLanes.game,
