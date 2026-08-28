@@ -5,7 +5,7 @@
 
 import { query, get } from "@/lib/db";
 import { sharedCache } from "@/lib/boundedCache";
-import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
+import { getDerivedForItem, peekDerived, derivedSignature, type Derived, type RawLink } from "@/lib/facetCache";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
@@ -94,9 +94,11 @@ interface ItemRow {
   status: string | null;
   source: string | null;
   source_id: string | null;
-  raw_data: string | null;
   link_release_date: string | null;
   last_synced: number | null;
+  /** OCTET_LENGTH(raw_data), not the blob: half of facetCache's freshness token, and
+   *  the half that catches a same-second rewrite. */
+  raw_len: number | null;
 }
 
 // Personal 0-10 score: average across platforms, falling back to the canonical
@@ -105,12 +107,31 @@ function personalRating(rating: number | null, metadata: string | null): number 
   return averageRating(parseRatings(metadata)) ?? rating;
 }
 
+// SQLite caps host parameters per statement. Same chunk size discovery.ts's
+// buildEntries uses, and for the same reason: stay well under any build's limit
+// rather than assuming the modern 32k default.
+const MISS_CHUNK = 400;
+
+interface RawDataRow {
+  media_item_id: string; source: string; source_id: string;
+  release_date: string | null; raw_data: string | null; last_synced: number | null;
+}
+
 export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
+  // TWO PASSES, not one — the same shape discovery.ts's buildEntries took in §A
+  // (2026-08-02) and for the same measured reason. Pass 1 reads metadata plus a
+  // freshness token (`last_synced`, `OCTET_LENGTH(raw_data)`); it does NOT read the
+  // blobs. `raw_data` was never PARSED here (getDerivedForItem only JSON.parses
+  // on a cache miss) but it was still being READ: a media_links row carries
+  // ~7 KB, so a 1,942-item library was pulling tens of MB of pages off disk to
+  // reach a cache that then ignored them. Measured 2026-08-28: **350 ms per
+  // call**, on the first request after every rating, which is the single most
+  // common write on the site.
   const rows = query<ItemRow>(
     `SELECT mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url,
             ul.rating, ul.metadata, ul.status,
-            ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date,
-            ml.last_synced
+            ml.source, ml.source_id, ml.release_date as link_release_date,
+            ml.last_synced, OCTET_LENGTH(ml.raw_data) as raw_len
      FROM user_library ul
      JOIN media_items mi ON mi.id = ul.media_item_id
      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
@@ -118,19 +139,77 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
     [userId]
   );
 
-  // Collapse (item ⋈ links) into one entry per media item. `raw_data` stays an
-  // UNPARSED string here (2026-07-31 perf audit): getDerivedForItem below only
-  // JSON.parses it on an actual cache miss, so a repeat call for an unchanged
-  // library (the common case — most /library or /insights visits follow no
-  // mutation) skips the parse entirely instead of redoing it every time.
-  const groups = new Map<string, { item: ItemRow; rawLinks: RawLink[] }>();
+  // Collapse (item ⋈ links) into one entry per media item. `rawData` is null on
+  // every link here — it is filled in below for cache misses only.
+  const groups = new Map<string, { item: ItemRow; rawLinks: RawLink[]; maxSynced: number; rawLen: number }>();
   for (const r of rows) {
-    if (!groups.has(r.id)) groups.set(r.id, { item: r, rawLinks: [] });
+    let g = groups.get(r.id);
+    if (!g) { g = { item: r, rawLinks: [], maxSynced: 0, rawLen: 0 }; groups.set(r.id, g); }
     if (r.source) {
-      groups.get(r.id)!.rawLinks.push({
+      g.rawLinks.push({
         source: r.source as MediaLink["source"], sourceId: r.source_id!,
-        releaseDate: r.link_release_date, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
+        releaseDate: r.link_release_date, rawData: null, lastSynced: r.last_synced ?? 0,
       });
+      g.maxSynced = Math.max(g.maxSynced, r.last_synced ?? 0);
+      g.rawLen += r.raw_len ?? 0;
+    }
+  }
+
+  // Only RATED items are derived at all. An unrated row contributes its id to
+  // `libraryIds` and nothing else (the loop below `continue`s on it), so
+  // fetching or deriving its facets was always pure waste.
+  //
+  // The signature is constant across the whole pass but costs ~0.06 ms a call,
+  // so it is hoisted for the same reason buildEntries hoists it.
+  const sig = derivedSignature();
+  const derivedById = new Map<string, Derived>();
+  const missIds: string[] = [];
+  for (const [id, g] of groups) {
+    if (personalRating(g.item.rating, g.item.metadata) == null) continue;
+    const hit = peekDerived(id, g.maxSynced, g.rawLen, undefined, sig);
+    if (hit) derivedById.set(id, hit);
+    else missIds.push(id);
+  }
+
+  // Pass 2: raw_data for the misses alone. Same bulk-vs-chunked choice as
+  // buildEntries — a chunked `IN (?,?,…)` wins for a handful of misses and
+  // loses badly when nearly everything misses (a cold cache).
+  if (missIds.length) {
+    const rawByItem = new Map<string, RawDataRow[]>();
+    const bulk = missIds.length > groups.size / 2;
+    const rd = bulk
+      ? query<RawDataRow>(
+          `SELECT ml.media_item_id, ml.source, ml.source_id, ml.release_date, ml.raw_data, ml.last_synced
+           FROM media_links ml
+           JOIN user_library ul ON ul.media_item_id = ml.media_item_id
+           WHERE ul.user_id = ?`,
+          [userId]
+        )
+      : [];
+    for (const r of rd) {
+      const list = rawByItem.get(r.media_item_id);
+      if (list) list.push(r); else rawByItem.set(r.media_item_id, [r]);
+    }
+    for (let i = 0; !bulk && i < missIds.length; i += MISS_CHUNK) {
+      const chunk = missIds.slice(i, i + MISS_CHUNK);
+      const part = query<RawDataRow>(
+        `SELECT media_item_id, source, source_id, release_date, raw_data, last_synced
+         FROM media_links WHERE media_item_id IN (${chunk.map(() => "?").join(",")})`,
+        chunk
+      );
+      for (const r of part) {
+        const list = rawByItem.get(r.media_item_id);
+        if (list) list.push(r); else rawByItem.set(r.media_item_id, [r]);
+      }
+    }
+    for (const id of missIds) {
+      const g = groups.get(id)!;
+      const rawLinks: RawLink[] = (rawByItem.get(id) ?? []).map((r) => ({
+        source: r.source as MediaLink["source"], sourceId: r.source_id,
+        releaseDate: r.release_date, rawData: r.raw_data, lastSynced: r.last_synced ?? 0,
+      }));
+      // getDerivedForItem populates the shared cache as a side effect.
+      derivedById.set(id, getDerivedForItem(id, rawLinks, g.item.type, undefined, sig));
     }
   }
 
@@ -173,9 +252,9 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
     if (item.status) byStatus[item.status] = (byStatus[item.status] ?? 0) + 1;
 
     // This has always used the DEFAULT region (no region arg was ever passed
-    // to mergeLinks here) — Insights/taste stats aren't region-specific, so
-    // getDerivedForItem is called the same way, preserving that exactly.
-    const { facets: rawFacets, merged } = getDerivedForItem(item.id, rawLinks, item.type);
+    // to mergeLinks here) — Insights/taste stats aren't region-specific, so the
+    // two passes above resolve it the same way, preserving that exactly.
+    const { facets: rawFacets, merged } = derivedById.get(item.id)!;
     items.push({
       id: item.id,
       type: item.type,

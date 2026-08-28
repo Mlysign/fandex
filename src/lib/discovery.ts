@@ -216,7 +216,7 @@ function actedBrowsedIds(): Set<string> {
 }
 
 // NOTE: no `raw_data` — pass 1 reads metadata only (see buildCache()).
-// `raw_len` is LENGTH(raw_data), not the blob itself: half of facetCache's
+// `raw_len` is OCTET_LENGTH(raw_data), not the blob itself: half of facetCache's
 // freshness token, and the half that catches a same-second rewrite.
 interface VecRow {
   id: string; type: MediaType; title: string; slug: string | null; release_date: string | null; poster_url: string | null;
@@ -241,7 +241,7 @@ interface PoolEntry { vector: DiscoveryVector; rawFacets: Facet[] }
 // and a membership write no longer triggers a rebuild at all.
 //
 // TWO PASSES, not one. Pass 1 reads metadata + a freshness token
-// (`last_synced`, `LENGTH(raw_data)`) with no blobs; `raw_data` is then SELECTed
+// (`last_synced`, `OCTET_LENGTH(raw_data)`) with no blobs; `raw_data` is then SELECTed
 // in pass 2 for facetCache MISSES ALONE. An unchanged item costs a map lookup —
 // no SQL blob read, no JSON.parse, no mergeLinks/extractFacets.
 //
@@ -256,7 +256,7 @@ function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
   const rows = query<VecRow>(
     `SELECT mi.id, mi.type, mi.title, mi.slug, mi.release_date, mi.poster_url, mi.created_at,
             ml.source, ml.source_id, ml.release_date as link_release_date, ml.last_synced,
-            LENGTH(ml.raw_data) as raw_len
+            OCTET_LENGTH(ml.raw_data) as raw_len
      FROM media_items mi
      LEFT JOIN media_links ml ON ml.media_item_id = mi.id
      WHERE ${where}`,
@@ -1103,6 +1103,20 @@ export function computeFandexScore(
 // array and 0 is a legitimate score.
 interface FandexScores {
   sig: string;
+  /**
+   * Which POOL these indices refer to. Split out of `sig` so a stale entry can
+   * still be checked for alignment: `sig` says "these numbers are current",
+   * `poolSig` says "index i still means vectors[i]". Two different questions,
+   * and only the second one is a correctness question.
+   */
+  poolSig: string;
+  /**
+   * The pool's ids in index order, shared by every entry computed against the
+   * same pool (see `poolIds()`), so this costs one array per POOL rather than
+   * one per user. It is what lets a stale entry be REMAPPED onto a changed
+   * pool instead of thrown away — see `remap()`.
+   */
+  ids: string[];
   /** Constant across items for one profile — it is `baseline × 10`. */
   center: number | null;
   scores: Float64Array;
@@ -1130,32 +1144,188 @@ function poolSignature(cache: { sig: string; memSig: string; aliasSig: string; a
   return `${cache.sig}|${cache.memSig}|${cache.aliasSig}|${cache.actedSig}|${cache.vectors.length}`;
 }
 
-function fandexScoresFor(
-  userId: string,
-  rawProfile: Profile,
-  cache: { sig: string; memSig: string; aliasSig: string; actedSig: string; vectors: DiscoveryVector[] }
-): FandexScores {
-  // The profile half: what the user rated, and the knobs the score is computed
-  // with. Both already exist as cheap signatures — buildProfile keys its own
-  // cache on the same pair.
-  const sig = `${librarySignature(userId)}|${scoringConfigSignature()}|${poolSignature(cache)}`;
-  const hit = process.env.FANDEX_NO_CACHE ? undefined : _fandexScores.get(userId);
-  if (hit && hit.sig === sig) return hit;
+// The id-order of the pool a score pass ran against, built once per pool and
+// shared by every user's entry. The strings are the SAME objects the vectors
+// hold, so while that pool is live this costs one pointer per item and nothing
+// else; it only starts retaining strings of its own once the pool has been
+// rebuilt out from under it, which is exactly the window `remap()` needs it for.
+let _poolIds: { poolSig: string; ids: string[] } | null = null;
+function poolIds(cache: { vectors: DiscoveryVector[] }, poolSig: string): string[] {
+  if (_poolIds && _poolIds.poolSig === poolSig) return _poolIds.ids;
+  const ids = cache.vectors.map((v) => v.id);
+  _poolIds = { poolSig, ids };
+  return ids;
+}
 
+// ── Recomputing off the request path (2026-08-28) ────────────────────────────
+//
+// The cache above stopped a WARM request from scoring the catalog. It did not
+// stop the first request after a change from doing it: a rating, a scoring-config
+// edit or any catalog write invalidates the key, and the next visitor pays the
+// whole pass. At 2,553 items that is ~55 ms and nobody notices. At the 30–50k
+// the growth plan targets it is 0.6–1.0 s, and `better-sqlite3` is synchronous
+// and in-process, so that is not "a slow request", it is the whole server
+// blocked — every other request, for every other user, waiting behind it.
+//
+// So the pass moves off the request path. Three pieces, and the order matters:
+//
+//  1. **Serve the previous numbers.** A score one rating out of date is a small
+//     error; a page that took a second to render is a big one. Every input to a
+//     score (facets, profile, config, idf) can move, so staleness is never
+//     structural — only ALIGNMENT is, which is why `poolSig` is checked apart
+//     from `sig`.
+//  2. **Remap when the pool moved.** Stale scores from a different pool are
+//     still those items' scores; they are just sitting at the wrong indices.
+//     One Map rebuilds the alignment in O(n) — ~10 ms at 50k against ~1 s for a
+//     rescore — and an item NEW to the pool gets NaN, which is already a real
+//     state (`fandexPending`), so its card asks for a score instead of showing
+//     somebody else's.
+//  3. **Refresh in chunks.** `setImmediate` between chunks, so the event loop
+//     interleaves other requests with the pass instead of waiting for it.
+//
+// ⚠️ What this deliberately does NOT do: a user with no cached entry at all
+// still scores synchronously. There is nothing to serve and no honest way to
+// fake it, and it happens once per user per process.
+const RECOMPUTE_CHUNK = 512;
+
+// Passes in flight, one per user. The promise is what tests and the probe
+// await; nothing on the request path reads it.
+const _recomputing = new Map<string, Promise<void>>();
+
+/** Test/probe hook: resolves once no background score pass is in flight. */
+export function scoreRecomputesIdle(): Promise<void> {
+  return Promise.all([..._recomputing.values()]).then(() => undefined);
+}
+
+const yieldToLoop: (fn: () => void) => void =
+  typeof setImmediate === "function" ? (fn) => { setImmediate(fn); } : (fn) => { setTimeout(fn, 0); };
+
+/**
+ * Move a stale entry onto the current pool's indices. Returns the entry
+ * unchanged when it is already aligned, and null when it cannot be aligned.
+ *
+ * ⚠️ The result keeps the OLD `sig` on purpose. It is aligned, not current, and
+ * an entry claiming to be current would never be refreshed.
+ */
+function remap(prev: FandexScores, cache: { vectors: DiscoveryVector[] }, poolSig: string): FandexScores | null {
+  if (prev.poolSig === poolSig) return prev;
+  if (!prev.ids.length) return null;
+  const idx = new Map<string, number>();
+  for (let i = 0; i < prev.ids.length; i++) idx.set(prev.ids[i], i);
+  const n = cache.vectors.length;
+  const scores = new Float64Array(n);
+  const rank = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const j = idx.get(cache.vectors[i].id);
+    // NaN, not 0: "no score for this item yet" is a state the whole stack
+    // already understands, and 0 is a legitimate score.
+    scores[i] = j === undefined ? NaN : prev.scores[j];
+    rank[i] = j === undefined ? 0 : prev.rank[j];
+  }
+  return { sig: prev.sig, poolSig, ids: poolIds(cache, poolSig), center: prev.center, scores, rank };
+}
+
+/** One full pass, synchronously. The only caller that wants it is a cold user. */
+function scorePool(
+  rawProfile: Profile,
+  cache: { vectors: DiscoveryVector[]; idf: Map<string, number> },
+  sig: string,
+  poolSig: string
+): FandexScores {
   const ctx = scoringContext();
-  const idf = getCache().idf;
-  const scores = new Float64Array(cache.vectors.length);
-  const rank = new Float64Array(cache.vectors.length);
+  const n = cache.vectors.length;
+  const scores = new Float64Array(n);
+  const rank = new Float64Array(n);
   let center: number | null = null;
-  for (let i = 0; i < cache.vectors.length; i++) {
+  for (let i = 0; i < n; i++) {
     const v = cache.vectors[i];
     const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
     scores[i] = fx ? fx.score : NaN;
     if (fx && center === null) center = fx.center;
-    rank[i] = scoreFacets(v.facets, rawProfile.w, idf)?.score ?? 0;
+    rank[i] = scoreFacets(v.facets, rawProfile.w, cache.idf)?.score ?? 0;
+  }
+  return { sig, poolSig, ids: poolIds(cache, poolSig), center, scores, rank };
+}
+
+/**
+ * The same pass in `RECOMPUTE_CHUNK`-sized pieces, with the event loop free in
+ * between. ~20 µs/item measured, so a chunk is ~10 ms of CPU: short enough that
+ * a request arriving mid-pass waits for one chunk rather than for the pass.
+ *
+ * ⚠️ Aborts if the pool moves. The arrays being filled are indexed against the
+ * pool this started on, so finishing would write one title's score at another
+ * title's position. Throwing the work away is correct and costs one pass; the
+ * next request schedules a fresh one against the new pool.
+ */
+function scheduleRecompute(userId: string, rawProfile: Profile, sig: string, poolSig: string): void {
+  if (_recomputing.has(userId)) return;
+  const start = _cache;
+  if (!start || poolSignature(start) !== poolSig) return;
+  const n = start.vectors.length;
+  const scores = new Float64Array(n);
+  const rank = new Float64Array(n);
+  // One context per PASS, not per item — the phase-0 invariant, and the reason
+  // a config edit landing mid-pass is seen by the next pass rather than by the
+  // next item. `sig` carries the config signature, so such an edit invalidates
+  // this result anyway and the next request reschedules.
+  const ctx = scoringContext();
+  const idf = start.idf;
+  let i = 0;
+  let center: number | null = null;
+
+  const done = new Promise<void>((resolve) => {
+    const step = () => {
+      try {
+        if (_cache !== start || poolSignature(start) !== poolSig) { _recomputing.delete(userId); resolve(); return; }
+        const end = Math.min(i + RECOMPUTE_CHUNK, n);
+        for (; i < end; i++) {
+          const v = start.vectors[i];
+          const fx = computeFandexScore(v.facets, rawProfile, undefined, { mediaItemId: v.id, ctx });
+          scores[i] = fx ? fx.score : NaN;
+          if (fx && center === null) center = fx.center;
+          rank[i] = scoreFacets(v.facets, rawProfile.w, idf)?.score ?? 0;
+        }
+        if (i < n) { yieldToLoop(step); return; }
+        _fandexScores.set(userId, { sig, poolSig, ids: poolIds(start, poolSig), center, scores, rank });
+      } catch (err) {
+        // A background pass must never take the process down, and a failed one
+        // costs only the staleness it existed to end.
+        console.error("[discovery] background score recompute failed", err);
+      }
+      _recomputing.delete(userId);
+      resolve();
+    };
+    yieldToLoop(step);
+  });
+  _recomputing.set(userId, done);
+}
+
+function fandexScoresFor(
+  userId: string,
+  rawProfile: Profile,
+  cache: { sig: string; memSig: string; aliasSig: string; actedSig: string; vectors: DiscoveryVector[]; idf: Map<string, number> }
+): FandexScores {
+  // The profile half: what the user rated, and the knobs the score is computed
+  // with. Both already exist as cheap signatures — buildProfile keys its own
+  // cache on the same pair.
+  const poolSig = poolSignature(cache);
+  const sig = `${librarySignature(userId)}|${scoringConfigSignature()}|${poolSig}`;
+  if (process.env.FANDEX_NO_CACHE) return scorePool(rawProfile, cache, sig, poolSig);
+
+  const hit = _fandexScores.get(userId);
+  if (hit && hit.sig === sig) return hit;
+
+  const aligned = hit ? remap(hit, cache, poolSig) : null;
+  if (aligned) {
+    // Store the realigned copy so the next request skips the remap: same
+    // numbers, now at the right indices for the pool we actually have.
+    if (aligned !== hit) _fandexScores.set(userId, aligned);
+    scheduleRecompute(userId, rawProfile, sig, poolSig);
+    return aligned;
   }
 
-  const out: FandexScores = { sig, center, scores, rank };
+  // Nothing to serve: score it here. Once per user per process.
+  const out = scorePool(rawProfile, cache, sig, poolSig);
   _fandexScores.set(userId, out);
   return out;
 }
