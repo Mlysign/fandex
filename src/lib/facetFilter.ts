@@ -1,29 +1,37 @@
 // Client-side must-include / must-exclude facet matching for already-loaded
-// item lists (wishlist, library). Reuses the same extractFacets/facetId logic the
-// server uses, applied to each item's per-source rawData (EnrichedItem.sources[].data),
-// so a facet pill means the same thing here as in catalog search.
+// item lists (library, wishlist, progress).
+//
+// ── There is exactly ONE producer of facet ids, and it is the server ────────
+//
+// This file used to hold a second one. `matchesFacets(item, …)` rebuilt
+// MediaLink[] out of `EnrichedItem.sources[].data` and re-ran `extractFacets`,
+// on the reasonable-sounding theory that a facet pill should mean the same
+// thing here as in catalog search.
+//
+// It didn't, and hadn't since 2026-07-30. `/api/library` and `/api/calendar`
+// ship `sources[].data` as `{}` — the payload fix that took 30.7 MB of raw
+// provider blobs off the wire — and `extractFacets` reads people out of
+// `tmdb.credits`, companies out of `production_companies` /
+// `involved_companies` and franchises out of `belongs_to_collection` /
+// `franchises`. All of that lives in the blobs. With them empty the derivation
+// yields TAG FACETS AND NOTHING ELSE, so every person, studio and franchise
+// pill silently matched zero items on Library and Wishlist. Measured on the
+// real account: "Rebecca Ferguson · Cast · 6" took /wishlist?tab=library from
+// 1,943 titles to 0, while the same pill on Progress correctly returned Silo.
+//
+// It survived a month with every test green for two reasons worth remembering.
+// A pill that matches nothing renders exactly like a genuine zero result, so
+// there is nothing to see. And the tests only ever exercised tags, which is the
+// one kind that still worked.
+//
+// So the derivation is gone rather than fixed. The routes carry `facetIds`,
+// computed where the raw data still lives, and `matchesFacetIds` below is the
+// only entry point. A client that cannot derive facets cannot derive them
+// WRONG, and `tsc` now rejects the call that used to.
 
-import { extractFacets, facetId } from "@/lib/facets";
+import { facetId } from "@/lib/facets";
 import type { FacetPill, Membership} from "@/components/discovery/types";
 import { YEAR_MIN, YEAR_MAX } from "@/components/discovery/types";
-import type { MediaLink, MediaType } from "@/types";
-
-interface FacetableItem {
-  id: string;
-  type: MediaType;
-  tags?: string[];
-  keywords?: string[];
-  sources?: { source: string; sourceId: string; data?: Record<string, any> }[];
-}
-
-function itemFacetIds(item: FacetableItem): Set<string> {
-  const links: MediaLink[] = (item.sources ?? []).map((s, i) => ({
-    id: String(i), mediaItemId: item.id, source: s.source as MediaLink["source"],
-    sourceId: s.sourceId, title: null, releaseDate: null, rawData: s.data ?? {}, lastSynced: 0,
-  }));
-  const facets = extractFacets(links, item.type, { tags: item.tags, keywords: item.keywords });
-  return new Set(facets.map((f) => facetId(f)));
-}
 
 // Year range + membership (in-library / on-wishlist) filter for already-loaded
 // lists. inLibrary = has a library status/rating; onWishlist = has wishlist
@@ -51,15 +59,16 @@ export function passesYearMembership(
 /**
  * AND across include (every one must be present), NONE of exclude may be present.
  *
- * Takes ids rather than an item, so a caller that already HAS them can use it.
- * The Progress tab is one: its entries arrive carrying the show's `facetIds`,
- * computed server-side where the raw provider data actually lives.
+ * Takes ids rather than an item, because every caller now HAS them: they arrive
+ * on the payload as `facetIds`, computed server-side. `/api/library` and
+ * `/api/calendar` supply them per item (EnrichedItem.facetIds); `/api/progress`
+ * supplies the show's set per episode (ProgressEntry.facetIds). One producer,
+ * one meaning, all four facet kinds.
  *
- * ⚠️ That makes this the STRONGER half of the pair. `matchesFacets` below can
- * only ever see TAG facets, because `/api/library` and `/api/calendar` ship
- * `sources[].data` as `{}` (the 2026-07-30 payload fix — 30.7 MB of provider
- * blobs), and people, studios and franchises are extracted from exactly those
- * blobs. Ids computed server-side carry all four kinds.
+ * ⚠️ An item that carries no ids matches nothing but the empty filter, which is
+ * the correct reading of "we know none of this item's facets" and the same
+ * answer the old derivation gave for people. Do not paper over a missing
+ * `facetIds` by re-deriving from the item — see this file's header.
  */
 export function matchesFacetIds(ids: Iterable<string>, include: FacetPill[], exclude: FacetPill[]): boolean {
   if (include.length === 0 && exclude.length === 0) return true;
@@ -68,10 +77,4 @@ export function matchesFacetIds(ids: Iterable<string>, include: FacetPill[], exc
   for (const f of include) if (!set.has(facetId(f as any))) return false;
   for (const f of exclude) if (set.has(facetId(f as any))) return false;
   return true;
-}
-
-// The same rule, deriving the ids from an already-loaded item's per-source data.
-export function matchesFacets(item: FacetableItem, include: FacetPill[], exclude: FacetPill[]): boolean {
-  if (include.length === 0 && exclude.length === 0) return true;
-  return matchesFacetIds(itemFacetIds(item), include, exclude);
 }

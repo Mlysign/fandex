@@ -188,18 +188,27 @@ same 15-minute window pays anyway.
 
 ## Still open elsewhere
 
-- **⬜ Person, studio and franchise facet pills match NOTHING on Library and Wishlist.** Only genre
-  tags work there. Measured 2026-08-28 on a prod build: "Rebecca Ferguson · Cast · 6" takes
-  `/wishlist?tab=library` from **1,943 titles to 0**, while the same pill on the Progress tab
-  correctly returns Silo. Cause: `/api/library` and `/api/calendar` ship `sources[].data` as `{}`
-  (the 2026-07-30 payload fix), and `extractFacets` reads people, companies and franchises straight
-  out of those blobs — so `matchesFacets` sees tags and nothing else. It has been half-working since
-  July with every test green, because a pill that matches nothing looks like a genuine zero.
-  **The fix pattern already exists**: ship server-computed `facetIds` and use `matchesFacetIds`, as
-  `lib/upNextFacts.ts` + `lib/progressFilter.ts` do. ⚠️ **Price the payload before choosing how** —
-  ~30 ids / ~680 B per item would add roughly **1.3 MB (15%)** to an 8.9 MB response; interning or a
-  server-side filter are the alternatives. Add a test with a person pill first; the current
-  `facetFilter` tests only exercise tags, which is why this hid.
+- **✅ Facet pills matched nothing on Library + Wishlist: FIXED 2026-08-28**, verified on the real
+  account (0 → 5 titles). Both routes ship server-computed `facetIds`; the client derivation is
+  deleted. → [the archive](docs/archive/history.md) "The facet pills that matched nothing"
+
+- **⬜ `/api/*` responses are NOT COMPRESSED, in dev or on prod — and `/api/library` is 8.63 MB.**
+  Found while pricing the facet fix, 2026-08-28. Next's `compress: true` and Railway's edge both
+  cover pages and static only: `GET /discover` returns `Content-Encoding: gzip`, `GET
+  /api/discover/facets` returns no encoding header at all. **8.63 MB raw → ~2.0 MB gzipped, a
+  6.6 MB saving on ONE request** — 5.7× the whole facet fix, and more than every trimming idea
+  below combined. ⚠️ **This is the lever; don't intern or trim anything until it is pulled.** Not
+  bundled into the facet fix because it needs its own verification: streaming, `Content-Length`,
+  and whether Railway's proxy re-buffers. ⚠️ Re-measure rather than trusting this line —
+  `curl -sI -H 'Accept-Encoding: gzip'` against a page and an `/api/` route, compare the headers.
+
+- **⬜ The list payload carries ~4.7 MB that only the DETAIL page reads.** `/api/library`, 1,943
+  items: `cast` 1,183 KB · `description` 1,014 KB · `images` 966 KB · `storeLinks` 853 KB ·
+  `links` 697 KB — 54%, and `MediaCardItem` names none of them. `tags` + `keywords` (552 KB) lost
+  their last client reader when `itemFacetIds` went. ⚠️ **Below compression, and riskier**: the
+  2026-07-30 audit kept cast/images/description deliberately, and dropping a field from a payload
+  two routes and one component share is the exact shape of the bug this list keeps recording.
+  Verify every consumer on BOTH routes first.
 
 - **✅ Catalog growth: DONE, and the backfill is running** (Nils 2026-08-27, built out 2026-08-27/28, `4ab0066`…`7ef2c62`). All five phases shipped: the catalog is served from our own DB, scores and the pool no longer scale with it, TMDB's six-month cache cap is enforced, and blobs are reclaimed by size. **The runbook — the env switches, what to watch in `/api/health`, the open IGDB question — is [docs/catalog-growth.md](docs/catalog-growth.md)**; every measurement and the phase history are in [the archive](docs/archive/history.md).
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query } from "@/lib/db";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
+import { facetId } from "@/lib/facets";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap } from "@/lib/userState";
 import { buildProfile, computeFandexScore, scoringContext } from "@/lib/discovery";
@@ -73,6 +74,13 @@ export const GET = withUser(async (req: NextRequest, session) => {
       // List projection, same as /api/library (2026-07-30 perf audit): drop
       // `sources[].data`, the raw provider blob per link, which no card or
       // calendar cell reads. Keep the identity pair for buildItemHref.
+      //
+      // …and `facetIds` for the same reason /api/library carries it (2026-08-28):
+      // once `data` is `{}`, a client-side re-derivation sees TAGS ONLY, so the
+      // Filters sheet's person, studio and franchise pills matched nothing here
+      // either. These two routes feed ONE component, so the field has to arrive
+      // from both — the half that is missing fails silently, as an inert
+      // control rather than an error. See the long note in /api/library.
       const { sources, ...rest } = merged;
       enriched.push({
         id: item.id,
@@ -81,6 +89,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         platformSources: item.platformSources,
         ...rest,
         sources: (sources ?? []).map((s) => ({ source: s.source, sourceId: s.sourceId, data: {} })),
+        facetIds: facets.map((f) => facetId(f)),
         // `uw.added_at` is read into `item` above and MUST be carried onto the
         // enriched item. It wasn't until 2026-08-26, so every wishlist item
         // reached the client with `addedAt: undefined`; sortItems' "Recently

@@ -10,7 +10,7 @@ import SubBar from "@/components/SubBar";
 import type { FacetPill, VocabMatch, SortKey, ProgressSortKey, UiFilters, MembershipFilters} from "@/components/discovery/types";
 import { LIBRARY_SORTS, PROGRESS_SORTS, defaultUiFilters, normalizeSort, normalizeProgressSort, countActiveAdvanced } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
-import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
+import { matchesFacetIds, passesYearMembership } from "@/lib/facetFilter";
 import type { ProgressEntry } from "@/lib/progressFilter";
 import { filterProgressEntries, filterProgressByPlatform, sortProgressEntries } from "@/lib/progressFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
@@ -403,7 +403,11 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const beforePlatform = tabItems.filter((item) => {
     if (!typeIsVisible(item.type, types, storedTypes)) return false;
     if (q && !item.title.toLowerCase().includes(q)) return false;
-    if (!matchesFacets(item, includeFacets, excludeFacets)) return false;
+    // `item.facetIds`, never a re-derivation from `item.sources[].data` — the
+    // list routes ship that as `{}`, so the derivation this replaced saw tags
+    // and nothing else and every person/studio/franchise pill matched zero
+    // items here. Same call the Progress tab beside it makes.
+    if (!matchesFacetIds(item.facetIds ?? [], includeFacets, excludeFacets)) return false;
     if (!passesYearMembership(item, yearRange, membership)) return false;
     return true;
   });

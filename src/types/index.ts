@@ -181,8 +181,27 @@ export interface EnrichedItem {
   streamingLink: string | null;
   streamingOfferType: string | null;
   links: { label: string; url: string }[];
-  // Raw source data for the detail panel
+  // Raw source data for the detail panel.
+  //
+  // ⚠️ The two LIST routes ship this as `{}` (the 2026-07-30 payload fix — 30.7 MB
+  // of provider blobs off the wire). Anything derived from it must therefore be
+  // derived SERVER-side and carried explicitly; `facetIds` below is that carrier.
   sources: { source: Source; sourceId: string; data: Record<string, any> }[];
+  /**
+   * `facetId()` strings for every facet of this item — tags, people, companies
+   * and franchises alike — computed where the raw provider data still lives.
+   *
+   * Optional because only the surfaces that FILTER on facets pay for it
+   * (/api/library and /api/calendar today; the Progress tab carries the same
+   * field on its own entry shape). A card payload has no use for it.
+   *
+   * ⚠️ Never re-derive these on the client from `sources[].data`. That is the bug
+   * this field exists to close: with `data: {}` the derivation yields tag facets
+   * and nothing else, so a person, studio or franchise pill matched NOTHING on
+   * Library and Wishlist — and a pill that matches nothing looks exactly like a
+   * genuine zero. → src/lib/facetFilter.ts
+   */
+  facetIds?: string[];
 }
 
 // This is the JWT session payload (see session.ts). The JWT is SIGNED, not

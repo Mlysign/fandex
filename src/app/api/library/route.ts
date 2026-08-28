@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { getDerivedForItem, type RawLink } from "@/lib/facetCache";
+import { facetId } from "@/lib/facets";
 import { getUserCountry } from "@/lib/userCountry";
 import { getUserStateMap, resolveMediaItemFromIds } from "@/lib/userState";
 import { buildProfile, computeFandexScore, scoringContext } from "@/lib/discovery";
@@ -95,6 +96,25 @@ export const GET = withUser(async (req: NextRequest, session) => {
       // Deliberately NOT dropping cast/images/description (a further ~2.7 MB):
       // they're small per item and several surfaces read them off this payload.
       // The blobs were the whole problem.
+      //
+      // ── …and what dropping them cost, found 2026-08-28 ────────────────────
+      // The Filters sheet's must-include/must-exclude pills matched NOTHING on
+      // Library and Wishlist unless the pill was a tag. `matchesFacets` rebuilt
+      // MediaLink[] from `sources[].data` and re-ran extractFacets, which reads
+      // people out of `tmdb.credits`, companies out of `production_companies` /
+      // `involved_companies` and franchises out of `belongs_to_collection` — all
+      // of it inside the blobs this line empties. Selecting "Rebecca Ferguson ·
+      // Cast · 6" took the Library tab from 1,943 titles to 0.
+      //
+      // Every test stayed green for a month, because a pill that matches
+      // nothing is indistinguishable from a genuine zero result.
+      //
+      // `facetIds` below is the fix, and it is the SAME one MB16 gave the
+      // Progress tab (lib/upNextFacts.ts): derive the ids here, where the raw
+      // data still lives, and ship them. `facets` is already in hand from
+      // getDerivedForItem, so it costs no query, no parse and no derivation —
+      // only bytes. Measured on the real account (1,943 items): 8.63 → 9.77 MB
+      // raw, 2,115 → 2,440 KB gzipped, +324 KB on the wire.
       const { sources, ...rest } = merged;
 
       // `releaseDate` is the real release date (from the merged links) so the
@@ -107,6 +127,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
         platformSources: item.platformSources,
         ...rest,
         sources: (sources ?? []).map((s) => ({ source: s.source, sourceId: s.sourceId, data: {} })),
+        facetIds: facets.map((f) => facetId(f)),
         rating: averageRating(item.ratings) ?? item.rating,
         ratings: item.ratings,
         review: item.review,

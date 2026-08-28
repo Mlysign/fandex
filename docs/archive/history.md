@@ -4836,3 +4836,125 @@ that up is how it becomes the PR16 incident again. Switch it on, leave it for we
 and flip `CATALOG_BROWSE=1` when `/api/health`'s `catalog.browse.windows` says a type is
 ready. The one thing still worth an answer is IGDB (§17c), and the kill switch is what
 makes that answer cheap.
+
+---
+
+# The facet pills that matched nothing (2026-08-28) — SHIPPED
+
+**The bug.** The Filters sheet's must-include / must-exclude pills matched NOTHING on the
+Library and Wishlist tabs unless the pill was a genre tag. Selecting "Rebecca Ferguson ·
+Cast · 6" on `/wishlist?tab=library` took the list from **1,943 titles to 0**, while the
+same pill on the Progress tab beside it correctly returned Silo.
+
+**Cause.** `/api/library` and `/api/calendar` ship `sources[].data` as `{}` — the
+2026-07-30 payload fix, which took 30.7 MB of raw provider blobs off the wire. The client
+predicate `matchesFacets` rebuilt `MediaLink[]` out of exactly that field and re-ran
+`extractFacets`, which reads people from `tmdb.credits`, companies from
+`production_companies` / `networks` / `involved_companies`, and franchises from
+`belongs_to_collection` / `franchises`. All of it inside the blobs. With them empty the
+derivation returned tag facets and nothing else, so three of the four facet kinds silently
+matched zero items. Broken since 2026-07-30; found 2026-08-28 while wiring the Progress
+tab's toolbar, which needed the same ids and got them the right way.
+
+**Why nothing caught it for a month.** A pill that matches nothing renders identically to a
+genuine zero result — same empty list, same count, no error. And `facetFilter.test.ts` only
+ever exercised TAGS, the one kind that still worked, so the suite was testing the half of
+the feature that wasn't broken.
+
+## The fix: delete the client derivation, don't repair it
+
+Both routes now ship `facetIds: facets.map(facetId)` — `facets` is already in hand from the
+`getDerivedForItem` call each route makes, so it costs no query, no parse and no extra
+derivation, only bytes. `matchesFacets` and `itemFacetIds` are **deleted**; `matchesFacetIds`
+is the only matcher left, and every surface that filters (`/api/library`, `/api/calendar`,
+`/api/progress`) feeds it server-computed ids.
+
+**Deleting the derivation is the fix; adding the field is only what makes it possible.** A
+client that cannot derive facets cannot derive them wrong, and `tsc` now rejects the old call.
+
+**Verified on the real account against a prod build**, not just in tests: "Rebecca Ferguson ·
+Cast · 6" → **5 titles** (Silo, A House of Dynamite, Dune, Dune: Part Two, Mission:
+Impossible - Fallout); the same pill on the Wishlist tab → Dune: Part Three. Checked all four
+kinds against the LIVE vocab on both routes: `company|studio|a24`, `person|director|denis
+villeneuve`, `company|studio|legendary`, `ip|ip|dune` all resolve on both.
+
+## The three options, priced
+
+| | raw | Δ raw | gzip | Δ gzip |
+|---|---|---|---|---|
+| today | 8.63 MB | — | 2,115 KB | — |
+| (a) `facetIds`, all four kinds | 9.77 MB | +1,168 KB (+13.2%) | 2,440 KB | +324 KB |
+| (b) interned: vocab + indices | 9.29 MB | +669 KB | 2,387 KB | +271 KB |
+| (d) `facetIds`, non-tag only | 9.20 MB | +570 KB | 2,288 KB | +172 KB |
+| (e) non-tag, interned | 9.04 MB | +415 KB | 2,261 KB | +146 KB |
+
+1,943 items, 52,409 facet ids, 16,080 unique (3.26× reuse).
+
+**(a) shipped.** **(b) interning was rejected** on its own numbers: a two-part payload
+contract plus an index-mapping step on the client, to save 499 KB raw — and only **53 KB
+gzipped**, because gzip already interns repeated strings.
+
+**(d) was the interesting one, and it was rejected on naming, not on cost.** The client
+already derives tag facets correctly from `tags`+`keywords` (that half never broke), so
+shipping only the non-tag ids would have been correct and 598 KB cheaper. But a field called
+`facetIds` that silently holds three of four kinds is **the same trap as `data: {}` wearing a
+different name**, and that trap is this entire incident. Ship all four kinds or none.
+
+**(c) server-side filtering was rejected on architecture.** It would need a round trip per
+pill, and it breaks the platform-chip count contract: `platformOptions(beforePlatform)` needs
+the whole pre-platform set in hand so a chip reading 269 yields exactly 269. It also
+contradicts the standing rule that every filter here is client-side and the list is therefore
+fetched whole.
+
+## ⚠️ The measurement that was nearly the wrong one
+
+Every number above was first taken **gzipped**, on the assumption that Next's default
+`compress: true` covers API routes. It does not. Checked with `curl -I`, in dev and against
+prod:
+
+```
+GET https://fandex.org/discover                    → Content-Encoding: gzip
+GET https://fandex.org/api/discover/facets?q=…     → (no encoding header at all)
+```
+
+Next compresses pages and static assets; a route handler's `Response` goes out raw, and
+Railway's edge does not add anything. So the real cost of the fix is **+1,168 KB raw**, and
+the real headline is that `/api/library` ships **8.63 MB uncompressed where ~2.0 MB would
+do** — a 6.6 MB saving on one request, **5.7× the entire facet fix**. That is now the top
+payload item in `TASKS.md`, and it was deliberately not bundled here: it needs its own
+verification (streaming, `Content-Length`, whether Railway's proxy re-buffers).
+
+**The rule: check `Content-Encoding` on the actual response before pricing any payload change
+in this repo.**
+
+## Byte breakdown of `/api/library`, taken while this was open
+
+1,943 items, 8.63 MB: `cast` 1,183 KB · `description` 1,014 KB · `images` 966 KB ·
+`storeLinks` 853 KB · `links` 697 KB — **54% of the response in five fields**, none of which
+`MediaCardItem` (what PosterCard and ListCard actually consume) names. `tags` + `keywords`
+(552 KB) lost their last client reader when `itemFacetIds` was deleted. Trimming is real, but
+it ranks below compression and carries more risk: the 2026-07-30 audit kept
+cast/images/description deliberately, and dropping a field from a payload that two routes and
+one component share is the exact shape of the bug this section is about.
+
+## Two side observations
+
+**A vocab-ranking quirk that will read as a bug if you meet it cold.** `searchFacets` merges
+by `kind|key` and ranks by count, so typing "Dune" offers **`company|studio|dune`** (Legendary's
+"Dune Entertainment") above the `ip|ip|dune` franchise. Pre-existing and unrelated.
+
+**`/api/dev/login` 404s on the `prod` launch config**, because gate 1 is
+`NODE_ENV !== "production"` and `next start` sets it. Logged-in verification still works there
+only because cookies ignore PORT — a session minted against the dev server on :3000 is already
+in the jar for :3100. Mint it there first.
+
+## What guards it now
+
+`src/lib/listRouteFacetIds.test.ts` drives the **real route handlers** (session mocked, DB
+seeded with real TMDB-shaped blobs), takes the response each returns, and runs the predicate
+the component actually calls. 12 of its 15 assertions fail with the routes reverted;
+control-tested by commenting the field out. A source grep would not have done: it would pass
+on a `facetIds` assigned to a local variable that never reaches the response, which is exactly
+how `addedAt` went missing on `/api/calendar` for a month. It also pins the reason the field
+must exist — re-deriving from the shipped payload yields tag facets and nothing else — so
+nobody drops it as redundant.
