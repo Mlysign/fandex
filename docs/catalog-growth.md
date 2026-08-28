@@ -11,7 +11,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **two slices done; the third is BLOCKED ON PHASE 4, not phase 3.** §10: an empty provider section falls back to stored rows. §14: a logged-out SEARCH asks our catalog first, and the provider search is cached. What is left is the BROWSE feed, and §14 is why it waits. |
 | **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
-| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **step 1 done 2026-08-28** (§15): the derived projection is stored, so the memory cap no longer decides rebuild cost (495 → 171 ms at the phase-4 ratio). ⚠️ **Step 2 before the backfill**: make a CONTENT change incremental instead of a full rebuild, or a 50k rebuild is still ~3.4 s. §15's last section says how, and why it is now possible. |
+| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **steps 1–2 done 2026-08-28.** §15: the derived projection is stored, so the memory cap stops deciding rebuild cost. §16: a content change PATCHES the pool (5 ms for 10 items against an 87 ms rebuild), verified identical to a rebuild on the real catalog. ⚠️ **Before the backfill**: the 5-minute TTL is now the dominant remaining rebuild, and §6's provider-terms questions are still unanswered. |
 | 5. Housekeeping by bytes | ⬜ |
 
 ⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
@@ -729,3 +729,87 @@ facets**, so the missing input exists. Add a `WHERE updated_at > <last build>` q
 for the changed set and the rebuild becomes proportional to what moved, not to the
 catalog. That is the step that clears phase 4, and it should come before the backfill
 rather than after it.
+
+---
+
+## 16. Phase 4, step 2: a content change patches the pool (2026-08-28) — SHIPPED
+
+§15 stopped the memory cap deciding what a rebuild costs. This stops most rebuilds
+happening at all.
+
+Any write that moved `media_items.updated_at` on a pooled row threw the whole pool
+away: every sync, every ingest, every heal by the fill job. **It could not be
+incremental before, and `getCache()` said why in as many words** — removing an item's
+contribution needs its RAW (pre-alias) facets to un-count the vocabulary exactly, and
+the pool vector only carries post-alias ones. `_cache.rawFacetsById` now keeps them
+(the same `Facet` objects the derivation already produced, so roughly one pointer per
+occurrence), which makes `unfoldEntry` an exact inverse of `foldEntry`.
+
+Measured on the real catalog, with `updated_at` spread over real time so a change is
+a change rather than "the whole catalog shares one second":
+
+| items changed | pool cost | vs a rebuild |
+|---:|---:|---:|
+| 1 | **5 ms** | 16.2× cheaper |
+| 10 | 5 ms | 16.1× |
+| 100 | 9 ms | 10.0× |
+| 500 | 25 ms | 3.4× |
+| *(full rebuild)* | *87 ms* | |
+
+What remains is a FIXED cost — `sortVocab` + `computeIdf` over the whole vocabulary —
+rather than one proportional to the catalog. That is the property that matters at 50k.
+
+### Exactness is the only interesting question
+
+A patched vocabulary that is merely close is not a small bug. `computeIdf` reads those
+counts, so every ranking on the site shifts, silently, with nothing to look at. So a
+patched pool was compared against a rebuilt one **on the real catalog** — the tag
+vocab with counts, every IDF weight to nine decimals, and the full facet arrays of
+400 items: **identical, 1.7 MB of comparison**. Plus `discoveryContentPatch.test.ts`,
+which diffs the two field by field over eight cases, including:
+
+- a facet only the changed item carried, which must LEAVE the vocab rather than
+  linger at count 0 where `computeIdf` still weights it
+- a facet two items share when one drops it: 2 → 1, not 0 and not 2
+- an item carrying no tags at all (nothing to unfold from `rawTagCounts`)
+- a deletion, which still rebuilds — which row went is unknowable from an aggregate,
+  because it is gone
+- membership and content moving in the same pass
+
+**Every check that could be wrong runs BEFORE anything is mutated**, and a throw from
+`unfoldEntry` is caught and answered with a rebuild. A wrong patch costs one rebuild,
+never a wrong pool.
+
+### Three things worth not rediscovering
+
+- ⚠️ **The changed set is `updated_at >= prevMx`, not `>`.** `updated_at` is
+  `strftime('%s','now')`, so a write in the same second as the previous watermark is
+  invisible to `>` — a silently stale vector, which is much worse than the handful of
+  idempotent re-derivations the overlap costs. Pinned by a test.
+- ⚠️ **`contentSignature` cannot see a re-sync inside its own second at all** (neither
+  count nor MAX moves). That predates this work — the old code did not rebuild either
+  — and the 5-minute TTL is what covers it. It is also why the tests bump
+  `updated_at` by hand: they run in milliseconds, so without it every re-sync is
+  invisible and the assertions test nothing.
+- ⚠️ **A same-length payload swap defeats the facet cache's freshness token**, which
+  is `(last_synced, OCTET_LENGTH)`. Writing this section's tests hit it by accident:
+  swapping a genre "Steampunk" for "Cyberpunk" is nine bytes for nine bytes inside one
+  second, so the token does not move and the cache correctly serves the old
+  derivation. That is the documented limit of a length-not-hash token, and it is worth
+  knowing before blaming the code.
+
+### What still rebuilds, and what phase 4 needs next
+
+- **An alias or bundle edit.** A bundle changes what EVERY vector's facets resolve to,
+  so there is no changed set smaller than the catalog. Correct as it stands.
+- **The 5-minute TTL**, deliberately not refreshed by a patch — it is the backstop
+  against any drift no signature here is watching, and a stream of ingests must not be
+  able to hold a patched pool open forever. ⚠️ **At 50k this is now the dominant
+  remaining cost**: one ~3.4 s rebuild every five minutes, landing on whichever
+  request arrives. Before the backfill, decide whether to raise it (the patch path is
+  now proven equal to a rebuild, which is the argument for) or to move the rebuild
+  itself off the request path the way §12 moved scoring. **Measure it at size first.**
+
+With those two, phase 4's remaining work is the backfill itself: the seeded ingest,
+the tiered refresh, and §6's open questions on provider terms at scale — which are a
+reading task, not an engineering one, and are still unanswered.
