@@ -538,13 +538,26 @@ export function invalidateDiscoveryCache() { _cache = null; }
 
 // ── What the POOL weighs, and how fast it grows (2026-08-23) ─────────────────
 //
-// ⚠️ THIS IS THE BIGGEST SINGLE THING IN MEMORY AND IT WAS COMPLETELY INVISIBLE.
 // `_cache.vectors` is one DiscoveryVector per pool item in a plain array, plus a
 // `byId` Map over the same objects, plus the vocab, IDF and tag counts derived
 // from them. It is bounded by NOTHING except how many items the catalog holds,
 // and `cacheWeights()` cannot see it because it is a bare module-level `let`,
 // not a `sharedCache`. Memory is 77% of the Railway bill, so "the largest
 // consumer is unmeasured" was the real gap behind scalability.md §3.5.
+//
+// ⚠️ **THIS IS NOT THE BIGGEST THING IN MEMORY, AND THESE NUMBERS DO NOT SIZE A
+// FIX.** It said so here until 2026-08-28, when `scripts/probe-memory.mjs`
+// measured RETAINED heap instead of serialised bytes: the pool was **13.5 MB of
+// the 109.6 MB** a warm Discover request held, and `facetCache.derived` was
+// 86 MB of it. `docs/catalog-growth.md` §4 planned an interning fix off the
+// split below; interning every live facet array — 130,737 occurrences down to
+// 22,341 objects — saved **0.4 MB**. The numbers here are honest about what a
+// vector SERIALISES to and say nothing about what freeing one would return.
+//
+// What they are still good for: a growth rate. The pool is the one structure
+// with no bound, so `bytesPer1kItems` against a target catalog size is the
+// question worth asking. For anything shaped like "what should I make smaller",
+// run the probe.
 //
 // ⚠️ AND IT MUST NOT BE CAPPED. A BoundedCache here would be actively wrong:
 // the pool IS the candidate set for the Fandex Score, "More like this" and the

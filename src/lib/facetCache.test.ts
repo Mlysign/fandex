@@ -122,3 +122,41 @@ describe("getDerivedForItem", () => {
     expect(de.merged.title).toBe(us.merged.title);
   });
 });
+
+// 2026-08-28 — the cache must NOT hold the parsed provider blobs.
+//
+// `EnrichedItem.sources[].data` is the entire parsed raw_data, and mergeLinks
+// puts it into every projection it returns (merge.ts: `data: l.rawData`). This
+// cache stored that, which is exactly what its own header comment says it must
+// never do: measured on the real catalog, `sources` was 19,311 of 25,518
+// serialised bytes per entry (76%), and facetCache.derived was 86 MB of the
+// 110 MB a warm Discover request retained. Dropping it took the whole request
+// to 40 MB.
+//
+// No caller lost anything. /api/library and /api/calendar each destructured
+// `sources` off and rebuilt it with `data: {}`; the pool, the library analysis
+// and the membership signal read scalars. /api/detail, the one surface that
+// wants the blobs, calls mergeLinks directly.
+describe("facetCache — the parsed blobs stay out", () => {
+  it("returns source identity without the provider payload", () => {
+    const d = getDerivedForItem("item-nb", [tmdbLink("Greta Gerwig", 700)], MOVIE);
+    expect(d.merged.sources).toEqual([{ source: "tmdb", sourceId: "1" }]);
+    // Belt and braces: nothing anywhere under `merged` still carries the blob.
+    expect(JSON.stringify(d.merged)).not.toContain("Test Movie\",\"credits");
+  });
+
+  it("keeps every other merged field intact", () => {
+    const d = getDerivedForItem("item-nb2", [tmdbLink("Greta Gerwig", 701)], MOVIE);
+    expect(d.merged.title).toBe("Test Movie");
+    expect(d.facets.some((f) => f.kind === "tag" && f.key === "drama")).toBe(true);
+  });
+
+  it("hands a cache HIT the same shape as a cache MISS", () => {
+    // The failure this rules out is the nastiest available here: strip on write
+    // and not on read (or the reverse) gives a projection whose shape depends on
+    // whether somebody looked at the item recently.
+    const miss = getDerivedForItem("item-nb3", [tmdbLink("Ari Aster", 702)], MOVIE);
+    const hit = getDerivedForItem("item-nb3", [tmdbLink("Ari Aster", 702)], MOVIE);
+    expect(JSON.stringify(hit.merged)).toBe(JSON.stringify(miss.merged));
+  });
+});

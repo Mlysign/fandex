@@ -52,9 +52,36 @@ import type { EnrichedItem, MediaLink, MediaType } from "@/types";
 /** The region-aware projection every caller already builds via mergeLinks(). */
 export type MergedItem = Omit<EnrichedItem, "id" | "type" | "platformSources">;
 
+/**
+ * The projection as THIS CACHE stores it: `sources` carries identity only.
+ *
+ * ⚠️ `EnrichedItem.sources[].data` is the whole parsed provider blob, and the
+ * header above says in as many words that this cache must never hold those.
+ * `mergeLinks` puts them straight back (`merge.ts`: `data: l.rawData`), so from
+ * the day it was written this cache stored every parsed blob it derived from.
+ * Measured 2026-08-28 on the real catalog: **19,311 of 25,518 serialised bytes
+ * per entry — 76%** — and `facetCache.derived` was 86 MB of the 110 MB a warm
+ * Discover request retains, the single largest thing in the process.
+ *
+ * No caller wanted them. `/api/library` and `/api/calendar` each destructure
+ * `sources` off and rebuild it with `data: {}` (the 2026-07-30 audit, which
+ * caught the same blobs going over the WIRE and never looked at the cache);
+ * `buildEntries`, `analyzeLibraryFacets` and `loadMembershipGroups` read
+ * scalars only — the last one even documents "raw per-source blobs aren't
+ * exposed by the cache", which was the intent and not the behaviour. The one
+ * surface that does need them, `/api/detail`, calls `mergeLinks` directly and
+ * never touches this cache.
+ *
+ * So the type says what the cache holds, rather than promising a field whose
+ * contents a caller must remember to throw away.
+ */
+export type DerivedMerged = Omit<MergedItem, "sources"> & {
+  sources: { source: MediaLink["source"]; sourceId: string }[];
+};
+
 export interface Derived {
   facets: Facet[];
-  merged: MergedItem;
+  merged: DerivedMerged;
 }
 
 /**
@@ -192,8 +219,15 @@ export function getDerivedForItem(
     rawData: l.rawData ? JSON.parse(l.rawData) : {}, lastSynced: l.lastSynced,
   }));
 
-  const merged = mergeLinks(links, type, region);
-  const facets = extractFacets(links, type, merged);
+  const full = mergeLinks(links, type, region);
+  // `extractFacets` gets the FULL projection — it is derived from the same
+  // links either way, and narrowing what it sees would be a behaviour change.
+  const facets = extractFacets(links, type, full);
+  // Drop the parsed blobs before anything stores this. See DerivedMerged.
+  const merged: DerivedMerged = {
+    ...full,
+    sources: full.sources.map((s) => ({ source: s.source, sourceId: s.sourceId })),
+  };
 
   _cache.set(key, { facets, merged });
   return { facets: [...facets], merged };
