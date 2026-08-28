@@ -11,7 +11,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **two slices done; the third is BLOCKED ON PHASE 4, not phase 3.** §10: an empty provider section falls back to stored rows. §14: a logged-out SEARCH asks our catalog first, and the provider search is cached. What is left is the BROWSE feed, and §14 is why it waits. |
 | **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
-| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **steps 1–2 done 2026-08-28.** §15: the derived projection is stored, so the memory cap stops deciding rebuild cost. §16: a content change PATCHES the pool (5 ms for 10 items against an 87 ms rebuild), verified identical to a rebuild on the real catalog. ⚠️ **Before the backfill**: the 5-minute TTL is now the dominant remaining rebuild, and §6's provider-terms questions are still unanswered. |
+| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **steps 1–3 done 2026-08-28. ⚠️ The BACKFILL itself is gated on IGDB (§17): one email to partner@igdb.com.** §15: the derived projection is stored, so the memory cap stops deciding rebuild cost. §16: a content change PATCHES the pool (5 ms for 10 items against an 87 ms rebuild), verified identical to a rebuild on the real catalog. §17b: TMDB's six-month cache cap is enforced (nothing was enforcing it; first breach would have been ~2026-12-02). ⚠️ **Before the backfill**: IGDB's storage position (§17), and the 5-minute pool TTL. |
 | 5. Housekeeping by bytes | ⬜ |
 
 ⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
@@ -243,10 +243,10 @@ catch-up burst, and **checking Railway usage is an explicit precondition for any
 
 ## 6. Open questions, before this is a plan anyone executes
 
-1. **Provider terms at this scale.** TMDB's free tier is **non-commercial**, $149/mo commercial, and
-   a large stored derivative is a stronger "we built a database" reading than a cache is. Read the
-   caching and storage clauses for TMDB and IGDB before a bulk backfill. This project has been wrong
-   about provider terms twice → [[platform-integration-architecture]].
+1. ~~**Provider terms at this scale.**~~ **READ 2026-08-28 → §17.** Answer in one line: TMDB caps
+   caching at six months (an AGE cap, which a refresh tier satisfies — now enforced, §17b), Steam
+   states no limit, and **IGDB is the blocker** (24-hour cache under the Twitch DSA, contradicted by
+   its own webhooks product). The non-commercial question is unchanged by scale and belongs to H3.
 2. **Refresh budget.** The treadmill scales with catalog SIZE, not ingest rate: 85k items at one
    call a month each is 85k calls a month, and every refresh rewrites rows, which is WAL, which
    Litestream ships. Size the tiers deliberately.
@@ -813,3 +813,92 @@ never a wrong pool.
 With those two, phase 4's remaining work is the backfill itself: the seeded ingest,
 the tiered refresh, and §6's open questions on provider terms at scale — which are a
 reading task, not an engineering one, and are still unanswered.
+
+---
+
+## 17. The provider terms, read at last (2026-08-28)
+
+§6 asked whether a large stored derivative is allowed before anyone builds one. Read
+2026-08-28, from the primary sources rather than summaries. ⚠️ **Not legal advice, and
+the wording matters more than this summary** — the links are there to be read.
+
+| provider | stored-data position | items | verdict for a 30–50k catalog |
+|---|---|--:|---|
+| **TMDB** | Cache capped at **6 months**; "make derivatives" prohibited; free tier non-commercial | 1,617 | 🟡 **conditional** — see below |
+| **IGDB** | Twitch DSA: storing copies needs **prior written authorization**, else a **24-hour** cache | 1,008 | 🔴 **unresolved** |
+| **Steam** | Terms *contemplate* storage (declare it, name the country); **no retention limit** | 809 | 🟢 fine |
+| **RAWG** | non-commercial, 20k/mo | 741 | already dropped from the facet paths (PL3) |
+
+Sources: [TMDB API Terms of Use](https://www.themoviedb.org/api-terms-of-use) §1.C ·
+[Twitch Developer Services Agreement](https://legal.twitch.com/legal/developer-agreement/) ·
+[Steam Web API Terms](https://steamcommunity.com/dev/apiterms) ·
+[IGDB API docs](https://api-docs.igdb.com/)
+
+### TMDB: the cap is on AGE, not size, and that changes everything
+
+The clause forbids caching TMDB information **for longer than six months**. It says
+nothing about how many rows you may hold. So a 50k catalog is not the problem; a 50k
+catalog nobody re-fetches is. **The terms turn phase 1's vague "tiered refresh" into a
+specified one: a hard maximum interval of six months, per row.** At 50k items that is
+~275 refreshes a day, against a fill job already pacing 480.
+
+⚠️ **Nothing was enforcing it, and nothing would have.** `healLinks` re-fetches a link
+whose PROJECTION VERSION is behind (`isStale`, `detail/enrich.ts`); age is not part of
+that test, so once an item heals its `last_synced` never moves again. The catalog was
+compliant only by being younger than six months: the oldest tmdb link measured
+2026-06-05, so the first silent breach would have landed **around 2026-12-02**.
+`lib/retention.ts` fixes that — §17b.
+
+Two clauses stay unresolved and are Nils's call, not an engineering one: **"make
+derivatives of TMDB Content"** is vague enough that a projected, facet-extracted
+catalog could be read into it, and the free tier is **non-commercial**, which the ads
+plan (H3) already collides with independently of anything here.
+
+### IGDB: the licence and the product contradict each other
+
+The Twitch DSA permits storing copies only with prior written authorization or a
+**24-hour** cache. Fandex holds 1,008 igdb links indefinitely, so it is already outside
+that on a literal reading, before any backfill.
+
+But IGDB's own API ships **webhooks whose only purpose is keeping your copy of their
+data current**, its docs open with a paragraph about the accessibility of their data,
+and it offers a commercial partnership. A product built to maintain your local mirror
+is hard to square with a 24-hour cache limit.
+
+**That contradiction is not resolvable by picking a number, and this project has been
+wrong about provider terms twice.** It needs one email to `partner@igdb.com`.
+⚠️ Note the standing rule in TASKS.md is about not inviting scrutiny from TMDB and
+Trakt *while monetizing on their free tiers*; IGDB is not in it and Fandex is not
+monetizing yet, so the calculus differs — but it is still Nils's call to send.
+
+### What this means for the build order
+
+- **Steam-sourced breadth is unblocked today.**
+- **TMDB-sourced breadth is unblocked once the refresh guarantee exists**, which it now
+  does (§17b). The non-commercial question is unchanged by scale and already tracked
+  against H3.
+- **IGDB-sourced breadth is blocked on one email.** Until it is answered, do not scale
+  igdb storage — the honest position is that we are already past the literal limit.
+
+## 17b. Retention enforcement (2026-08-28) — SHIPPED
+
+`lib/retention.ts` marks an ageing link's `projection_version` back to 0, which is
+exactly the queue `fillCandidates` already selects and `healLinks` already drains. A
+contract deadline therefore reuses the existing fetch, pacing, budget and logging path
+and adds **one UPDATE**. It runs before the fill on each tick, because a refresh on a
+clock outranks an enrichment that is not.
+
+- **Marking degrades nothing.** `raw_data` is untouched, so facets, scores and pages
+  read exactly as before; the row is only queued.
+- **A one-month LEAD before the cap.** Marking at exactly six months would guarantee a
+  breach on any failure. The month is room for the queue to drain, an outage to pass,
+  and a title TMDB now 404s to be noticed while it is still legal to hold.
+- **`retentionStatus().expired` is logged as an ERROR, not a warning.** It is not a
+  threshold, it is a term being breached, and it should be unreachable while the fill
+  drains — which is why it is measured rather than assumed.
+- ⚠️ **There is deliberately no DELETE fallback.** If a row ever ages out because the
+  provider will not serve it, the strict remedy is to drop the cached content — but
+  TMDB-derived content includes `media_items.title`, `poster_url` and `release_date`,
+  so a literal purge takes the public page with it. That is a data-loss decision for
+  Nils, not one to encode from a reading of a contract. The lead time exists so it
+  stays hypothetical; `expired > 0` in the logs is the signal that it did not.
