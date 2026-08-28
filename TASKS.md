@@ -188,6 +188,19 @@ same 15-minute window pays anyway.
 
 ## Still open elsewhere
 
+- **⬜ Person, studio and franchise facet pills match NOTHING on Library and Wishlist.** Only genre
+  tags work there. Measured 2026-08-28 on a prod build: "Rebecca Ferguson · Cast · 6" takes
+  `/wishlist?tab=library` from **1,943 titles to 0**, while the same pill on the Progress tab
+  correctly returns Silo. Cause: `/api/library` and `/api/calendar` ship `sources[].data` as `{}`
+  (the 2026-07-30 payload fix), and `extractFacets` reads people, companies and franchises straight
+  out of those blobs — so `matchesFacets` sees tags and nothing else. It has been half-working since
+  July with every test green, because a pill that matches nothing looks like a genuine zero.
+  **The fix pattern already exists**: ship server-computed `facetIds` and use `matchesFacetIds`, as
+  `lib/upNextFacts.ts` + `lib/progressFilter.ts` do. ⚠️ **Price the payload before choosing how** —
+  ~30 ids / ~680 B per item would add roughly **1.3 MB (15%)** to an 8.9 MB response; interning or a
+  server-side filter are the alternatives. Add a test with a person pill first; the current
+  `facetFilter` tests only exercise tags, which is why this hid.
+
 - **✅ Catalog growth: DONE, and the backfill is running** (Nils 2026-08-27, built out 2026-08-27/28, `4ab0066`…`7ef2c62`). All five phases shipped: the catalog is served from our own DB, scores and the pool no longer scale with it, TMDB's six-month cache cap is enforced, and blobs are reclaimed by size. **The runbook — the env switches, what to watch in `/api/health`, the open IGDB question — is [docs/catalog-growth.md](docs/catalog-growth.md)**; every measurement and the phase history are in [the archive](docs/archive/history.md).
 
   **The only open action is one env var.** Watch `/api/health` → `catalog.browse.windows`; when a type's `future` count reaches 200 (49/49/29 on 2026-08-28), set `CATALOG_BROWSE=1` and that section serves from the DB at zero provider calls. ⚠️ Do not raise `BACKFILL_PAGES` without checking Railway spend first — the pacing is the safety feature, not a conservative default.

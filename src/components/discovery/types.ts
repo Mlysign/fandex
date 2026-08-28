@@ -67,6 +67,28 @@ export const SORTS: [SortKey, string][] = [
 // Library sorts client-side through sortItems(), so nothing is sent anywhere.
 export const LIBRARY_SORTS: [SortKey, string][] = [["addedAt", "Recently added"], ...SORTS];
 
+// ── The Progress tab's own set ──────────────────────────────────────────────
+// That tab lists EPISODES, ordered by upNext.ts's rule: the later of "when you
+// finished the one before" and "when this one aired", newest first. That is a
+// property of the pair, not of the show, so it can't be expressed as one of the
+// shared keys — and it is the order the tab is FOR, so it has to be offerable
+// rather than merely being what you get before you open the menu.
+//
+// Everything below it still means what it means everywhere else, because it is
+// read off the SHOW behind the episode (see lib/progressFilter.ts). Kept out of
+// `SortKey` for the same reason "addedAt" is kept out of `SORTS`: `zSortKey` and
+// discovery.ts's own SortKey stay at the four the catalog has columns for, and
+// this one is never sent anywhere.
+export type ProgressSortKey = "upNext" | SortKey;
+export const PROGRESS_SORTS: [ProgressSortKey, string][] = [["upNext", "Up next"], ...LIBRARY_SORTS];
+
+// Its own storage key (`rr_progress_sort`), so this tab and the other two can
+// never hand each other a sort the receiving list has no meaning for. Anything
+// unknown lands on this tab's default rather than the library's.
+export function normalizeProgressSort(v: unknown): ProgressSortKey {
+  return typeof v === "string" && PROGRESS_SORTS.some(([k]) => k === v) ? (v as ProgressSortKey) : "upNext";
+}
+
 // Sorts whose result list is grouped/scrolled by date (calendar view allowed).
 export const DATE_SORTS: SortKey[] = ["releaseDate"];
 

@@ -733,12 +733,13 @@ assuming it is free.
 2. The mount effect referenced `init()` before its declaration — flagged by the react-hooks rules as
    a stale-binding hazard, and an error under this repo's config.
 
-**Paging.** `buildUpNextPage` shares `buildUpNext`'s work (`limit: Infinity`, then slice) so the
-filter and the sort can never differ between Home and the full list. Only the FIRST page pays for the
-bounded catalog heal — making every scroll tick fire provider calls is the shape of the 2026-08-02
-latency incident. A **"Load more" button sits alongside the IntersectionObserver**: the observer
-needs a compositor and never fires in some embedded/headless contexts, and a keyboard user shouldn't
-have to simulate a scroll to reach the rest of the list.
+**Paging.** ⚠️ **Superseded 2026-08-28** — see the next section; the fetch is no longer paged, the
+render is. What follows describes the original. `buildUpNextPage` shares `buildUpNext`'s work
+(`limit: Infinity`, then slice) so the filter and the sort can never differ between Home and the full
+list. Only the FIRST page pays for the bounded catalog heal — making every scroll tick fire provider
+calls is the shape of the 2026-08-02 latency incident. A **"Load more" button sits alongside the
+IntersectionObserver**: the observer needs a compositor and never fires in some embedded/headless
+contexts, and a keyboard user shouldn't have to simulate a scroll to reach the rest of the list.
 
 **Verified at 375×812 on a clean build:** rail renders 10 rows with poster + checkbox and a working
 "See all"; the tab opens to 20 of "81 episodes up next", pages 20 → 40 → 81, then retires the button
@@ -751,6 +752,71 @@ a string of impossible-looking results — React logging `ready: true` while the
 a `ReferenceError` for a variable that plainly existed. **When the browser and the typechecker
 disagree about what the code says, suspect the bundle before the code:** check for HMR socket errors
 and restart the dev server with `.next` cleared rather than theorising about React internals.
+
+## The Progress tab's toolbar reaches the list (2026-08-28)
+
+Nils: *"the advanced filters and search bar dont work on the progress page."* They didn't. MB16 gave
+that tab its own render branch and passed `<ProgressTabPanel />` **no props at all**, so the search
+box, the three type chips, the sort menu and the Filters sheet all rendered above a list none of them
+touched. Four visible controls doing nothing, and the code said so in as many words: *"the filters
+simply don't apply here, which is why none of them are consulted."*
+
+**Nils's call, asked before building:** make them work, applied to the SHOW behind the episode
+("must include steampunk" keeps steampunk shows, "available on Netflix" keeps Netflix ones), add the
+list's own order as a named sort, and **keep the type chips for consistency** even though every row
+is a show.
+
+**Why the fetch stopped being paged, which is the load-bearing decision.** Every filter in this app
+runs client-side, and **a filter over one page of a paged list is a lie** — search would have found
+only what you had already scrolled past. Paging was also never the cheap option: `buildUpNext`
+re-derives the whole list on every call and slices, so serving page 4 cost exactly what serving all
+of it costs, paid once per scroll. Measured on the real account: **84 entries, 40 ms to build, 31 ms
+to enrich, 115 KB on the wire** against `/api/library`'s 8.9 MB for the tabs beside it. So
+`buildUpNextPage` is gone, `/api/progress?full=1` returns the lot, and the tab pages its **render**.
+MB16's rule that this tab must not load the library payload is untouched and was re-verified: opening
+it fires `/api/progress?full=1` and nothing else.
+
+**Where each piece lives, and why it is split that way:**
+
+- `lib/upNextFacts.ts` (server) attaches the show's facts — `facetIds`, `releaseDate`, `platforms`,
+  `streamingProviders`, `communityRatings`, `fandexScore`, `libraryStatus`, `rating`,
+  `platformSources`, `addedAt`. Nothing is carried "in case"; every field is read by a control.
+- `lib/progressFilter.ts` (leaf, client-safe) holds the predicates, and they are the SAME ones the
+  other two tabs use: `typeIsVisible`, `passesYearMembership`, `matchesPlatforms`, `sortItems`. A
+  filter that means one thing on Library and another on Progress is [[shared-view-two-routes]] with
+  the halves swapped.
+- The list, the filtering and the sorting moved **into `MyStuffView`**, beside the other two tabs'
+  pipeline, because the toolbar has to count and describe the set it is filtering: "episodes · 84",
+  the sheet's "Show 84 episodes", and platform chips that count the set they will act on. The panel
+  kept the rows, the tick and the render paging, which is all its branch should ever have been.
+
+**`facetIds`, not raw blobs — and it is the stronger half.** `matchesFacets` derives ids from
+`sources[].data`, which `/api/library` ships as `{}` (the 2026-07-30 payload fix, 30.7 MB of provider
+blobs off the wire), so on Library and Wishlist it can only ever see TAG facets. Ids computed
+server-side carry all four kinds. `matchesFacetIds` is the shared half both now call. ⚠️ **That means
+the older two tabs have a real bug this work only exposed** — see the open item in TASKS.md.
+
+**Sort.** `PROGRESS_SORTS` = `["upNext", "Up next"]` + `LIBRARY_SORTS`, in its own persisted key
+(`rr_progress_sort`, default `upNext`) so the two sort sets can never hand each other a key the
+receiving list has no meaning for. ⚠️ **"Up next" re-sorts rather than returning the array
+untouched**: `sortItems` returns a NEW array, so by the time someone switches back the list in hand
+is in whatever order the last sort left it. Pinned by a test.
+
+**One trap worth naming.** The load effect is guarded by a **ref**, not by the loading/loaded flags.
+Gating on those re-fires the moment a failed request clears `progressLoading` while `progressLoaded`
+stays false — a tight retry loop against a failing endpoint, which is what the panel's old
+`setHasMore(false)` existed to prevent. A failure surfaces "Try again" instead.
+
+**Verified on a production build, signed in** (`/wishlist?tab=progress`, 84 entries): search 84 → 2
+on "one piece"; the Netflix chip promised **34** and returned exactly **34**; Netflix + the
+"Animation" tag → **11**, badge "Filters (2 active)"; the cast pill "Rebecca Ferguson · Cast · 6" →
+**Silo**, the exact filter kind that returns 0 on the Library tab; the Games chip → 0 with "No
+episodes match the current filters"; a nonsense search → "No shows in progress match …" with a Clear
+search action; "Load more" 20 → 40. Sorting to Release date reordered the list and back to "Up next"
+restored it exactly. Regressions clear: Library 1,943 titles / 300 cards / its own "Recently added"
+sort, Wishlist 96, Home's rail still 10, every request 200. 1,251 tests, 21 of them new. **Not
+exercised: ticking an episode**, because it writes to the real account and pushes to Trakt;
+`useEpisodeTick` is untouched and the removal callback is the same array filter it always was.
 
 ## Phase 0 — Warm-up (orient in the codebase, low-risk wins)
 

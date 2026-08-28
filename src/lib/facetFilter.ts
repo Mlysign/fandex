@@ -48,12 +48,30 @@ export function passesYearMembership(
   return true;
 }
 
-// AND across include (every one must be present), NONE of exclude may be present.
+/**
+ * AND across include (every one must be present), NONE of exclude may be present.
+ *
+ * Takes ids rather than an item, so a caller that already HAS them can use it.
+ * The Progress tab is one: its entries arrive carrying the show's `facetIds`,
+ * computed server-side where the raw provider data actually lives.
+ *
+ * ⚠️ That makes this the STRONGER half of the pair. `matchesFacets` below can
+ * only ever see TAG facets, because `/api/library` and `/api/calendar` ship
+ * `sources[].data` as `{}` (the 2026-07-30 payload fix — 30.7 MB of provider
+ * blobs), and people, studios and franchises are extracted from exactly those
+ * blobs. Ids computed server-side carry all four kinds.
+ */
+export function matchesFacetIds(ids: Iterable<string>, include: FacetPill[], exclude: FacetPill[]): boolean {
+  if (include.length === 0 && exclude.length === 0) return true;
+  const set = ids instanceof Set ? (ids as Set<string>) : new Set(ids);
+  // FacetPill carries kind/role as plain strings; facetId only reads them as keys.
+  for (const f of include) if (!set.has(facetId(f as any))) return false;
+  for (const f of exclude) if (set.has(facetId(f as any))) return false;
+  return true;
+}
+
+// The same rule, deriving the ids from an already-loaded item's per-source data.
 export function matchesFacets(item: FacetableItem, include: FacetPill[], exclude: FacetPill[]): boolean {
   if (include.length === 0 && exclude.length === 0) return true;
-  const ids = itemFacetIds(item);
-  // FacetPill carries kind/role as plain strings; facetId only reads them as keys.
-  for (const f of include) if (!ids.has(facetId(f as any))) return false;
-  for (const f of exclude) if (ids.has(facetId(f as any))) return false;
-  return true;
+  return matchesFacetIds(itemFacetIds(item), include, exclude);
 }

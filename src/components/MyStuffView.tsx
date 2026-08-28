@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -7,10 +7,12 @@ import type { EnrichedItem, MediaType } from "@/types";
 import { SOURCE_LABELS } from "@/lib/constants";
 import type { SearchBarFacets, ViewMode } from "@/components/SubBar";
 import SubBar from "@/components/SubBar";
-import type { FacetPill, VocabMatch, SortKey, UiFilters, MembershipFilters} from "@/components/discovery/types";
-import { LIBRARY_SORTS, defaultUiFilters, normalizeSort, countActiveAdvanced } from "@/components/discovery/types";
+import type { FacetPill, VocabMatch, SortKey, ProgressSortKey, UiFilters, MembershipFilters} from "@/components/discovery/types";
+import { LIBRARY_SORTS, PROGRESS_SORTS, defaultUiFilters, normalizeSort, normalizeProgressSort, countActiveAdvanced } from "@/components/discovery/types";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
+import type { ProgressEntry } from "@/lib/progressFilter";
+import { filterProgressEntries, filterProgressByPlatform, sortProgressEntries } from "@/lib/progressFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
 import { useEnabledTypes } from "@/lib/useEnabledTypes";
 import { typeIsVisible } from "@/lib/mediaTypes";
@@ -30,6 +32,7 @@ import Button, { buttonClasses } from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
 import LibraryWishlistTabs, { tabId, TABPANEL_ID } from "@/components/LibraryWishlistTabs";
 import ProgressTabPanel from "@/components/ProgressTabPanel";
+import { entryKey } from "@/components/EpisodeRow";
 import SignInDialog from "@/components/auth/SignInDialog";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 
@@ -45,11 +48,11 @@ const TAB_NOUN: Record<MyStuffTab, string> = { wishlist: "saved", progress: "epi
 // /wishlist?tab=library sat under an <h1> reading "Library" while the search box
 // still offered to search your wishlist. Everything the toolbar says about the
 // visible set tracks the ACTIVE TAB, same as the heading and the count (SM21).
-// Progress doesn't filter by this box at all (MB16), so it borrows the library
-// wording rather than inventing a third noun.
+// Progress names SHOWS rather than the library, because that is what its box
+// matches — the list is episodes, but you search it by the show they belong to.
 const TAB_SEARCH_PLACEHOLDER: Record<MyStuffTab, string> = {
   wishlist: "Search your wishlist…",
-  progress: "Search your library…",
+  progress: "Search shows you're watching…",
   library: "Search your library…",
 };
 
@@ -58,6 +61,8 @@ const TAB_SEARCH_PLACEHOLDER: Record<MyStuffTab, string> = {
 // effect on every render and clobbers each edit with the stored value a beat
 // later. Bind the "addedAt" fallback once, at module scope, not inline.
 const normalizeSortAddedAt = (v: unknown) => normalizeSort(v, "addedAt");
+// Same stability requirement; `normalizeProgressSort` is already a module-level
+// function, so it is passed straight through rather than wrapped in an arrow.
 
 // ── First-run onboarding checklist (distinct from the shared <EmptyState>) ──
 function OnboardingState({ identities }: { identities: any[] }) {
@@ -180,6 +185,24 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   const [membership, setMembership] = usePersistedState<MembershipFilters>("rr_mystuff_membership", {});
   const [platforms, setPlatforms] = usePersistedState<string[]>("rr_mystuff_platforms", []);
   const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
+  // The Progress tab's own sort, in its own key: its default ("Up next") is not
+  // a valid library sort and the library's default is not a meaningful episode
+  // one, so a single shared value would have each tab handing the other a sort
+  // it can't honour. Everything else in the toolbar IS shared, deliberately —
+  // "Available on Netflix" should mean the same thing on all three.
+  const [progressSort, setProgressSort] = usePersistedState<ProgressSortKey>("rr_progress_sort", "upNext", normalizeProgressSort);
+
+  // ── The Progress tab's list ───────────────────────────────────────────────
+  // Held here, not in ProgressTabPanel, because the toolbar has to count and
+  // describe the set it is filtering: "episodes · 12" and the sheet's "Show 12
+  // episodes" both read the filtered length, and the platform chips count the
+  // set they will act on. Fetched whole and filtered client-side, like the
+  // other two tabs — see lib/upNextFacts.ts for the sizing that makes that the
+  // cheap option (84 entries / 110 KB, against /api/library's 8.9 MB).
+  const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState<string | null>(null);
 
 
   // SM1 — a card's quick-action remove used to leave the row on screen until
@@ -271,10 +294,53 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
     void loadItems();
   }, [authChecked, activeTab, itemsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The mirror of the effect above: the Progress tab's own (small) payload, and
+  // only when that tab is the one showing. `?full=1` is the whole list with each
+  // show's filterable facts attached; Home's rail passes nothing and is
+  // unchanged. Errors are held rather than swallowed — a panel that renders
+  // "nothing in progress" over a failed fetch is the empty-state trap.
+  async function loadProgress() {
+    setProgressLoading(true);
+    setProgressError(null);
+    try {
+      const res = await fetch("/api/progress?full=1");
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      setProgressEntries(data.entries ?? []);
+      setProgressLoaded(true);
+    } catch (e) {
+      setProgressError(e instanceof Error ? e.message : "Couldn't load your progress.");
+    } finally {
+      setProgressLoading(false);
+    }
+  }
+
+  // Guarded by a REF, not by the loading/loaded flags. Gating on those would
+  // re-fire the moment a failed request cleared `progressLoading` while
+  // `progressLoaded` stayed false — a tight retry loop against a failing
+  // endpoint, which is the thing the panel's old `setHasMore(false)` existed to
+  // prevent. A failure surfaces a "Try again" button instead, which calls
+  // loadProgress directly and puts the user back in control.
+  const progressRequested = useRef(false);
+  useEffect(() => {
+    if (!authChecked || activeTab !== "progress" || progressRequested.current) return;
+    progressRequested.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadProgress();
+  }, [authChecked, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function sync() {
     setSyncing(true);
     await syncToCompletion("all");
-    await loadItems();
+    // Refresh whatever THIS tab is showing. Two reasons, and both were wrong
+    // before 2026-08-28. Pulling `/api/library` on the Progress tab undoes
+    // MB16's whole point — 8.9 MB that tab renders none of — and leaving the
+    // episode list untouched after a sync makes the button look like it did
+    // nothing, when a Trakt sync is exactly what brings new episodes in.
+    // `activeTab`, not the `onProgress` const below, so this doesn't depend on
+    // where in the body it is declared.
+    if (activeTab === "progress") await loadProgress();
+    else await loadItems();
     setSyncing(false);
   }
 
@@ -346,6 +412,25 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
     : beforePlatform;
   const sorted = sortItems(filtered, sort);
 
+  // ── The same pipeline, over episodes ──────────────────────────────────────
+  // Same three stages, same order, same helpers underneath — every filter
+  // applies to the SHOW behind the episode (lib/progressFilter.ts). Split at the
+  // platform step for the same reason the one above is: the chips count the set
+  // they act on.
+  const onProgress = activeTab === "progress";
+  const progressBeforePlatform = useMemo(
+    () => filterProgressEntries(progressEntries, { q, types, storedTypes, includeFacets, excludeFacets, yearRange, membership }),
+    [progressEntries, q, types, storedTypes, includeFacets, excludeFacets, yearRange, membership],
+  );
+  const progressSorted = useMemo(
+    () => sortProgressEntries(filterProgressByPlatform(progressBeforePlatform, platforms), progressSort),
+    [progressBeforePlatform, platforms, progressSort],
+  );
+  // What the panel resets its render page on. The SORT is deliberately in here
+  // and the entry list is deliberately not: re-sorting should take you back to
+  // the top, and ticking an episode (which shortens the list) should not.
+  const progressResetKey = JSON.stringify([q, types, storedTypes, includeFacets, excludeFacets, yearRange, membership, platforms, progressSort]);
+
   // Chip counts are built from `beforePlatform` — every other filter applied,
   // this one not — so a chip reading 269 yields exactly 269.
   //
@@ -355,7 +440,14 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // over-promises: it said "Netflix 270" on the Library tab and returned 269,
   // because one of those 270 is wishlist-only. A count beside a control is a
   // promise about what the control does.
-  const platformOpts = useMemo(() => platformOptions(beforePlatform), [beforePlatform]);
+  //
+  // On Progress the same rule points at that tab's own set: the chips have to
+  // describe the shows whose episodes are listed, not a library the tab isn't
+  // showing.
+  const platformOpts = useMemo(
+    () => platformOptions(onProgress ? progressBeforePlatform : beforePlatform),
+    [onProgress, progressBeforePlatform, beforePlatform],
+  );
 
   const highlightId = q && sorted.length > 0 ? sorted[0].id : null;
 
@@ -457,22 +549,29 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         onSearchChange={setSearch}
         searchPlaceholder={TAB_SEARCH_PLACEHOLDER[activeTab]}
         searchFacets={searchFacets}
-        sort={{ value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
+        // Progress sorts EPISODES and carries an option the other two can't
+        // ("Up next"), so it brings its own value, setter and option list.
+        sort={onProgress
+          ? { value: progressSort, onChange: (v) => setProgressSort(v as ProgressSortKey), options: PROGRESS_SORTS }
+          : { value: sort, onChange: (v) => setSort(v as SortKey), options: LIBRARY_SORTS }}
         advancedFilters={<FilterPanel filters={advFilters} onChange={patchAdvanced} platformOptions={platformOpts} ownedPlatforms={ownedPlatforms} />}
         advancedActiveCount={advancedActiveCount}
         onResetFilters={resetAdvanced}
-        // Progress counts episodes, and only its own panel knows how many — so
-        // suppress the toolbar's number there rather than showing a library
-        // total under an episode heading. The panel prints its own count.
         // `sorted`, not `tabItems`: the count has to be what you are actually
-        // looking at, after search, facets, year, lists and platforms.
+        // looking at, after search, facets, year, lists and platforms. Progress
+        // counts EPISODES and used to be suppressed here, because only its panel
+        // knew the number; now that the filtering happens above, it reports the
+        // same filtered length as the other two tabs (and the panel's own
+        // duplicate count line is gone).
         // ⚠️ Caught 2026-08-27 by the new sheet footer, which renders this same
         // number as "Show N titles" — picking Netflix left the button reading
         // "Show 1,929 titles" while the list behind it dropped to a few hundred,
         // so the primary action was describing a set that no longer existed.
         // Discover already passed its filtered count (`browseSorted.length`);
         // this was the odd one out.
-        resultCount={loading || activeTab === "progress" ? null : sorted.length}
+        resultCount={onProgress
+          ? (progressLoading && !progressLoaded ? null : progressSorted.length)
+          : (loading ? null : sorted.length)}
         resultNoun={TAB_NOUN[activeTab]}
         view={effView}
         onViewChange={() => {}}
@@ -497,16 +596,27 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
           which had no role="tabpanel" anywhere. */}
       <main id={TABPANEL_ID} role="tabpanel" aria-labelledby={tabId(activeTab)} className="max-w-6xl mx-auto px-6 py-6">
         {/* MB16 — Progress is the one tab that isn't a filter over `merged`: it
-            lists EPISODES from /api/progress, owns its own paging, and shares
-            none of the item pipeline above (search, facets, sort and grouping
-            all address titles, not episodes). So it returns early rather than
-            threading an "is this an episode?" branch through five render
-            blocks. The toolbar above stays visible because the tab strip lives
-            in it — the filters simply don't apply here, which is why none of
-            them are consulted. */}
-        {activeTab === "progress" ? (
+            lists EPISODES from /api/progress rather than titles, so it gets its
+            own render branch instead of an "is this an episode?" condition
+            threaded through five blocks.
+            ⚠️ 2026-08-28: that branch used to be the whole story, and it left
+            the toolbar's search box, type chips, sort menu and Filters sheet
+            inert on this tab — four visible controls that did nothing (Nils).
+            The pipeline above now has an episode half; what differs is only the
+            SHAPE of a row, which is all this branch should ever have been. */}
+        {onProgress ? (
           <ErrorBoundary label="library progress tab">
-            <ProgressTabPanel />
+            <ProgressTabPanel
+              entries={progressSorted}
+              totalUnfiltered={progressEntries.length}
+              loading={progressLoading}
+              error={progressError}
+              onRetry={() => void loadProgress()}
+              onRemove={(k) => setProgressEntries((list) => list.filter((x) => entryKey(x) !== k))}
+              resetKey={progressResetKey}
+              searchQuery={search}
+              onClearSearch={() => setSearch("")}
+            />
           </ErrorBoundary>
         ) : (
           <>

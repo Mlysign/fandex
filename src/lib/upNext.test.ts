@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { initDb, run } from "./db";
 import { markEpisodes } from "./episodes";
-import { buildUpNext, buildUpNextPage, upNextStatus, backfillUpNextCatalog } from "./upNext";
+import { buildUpNext, upNextStatus, backfillUpNextCatalog } from "./upNext";
+import { buildFilterableUpNext } from "./upNextFacts";
 
 // Home's progress module. ONE filter and ONE sort, and both are the feature:
 //
@@ -499,10 +500,14 @@ describe("backfillUpNextCatalog — the bulk fill behind the rail", () => {
   });
 });
 
-describe("buildUpNextPage — the library's Progress tab", () => {
-  // Home caps at 10; the tab explicitly does not. What matters is that paging is
-  // a view over the SAME list — same filter, same sort — so an episode can never
-  // appear on one surface and not the other.
+describe("buildFilterableUpNext — the library's Progress tab", () => {
+  // Home caps at 10; the tab explicitly does not. What matters is that this is a
+  // view over the SAME list — same filter, same sort — so an episode can never
+  // appear on one surface and not the other, and that each entry arrives with
+  // the SHOW's own facts, which is what the tab's toolbar filters on.
+  //
+  // (It replaced a `buildUpNextPage` on 2026-08-28. Paging was fine while the
+  // tab had no filters and wrong the moment it got them — see upNextFacts.ts.)
   const tmdb = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
   function stubTmdb() {
@@ -520,64 +525,66 @@ describe("buildUpNextPage — the library's Progress tab", () => {
     }));
   }
 
-  function unopenedShow(id: string, title: string) {
+  // Same fixture shape as facetCache.test.ts's, which is where it is proven
+  // against the real derivation rather than assumed from TMDB's docs.
+  function unopenedShow(id: string, title: string, raw: Record<string, unknown> = {}) {
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES (?, 'show', ?, ?)", [id, title, id]);
     run(
-      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, raw_data)
-       VALUES (?, ?, 'tmdb', ?, 'show', ?, '{}')`,
-      [`${id}-l`, id, id, title],
+      `INSERT INTO media_links (id, media_item_id, source, source_id, media_type, title, release_date, raw_data)
+       VALUES (?, ?, 'tmdb', ?, 'show', ?, ?, ?)`,
+      [`${id}-l`, id, id, title, (raw.first_air_date as string) ?? null, JSON.stringify({ name: title, ...raw })],
     );
   }
 
-  async function seed(n: number) {
+  async function seed(n: number, raw?: Record<string, unknown>) {
     stubTmdb();
     for (let i = 0; i < n; i++) {
-      unopenedShow(`s${i}`, `Show ${i}`);
+      unopenedShow(`s${i}`, `Show ${i}`, raw);
       watched(`s${i}`, [[1, 1]], NOW - (i + 1) * DAY);
     }
     await backfillUpNextCatalog(USER, { now: NOW });
   }
 
-  it("returns a page plus the honest total", async () => {
+  it("is not capped at Home's 10, and reports an honest total", async () => {
     await seed(25);
-    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 0 });
-    expect(page.entries).toHaveLength(10);
-    expect(page.total).toBe(25);
-    expect(page.hasMore).toBe(true);
-  });
-
-  it("is not capped at Home's 10", async () => {
-    await seed(25);
-    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 50, offset: 0 });
-    expect(page.entries).toHaveLength(25);
-    expect(page.hasMore).toBe(false);
-  });
-
-  // Paging must tile the list exactly: no gaps (a missed episode) and no
-  // repeats (a duplicate React key).
-  it("tiles the list with no gaps and no repeats", async () => {
-    await seed(25);
-    const seen: string[] = [];
-    for (let offset = 0; offset < 30; offset += 10) {
-      const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset });
-      seen.push(...page.entries.map((e) => `${e.mediaItemId}:${e.season}:${e.episode}`));
-    }
-    expect(seen).toHaveLength(25);
-    expect(new Set(seen).size).toBe(25);
-  });
-
-  it("reports hasMore=false past the end", async () => {
-    await seed(5);
-    const page = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 10 });
-    expect(page.entries).toEqual([]);
-    expect(page.total).toBe(5);
-    expect(page.hasMore).toBe(false);
+    const { entries, total } = await buildFilterableUpNext(USER, { now: NOW, maxHealShows: 0 });
+    expect(entries).toHaveLength(25);
+    expect(total).toBe(25);
   });
 
   it("agrees with buildUpNext on the first 10", async () => {
     await seed(25);
     const home = await buildUpNext(USER, { now: NOW, maxHealShows: 0 });
-    const tab = await buildUpNextPage(USER, { now: NOW, maxHealShows: 0, limit: 10, offset: 0 });
-    expect(tab.entries.map((e) => e.showTitle)).toEqual(home.map((e) => e.showTitle));
+    const tab = await buildFilterableUpNext(USER, { now: NOW, maxHealShows: 0 });
+    expect(tab.entries.slice(0, 10).map((e) => e.showTitle)).toEqual(home.map((e) => e.showTitle));
+  });
+
+  // The whole reason this function exists: without these the toolbar's controls
+  // have nothing to filter on, which is the state the tab shipped in.
+  it("attaches the show's facets, so a facet pill can match an episode", async () => {
+    await seed(1, { genres: [{ id: 1, name: "Drama" }], first_air_date: "2019-05-05" });
+    const { entries } = await buildFilterableUpNext(USER, { now: NOW, maxHealShows: 0 });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].facetIds).toContain("tag||drama");
+    expect(entries[0].type).toBe("show");
+    expect(entries[0].releaseDate).toBe("2019-05-05");
+  });
+
+  it("carries the per-user facts the membership filters and sorts read", async () => {
+    await seed(1);
+    // Straight into the base table: `user_library` is a VIEW over it.
+    run(
+      `INSERT INTO user_item_state (id, user_id, media_item_id, source, relation, status, rating, added_at)
+       VALUES ('uis-s0', ?, 's0', 'trakt', 'library', 'watched', 8, ?)`,
+      [USER, NOW - 10 * DAY],
+    );
+    const { entries } = await buildFilterableUpNext(USER, { now: NOW, maxHealShows: 0 });
+    expect(entries[0].libraryStatus).toBe("watched");
+    expect(entries[0].rating).toBe(8);
+    expect(entries[0].addedAt).toBe(NOW - 10 * DAY);
+  });
+
+  it("returns nothing, and does not throw, for a user with no progress", async () => {
+    expect(await buildFilterableUpNext("nobody", { now: NOW })).toEqual({ entries: [], total: 0 });
   });
 });

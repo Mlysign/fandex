@@ -383,30 +383,11 @@ export async function buildUpNext(
   return entries.slice(0, opts.limit ?? MAX_ENTRIES);
 }
 
-/**
- * The same list, paged — for the library's Progress tab, which is explicitly
- * NOT capped at 10 and loads more as you scroll.
- *
- * Shares `buildUpNext`'s work rather than reimplementing the rules: it asks for
- * an unbounded list (`limit: Infinity`) and slices here, so the filter, the sort
- * and the bounded heal can never differ between Home and the full listing. The
- * cost is computing the whole list to serve one page, which is right at this
- * size — the input is one user's in-progress shows (hundreds at most, already
- * in memory for the sort), not a table scan.
- *
- * `total` is the honest count of everything that qualifies, so the client can
- * stop asking rather than probing for an empty page.
- */
-export async function buildUpNextPage(
-  userId: string,
-  opts: { now?: number; maxHealShows?: number; healBudgetMs?: number; limit?: number; offset?: number } = {},
-): Promise<{ entries: UpNextEntry[]; total: number; hasMore: boolean }> {
-  const all = await buildUpNext(userId, { ...opts, limit: Infinity });
-  const offset = Math.max(0, opts.offset ?? 0);
-  const limit = Math.max(1, opts.limit ?? MAX_ENTRIES);
-  const entries = all.slice(offset, offset + limit);
-  return { entries, total: all.length, hasMore: offset + entries.length < all.length };
-}
+// The library's Progress tab asks for this same list UNCAPPED, via
+// `buildFilterableUpNext` (lib/upNextFacts.ts) — which calls the function above
+// with `limit: Infinity` and attaches the show facts its toolbar filters on. It
+// replaced a `buildUpNextPage` helper on 2026-08-28; see that module's header
+// for why the tab pages its render rather than its fetch.
 
 /**
  * Fill the episode catalog for shows that can't produce a rail entry yet.
