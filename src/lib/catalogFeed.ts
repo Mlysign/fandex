@@ -1,4 +1,4 @@
-import { query } from "@/lib/db";
+import { query, get } from "@/lib/db";
 import type { Direction, FeedCandidate } from "@/lib/discoverFeed";
 import { dateWindow } from "@/lib/discoverFeed";
 import type { MediaType } from "@/types";
@@ -126,3 +126,61 @@ export function withCatalogFallback(
   const stored = catalogSectionPage(type, direction, page);
   return { items: stored, fellBack: stored.length > 0 };
 }
+
+// ── Serving browse from the catalog BY DEFAULT (phase 2's second half) ───────
+//
+// The fallback above is the outage case. This is the goal: an anonymous browse
+// answered from our own database, costing zero provider calls, which is what
+// makes crawler traffic free and a provider outage boring.
+//
+// ⚠️ IT IS GATED ON BREADTH, and that gate is the whole design. Measured
+// 2026-08-28, before the backfill: the future window held 59 games, 52 movies
+// and 42 shows, and 128 of those 153 were rows the provider feed itself wrote
+// while somebody scrolled past. Serving that as the default would have been a
+// circular feed, thinner and one step staler than the TMDB list it replaced.
+// So the switch is not a preference, it is a MEASUREMENT: serve from the
+// catalog only once the catalog can actually answer, per type and per window.
+//
+// The threshold is per (type, direction) rather than global, because the lanes
+// fill at different rates — games run through two providers, shows through one
+// — and a global switch would flip a type that is still thin.
+//
+// ⚠️ `CATALOG_BROWSE_MIN` is the number of stored rows in that window before we
+// stop asking the provider. It defaults to ten pages' worth: enough that a
+// visitor can scroll a while without hitting the end, which is the failure the
+// gate exists to prevent. Below it, nothing changes and the provider answers.
+// Read at CALL time. Every safety gate in this codebase that was written as a
+// module-load `const` had to be moved here first: the backfill's ceiling, the
+// housekeeping threshold, and this one. A gate you cannot exercise without
+// reloading the module is a gate nothing tests, and all three shipped with the
+// test silently asserting the default instead of the behaviour.
+export function catalogBrowseMin(): number {
+  const raw = process.env.CATALOG_BROWSE_MIN;
+  return raw === undefined || raw === "" ? 200 : Number(raw);
+}
+
+/** Unset = OFF. Serving the DB by default is switched on deliberately. */
+export function catalogBrowseEnabled(): boolean {
+  const v = (process.env.CATALOG_BROWSE ?? "").trim().toLowerCase();
+  return v === "1" || v === "true";
+}
+
+/** How many stored rows this type has inside this window. */
+export function catalogWindowCount(type: MediaType, direction: Direction): number {
+  const { gte, lte } = dateWindow(direction);
+  return get<{ n: number }>(
+    `SELECT COUNT(*) n FROM media_items
+      WHERE type = ? AND release_date IS NOT NULL AND release_date >= ? AND release_date <= ?`,
+    [type, gte, lte]
+  )?.n ?? 0;
+}
+
+/**
+ * True when this (type, window) can be served from the catalog instead of a
+ * provider. Reported rather than assumed, so `/api/health` can show why browse
+ * is or is not local yet.
+ */
+export function catalogBrowseReady(type: MediaType, direction: Direction): boolean {
+  return catalogBrowseEnabled() && catalogWindowCount(type, direction) >= catalogBrowseMin();
+}
+

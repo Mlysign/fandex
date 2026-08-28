@@ -185,6 +185,28 @@ export async function register() {
       // Log only when something happened. A line every 30 minutes saying "0 of
       // 0" is how a log stops being read.
       if (res.considered > 0) log.info("catalog_fill", { ...res, everyMs: FILL_INTERVAL_MS });
+
+      // ── The seeded backfill (docs/catalog-growth.md phase 4) ────────────
+      // LAST, and off by default (`BACKFILL_ENABLED=1` to run it). It is the
+      // only job here that deliberately GROWS the database, so it goes behind
+      // the two that keep it correct and bounded: retention first (a contract
+      // deadline), then the fill (enrich what we have), then this (add more).
+      // Growing a catalog whose existing rows are stale or unrefreshed would be
+      // the wrong order.
+      const { backfillBatch, BACKFILL_INTERVAL_MS } = await import("./lib/catalogBackfill");
+      const bf = await backfillBatch();
+      if (bf.ran && bf.pages > 0) log.info("catalog_backfill", { ...bf, everyMs: BACKFILL_INTERVAL_MS });
+      else if (bf.reason === "at-cap") log.warn("catalog_backfill_at_cap", { items: bf.items });
+
+      // ── Housekeeping by bytes (phase 5) ─────────────────────────────────
+      // Last of all, and a no-op until the file passes its size threshold. It
+      // reclaims the 70% of the database that is `media_links.raw_data` by
+      // dropping BLOBS, never rows — so a title keeps its uuid, slug and public
+      // page. Running it after the backfill means it sees the growth that pass
+      // just caused rather than a snapshot from before it.
+      const { housekeepingPass } = await import("./lib/catalogHousekeeping");
+      const hk = housekeepingPass();
+      if (hk.dropped > 0) log.info("catalog_housekeeping", { ...hk });
     };
 
     const { FILL_INTERVAL_MS, FILL_START_DELAY_MS } = await import("./lib/catalogFill");

@@ -12,7 +12,7 @@ import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/live
 import { persistDiscoverBatch, annotateUserState, annotateAvailability } from "@/lib/annotateDiscover";
 import type { Direction } from "@/lib/discoverFeed";
 import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
-import { withCatalogFallback } from "@/lib/catalogFeed";
+import { withCatalogFallback, catalogSectionPage, catalogBrowseReady } from "@/lib/catalogFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
 
@@ -220,7 +220,19 @@ export async function GET(req: NextRequest) {
     // (no hydration → stays fast). Falls through unfiltered when no signal.
     if (section) {
       const direction: Direction = searchParams.get("direction") === "past" ? "past" : "future";
+      const typeOfSection = { games: "game", movies: "movie", shows: "show" } as const;
       let results: any[] = [];
+
+      // ── Phase 2: serve this section from our own catalog ────────────────
+      // Once a (type, window) holds enough rows, load-more reads the database
+      // and costs ZERO provider calls. Gated on breadth per section, because
+      // the lanes fill at different rates — see catalogFeed.ts.
+      if (catalogBrowseReady(typeOfSection[section], direction)) {
+        const local = catalogSectionPage(typeOfSection[section], direction, page);
+        const decorated = userId ? filterSectionPage(userId, local) : decorateSection(local, null);
+        return NextResponse.json({ items: annotate(persist(decorated)), section, source: "catalog" });
+      }
+
       // SM35: games come from RAWG *and* IGDB. This used to call fetchGamePage
       // (RAWG only), so a RAWG outage made "Load more" a silent dead control on
       // the games section while the initial browse above still showed IGDB games.
@@ -232,8 +244,7 @@ export async function GET(req: NextRequest) {
       // type and window. Measured 2026-08-27: with RAWG quota-latched and IGDB
       // failing, `?section=games` returned `{"items":[]}` on prod and the whole
       // category disappeared from Discover. → lib/catalogFeed.ts
-      const typeOf = { games: "game", movies: "movie", shows: "show" } as const;
-      const fallback = withCatalogFallback(results, typeOf[section], direction, page);
+      const fallback = withCatalogFallback(results, typeOfSection[section], direction, page);
       if (fallback.fellBack) {
         log.info("discover_catalog_fallback", { section, page, direction, items: fallback.items.length });
         results = fallback.items;
@@ -259,10 +270,19 @@ export async function GET(req: NextRequest) {
     // It had the same RAWG-only games pull, so a logged-in user with a taste
     // signal kept seeing IGDB games (personalizedFeed pulls both) while a
     // logged-out visitor's browse lost the whole category.
+    // ── Phase 2: each section from the catalog once it is ready ─────────
+    // Per SECTION, so a type with enough stored rows stops costing provider
+    // calls while a thinner one keeps asking. A ready section makes NO provider
+    // request at all, which is the whole point: this is the anonymous path, so
+    // it is also the one a crawler and an outage both hit.
+    const localOrLive = async (
+      t: "game" | "movie" | "show", fetcher: () => Promise<any[]>
+    ) => (catalogBrowseReady(t, "future") ? catalogSectionPage(t, "future", 1) : fetcher());
+
     const [games, movies, shows] = await Promise.all([
-      fetchGamePageAllSources(1, "future"),
-      fetchMoviePage(1, "future", region),
-      fetchShowPage(1, "future"),
+      localOrLive("game", () => fetchGamePageAllSources(1, "future")),
+      localOrLive("movie", () => fetchMoviePage(1, "future", region)),
+      localOrLive("show", () => fetchShowPage(1, "future")),
     ]);
     // Per SECTION, not for the batch: one dead provider must not be able to
     // take the other two categories down with it, and one healthy one must not

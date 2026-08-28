@@ -314,6 +314,34 @@ function ensureSchema(db: Database.Database) {
     -- Eviction reads WRITE time, never read time: tracking reads would turn every
     -- cache hit into a write, which is the invariant in AGENTS.md.
     CREATE INDEX IF NOT EXISTS idx_projection_written ON media_item_projection(written_at);
+
+    -- ── The seeded backfill's cursor (2026-08-28) ─────────────────────────
+    -- One row per (type, direction) lane, holding which provider page that lane
+    -- reads next. Phase 4 of docs/catalog-growth.md paces 30-50k titles over
+    -- weeks, so the position has to survive a deploy: a restart that resets to
+    -- page 1 re-fetches everything it already holds and burns quota to learn
+    -- nothing.
+    --
+    -- Deliberately tiny and deliberately its own table rather than a general
+    -- key/value store, which this schema does not have and does not need. No
+    -- user_id (it is catalog machinery, so GDPR erasure correctly skips it) and
+    -- it references no other table, so it is not a dbPrune concern.
+    --
+    -- ⚠️ strikes is part of the ORIGINAL create, not a later addition, and
+    -- that is deliberate: this block runs before migrations and CREATE TABLE IF
+    -- NOT EXISTS is a no-op against an existing table, so a column added here
+    -- later would silently never appear on any database that already had the
+    -- table. This one had not shipped when the column was added, so it went in
+    -- the create; anything after this needs a migration.
+    CREATE TABLE IF NOT EXISTS backfill_cursor (
+      lane TEXT PRIMARY KEY,          -- "movie:future", "game:past", ...
+      page INTEGER NOT NULL,          -- provider page this lane reads next
+      exhausted INTEGER NOT NULL DEFAULT 0,  -- provider ran out; lane is done
+      strikes INTEGER NOT NULL DEFAULT 0,    -- consecutive empty pages; see catalogBackfill.ts
+      added INTEGER NOT NULL DEFAULT 0,      -- rows this lane has created
+      seen INTEGER NOT NULL DEFAULT 0,       -- candidates it has looked at
+      last_run INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // ── Lightweight migrations for existing databases ──────────────

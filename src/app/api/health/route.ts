@@ -6,6 +6,7 @@ import {
   readProcessRss,
 } from "@/lib/containerMemory";
 import { providerBreakerSnapshot, providerCallSnapshot, hostGateSnapshot } from "@/lib/http";
+import { catalogSnapshot } from "@/lib/catalogStatus";
 import { cacheSnapshot } from "@/lib/boundedCache";
 
 // Reads live process/cgroup state — must never be prerendered at build time.
@@ -86,6 +87,17 @@ export async function GET() {
     // difference from inside one bundle. Now that they are process-wide, THIS
     // is the true number: read it against the `max` each cache was sized to.
     caches: cacheSnapshot(),
+    // ── The catalog-growth jobs (2026-08-28) ─────────────────────────────
+    // Four background jobs now write to this database on a timer, and each has
+    // a state that is invisible from the outside. This is the one place that
+    // says whether they are working, so "is the backfill actually running" and
+    // "are we inside TMDB's retention window" stop being questions that need a
+    // shell on the box. → docs/catalog-growth.md
+    //
+    // ⚠️ `retention.expired > 0` is not a threshold being crossed, it is a
+    // provider TERM being breached. It should be unreachable while the fill
+    // drains, which is exactly why it is measured.
+    catalog: catalogSnapshot(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }

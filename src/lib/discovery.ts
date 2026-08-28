@@ -112,7 +112,16 @@ export interface FindRequest {
 }
 
 // ── Candidate cache (whole catalog, user-independent) ──────────────
-const CANDIDATE_TTL_MS = 5 * 60 * 1000;
+// ⚠️ Raised 5 min → 60 min on 2026-08-28, and the reason is that it is now a
+// BACKSTOP rather than a mechanism. Every way the pool can actually change is
+// signed and patched: catalog content, the acted-on half, membership, and alias
+// edits (which rebuild, necessarily — a bundle changes what every vector
+// resolves to). The TTL only catches drift no signature is watching, and it is
+// the last full rebuild left on a request path: ~175 ms at 2,553 items and a
+// projected ~3.4 s at the 50k phase 4 targets, landing on whichever request
+// arrives. Twelve times less often is the cheap half of that; the patch paths
+// are what make it safe.
+const CANDIDATE_TTL_MS = 60 * 60 * 1000;
 // `sig` is the CONTENT signature and `memSig` the membership one — they're
 // separate so a wishlist/rating write can take getCache()'s incremental path
 // instead of forcing a full rebuild (§A). `vocabMap` and `actedIds` exist only
@@ -544,7 +553,12 @@ const MAX_INCREMENTAL_CONTENT = 2000;
 function patchContent(content: ContentStats, sig: string, aliasSig: string) {
   const prev = _cache;
   if (!prev) return null;
-  const [prevN, prevMx] = prev.sig.split(":").map(Number);
+  const [prevN, prevMxContent] = prev.sig.split(":").map(Number);
+  // The acted-on half moves under its own signature, so the watermark is the
+  // EARLIER of the two: taking only the content one would skip a re-synced
+  // acted row whose stamp is older than the catalog's newest write.
+  const prevMxActed = Number(prev.actedSig);
+  const prevMx = Math.min(prevMxContent, Number.isFinite(prevMxActed) && prevMxActed > 0 ? prevMxActed : prevMxContent);
   // A browsed = 0 row DISAPPEARED. Which one is unknowable from an aggregate —
   // it is gone — so this is the one direction that still rebuilds. It is also
   // rare: dbPrune only ever deletes browsed = 1 rows.
@@ -554,8 +568,14 @@ function patchContent(content: ContentStats, sig: string, aliasSig: string) {
   // the same second as the previous watermark would be invisible to `>`. The
   // overlap re-derives a handful of items that did not change, which is
   // idempotent and cheap; missing one would be a silently stale vector.
+  //
+  // Both halves of the pool, because both can be re-synced: browsed = 0 is the
+  // catalog, and a browsed row somebody acted on is in the pool too and stays
+  // browsed = 1 forever (matcher never clears the flag). Missing the second set
+  // is what used to force a rebuild on `actedContentSignature` moving.
   const changed = query<{ id: string }>(
-    `SELECT id FROM media_items WHERE browsed = 0 AND updated_at >= ?`, [prevMx]
+    `SELECT mi.id FROM media_items mi
+      WHERE mi.updated_at >= ? AND (${POOL_WHERE})`, [prevMx]
   ).map((r) => r.id);
   if (!changed.length || changed.length > MAX_INCREMENTAL_CONTENT) return null;
 
@@ -658,7 +678,15 @@ function getCache() {
     // promoted item gets caught. (Checked AFTER memSig on purpose: promotion
     // moves both, and the membership branch must win.)
     const actedSig = actedContentSignature();
-    if (actedSig !== _cache.actedSig) return rebuild(sig, memSig, aliasSig);
+    if (actedSig !== _cache.actedSig) {
+      // A re-sync of an already promoted browsed row. Same shape as a content
+      // change and patched the same way (2026-08-28); it used to rebuild, which
+      // meant the very first sync after wishlisting a browsed title threw the
+      // whole pool away.
+      const patched = patchContent(content, sig, aliasSig);
+      if (patched) return patched;
+      return rebuild(sig, memSig, aliasSig);
+    }
     return _cache;
   }
 
