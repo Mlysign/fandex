@@ -9,7 +9,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 |---|---|
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
-| 2. Serve anon Discover from the DB | 🔵 **first slice done 2026-08-27** (§10): an empty provider section now falls back to stored rows. Serving the DB by DEFAULT still wants phase 3 first. |
+| 2. Serve anon Discover from the DB | 🔵 **two slices done; the third is BLOCKED ON PHASE 4, not phase 3.** §10: an empty provider section falls back to stored rows. §14: a logged-out SEARCH asks our catalog first, and the provider search is cached. What is left is the BROWSE feed, and §14 is why it waits. |
 | **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
 | 4. Seeded backfill to 30–50k with tiered refresh | ⬜ **⚠️ read §13's last paragraph first**: `facetCache.derived` is capped at 6,000 entries, so a 50k pool would miss on every rebuild. That is the next real blocker, and it is a phase-4 design question. |
 | 5. Housekeeping by bytes | ⬜ |
@@ -562,3 +562,88 @@ answer is to stop deriving the pool from blobs at request time at all — **pers
 (a `media_item_projection` row per item, written by the fill/sync jobs) so a rebuild is a table scan
 rather than a re-derivation. That is a schema change and a phase-4 decision. Size it before starting
 phase 4, not during.
+
+---
+
+## 14. Phase 2, second slice — and why the third one waits for phase 4 (2026-08-28)
+
+Picking phase 2 back up after phase 3 closed turned up a dependency this document
+had backwards.
+
+### The browse half is blocked on BREADTH, which is phase 4
+
+Serving anon Discover from the DB by default needs a catalog worth serving. Measured
+2026-08-28, the whole browse window:
+
+| direction | game | movie | show | of which `browsed` |
+|---|--:|--:|--:|--:|
+| future (today → +550d) | 59 | 52 | 42 | **128 of 153** |
+| past (−550d → today) | 99 | 110 | 25 | 88 of 234 |
+
+**153 items in the future window, and five sixths of them are rows the provider feed
+itself wrote** while somebody scrolled past. Serving that as the default browse would
+be a circular feed, thinner than TMDB's upcoming list and made of the same data one
+step staler. Phase 4's backfill is the prerequisite, not phase 3's shelf/pool split.
+
+Two more measurements that shrink the case for doing it sooner:
+
+- **Discover has no crawler cost to kill.** `/discover` is in `robots.ts`'s
+  `DISALLOW` list and is entirely client-rendered, so no crawler fetches it or
+  `/api/discover`. §2's "kills the crawler cost" row belongs to the FACET pages,
+  which are a different surface with their own plan (`docs/seo.md`).
+- **Anon browse already costs almost nothing.** `discoverFeed`'s `_pageCache` holds
+  each page for 15 minutes across every visitor, so the fan-out is ~5 provider calls
+  per quarter-hour regardless of traffic.
+
+⚠️ **A cold-facet-page number was attempted and thrown away.** Prod had just
+redeployed, and a CONTROL run with no page request at all moved TMDB +9, IGDB +1,
+Steam +4 and Trakt +1 in six idle seconds — the whole delta a `/tag/` load appeared
+to cause. Boot-time jobs make prod unmeasurable for a while after a deploy. The "a
+cold `/tag/` page should now cost 10 calls" figure remains a PREDICTION.
+
+### What did ship: search asks our own catalog first
+
+§1 always said "a text search hits the DB first and falls through to the providers
+only when we have no good answer". Half of that was already true and nobody had
+noticed the other half was gated: the client calls `/api/discover/find` (our catalog)
+for the primary results and `/api/discover?q=` (the providers) for "More from the
+databases" — **but `find` was `withUser`**, so a logged-out visitor's search was
+answered by the provider fan-out alone. Five uncached calls, two of which (RAWG on
+its quota, Letterboxd with no key) 401 on prod every time, to answer a question the
+catalog often already held.
+
+`find()` now takes `userId: string | null`. The rule that makes it safe is that every
+per-user field is empty **by construction** rather than by filtering: no profile is
+built and no state map is fetched, so there is no branch that could return one
+visitor another's state. `/api/discover/facets` had been public since 2026-08-18 for
+the same reason, but the Discover call site kept its own `authed &&` gate, so the
+People and Tags groups stayed invisible for ten more days. → `discoveryAnonSearch.test.ts`
+
+**And the provider search was the last uncached provider boundary in the app**, which
+AGENTS.md has required of every other one since August. Now `sharedCache`d for 15
+minutes on (type, lowercased query), never caching an empty result. Measured on a
+production build: `q=dune` **666 ms cold, 4 ms warm**.
+
+⚠️ **`max: 60`, and the number is measured.** An entry carries each item's `raw`
+payload, and `GET /api/dev/dbsize?caches=1` prices one at **51,003 bytes** over five
+real queries. The first draft said 150 on a guess of "tens of KB" — a 7.7 MB ceiling
+for a cache that mostly serves repeats inside one 15-minute window.
+
+### What "no good answer" cannot mean
+
+The obvious next step — skip the provider call entirely when the catalog answers
+well — **does not survive scrutiny, and should not be attempted with a cleverer
+heuristic.** Any bar has to decide completeness from our own rows, and a title is a
+prefix of its own sequels: an exact match on "Blade Runner" would hide *2049*, and
+"Cars" would hide *Cars 3*. The catalog cannot know what it is missing. The local
+half is served first and fast; the provider half stays, and the cache is what makes
+it cheap.
+
+### Verifying an anonymous surface without logging out
+
+`/api/auth/logout` bumps `session_epoch` and kills Nils's own browser session, and
+the session cookie is `httpOnly` so JS cannot clear it. **`127.0.0.1` is a different
+cookie jar from `localhost`**, which gives a genuinely anonymous context on the same
+server. ⚠️ It must be the **`prod` launch config**: `next dev` rejects `127.0.0.1`
+outright (403 on every chunk, HMR websocket refused), so the page never hydrates and
+looks exactly like the documented dev-hydration failure.
