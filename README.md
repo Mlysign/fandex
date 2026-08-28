@@ -38,6 +38,9 @@ missing.
 | `STEAM_API_KEY` | ⬚ | Steam integration |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
+| `BACKFILL_ENABLED` | ⬚ | **Phase 4: the seeded backfill. Default OFF.** `1` starts paced ingest toward 30–50k titles (`BACKFILL_PAGES` per 30 min, default 2; stops at `BACKFILL_MAX_ITEMS`, default 50,000). ⚠️ **The pacing is the safety feature** — 30–50k titles is 60–120k provider calls and every row is WAL that Litestream ships. Check Railway spend before raising anything. |
+| `CATALOG_BROWSE` | ⬚ | **Phase 2: serve Discover browse from our own database. Default OFF.** `1` lets a (type, window) go local once it holds `CATALOG_BROWSE_MIN` rows (default 200), per type, so a thin lane keeps asking the provider. A ready section costs **zero** provider calls. |
+| `HOUSEKEEPING_START_MB` | ⬚ | **Phase 5: reclaim `media_links.raw_data` above this file size** (default 1200 MB). Drops blobs, never rows, so pages and user data survive. A size trigger, not an age one. |
 | `IGDB_ENABLED` | ⬚ | **IGDB kill switch. Default ON** — set to `0` to stop every IGDB call at once. It exists because the Twitch Developer Services Agreement, which IGDB's own docs name as its licence, allows storing copies only with prior written authorization or a 24-hour cache, while IGDB's own product ships webhooks for maintaining your local mirror. Awaiting an answer from `partner@igdb.com`. Flipping it stops the flow; `scripts/purge-igdb.mjs` removes what is already stored. See [docs/catalog-growth.md](docs/catalog-growth.md) §17. |
 | `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
 | `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |

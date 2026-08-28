@@ -43,6 +43,15 @@ const ENV: EnvSpec[] = [
   // if IGDB answers that a stored mirror is not covered by their free tier.
   // → src/lib/sources/igdb.ts, docs/catalog-growth.md §17
   { name: "IGDB_ENABLED", required: false, quiet: true, note: "kill switch; set to 0 to stop all IGDB calls. Default ON" },
+  // Catalog growth (docs/catalog-growth.md phases 2, 4 and 5). All three are
+  // OFF unless set, and all three deliberately: one grows the database, one
+  // changes where browse comes from, and one deletes bytes.
+  { name: "BACKFILL_ENABLED", required: false, quiet: true, note: "phase 4: 1 = run the seeded backfill. Default OFF" },
+  { name: "BACKFILL_PAGES", required: false, quiet: true, note: "provider pages per backfill pass; default 2. The pacing IS the safety feature" },
+  { name: "BACKFILL_MAX_ITEMS", required: false, quiet: true, note: "stop growing at this catalog size; default 50000" },
+  { name: "CATALOG_BROWSE", required: false, quiet: true, note: "phase 2: 1 = serve browse from our own DB once a window is deep enough. Default OFF" },
+  { name: "CATALOG_BROWSE_MIN", required: false, quiet: true, note: "stored rows in a window before browse goes local; default 200" },
+  { name: "HOUSEKEEPING_START_MB", required: false, quiet: true, note: "phase 5: reclaim raw_data blobs above this file size; default 1200" },
   // H3 — monetization. All optional and all inert by default; see lib/affiliate.ts.
   // MONETIZATION_ENABLED is the master switch and MUST stay unset until H4.2's
   // Impressum is live (the first affiliate link makes the site commercial under

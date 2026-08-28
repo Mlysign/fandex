@@ -9,10 +9,10 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 |---|---|
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
-| 2. Serve anon Discover from the DB | 🔵 **two slices done; the third is BLOCKED ON PHASE 4, not phase 3.** §10: an empty provider section falls back to stored rows. §14: a logged-out SEARCH asks our catalog first, and the provider search is cached. What is left is the BROWSE feed, and §14 is why it waits. |
+| **2. Serve anon Discover from the DB** | ✅ **DONE 2026-08-28.** §10 outage fallback, §14 anon search, §18 the browse switch: a (type, window) with enough rows serves from our own DB at **zero provider calls**. `CATALOG_BROWSE=1`, gated on breadth per type. |
 | **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
-| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **steps 1–3 done 2026-08-28. ⚠️ The BACKFILL itself is gated on IGDB (§17): one email to partner@igdb.com.** §15: the derived projection is stored, so the memory cap stops deciding rebuild cost. §16: a content change PATCHES the pool (5 ms for 10 items against an 87 ms rebuild), verified identical to a rebuild on the real catalog. §17b: TMDB's six-month cache cap is enforced (nothing was enforcing it; first breach would have been ~2026-12-02). ⚠️ **Before the backfill**: IGDB's storage position (§17), and the 5-minute pool TTL. |
-| 5. Housekeeping by bytes | ⬜ |
+| **4. Seeded backfill to 30–50k with tiered refresh** | ✅ **MACHINERY DONE 2026-08-28** (§15, §16, §18). Six lanes with a durable cursor, proven against real providers. `BACKFILL_ENABLED=1` to start. ⚠️ The DATA is weeks of paced calls by design. |
+| **5. Housekeeping by bytes** | ✅ **DONE 2026-08-28** (§18). Drops `raw_data` blobs, never rows, above `HOUSEKEEPING_START_MB`. Never-evict list tested clause by clause. |
 
 ⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
 Absolute µs vary with machine load (a run with two dev servers up reads ~2× a quiet one); the RATIO
@@ -962,3 +962,84 @@ gives a pre-WAL snapshot that reads as a perfectly valid database with stale con
 It bit this script's own dry run: **1,580 projections reported against the 908 actually
 there**, because a recent DELETE was still in the WAL. That is a bad way to decide what
 to purge, so the script now says what it is reading.
+
+---
+
+## 18. Phases 4, 2 and 5, completed (2026-08-28)
+
+Everything the plan still needed, minus the weeks of paced provider calls the backfill
+deliberately takes. All three are **off by default**, because one grows the database,
+one changes where browse comes from, and one deletes bytes.
+
+### Phase 4 — the seeded backfill (`catalogBackfill.ts`)
+
+Six lanes, one per (type, direction), walked page by page from a cursor that survives a
+deploy. It reuses the **same fetchers the Discover feed calls**, so there is one
+definition of a candidate, one circuit breaker, one page cache, and games stay
+dual-source. `BACKFILL_ENABLED=1` to run it; `BACKFILL_MAX_ITEMS` (50,000) is a real
+ceiling, not a formality.
+
+**Proven against real providers on a copy**: 2,770 → 2,807 items over three passes,
+every lane advancing, cursors persisting, and the future window growing from 51/40/62 to
+52/51/73 across movies, shows and games.
+
+⚠️ **Two faults the live run caught that no unit test would have**, both worth keeping:
+
+- **A lane was retired on page 1 with nothing seen.** RAWG is quota-latched, and
+  `fetchGamePageAllSources` SWALLOWS a provider failure and answers `[]` — so an empty
+  page cannot tell "this window is finished" from "this provider is down". That is the
+  same `undefined` vs `[]` confusion the prune invariant exists to prevent, here costing
+  a lane that silently never runs again. **Three consecutive empties now**, and any good
+  page resets the count.
+- **One lane was hammered while five starved.** `last_run` is `strftime('%s','now')`, so
+  every lane a pass touches ends up in the same second and the least-recently-run sort
+  cannot separate them. Lanes are now tracked within a pass, tie-broken by
+  **declaration order** rather than alphabetically, which would have quietly
+  re-prioritised the `LANES` list.
+
+### Phase 2 — the browse switch (`catalogFeed.ts`)
+
+Once a (type, window) holds enough stored rows, the anonymous browse and load-more read
+the database and cost **zero provider calls**. `CATALOG_BROWSE=1`, threshold
+`CATALOG_BROWSE_MIN` (200).
+
+⚠️ **The gate is the design, not a guard on it.** Serving the 153 items the future
+window held before the backfill would have produced a circular feed: thinner than the
+TMDB list it replaced, made of the same data one step staler, and **it would have looked
+like it worked**. Readiness is measured per type and per window because the lanes fill
+at different rates.
+
+### Phase 5 — housekeeping by bytes (`catalogHousekeeping.ts`)
+
+70% of the file is `media_links.raw_data`. This drops **blobs, never rows**, so a title
+keeps its uuid, slug, public page and every user relation — deleting rows is what makes
+public pages 404, which the archive already records as an accepted loss from last time.
+
+A **size** trigger (`HOUSEKEEPING_START_MB`, 1200), not an age one: there is no benefit
+to dropping a blob from a small database, and it costs a refetch later. The never-evict
+list names every table one by one the way `dbPrune`'s predicate does, and each clause
+has its own test: acted on, episodes tracked, in a public snapshot, named by a franchise
+override, still waiting to be healed, or never projected.
+
+⚠️ It only touches rows at the CURRENT projection version and with a stored projection.
+The blob is redundant **because** the derived form exists (§15); without that, dropping
+it loses the data outright until a refetch. The price stands either way: a future
+`PROJECTION_VERSION` bump cannot re-derive an item whose blob is gone.
+
+### Also
+
+- **The pool TTL is 5 min → 60 min.** A re-sync of an acted-on browsed row now patches
+  instead of rebuilding, so every real change path is patched and the TTL is a pure
+  backstop — the last full rebuild left on a request path.
+- **`/api/health` reports all four jobs** (`catalog`), because a background job that
+  reports nothing is indistinguishable from one that is not running, which this project
+  has shipped twice.
+
+### What is left, honestly
+
+**Data, not code.** The backfill is paced at ~2 pages per 30 minutes because 30–50k
+titles is 60–120k provider calls and every row is WAL that Litestream ships. Turning
+that up is how it becomes the PR16 incident again. Switch it on, leave it for weeks,
+and flip `CATALOG_BROWSE=1` when `/api/health`'s `catalog.browse.windows` says a type is
+ready. The one thing still worth an answer is IGDB (§17c), and the kill switch is what
+makes that answer cheap.
