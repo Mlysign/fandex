@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { log, errorFields } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { httpFetch } from "@/lib/http";
+import { sharedCache } from "@/lib/boundedCache";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 
@@ -128,6 +129,44 @@ async function searchAll(q: string, type: string | null) {
   return results;
 }
 
+// ── The search cache (2026-08-28) ────────────────────────────────────────────
+// `searchAll` was the last provider boundary in the app with no cache at all,
+// which AGENTS.md has required of every other one since August. Every query cost
+// five live calls — RAWG, IGDB, TMDB movies, TMDB shows, Letterboxd — and on
+// prod two of those (RAWG on its quota, Letterboxd with no valid key) return 401
+// every single time. The client debounces at 300 ms, so refining a query walks
+// through several prefixes and pays for each.
+//
+// ⚠️ NEVER CACHE AN EMPTY RESULT, the same rule discoverFeed's page cache keeps:
+// `searchAll` swallows a per-provider failure and continues, so an outage looks
+// exactly like "no such title", and storing that would pin the outage in place
+// for the whole TTL. A genuinely empty query is re-asked, which is cheap.
+//
+// ⚠️ Keyed on (type, lowercased query) and nothing else — `searchAll` reads no
+// region and no session, so there is nothing per-viewer to leak. Persisting and
+// annotating still run per request, OUTSIDE the cache, and both build new
+// objects rather than mutating these, so a cached array cannot be consumed once
+// and come back stripped.
+const SEARCH_TTL_MS = 15 * 60 * 1000;
+// ⚠️ The bound comes from a MEASURED entry, not from a round number. An entry is
+// a whole page of provider records INCLUDING each item's `raw` payload
+// (persistDiscoverBatch needs it to create the row), and `GET
+// /api/dev/dbsize?caches=1` over five real queries prices it at **51,003 bytes**
+// — so 60 entries is ~3 MB serialised, against `facetCache.derived`'s 14 MB. The
+// first draft said 150 on a guess of "tens of KB", which would have been a
+// 7.7 MB ceiling for a cache that mostly serves repeats of the same few queries
+// inside one 15-minute window. Re-price it before raising this.
+const _searchCache = sharedCache<string, any[]>("discover.search", { max: 60, ttlMs: SEARCH_TTL_MS });
+
+async function cachedSearchAll(q: string, type: string | null) {
+  const key = `${type ?? "all"}|${q.toLowerCase()}`;
+  const hit = _searchCache.get(key);
+  if (hit) return hit;
+  const fresh = await searchAll(q, type);
+  if (fresh.length) _searchCache.set(key, fresh);
+  return fresh;
+}
+
 function sortByDate(items: any[]) {
   return [...items].sort((a, b) => {
     if (!a.releaseDate && !b.releaseDate) return 0;
@@ -171,7 +210,7 @@ export async function GET(req: NextRequest) {
 
     // ── Search ────────────────────────────────────────────────────
     if (q && q.length >= 2) {
-      const results = await searchAll(q, type ?? null);
+      const results = await cachedSearchAll(q, type ?? null);
       return NextResponse.json({ items: annotate(persist(sortByDate(results))) });
     }
 

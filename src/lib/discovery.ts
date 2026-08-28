@@ -1435,7 +1435,30 @@ export interface FindResult {
   items: DiscoverResultItem[];
 }
 
-export function find(userId: string, req: FindRequest): FindResult {
+// Somebody we know nothing about: no facets, no baseline, no signal. Built once
+// rather than read from SQL under a placeholder id, which would run three
+// pointless queries and cache a profile under a key no user has.
+const ANON_PROFILE: Profile = {
+  w: new Map(), meta: new Map(), baseline: 0, hasSignal: false, ratedItemCount: 0,
+};
+
+/**
+ * ⚠️ `userId` may be NULL, and that is the anonymous catalog search (2026-08-28,
+ * `docs/catalog-growth.md` phase 2). Everything this returns for a null user is
+ * catalog data the site already serves anonymously at `/discover`, `/person`,
+ * `/tag` and `/studio`; every per-user field — `fandexScore`, `reasons`,
+ * `onWatchlist`, `libraryStatus`, `rating`, `profileSummary` — comes back
+ * null/empty **by construction**, because the profile is empty and the state map
+ * is never fetched. There is no branch that could leak one user's state to
+ * another, because there is no second user to read from.
+ *
+ * Before this, `/api/discover/find` was `withUser` and a logged-out visitor's
+ * search fell through to the provider half alone: five uncached provider calls
+ * to answer a question the local catalog often already held. That is the same
+ * shape as the gates in [[anon-gates-must-ask-not-bounce]] — the wrapper was
+ * gated, not the data.
+ */
+export function find(userId: string | null, req: FindRequest): FindResult {
   // The whole cache object, not just its fields: `fandexScoresFor` keys its
   // per-user score array on the pool's own signatures.
   const cache = getCache();
@@ -1444,7 +1467,7 @@ export function find(userId: string, req: FindRequest): FindResult {
   // never the refined one — a seed/manual-pill nudge changes what ranks well
   // in THIS search, not your actual taste-match number (D2's "fully
   // transparent" intent extends to "stable regardless of session refinements").
-  const rawProfile = buildProfile(userId);
+  const rawProfile = userId ? buildProfile(userId) : ANON_PROFILE;
   const profile = applyRefinements(rawProfile, req.refine, byId);
   const filters = req.filters ?? {};
   const sort: SortKey = req.sort ?? "fandexScore";
@@ -1453,9 +1476,11 @@ export function find(userId: string, req: FindRequest): FindResult {
   const q = (req.q ?? "").trim().toLowerCase();
 
   // State for the whole catalog (needed for membership filtering + hydration).
-  const state = getUserStateMap(userId, vectors.map((v) => v.id));
+  const state = userId
+    ? getUserStateMap(userId, vectors.map((v) => v.id))
+    : new Map<string, ReturnType<typeof getUserStateMap> extends Map<string, infer V> ? V : never>();
 
-  const ignored = req.excludeIgnored
+  const ignored = req.excludeIgnored && userId
     ? new Set(query<{ media_item_id: string }>(
         "SELECT media_item_id FROM user_item_state WHERE user_id = ? AND relation = 'ignored'", [userId]
       ).map((r) => r.media_item_id))
@@ -1468,7 +1493,10 @@ export function find(userId: string, req: FindRequest): FindResult {
   // fandexScoresFor(). ⚠️ Indexed by POSITION in `vectors`, so the loop below
   // has to be an indexed one even though it skips filtered items: `continue`
   // must not desynchronise `i` from the array the scores were computed over.
-  const fandex = fandexScoresFor(userId, rawProfile, cache);
+  // Null for an anonymous caller: an empty profile scores nothing (every item
+  // is below MIN_RATED_FOR_FANDEX_SCORE), so the pass would fill two arrays with
+  // NaN and 0 and cache them under a user that does not exist.
+  const fandex = userId ? fandexScoresFor(userId, rawProfile, cache) : null;
   // A seed or a manual pill rewrites the weights for THIS request only, so the
   // cached ranking scores describe a different profile and cannot be used.
   const refined = profile !== rawProfile && !!req.refine;
@@ -1478,12 +1506,12 @@ export function find(userId: string, req: FindRequest): FindResult {
     if (ignored?.has(v.id)) continue;
     if (q && !v.title.toLowerCase().includes(q)) continue;
     if (!passesFilters(v, filters, state.get(v.id))) continue;
-    const fandexScore = Number.isNaN(fandex.scores[i]) ? null : fandex.scores[i];
+    const fandexScore = fandex && !Number.isNaN(fandex.scores[i]) ? fandex.scores[i] : null;
     scored.push({
       v,
-      score: refined ? scoreFacets(v.facets, profile.w, idf)?.score ?? 0 : fandex.rank[i],
+      score: refined || !fandex ? scoreFacets(v.facets, profile.w, idf)?.score ?? 0 : fandex.rank[i],
       fandexScore,
-      fandexCenter: fandexScore === null ? null : fandex.center,
+      fandexCenter: fandexScore === null ? null : fandex!.center,
     });
   }
 

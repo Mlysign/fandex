@@ -229,9 +229,8 @@ export default function DiscoverPageClient() {
   const [webItems, setWebItems] = useState<any[]>([]);   // fresh DB matches (fetch-more)
   const [webLoading, setWebLoading] = useState(false);
   // A5 — typed search groups: People/Tags matching a real text query, shown
-  // above the Titles results. Signed-in only (same reason /api/discover/find
-  // is skipped for anon above — it's an authed endpoint) so anon gets exactly
-  // today's Titles-only behavior, no regression.
+  // above the Titles results. Public since 2026-08-28 — the vocab behind them
+  // is what /person and /tag already serve anonymously.
   const [peopleMatches, setPeopleMatches] = useState<VocabMatch[]>([]);
   const [tagMatches, setTagMatches] = useState<VocabMatch[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,22 +407,21 @@ export default function DiscoverPageClient() {
     if (append) setSearchLoadingMore(true);
     else { setSearchLoading(true); setWebItems([]); setPeopleMatches([]); setTagMatches([]); }
     try {
-      // SM6: the local-catalog find is an authed endpoint — for anonymous
-      // viewers skip straight to the public database results below instead of
-      // eating a 401 on every keystroke.
-      const authed = await probeSession();
+      // 2026-08-28 — the local-catalog find is PUBLIC now, so an anonymous
+      // visitor searches our own database first like everyone else. It used to
+      // be skipped for them (SM6, when the endpoint was authed), which left a
+      // logged-out search answered entirely by five uncached provider calls
+      // while the catalog sat right there. → docs/catalog-growth.md phase 2.
+      // Every per-user field comes back null for them; the titles are the same
+      // ones /person and /tag already serve anonymously.
       let localItems: DiscoverItem[] = [];
-      if (authed) {
-        const res = await fetch("/api/discover/find", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ q: q.trim(), filters: apiFilters(filters), sort, limit: LIMIT, offset }),
-        });
-        const d = await res.json();
-        localItems = d.items ?? [];
-        setSearchTotal(d.total ?? 0);
-      } else {
-        setSearchTotal(0);
-      }
+      const res = await fetch("/api/discover/find", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: q.trim(), filters: apiFilters(filters), sort, limit: LIMIT, offset }),
+      });
+      const d = await res.json();
+      localItems = d.items ?? [];
+      setSearchTotal(d.total ?? 0);
       setSearchItems((prev) => (append ? [...prev, ...localItems] : localItems));
       // Show local results immediately; the DB fetch below populates separately.
       if (append) setSearchLoadingMore(false);
@@ -436,10 +434,13 @@ export default function DiscoverPageClient() {
         const query = q.trim();
 
         // A5 — typed groups (People/Tags): a real text query only (not a bare
-        // facet/year filter, which isn't something you "typed"), and only for
-        // a signed-in viewer — /api/discover/facets is the same authed
-        // catalog-vocab search FacetAutocomplete already uses.
-        if (authed && query.length >= 2) {
+        // facet/year filter, which isn't something you "typed").
+        // `/api/discover/facets` has been public since 2026-08-18 — it reads the
+        // same catalog vocab /person, /tag and /studio serve anonymously — but
+        // this call site kept its own `authed &&` gate, so the People and Tags
+        // groups stayed invisible to logged-out visitors for ten days after the
+        // endpoint stopped requiring a session.
+        if (query.length >= 2) {
           try {
             const md = await (await fetch(`/api/discover/facets?q=${encodeURIComponent(query)}`)).json();
             const matches: VocabMatch[] = md.matches ?? [];
@@ -459,7 +460,10 @@ export default function DiscoverPageClient() {
             extras.push(...(wd.items ?? []));
           } catch { /* ignore */ }
         }
-        if (authed && filters.includeFacets.length > 0) {
+        // Still signed-in only, and deliberately: unlike find() and facets, this
+        // one FANS OUT TO PROVIDERS on our keys (a person's whole TMDB
+        // filmography), so it stays `withUser` and so does this call site.
+        if (await probeSession() && filters.includeFacets.length > 0) {
           try {
             const fd = await (await fetch("/api/discover/facet-fetch", {
               method: "POST", headers: { "Content-Type": "application/json" },
