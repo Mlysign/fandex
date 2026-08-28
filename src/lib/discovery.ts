@@ -6,6 +6,7 @@
 // catalog with explainable reasons — plus extensive filtering and sorting.
 
 import { query, get } from "@/lib/db";
+import { log } from "@/lib/logger";
 import { sharedCache } from "@/lib/boundedCache";
 import { extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
@@ -126,6 +127,22 @@ let _cache: {
   idf: Map<string, number>;
   rawTagCounts: Map<string, { label: string; count: number }>;
   actedIds: Set<string>;
+  /**
+   * The PRE-alias facets each pooled item was folded with, kept so a changed
+   * item can be UN-counted exactly (2026-08-28).
+   *
+   * ⚠️ This is the input the code used to say it did not have. `getCache`'s
+   * removal branch reads: "a removal needs the departing item's RAW facets to
+   * un-count its vocab and rawTagCounts contribution exactly, and the vector
+   * only carries POST-alias facets" — which is why every content change forced
+   * a full rebuild. Holding them makes a content patch possible, and a rebuild
+   * proportional to what moved rather than to the catalog.
+   *
+   * Cheap: the arrays are the same `Facet` objects the derivation already
+   * produced (facetCache shares them; nothing mutates a Facet in place), so
+   * this is ~one pointer per facet occurrence.
+   */
+  rawFacetsById: Map<string, Facet[]>;
 } | null = null;
 
 // ── The catalog POOL (H2b) ───────────────────────────────────────────────────
@@ -165,11 +182,21 @@ export const POOL_WHERE = `(mi.browsed = 0 OR mi.id IN (SELECT media_item_id FRO
 // it writes `user_item_state` and never touches `media_items` (only
 // upsertMediaItem does, matcher.ts) — which is what lets a promotion take the
 // incremental path.
-function contentSignature(): string {
+// The two halves are kept apart (2026-08-28) so the content branch of getCache()
+// can PATCH instead of rebuilding: `mx` is the watermark a "what changed since
+// the last build" query needs, and `n` is what tells a deletion apart from an
+// insert. The signature string is just their pair, so nothing about its meaning
+// as a cache key changed.
+interface ContentStats { n: number; mx: number }
+function contentStats(): ContentStats {
   const cat = get<{ n: number; mx: number }>(
     `SELECT COUNT(*) n, COALESCE(MAX(updated_at),0) mx FROM media_items WHERE browsed = 0`
   );
-  return `${cat?.n ?? 0}:${cat?.mx ?? 0}`;
+  return { n: cat?.n ?? 0, mx: cat?.mx ?? 0 };
+}
+const contentSig = (c: ContentStats) => `${c.n}:${c.mx}`;
+function contentSignature(): string {
+  return contentSig(contentStats());
 }
 
 // CONTENT of the acted-on browsed rows, which are in the pool too and CAN be
@@ -410,6 +437,44 @@ function foldEntry(
   }
 }
 
+/**
+ * `foldEntry` run backwards, for an item leaving the pool or being replaced by a
+ * re-derived version of itself (2026-08-28).
+ *
+ * ⚠️ It must be an EXACT inverse or the vocab drifts, and a drifted vocab is not
+ * a visible bug: it silently changes every IDF weight and so every ranking. The
+ * two arguments are the two things `foldEntry` counted — POST-alias facets into
+ * `vocabMap`, RAW tag facets into `rawTagCounts` — and they have to be the ones
+ * that item was actually folded with, which is why `_cache.rawFacetsById` exists.
+ *
+ * ⚠️ Deletes an entry at zero rather than leaving a `count: 0` row. `getTagVocab`
+ * and the tag admin table both read these maps directly, so a zero-count term
+ * would show up as a real facet nobody carries, and `computeIdf` would weight it.
+ *
+ * Throws on an underflow. That means the pool and its vocab have already
+ * disagreed, and the caller's answer is to throw the patch away and rebuild —
+ * never to carry on with counts it cannot explain.
+ */
+function unfoldEntry(
+  postFacets: Facet[],
+  rawFacets: Facet[],
+  vocabMap: Map<string, VocabEntry>,
+  rawTagCounts: Map<string, { label: string; count: number }>
+) {
+  for (const f of postFacets) {
+    const fid = facetId(f);
+    const v = vocabMap.get(fid);
+    if (!v) throw new Error(`unfoldEntry: vocab has no entry for ${fid}`);
+    if (--v.count <= 0) vocabMap.delete(fid);
+  }
+  for (const f of rawFacets) {
+    if (f.kind !== "tag") continue;
+    const r = rawTagCounts.get(f.key);
+    if (!r) throw new Error(`unfoldEntry: rawTagCounts has no entry for ${f.key}`);
+    if (--r.count <= 0) rawTagCounts.delete(f.key);
+  }
+}
+
 // IDF: a facet on most items (Singleplayer, Action) is a weak signal; a rare
 // one (steampunk, a specific director) is a strong, distinctive match. This is
 // what stops generic high-frequency genres from dominating recommendations.
@@ -439,6 +504,7 @@ function buildCache() {
     idf: computeIdf(vocabMap, vectors.length),
     rawTagCounts,
     actedIds: actedBrowsedIds(),
+    rawFacetsById: new Map(entries.map((e) => [e.vector.id, e.rawFacets])),
   };
 }
 
@@ -451,8 +517,101 @@ function rebuild(sig: string, memSig: string, aliasSig: string) {
 // not much slower, and it bounds how far a patch bug could ever propagate.
 const MAX_INCREMENTAL_ADDS = 50;
 
+// How many CHANGED items are worth patching before a rebuild is simply the
+// better answer. Much higher than MAX_INCREMENTAL_ADDS on purpose: a membership
+// patch competes with a rebuild of a catalog that has not otherwise changed,
+// while this competes with re-deriving 50k items. Measured per patch, the fixed
+// cost is sortVocab + computeIdf over the whole vocabulary; the per-item cost is
+// one derivation, which the projection table (§15) made a row read.
+const MAX_INCREMENTAL_CONTENT = 2000;
+
+/**
+ * A CONTENT change patches the pool instead of rebuilding it (2026-08-28,
+ * `docs/catalog-growth.md` §16).
+ *
+ * Before this, any write that moved `media_items.updated_at` on a pooled row —
+ * every sync, every ingest, every heal by the fill job — threw the whole pool
+ * away. At 2,553 items that is 590 ms and nobody notices. At the 30–50k phase 4
+ * targets it is ~3.4 s of blocking CPU, per batch, on a single synchronous
+ * process, which is what made the backfill unshippable.
+ *
+ * Returns the patched cache, or null when it cannot be done exactly — in which
+ * case the caller rebuilds. **A wrong patch must cost one rebuild, never a wrong
+ * pool**, so every check that could be wrong runs BEFORE anything is mutated,
+ * and a throw from `unfoldEntry` is caught and answered the same way. A rebuild
+ * replaces `_cache` wholesale, so a half-applied patch cannot survive.
+ */
+function patchContent(content: ContentStats, sig: string, aliasSig: string) {
+  const prev = _cache;
+  if (!prev) return null;
+  const [prevN, prevMx] = prev.sig.split(":").map(Number);
+  // A browsed = 0 row DISAPPEARED. Which one is unknowable from an aggregate —
+  // it is gone — so this is the one direction that still rebuilds. It is also
+  // rare: dbPrune only ever deletes browsed = 1 rows.
+  if (!Number.isFinite(prevN) || !Number.isFinite(prevMx) || content.n < prevN) return null;
+
+  // `>=`, not `>`. updated_at is strftime('%s','now'), so anything written in
+  // the same second as the previous watermark would be invisible to `>`. The
+  // overlap re-derives a handful of items that did not change, which is
+  // idempotent and cheap; missing one would be a silently stale vector.
+  const changed = query<{ id: string }>(
+    `SELECT id FROM media_items WHERE browsed = 0 AND updated_at >= ?`, [prevMx]
+  ).map((r) => r.id);
+  if (!changed.length || changed.length > MAX_INCREMENTAL_CONTENT) return null;
+
+  // Derived through the SAME buildEntries a rebuild uses, so a patched item is
+  // indistinguishable from a rebuilt one.
+  const entries = buildEntries(`mi.id IN (${changed.map(() => "?").join(",")})`, changed);
+  if (entries.length !== changed.length) return null;
+
+  const index = new Map(prev.vectors.map((v, i) => [v.id, i]));
+  const fresh = entries.filter((e) => !index.has(e.vector.id));
+  // Every item we are REPLACING must have the raw facets it was folded with, or
+  // its vocab contribution cannot be removed exactly.
+  for (const e of entries) {
+    if (index.has(e.vector.id) && !prev.rawFacetsById.has(e.vector.id)) return null;
+  }
+
+  // The same self-check the membership patch runs, and for the same reason: if
+  // the patched pool would not match what SQL says the pool is, do not patch.
+  const poolCount = get<{ n: number }>(`SELECT COUNT(*) n FROM media_items mi WHERE ${POOL_WHERE}`)?.n ?? -1;
+  if (prev.vectors.length + fresh.length !== poolCount) return null;
+
+  try {
+    for (const e of entries) {
+      const id = e.vector.id;
+      const i = index.get(id);
+      if (i === undefined) {
+        prev.vectors.push(e.vector);
+      } else {
+        unfoldEntry(prev.vectors[i].facets, prev.rawFacetsById.get(id)!, prev.vocabMap, prev.rawTagCounts);
+        prev.vectors[i] = e.vector;
+      }
+      prev.byId.set(id, e.vector);
+      prev.rawFacetsById.set(id, e.rawFacets);
+      foldEntry(e, prev.vocabMap, prev.rawTagCounts);
+    }
+  } catch (err) {
+    log.warn("discovery_content_patch_failed", { changed: changed.length, error: String(err) });
+    return null;
+  }
+
+  prev.vocab = sortVocab(prev.vocabMap);
+  prev.idf = computeIdf(prev.vocabMap, prev.vectors.length);
+  prev.sig = sig;
+  prev.aliasSig = aliasSig;
+  // Restamped, not compared: the acted set's content MAX is measured against a
+  // catalog that just moved.
+  prev.actedSig = actedContentSignature();
+  // `at` deliberately NOT refreshed, exactly as in the membership patch: the TTL
+  // measures staleness against the last FULL build, so a stream of ingests must
+  // not be able to hold a patched pool open forever.
+  return prev;
+}
+
 function getCache() {
-  const sig = contentSignature();
+  const content = contentStats();
+  const sig = contentSig(content);
   // H5.6: a bundle edit doesn't change the catalog, so guard on the alias
   // signature too — otherwise bundled vocab/vectors would stay stale until the
   // 5-min TTL expired.
@@ -471,7 +630,20 @@ function getCache() {
   // happened to equal the new canonical one. Nils bundled the Spider-Man
   // franchises and the rail showed exactly one film.
   const aliasSig = `${tagAliasSignature()}|${ipAliasSignature()}|${itemIpOverrideSignature()}`;
-  if (!_cache || _cache.sig !== sig || _cache.aliasSig !== aliasSig || Date.now() - _cache.at >= CANDIDATE_TTL_MS) {
+  // An alias edit and the TTL still rebuild. The alias one has to: a bundle
+  // changes what EVERY vector's facets resolve to, so there is no "what
+  // changed" set smaller than the catalog. The TTL is the backstop against any
+  // way the pool could drift that no signature here is watching, and it is
+  // deliberately not refreshed by a patch.
+  if (!_cache || _cache.aliasSig !== aliasSig || Date.now() - _cache.at >= CANDIDATE_TTL_MS) {
+    return rebuild(sig, membershipSignature(), aliasSig);
+  }
+
+  // Catalog content moved. Patch the items that moved rather than re-deriving
+  // the catalog; fall back to a rebuild when it cannot be done exactly.
+  if (_cache.sig !== sig) {
+    const patched = patchContent(content, sig, aliasSig);
+    if (patched) return patched;
     return rebuild(sig, membershipSignature(), aliasSig);
   }
 
@@ -522,6 +694,7 @@ function getCache() {
   for (const e of entries) {
     _cache.vectors.push(e.vector);
     _cache.byId.set(e.vector.id, e.vector);
+    _cache.rawFacetsById.set(e.vector.id, e.rawFacets);
     foldEntry(e, _cache.vocabMap, _cache.rawTagCounts);
   }
   _cache.vocab = sortVocab(_cache.vocabMap);
@@ -538,7 +711,13 @@ function getCache() {
 }
 
 // Public: invalidate after a fetch-more ingest so new items appear immediately.
-export function invalidateDiscoveryCache() { _cache = null; }
+export function invalidateDiscoveryCache() {
+  _cache = null;
+  // Every in-flight score pass is indexed against the pool that just went away,
+  // so each will abort at its next chunk. Dropping the slots now means the next
+  // request schedules a fresh pass instead of waiting behind a doomed one.
+  _recomputing.clear();
+}
 
 // ── What the POOL weighs, and how fast it grows (2026-08-23) ─────────────────
 //
@@ -1207,11 +1386,18 @@ const RECOMPUTE_CHUNK = 512;
 
 // Passes in flight, one per user. The promise is what tests and the probe
 // await; nothing on the request path reads it.
-const _recomputing = new Map<string, Promise<void>>();
+//
+// ⚠️ The generation is not bookkeeping for its own sake. A pass whose pool was
+// invalidated is dead work — it aborts at its next chunk — but its cleanup would
+// otherwise `delete` whatever entry it found under that key, which by then can
+// belong to a NEWER pass, letting a third be scheduled alongside it. Each pass
+// only ever clears its own generation.
+let _recomputeGen = 0;
+const _recomputing = new Map<string, { gen: number; done: Promise<void> }>();
 
 /** Test/probe hook: resolves once no background score pass is in flight. */
 export function scoreRecomputesIdle(): Promise<void> {
-  return Promise.all([..._recomputing.values()]).then(() => undefined);
+  return Promise.all([..._recomputing.values()].map((r) => r.done)).then(() => undefined);
 }
 
 const yieldToLoop: (fn: () => void) => void =
@@ -1276,6 +1462,7 @@ function scorePool(
  */
 function scheduleRecompute(userId: string, rawProfile: Profile, sig: string, poolSig: string): void {
   if (_recomputing.has(userId)) return;
+  const gen = ++_recomputeGen;
   const start = _cache;
   if (!start || poolSignature(start) !== poolSig) return;
   const n = start.vectors.length;
@@ -1290,10 +1477,12 @@ function scheduleRecompute(userId: string, rawProfile: Profile, sig: string, poo
   let i = 0;
   let center: number | null = null;
 
+  // Only ever clears THIS pass. See the generation note above.
+  const release = () => { if (_recomputing.get(userId)?.gen === gen) _recomputing.delete(userId); };
   const done = new Promise<void>((resolve) => {
     const step = () => {
       try {
-        if (_cache !== start || poolSignature(start) !== poolSig) { _recomputing.delete(userId); resolve(); return; }
+        if (_cache !== start || poolSignature(start) !== poolSig) { release(); resolve(); return; }
         const end = Math.min(i + RECOMPUTE_CHUNK, n);
         for (; i < end; i++) {
           const v = start.vectors[i];
@@ -1309,12 +1498,12 @@ function scheduleRecompute(userId: string, rawProfile: Profile, sig: string, poo
         // costs only the staleness it existed to end.
         console.error("[discovery] background score recompute failed", err);
       }
-      _recomputing.delete(userId);
+      release();
       resolve();
     };
     yieldToLoop(step);
   });
-  _recomputing.set(userId, done);
+  _recomputing.set(userId, { gen, done });
 }
 
 function fandexScoresFor(
