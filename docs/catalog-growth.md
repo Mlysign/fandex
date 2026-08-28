@@ -11,7 +11,7 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **two slices done; the third is BLOCKED ON PHASE 4, not phase 3.** §10: an empty provider section falls back to stored rows. §14: a logged-out SEARCH asks our catalog first, and the provider search is cached. What is left is the BROWSE feed, and §14 is why it waits. |
 | **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
-| 4. Seeded backfill to 30–50k with tiered refresh | ⬜ **⚠️ read §13's last paragraph first**: `facetCache.derived` is capped at 6,000 entries, so a 50k pool would miss on every rebuild. That is the next real blocker, and it is a phase-4 design question. |
+| 4. Seeded backfill to 30–50k with tiered refresh | 🔵 **step 1 done 2026-08-28** (§15): the derived projection is stored, so the memory cap no longer decides rebuild cost (495 → 171 ms at the phase-4 ratio). ⚠️ **Step 2 before the backfill**: make a CONTENT change incremental instead of a full rebuild, or a 50k rebuild is still ~3.4 s. §15's last section says how, and why it is now possible. |
 | 5. Housekeeping by bytes | ⬜ |
 
 ⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
@@ -647,3 +647,85 @@ cookie jar from `localhost`**, which gives a genuinely anonymous context on the 
 server. ⚠️ It must be the **`prod` launch config**: `next dev` rejects `127.0.0.1`
 outright (403 on every chunk, HMR websocket refused), so the page never hydrates and
 looks exactly like the documented dev-hydration failure.
+
+---
+
+## 15. Phase 4, step 1: the derived projection lives on disk (2026-08-28) — SHIPPED
+
+§13 flagged `facetCache.derived`'s 6,000-entry cap as phase 4's blocker. It is, and
+the size of it was measured rather than assumed — by shrinking the cap instead of
+growing the catalog, which is the same ratio:
+
+| pool rebuild | |
+|---|--:|
+| memory-warm | **64–72 ms** |
+| memory 2.1× oversubscribed | 368 ms |
+| memory 5.1× oversubscribed | 436 ms |
+| memory 12.8× oversubscribed | **495 ms** (7.7×, and saturating) |
+| cold, nothing cached anywhere | 590 ms |
+
+The penalty saturates because `buildEntries` switches to a bulk read once most
+items miss, so a thrashed rebuild simply *is* a cold one. That 590 ms decomposes as
+107 ms reading 49 MB of blobs, 148 ms `JSON.parse`-ing them, and mergeLinks +
+extractFacets for most of the rest. **A 50k pool sits permanently in the saturated
+case: ~10 s of blocking CPU per rebuild**, on the 5-minute TTL plus every content
+change.
+
+`media_item_projection` is the same `{facets, merged}` value on a medium that costs
+~75× less than RAM. The cap stops mattering:
+
+| pool rebuild, projection table present | |
+|---|--:|
+| cold, table populated | **175 ms** |
+| memory 5.1× oversubscribed | 171 ms |
+| memory 12.8× oversubscribed | 171 ms |
+
+**Verified byte-identical** with the table cold and warm: `capture-find.mjs` over
+five request shapes (372,500 bytes) and the whole `analyzeLibraryFacets` output
+(8,064,556 bytes).
+
+### Three things that are not free choices
+
+- **The key omits `scoringConfigSignature()`**, which the MEMORY key includes. In
+  RAM that is a free safety margin (raw facets do not actually depend on the
+  config). On disk it would mean every tweak in `/dev/scoring` orphans the whole
+  table and rewrites it: at 50k items, ~315 MB of WAL for Litestream to ship, which
+  is the shape of the PR16 incident that blew the spend cap. Freshness is
+  `(last_synced, raw_len)`, which is what actually determines the value.
+- **The DEFAULT region only.** Without that guard the real database stored TWO
+  regions after a single session — `DEFAULT_COUNTRY` from the pool, the user's own
+  country from `/api/library` and `/api/calendar` — **4,589 rows for a 2,553-item
+  catalog**. Regions multiply, and each one is another ~315 MB at phase 4's target.
+  Only the pool iterates the whole catalog, and it always uses the default; every
+  other caller is bounded by one library or one month, which memory already covers.
+- **NOT a `dbPrune` PRUNABLE_WHERE entry, and this is the one place that rule is
+  deliberately not followed.** That predicate lists tables whose rows would take a
+  USER'S OWN data with them; these are a pure function of `media_links` and cost one
+  re-derive. Listing it would make every browsed row unprunable the moment it was
+  rendered once, i.e. it would turn the boot prune off. `ON DELETE CASCADE` cleans
+  up instead, pinned by a test.
+
+Bounded by ROWS on the existing unref'd 15-minute sweep, in batches (PR16 again),
+and with **no TTL at all**: a projection is stale only when its item's links change,
+which the freshness token already catches on read. The sweep also clears rows for a
+region it no longer persists, so a policy change self-heals instead of leaking.
+
+⚠️ **`scripts/migrate.mjs` does not create this table**, or any other table in
+`db.ts`'s CREATE block — it calls `runMigrations` only. Verified against a copy.
+Harmless, because every query goes through `getDb()`, which runs that block first.
+
+### ⚠️ What this does NOT finish
+
+At 50k a rebuild is **~3.4 s, down from ~10 s**. Better, and still not a number that
+can sit on a request path. The remaining cost is reading and parsing the projections
+themselves (~315 MB at 50k) plus building vectors and folding the vocab.
+
+**The next step is to stop rebuilding the pool wholesale.** `getCache()` already
+patches membership changes incrementally; a CONTENT change forces a full rebuild
+because un-counting a departing item's vocab contribution needs its RAW (pre-alias)
+facets, and the pool vector only carries post-alias ones — which is exactly what the
+code comment in `getCache()` says. **The projection table now stores those raw
+facets**, so the missing input exists. Add a `WHERE updated_at > <last build>` query
+for the changed set and the rebuild becomes proportional to what moved, not to the
+catalog. That is the step that clears phase 4, and it should come before the backfill
+rather than after it.
