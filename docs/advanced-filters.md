@@ -29,6 +29,14 @@ Six controls, in render order:
 The `Tri` control is deliberately **not** `ui/TriToggle`: it shows "Any" as its own pressed segment
 rather than as "nothing pressed" (`FilterPanel.tsx:10-14`).
 
+⚠️ **Rows 1 and 2 match against `facetIds`, which the SERVER computes** (`matchesFacetIds`, the only
+matcher). Never re-derive facets on the client from `item.sources[].data`: the list routes ship that
+as `{}`, so the derivation sees tag facets and nothing else, and a person, studio or franchise pill
+matches zero items while looking exactly like a genuine zero result. That shipped and survived a
+month. ⚠️ The pill's own count comes from the CATALOG vocab (`searchFacets`), not from the visible
+tab, so a count above the tab's hit count is correct, not a bug.
+→ [the archive](archive/history.md), "The facet pills that matched nothing"
+
 **State** (`discovery/types.ts:102-111`): `UiFilters` carries `types, sources, yearRange, commRange,
 runtimeRange, membership, includeFacets, excludeFacets`. ⚠️ **`sources`, `commRange` and
 `runtimeRange` are dead in the UI** — removed by T24, still in the type and still fully supported

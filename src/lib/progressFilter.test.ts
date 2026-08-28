@@ -81,10 +81,12 @@ describe("the Filters sheet", () => {
     expect(titles(filterProgressEntries(list, withFilters({ excludeFacets: [steampunk] })))).toEqual(["Andor"]);
   });
 
-  // The kind that `matchesFacets` structurally cannot do on the other two tabs:
-  // /api/library ships `sources[].data` as `{}`, so people, studios and
-  // franchises are simply absent from the item it is handed. These ids are
-  // computed server-side, where the provider data still exists.
+  // The kind a CLIENT-side derivation structurally cannot do: /api/library and
+  // /api/calendar ship `sources[].data` as `{}`, so people, studios and
+  // franchises are simply absent from the item it would be handed. This tab was
+  // the first to compute the ids server-side; the other two followed on
+  // 2026-08-28 and the client-side derivation is now deleted outright.
+  // → src/lib/listRouteFacetIds.test.ts
   it("matches a PERSON pill, which needs ids computed server-side", () => {
     const list = [
       entry({ showTitle: "Severance", facetIds: ["person|creator|dan erickson"] }),

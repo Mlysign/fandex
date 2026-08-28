@@ -243,6 +243,17 @@ Anonymous first (public surface), then logged-in. Check console + server logs af
     correct sort with one item in a strange place.
 13b-ii. Also verify Library **no longer auto-scrolls to today** (Q3 fix — it should open at the
     top); Wishlist SHOULD still auto-scroll (that's intended).
+13b-iii. **A Filters-sheet pill must be checked with a PERSON or a STUDIO, on all three tabs.**
+    Open Filters → Must include, type an actor or studio you own a few titles by, pick the
+    match, and confirm the count and the list. ⚠️ **Testing this with a genre tag proves
+    nothing**: tags were the one facet kind that worked while people, studios and franchises
+    matched ZERO on Library and Wishlist for a month (2026-07-30 → fixed 2026-08-28). The
+    routes shipped `sources[].data` as `{}` and the client re-derived facets from it, so three
+    of four kinds were simply absent. **A pill that matches nothing renders identically to a
+    genuine zero result**, which is the whole reason it needs an item you KNOW should match.
+    The pill's count is catalog-wide, so it can legitimately exceed the tab's hits (Rebecca
+    Ferguson: 6 in the catalog = 5 Library + 1 Wishlist). Also check exclude, and check that
+    two pills AND rather than OR.
 13c. **A5 typed search groups, logged in**: search a person's name on Discover → a **People**
     group and (for a genre word) a **Tags** group render above a **Titles** header, each pill
     links to the right `/person/…` / `/tag/…` page. This is the half no anon sweep can reach.

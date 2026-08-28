@@ -796,6 +796,11 @@ blobs off the wire), so on Library and Wishlist it can only ever see TAG facets.
 server-side carry all four kinds. `matchesFacetIds` is the shared half both now call. ⚠️ **That means
 the older two tabs have a real bug this work only exposed** — see the open item in TASKS.md.
 
+> **Superseded 2026-08-28, same day.** That bug is fixed: both list routes ship `facetIds`, and
+> `matchesFacets` is deleted, so `matchesFacetIds` is now the only matcher anywhere. The paragraph
+> above stands as the record of how the bug was found, not as current behaviour.
+> → "The facet pills that matched nothing", at the end of this file.
+
 **Sort.** `PROGRESS_SORTS` = `["upNext", "Up next"]` + `LIBRARY_SORTS`, in its own persisted key
 (`rr_progress_sort`, default `upNext`) so the two sort sets can never hand each other a key the
 receiving list has no meaning for. ⚠️ **"Up next" re-sorts rather than returning the array
