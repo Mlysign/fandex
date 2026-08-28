@@ -10,8 +10,8 @@ evening.** Read this before starting any of it, and before touching `discovery.t
 | **0. Hoist the per-item cache checks out of scoring** | ✅ **DONE 2026-08-27.** 105 → 21 µs/item, **5.1×**, `find()` warm 384–610 ms → 185–206 ms. Verified 2,553 identical scores and 0 different over the real catalog, plus `scoringContext.test.ts`. |
 | **1. Enrich what we already store** | ✅ **DONE 2026-08-27.** Discover reads stored availability (§8) and the fill job heals thin rows on a timer (§9). Left over: the same annotation on /api/home and the calendar. |
 | 2. Serve anon Discover from the DB | 🔵 **first slice done 2026-08-27** (§10): an empty provider section now falls back to stored rows. Serving the DB by DEFAULT still wants phase 3 first. |
-| 3. Split the shelf from the scoring pool | 🔵 **half done 2026-08-27** (§11): scores precomputed per (user, profile, pool), and a 63 ms signature query fixed. find() 190 → 32 ms (§11, §11b). Memory levers, inverted index and a background recompute still open. |
-| 4. Seeded backfill to 30–50k with tiered refresh | ⬜ |
+| **3. Split the shelf from the scoring pool** | ✅ **DONE 2026-08-27/28.** Scores precomputed (§11), the last two catalog-scaling costs in `find()` removed (§11b), the pass moved OFF the request path (§12), and the memory question re-measured and answered differently than planned (§13). `find()` warm **384–610 → 32 ms**; a warm request's heap **109.6 → 39.9 MB**. The inverted index is NOT built and no longer urgent — see §13. |
+| 4. Seeded backfill to 30–50k with tiered refresh | ⬜ **⚠️ read §13's last paragraph first**: `facetCache.derived` is capped at 6,000 entries, so a 50k pool would miss on every rebuild. That is the next real blocker, and it is a phase-4 design question. |
 | 5. Housekeeping by bytes | ⬜ |
 
 ⚠️ **Re-run `BENCH_DB=<copy> node scripts/probe-score.mjs` after any change to the scoring path.**
@@ -88,14 +88,22 @@ appetite, not pageviews**, so moving anon traffic onto the DB attacks the only v
 
 ## 4. Keeping the Fandex Score off the memory bill
 
-**The problem.** `_cache.vectors` holds one `DiscoveryVector` per pool item and every scored request
-scans it. It is bounded by nothing but catalog size, and AGENTS.md forbids capping it because
-truncation silently changes every score. Measured today: 2,553 items × **2,537 bytes = 6.5 MB**.
-Straight-line at 85k items that is **216 MB serialised**, against prod's entire 185 MB heap, and real
-V8 heap runs several times a `JSON.stringify` estimate. PROJECTION, and the honest reading is that
-the current representation does not survive this plan.
+> ⚠️ **THE WHOLE OF §4'S MEMORY ANALYSIS WAS WRONG, MEASURED 2026-08-28 → §13.** It was built on
+> `poolWeight()`'s `JSON.stringify` estimate of ONE structure, and both halves of that were off: the
+> pool is **13.5 MB of the 109.6 MB** a warm request retained (not the biggest thing — that was
+> `facetCache.derived` at 86 MB), and interning the facet strings, lever 1 below, saves **0.4 MB**
+> rather than the 1,997 → 200 bytes per item projected here. Levers 1–3 are struck. Read §13 before
+> touching any of it. The CPU findings further down (the 100 µs/item decomposition, the
+> `scoringContext` hoist) were measured and stand.
 
-**Where the bytes are** (`poolWeight()` reports the split as of 2026-08-27):
+**The problem, as it was understood on 2026-08-27.** `_cache.vectors` holds one `DiscoveryVector`
+per pool item and every scored request scans it. It is bounded by nothing but catalog size, and
+AGENTS.md forbids capping it because truncation silently changes every score. Measured that day:
+2,553 items × **2,537 bytes = 6.5 MB**, straight-line at 85k items **216 MB serialised**. That
+premise survived one day.
+
+**Where the bytes are** (`poolWeight()` reports the split as of 2026-08-27; ⚠️ serialised, and §13
+is why that does not size a fix):
 
 | per pool item | bytes | share |
 |---|---|---|
@@ -110,19 +118,16 @@ catalog grows).
 
 ### The levers, cheapest and safest first
 
-1. **Intern the facet strings.** Replace `{kind, key, label, role, category}` per occurrence with an
-   integer id into the vocab we already build. ~80 bytes per occurrence becomes 4–8.
-   **PROJECTION: 1,997 → ~150–200 bytes per item.** Changes no score: same facets, same order,
-   different spelling in memory.
-2. **Stop holding display data in the pool.** Titles, posters and slugs matter for the 20–60 items
-   that reach a screen, not for the scan that ranks them. Look them up by id from SQLite after
-   ranking. Removes the remaining 540 bytes per item and leaves the pool purely numeric.
-3. **Go columnar.** With 1 and 2 done, an item's facets are a slice of one flat `Int32Array`, plus
-   per-item scalars in parallel typed arrays. This is where the real heap win is: per-object and
-   per-array overhead is what a serialised estimate cannot see. **PROJECTION at 85k items:
-   ~2.1M occurrences × 4 bytes ≈ 8.5 MB, plus scalars, plus the vocab dictionary we already keep
-   (~160k terms by Heaps' law, ~16 MB). Order 30 MB, and flat in shape rather than growing 80 bytes
-   at a time.**
+1. ~~**Intern the facet strings.**~~ ❌ **STRUCK 2026-08-28, measured.** Interning every live facet
+   array — 130,737 occurrences down to 22,341 distinct objects, **5.85× reuse** — saved **0.4 MB**
+   of 108. The projection below (1,997 → 150–200 bytes/item) was serialised arithmetic; retained
+   heap does not work that way, because the strings are already shared and the objects are small
+   next to what actually held the memory. → §13
+2. ~~**Stop holding display data in the pool.**~~ ❌ **STRUCK.** The whole pool is 13.5 MB of 109.6;
+   the display half of it is a rounding error, and removing it costs a SQLite lookup on every ranked
+   page.
+3. ~~**Go columnar.**~~ ❌ **STRUCK for memory.** Might still be worth it one day for scan locality;
+   it is not a memory fix, and it was the expensive one.
 4. **Invert the index, so a request stops scanning everything.** Postings lists (facet → item ids)
    instead of a full scan: union the profile's facets, score only the candidates that share one.
    ⚠️ Correctness hinge worth stating up front: an item sharing NO facet with the profile scores
@@ -191,22 +196,25 @@ number, which is why it is necessary and not sufficient.
    0 different**.
    ⚠️ What it trades away: a scoring config or alias edit landing MID-PASS is now seen by the next
    pass instead of the next item. No surface has ever relied on that, and the test pins it.
-2. **Precompute per-user scores.** A score changes only when the profile changes (a rating) or the
-   item's facets change, so the per-request scan is recomputation of a value that was already known.
-   Store one `Float32Array` (or table) per user: 50k items is 200 KB. Per request becomes a sort
-   over floats, single-digit ms at any catalog size we are contemplating. The full pass moves off
-   the request path to a background job on rating.
-3. **Inverted index (facet → item ids).** Two jobs: it makes step 2's recompute incremental (a new
-   rating only touches items carrying the affected facets), and it bounds a cold "score everything"
-   pass by scoring only candidates that share a facet with the profile. ⚠️ Check
-   `computeFandexScore`'s non-facet terms before assuming an unmatched item can be skipped rather
-   than visited.
-4. **The memory levers 1–3 above.** Still worth doing (columnar layout also speeds the scan through
-   cache locality), but they solve the smaller of the two problems.
+2. ✅ **DONE 2026-08-27/28. Precompute per-user scores, then move the pass off the request path.**
+   §11 cached one `Float64Array` per (user, profile, pool); §12 stopped the FIRST request after a
+   change from paying for it. Post-rating request 397 → 117 ms, and the catalog-scaling half of that
+   is now a chunked background job.
+3. **Inverted index (facet → item ids).** ⬜ **Not built, and no longer urgent.** Its two jobs were
+   to make the recompute incremental and to bound a cold pass; §12's chunked background pass with a
+   stale-serve took the pressure off both, since no request waits for either any more. Still the
+   right answer if the background pass itself becomes too expensive to run per rating at 50k.
+   ⚠️ Check `computeFandexScore`'s non-facet terms before assuming an unmatched item can be skipped
+   rather than visited.
+4. ~~**The memory levers 1–3 above.**~~ ❌ Struck 2026-08-28 → §13. What replaced them: the facet
+   cache had been storing every parsed provider blob, and dropping those took a warm request from
+   109.6 MB to 39.9 MB — 4× what all three levers together were projected to save, in a two-line
+   change.
 
-Levers 1–3 and steps 1–2 are all output-preserving, which makes them testable the strongest way
-available: same catalog, same profile, byte-identical scores before and after. Pool membership (§4
-lever 5) remains the only knob that changes what a score IS.
+Every step here is output-preserving, which makes them testable the strongest way available: same
+catalog, same profile, byte-identical scores before and after. `scripts/capture-find.mjs` exists so
+that comparison stops being hand-rolled each time. Pool membership (§4 lever 5) remains the only
+knob that changes what a score IS.
 
 ---
 
@@ -446,3 +454,111 @@ also grew with the catalog. Same treatment:
 date sort, type+year filtered, text query) captured against the committed code and again after,
 comparing ids, Fandex scores, ranking scores and every reason label and contribution. **16,502
 bytes, identical.**
+
+---
+
+## 12. Phase 3, second half: nothing on the request path scores the catalog (2026-08-28) — SHIPPED
+
+§11 stopped a WARM request from scoring. It did not stop the first request after a change, and at
+30–50k items that request is 0.6–1.0 s of BLOCKING CPU on a synchronous in-process database, which
+is not a slow request but a stopped server.
+
+`fandexScoresFor()` now **serves the previous numbers and refreshes them in the background**, in
+512-item chunks with `setImmediate` between them (~10 ms of CPU each, measured; a timer set to 1 ms
+fires four times during a 2,553-item pass). A user with no cached entry at all still scores
+synchronously — there is nothing to serve and no honest way to fake it, and it happens once per user
+per process.
+
+⚠️ **Staleness is fine, MISALIGNMENT is not**, and that distinction is the whole design. The scores
+live in a `Float64Array` indexed by position in the pool's vector array, so if the pool changes and
+the array does not, index *i* stops meaning `vectors[i]` and one title renders another title's score
+— silently, and plausibly, because both numbers are real. So `poolSig` is tracked separately from
+`sig`: `sig` says "these numbers are current", `poolSig` says "index *i* still means `vectors[i]`",
+and only the second is a correctness question. When the pool moved, the entry is **remapped** by id
+through a Map built from the ids it was computed against (~10 ms at 50k, against ~1 s for a
+rescore); an item NEW to the pool gets `NaN`, which the whole stack already reads as "no score yet"
+and renders as `fandexPending`.
+
+**And the decomposition moved the target again, twice.**
+
+| the first request after a rating | |
+|---|---|
+| This morning | 397 ms |
+| Fandex scoring's share of it | ~55 ms — the part everyone was looking at |
+| `getLibraryFacetAnalysis`'s share | **350 ms** |
+| After both | **117 ms** |
+
+`analyzeLibraryFacets` was reading `ml.raw_data` for every library row. It never PARSED it
+(`getDerivedForItem` only parses on a miss) but SQLite still had to fetch it: ~7 KB a row, 1,942
+items, tens of MB of pages to reach a cache that then ignored them. It takes the same two-pass shape
+`buildEntries` took in §A, and derives nothing at all for unrated rows (1,688 of 1,942 here are
+rated). **396 → 71 ms warm**, output byte-identical over the whole analysis (8,064,556 bytes).
+
+⚠️ **And then the freshness token turned out never to have worked for 1% of the catalog.** It was
+SQL `LENGTH()` against JS `.length`, which count different things — code points and UTF-16 code
+units. Any payload with an astral character (an emoji in an overview, a mathematical-alphanumeric
+letter in a title) made them disagree, so the peek looked under a key `getDerivedForItem` would
+never write: **56 of 7,006 links, 55 items, which had never once hit the facet cache** and were
+re-read, re-parsed and re-merged on every pool rebuild and every library analysis. A permanent cache
+miss has no symptom — the answer is right every time, it just costs what the cache was built to
+save. Both sides are UTF-8 bytes now (`OCTET_LENGTH` / `Buffer.byteLength`), which is also **4–8×
+cheaper**: `LENGTH()` on TEXT has to decode the whole string to count characters, and that scan runs
+over the pool on every rebuild. Pool pass-1 query **67–84 → 8–12 ms**; `find()` COLD **1,502 → 890
+ms**. Pinned by `facetCacheFreshnessToken.test.ts`, which fails against the old code.
+
+**Verified**: `scripts/capture-find.mjs` over five request shapes (default sort, date sort,
+type+year filtered, text query, deep offset) — ids, slugs, both scores, the center, `fandexPending`
+and every reason label and contribution — **372,500 bytes, identical**. Plus
+`discoveryScoreRecompute.test.ts` (stale-serve, remap alignment, the pending flag, `FANDEX_NO_CACHE`)
+and a scripted run on a copy of the real DB proving both change paths converge to exactly the
+synchronous answer.
+
+## 13. Phase 3's memory question, re-measured — and §4 was wrong (2026-08-28)
+
+`scripts/probe-memory.mjs` measures RETAINED heap (`--expose-gc`, release one structure at a time)
+instead of `JSON.stringify` length. It reversed §4 completely.
+
+| what a warm Discover request retained | before | after |
+|---|---|---|
+| **total** | **109.6 MB** | **39.9 MB** |
+| `facetCache.derived` (2,553 entries) | 86.1 MB | 16.4 MB |
+| `libraryAnalysis.facets` (1 entry) | 5.3 MB | 5.3 MB |
+| the discovery pool | 13.5 MB | 13.5 MB |
+| per pool item, all-in | 42.9 KB | 15.6 KB |
+
+**The pool was never the problem.** It is 12% of the total, against §4's claim that it was "the
+biggest single thing in memory". And interning — §4's lever 1, the cheap safe one — was measured at
+its theoretical best: every live facet array, 130,737 occurrences collapsed to 22,341 distinct
+objects, **5.85× reuse**, for **0.4 MB**. The 1,997 → 200 bytes/item projection was serialised
+arithmetic about strings that were already shared.
+
+**What was actually there.** `facetCache.ts`'s own header says it must never cache parsed
+`raw_data`, in those words, with the OOM history as the reason. It cached all of it: `mergeLinks`
+returns `sources[].data` — the entire parsed payload per link — and the cache stored the projection
+whole. **19,311 of 25,518 serialised bytes per entry, 76%.** No caller wanted it: `/api/library` and
+`/api/calendar` each destructure `sources` off and rebuild it with `data: {}` (the 2026-07-30 audit
+caught the same blobs going over the WIRE and never thought to look at the cache), and
+`loadMembershipGroups` even documents "raw per-source blobs aren't exposed by the cache", which was
+the intent and not the behaviour. `/api/detail`, the one surface that needs them, calls `mergeLinks`
+directly. The cached type now says so, so `tsc` is the proof rather than a comment asking callers to
+remember.
+
+**Three rules out of this, in descending order of how much they will save someone:**
+
+- **`JSON.stringify` length does not size a memory fix.** It is fine for a growth RATE and it lied
+  about both the ranking and the magnitude here. Reach for `probe-memory.mjs`.
+- **A cache's biggest entry field is usually something nobody reads.** Two separate audits measured
+  `sources[].data` on the wire; neither looked at the process holding the same bytes for weeks.
+- **Price a cache's ENTRY before choosing its bound.** `facetCache.derived`'s `max: 6000` was chosen
+  when an entry was assumed small; it was 34 KB retained, so the cap was a **~200 MB** ceiling. It
+  is ~39 MB now.
+
+⚠️ **The next real blocker for phase 4, found here and NOT fixed.** That 6,000-entry cap is fine at
+2,553 pool items and fatal at 50k: `buildEntries` peeks the cache for every pool item, so a 50k pool
+would evict what it just wrote and miss on **every** rebuild — a full re-derivation (JSON.parse of
+~875 MB of blobs) every time the content signature moves, against ~890 ms for a cold rebuild at
+2,553 today. Raising the cap does not help either: 50k × 6.4 KB is ~320 MB of heap. The honest
+answer is to stop deriving the pool from blobs at request time at all — **persist the projection**
+(a `media_item_projection` row per item, written by the fill/sync jobs) so a rebuild is a table scan
+rather than a re-derivation. That is a schema change and a phase-4 decision. Size it before starting
+phase 4, not during.
