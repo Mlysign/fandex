@@ -5050,3 +5050,83 @@ var name went back to the Gets session, which writes the PHP proxy that holds th
 repeating on any keyed route: no header, a wrong key and an empty header value all still 404, so
 making the secret real did not open the door for everybody. The variable change triggered its own
 Railway redeploy, confirmed ACTIVE and successful.
+
+---
+
+# The search that could not find a new title (2026-08-29) — SHIPPED
+
+Reported from the phone, with a screenshot: *"'Lucky' is a popular new show on Apple TV+ — how come
+it does not show up in the search?"* Four cards were on screen under a sort control reading
+**Popularity**: *Mr. Lucky* (Oct 1959), *Lucky Luke* (Dec 1984), a mid-80s film, *Stay Lucky* (1989).
+
+That order is the whole diagnosis. It is ascending by release date, which is not what any of the
+four sorts claims to do — and reproducing it took no provider access at all, just the three
+functions on the path replayed over a plausible result set (`scratchpad/probe.mjs`, six lines of
+output that matched the screenshot card for card).
+
+## Two independent faults, either of which alone hides the title
+
+**1. The search branch of `/api/discover` was the one feed in the app that never decorated.**
+Load-more, `personalizedFeed` and the anonymous cold-start browse all run their provider records
+through `decorateSection`, which is what attaches `communityVotes`/`communityScore`. The `q` branch
+returned the raw records. The client's popularity sort reads `i.communityVotes ?? 0`, so **every
+search result in the app tied at zero**; `Array.prototype.sort` is stable, so the ties kept their
+incoming order, and that order is `sortByDate` **ascending**. Under a control labelled Popularity
+the user was looking at an oldest-first list. Rating and Fandex Score were inert for the same
+reason. A 2026 title was therefore always last, below however many local matches the catalog held.
+
+⚠️ The reason it survived: **every assertion anyone would think to write here was true.** The
+results were all present and correctly shaped. They were merely unsortable, and so unfindable.
+
+**2. `dedupeWeb` keyed a title as `t:{title}:{type}`, with no year.** So the first work to claim a
+name kept it and every other work of that name was discarded as its duplicate. Two unrelated shows
+are called *Lucky* (FX 2003 · Apple TV+ 2026) and TMDB returns both — and because the list arrives
+oldest-first (fault 1's `sortByDate` again), **the loser was always the newer one**. No error, no
+empty state, no "N hidden": the search silently insisted the title did not exist while listing four
+other things called Lucky. `searchAll`'s Letterboxd block had the same key shape and was worse — it
+compared against **every** result of **every type**, so a game called *Lucky Luke* suppressed a film
+of that name.
+
+## The fix
+
+`searchAll` now carries each provider's own crowd stats (RAWG `ratings_count`/`rating`, IGDB
+`total_rating_count`/`total_rating`, TMDB `vote_count`/`vote_average` — the same normalisations
+`discoverFeed.ts` already uses; Letterboxd's search payload genuinely carries none, so it says 0 /
+null and means it), and the search branch calls `decorateSection`. **Outside `cachedSearchAll`, not
+inside it**: that cache is keyed `(type, query)` with no viewer in the key, and decoration attaches a
+per-user Fandex Score. It maps to new objects, so the cached array is not mutated — the property
+`persist`/`annotate` already depend on.
+
+An untyped `results: any[]` is what let a provider block omit the stats in the first place, so
+`searchAll` now returns a declared `SearchResult[]` **whose `voteCount`/`voteAverage` are required**:
+a new provider added there fails `tsc` rather than the search. (Typing it surfaced a second thing the
+`any` was hiding — `FeedCandidate.ids` is declared `Record<string, number>` and Letterboxd film ids
+are alphanumeric. Runtime never cared, `catalogFacets` `String()`s them.)
+
+`itemKeys`/`dedupeWeb` moved out of the 900-line client component into `src/lib/searchDedupe.ts` — a
+LEAF module, which is both what keeps `db.ts` out of a client component's graph and what makes the
+bug testable at all — and the title key now carries the year. The cost of that is the opposite case:
+the same work carrying two different dates across two sources no longer collapses on title alone, so
+it can render twice. Deliberate. The id keys catch the same work whenever either side has a provider
+id, which is the common case; **a visible duplicate is a fault the user can see and reason about, a
+silent drop is indistinguishable from "we don't have it".**
+
+## Verified
+
+Both fixes were run as CONTROLS against the old code, which is the only thing that proves a test
+catches its bug: reverting the year makes 3 of 6 dedupe tests fail; reverting the `decorateSection`
+call makes 2 of 4 route tests fail. The route test drives the real `GET` handler with TMDB mocked and
+asserts a **call count** (the tv search really is reached for the term) rather than only an invented
+payload shape. 1,294 tests pass (10 new), tsc clean, lint 0 errors / 475 warnings (down 5 from 480).
+
+⚠️ **Not verified in a browser against live providers** — this container has no provider keys and no
+`data/rr.db`, so "the new show now appears near the top for a real query" is a prediction from the
+mocked path, not a measurement. It is one search on prod to confirm.
+
+## What this does NOT fix
+
+There is still **no relevance term anywhere in the search**. `find()`'s local half is a bare
+`title.includes(q)` and then a global sort, so an exact match on *Lucky* ranks below *Mr. Lucky* if
+*Mr. Lucky* has more votes, and the merged list has the same property. That is a ranking design
+change across all four sorts, and this repo's own precedent is to not slip one in beside a bug fix.
+→ `TASKS.md`.
