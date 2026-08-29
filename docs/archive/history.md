@@ -5043,6 +5043,10 @@ clean, lint 0 errors.
 
 ## What is left
 
-**One env var and one handover.** `KPI_READ_KEY` has to be set in Railway (`openssl rand -hex 32`),
-and the Gets session needs the URL and the var name so it can write the PHP proxy, which does not
-exist yet because there was nothing to point it at.
+**Both done the same day.** `KPI_READ_KEY` was set in Railway on 2026-08-29, and the URL plus the
+var name went back to the Gets session, which writes the PHP proxy that holds the key server-side.
+
+⚠️ **The gate was re-verified from outside AFTER a valid key existed**, which is the check worth
+repeating on any keyed route: no header, a wrong key and an empty header value all still 404, so
+making the secret real did not open the door for everybody. The variable change triggered its own
+Railway redeploy, confirmed ACTIVE and successful.
