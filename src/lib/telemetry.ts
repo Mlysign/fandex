@@ -394,3 +394,129 @@ export function analyticsSnapshot(days = 30, now: Date = new Date()): AnalyticsS
     generatedAt: now.toISOString(),
   };
 }
+
+// ── The portfolio KPI contract ──────────────────────────────────────────────
+//
+// One JSON shape shared by every project on https://nilsmlynarek.eu/analytics/,
+// served by GET /api/telemetry/kpi behind KPI_READ_KEY. The hub renders three
+// numbers per project and does not care which project it is reading, so the
+// field names below are the CONTRACT's and not this codebase's.
+//
+// Everything here is an aggregate. No user ids, no paths, no referrers: the
+// response is read by a page that a stranger may end up looking at, so the bar
+// is "printable on a dashboard in front of someone" rather than "not obviously
+// identifying".
+
+/**
+ * First UTC day whose pageview counts exclude crawlers.
+ *
+ * `isCrawlerUserAgent` landed on prod at 2026-08-20T18:14Z, so 2026-08-20 is a
+ * MIXED day (unfiltered until the evening), and 2026-08-21 is the first clean
+ * one. Everything before it is the ~80%-bot era measured in the pv route's
+ * comment: 4,314 of 5,365 pageviews in the 30 days to 2026-08-20 were facet-page
+ * crawls, against fourteen homepage views.
+ *
+ * The KPI response therefore counts `runsTotal` from this day and reports the
+ * earlier total as `simRuns`, the contract's field for records excluded as not a
+ * person. Publishing the raw all-time sum would put roughly four times the real
+ * number on the hub, which is the exact failure the contract exists to prevent.
+ * The counters are never pruned (dbPrune.ts touches media_items and its cascades
+ * only, and nothing else deletes from these two tables), so the split is a
+ * deliberate exclusion and not a retention window.
+ */
+export const CRAWLER_FILTER_FROM_DAY = "2026-08-21";
+
+/** Windows the contract fixes. Not view settings: the hub echoes them back. */
+export const KPI_ACTIVE_WINDOW_DAYS = 7;
+export const KPI_NEW_WINDOW_DAYS = 30;
+
+export interface KpiSnapshot {
+  ok: true;
+  /** Lower-case and plural: the hub prints it as "{unit} this week". */
+  unit: "pageviews";
+  /**
+   * Distinct signed-in accounts seen in the last 7 days, exact, from
+   * users.last_seen_at.
+   *
+   * ⚠️ This is a FLOOR on human activity, not a total, and the reason is
+   * structural rather than a gap to close later: pageviews carry no identity by
+   * design (migration 17 stores no user_id, no IP, no session id), so an
+   * anonymous SEO visitor is active and uncountable. "Weekly active USERS" where
+   * a user means an account is exactly what this number is, which is why it is
+   * safe to publish under that name. Do not swap in a pageview-derived estimate.
+   */
+  weeklyActive: number;
+  runsWeek: number;
+  newThisMonth: number;
+  usersTotal: number;
+  runsTotal: number;
+  /** Pageviews excluded as not a person: the pre-crawler-filter era. */
+  simRuns: number;
+  windowDays: { active: number; new: number };
+  /** ISO 8601 UTC, so the hub can spot a stale cache. */
+  server: string;
+}
+
+function pageviewsFrom(fromDay: string): number {
+  return (
+    getDb()
+      .prepare(`SELECT COALESCE(SUM(count), 0) AS n FROM page_view_daily WHERE day >= ?`)
+      .get(fromDay) as { n: number }
+  ).n;
+}
+
+function pageviewsBefore(day: string): number {
+  return (
+    getDb()
+      .prepare(`SELECT COALESCE(SUM(count), 0) AS n FROM page_view_daily WHERE day < ?`)
+      .get(day) as { n: number }
+  ).n;
+}
+
+/**
+ * The whole KPI response, in one call.
+ *
+ * Reads the same two tables `analyticsSnapshot` does, over the same day
+ * arithmetic, so the two routes cannot disagree about a week: `runsWeek` uses
+ * `dayNDaysAgo(6)`, which is exactly `pageViewSeries(7)`'s first day. That is
+ * worth keeping deliberate. Two routes over the same tables reporting different
+ * totals is the failure most worth catching here, and it is free to prevent.
+ *
+ * `newThisMonth` counts accounts CREATED in the window, which is the contract's
+ * "first ever record" rather than "any record": a returning user of two years is
+ * not new. users.created_at has always been written correctly, unlike
+ * last_seen_at, which only became meaningful on 2026-08-03 (see userMetrics) and
+ * is nowhere near the 7-day window this uses it for.
+ */
+export function kpiSnapshot(now: Date = new Date()): KpiSnapshot {
+  const db = getDb();
+  const nowSec = Math.floor(now.getTime() / 1000);
+  const since = (d: number) => nowSec - d * 86_400;
+
+  // ISO days sort lexicographically, so this is a plain string max. It is inert
+  // for any window that starts after the filter shipped; it exists so runsWeek
+  // can never count a pre-filter day and exceed runsTotal.
+  const weekStart = dayNDaysAgo(KPI_ACTIVE_WINDOW_DAYS - 1, now);
+  const weekFrom = weekStart > CRAWLER_FILTER_FROM_DAY ? weekStart : CRAWLER_FILTER_FROM_DAY;
+
+  const count = (sql: string, param: number) => (db.prepare(sql).get(param) as { n: number }).n;
+
+  return {
+    ok: true,
+    unit: "pageviews",
+    weeklyActive: count(
+      `SELECT COUNT(*) AS n FROM users WHERE last_seen_at >= ?`,
+      since(KPI_ACTIVE_WINDOW_DAYS),
+    ),
+    runsWeek: pageviewsFrom(weekFrom),
+    newThisMonth: count(
+      `SELECT COUNT(*) AS n FROM users WHERE created_at >= ?`,
+      since(KPI_NEW_WINDOW_DAYS),
+    ),
+    usersTotal: (db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number }).n,
+    runsTotal: pageviewsFrom(CRAWLER_FILTER_FROM_DAY),
+    simRuns: pageviewsBefore(CRAWLER_FILTER_FROM_DAY),
+    windowDays: { active: KPI_ACTIVE_WINDOW_DAYS, new: KPI_NEW_WINDOW_DAYS },
+    server: now.toISOString(),
+  };
+}

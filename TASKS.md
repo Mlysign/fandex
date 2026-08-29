@@ -68,6 +68,8 @@ Everything else in this file is either done or a standing constraint.
    "Filters" button with a count, ~90px back; (c) leave it, and accept the grid at 486px. Say which
    and it is a small change.
 
+9. **Two small things to put Fandex's numbers on the portfolio hub** (2026-08-29). `GET /api/telemetry/kpi` is built, tested and verified: aggregates only, gated by an `X-BW-Admin` header, 404 for everybody until the key exists. (a) **Set `KPI_READ_KEY` in Railway**, `openssl rand -hex 32`, kept distinct from every other secret so it can be rotated alone. (b) **Hand the Gets session `https://fandex.org/api/telemetry/kpi` and the var name `KPI_READ_KEY`**, which is all it is waiting on to write the PHP proxy that holds the key server-side. Then `curl -s -H "X-BW-Admin: $KPI_READ_KEY" https://fandex.org/api/telemetry/kpi | jq` should answer, and the bare curl should print 404. ⚠️ `runsTotal` deliberately EXCLUDES the pre-2026-08-21 counters (the ~80%-bot era) and reports them as `simRuns` instead, so the hub's total will look smaller than `/dev/analytics`. That is the honest number, not a bug. → [the archive](docs/archive/history.md), "The portfolio KPI route"
+
 **Standing constraints. Not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
 - **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative line stays; no number ever joins it.

@@ -4963,3 +4963,86 @@ on a `facetIds` assigned to a local variable that never reaches the response, wh
 how `addedAt` went missing on `/api/calendar` for a month. It also pins the reason the field
 must exist — re-deriving from the shipped payload yields tag facets and nothing else — so
 nobody drops it as redundant.
+
+---
+
+# The portfolio KPI route (2026-08-29): SHIPPED
+
+`GET /api/telemetry/kpi`, key-gated, answering the shared contract that the hub at
+<https://nilsmlynarek.eu/analytics/> reads for every project. Fandex was on that hub as a plain
+link with no numbers.
+
+## What was actually blocking it, which was not CORS
+
+Two things stopped the hub reading `/api/dev/analytics`, and only the second one mattered.
+It is another domain, so no CORS headers, which is solvable on the hub side alone. **Its gate is a
+logged-in session, not a key**: `withScoringAdmin` wraps `withUser` and checks `session.userId`
+against `SCORING_ADMIN_USER_IDS`, with no bearer path through it, so a server-side proxy could not
+authenticate either. That gate also protects `/dev/scoring` and `/api/dev/dbsize`, which serve
+per-item and per-user data, so loosening it was the wrong fix. This is a second, much narrower door.
+
+It sits under `/api/telemetry/` beside the pv beacon rather than under `/api/dev/`, where every
+other route is session-gated: a key-gated route in that tree is a trap for the next reader.
+
+## The one real judgement call: what counts as traffic
+
+Neither counter table is pruned (`dbPrune.ts` touches `media_items` and its cascades only, and
+nothing else deletes from them), so `runsTotal` could have been the raw all-time sum. **It is not,
+and this is the part worth remembering.** `isCrawlerUserAgent` landed on prod at 2026-08-20T18:14Z;
+before it, the counters were the ~80%-bot era already on file (4,314 of 5,365 pageviews in the 30
+days to 2026-08-20 were facet-page crawls, against fourteen homepage views).
+
+Publishing the raw sum would put roughly four times the real number on a public dashboard, which is
+the exact failure the contract exists to prevent. So `runsTotal` counts from
+`CRAWLER_FILTER_FROM_DAY = "2026-08-21"` (the first WHOLE clean day; the 20th is mixed and lands on
+the excluded side) and the earlier total is reported as `simRuns`, the contract's field for records
+excluded as not a person. Nothing is hidden, and the split is visible on the hub.
+
+## Field mapping
+
+| Contract field | Fandex source |
+|---|---|
+| `unit` | the literal `"pageviews"` |
+| `weeklyActive` | `COUNT(*) FROM users WHERE last_seen_at >= now-7d` |
+| `runsWeek` | `page_view_daily` over the same window `pageViewSeries(7)` uses |
+| `newThisMonth` | `COUNT(*) FROM users WHERE created_at >= now-30d` |
+| `usersTotal` | `COUNT(*) FROM users` |
+| `runsTotal` | `page_view_daily` from `CRAWLER_FILTER_FROM_DAY` |
+| `simRuns` | `page_view_daily` before it |
+
+`weeklyActive` needed no new column: `users.last_seen_at` has been stamped once per user per UTC day
+by `getSession()` since 2026-08-03, well outside a 7-day window. ⚠️ **It is a FLOOR on human
+activity, not a total, and structurally so.** Migration 17 stores no user_id, no IP and no session
+id, so an anonymous SEO visitor is active and uncountable. "Weekly active USERS" where a user means
+an account is exactly what the number is, which is why it is safe to publish under that name. Do not
+swap in a pageview-derived estimate. `newThisMonth` counts accounts CREATED in the window, which is
+the contract's "first ever record" rather than "any record": a returning user of two years is not new.
+
+## The gate
+
+`KPI_READ_KEY`, presented as `X-BW-Admin`. Unset, or under 16 characters, and the route 404s for
+everybody, matching how `SCORING_ADMIN_USER_IDS` already fails closed. Both sides are SHA-256'd
+before `timingSafeEqual`, so the buffers are always 32 bytes and the length guard a raw compare
+would need cannot leak the secret's length. The env var is read at CALL time, per the standing rule
+that a gate read at module load is a gate nothing tests. 404 and never 401, so a wrong key and a
+missing route look identical from outside; that is a portfolio-wide convention, not a local choice.
+
+No session, no cookies, no CORS, `no-store`, aggregates only. The hub reaches this through a PHP
+proxy on nilsmlynarek.eu that holds the key server-side, so CORS would only invite the secret into a
+browser later.
+
+## Verified
+
+`npm run build`'s route table says `ƒ /api/telemetry/kpi`, so it is not a build-time snapshot with
+the build phase's (absent) key baked in. On the `prod` launch config: no header 404, wrong key 404,
+right key 200. **The cross-check that mattered**: against a real dev session, `/api/dev/analytics`'s
+`pageViewSeries(7)` sum and the KPI route's `runsWeek` both read **227**, `users.total` 3 = 3, and
+`users.wau` 1 = 1. Two routes over the same tables disagreeing is the failure worth catching here,
+and a unit test now pins that equality rather than trusting the arithmetic. 1,271 tests pass, tsc
+clean, lint 0 errors.
+
+## What is left
+
+**One env var and one handover.** `KPI_READ_KEY` has to be set in Railway (`openssl rand -hex 32`),
+and the Gets session needs the URL and the var name so it can write the PHP proxy, which does not
+exist yet because there was nothing to point it at.

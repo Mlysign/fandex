@@ -9,6 +9,8 @@ import {
   topPages,
   referrerBreakdown,
   utcDay,
+  kpiSnapshot,
+  CRAWLER_FILTER_FROM_DAY,
 } from "@/lib/telemetry";
 
 describe("normalizePathKey", () => {
@@ -240,5 +242,142 @@ describe("pageViewSeries", () => {
     expect(series).toHaveLength(30);
     const days = series.map((d) => d.day);
     expect([...days].sort()).toEqual(days);
+  });
+});
+
+describe("kpiSnapshot: the portfolio KPI contract", () => {
+  const db = () => getDb();
+
+  // A day the crawler filter was definitely running on, and one it definitely
+  // was not. Both are written directly rather than through recordPageView,
+  // which can only ever stamp today.
+  const CLEAN_DAY = "2026-09-01";
+  const DIRTY_DAY = "2026-08-19";
+
+  function seedPageviews(day: string, count: number, pathKey = "/tag/[slug]") {
+    db()
+      .prepare(
+        `INSERT INTO page_view_daily (day, path_key, authed, count) VALUES (?, ?, 0, ?)
+         ON CONFLICT(day, path_key, authed) DO UPDATE SET count = count + excluded.count`,
+      )
+      .run(day, pathKey, count);
+  }
+
+  function seedUser(id: string, createdDaysAgo: number, lastSeenDaysAgo: number) {
+    const now = Math.floor(Date.now() / 1000);
+    db()
+      .prepare(`INSERT INTO users (id, created_at, last_seen_at) VALUES (?, ?, ?)`)
+      .run(id, now - createdDaysAgo * 86_400, now - lastSeenDaysAgo * 86_400);
+  }
+
+  beforeEach(() => {
+    db().exec("DELETE FROM page_view_daily; DELETE FROM referrer_daily; DELETE FROM users;");
+  });
+
+  it("answers the contract's field set, with the windows it used", () => {
+    const snap = kpiSnapshot();
+    expect(snap.ok).toBe(true);
+    expect(snap.unit).toBe("pageviews");
+    expect(snap.windowDays).toEqual({ active: 7, new: 30 });
+    expect(Object.keys(snap).sort()).toEqual(
+      [
+        "newThisMonth", "ok", "runsTotal", "runsWeek", "server",
+        "simRuns", "unit", "usersTotal", "weeklyActive", "windowDays",
+      ].sort(),
+    );
+    // ISO 8601 UTC, so a stale cache is spottable from the hub.
+    expect(snap.server).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+  });
+
+  it("counts pre-crawler-filter pageviews as simRuns, never as runsTotal", () => {
+    // The whole reason this route can be published: the pre-2026-08-21 counters
+    // are ~80% bot (4,314 of 5,365 measured), so reporting them as traffic would
+    // put roughly four times the real number on a public dashboard.
+    seedPageviews(DIRTY_DAY, 5_365);
+    seedPageviews(CLEAN_DAY, 100);
+
+    const snap = kpiSnapshot();
+    expect(snap.runsTotal).toBe(100);
+    expect(snap.simRuns).toBe(5_365);
+  });
+
+  it("puts the mixed cutover day on the excluded side", () => {
+    // isCrawlerUserAgent shipped at 18:14Z on 2026-08-20, so that UTC day is
+    // part filtered and part not. Only whole clean days count as traffic.
+    seedPageviews("2026-08-20", 10);
+    expect(CRAWLER_FILTER_FROM_DAY).toBe("2026-08-21");
+
+    const snap = kpiSnapshot();
+    expect(snap.simRuns).toBe(10);
+    expect(snap.runsTotal).toBe(0);
+  });
+
+  it("agrees with the dashboard's own week: runsWeek === sum of pageViewSeries(7)", () => {
+    // Two routes over the same tables disagreeing about a week is the failure
+    // most worth catching here, so the arithmetic is pinned rather than trusted.
+    seedPageviews(utcDay(), 12);
+    seedPageviews(utcDay(new Date(Date.now() - 6 * 86_400_000)), 3);
+    seedPageviews(utcDay(new Date(Date.now() - 9 * 86_400_000)), 99);
+
+    const fromSeries = pageViewSeries(7).reduce((a, p) => a + p.total, 0);
+    expect(kpiSnapshot().runsWeek).toBe(fromSeries);
+    expect(kpiSnapshot().runsWeek).toBe(15);
+  });
+
+  it("keeps runsWeek at or under runsTotal even when the week reaches back past the filter", () => {
+    // The floor on the week window is what makes this hold by construction
+    // rather than by luck of the calendar.
+    const now = new Date("2026-08-23T12:00:00Z"); // week start 2026-08-17, before the filter
+    seedPageviews("2026-08-19", 500);
+    seedPageviews("2026-08-22", 7);
+
+    const snap = kpiSnapshot(now);
+    expect(snap.runsWeek).toBe(7);
+    expect(snap.runsWeek).toBeLessThanOrEqual(snap.runsTotal);
+  });
+
+  it("counts weekly actives as distinct accounts, and new users by first ever record", () => {
+    seedUser("u-active", 200, 1); // old account, seen yesterday
+    seedUser("u-new", 3, 2); // signed up this month, seen two days ago
+    seedUser("u-dormant", 400, 90); // old account, long gone
+
+    const snap = kpiSnapshot();
+    expect(snap.usersTotal).toBe(3);
+    expect(snap.weeklyActive).toBe(2);
+    // "Any record in 30 days" would be 2 here. First-ever is 1, and that is the
+    // contract: a returning user of two years is not new.
+    expect(snap.newThisMonth).toBe(1);
+  });
+
+  it("holds the sanity checks the hub relies on", () => {
+    seedUser("u-1", 3, 0);
+    seedUser("u-2", 500, 0);
+    seedPageviews(utcDay(), 20);
+    seedPageviews(CLEAN_DAY, 5);
+    seedPageviews(DIRTY_DAY, 900);
+
+    const s = kpiSnapshot();
+    expect(s.runsWeek).toBeLessThanOrEqual(s.runsTotal);
+    expect(s.newThisMonth).toBeLessThanOrEqual(s.usersTotal);
+    expect(s.weeklyActive).toBeLessThanOrEqual(s.usersTotal);
+  });
+
+  it("returns zeros rather than nulls on an empty database", () => {
+    const s = kpiSnapshot();
+    // COALESCE, not a NULL leaking into JSON: the hub reads null as "unmeasured"
+    // and prints "?", which would be wrong for a table that is genuinely empty.
+    expect(s).toMatchObject({
+      weeklyActive: 0, runsWeek: 0, newThisMonth: 0,
+      usersTotal: 0, runsTotal: 0, simRuns: 0,
+    });
+  });
+
+  it("exposes no per-user or per-path data", () => {
+    seedUser("u-secret", 1, 0);
+    seedPageviews(utcDay(), 1, "/person/[slug]");
+    const body = JSON.stringify(kpiSnapshot());
+    expect(body).not.toContain("u-secret");
+    expect(body).not.toContain("person");
+    expect(body).not.toContain("path");
   });
 });

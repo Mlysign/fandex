@@ -53,6 +53,7 @@ missing.
 | `NEXT_PUBLIC_SUPPORT_URL` / `NEXT_PUBLIC_SUPPORT_LABEL` | ⬚ | H3.3 donations link (Ko-fi / GitHub Sponsors) shown next to the legal links; label defaults to `Donate`. **Build-time inlined** — changing it needs a rebuild. Not gated by `MONETIZATION_ENABLED`; a donation link isn't a commercial communication. |
 | `SCORING_ADMIN_USER_IDS` | ⬚ | Comma-separated `users.id` allowlist for `/dev/scoring`. Unset = nobody (fails closed) |
 | `DEV_LOGIN_USER_ID` | ⬚ | **Local dev only.** A `users.id` that `GET /api/dev/login` mints a session for, so the logged-in pages are reachable without an OAuth round-trip. 404s unless `NODE_ENV !== "production"` *and* the host is loopback. Leave unset unless testing. |
+| `KPI_READ_KEY` | ⬚ | Shared secret for `GET /api/telemetry/kpi`, the aggregate KPI feed read by the portfolio hub at <https://nilsmlynarek.eu/analytics/>. Sent as the `X-BW-Admin` header and compared in constant time. Unset, or under 16 characters, = the route 404s for everybody. Generate with `openssl rand -hex 32`, and keep it distinct from every other secret so it can be rotated alone. Aggregates only: counts and totals, no user ids, no paths. |
 
 Required vars are validated once at boot ([`src/lib/config.ts`](src/lib/config.ts) via
 [`src/instrumentation.ts`](src/instrumentation.ts)) — a missing one fails fast in production with a
