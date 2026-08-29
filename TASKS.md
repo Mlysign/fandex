@@ -43,7 +43,7 @@ Everything else in this file is either done or a standing constraint.
    migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
    from the moment it deploys**. The rows already merged there do not fix themselves.
 
-   **What to run, on the Railway box, after the deploy lands:**
+   **Where the shell is:** the `releaseradar` service in Railway has a **Console** tab (and a "Copy SSH command" button beside it). Seen open 2026-08-29 and not driven further than connecting, so treat it as a starting point rather than a verified route. **What to run, on the Railway box, after the deploy lands:**
    ```
    node scripts/repair-cross-type-links.mjs data/rr.db           # report only, read it first
    node scripts/repair-cross-type-links.mjs data/rr.db --apply
