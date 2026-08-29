@@ -425,14 +425,25 @@ export interface PersonalizedItem {
 
 // Community stats (crowd popularity/rating) — independent of any per-user
 // profile, so always attachable regardless of auth state.
-function communityStatsOf(c: FeedCandidate): { communityVotes: number; communityScore: number | null } {
+function communityStatsOf(c: Decoratable): { communityVotes: number; communityScore: number | null } {
   return { communityVotes: c.voteCount, communityScore: c.voteAverage != null ? c.voteAverage * 10 : null };
 }
 
+// Exactly what decorateSection READS: the two keys fandexForPage looks an item
+// up by, plus the crowd stats. Narrower than FeedCandidate deliberately — the
+// Discover SEARCH results are provider records too, but `searchAll` in the
+// route builds them itself rather than through discoverFeed's normalizers, so
+// they carry no genreNames/originalLanguage/popularity and the wider constraint
+// rejects them. This function was extracted on 2026-08-26 and wired into every
+// branch of that route except the search one, which is the branch that then
+// served an unsortable list. → src/app/api/discover/route.ts
+export type Decoratable = FandexTarget & Pick<FeedCandidate, "voteCount" | "voteAverage">;
+
 // Attach community stats (+ Fandex Score when signed in) to a page of raw
-// candidates — used by the section-pagination ("load more") and anonymous/
-// cold-start browse paths, which don't run through rankType's fuller pipeline.
-export function decorateSection<T extends FeedCandidate>(
+// candidates — used by the section-pagination ("load more"), anonymous/
+// cold-start browse and text-search paths, which don't run through rankType's
+// fuller pipeline.
+export function decorateSection<T extends Decoratable>(
   candidates: T[],
   userId: string | null
 ): (T & { communityVotes: number; communityScore: number | null; fandexScore: number | null; fandexCenter: number | null; fandexPending: boolean })[] {

@@ -10,7 +10,8 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState, annotateAvailability } from "@/lib/annotateDiscover";
-import type { Direction } from "@/lib/discoverFeed";
+import type { Direction, RawPayload } from "@/lib/discoverFeed";
+import type { MediaType } from "@/types";
 import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
 import { withCatalogFallback, catalogSectionPage, catalogBrowseReady } from "@/lib/catalogFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
@@ -19,8 +20,35 @@ import { normalizeName } from "@/lib/merge";
 const TMDB_KEY = process.env.TMDB_API_KEY!;
 const RAWG_KEY = process.env.RAWG_API_KEY!;
 
-async function searchAll(q: string, type: string | null) {
-  const results: any[] = [];
+// The shape EVERY provider block below must produce. `voteCount`/`voteAverage`
+// are required, and that is the whole point of the type existing (2026-08-29):
+// they are what lets the Popularity and Rating sorts order a search result at
+// all, and a block that quietly omitted them is what put a 1959 show above a
+// 2026 one. A new provider added here now fails `tsc` rather than the search.
+// Structurally a `Decoratable` (src/lib/liveDiscover.ts).
+interface SearchResult {
+  id: string;
+  rawId: number;
+  source: string;
+  type: MediaType;
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  platforms?: string[];
+  overview?: string;
+  // `number | string` because Letterboxd film ids are alphanumeric ("2a9q").
+  // FeedCandidate declares `Record<string, number>` and has always been wrong
+  // about that; the search path only pushed a string past it because these
+  // objects were untyped. `catalogFacets` String()s every id it reads, so the
+  // runtime never cared — but the type should say what is actually here.
+  ids: Record<string, number | string>;
+  voteCount: number;
+  voteAverage: number | null;
+  raw: RawPayload;
+}
+
+async function searchAll(q: string, type: string | null): Promise<SearchResult[]> {
+  const results: SearchResult[] = [];
 
   if (!type || type === "game") {
     try {
@@ -36,6 +64,8 @@ async function searchAll(q: string, type: string | null) {
           posterUrl: g.background_image ?? null,
           platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
           ids: { rawg: g.id },
+          voteCount: g.ratings_count ?? 0,
+          voteAverage: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0–5 → 0–10
           raw: { source: "rawg", sourceId: String(g.id), data: g },
         });
       }
@@ -58,6 +88,8 @@ async function searchAll(q: string, type: string | null) {
           posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
           platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
           ids: { igdb: g.id },
+          voteCount: g.total_rating_count ?? 0,
+          voteAverage: typeof g.total_rating === "number" && g.total_rating > 0 ? g.total_rating / 10 : null, // 0–100 → 0–10
           raw: { source: "igdb", sourceId: String(g.id), data: g },
         });
       }
@@ -77,6 +109,8 @@ async function searchAll(q: string, type: string | null) {
           title: m.title, releaseDate: m.release_date ?? null,
           posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
           overview: m.overview, ids: { tmdb: m.id },
+          voteCount: m.vote_count ?? 0,
+          voteAverage: typeof m.vote_average === "number" && m.vote_average > 0 ? m.vote_average : null,
           raw: { source: "tmdb", sourceId: String(m.id), data: m },
         });
       }
@@ -96,6 +130,8 @@ async function searchAll(q: string, type: string | null) {
           title: s.name, releaseDate: s.first_air_date ?? null,
           posterUrl: s.poster_path ? `https://image.tmdb.org/t/p/w342${s.poster_path}` : null,
           overview: s.overview, ids: { tmdb: s.id },
+          voteCount: s.vote_count ?? 0,
+          voteAverage: typeof s.vote_average === "number" && s.vote_average > 0 ? s.vote_average : null,
           raw: { source: "tmdb", sourceId: String(s.id), data: s },
         });
       }
@@ -106,10 +142,21 @@ async function searchAll(q: string, type: string | null) {
   if (!type || type === "movie") {
     try {
       const films = await searchLetterboxdFilms(q);
-      const existingTitles = new Set(results.map((r) => r.title?.toLowerCase()));
+      // 2026-08-29 — was `results.map((r) => r.title?.toLowerCase())`: EVERY
+      // result, of every type, keyed on title alone. So a GAME called "Lucky
+      // Luke" suppressed a film of the same name, and any two films sharing a
+      // title collapsed into whichever the earlier provider happened to return.
+      // Same key shape as the IGDB dedupe above — normalized title + year, and
+      // movies only. → src/lib/searchDedupe.ts for the same bug on the client.
+      const existingFilms = new Set(
+        results.filter((r) => r.type === "movie")
+          .map((r) => `${normalizeName(r.title ?? "")}|${(r.releaseDate ?? "").slice(0, 4)}`)
+      );
       for (const film of films.slice(0, 8)) {
-        // Deduplicate against TMDB results by title
-        if (existingTitles.has(film.name?.toLowerCase())) continue;
+        // Deduplicate against the TMDB films above by title + year
+        const filmKey = `${normalizeName(film.name ?? "")}|${film.releaseYear ?? ""}`;
+        if (existingFilms.has(filmKey)) continue;
+        existingFilms.add(filmKey);
         const tmdbLink = film.links?.find((l: any) => l.type === "tmdb");
         results.push({
           id: `letterboxd-${film.id}`, rawId: 0, source: "letterboxd", type: "movie",
@@ -120,6 +167,13 @@ async function searchAll(q: string, type: string | null) {
             letterboxd: film.id,
             ...(tmdbLink ? { tmdb: parseInt(tmdbLink.id) } : {}),
           },
+          // The Letterboxd film search payload carries no crowd stats at all
+          // (its rating lives on a separate per-film endpoint), so these are an
+          // honest "we hold none" rather than a zero we measured. Only reached
+          // for films TMDB did not already return, which is where the votes
+          // would have come from.
+          voteCount: 0,
+          voteAverage: null,
           raw: { source: "letterboxd", sourceId: String(film.id), data: film },
         });
       }
@@ -156,9 +210,9 @@ const SEARCH_TTL_MS = 15 * 60 * 1000;
 // first draft said 150 on a guess of "tens of KB", which would have been a
 // 7.7 MB ceiling for a cache that mostly serves repeats of the same few queries
 // inside one 15-minute window. Re-price it before raising this.
-const _searchCache = sharedCache<string, any[]>("discover.search", { max: 60, ttlMs: SEARCH_TTL_MS });
+const _searchCache = sharedCache<string, SearchResult[]>("discover.search", { max: 60, ttlMs: SEARCH_TTL_MS });
 
-async function cachedSearchAll(q: string, type: string | null) {
+async function cachedSearchAll(q: string, type: string | null): Promise<SearchResult[]> {
   const key = `${type ?? "all"}|${q.toLowerCase()}`;
   const hit = _searchCache.get(key);
   if (hit) return hit;
@@ -167,7 +221,7 @@ async function cachedSearchAll(q: string, type: string | null) {
   return fresh;
 }
 
-function sortByDate(items: any[]) {
+function sortByDate<T extends { releaseDate?: string | null }>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     if (!a.releaseDate && !b.releaseDate) return 0;
     if (!a.releaseDate) return 1;
@@ -209,9 +263,28 @@ export async function GET(req: NextRequest) {
     const annotate = (items: any[]) => annotateAvailability(annotateUserState(items, userId), region);
 
     // ── Search ────────────────────────────────────────────────────
+    // 2026-08-29 — `decorateSection` is new here, and its absence is why a
+    // popular NEW title could not be found by name. Every other branch of this
+    // route decorates; the search branch returned raw provider records with no
+    // `communityVotes` at all, so the client's Popularity sort
+    // (`votesOf(i) = i.communityVotes ?? 0`) had every search result tied at
+    // zero. Array.prototype.sort is stable, so what a user actually saw under
+    // "Popularity" was the incoming order — `sortByDate` ASCENDING, i.e. oldest
+    // first. Searching "Lucky" put a 1959 show in slot 1 and a 2026 one last.
+    // The Rating and Fandex Score sorts were inert on this list for the same
+    // reason.
+    //
+    // ⚠️ OUTSIDE `cachedSearchAll`, not inside it: the search cache is keyed on
+    // (type, query) with no viewer in the key, and `decorateSection(_, userId)`
+    // attaches a per-user Fandex Score. It maps to NEW objects, so the cached
+    // array is not mutated — the same property `persist`/`annotate` rely on.
+    //
+    // ⚠️ `decorateSection`, not `filterSectionPage`: this is a search. Dropping
+    // a title the user typed the name of is the failure being fixed, not a
+    // ranking nicety to reapply.
     if (q && q.length >= 2) {
       const results = await cachedSearchAll(q, type ?? null);
-      return NextResponse.json({ items: annotate(persist(sortByDate(results))) });
+      return NextResponse.json({ items: annotate(persist(decorateSection(sortByDate(results), userId))) });
     }
 
     // ── Load-more for a single section (pagination, either direction) ───

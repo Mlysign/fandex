@@ -24,6 +24,7 @@ import { defaultUiFilters,
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX, normalizeSort, countActiveAdvanced,
 } from "@/components/discovery/types";
 import { bayesRating, ratingPrior } from "@/lib/ratingsSort";
+import { dedupeWeb } from "@/lib/searchDedupe";
 import type { MediaType } from "@/types";
 import { probeSession, sessionUser } from "@/lib/sessionProbe";
 
@@ -479,29 +480,6 @@ export default function DiscoverPageClient() {
       if (!append) { setSearchItems([]); setSearchTotal(0); setWebItems([]); setSearchedQ(qUsed); }
       setSearchLoading(false); setSearchLoadingMore(false); setWebLoading(false);
     }
-  }
-
-  // Keys an item is known by — its source ids (`sources[]` or `ids{}`) + title+type.
-  function itemKeys(item: any): string[] {
-    const ks: string[] = [];
-    for (const s of item.sources ?? []) ks.push(`${s.source}:${s.sourceId}`);
-    for (const [src, id] of Object.entries(item.ids ?? {})) ks.push(`${src}:${id}`);
-    ks.push(`t:${(item.title ?? "").toLowerCase()}:${item.type}`);
-    return ks;
-  }
-
-  // Drop external matches already present locally; also dedupe within the web set.
-  function dedupeWeb(local: DiscoverItem[], web: any[]): any[] {
-    const keys = new Set<string>();
-    for (const it of local) for (const k of itemKeys(it)) keys.add(k);
-    const out: any[] = [];
-    for (const w of web) {
-      const ks = itemKeys(w);
-      if (ks.some((k) => keys.has(k))) continue;
-      for (const k of ks) keys.add(k);
-      out.push(w);
-    }
-    return out;
   }
 
   // Re-run the search (debounced) whenever the query / filters / sort change.
