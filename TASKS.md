@@ -130,7 +130,7 @@ The three findings that decided it, so nobody re-derives them:
 **H3.8 gates, approved 2026-08-17 and instrumented 2026-08-19** (`/dev/analytics` measures both directly):
 - **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20). Not a second gate, just worth re-checking which network fits.
 - **Freemium → 3,500 sustained weekly actives.** The old "roughly 1k+" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€.
-- ⚠️ **Client beacon, so crawlers are invisible by design.** Right population for an ads decision, wrong one for SEO (use Search Console). → [[telemetry-self-hosted]]
+- ⚠️ **A client beacon does NOT exclude crawlers**, whatever this line used to say: the big ones render the page and POST to it. They are filtered by user agent, and since 2026-08-31 the dashboard also skips the days before that filter shipped, so **the ads gate reads 4% and not 62%**. Both numbers were of the same two counters. Right population for an ads decision either way, wrong one for SEO (use Search Console). → [[telemetry-self-hosted]]
 - **The WAU query, verified against the real DB.** `users.last_seen_at` is now stamped in `getSession()` (one write per user per UTC day) and is the meter, not the trigger. The action-based signal stays the conservative cross-check, and it counts only users who took a write action, so a pure browser is not captured by anything in the schema:
     ```sql
     SELECT COUNT(DISTINCT user_id) wau FROM (

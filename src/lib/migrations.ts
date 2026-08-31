@@ -1148,6 +1148,47 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 26,
+    name: "crawler_view_daily (make the crawler filter observable)",
+    up: (db) => {
+      // 2026-08-31. `isCrawlerUserAgent` has rejected beacons since 2026-08-20
+      // and left no trace of doing it, which means the two questions anyone
+      // actually has about a filter were both unanswerable:
+      //
+      //   "is anything still getting through?"  and  "is it eating real people?"
+      //
+      // Those have opposite fixes and identical symptoms on a dashboard with no
+      // rejection count: traffic that looks too low. The original bug hid for a
+      // day and a half for exactly this reason, and the thing that eventually
+      // gave it away was the SHAPE of the top-pages panel rather than any number
+      // the schema could produce. So: count what the filter drops.
+      //
+      // ── One integer per day, and nothing else ───────────────────────────
+      //
+      // No path, no user agent, no IP. A user agent string is the one field here
+      // that would be worth having (it names the crawler), and it is also
+      // unbounded, attacker-controlled, and arguably personal data on a public
+      // endpoint. The pv route rejects a crawler BEFORE it reads the request
+      // body precisely so a crawl costs nothing, and this keeps that true: the
+      // whole write is an UPSERT against a single row per day.
+      //
+      // Same counter discipline as migration 17, and the same reasons: bounded
+      // by the calendar rather than by traffic (365 rows a year at any volume),
+      // no user_id so account erasure correctly skips it, and no reference to
+      // media_items so dbPrune's PRUNABLE_WHERE is untouched.
+      //
+      // `day` alone is the PK, and the only range any read filters on, so the
+      // implicit index serves every query and no secondary index is needed.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS crawler_view_daily (
+          day   TEXT    NOT NULL,             -- 'YYYY-MM-DD', UTC
+          count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (day)
+        );
+      `);
+    },
+  },
 ];
 
 

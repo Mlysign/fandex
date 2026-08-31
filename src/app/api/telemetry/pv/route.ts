@@ -1,7 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withOptionalUser } from "@/lib/withUser";
-import { classifyReferrer, isCrawlerUserAgent, normalizePathKey, recordPageView } from "@/lib/telemetry";
+import {
+  classifyReferrer, isCrawlerUserAgent, normalizePathKey, recordCrawlerView, recordPageView,
+} from "@/lib/telemetry";
 import { log } from "@/lib/logger";
 
 // Writes to the DB on every call. Never prerender or cache this.
@@ -44,8 +46,23 @@ export const dynamic = "force-dynamic";
 export const POST = withOptionalUser(
   async (req: NextRequest, session) => {
     // Checked before the body is even read: a crawler's POST costs us nothing
-    // beyond this line, and answering ok keeps the beacon silent on the page.
+    // beyond this line and one integer, and answering ok keeps the beacon silent
+    // on the page.
+    //
+    // The rejection is COUNTED (migration 26). Until 2026-08-31 it was not, and
+    // that left the filter unfalsifiable: "crawlers are being filtered", "the
+    // filter is dropping real people" and "the filter silently stopped running"
+    // all render as the same dashboard, differing only in a number nobody could
+    // see. The counter is a bare (day, count) row: no user agent, no path, no
+    // IP, so a crawl is still one UPSERT and carries nothing worth storing.
     if (isCrawlerUserAgent(req.headers.get("user-agent"))) {
+      try {
+        recordCrawlerView();
+      } catch (e) {
+        log.warn("telemetry_crawler_write_failed", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
       return NextResponse.json({ ok: true, counted: false });
     }
 

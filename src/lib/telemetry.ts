@@ -135,22 +135,48 @@ const CRAWLER_PATTERNS: RegExp[] = [
   // a real Android phone and "BOT " with a trailing space is all it takes to
   // classify every one of its owners as a crawler. A test asserts that.
   /\bbot\b|bot[/;)+]|^bot/i,
-  /crawl|spider|slurp|scraper/i,
+  // "Scrapy" is the one big scraping framework whose name contains neither
+  // "scraper" nor "bot", so the stem here is deliberately not `scrap`: that
+  // would also match "scrapbook".
+  /crawl|spider|slurp|scraper|scrapy|heritrix|nutch|ia_archiver/i,
   // Headless engines: Lighthouse, most rendering scrapers, and anything driving
-  // Chrome or Firefox without a display.
-  /headlesschrome|phantomjs|puppeteer|playwright|selenium|chrome-lighthouse/i,
+  // Chrome or Firefox without a display. ⚠️ Chrome's new headless mode no longer
+  // says "HeadlessChrome", and nothing here can catch that one.
+  /headlesschrome|phantomjs|puppeteer|playwright|selenium|chrome-lighthouse|pagespeed|gtmetrix/i,
   // Scripted clients. These do not run JS, so they can only reach this endpoint
   // by POSTing to it directly.
-  /python-requests|python-urllib|go-http-client|java\/|okhttp|libwww-perl|^curl|^wget|axios\//i,
+  /python-requests|python-urllib|aiohttp|go-http-client|java\/|okhttp|apache-httpclient|libwww-perl|^curl|^wget|axios\/|node-fetch|undici|got \(|guzzle|postmanruntime|insomnia|httpie|restsharp|^deno|^bun\//i,
+  // Uptime and availability monitors. They hit the same few pages forever, so
+  // left uncounted they read as a small, extremely loyal audience.
+  /uptimerobot|pingdom|statuscake|betteruptime|site24x7|newrelic|datadog|checkly/i,
+  // Internet-wide scanners, which mostly hit "/" and paths that do not exist.
+  /censys|shodan|zgrab|masscan|internet-?measurement|expanse|paloaltonetworks|netcraft/i,
   // Link unfurlers and social preview fetchers.
   // "whatsapp" carries a slash because the unfurler is "WhatsApp/2.x" while the
   // in-app browser is a normal mobile UA that must keep counting.
-  /facebookexternalhit|twitterbot|slackbot|discordbot|telegrambot|whatsapp\/|embedly|quora link preview|skypeuripreview/i,
+  /facebookexternalhit|meta-external|twitterbot|slackbot|discordbot|telegrambot|whatsapp\/|embedly|quora link preview|skypeuripreview|vkshare|redditbot/i,
   // AI training and answer-engine fetchers, which mostly do not identify as "bot".
-  /gptbot|claudebot|claude-web|anthropic-ai|ccbot|perplexity|bytespider|amazonbot|applebot|google-extended|cohere-ai|diffbot/i,
+  /gptbot|chatgpt-user|oai-searchbot|claudebot|claude-web|claude-searchbot|anthropic-ai|ccbot|perplexity|bytespider|amazonbot|applebot|google-extended|cohere-ai|diffbot|omgili|timpi|imagesift|firecrawl/i,
   // Named SEO suites worth listing explicitly: several use a UA that would not
   // otherwise match, and they are the heaviest facet-page crawlers.
-  /ahrefs|semrush|mj12|dotbot|blexbot|dataforseo|screaming frog|sitebulb|serpstat|petal|barkrowler|zoominfo|seekport|megaindex/i,
+  /ahrefs|semrush|mj12|dotbot|blexbot|dataforseo|screaming frog|sitebulb|serpstat|petal|barkrowler|zoominfo|seekport|megaindex|seokicks|linkdex|majestic|sistrix|oncrawl|oncrawler/i,
+  // Search-engine fetchers whose UA omits "bot" entirely. `bingpreview` and
+  // `mediapartners` (AdSense) are the two that reach a rendered page.
+  //
+  // ⚠️ The bare engine names are deliberately absent. "yandex", "sogou",
+  // "coccoc", "naver" and "daum" each appear in a REAL browser or in-app browser
+  // used by real people (YandexSearch, Sogou Explorer, Cốc Cốc, the NAVER and
+  // Daum apps), so matching the engine name would silently delete a region's
+  // worth of visitors from the only number gating the ads decision.
+  //
+  // Their CRAWLERS are named instead, one at a time. YandexBot and Sogou's
+  // spider fall out of the `bot` and `spider` arms above; Daumoa and Yeti (Naver)
+  // match neither, and were only caught here because the test asserting "the
+  // crawler is still blocked" failed on them. Assert both halves of a precision
+  // decision, or the half you assumed will be the wrong one. `qwantify` is
+  // Qwant's crawler specifically, which is why it is safe where a bare "qwant"
+  // would not be; `yeti` carries a slash for the same reason.
+  /bingpreview|mediapartners|google-read-aloud|google-inspectiontool|google-site-verification|googleother|feedfetcher|qwantify|daumoa|yeti\//i,
 ];
 
 /**
@@ -164,6 +190,43 @@ export function isCrawlerUserAgent(ua: string | null | undefined): boolean {
   const s = ua?.trim();
   if (!s) return true;
   return CRAWLER_PATTERNS.some((re) => re.test(s));
+}
+
+/**
+ * First UTC day whose pageview counts exclude crawlers.
+ *
+ * `isCrawlerUserAgent` landed on prod at 2026-08-20T18:14Z, so 2026-08-20 is a
+ * MIXED day (unfiltered until the evening), and 2026-08-21 is the first clean
+ * one. Everything before it is the ~80%-bot era measured in the pv route's
+ * comment: 4,314 of 5,365 pageviews in the 30 days to 2026-08-20 were facet-page
+ * crawls, against fourteen homepage views.
+ *
+ * ⚠️ EVERY read in this file starts here or later, via `trustedFrom`. That was
+ * not true until 2026-08-31, and the gap was not academic: prod held 5,792
+ * pre-filter pageviews (5,769 of them on the single crawl day 2026-08-20)
+ * against 416 real ones, so the ads gate on /dev/analytics read **62% when the
+ * honest figure was 4%**. The KPI route had excluded them since 2026-08-29 and
+ * the dashboard had not, which is the asymmetry this constant now closes.
+ *
+ * The counters are never pruned (dbPrune.ts touches media_items and its cascades
+ * only, and nothing else deletes from these tables), so the split is a
+ * deliberate exclusion and not a retention window. The excluded total is still
+ * reported, by `excludedPreFilter` and by the KPI contract's `simRuns`: this
+ * drops the numbers from the totals, never the evidence from the page.
+ */
+export const CRAWLER_FILTER_FROM_DAY = "2026-08-21";
+
+/**
+ * Clamp a read's start day to the first day whose counts can be trusted.
+ *
+ * ISO days sort lexicographically, so this is a plain string max. Inert for any
+ * window that begins after the filter shipped, which is every window from
+ * 2026-09-20 onward — at which point this becomes dead weight that still costs
+ * nothing, and removing it would silently re-admit the dirty days to a 90-day
+ * or 365-day range.
+ */
+function trustedFrom(fromDay: string): string {
+  return fromDay > CRAWLER_FILTER_FROM_DAY ? fromDay : CRAWLER_FILTER_FROM_DAY;
 }
 
 // ── Referrer classification ─────────────────────────────────────────────────
@@ -238,6 +301,26 @@ export function recordPageView(opts: {
   tx();
 }
 
+/**
+ * Increment the count of beacons rejected as crawler traffic for today.
+ *
+ * One row per day, one integer, no user agent stored (migration 26 explains
+ * why). Called from the pv route's rejection arm, which runs before the request
+ * body is read, so a crawl still costs a single UPSERT and nothing else.
+ *
+ * This exists to make the filter falsifiable. Without it, "the filter is
+ * working" and "the filter is eating real visitors" produce the same dashboard,
+ * and so do "crawlers stopped coming" and "the filter silently broke".
+ */
+export function recordCrawlerView(now?: Date): void {
+  getDb()
+    .prepare(
+      `INSERT INTO crawler_view_daily (day, count) VALUES (?, 1)
+       ON CONFLICT(day) DO UPDATE SET count = count + 1`,
+    )
+    .run(utcDay(now));
+}
+
 // ── Read ────────────────────────────────────────────────────────────────────
 
 export interface DailyPoint {
@@ -251,9 +334,16 @@ export interface DailyPoint {
  * Daily pageviews for the last `days` days, zero-filled. Zero-filling matters:
  * a gap in the data and a day with no traffic are the same fact to a reader, but
  * a chart that silently omits empty days draws a flat line through an outage.
+ *
+ * ⚠️ The window is CLAMPED to `CRAWLER_FILTER_FROM_DAY`, so a 90-day range can
+ * return fewer than 90 points. That is deliberate and it is not zero-filling's
+ * job to hide it: those days hold real counts we know to be ~80% crawler, and
+ * drawing them as zero would be as wrong as drawing them as traffic. The caller
+ * reads `series.length` for the window actually covered, and
+ * `excludedPreFilter()` for what was left out.
  */
 export function pageViewSeries(days = 30, now: Date = new Date()): DailyPoint[] {
-  const from = dayNDaysAgo(days - 1, now);
+  const from = trustedFrom(dayNDaysAgo(days - 1, now));
   const rows = getDb()
     .prepare(
       `SELECT day, SUM(CASE WHEN authed = 1 THEN count ELSE 0 END) AS authed,
@@ -266,10 +356,47 @@ export function pageViewSeries(days = 30, now: Date = new Date()): DailyPoint[] 
   const out: DailyPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const day = dayNDaysAgo(i, now);
+    if (day < from) continue;
     const r = byDay.get(day);
     const anon = r?.anon ?? 0;
     const authed = r?.authed ?? 0;
     out.push({ day, anon, authed, total: anon + authed });
+  }
+  return out;
+}
+
+/**
+ * Signed-in pageviews per day, zero-filled, over the FULL window asked for.
+ *
+ * Deliberately not clamped to `CRAWLER_FILTER_FROM_DAY`, and the reason is that
+ * a crawler is always anonymous: it carries no session cookie, so
+ * `withOptionalUser` hands the beacon a null session and the row lands under
+ * `authed = 0`. The pre-filter era's contamination is therefore entirely in the
+ * anonymous half. Measured on prod for 2026-08-20, the heaviest crawl day on
+ * record: anon 5,761, authed 8.
+ *
+ * So this series was never dirty, and clamping it would throw away real
+ * signed-in history to protect against a problem it cannot have. It exists as
+ * its own named function rather than a flag on `pageViewSeries` because "which
+ * of these two reads is safe unclamped" is exactly the question a boolean
+ * argument hides at the call site.
+ *
+ * ⚠️ Do not use this to total traffic. It is the authed half only.
+ */
+export function signedInPageViewSeries(days = 30, now: Date = new Date()): { day: string; count: number }[] {
+  const from = dayNDaysAgo(days - 1, now);
+  const rows = getDb()
+    .prepare(
+      `SELECT day, SUM(count) AS count FROM page_view_daily
+       WHERE day >= ? AND authed = 1 GROUP BY day`,
+    )
+    .all(from) as { day: string; count: number }[];
+
+  const byDay = new Map(rows.map((r) => [r.day, r.count]));
+  const out: { day: string; count: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = dayNDaysAgo(i, now);
+    out.push({ day, count: byDay.get(day) ?? 0 });
   }
   return out;
 }
@@ -280,7 +407,7 @@ export function topPages(days = 30, limit = 15, now: Date = new Date()): { pathK
       `SELECT path_key AS pathKey, SUM(count) AS count FROM page_view_daily
        WHERE day >= ? GROUP BY path_key ORDER BY count DESC LIMIT ?`,
     )
-    .all(dayNDaysAgo(days - 1, now), limit) as { pathKey: string; count: number }[];
+    .all(trustedFrom(dayNDaysAgo(days - 1, now)), limit) as { pathKey: string; count: number }[];
 }
 
 export function referrerBreakdown(days = 30, now: Date = new Date()): { refClass: RefClass; count: number }[] {
@@ -289,9 +416,82 @@ export function referrerBreakdown(days = 30, now: Date = new Date()): { refClass
       `SELECT ref_class AS refClass, SUM(count) AS count FROM referrer_daily
        WHERE day >= ? GROUP BY ref_class`,
     )
-    .all(dayNDaysAgo(days - 1, now)) as { refClass: RefClass; count: number }[];
+    .all(trustedFrom(dayNDaysAgo(days - 1, now))) as { refClass: RefClass; count: number }[];
   const byClass = new Map(rows.map((r) => [r.refClass, r.count]));
   return REF_CLASSES.map((refClass) => ({ refClass, count: byClass.get(refClass) ?? 0 }));
+}
+
+export interface CrawlerBlocked {
+  /** Beacons rejected as crawler traffic inside the selected range. */
+  blockedInRange: number;
+  /** Share of all beacons in range that were rejected, 0-100, or null if none. */
+  sharePct: number | null;
+  /** The heaviest single day in range, which is what a crawl looks like. */
+  busiestDay: { day: string; count: number } | null;
+  /** First day this counter existed. Anything earlier is absent, not zero. */
+  since: string | null;
+}
+
+/**
+ * What the crawler filter rejected, for the same window the pageviews cover.
+ *
+ * ⚠️ `sharePct` is out of BEACONS (blocked + counted), not out of requests. A
+ * crawler that never runs JS never reaches the beacon at all and is invisible
+ * here; that traffic belongs in Search Console. This number answers "of the
+ * things that POSTed to the beacon, how many were rejected", which is the only
+ * question the schema can honestly answer, and the one that separates a working
+ * filter from a broken one.
+ */
+export function crawlerBlocked(days = 30, now: Date = new Date()): CrawlerBlocked {
+  const db = getDb();
+  const from = trustedFrom(dayNDaysAgo(days - 1, now));
+
+  const rows = db
+    .prepare(`SELECT day, count FROM crawler_view_daily WHERE day >= ? ORDER BY count DESC`)
+    .all(from) as { day: string; count: number }[];
+
+  const blockedInRange = rows.reduce((a, r) => a + r.count, 0);
+  const counted = pageViewSeries(days, now).reduce((a, p) => a + p.total, 0);
+  const beacons = blockedInRange + counted;
+
+  // The earliest row ever, not the earliest in range: it is what tells a reader
+  // that a flat zero on an old range means "not measured yet" rather than "no
+  // crawlers". Cheap, since `day` is the PK.
+  const since = (db.prepare(`SELECT MIN(day) AS d FROM crawler_view_daily`).get() as { d: string | null }).d;
+
+  return {
+    blockedInRange,
+    sharePct: beacons > 0 ? (blockedInRange / beacons) * 100 : null,
+    busiestDay: rows[0] ?? null,
+    since,
+  };
+}
+
+export interface ExcludedPreFilter {
+  /** Pageviews held in the counters but not trusted, and so not reported. */
+  pageviews: number;
+  /** Last day on the excluded side. The filter shipped partway through it. */
+  throughDay: string;
+  /** Whether the selected range would otherwise have reached into that era. */
+  inRange: boolean;
+}
+
+/**
+ * The pre-filter counts every read above deliberately skips.
+ *
+ * Reported rather than dropped. A number quietly missing from a total is the
+ * failure this whole file keeps re-learning: on 2026-08-31 prod held 5,792 of
+ * these against 416 real pageviews, and the dashboard's ads gate read 62%
+ * because nothing separated them. Showing the excluded figure beside the honest
+ * one is what makes the honest one believable.
+ */
+export function excludedPreFilter(days = 30, now: Date = new Date()): ExcludedPreFilter {
+  const pageviews = pageviewsBefore(CRAWLER_FILTER_FROM_DAY);
+  return {
+    pageviews,
+    throughDay: dayNDaysAgo(1, new Date(`${CRAWLER_FILTER_FROM_DAY}T00:00:00Z`)),
+    inRange: dayNDaysAgo(days - 1, now) < CRAWLER_FILTER_FROM_DAY,
+  };
 }
 
 export interface UserMetrics {
@@ -374,10 +574,18 @@ export function gateProgress(now: Date = new Date()): GateProgress {
 
 export interface AnalyticsSnapshot {
   gates: GateProgress;
+  /**
+   * ⚠️ May be SHORTER than `days`: the window is clamped to the first day whose
+   * counts exclude crawlers. Read `series.length` for the window actually
+   * covered, and `excluded` for what that left out.
+   */
   series: DailyPoint[];
   topPages: { pathKey: string; count: number }[];
   referrers: { refClass: RefClass; count: number }[];
   users: UserMetrics;
+  crawler: CrawlerBlocked;
+  excluded: ExcludedPreFilter;
+  /** The window ASKED for. `series.length` is the window answered. */
   days: number;
   generatedAt: string;
 }
@@ -390,6 +598,8 @@ export function analyticsSnapshot(days = 30, now: Date = new Date()): AnalyticsS
     topPages: topPages(days, 15, now),
     referrers: referrerBreakdown(days, now),
     users: userMetrics(days, now),
+    crawler: crawlerBlocked(days, now),
+    excluded: excludedPreFilter(days, now),
     days,
     generatedAt: now.toISOString(),
   };
@@ -407,24 +617,11 @@ export function analyticsSnapshot(days = 30, now: Date = new Date()): AnalyticsS
 // is "printable on a dashboard in front of someone" rather than "not obviously
 // identifying".
 
-/**
- * First UTC day whose pageview counts exclude crawlers.
- *
- * `isCrawlerUserAgent` landed on prod at 2026-08-20T18:14Z, so 2026-08-20 is a
- * MIXED day (unfiltered until the evening), and 2026-08-21 is the first clean
- * one. Everything before it is the ~80%-bot era measured in the pv route's
- * comment: 4,314 of 5,365 pageviews in the 30 days to 2026-08-20 were facet-page
- * crawls, against fourteen homepage views.
- *
- * The KPI response therefore counts `runsTotal` from this day and reports the
- * earlier total as `simRuns`, the contract's field for records excluded as not a
- * person. Publishing the raw all-time sum would put roughly four times the real
- * number on the hub, which is the exact failure the contract exists to prevent.
- * The counters are never pruned (dbPrune.ts touches media_items and its cascades
- * only, and nothing else deletes from these two tables), so the split is a
- * deliberate exclusion and not a retention window.
- */
-export const CRAWLER_FILTER_FROM_DAY = "2026-08-21";
+// `CRAWLER_FILTER_FROM_DAY` is declared with the crawler filter itself, above.
+// The KPI response counts `runsTotal` from that day and reports the earlier
+// total as `simRuns`, the contract's field for records excluded as not a person.
+// Publishing the raw all-time sum would put roughly four times the real number
+// on the hub, which is the exact failure the contract exists to prevent.
 
 /** Windows the contract fixes. Not view settings: the hub echoes them back. */
 export const KPI_ACTIVE_WINDOW_DAYS = 7;
@@ -493,11 +690,9 @@ export function kpiSnapshot(now: Date = new Date()): KpiSnapshot {
   const nowSec = Math.floor(now.getTime() / 1000);
   const since = (d: number) => nowSec - d * 86_400;
 
-  // ISO days sort lexicographically, so this is a plain string max. It is inert
-  // for any window that starts after the filter shipped; it exists so runsWeek
-  // can never count a pre-filter day and exceed runsTotal.
-  const weekStart = dayNDaysAgo(KPI_ACTIVE_WINDOW_DAYS - 1, now);
-  const weekFrom = weekStart > CRAWLER_FILTER_FROM_DAY ? weekStart : CRAWLER_FILTER_FROM_DAY;
+  // Same clamp every dashboard read uses, so runsWeek can never count a
+  // pre-filter day and exceed runsTotal.
+  const weekFrom = trustedFrom(dayNDaysAgo(KPI_ACTIVE_WINDOW_DAYS - 1, now));
 
   const count = (sql: string, param: number) => (db.prepare(sql).get(param) as { n: number }).n;
 

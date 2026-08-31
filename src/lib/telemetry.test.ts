@@ -11,6 +11,9 @@ import {
   utcDay,
   kpiSnapshot,
   CRAWLER_FILTER_FROM_DAY,
+  crawlerBlocked,
+  excludedPreFilter,
+  recordCrawlerView,
 } from "@/lib/telemetry";
 
 describe("normalizePathKey", () => {
@@ -111,6 +114,59 @@ describe("isCrawlerUserAgent", () => {
     expect(isCrawlerUserAgent("Mozilla/5.0 (compatible; PerplexityBot/1.0)")).toBe(true);
     expect(isCrawlerUserAgent("Mozilla/5.0 AppleWebKit (KHTML, like Gecko; compatible; ClaudeBot/1.0)")).toBe(true);
     expect(isCrawlerUserAgent("Mozilla/5.0 (compatible; Bytespider)")).toBe(true);
+    expect(isCrawlerUserAgent("Mozilla/5.0 ... ChatGPT-User/1.0; +https://openai.com/bot")).toBe(true);
+    expect(isCrawlerUserAgent("Mozilla/5.0 (compatible; meta-externalagent/1.1)")).toBe(true);
+  });
+
+  // Added 2026-08-31. Each of these reaches a rendered page (or POSTs directly)
+  // and matched none of the original arms, so each was counting as a visitor.
+  it("catches the agents added in the 2026-08-31 widening", () => {
+    const uas = [
+      // Search fetchers whose UA omits "bot" entirely.
+      "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/534+ BingPreview/1.0b",
+      "Mediapartners-Google",
+      "Mozilla/5.0 (compatible; GoogleOther)",
+      "Google-InspectionTool/1.0",
+      "Feedfetcher-Google; (+http://www.google.com/feedfetcher.html)",
+      // Scraping frameworks and HTTP clients that name neither bot nor scraper.
+      "Scrapy/2.11.0 (+https://scrapy.org)",
+      "node-fetch/1.0 (+https://github.com/bitinn/node-fetch)",
+      "Apache-HttpClient/4.5.13 (Java/1.8.0_292)",
+      "PostmanRuntime/7.36.0",
+      "GuzzleHttp/7",
+      "Mozilla/5.0 (compatible; Firecrawl/1.0)",
+      // Uptime monitors, which otherwise read as a tiny, very loyal audience.
+      "Mozilla/5.0 (compatible; UptimeRobot/2.0; http://uptimerobot.com/)",
+      "Pingdom.com_bot_version_1.4",
+      // Internet-wide scanners.
+      "Mozilla/5.0 (compatible; CensysInspect/1.1)",
+      "Mozilla/5.0 (compatible; InternetMeasurement/1.0)",
+    ];
+    for (const ua of uas) expect(isCrawlerUserAgent(ua), ua).toBe(true);
+  });
+
+  // ⚠️ The bare engine names are deliberately NOT in the pattern list, because
+  // each is also a real browser or in-app browser used by real people. Matching
+  // the engine name would delete a region's worth of visitors from the only
+  // number gating the ads decision. This is the guard on that decision, and it
+  // asserts BOTH halves: the browser survives, and the engine's crawler does not.
+  // The second half is not decoration. It failed on first run for Daumoa and
+  // Yeti, which had been assumed caught by the `bot`/`spider` arms and were not.
+  it("keeps regional browsers whose name matches their search engine", () => {
+    const browsers = [
+      "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 YaBrowser/24.1.0.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 YandexSearch/24.5 Mobile/15E148",
+      "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) coc_coc_browser/120.0.0 Chrome/114.0.0.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 NAVER(inapp; search; 2000; 12.9.2)",
+      "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36 DaumApps/5.6.0",
+      "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.221 Safari/537.36 SE 2.X MetaSr 1.0",
+    ];
+    for (const ua of browsers) expect(isCrawlerUserAgent(ua), ua).toBe(false);
+
+    // …while the crawlers those same engines run are still caught.
+    for (const ua of ["Mozilla/5.0 (compatible; YandexBot/3.0)", "Mozilla/5.0 (compatible; Daumoa-web-search)", "Sogou web spider/4.0", "Yeti/1.1 (NHN Corp.; http://help.naver.com/robots/)"]) {
+      expect(isCrawlerUserAgent(ua), ua).toBe(true);
+    }
   });
 
   it("treats a missing user agent as a crawler", () => {
@@ -239,9 +295,103 @@ describe("pageViewSeries", () => {
 
   it("returns days in ascending order, ending today", () => {
     const series = pageViewSeries(30);
-    expect(series).toHaveLength(30);
     const days = series.map((d) => d.day);
     expect([...days].sort()).toEqual(days);
+    expect(days[days.length - 1]).toBe(utcDay());
+  });
+
+  it("never returns a day the crawler filter was not running on", () => {
+    // The clamp, and the reason /dev/analytics disagreed with the KPI route
+    // until 2026-08-31: prod held 5,792 pre-filter pageviews against 416 real
+    // ones, so the unclamped 30-day window put the ads gate at 62% when the
+    // honest figure was 4%. A 3,650-day range must still start at the filter.
+    const series = pageViewSeries(3_650);
+    expect(series[0].day).toBe(CRAWLER_FILTER_FROM_DAY);
+    expect(series.every((d) => d.day >= CRAWLER_FILTER_FROM_DAY)).toBe(true);
+  });
+
+  it("drops pre-filter counts from the totals rather than drawing them as zero", () => {
+    // Both wrong answers are worth pinning against. Reporting 5_000 would be
+    // the old bug; reporting a zero-filled point for 2026-08-19 would claim we
+    // measured no traffic that day, which is a different lie about the same row.
+    getDb()
+      .prepare(`INSERT INTO page_view_daily (day, path_key, authed, count) VALUES (?, '/', 0, ?)`)
+      .run("2026-08-19", 5_000);
+    recordPageView({ pathKey: "/", authed: false, refClass: "direct" });
+
+    const series = pageViewSeries(3_650);
+    expect(series.reduce((a, p) => a + p.total, 0)).toBe(1);
+    expect(series.find((d) => d.day === "2026-08-19")).toBeUndefined();
+
+    // …and the count is still reported, as the excluded figure.
+    expect(excludedPreFilter(3_650).pageviews).toBe(5_000);
+    expect(excludedPreFilter(3_650).inRange).toBe(true);
+    expect(excludedPreFilter(1).inRange).toBe(false);
+  });
+
+  it("clamps topPages and referrerBreakdown to the same window", () => {
+    // One read left unclamped is the whole bug back: the top-pages panel is
+    // what gave away the original 80%-bot era, so it must not be the panel
+    // still showing it.
+    getDb()
+      .prepare(`INSERT INTO page_view_daily (day, path_key, authed, count) VALUES (?, ?, 0, ?)`)
+      .run("2026-08-19", "/person/[slug]", 3_091);
+    getDb()
+      .prepare(`INSERT INTO referrer_daily (day, ref_class, count) VALUES (?, 'direct', ?)`)
+      .run("2026-08-19", 3_091);
+    recordPageView({ pathKey: "/", authed: false, refClass: "search" });
+
+    expect(topPages(3_650)).toEqual([{ pathKey: "/", count: 1 }]);
+    expect(referrerBreakdown(3_650).find((r) => r.refClass === "direct")?.count).toBe(0);
+    expect(referrerBreakdown(3_650).find((r) => r.refClass === "search")?.count).toBe(1);
+  });
+});
+
+describe("crawlerBlocked: making the filter falsifiable", () => {
+  beforeEach(() => {
+    getDb().exec("DELETE FROM page_view_daily; DELETE FROM referrer_daily; DELETE FROM crawler_view_daily;");
+  });
+
+  it("stores one bounded counter row per day and no identifying column", () => {
+    // Same discipline as page_view_daily: no user_id (account erasure finds its
+    // targets by that literal column name), no user agent, no path, no IP.
+    const cols = (getDb().prepare("PRAGMA table_info(crawler_view_daily)").all() as { name: string }[])
+      .map((c) => c.name);
+    expect(cols).toEqual(["day", "count"]);
+
+    recordCrawlerView();
+    recordCrawlerView();
+    recordCrawlerView();
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM crawler_view_daily").get()).toEqual({ n: 1 });
+    expect(crawlerBlocked(7).blockedInRange).toBe(3);
+  });
+
+  it("reports the blocked share out of beacons, so both failure modes are visible", () => {
+    // A share near 0 on a public site means the filter stopped matching; a
+    // share near 100 means it is eating real visitors. Neither is readable
+    // from the pageview count alone, which is why they render as a pair.
+    recordCrawlerView();
+    recordCrawlerView();
+    recordCrawlerView();
+    recordPageView({ pathKey: "/", authed: false, refClass: "direct" });
+
+    const c = crawlerBlocked(7);
+    expect(c.blockedInRange).toBe(3);
+    expect(c.sharePct).toBe(75); // 3 of 4 beacons
+    expect(c.busiestDay).toEqual({ day: utcDay(), count: 3 });
+  });
+
+  it("says when it has never measured, rather than reporting a confident zero", () => {
+    // "No crawlers came" and "this counter did not exist yet" are the same
+    // zero. `since` is what separates them for a reader.
+    const empty = crawlerBlocked(7);
+    expect(empty.blockedInRange).toBe(0);
+    expect(empty.sharePct).toBe(null);
+    expect(empty.busiestDay).toBe(null);
+    expect(empty.since).toBe(null);
+
+    recordCrawlerView();
+    expect(crawlerBlocked(7).since).toBe(utcDay());
   });
 });
 

@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { pageViewSeries } from "@/lib/telemetry";
+import { signedInPageViewSeries } from "@/lib/telemetry";
 
 // Audience analytics for /dev/users (2026-08-19). Sibling of telemetry.ts, and
 // deliberately a separate module: that one measures ANONYMOUS traffic from
@@ -230,7 +230,10 @@ export function userAnalyticsSnapshot(days = 30, now: Date = new Date()): UserAn
     now,
   );
 
-  const signedInPageviews = pageViewSeries(days, now).map((p) => ({ day: p.day, count: p.authed }));
+  // Unclamped on purpose: a crawler is never signed in, so this half of the
+  // counters carries none of the pre-filter contamination the dashboard has to
+  // exclude. See signedInPageViewSeries.
+  const signedInPageviews = signedInPageViewSeries(days, now);
 
   const userRows = db
     .prepare(
