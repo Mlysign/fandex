@@ -11,7 +11,13 @@
 
 Everything else in this file is either done or a standing constraint.
 
-1. **🔵 Google sign-in is LIVE on prod. ONE 10-second check is left: complete a sign-in.** (2026-09-01.) Everything else is verified: the route 307s to Google with the right client id and scopes, `/settings` renders the Google card (so the `NEXT_PUBLIC_` value reached the client bundle), and Google's consent screen loads as "continue to fandex.org" with the privacy and terms links, no unverified-app warning and no redirect-URI mismatch. **The only unproven link is the token exchange**, which is the one step that needs the SECRET to be right rather than merely present. Click "Connect Google" on [/settings](https://fandex.org/settings): landing on `?connected=google` closes this; a bounce to `/?error=google_failed` means re-paste the secret. Full writeup → [docs/archive/history.md](docs/archive/history.md) ("Google sign-in, an identity-only provider").
+1. **⚠️ The catalog backfill has FINISHED and it did not get where it was going. This needs a decision, not a wait.** (2026-09-01.) Every doc still says the only remaining action is one env var once `/api/health` → `catalog.browse.windows` reaches 200. **That will never happen.** All three `:future` lanes read `exhausted: true`, so nothing refills them, and the future window is a rolling 18 months that DRAINS as release dates pass: movie **49 → 35** and show **49 → 26** in the four days since 2026-08-28, against a `min` of 200. Game is 74, up from 29, and also retired. Catalog is 4,476 items.
+
+   Two separate things fell out of the same reading:
+   - **`game:past` is retired at page 1 with 0 added**, which is the exact incident `EMPTY_STRIKES = 3` was written to prevent, happening again. RAWG is still quota-latched, `fetchGamePageAllSources` swallows the failure and answers `[]`, and three empty pages from a DOWN provider retire a lane just as permanently as three from a finished one. The strike counter cannot tell those apart. → the comment at `src/lib/catalogBackfill.ts:96` predicts this in as many words.
+   - **`resetBackfill()` exists (`catalogBackfill.ts:222`) and is wired to nothing.** No route, no script. There is currently no way to un-retire a lane on prod.
+
+   **The decision:** "browse served from our own catalog" needs a source of UPCOMING titles that a one-shot paginated sweep cannot provide, because the target is a window that empties itself. Options, cheapest first: (a) drop `CATALOG_BROWSE_MIN` to something the windows actually reach and accept a shorter local feed; (b) expose `resetBackfill()` and re-run the future lanes on a schedule, so the window is topped up rather than filled once; (c) leave `CATALOG_BROWSE` off and keep paying the provider calls on browse. **Not chosen here** — (b) is the only one that matches the original intent, and it is also the most work.
 
 2. **✉️ One email to `partner@igdb.com`, no longer blocking.** ✅ **Decided 2026-08-28: carry on with IGDB, behind a kill switch.** `IGDB_ENABLED=0` stops every IGDB call at once (default ON, verified no `fetch` happens when off) and `scripts/purge-igdb.mjs` removes what is stored (proven on a copy: 1,008 links and 908 projections gone, all 2,770 items and 2,482 user rows untouched, 100 items left source-less and none acted on). → [docs/catalog-growth.md](docs/catalog-growth.md). **The question is still worth asking; it is just no longer holding anything up.** (2026-08-28, → [docs/catalog-growth.md](docs/catalog-growth.md).) The provider terms were read from the primary sources before sizing the backfill. TMDB is fine — its cap is on cache AGE (six months), which a refresh tier satisfies, and `lib/retention.ts` now enforces it. Steam states no limit. **IGDB is the one that does not resolve on its own.**
 
@@ -37,11 +43,9 @@ Everything else in this file is either done or a standing constraint.
 
 5. **Optional, not urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan. Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon**: its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
 
-6. **One sentence needed for the privacy policy: which region does Railway host us in?** Steam's Web API terms (read 2026-08-23) require that Steam data is stored in a country the privacy policy **identifies**. The policy names Railway as the host but not the region, so this is an open obligation on a live term. **Deliberately not guessed**: the region is a runtime env var, not knowable from the repo, and inventing a data-residency claim in a legal document is worse than a noted gap. Tell me the region and it is one sentence in `src/lib/legal/content/{de,en}/privacy.ts`.
+6. **Calendar: two things want your eyes on a real desktop browser, not a fix** (2026-08-26, `0bc9b7a` `d36952e` `1026550`). The page is now exactly one viewport tall and never scrolls, which meant **desktop day cells went from 128px to ~97px** so a six-week month fits without one; that is a visible change nobody has looked at outside the measurement. And the **rail cards' hover tooltip is unverified**: `(hover: hover)` is false in the browser pane, so neither the changed code nor a control can be exercised there. **A third joined them 2026-08-26:** does the height budget **re-fit when the window is resized**? `boxH` comes from a `ResizeObserver`, and the browser pane never delivers one, so no Claude session can test it. If it does not re-fit, the symptom is cells keeping their old height inside a shrunken `overflow-hidden` box, i.e. **weeks clipped with nothing to scroll to them**. Open `/calendar`, drag the window shorter, count the week rows. The other two are settled enough to state: desktop cells measure **95px** at 1280×900, and everything else in 13j/13ja passes at 375 and 1280, anon and authed, dev and prod. Checks are in [smoketest.md](smoketest.md) 13j/13ja/13jb.
 
-7. **Calendar: two things want your eyes on a real desktop browser, not a fix** (2026-08-26, `0bc9b7a` `d36952e` `1026550`). The page is now exactly one viewport tall and never scrolls, which meant **desktop day cells went from 128px to ~97px** so a six-week month fits without one; that is a visible change nobody has looked at outside the measurement. And the **rail cards' hover tooltip is unverified**: `(hover: hover)` is false in the browser pane, so neither the changed code nor a control can be exercised there. **A third joined them 2026-08-26:** does the height budget **re-fit when the window is resized**? `boxH` comes from a `ResizeObserver`, and the browser pane never delivers one, so no Claude session can test it. If it does not re-fit, the symptom is cells keeping their old height inside a shrunken `overflow-hidden` box, i.e. **weeks clipped with nothing to scroll to them**. Open `/calendar`, drag the window shorter, count the week rows. The other two are settled enough to state: desktop cells measure **95px** at 1280×900, and everything else in 13j/13ja passes at 375 and 1280, anon and authed, dev and prod. Checks are in [smoketest.md](smoketest.md) 13j/13ja/13jb.
-
-8. **SM50's data repair still has to run against PROD.** The code fix ships with this commit and
+7. **SM50's data repair still has to run against PROD.** The code fix ships with this commit and
    migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
    from the moment it deploys**. The rows already merged there do not fix themselves.
 
@@ -56,10 +60,33 @@ Everything else in this file is either done or a standing constraint.
    read the report rather than assuming. ⚠️ **Copy the `-wal` and `-shm` alongside the `.db` if you
    rehearse on a copy**; a plain `cp data/rr.db` reads an older database and invented a 9-row
    discrepancy while this was being written.
-   ⚠️ **A restore drill is due**: migration 23 rebuilds a table, which is a schema change, and the
-   standing rule is that a drill proves the backup you had that day.
+   ⚠️ **A restore drill is due**: migrations 23–26 have landed since the last one passed
+   (2026-08-23), 23 rebuilds a table, and the standing rule is that a drill proves the backup you
+   had THAT day. **It needs the same shell** — there is no litestream binary and no bucket
+   credential outside the container, so no Claude session can run it. Same Console, three commands:
+   ```
+   litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
+   node scripts/verify-restore.mjs /tmp/restore-test.db     # wants integrity_check ok + 8 sane counts
+   rm /tmp/restore-test.db
+   ```
 
-9. **SM53 is a design call, not a fix, and it is yours** (12th smoke test). At 375×812 the calendar's
+   **The half that COULD be done locally was, 2026-09-01, and both parts passed.** They are the two
+   ways this has actually broken before, so a red drill is now less likely, not merely unmeasured:
+   - **The schema carries nothing Litestream's older SQLite would reject.** That is the exact
+     failure from August: migration 16's `ORDER BY` inside an aggregate parses on the 3.53 that
+     `better-sqlite3` ships and not on the ~3.40 Litestream embeds, so replication died for two days
+     while every test, the build and `/api/health` stayed green. Dumped the live schema and checked:
+     **zero** aggregate-with-`ORDER BY`, no `string_agg`, no `concat()`, no `jsonb_*`, no
+     `GENERATED`/`STRICT`. All four `ORDER BY`s in the schema sit in a subquery, which is the shape
+     the invariant asks for.
+   - **The real upgrade path applies clean.** Ran `node scripts/migrate.mjs` against a copy of the
+     July backup (all three files, per the WAL rule): **user_version 6 → 26**, all 20 migrations,
+     then `integrity_check ok` and 8 populated tables via `verify-restore.mjs`. Green tests never
+     exercise this: every DB test starts fresh. ⚠️ The upgraded copy is missing the indexes `db.ts`
+     creates at boot, which is expected — `migrate.mjs` runs migrations only, and that is the
+     documented two-apply-path split, not a fault.
+
+8. **SM53 is a design call, not a fix, and it is yours** (12th smoke test). At 375×812 the calendar's
    sticky filter bar takes **175px, 22% of the viewport**: two wrapped rows of seven 40px icon-only
    circles, plus a 38px view-toggle row, leaving the grid 486px. Nothing is broken (hit areas pass,
    `.tap-44` gives each chip a 44×44 target with no overlap) — the point is that on the one page
@@ -70,7 +97,7 @@ Everything else in this file is either done or a standing constraint.
    "Filters" button with a count, ~90px back; (c) leave it, and accept the grid at 486px. Say which
    and it is a small change.
 
-10. **Search has no relevance term at all, and whether it should is a ranking call, not a bug** (2026-08-29). Two real faults were fixed this session — the search branch never attached crowd stats, so "Popularity" silently sorted oldest-first, and the dedupe dropped any second work sharing a title, which is what actually hid the new *Lucky* → [archive](docs/archive/history.md), grep `could not find a new title`. What is left is that nothing anywhere scores a title against what was TYPED: `find()` is `title.includes(q)` and then a global sort, so an exact match on *Lucky* still ranks below *Mr. Lucky* when *Mr. Lucky* has more votes. **Deliberately not changed**, because "exact match first" overrides all four sorts on the page and that is a visible ranking decision. Say the word and it is a small change; the alternative is to leave search meaning "filter, then sort by what you picked".
+9. **Search has no relevance term at all, and whether it should is a ranking call, not a bug** (2026-08-29). Two real faults were fixed this session — the search branch never attached crowd stats, so "Popularity" silently sorted oldest-first, and the dedupe dropped any second work sharing a title, which is what actually hid the new *Lucky* → [archive](docs/archive/history.md), grep `could not find a new title`. What is left is that nothing anywhere scores a title against what was TYPED: `find()` is `title.includes(q)` and then a global sort, so an exact match on *Lucky* still ranks below *Mr. Lucky* when *Mr. Lucky* has more votes. **Deliberately not changed**, because "exact match first" overrides all four sorts on the page and that is a visible ranking decision. Say the word and it is a small change; the alternative is to leave search meaning "filter, then sort by what you picked".
 
 **Standing constraints. Not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
@@ -96,19 +123,11 @@ Nils answered the full open-decision list in one pass. Treat every line as settl
 
 ## Open: carried forward from Phase 6
 
-### P15/P16: the Android app. Read this before deciding; "Bubblewrap" needed context.
+### P15/P16: the Android app
 
-**→ The click-by-click version is [docs/twa-play-store.md](docs/twa-play-store.md)** (2026-08-22). The section below is the *why*; that doc is the *how*, plus the two traps: the 12-testers/14-days gate is **per app**, and the SHA-256 the assetlinks file needs is the one Play Console shows under **App integrity**, not the one PWABuilder hands you.
+**State is "Needs Nils" item 3; the click-by-click is [docs/twa-play-store.md](docs/twa-play-store.md).** A TWA is an Android app whose whole content is fandex.org rendered by the user's Chrome, so there is no second codebase; the only reason it beats a browser shortcut is that it can hide the address bar, and hiding that bar is what needs proof of domain ownership. `assetlinks.json` and the PWA manifest are already built. Only the signing key and the Play Console account are Nils's, being a credential and an identity.
 
-**⚠️ "Bubblewrap" is two things, which is exactly why decision #7 read as cross-project contamination.** It is Nils's first published game (the `mobilegameportfolio` project) *and* Google's CLI for building a TWA. The doc above uses **PWABuilder** so the word never has to appear.
-
-**This is Fandex, not a different project.** It traces back to a decision locked on **2026-06-18**: *"public website first, Android as a PWA/TWA wrapper"*, i.e. Fandex ships to the Play Store as a **thin Android app that just displays fandex.org**, not as a separate codebase.
-
-**What a TWA is.** A *Trusted Web Activity* is an Android app whose entire content is your website, rendered by the user's Chrome. No second codebase, no rewrite, no separate release of features. The only reason it isn't just a browser shortcut is that a TWA can **hide the browser address bar**, and hiding that bar is what needs proof you own the domain. That is P15.
-
-**Already built:** `src/app/.well-known/assetlinks.json/route.ts` serves the Digital Asset Links file Google's verifier fetches; it is env-driven. **P14 (PWA manifest + service worker) is done**, which is the prerequisite that makes the site installable at all.
-
-**What only Nils can do, and why.** The **signing key** and the **Play Console account** are a credential and an account tied to his identity. Everything mechanical after that is in the doc. Older context → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
+⚠️ **"Bubblewrap" is two things**, which is why locked decision #7 read as cross-project contamination: it is Nils's first published game (`mobilegameportfolio`) *and* Google's TWA CLI. The doc uses PWABuilder so the word never appears. Older context → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
 
 ---
 
@@ -133,16 +152,7 @@ The three findings that decided it, so nobody re-derives them:
 - **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20). Not a second gate, just worth re-checking which network fits.
 - **Freemium → 3,500 sustained weekly actives.** The old "roughly 1k+" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€.
 - ⚠️ **A client beacon does NOT exclude crawlers**, whatever this line used to say: the big ones render the page and POST to it. They are filtered by user agent, and since 2026-08-31 the dashboard also skips the days before that filter shipped, so **the ads gate reads 4% and not 62%**. Both numbers were of the same two counters. Right population for an ads decision either way, wrong one for SEO (use Search Console). → [[telemetry-self-hosted]]
-- **The WAU query, verified against the real DB.** `users.last_seen_at` is now stamped in `getSession()` (one write per user per UTC day) and is the meter, not the trigger. The action-based signal stays the conservative cross-check, and it counts only users who took a write action, so a pure browser is not captured by anything in the schema:
-    ```sql
-    SELECT COUNT(DISTINCT user_id) wau FROM (
-      SELECT user_id, added_at ts FROM user_library WHERE added_at >= :weekAgo
-      UNION ALL SELECT user_id, reviewed_at FROM user_library WHERE reviewed_at >= :weekAgo
-      UNION ALL SELECT user_id, added_at FROM user_watchlist WHERE added_at >= :weekAgo
-      UNION ALL SELECT user_id, added_at FROM user_item_state WHERE added_at >= :weekAgo
-      UNION ALL SELECT user_id, reviewed_at FROM user_item_state WHERE reviewed_at >= :weekAgo
-    )
-    ```
+- **The WAU meter is `users.last_seen_at`**, stamped in `getSession()` once per user per UTC day. The action-based union over `user_library`/`user_watchlist`/`user_item_state` stays as the conservative cross-check; it counts only users who took a WRITE action, so a pure browser is captured by nothing in this schema. Both live in `src/lib/telemetry.ts` (`userMetrics`) and `src/lib/userAnalytics.ts` — read them there rather than from a copy here.
 
 **If affiliate is ever revived:** sign up → set the env vars → flip `MONETIZATION_ENABLED` → run the post-go-live cookie check. The runbook is still accurate and still in the go-live doc; only its priority changed.
 
@@ -157,54 +167,48 @@ are in [AGENTS.md](AGENTS.md) and their memory files ([[cross-type-identity-merg
 [[shared-view-two-routes]], [[anon-gates-must-ask-not-bounce]], [[unhydrated-page-diagnosis]]).
 The checks are in [smoketest.md](smoketest.md) 1c-i, 13e-i and 13n-i.
 
-## Nils's feedback, 2026-08-27 (post-smoketest)
+## Nils's feedback, 2026-08-27 (post-smoketest) — ✅ ALL SHIPPED, closed 2026-09-01
 
-**Everything is ✅ DONE except A**: the filter panel rebuilt to Option A, Discover's pagination, the
-platform chips (a service you use now shows a 0 instead of vanishing) and the Settings picker
-collapsed to two rows. Analysis → [docs/advanced-filters.md](docs/advanced-filters.md); read it
-before touching the panel.
-
-- **A. ⬜ The Fandex Score's colours disagree between the card and the tooltip.** `Tooltip.tsx:99`
-  hardcodes gold `var(--color-accent)` for the number where the card (`PosterCard.tsx:184`) and the
-  item page (`FandexScoreSection.tsx:220`) both call `fandexScoreColor()`, so the tooltip's number is
-  score-INDEPENDENT: an 88 and a 30 are the same gold. ⚠️ Not purely a bug fix. Check the ramp
-  passes contrast on `--color-surface-overlay` first, and `--color-score-high/baseline/low` exist in
-  `globals.css:75-77` with **nothing referencing them**, so this is the moment to move all three onto
-  the tokens (the light theme is otherwise stuck with the dark hexes). `FandexScoreBadge.test.ts:8`
-  pins them. Adjacent: the 0–10 user rating colour is written twice with different palettes
-  (`ActionCells.tsx:32` brand, `QuickActions.tsx:6` stock Tailwind).
-- **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
-
-### Settings: Your platforms + What you track ✅ 2026-08-27 — archived
-
-Both shipped and verified, and the streaming-chips follow-up is done too
-([docs/advanced-filters.md](docs/advanced-filters.md) §6–§6c, [docs/archive/history.md](docs/archive/history.md) (catalog growth §8)).
-Write-up → grep the archive for `Two per-user preferences`; rules → [AGENTS.md](AGENTS.md) and
-[[user-display-preferences]]; checks → [smoketest.md](smoketest.md) 13e-iii.
-
-**⬜ One thing left over: nothing uses the media-type setting to SPEND less.** Three places could,
-in value order: `/api/discover?q=` still fetches disabled types (the only real provider-call saving,
-since search is uncached and games are 2 of its 4 calls); `/api/library` and `/api/calendar` already
-take `?type=` and could default it from the setting, cutting a 1,942-item payload instead of
-filtering it in the browser; and the Discover fan-out could skip a disabled section. ⚠️ Only the
-first saves QUOTA — `_pageCache` keys carry no userId, so another visitor's games request in the
-same 15-minute window pays anyway.
+The filter panel (Option A), Discover's pagination, the platform chips and the Settings picker all
+landed 2026-08-27; the Fandex Score colour, the last one open, landed 2026-09-01 (`fcfe431`).
+Panel analysis → [docs/advanced-filters.md](docs/advanced-filters.md), read it before touching the
+panel. Score write-up → [the archive](docs/archive/history.md), grep `ramp was written twice`.
+Settings → grep the archive for `Two per-user preferences`; rules → [AGENTS.md](AGENTS.md) and
+[[user-display-preferences]]; checks → [smoketest.md](smoketest.md) 13e-iii. **The three things
+that outlived the section are in "Still open elsewhere" below.**
 
 ## Still open elsewhere
+
+- **⬜ The 0–10 user rating colour is written twice with different palettes** (`ActionCells.tsx:32`
+  brand, `QuickActions.tsx:6` stock Tailwind). Left over from feedback item A, deliberately not
+  bundled with the Fandex Score fix: same class of duplication, different ramp, wants its own look.
+
+- **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
+
+- **⬜ Nothing uses the media-type setting to SPEND less.** Three places could, in value order:
+  `/api/discover?q=` still fetches disabled types (the only real provider-call saving, since search
+  is uncached and games are 2 of its 4 calls); `/api/library` and `/api/calendar` already take
+  `?type=` and could default it from the setting, cutting a 1,942-item payload instead of filtering
+  it in the browser; and the Discover fan-out could skip a disabled section. ⚠️ Only the first saves
+  QUOTA — `_pageCache` keys carry no userId, so another visitor's games request in the same
+  15-minute window pays anyway.
 
 - **✅ Facet pills matched nothing on Library + Wishlist: FIXED 2026-08-28**, verified on the real
   account (0 → 5 titles). Both routes ship server-computed `facetIds`; the client derivation is
   deleted. → [the archive](docs/archive/history.md) "The facet pills that matched nothing"
 
-- **⬜ `/api/*` responses are NOT COMPRESSED, in dev or on prod — and `/api/library` is 8.63 MB.**
-  Found while pricing the facet fix, 2026-08-28. Next's `compress: true` and Railway's edge both
-  cover pages and static only: `GET /discover` returns `Content-Encoding: gzip`, `GET
-  /api/discover/facets` returns no encoding header at all. **8.63 MB raw → ~2.0 MB gzipped, a
-  6.6 MB saving on ONE request** — 5.7× the whole facet fix, and more than every trimming idea
-  below combined. ⚠️ **This is the lever; don't intern or trim anything until it is pulled.** Not
-  bundled into the facet fix because it needs its own verification: streaming, `Content-Length`,
-  and whether Railway's proxy re-buffers. ⚠️ Re-measure rather than trusting this line —
-  `curl -sI -H 'Accept-Encoding: gzip'` against a page and an `/api/` route, compare the headers.
+- **✅ `/api/*` compression: DONE and LIVE on prod, 2026-09-01** (`a4edd5d`). `/api/library` is
+  **9.77 MB → 2.23 MB, 4.39×**, and Railway's edge passes it through unchanged (`/api/discover` on
+  fandex.org answers `Content-Encoding: gzip`, `Content-Length: 12901`, `Vary: Accept-Encoding`),
+  which was the one thing that could only be checked after deploying. The cause was Next's, not
+  ours: `send-response.js` copies a route handler's headers with `appendHeader`, which stores even a
+  single value as an ARRAY, so `compression`'s `compressible(Content-Type)` filter rejects every
+  JSON response in the app. `lib/compressResponse.ts` does it instead. Full write-up →
+  [the archive](docs/archive/history.md), grep `gzip /api/`.
+
+  ⚠️ **The field-trimming item below is now worth far less than it reads.** Its 4.7 MB was priced
+  against an 8.63 MB raw payload; the same fields gzip down with everything else, so the saving is
+  roughly a quarter of the stated figure and still carries the whole risk.
 
 - **⬜ The list payload carries ~4.7 MB that only the DETAIL page reads.** `/api/library`, 1,943
   items: `cast` 1,183 KB · `description` 1,014 KB · `images` 966 KB · `storeLinks` 853 KB ·
@@ -216,7 +220,7 @@ same 15-minute window pays anyway.
 
 - **✅ Catalog growth: DONE, and the backfill is running** (Nils 2026-08-27, built out 2026-08-27/28, `4ab0066`…`7ef2c62`). All five phases shipped: the catalog is served from our own DB, scores and the pool no longer scale with it, TMDB's six-month cache cap is enforced, and blobs are reclaimed by size. **The runbook — the env switches, what to watch in `/api/health`, the open IGDB question — is [docs/catalog-growth.md](docs/catalog-growth.md)**; every measurement and the phase history are in [the archive](docs/archive/history.md).
 
-  **The only open action is one env var.** Watch `/api/health` → `catalog.browse.windows`; when a type's `future` count reaches 200 (49/49/29 on 2026-08-28), set `CATALOG_BROWSE=1` and that section serves from the DB at zero provider calls. ⚠️ Do not raise `BACKFILL_PAGES` without checking Railway spend first — the pacing is the safety feature, not a conservative default.
+  ⚠️ **"The only open action is one env var" was true until 2026-09-01 and is not any more.** All three `:future` lanes are `exhausted`, the windows are DRAINING (movie 49 → 35, show 49 → 26 in four days) and none will reach 200 by waiting. It is a decision now → **"Needs Nils" item 1**. ⚠️ Do not raise `BACKFILL_PAGES` without checking Railway spend first — the pacing is the safety feature, not a conservative default.
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
 

@@ -48,12 +48,30 @@ Railway usage page before raising it, and raise it a little rather than a lot.
 - **`browse.windows`** — the number that decides the next action. When a type's `future`
   count reaches `browse.min`, set `CATALOG_BROWSE=1` and that section stops costing
   provider calls. It is per type, so movies can go local while games are still filling.
+
+  ⚠️ **Measured 2026-09-01: it will not get there by waiting, and that is structural.**
+  All three `:future` lanes are `exhausted: true`, so nothing refills them, while the
+  future window is a rolling **18 months that DRAINS** as release dates pass. Movie went
+  **49 → 35** and show **49 → 26** in four days, against a `min` of 200; game is 74, up
+  from 29, and also retired. **A one-shot paginated sweep cannot fill a window that
+  empties itself.** This is a design decision now, not a watch item → [TASKS.md](../TASKS.md)
+  "Needs Nils" item 1. ⚠️ Note also that `resetBackfill()` (`catalogBackfill.ts:222`) is
+  exported and wired to NOTHING: no route, no script, so a retired lane cannot currently
+  be revived on prod at all.
 - **`retention.expired`** — must stay 0. ⚠️ **Not a threshold: a provider term being
   breached.** TMDB's API Terms §1.C cap caching at six months. It is logged as an
   `error`, not a warning, and should be unreachable while the fill job drains.
 - **`backfill.lanes[].strikes`** — a lane needs three consecutive empty pages to retire.
   One lane striking is normal (`game:past` will, while RAWG is quota-latched); every
   lane striking means providers are failing, not that the windows are finished.
+
+  ⚠️ **`game:past` did retire, at page 1 with 0 added, and three strikes did not save it.**
+  The counter buys three cheap empty pages against a TRANSIENT outage. RAWG's quota latch
+  is not transient, so the lane still retired permanently, silently, and for the whole
+  month. `EMPTY_STRIKES` raises the cost of a false retirement; it does not make one
+  impossible, and a `exhausted: true` on a lane whose provider is latched should be read
+  as "provider down", not "window finished". Cross-check against `providerCalls` before
+  believing a lane is done.
 - **`backfill.lanes[].page` / `.added`** — climbing means it is working. `items` against
   `backfill.maxItems` is the runway.
 - **`housekeeping.fileMb`** — inert until it passes `HOUSEKEEPING_START_MB`.

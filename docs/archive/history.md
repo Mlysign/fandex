@@ -23,6 +23,144 @@ full history.
 
 ---
 
+## gzip /api/ responses, which Next installs a middleware for and then silently filters out (2026-09-01)
+
+`a4edd5d`, live on prod the same day. **`/api/library` went 9.77 MB to 2.23 MB, a 4.39x ratio and
+7.55 MB off one request.** It was carried in TASKS.md as "the lever, don't trim anything until it
+is pulled" since 2026-08-28, priced there at 8.63 MB, which the payload has since outgrown.
+
+### The bug was Next's, and it takes one line of its own debug output to see
+
+`next.config.ts` leaves `compress` at its default `true`, and
+`next/dist/server/lib/router-server.js` really does install the `compression` middleware on **every**
+request. Pages come back gzipped. Route handlers do not:
+
+```
+GET /discover             -> Content-Encoding: gzip
+GET /api/discover/facets  -> no encoding header at all
+```
+
+Reproduced against a local `next start` with no proxy in the way, which is what ruled out Railway's
+edge before any code was read. Running that same server under `DEBUG=compression`:
+
+```
+compression [ 'application/json' ] not compressible
+compression no compression: filtered
+```
+
+**Note the array.** `compression`'s filter is `compressible(res.getHeader("Content-Type"))` and
+`compressible` takes a **string**. The array is Next's own doing: `server/send-response.js` copies a
+route handler's Web `Headers` onto the Node response with `res.appendHeader(name, value)`, and
+`NodeNextResponse.appendHeader` (`server/base-http/node.js`) is unconditionally
+`setHeader(name, [...currentValues, value])`. So every header a route handler sets lands as a
+single-element array, the filter rejects it, and the middleware never reaches the size check or
+`Accept-Encoding`. Pages never go through `sendResponse`, which is exactly why they are the half
+that works. Nothing in our config can reach it either: `compression()` is constructed inside Next
+with no options, so its filter is not ours to replace.
+
+The give-away in the headers, worth knowing for next time: the uncompressed `/api/` response's
+`vary` lacked `Accept-Encoding`. The middleware adds that BEFORE it checks the size, so its absence
+says the request was rejected at the filter, not skipped for being small. The other tell is the
+casing: a page's `Vary` is Node's `setHeader`, an `/api/` route's `vary` comes from a Web `Headers`
+object, and the two halves of the app were visibly taking different paths.
+
+### What shipped
+
+`src/lib/compressResponse.ts`, wired into `withUser` and `withOptionalUser` (28 routes) plus
+`/api/discover` and `/api/facet`, which predate those wrappers, do their own session handling, and
+are the two biggest anonymous payloads. Measured on a local prod build against the real database,
+and re-measured on prod after deploy:
+
+| route | plain | gzip | ratio |
+|---|---|---|---|
+| `/api/library` (1,943 items) | 9.77 MB | 2.23 MB | **4.39x** |
+| `/api/discover` | 59,393 B | 12,901 B | **4.60x** |
+| `/api/calendar/popular` | 10,425 B | 2,387 B | **4.37x** |
+| `/api/facet` (person) | 12,221 B | 4,025 B | **3.04x** |
+| `/api/discover/facets?q=a` | 1,367 B | unchanged | under the 1,400 B threshold |
+
+Every gzipped body gunzips **byte-identical** to the uncompressed one, carries a correct
+`Content-Length`, and gains `Vary: Accept-Encoding`. In the browser, `/api/discover` reports
+`encodedBodySize` 14,721 against `decodedBodySize` 64,331, the page renders and the console is clean.
+
+**Railway passes it through unchanged**, which was the one question that could not be answered
+locally and the reason this was never bundled into the facet fix: `GET https://fandex.org/api/discover`
+answers `Content-Encoding: gzip`, `Content-Length: 12901`, `vary: Accept-Encoding`. No re-buffering,
+no stripped header, `Content-Length` intact.
+
+### The rules it keeps, each of which is a way to get this wrong quietly
+
+- **`Vary: Accept-Encoding` always.** Without it any shared cache can hand a gzipped body to a
+  client that did not ask for one.
+- **The threshold is UTF-8 BYTES, not `String.length`.** Pinned by a test using 500 astral
+  characters, where `.length` is 1,000 and the byte length is ~2,000. This repo has already lost a
+  cache to that distinction (see the facetCache freshness token).
+- **Never double-encode, never touch a `Set-Cookie` response** (copying a `Headers` holding several
+  risks collapsing them into one comma-joined value, and every cookie-setting route here answers
+  well under the threshold anyway), never touch a non-compressible type.
+- **gzip ASYNCHRONOUSLY.** `zlib.gzipSync` on 8 MB blocks the event loop for ~150 ms and this is one
+  always-on process serving everybody; the callback form runs on libuv's threadpool. Measured cost
+  on the 9.77 MB response: **+133 ms** wall clock, against 7.55 MB less to send.
+- **Best-effort throughout.** Reading the body disturbs it, so `res` stops being a valid thing to
+  return the moment `arrayBuffer()` succeeds; every later failure falls back to a response rebuilt
+  from the buffer, never to `res`.
+
+### What this changes about the trimming plan
+
+`/api/library` carrying ~4.7 MB that only the detail page reads is still true, but it was priced
+against the RAW payload. Those fields gzip with everything else, so the real saving is roughly a
+quarter of the stated figure, and it still carries the whole risk of dropping a field from a payload
+two routes and one component share. **Compression was 5.7x that item on paper and is worth
+considerably more than that now.**
+
+## The Fandex Score ramp was written twice, and the tooltip used neither copy (2026-09-01)
+
+`fcfe431`. Nils's feedback item A from the 12th smoke test: `Tooltip.tsx` hardcoded
+`var(--color-accent)` for the score, so the explainer's number was **score-independent**. An 88 and
+a 30 rendered in the same gold, one line above a band word reading "strong match" or "weak match".
+The card and the item page both call `fandexScoreColor()`; the tooltip was the third surface and it
+disagreed with the other two.
+
+Fixing that line alone would have left the real problem. `--color-score-high/baseline/low` had been
+in `globals.css` since the design landed and **nothing referenced them**, while
+`FandexScoreBadge.tsx` carried the same three hexes inline. Two copies of one palette, and only the
+copy nobody used had a light theme. `fandexScoreColor()` returns the tokens now.
+
+**Two traps on the way, both already documented, both easy to walk into:**
+
+1. **The tokens had to move OUT of `@theme` into a plain `:root`.** Their only consumer is an inline
+   `style={{ color }}` and no utility class names them, so Tailwind v4 tree-shakes them: the `var()`
+   would resolve to the empty string, the declaration would be invalid, and every score on every
+   card, tooltip and item page would silently inherit its parent's colour, with tsc, lint, the tests
+   and the build all green. → [[tailwind-theme-tree-shaking]]
+2. **The light values had to move to `:root[data-theme="light"]`.** A plain `:root` and
+   `[data-theme="light"]` have EQUAL specificity, and the score block sits later in the file, so the
+   dark ramp would have won in light theme. The extra `:root` is what makes the override stick. The
+   `--fill-*` tokens already use this shape; the score ramp did not.
+
+**Contrast, measured on `--color-surface-overlay` before changing anything**, since this was not
+purely a bug fix:
+
+| | high | baseline | low |
+|---|---|---|---|
+| dark `#201C18` | 10.43:1 | 10.28:1 | 7.93:1 |
+| light `#FFFFFF` | 4.09:1 | 5.92:1 | 3.76:1 |
+
+The tooltip renders the score at 24px, where WCAG's 3:1 large-text bar applies, so all six pass. Two
+light values would **not** clear 4.5:1 at body size, which is noted beside the tokens so nobody
+reuses the ramp for small light text without re-measuring. In dark it also beats the gold it
+replaces (7.03:1) on all three.
+
+**Verified in the browser on real data**, not asserted: the three tokens resolve
+(`#5fe39a` / `#cfc9be` / `#f0a04b`), so nothing was tree-shaken, and every card's score paints its
+band colour; flipping `data-theme="light"` swaps all three and repaints a live score
+`rgb(240,160,75)` to `rgb(185,116,31)`, where it would have stayed dark before. The explainer itself
+was opened through the **long-press Sheet**, because its hover twin cannot be triggered in the
+browser pane where `(hover: hover)` is false: "Cars", score 56, "weak match", painted
+`rgb(240,160,75)` and byte-equal to the same card's badge. It was `#c8a24b` gold before.
+
+Dark theme is otherwise pixel-identical, since the token values are the hexes the component carried.
+
 ## PL1 / PL2 / PL3 / PL5 — the platform capability findings, shipped (2026-08-23)
 
 Four of the five `PL` tasks from the `PLATFORMS.md` re-read. PL4 (the Letterboxd
