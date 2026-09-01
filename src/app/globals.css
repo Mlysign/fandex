@@ -66,15 +66,9 @@
   --color-warning-subtle: rgb(240 160 75 / 0.14);
   --color-danger-subtle:  rgb(229 103 76 / 0.14);
 
-  /* ---- Fandex Score badge ramp --------------------------------------------
-     NOTE: these are the design's palette values, kept. The NUMERIC band
-     cutoffs (>=80/65-79/<65) are NOT adopted — src/components/FandexScoreBadge.tsx
-     keeps its existing baseline-relative thresholds (D-B, docs/ui-overhaul.md §8):
-     Q19 recentered the score on the user's own mean rating, so there is no
-     fixed neutral point to band against. */
-  --color-score-high:     #5FE39A;
-  --color-score-baseline: #CFC9BE;
-  --color-score-low:      #F0A04B;
+  /* The Fandex Score ramp used to sit here. It moved to a plain :root block
+     below on 2026-09-01, because it is read ONLY through an inline var() and
+     @theme would tree-shake it. See that block. */
 
   /* ---- Type scale  (size · line-height · weight; family noted) ----------- */
   --text-eyebrow: 9px;   --text-eyebrow--line-height: 1;    --text-eyebrow--font-weight: 400;  --text-eyebrow--letter-spacing: 0.13em; /* mono, UPPERCASE */
@@ -192,9 +186,10 @@
   --color-success: #1F8F5B;
   --color-warning: #B9741F;
 
-  --color-score-high:     #1F8F5B;
-  --color-score-baseline: #6B6357;
-  --color-score-low:      #B9741F;
+  /* The score ramp's light values moved to the :root[data-theme="light"] block
+     below, alongside the dark ones. They cannot stay here: this block and a
+     plain `:root` have the SAME specificity, so a later `:root` would win and
+     light theme would silently render the dark ramp. */
 
   /* Facet classes, darkened for light surfaces (the dark values sit at 2–3:1 on
      white). Same four-way split; see the :root block below for the rationale. */
@@ -340,6 +335,52 @@
   --fill-idle-border-hover: rgb(27 23 18 / 0.22);
   --fill-accent-hover: rgb(133 102 25 / 0.20);
   --fill-accent-border-hover: rgb(133 102 25 / 0.32);
+}
+
+/* ---- Fandex Score ramp (moved out of @theme 2026-09-01) --------------------
+   The design's palette values, unchanged. What changed is where they live and
+   who reads them.
+
+   They were declared in `@theme` and referenced by NOTHING for as long as they
+   existed, while `FandexScoreBadge.tsx` carried the same three hexes inline.
+   That is two copies of a palette, and only one of them had a light theme.
+   `fandexScoreColor()` returns these tokens now, so the ramp is defined once.
+
+   PLAIN `:root`, NOT `@theme`, and that is load-bearing: the only consumer is
+   an inline `style={{ color }}`, no utility class ever names these, and
+   Tailwind v4 TREE-SHAKES an unreferenced @theme custom property. It would
+   resolve to the empty string, the declaration would be invalid, and every
+   score would inherit its parent's colour with no build, lint or test error.
+   → AGENTS.md, [[tailwind-theme-tree-shaking]]
+
+   `:root[data-theme="light"]` rather than the plain `[data-theme="light"]`
+   block above, because that block and a plain `:root` have EQUAL specificity
+   and this one comes later in the file, so it would have overridden the light
+   theme. The extra `:root` is what makes it win.
+
+   NOTE: the NUMERIC band cutoffs from the design (>=80 / 65-79 / <65) are still
+   not adopted. FandexScoreBadge.tsx keeps its baseline-relative thresholds
+   (D-B, docs/ui-overhaul.md §8): Q19 recentered the score on the user's own
+   mean rating, so there is no fixed neutral point to band against.
+
+   Contrast, measured on --color-surface-overlay (the tooltip's surface), which
+   is the tightest surface any of these lands on:
+     dark  #201C18 : high 10.43:1 · baseline 10.28:1 · low 7.93:1  (all AA)
+     light #FFFFFF : high  4.09:1 · baseline  5.92:1 · low 3.76:1
+   The tooltip renders the score at 24px, where WCAG's large-text bar of 3:1
+   applies and all six pass. Two of the light values would NOT clear 4.5:1 at
+   body size, so do not reuse this ramp for small light-theme text without
+   re-measuring. */
+:root {
+  --color-score-high:     #5FE39A;
+  --color-score-baseline: #CFC9BE;
+  --color-score-low:      #F0A04B;
+}
+
+:root[data-theme="light"] {
+  --color-score-high:     #1F8F5B;
+  --color-score-baseline: #6B6357;
+  --color-score-low:      #B9741F;
 }
 
 /* ---- Pointer cursor on controls (2026-08-18) ------------------------------

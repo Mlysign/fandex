@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
 import type { MediaType } from "@/types";
 import { TypeBadge } from "@/components/Badges";
-import { matchStrength } from "@/components/FandexScoreBadge";
+import { matchStrength, fandexScoreColor } from "@/components/FandexScoreBadge";
 import type { Reason } from "@/components/discovery/types";
 
 // T15 (2026-07-29) — rebuilt as a score explainer. The old version duplicated
@@ -96,7 +96,13 @@ export function TooltipBody({ item }: { item: TooltipItem }) {
       {scored ? (
         <>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-2xl" style={{ color: "var(--color-accent)" }}>{rounded}</span>
+            {/* The score's own band colour, not the accent. This hardcoded
+                `--color-accent` until 2026-09-01, which made the tooltip's
+                number score-INDEPENDENT: an 88 and a 30 rendered in the same
+                gold, one line above a band word that said "strong" or "weak".
+                The card and the item page both call fandexScoreColor(); this is
+                the third surface and it disagreed with the other two. */}
+            <span className="font-serif text-2xl" style={{ color: fandexScoreColor(item.fandexScore!, item.fandexCenter ?? null) }}>{rounded}</span>
             <span className="text-xs text-text-secondary capitalize">{band}</span>
           </div>
           {(rated || item.libraryStatus) && (

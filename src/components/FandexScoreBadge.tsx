@@ -24,9 +24,19 @@
 // against the wider, unbounded sum.
 const BAND_MARGIN = 10;
 
+// 2026-09-01: returns the design TOKENS rather than the three hexes it used to
+// carry inline. The tokens existed in globals.css from the start and nothing
+// read them, so the ramp was written twice and only the copy nobody used had a
+// light theme. One definition now, in a plain `:root` (see the long note beside
+// them: in `@theme` Tailwind would tree-shake a token no utility class names,
+// and every score would silently inherit its parent's colour).
 export function fandexScoreColor(score: number, center: number | null = 50): string {
   const c = center ?? 50;
-  return score >= c + BAND_MARGIN ? "#5FE39A" : score <= c - BAND_MARGIN ? "#F0A04B" : "#CFC9BE";
+  return score >= c + BAND_MARGIN
+    ? "var(--color-score-high)"
+    : score <= c - BAND_MARGIN
+      ? "var(--color-score-low)"
+      : "var(--color-score-baseline)";
 }
 
 export function matchStrength(score: number, center: number | null = 50): string {
