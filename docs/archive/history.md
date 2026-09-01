@@ -5130,3 +5130,92 @@ There is still **no relevance term anywhere in the search**. `find()`'s local ha
 *Mr. Lucky* has more votes, and the merged list has the same property. That is a ranking design
 change across all four sorts, and this repo's own precedent is to not slip one in beside a bug fix.
 → `TASKS.md`.
+
+---
+
+# Google sign-in, an identity-only provider (2026-09-01)
+
+`c0f0390` (feature) · `e2966bb` (the coloured G) · `b9df0ab` (Google Cloud state)
+
+## Why
+
+Nils: "do you think its a good idea to let users create a new account without linking an existing
+one? i am afraid we are loosing potential users because they dont have an account on those
+platforms." The answer was yes, and the funnel was worse than "some people lack those accounts":
+of the four doors offered, TMDB and RAWG are effectively developer accounts, Steam is games-only,
+Trakt is niche, and the RAWG option asks a stranger to type another site's password into
+fandex.org. A visitor who simply likes films and games had no door at all.
+
+**Email plus password was considered and rejected** as far more expensive: password hashing, a
+transactional mail vendor as a new sub-processor, verification and reset token tables that inherit
+the request-path ceiling rule, credential-stuffing defence, and an ongoing support load on a solo
+dev. A magic link is the middle option if the anti-Google slice ever matters; it skips passwords
+and resets but still takes on the mail vendor. Anonymous/guest accounts were rejected outright
+because they fight PR15's anon write gate.
+
+## The new shape: an identity provider that holds no library
+
+`AuthProvider` is a SUPERSET of `Source`. `Source` means "a place media comes from" and every value
+in it has a sync-registry entry; `AuthProvider` means "a thing that can log you in". Putting
+`google` in `Source` was the one-line option and would have made it a legal value for a store link,
+a release date and an `/api/sync` target. `zSource` still rejects it for `/api/sync`; a new
+`zAuthProvider` is what lets `/api/auth/disconnect` accept it.
+
+## The trap it surfaced, which nothing would have caught
+
+`staleProviders()` reads "this identity has no `sync_log` row" as "overdue". Correct for a provider
+that CAN sync, permanently wrong for one that cannot. A google identity would have been due
+**forever**: `MyStuffView` flips `autoSyncing` on and calls `syncToCompletion(due)` on mount, so
+every load of `/library` and `/wishlist` would fire a `POST /api/sync` and show the syncing spinner,
+for the life of the account.
+
+**It would never have shown up in a log.** `providerQueue` is registry-filtered, so an unknown id
+drains to an empty queue and the route answers `done: true`, 200. `SyncPostSchema.providers` is
+`z.array(z.string())`, so it does not even 400. `IDENTITY_ONLY_PROVIDERS` in `syncClient.ts` is the
+guard, with a test asserting `fetch` is never called for a google-only account.
+
+## Decisions
+
+- **Scopes are `openid profile`, NOT `email`.** The `sub` claim is the identity. Requesting the
+  address would add a personal-data category, a privacy-policy line and a hand-written block in
+  `/api/account/export`, for nothing the app does. One string from reversing.
+- **`access_type=online`**, so Google issues no refresh token, and the stored access token is the
+  empty string. Nothing calls a Google API after login.
+- **One env var for the id, not two.** A Google client id is public by construction (it rides in the
+  consent URL), so `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is read by both the button and the route, and they
+  cannot disagree about whether Google is configured. Needs the Dockerfile `ARG`.
+
+## The coloured G
+
+Nils: "if its google policy, then use the colored G." It is, and firmer than first described.
+Google's guidelines list "monochrome versions of the Google 'G'" under **Don't**, forbid changing
+the logo's colour at all, and open by making compliance **a condition of app verification**. So the
+no-brand-colour house rule has exactly one documented exception, `components/auth/GoogleMark.tsx`.
+
+⚠️ **Read those guidelines in ENGLISH.** The German page is an AI translation that drops an "other
+than" from "Don't put the standard color Google 'G' icon on a colored background **other than**
+light, dark, or neutral", inverting it into forbidding what is required. Reading the German first
+led toward a white tile the rules never ask for.
+
+`brandMarksNoGoogle.test.ts` fails if a `Google` key returns to `brandMarks.ts`, the generator or
+`BrandGlyph`'s map, if the four fills change, or if a fill becomes `currentColor`. The breach is
+invisible: a monochrome G renders perfectly and looks tidier against this palette.
+
+⚠️ One guideline is knowingly unmet: the button font should be **Google Sans Medium**. Self-hosting
+a font for one button was judged not worth the bundle, and the CSP blocks external font hosts.
+
+## The Google Cloud project
+
+Project **fandex**, OAuth client **"Fandex web"**, consent screen External, app name Fandex, support
+and developer contact `mlynareknils@gmail.com`, authorised domain `fandex.org`, home/privacy/terms
+pointing at the live legal pages. Redirect URIs for prod and `localhost:3000`. **Publishing status:
+In production.**
+
+- **No verification review was needed.** The confirm dialog states the rule: required only above 10
+  domains, with an uploaded logo, or with sensitive/restricted scopes. ⚠️ **Do not upload an app
+  logo** — the Branding page says that alone forces a verification submission.
+- **"Publish app" stays disabled until Branding is complete** (home page, privacy, terms). The
+  Audience page's error points at Branding without naming the fields.
+- A client secret is shown **once** and is unrecoverable after; the console states viewing and
+  downloading are no longer available. Generating a second one is the supported fix and both stay
+  valid.
