@@ -49,25 +49,45 @@ Everything else in this file is either done or a standing constraint.
    migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
    from the moment it deploys**. The rows already merged there do not fix themselves.
 
-   **Where the shell is:** the `releaseradar` service in Railway has a **Console** tab (and a "Copy SSH command" button beside it). Seen open 2026-08-29 and not driven further than connecting, so treat it as a starting point rather than a verified route. **What to run, on the Railway box, after the deploy lands:**
+   **✅ The report HAS now been run against prod (2026-09-01). `--apply` has NOT.** Three offenders, not the four seen locally. Details in the "Needs Nils" list is wrong; they are here, because this is where the decision lives:
+
+   | link | sits on (wrong) | belongs to |
+   |---|---|---|
+   | `tmdb:387` SpongeBob SquarePants | **Being John Malkovich** (movie) | SpongeBob SquarePants (show) |
+   | `tmdb:67195` Legion | **The Raid 2** (movie) | Legion (show) |
+   | `tmdb:1425` House of Cards | **Ratatouille** (movie) | House of Cards (show) |
+
+   Each has `episodeRowsOnWrongItem: 0` and one `user_item_state` row the script deliberately leaves alone (it is the movie's own row and legitimate).
+
+   ⚠️ **A SECOND fault the repair script does NOT fix: the three movies carry the SHOW's slug**, and slugs are immutable by contract (`ensureItemSlug` assigns once). Verified live on prod:
+   `/movie/spongebob-squarepants` serves **Being John Malkovich**, `/movie/legion` serves **The Raid 2**, `/movie/house-of-cards` serves **Ratatouille**. Those are public, crawlable urls. `grep -n slug scripts/repair-cross-type-links.mjs` shows it only ever READS the column. Fixing the links leaves this behind, so it needs its own pass.
+
+   **How to run it, corrected.** ⚠️ **There is no `scripts/` directory in the runtime image** — it holds only `.next`, `data`, `docker-entrypoint.sh`, `node_modules`, `package.json`, `public`, `server.js`. The command this section used to give could never have worked. Ship the script in first, and write it to **`/app/`** (not `/tmp`) so Node resolves `better-sqlite3` from `/app/node_modules`:
    ```
-   node scripts/repair-cross-type-links.mjs data/rr.db           # report only, read it first
-   node scripts/repair-cross-type-links.mjs data/rr.db --apply
+   railway ssh -- sh -c "echo '<base64 of the script>' | base64 -d > /app/repair.mjs"
+   railway ssh -- sh -c "node /app/repair.mjs /app/data/rr.db"            # report
+   railway ssh -- sh -c "node /app/repair.mjs /app/data/rr.db --apply"    # repair
+   railway ssh -- sh -c "rm -f /app/repair.mjs"
    ```
+   → [[railway-cli-and-tool-sandbox]] for the CLI setup this depends on.
    It is idempotent and prints its whole plan before touching anything. On the local database it
    moved 4 links (with their episode rows and external ids) and scrubbed 4 merged payloads.
    ⚠️ **Prod's numbers may differ** — it syncs the same Trakt account, so expect the same four, but
    read the report rather than assuming. ⚠️ **Copy the `-wal` and `-shm` alongside the `.db` if you
    rehearse on a copy**; a plain `cp data/rr.db` reads an older database and invented a 9-row
    discrepancy while this was being written.
-   ⚠️ **A restore drill is due**: migrations 23–26 have landed since the last one passed
-   (2026-08-23), 23 rebuilds a table, and the standing rule is that a drill proves the backup you
-   had THAT day. **It needs the same shell** — there is no litestream binary and no bucket
-   credential outside the container, so no Claude session can run it. Same Console, three commands:
+   ✅ **The restore drill PASSED 2026-09-01, and it is no longer due.** Run over `railway ssh`, so
+   any future session can repeat it without Nils. Generation `c62d7dc17a0fd0cb`, replication lag
+   **369 ms**, snapshot index 6512 plus **475 WAL files** replayed, restored file
+   **142,024,704 bytes = byte-for-byte the size of live**, `integrity_check ok` on both, and **all
+   eight tables identical**: users 1 · user_identities 5 · media_items 4,556 · media_links 8,630 ·
+   media_external_ids 7,040 · user_library 1,941 · user_watchlist 97 · user_item_state 2,458.
+   Scratch file and uploaded scripts removed; `/app/data/rr.db` never touched. This proves
+   migrations 23–26 restore. Repeat it after the next schema change:
    ```
-   litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db
-   node scripts/verify-restore.mjs /tmp/restore-test.db     # wants integrity_check ok + 8 sane counts
-   rm /tmp/restore-test.db
+   railway ssh -- sh -c "litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db"
+   railway ssh -- sh -c "node /app/verify-restore.mjs /tmp/restore-test.db"   # ship it in first, see below
+   railway ssh -- sh -c "rm -f /tmp/restore-test.db*"
    ```
 
    **The half that COULD be done locally was, 2026-09-01, and both parts passed.** They are the two
