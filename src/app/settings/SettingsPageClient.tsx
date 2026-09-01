@@ -10,6 +10,7 @@ import { detectCountry } from "@/lib/detectCountry";
 import { syncToCompletion } from "@/lib/syncClient";
 import PanelHeader from "@/components/insights/PanelHeader";
 import SignInGate from "@/components/auth/SignInGate";
+import GoogleMark from "@/components/auth/GoogleMark";
 import PlatformPicker from "@/components/settings/PlatformPicker";
 import MediaTypePicker from "@/components/settings/MediaTypePicker";
 import type { PlatformOption } from "@/lib/platformKeys";
@@ -471,7 +472,11 @@ function SettingsContent() {
                         The real mark identifies it and the label is right
                         beside it. See components/BrandGlyph.tsx. */}
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface border border-border">
-                      <BrandGlyph source={p.key} size={18} />
+                      {/* Google is the one provider that must keep its own
+                          colours. BrandGlyph renders in the UI's text colour,
+                          which their branding guidelines forbid for the G.
+                          → components/auth/GoogleMark.tsx */}
+                      {p.key === "google" ? <GoogleMark size={18} /> : <BrandGlyph source={p.key} size={18} />}
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-text-primary truncate">{p.label}</p>
@@ -557,7 +562,7 @@ function SettingsContent() {
             {googleEnabled && !getIdentity("google") && (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
               <a href="/api/auth/google" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
-                <BrandGlyph source="google" size={15} />
+                <GoogleMark size={15} />
                 Connect Google
               </a>
             )}

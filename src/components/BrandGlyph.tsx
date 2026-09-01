@@ -35,8 +35,12 @@ import { BRAND_MARKS } from "@/lib/brandMarks";
 // no RAWG icon), `rt` / `metacritic` (no icon either), and `igdb-critics` (the
 // same IGDB mark would make it indistinguishable from plain `igdb`, and the two
 // are different numbers on the same row).
+// ⚠️ No `google` entry, on purpose (2026-09-01). This component renders every
+// mark in the UI's own text colour, and Google's sign-in branding guidelines
+// forbid a monochrome "G" and forbid changing its colour at all. Google is drawn
+// by components/auth/GoogleMark.tsx, which carries its own literal fills.
+// Adding it here would compile, look fine, and be a compliance breach.
 const MARK_BY_SOURCE: Record<string, string> = {
-  google: "Google",
   steam: "Steam",
   trakt: "Trakt",
   tmdb: "TMDB",

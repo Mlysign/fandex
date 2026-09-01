@@ -26,11 +26,14 @@ const WANT = {
   "TMDB": "siThemoviedatabase",
   "IGDB": "siIgdb",
 
-  // Login providers (2026-09-01). Google's own sign-in branding guidelines ask
-  // for the multi-colour "G"; this renders it monochrome in the UI's text
-  // colour like every other mark, because "no brand hue in ANY state" is a
-  // standing house rule here. Flagged for Nils rather than decided silently.
-  "Google": "siGoogle",
+  // ⚠️ "Google" is DELIBERATELY ABSENT and must stay that way (2026-09-01).
+  // simple-icons ships a single monochrome path, and every consumer of this file
+  // renders it in `currentColor`. Google's sign-in branding guidelines forbid
+  // exactly that ("Don't: Use monochrome versions of the Google 'G'") and make
+  // compliance a condition of app verification. The four-colour mark lives in
+  // components/auth/GoogleMark.tsx instead; brandMarksNoGoogle.test.ts fails if
+  // a key reappears here, because a monochrome G is a silent breach that looks
+  // completely fine on screen.
 
   // Streaming + console marks for the "Available on" filter (2026-08-27).
   // ⚠️ simple-icons no longer ships Nintendo, Xbox, Disney+, Prime Video or

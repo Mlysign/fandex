@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 import BrandGlyph from "@/components/BrandGlyph";
+import GoogleMark from "./GoogleMark";
 
 // The sign-in provider options — Trakt, Steam, RAWG — factored out of the login
 // page (src/app/page.tsx) so the H2c in-page SignInDialog renders the EXACT same
@@ -120,9 +121,13 @@ export default function AuthOptions({
           no brand hue in any state. Flagged, not silently decided. */}
       {googleEnabled && (
         <>
+          {/* GoogleMark, not BrandGlyph, and no GLYPH_CLASS: Google's branding
+              guidelines forbid a monochrome G on this button and forbid changing
+              its colour at all, so it must not inherit the text colour or take
+              the shared hover treatment. See GoogleMark.tsx. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href={`/api/auth/google${q}`} className={OPTION_CLASS}>
-            <BrandGlyph source="Google" size={18} className={GLYPH_CLASS} />
+            <GoogleMark size={18} />
             Continue with Google
           </a>
           {/* The divider says the four below are a different KIND of option:
