@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/session";
 import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
 import { BadRequestError } from "@/lib/validate";
 import { log, errorFields } from "@/lib/logger";
+import { compressResponse } from "@/lib/compressResponse";
 import type { SessionUser } from "@/types";
 
 // Per-user cap across all authed routes (S3/P7). These routes proxy third-party
@@ -32,7 +33,10 @@ export function withUser<A extends unknown[]>(
     if (limited) return limited;
     const path = (() => { try { return new URL(req.url).pathname; } catch { return req.url; } })();
     try {
-      return await handler(req, session, ...rest);
+      // gzip on the way out. Next installs the `compression` middleware but its
+      // filter rejects every route handler response, so this is the only place
+      // an /api/ payload gets compressed at all. → lib/compressResponse.ts
+      return await compressResponse(req, await handler(req, session, ...rest));
     } catch (e) {
       // S8: schema-validation failures are the caller's fault → 400, not 500.
       if (e instanceof BadRequestError) {
@@ -90,7 +94,10 @@ export function withOptionalUser<A extends unknown[]>(
     if (limited) return limited;
     const path = (() => { try { return new URL(req.url).pathname; } catch { return req.url; } })();
     try {
-      return await handler(req, session, ...rest);
+      // gzip on the way out. Next installs the `compression` middleware but its
+      // filter rejects every route handler response, so this is the only place
+      // an /api/ payload gets compressed at all. → lib/compressResponse.ts
+      return await compressResponse(req, await handler(req, session, ...rest));
     } catch (e) {
       if (e instanceof BadRequestError) {
         log.warn("api_bad_request", { method: req.method, path, userId: session?.userId ?? null, error: e.message });

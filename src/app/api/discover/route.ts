@@ -16,6 +16,7 @@ import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/di
 import { withCatalogFallback, catalogSectionPage, catalogBrowseReady } from "@/lib/catalogFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
+import { compressResponse } from "@/lib/compressResponse";
 
 const TMDB_KEY = process.env.TMDB_API_KEY!;
 const RAWG_KEY = process.env.RAWG_API_KEY!;
@@ -230,7 +231,15 @@ function sortByDate<T extends { releaseDate?: string | null }>(items: T[]): T[] 
   });
 }
 
+// This route predates `withOptionalUser` and does its own session handling, so
+// it does not inherit that wrapper's gzip. Wrapped here instead: it is the
+// browse feed, it is what a crawler hits, and it is one of the two biggest
+// JSON payloads the app serves. → lib/compressResponse.ts
 export async function GET(req: NextRequest) {
+  return compressResponse(req, await handleDiscover(req));
+}
+
+async function handleDiscover(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
     const q = searchParams.get("q")?.trim();

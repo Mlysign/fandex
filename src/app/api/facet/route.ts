@@ -4,12 +4,20 @@ import type { PublicFacetRef } from "@/lib/detail/publicFacetDetail";
 import { buildPublicFacetDetail, isFacetSort } from "@/lib/detail/publicFacetDetail";
 import { prefixToKind, isFacetPrefix } from "@/lib/facetUrl";
 import { getSession } from "@/lib/session";
+import { compressResponse } from "@/lib/compressResponse";
 
 // P17 — public facet data, paged. Powers the "Load more" / sort controls on the
 // public facet pages. Unauthenticated on purpose (same data the SSR page renders,
 // just a deeper page). The personal overlay is a SEPARATE authed call
 // (/api/facet/mine); nothing user-specific is ever returned here.
+// No `withOptionalUser` here either (see the note in /api/discover), so gzip is
+// wired in explicitly. This is the "Load more" path on the public facet pages,
+// which is the crawl-depth multiplier. → lib/compressResponse.ts
 export async function GET(req: NextRequest) {
+  return compressResponse(req, await handleFacet(req));
+}
+
+async function handleFacet(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const prefix = searchParams.get("prefix");   // "person" | "tag" | "studio"
   const key = searchParams.get("key");         // the normalized facet key
