@@ -115,4 +115,35 @@ describe("staleProviders", () => {
     expect(staleProviders(ident("steam"), fresh, NOW)).toEqual([]);
     expect(staleProviders(ident("steam"), old, NOW)).toEqual(["steam"]);
   });
+
+  // 2026-09-01, added with Google sign-in. An identity-only provider has no
+  // library, so it never writes a sync_log row, so "never synced" — which the
+  // test above correctly reads as stale for a real provider — would make it due
+  // FOREVER. MyStuffView acts on this list directly: it would flip the syncing
+  // spinner on and POST /api/sync on every load of /library and /wishlist, for
+  // the life of the account, and never log an error, because providerQueue is
+  // registry-filtered and quietly answers done on an empty queue.
+  describe("identity-only providers", () => {
+    it("never reports google as due, even having never synced", () => {
+      expect(staleProviders(ident("google"), [], NOW)).toEqual([]);
+    });
+
+    it("still reports a real provider that is due alongside it", () => {
+      expect(staleProviders(ident("google", "steam"), [], NOW)).toEqual(["steam"]);
+    });
+
+    it("leaves a google-only account with an EMPTY list, which syncToCompletion no-ops on", async () => {
+      const due = staleProviders(ident("google"), [], NOW);
+      expect(due).toEqual([]);
+      // The contract that makes the empty list safe: an explicit empty array is
+      // "nothing is due", never "sync everything". /api/sync's providerQueue
+      // falls back to the FULL registry on an empty `providers`, so sending one
+      // would turn this no-op into a full sync of every provider.
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      await syncToCompletion(due);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+  });
 });

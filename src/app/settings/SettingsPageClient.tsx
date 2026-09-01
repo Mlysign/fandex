@@ -17,6 +17,14 @@ import { resetKnownPlatforms } from "@/lib/useKnownPlatforms";
 import { resetSessionProbe } from "@/lib/sessionProbe";
 import { Settings as SettingsIcon } from "lucide-react";
 
+// Same gate as components/auth/AuthOptions.tsx: hide Google everywhere until the
+// deploy actually has the credential, so a half-configured environment shows the
+// old four options rather than a control that errors. Module scope because Next
+// inlines a NEXT_PUBLIC_ var into the client bundle at build time.
+// ⚠️ Needs the matching Dockerfile ARG, or this reads undefined in prod while
+// the server route works. → memory: next-public-env-needs-dockerfile-arg
+const googleEnabled = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
 // Table → plain-language label for the delete dialog's counts. Tables not listed
 // here (anything a future migration adds) are still deleted — they just don't
 // get a line in the dialog, which is the safe direction for an unknown name.
@@ -284,13 +292,27 @@ function SettingsContent() {
     }
   }
 
+  // `identityOnly` marks a provider that signs you in and holds no library.
+  // It suppresses the Sync button, because there is nothing on the other end to
+  // sync and a control that does nothing is indistinguishable from a broken one.
+  // It is NOT the same as `canWrite: false`, which means "has a library we can
+  // read but not write to" and prints a note saying exactly that.
   const providers = [
-    { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true  },
-    { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true  },
+    ...(googleEnabled
+      ? [{ key: "google", label: "Google", description: "Signs you in. No library to import.", connectUrl: "/api/auth/google", canWrite: false, identityOnly: true }]
+      : []),
+    { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true,  identityOnly: false },
+    { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true,  identityOnly: false },
     // Letterboxd hidden until an API key is available — re-add when ready.
-    { key: "steam",      label: "Steam",        description: "Games from your wishlist",         connectUrl: "/api/auth/steam",       canWrite: false },
-    { key: "rawg",       label: "RAWG",         description: "Games from your Want to Play list", connectUrl: "rawg-form",           canWrite: true  },
+    { key: "steam",      label: "Steam",        description: "Games from your wishlist",         connectUrl: "/api/auth/steam",       canWrite: false, identityOnly: false },
+    { key: "rawg",       label: "RAWG",         description: "Games from your Want to Play list", connectUrl: "rawg-form",           canWrite: true,  identityOnly: false },
   ];
+
+  // Q5's "everything is connected" check. Was three inlined getIdentity() calls
+  // repeated in three places, which is how Google would have been added to two
+  // of them and missed in the third.
+  const loginMethods = ["trakt", "steam", "rawg", ...(googleEnabled ? ["google"] : [])];
+  const allLoginMethodsConnected = loginMethods.every((k) => getIdentity(k));
 
   if (anon) {
     return (
@@ -465,9 +487,11 @@ function SettingsContent() {
                         <span className="text-xs bg-success-subtle text-success px-2.5 py-1 rounded-full border border-success/40">
                           Connected
                         </span>
-                        <Button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}>
-                          {syncing === p.key ? "Syncing..." : "Sync"}
-                        </Button>
+                        {!p.identityOnly && (
+                          <Button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}>
+                            {syncing === p.key ? "Syncing..." : "Sync"}
+                          </Button>
+                        )}
                         <Button variant="danger" onClick={() => disconnect(p.key)} disabled={disconnecting === p.key}>
                           {disconnecting === p.key ? "..." : "Disconnect"}
                         </Button>
@@ -493,11 +517,16 @@ function SettingsContent() {
                     Last synced {new Date(log.last_sync * 1000).toLocaleString()} · {log.item_count} items · {log.status}
                   </p>
                 )}
-                {!p.canWrite && identity && (
+                {!p.canWrite && !p.identityOnly && identity && (
                   <p className="text-xs text-text-secondary mt-1">
                     {/* Template string, not JSX text: the space after {p.label} gets
                         swallowed in the compiled output (SM5). */}
                     {`Read-only. ${p.label} doesn’t support adding to a wishlist via its API.`}
+                  </p>
+                )}
+                {p.identityOnly && identity && (
+                  <p className="text-xs text-text-secondary mt-1">
+                    Used to sign you in. Connect a platform below to bring a library across.
                   </p>
                 )}
               </div>
@@ -512,12 +541,12 @@ function SettingsContent() {
           <PanelHeader
             eyebrow="Add login method"
             hint={
-              getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg")
+              allLoginMethodsConnected
                 ? "All available login methods are connected. Any of them can sign you in."
                 : "Connect another account to log in with it in the future."
             }
           />
-          {!(getIdentity("trakt") && getIdentity("steam") && getIdentity("rawg")) && (
+          {!allLoginMethodsConnected && (
           /*
             <a>, not <Link>: these hand off to an OAuth endpoint and Link would
             client-side navigate, breaking the redirect. The rule fires only
@@ -525,6 +554,13 @@ function SettingsContent() {
             pages to the linter; the static /api route still wins at runtime.
           */
           <div className="flex gap-3 flex-wrap">
+            {googleEnabled && !getIdentity("google") && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
+              <a href="/api/auth/google" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
+                <BrandGlyph source="google" size={15} />
+                Connect Google
+              </a>
+            )}
             {!getIdentity("trakt") && (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
               <a href="/api/auth/trakt" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">

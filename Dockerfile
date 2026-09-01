@@ -36,6 +36,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # nothing reads it client-side; it is deliberately NOT listed here.
 ARG NEXT_PUBLIC_SUPPORT_URL
 ENV NEXT_PUBLIC_SUPPORT_URL=$NEXT_PUBLIC_SUPPORT_URL
+# Google sign-in (2026-09-01). AuthOptions is a client component and gates the
+# "Continue with Google" button on this, so without the ARG the button never
+# renders while the /api/auth/google route works perfectly — the same half-live
+# failure the note above describes. The id is public by design; the SECRET is
+# server-only and must NOT be declared here.
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
 RUN npm run build
 

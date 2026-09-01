@@ -4,7 +4,8 @@ import { withUser } from "@/lib/withUser";
 import { run, query } from "@/lib/db";
 import { createSession, setSessionCookie, bumpSessionEpoch } from "@/lib/session";
 import { disconnectSource } from "@/lib/matcher";
-import type { Source } from "@/types";
+import { IDENTITY_ONLY_PROVIDERS } from "@/lib/syncClient";
+import type { AuthProvider, Source } from "@/types";
 import { parseJsonBody } from "@/lib/validate";
 import { DisconnectPostSchema } from "@/lib/schemas";
 
@@ -34,7 +35,14 @@ export const POST = withUser(async (req: NextRequest, session) => {
   // user_item_state (the truth table) via disconnectSource rather than raw SQL
   // against user_watchlist/user_library, so a disconnect can't leave orphaned
   // truth rows the way a direct cache DELETE/UPDATE did (see 6b4756c).
-  disconnectSource(session.userId, provider as Source);
+  //
+  // Skipped for an identity-only provider (Google): it owns no library rows, so
+  // there is nothing to detach. The call would be a harmless no-op, but only
+  // because `disconnectSource` happens to find nothing — expressing that as a
+  // cast to Source would be asserting something untrue to get past the compiler.
+  if (!IDENTITY_ONLY_PROVIDERS.includes(provider)) {
+    disconnectSource(session.userId, provider as Source);
+  }
 
   // Revoke every outstanding token for this user (S4) — in particular any session
   // minted from the identity we just removed. Then re-issue a fresh cookie for
@@ -45,7 +53,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
   const token = await createSession({
     userId: session.userId,
     identityId: remaining.id,
-    provider: remaining.provider as Source,
+    provider: remaining.provider as AuthProvider,
     displayName: remaining.display_name,
   });
   const res = NextResponse.json({ ok: true });

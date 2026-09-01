@@ -1,6 +1,24 @@
 export type MediaType = "game" | "movie" | "show";
 export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd";
 
+// An identity provider a user_identities row (and therefore a session) can be
+// minted from.
+//
+// A SUPERSET of Source, and the two mean different things. `Source` is "a place
+// MEDIA comes from": it is what `platformSources`, `storeLinks[].source` and
+// `dates[].source` are, and every value in it has an entry in the sync registry.
+// `AuthProvider` is "a thing that can log you in", which also covers providers
+// that hold no library and never sync.
+//
+// Google is the first of those (2026-09-01). Keeping it OUT of `Source` is what
+// stops it becoming a legal value for a store link or a release date, and keeps
+// `zSource` (the /api/sync target) rejecting it. The sync exclusion is enforced
+// separately and deliberately, by IDENTITY_ONLY_PROVIDERS in lib/syncClient.ts
+// (a runtime value, so it cannot live in this file — every export here is
+// type-only, which is what lets `scripts/*` import from it under Node's
+// type-stripping).
+export type AuthProvider = Source | "google";
+
 export interface MediaItem {
   id: string;
   type: MediaType;
@@ -27,7 +45,9 @@ export interface MediaLink {
 export interface UserIdentity {
   id: string;
   userId: string;
-  provider: Source;
+  // AuthProvider: a row here can be an identity-only provider (Google) that
+  // holds no library and is not a media source.
+  provider: AuthProvider;
   providerUserId: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -211,6 +231,7 @@ export interface EnrichedItem {
 export interface SessionUser {
   userId: string;
   identityId: string;
-  provider: Source;
+  // The provider this session was minted from, which may be identity-only.
+  provider: AuthProvider;
   displayName: string | null;
 }

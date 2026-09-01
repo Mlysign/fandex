@@ -6,7 +6,7 @@ import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
 import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
-import type { Source } from "@/types";
+import type { AuthProvider } from "@/types";
 
 // Normalized profile every OAuth provider resolves to after exchanging its code.
 export interface OAuthProfile {
@@ -19,7 +19,9 @@ export interface OAuthProfile {
 }
 
 interface OAuthCallbackOptions {
-  provider: Source;
+  // AuthProvider, not Source: an identity-only provider (Google) can mint a
+  // session but is not a place media comes from. → src/types/index.ts
+  provider: AuthProvider;
   resolve: (code: string) => Promise<OAuthProfile>; // exchange code + fetch profile
   errorRedirect: string;            // where to send the user on failure
   connectedLabel?: string;          // ?connected=<label> on success (defaults to provider)

@@ -35,6 +35,13 @@ const ENV: EnvSpec[] = [
   { name: "TRAKT_REDIRECT_URI", required: false, note: "Trakt OAuth callback URL" },
   { name: "TWITCH_CLIENT_ID", required: false, note: "IGDB game metadata" },
   { name: "TWITCH_CLIENT_SECRET", required: false, note: "IGDB game metadata" },
+  // Google sign-in (2026-09-01) — identity only, no library, nothing to sync.
+  // Both halves must be set or the flow stays hidden: the button gates on the
+  // id, the route refuses without both. NOT quiet, because unlike the
+  // monetization vars the intended production state here is PRESENT, so a boot
+  // warning is pointing the right way.
+  { name: "NEXT_PUBLIC_GOOGLE_CLIENT_ID", required: false, note: "Google sign-in; also needs a Dockerfile ARG (client component reads it)" },
+  { name: "GOOGLE_CLIENT_SECRET", required: false, note: "Google sign-in; server-only, never NEXT_PUBLIC_" },
   // P15 — Android TWA Digital Asset Links (only needed once you ship the Android app).
   { name: "TWA_PACKAGE_NAME", required: false, note: "Android TWA package name for /.well-known/assetlinks.json (P15)" },
   { name: "TWA_CERT_FINGERPRINT", required: false, note: "Android signing-cert SHA-256(s) for assetlinks.json (P15); comma-separate multiple" },

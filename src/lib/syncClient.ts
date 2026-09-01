@@ -33,6 +33,21 @@ export const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 // `${id}-library`, `${id}-episodes`, `${id}-episode-catalog`. Hence the prefix
 // match. No source id is a prefix of another, so this cannot bleed across
 // providers, and a provider that has NEVER synced reads as stale by design.
+// Identity providers that hold no library, so nothing ever syncs them.
+//
+// ⚠️ Load-bearing, not documentation (2026-09-01, added with Google sign-in).
+// The filter below reads "this identity has no sync_log row" as "overdue",
+// which is correct for every provider that CAN sync and permanently wrong for
+// one that cannot. Without this exclusion a google identity is due forever: the
+// MyStuffView init would flip `autoSyncing` on and POST /api/sync on EVERY load
+// of /library and /wishlist, for the life of the account. The request is not
+// even an error that would show up in a log — `providerQueue` is registry-
+// filtered, so it quietly drains to an empty queue and answers `done: true`.
+//
+// Kept here rather than in src/types because it is a runtime value and every
+// export of that file is type-only (scripts/ rely on Node's type-stripping).
+export const IDENTITY_ONLY_PROVIDERS: readonly string[] = ["google"];
+
 export function staleProviders(
   identities: { provider: string }[],
   syncLogs: { provider: string; last_sync: number }[],
@@ -41,6 +56,7 @@ export function staleProviders(
 ): string[] {
   return identities
     .map((i) => i.provider)
+    .filter((id) => !IDENTITY_ONLY_PROVIDERS.includes(id))
     .filter((id) => {
       const last = syncLogs
         .filter((l) => l.provider === id || l.provider.startsWith(`${id}-`))

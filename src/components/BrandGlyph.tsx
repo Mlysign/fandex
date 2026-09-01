@@ -36,6 +36,7 @@ import { BRAND_MARKS } from "@/lib/brandMarks";
 // same IGDB mark would make it indistinguishable from plain `igdb`, and the two
 // are different numbers on the same row).
 const MARK_BY_SOURCE: Record<string, string> = {
+  google: "Google",
   steam: "Steam",
   trakt: "Trakt",
   tmdb: "TMDB",

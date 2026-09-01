@@ -11,6 +11,10 @@ import { z } from "zod";
 // ── Shared primitives (single source of truth for the domain enums) ──────────
 export const zMediaType = z.enum(["game", "movie", "show"]);
 export const zSource = z.enum(["steam", "rawg", "tmdb", "trakt", "igdb", "letterboxd"]);
+// Anything that can mint a session, which is every Source plus the identity-only
+// providers. Mirrors the `AuthProvider` type; see src/types/index.ts for why the
+// two enums stay separate.
+export const zAuthProvider = z.enum([...zSource.options, "google"]);
 export const zFacetRole = z.enum([
   "director", "writer", "creator", "cast",       // PersonRole
   "developer", "publisher", "studio", "network", // CompanyRole
@@ -137,8 +141,13 @@ export const AccountDeleteSchema = z.object({
 });
 
 // POST /api/auth/disconnect — remove a connected identity.
+//
+// zAuthProvider, not zSource: this acts on user_identities, which can hold an
+// identity-only provider (Google) that is not a media source. Using zSource
+// here would 400 a Google disconnect. The /api/sync target above keeps zSource
+// deliberately — google must never be a sync target. → src/types/index.ts
 export const DisconnectPostSchema = z.object({
-  provider: zSource,
+  provider: zAuthProvider,
 });
 
 // POST /api/auth/rawg — RAWG email/password login.

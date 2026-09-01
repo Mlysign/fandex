@@ -44,6 +44,12 @@ const OPTION_CLASS =
 // Follows the button's own label colour, so the whole option lights together.
 const GLYPH_CLASS = "text-text-secondary transition-colors duration-fast group-hover:text-text-primary";
 
+// Read at MODULE scope on purpose: Next inlines a NEXT_PUBLIC_ var into the
+// client bundle at build time, so this is a literal by the time it ships, not a
+// lookup. A bare `process.env.X` inside the component body would be identical at
+// runtime but reads as if it could change between renders.
+const googleEnabled = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
 export default function AuthOptions({
   returnTo,
   onAuthenticated,
@@ -95,6 +101,39 @@ export default function AuthOptions({
         3-segment path (here /api/auth/trakt) look like a page to the linter —
         at runtime the static /api route still wins. False positive.
       */}
+
+      {/* ── Google, first and separated ────────────────────────────────────
+          2026-09-01. Nils: "are we loosing potential users because they dont
+          have an account on those platforms." Yes. Every other option below is
+          an account you have to already own: TMDB and RAWG are effectively
+          developer accounts, Steam is games-only, Trakt is niche. A visitor who
+          simply likes films and games had no door at all, which is a conversion
+          problem, not a preference.
+
+          Rendered only when the client id is present, so a deploy that has not
+          finished the Google Cloud setup yet shows the old four options rather
+          than a button that errors. It is the SAME variable the server route
+          checks — see lib/sources/google.ts for why there is only one.
+
+          The mark is monochrome like every other one here. Google's sign-in
+          branding guidelines ask for their multi-colour "G"; the house rule is
+          no brand hue in any state. Flagged, not silently decided. */}
+      {googleEnabled && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href={`/api/auth/google${q}`} className={OPTION_CLASS}>
+            <BrandGlyph source="Google" size={18} className={GLYPH_CLASS} />
+            Continue with Google
+          </a>
+          {/* The divider says the four below are a different KIND of option:
+              they connect a library, not just an identity. Without it Google
+              reads as a fifth platform to link. */}
+          <p className="text-xs text-text-secondary text-center pt-1">
+            or connect a platform and bring your library with you
+          </p>
+        </>
+      )}
+
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
       <a href={`/api/auth/trakt${q}`} className={OPTION_CLASS}>
         <BrandGlyph source="Trakt" size={18} className={GLYPH_CLASS} />

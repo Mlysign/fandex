@@ -26,6 +26,12 @@ const WANT = {
   "TMDB": "siThemoviedatabase",
   "IGDB": "siIgdb",
 
+  // Login providers (2026-09-01). Google's own sign-in branding guidelines ask
+  // for the multi-colour "G"; this renders it monochrome in the UI's text
+  // colour like every other mark, because "no brand hue in ANY state" is a
+  // standing house rule here. Flagged for Nils rather than decided silently.
+  "Google": "siGoogle",
+
   // Streaming + console marks for the "Available on" filter (2026-08-27).
   // ⚠️ simple-icons no longer ships Nintendo, Xbox, Disney+, Prime Video or
   // Hulu — checked, not assumed. Those fall back to BrandGlyph's globe with the
