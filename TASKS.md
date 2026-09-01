@@ -49,7 +49,7 @@ Everything else in this file is either done or a standing constraint.
    migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
    from the moment it deploys**. The rows already merged there do not fix themselves.
 
-   **✅ The report HAS now been run against prod (2026-09-01). `--apply` has NOT.** Three offenders, not the four seen locally. Details in the "Needs Nils" list is wrong; they are here, because this is where the decision lives:
+   **✅ FULLY DONE ON PROD, 2026-09-01.** `--apply` ran: **3 repaired, 4 blobs scrubbed**, and a re-run reports **0 offenders**. Two further layers of the same damage were found and fixed in the same pass, neither of which the link repair touches. Kept here only as the record of what was wrong:
 
    | link | sits on (wrong) | belongs to |
    |---|---|---|
@@ -59,8 +59,12 @@ Everything else in this file is either done or a standing constraint.
 
    Each has `episodeRowsOnWrongItem: 0` and one `user_item_state` row the script deliberately leaves alone (it is the movie's own row and legitimate).
 
-   ⚠️ **A SECOND fault the repair script does NOT fix: the three movies carry the SHOW's slug**, and slugs are immutable by contract (`ensureItemSlug` assigns once). Verified live on prod:
-   `/movie/spongebob-squarepants` serves **Being John Malkovich**, `/movie/legion` serves **The Raid 2**, `/movie/house-of-cards` serves **Ratatouille**. Those are public, crawlable urls. `grep -n slug scripts/repair-cross-type-links.mjs` shows it only ever READS the column. Fixing the links leaves this behind, so it needs its own pass.
+   ✅ **The two leftovers, both fixed by the new `scripts/repair-cross-type-slugs.mjs`.** Neither was reachable from the link repair, and **both were found by reading the rendered page after it reported success**, which is the reusable lesson: a data repair that reports "3 repaired" has not told you the page is right.
+
+   1. **The slug.** All three movies wore the show's, and slugs are immutable by contract (`ensureItemSlug` assigns once, `grep -n slug` on the link repair shows it only READS the column). Now `being-john-malkovich` / `the-raid-2` / `ratatouille`; the three old urls 404, which is correct because they never named those works; the three `/show/…` urls are untouched. ⚠️ **43 of the 46 slugs shared across types are CORRECT** and must not be "fixed": slugs are unique PER TYPE, so `/game/batman` and `/movie/batman` are two right answers. Only a shared slug whose holder's title cannot produce it is damage.
+   2. **An `item_ip_override`.** `/movie/being-john-malkovich` rendered a rail headed **"More from SpongeBob SquarePants"** full of Nickelodeon games. The 2026-08-14 Wikidata sweep resolved the item by its title, which was the show's at the time, and wrote a `mode: "add"` override. Removed; the rail is gone. ⚠️ **Prod holds 498 overrides and exactly ONE was wrong.** A crude title-vs-label word-overlap test flags 53, and 52 of those are correct and are the feature working (Prometheus → Alien, Andor → Star Wars, Better Call Saul → Breaking Bad, every Harry Potter → Wizarding World). **Do not turn that heuristic into a sweep.**
+
+   ⬜ **One unrelated thing noticed while verifying, NOT caused by this and not chased:** `/movie/being-john-malkovich` renders no "More like this" rail, where `/movie/ratatouille` does and `/movie/the-raid-2` shows "More from The Raid". It was already absent before the repair (checked against the captured pre-fix HTML), and all three items have an identical link/projection shape (`imdb` pv=0, `trakt` pv=0, `tmdb` pv=3), so the stale-projection explanation is ruled out. One item, cosmetic.
 
    **How to run it, corrected.** ⚠️ **There is no `scripts/` directory in the runtime image** — it holds only `.next`, `data`, `docker-entrypoint.sh`, `node_modules`, `package.json`, `public`, `server.js`. The command this section used to give could never have worked. Ship the script in first, and write it to **`/app/`** (not `/tmp`) so Node resolves `better-sqlite3` from `/app/node_modules`:
    ```
