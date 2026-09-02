@@ -1,6 +1,8 @@
 # Fandex: Task Tracker
 
-> **This file holds only what is still open.** Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it for the "why" behind a past decision; never read it end to end). One-page state → [STATUS.md](STATUS.md).
+> **This file holds only what is still open.** Settled calls and standing constraints → [docs/decisions.md](docs/decisions.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it; never read it end to end). One-page state → [STATUS.md](STATUS.md).
+>
+> ⚠️ **A decision is not a task and a constraint is not a task.** Both kept accumulating here and crowding out the actual work — 280 lines on 2026-09-02, of which most was already closed. If an entry has no next action, it belongs in one of the two files above.
 
 - **Legend:** ⬜ not started · 🔵 in progress / needs input · ⏸️ blocked · ✅ done
 - **Convention:** an entry is 2 to 4 sentences plus a commit hash once done. The full story (root cause, files touched, verification) belongs in the commit message, not here. **When a section is fully done, move it to the archive the same session.** This file blew past its 200-line CI guard twice (441 lines, then 374) from skipping that step.
@@ -9,96 +11,11 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Everything else in this file is either done or a standing constraint.
+Two items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
-1. **⚠️ The catalog's FUTURE windows can never fill, so "browse from our own DB" needs a decision.** (2026-09-01, numbers re-checked 2026-09-02.) All three `:future` lanes read `exhausted: true` and the counts are `future` **37 / 25 / 72** against a `min` of 200. This is structural, not a stalled job:
+1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
-   - **The provider genuinely ran out.** `tmdbMoviePage` asks with `region=DE` **and** `with_release_type=2|3`, so "upcoming" means "already has a scheduled German theatrical date", which is a few hundred titles. `empty` in the backfill means the PROVIDER returned zero rows. The lane stopped at 409. **So resetting the lanes re-walks the same set and adds nothing.**
-   - **And the dates disagree.** The backfill queries the provider's REGIONAL date while the catalog stores the MERGED date from `remergeItem`, so an item fetched as "future" often lands in the past window. That is why 409 added yielded 37.
-
-   **✅ DECIDED 2026-09-02 (Nils): widen the BACKFILL query.** Drop `region` and `with_release_type` from the backfill's fetch only, never from browse, so nobody sees a change and we simply pull far more upcoming titles. It also happens to fix the second bullet: without `region`, TMDB returns the PRIMARY release date, which is much closer to the merged date the catalog actually stores. Rejected: lowering `CATALOG_BROWSE_MIN` (a 25-title local section runs out under the reader) and leaving it (converges for `past` on its own but never for `future`, which is the direction the initial feed uses). Done half → [the archive](docs/archive/history.md), grep `CATALOG_BROWSE turned on`.
-
-   ⬜ **Two loose ends from the same reading, neither blocking:** `game:past` is retired at page 1 with 0 added (RAWG quota-latched; three empty pages from a DOWN provider retire a lane as permanently as three from a finished one), and **`resetBackfill()` (`catalogBackfill.ts:222`) is exported and wired to NOTHING** — no route, no script — so a lane retired by an outage cannot be revived on prod at all.
-
-2. **⏸️ IGDB email: HOLD OFF (Nils, 2026-09-02). Not a task, just state.** Nothing is blocked: the kill switch is proven (`IGDB_ENABLED=0` stops every call, `scripts/purge-igdb.mjs` removes what is stored) and asking invites a "no" we do not currently have to live with. **Revisit if Fandex monetizes**, which is exactly when the calculus changes. The open question, for whenever that is: whether a webhook-refreshed local mirror of IGDB metadata is covered by the free non-commercial tier, given the Twitch DSA allows a 24-hour cache or prior written authorization while IGDB itself ships webhooks for keeping your copy current. ⚠️ The standing "do not contact TMDB or Trakt" rule does NOT cover IGDB. → [docs/catalog-growth.md](docs/catalog-growth.md)
-
-3. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (`Fandex`, `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
-
-4. **RAWG's monthly quota is exhausted; the cross-link sweep waits for the reset.** Measured 2026-08-20: `api.rawg.io` answers `401 {"error": "The monthly API limit reached"}`. Not urgent — the facet paths no longer touch RAWG (PL3) and games are dual-sourced, so IGDB covers browse. Survey at the time: rawg 157, steam 113, igdb 59 of 760 games. ⚠️ **Do not use Steam as the control**; its cursor drained 2026-08-17 and it links 0 either way. ⚠️ **What SPENT the 20,000 is still unidentified**, and every RAWG figure we hold was measured AFTER the quota was gone, so it counts wasted calls rather than spent ones. The 401/403 latch makes next month's counter readable, and that is what will answer it. ⚠️ It undercuts a monetization assumption either way: `docs/monetization-go-live.md` records RAWG as free commercially to 20k req/mo, and we exhaust that at pre-launch traffic.
-
-5. **✅ GOG affiliate: DROPPED PERMANENTLY (Nils, 2026-09-02).** Not "later", not "if ads stall". The model puts it at ~€3 per 1,000 monthly actives and affiliate was already demoted to ads-first; the free click meter was its only remaining argument and it is worth little pre-traffic. ⚠️ The standing **do NOT apply to Amazon** rule outlives this: its 180-day / 3-sale clock starts at signup, and the self-referral shortcut closes the account rather than being a loophole.
-
-6. **✅ Calendar eyes-on: PASSED (Nils, 2026-09-02) — "item 6 looks fine".** All three settled by a human at a real desktop browser, which is the only place any of them could be: the 95px day cells at 1280×900, the rail cards' hover tooltip (`(hover: hover)` is false in the browser pane, so no Claude session can exercise it), and whether the height budget re-fits on window resize (`boxH` comes from a `ResizeObserver`, which the pane never delivers). Checks stay in [smoketest.md](smoketest.md) 13j/13ja/13jb as regression cover.
-
-7. **✅ SM53 — DONE 2026-09-02. The sticky bar went 175px → 65px at 375×812, a 110px saving (22% of the viewport → 8%).** Three groups collapsed to one 40px chip each via the shared `components/ui/CollapsibleChips.tsx`: `TypeFilter` (site-wide, since it is rendered from one place), `ScopeFilter`, and the calendar's view toggle, which stopped being a labelled pill in SubBar's sort row and became a chip in the filter row — that row was holding one control and is now gone entirely. Measured: collapsed 65px, both groups expanded 125px at 320px wide, no horizontal overflow at 320 or 375, page still never scrolls, every chip hit-tests to a single outcome at 40×40 with `.tap-44`. ⚠️ **The type filter now costs a tap on Home and Discover too**, which is the consistency Nils asked for; say the word if desktop should stay expanded. Background below, kept because it explains the shape.
-
-   **🔵 SM53 — ANSWERED 2026-09-02 (Nils), and the answer is bigger than the three options offered.**
-   At 375×812 the calendar's sticky filter bar takes **175px, 22% of the viewport** (two wrapped rows
-   of seven 40px icon-only circles plus a 38px view-toggle row), leaving the grid 486px. Nothing is
-   broken; the point is that on the one page whose whole design is a fixed height budget, the chips
-   are the biggest single claim on it.
-
-   **His answer, verbatim in substance: do not SHRINK, COLLAPSE.** Three separate control groups,
-   each collapsed and expanding on tap:
-   1. **type filters** (game / movie / show)
-   2. **list filters** (the rest of the chip row)
-   3. **view toggle**
-
-   ⚠️ **And the part that changes the scope: "shrinking the type filter must apply to all pages, not
-   just calendar. consistency is key."** So this is NOT a calendar fix. Do not ship a collapsed type
-   filter on the calendar only.
-
-   **Scoped 2026-09-02, and it is smaller than it sounds. Start here:**
-   - **`src/components/ui/TypeFilter.tsx` is ALREADY the single shared component**, rendered in one
-     place (`SubBar.tsx:223`) which sits above every list page. So "apply to all pages" is one
-     component change, not five. That is the whole reason his requirement is affordable.
-   - **`src/components/ui/ScopeFilter.tsx` is deliberately its twin** ("same 40px circular icon
-     chips, same anatomy"). Whatever collapse pattern TypeFilter gets, ScopeFilter almost certainly
-     wants it too, or the two drift and the consistency point is lost again.
-   - **The 175px breaks down as** a wrapping row of 40px chips (two rows at 375px) plus a 38px view
-     toggle. His three groups map to: TypeFilter, the rest of SubBar's controls (search / sort /
-     the Filters sheet), and the view toggle.
-   - ⚠️ **Verify at 375, 360 and 320**, and hit-test rather than reading the JSX: the standing rules
-     are one outcome per tap target and `truncate` needing `min-w-0`. A collapsed control that
-     expands on tap is exactly where a second clickable layer sneaks in.
-   → [docs/advanced-filters.md](docs/advanced-filters.md), [[calendar-day-first-and-viewport-fit]]
-   for the height-budget constraints this has to live inside, [[mobile-viewport-overflow]].
-
-8. **🔵 Search relevance — ANSWERED 2026-09-02 (Nils): YES, exact match first.** An exact title match pins to the top regardless of the chosen sort. ⚠️ Accepted trade, stated when asked: this visibly overrides all four sort controls for that row. Background below.
-
-   **Search has no relevance term at all, and whether it should is a ranking call, not a bug** (2026-08-29). Two real faults were fixed this session — the search branch never attached crowd stats, so "Popularity" silently sorted oldest-first, and the dedupe dropped any second work sharing a title, which is what actually hid the new *Lucky* → [archive](docs/archive/history.md), grep `could not find a new title`. What is left is that nothing anywhere scores a title against what was TYPED: `find()` is `title.includes(q)` and then a global sort, so an exact match on *Lucky* still ranks below *Mr. Lucky* when *Mr. Lucky* has more votes. **Deliberately not changed**, because "exact match first" overrides all four sorts on the page and that is a visible ranking decision. Say the word and it is a small change; the alternative is to leave search meaning "filter, then sort by what you picked".
-
-**Standing constraints. Not tasks, but do not violate them:**
-- **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
-- **The support page never quotes a running-cost figure** (H3.0, closed as won't-do 2026-08-17). The qualitative line stays; no number ever joins it.
-- **Do NOT contact TMDB or Trakt about commercial terms** while monetizing on their free tiers. The accepted risk is key revocation, and asking invites it.
-- **Watch that prod stays up.** Continuous since 2026-08-12; both prior outages were un-routings, never crashes.
-
----
-
-## ✅ Decisions LOCKED 2026-08-17: do not re-open these
-
-Nils answered the full open-decision list in one pass. Treat every line as settled; a future session that re-raises one is wasting his time. **One (#2) was later superseded by Nils himself on 2026-08-19; it is struck through rather than removed, and that is the only kind of change this list takes.**
-
-1. **Impressum: APPROVED as-is.** H4.2 closes. **All of H3 is unblocked.**
-2. **~~Affiliate signups: GO, starting with GOG, now.~~ SUPERSEDED 2026-08-19 by Nils**: the plan is ads-first and affiliate is demoted. Recorded rather than deleted, so the reversal is visible. The original text, still true as of 2026-08-17: the "prod stably up for days, not hours" gate is met. Sequence unchanged: GOG → Humble → Fanatical → GMG → **Amazon LAST**. Claude does not do the signups; they carry his tax/payment identity.
-3. **H3.0 is CLOSED as WON'T DO. The support page must NEVER quote a running-cost figure**, permanently, not "until we have one". The qualitative line ("Hosting, Domain und die Dienste … gehen auf eigene Rechnung") stays; no number ever joins it. Do not re-add H3.0 as an open item.
-4. **Fandex Score range: RELABEL (option c).** 0–100 is a **target, not a rule**. His reasoning, worth keeping: *exceeding 100 is rare and makes an item stand out, which promotes the score rather than making it unbelievable.* So **no re-tune, no top-N change, `ip` stays at 3.** ⚠️ **Not violated by the 2026-08-22 selection fix**, which changes no top-N *count* and refits no gain: the buckets simply now rank by `dev · classWeight` (what §3.3's spec always said) instead of the raw `dev`. It does move scores where a weight is not 1, and generally widens the spread, which this decision already accepts.
-7. **Android TWA (P15/P16): NEEDS MORE DETAIL** before he acts. "Bubblewrap" read as belonging to a different project. See the P15/P16 section.
-8. **H3.8 thresholds: APPROVED.** Ads at **10,000 pageviews/mo**, freemium at **3,500 sustained weekly-actives**. The long-standing "defined but explicitly NOT approved" guard is **retired**; these are real triggers.
-9. **`PRUNE_ON_BOOT` stays ON** (the guard has held in prod three times). **`priorStrength` / role-weight re-tune: NOT needed, current tuning approved as good.**
-
----
-
-## Open: carried forward from Phase 6
-
-### P15/P16: the Android app
-
-**State is "Needs Nils" item 3; the click-by-click is [docs/twa-play-store.md](docs/twa-play-store.md).** A TWA is an Android app whose whole content is fandex.org rendered by the user's Chrome, so there is no second codebase; the only reason it beats a browser shortcut is that it can hide the address bar, and hiding that bar is what needs proof of domain ownership. `assetlinks.json` and the PWA manifest are already built. Only the signing key and the Play Console account are Nils's, being a credential and an identity.
-
-⚠️ **"Bubblewrap" is two things**, which is why locked decision #7 read as cross-project contamination: it is Nils's first published game (`mobilegameportfolio`) *and* Google's TWA CLI. The doc uses PWABuilder so the word never appears. Older context → [archive](docs/archive/history.md), grep `P15/P16 Android TWA`.
-
----
+2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
 
@@ -111,7 +28,7 @@ The three findings that decided it, so nobody re-derives them:
 - **Fandex is past-tense.** People log what they already played or watched, so a buy link on an item already in a library arrives after the purchase decision. Only the **wishlist** and the **calendar** are pre-purchase surfaces.
 - **Affiliate is the only method that cannot clear its own cliff.** Covering upkeep once TMDB's $149/mo commercial tier applies needs ~1,000 users on ads, ~2,300 on premium, and **~45,000 on affiliate**.
 
-**The economics pivot on TMDB, not on hosting.** Upkeep is small (Railway Hobby $5/mo + usage, domain ~€10/yr, all APIs currently €0), but TMDB's free API is **non-commercial only** and commercial use is **$149/mo**. So "commercial" multiplies upkeep ~10× overnight; any paid model must clear ~$155/mo before netting a cent. Trakt requires case-by-case approval for monetizing apps. RAWG is free commercially to 20k req/mo (⚠️ which we have already exhausted; see Needs Nils item 2). **Donations are the gray zone**: TMDB doesn't say whether donation-funded counts as commercial.
+**The economics pivot on TMDB, not on hosting.** Upkeep is small (Railway Hobby $5/mo + usage, domain ~€10/yr, all APIs currently €0), but TMDB's free API is **non-commercial only** and commercial use is **$149/mo**. So "commercial" multiplies upkeep ~10× overnight; any paid model must clear ~$155/mo before netting a cent. Trakt requires case-by-case approval for monetizing apps. ⚠️ **RAWG no longer figures in this at all** — it was retired as a data provider 2026-09-02, so the "$298/mo commercial minimum" figure elsewhere (TMDB $149 + RAWG $149) is now TMDB alone. **Donations are the gray zone**: TMDB doesn't say whether donation-funded counts as commercial.
 
 **Consciously accepted risk:** Fandex monetizes on the free TMDB/Trakt tiers. Failure mode is **API-key revocation without notice**, not a fine.
 
@@ -127,34 +44,9 @@ The three findings that decided it, so nobody re-derives them:
 
 ---
 
-## Smoke test — 2026-08-26 (12th run) ✅ WORKED THROUGH 2026-08-27
-
-**SM49, SM50, SM51 and SM52 are fixed; SM53 is a decision for Nils and lives in "Needs Nils" item 7
-above.** The findings, their measured before/after and the four things they taught are in
-[docs/archive/history.md](docs/archive/history.md) — grep `12th run`. The rules that outlived them
-are in [AGENTS.md](AGENTS.md) and their memory files ([[cross-type-identity-merge]],
-[[shared-view-two-routes]], [[anon-gates-must-ask-not-bounce]], [[unhydrated-page-diagnosis]]).
-The checks are in [smoketest.md](smoketest.md) 1c-i, 13e-i and 13n-i.
-
-## Nils's feedback, 2026-08-27 (post-smoketest) — ✅ ALL SHIPPED, closed 2026-09-01
-
-The filter panel (Option A), Discover's pagination, the platform chips and the Settings picker all
-landed 2026-08-27; the Fandex Score colour, the last one open, landed 2026-09-01 (`fcfe431`).
-Panel analysis → [docs/advanced-filters.md](docs/advanced-filters.md), read it before touching the
-panel. Score write-up → [the archive](docs/archive/history.md), grep `ramp was written twice`.
-Settings → grep the archive for `Two per-user preferences`; rules → [AGENTS.md](AGENTS.md) and
-[[user-display-preferences]]; checks → [smoketest.md](smoketest.md) 13e-iii. **The three things
-that outlived the section are in "Still open elsewhere" below.**
-
 ## Still open elsewhere
 
-- **⬜ AGENTS.md's ~25 KB budget is unreachable, and it needs YOUR call (2026-09-02).** A compression pass took it **56.1 → 52.2 KB with all 93 invariants and all 39 `⚠️` sub-rules intact**, which is roughly where careful rewriting tops out. The arithmetic, measured: the memory index is ~10 KB and the file's non-invariant content (doc map, repo map, stack, routing) is ~10 KB, so the budget leaves **~55 bytes per rule** — one sentence, no pointer, no sub-rules. **Hitting 25 KB means deleting invariants, not prose.**
-
-  **The only structural way there:** move a whole category out (`### Data, sync…`, `### Providers…`, `### UI, layout…` are ~10 KB each) into its own memory file, leaving a two-line pointer. ⚠️ **The counter-argument is strong and it is why this is not a hygiene decision**: these rules exist *because* somebody did not know they were touching that subsystem, and a pointer only helps a reader who already worked that out. Say which categories (if any) may move; the budget line in AGENTS.md now records the measurement so nobody re-derives it.
-
-- **⬜ The 0–10 user rating colour is written twice with different palettes** (`ActionCells.tsx:32`
-  brand, `QuickActions.tsx:6` stock Tailwind). Left over from feedback item A, deliberately not
-  bundled with the Fandex Score fix: same class of duplication, different ramp, wants its own look.
+- **✅ AGENTS.md compressed and its budget corrected (2026-09-02, Nils delegated the call).** 56.1 → 52.7 KB with all **93 invariants and 40 `⚠️` sub-rules** intact and zero rule leads lost. Every rule stays inline; **no category moved behind a pointer**, because these exist *because* somebody did not know they were touching that subsystem, and a pointer only helps a reader who already worked that out. ⚠️ **The ~25 KB budget was measuring the wrong thing** and is corrected in the file: size is a function of how many rules it holds, and the count grew ~40 → 93 while the number stayed put. Remaining bullets average 441 B, which is rule + sub-rules + pointer with almost no narrative left. **~55 KB is the honest ceiling; the question to ask is whether each rule earned its place, not whether the file is under a byte count.**
 
 - **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
 
@@ -166,23 +58,6 @@ that outlived the section are in "Still open elsewhere" below.**
   QUOTA — `_pageCache` keys carry no userId, so another visitor's games request in the same
   15-minute window pays anyway.
 
-- **✅ Facet pills matched nothing on Library + Wishlist: FIXED 2026-08-28**, verified on the real
-  account (0 → 5 titles). Both routes ship server-computed `facetIds`; the client derivation is
-  deleted. → [the archive](docs/archive/history.md) "The facet pills that matched nothing"
-
-- **✅ `/api/*` compression: DONE and LIVE on prod, 2026-09-01** (`a4edd5d`). `/api/library` is
-  **9.77 MB → 2.23 MB, 4.39×**, and Railway's edge passes it through unchanged (`/api/discover` on
-  fandex.org answers `Content-Encoding: gzip`, `Content-Length: 12901`, `Vary: Accept-Encoding`),
-  which was the one thing that could only be checked after deploying. The cause was Next's, not
-  ours: `send-response.js` copies a route handler's headers with `appendHeader`, which stores even a
-  single value as an ARRAY, so `compression`'s `compressible(Content-Type)` filter rejects every
-  JSON response in the app. `lib/compressResponse.ts` does it instead. Full write-up →
-  [the archive](docs/archive/history.md), grep `gzip /api/`.
-
-  ⚠️ **The field-trimming item below is now worth far less than it reads.** Its 4.7 MB was priced
-  against an 8.63 MB raw payload; the same fields gzip down with everything else, so the saving is
-  roughly a quarter of the stated figure and still carries the whole risk.
-
 - **⬜ The list payload carries ~4.7 MB that only the DETAIL page reads.** `/api/library`, 1,943
   items: `cast` 1,183 KB · `description` 1,014 KB · `images` 966 KB · `storeLinks` 853 KB ·
   `links` 697 KB — 54%, and `MediaCardItem` names none of them. `tags` + `keywords` (552 KB) lost
@@ -190,10 +65,6 @@ that outlived the section are in "Still open elsewhere" below.**
   2026-07-30 audit kept cast/images/description deliberately, and dropping a field from a payload
   two routes and one component share is the exact shape of the bug this list keeps recording.
   Verify every consumer on BOTH routes first.
-
-- **✅ Catalog growth: DONE, and the backfill is running** (Nils 2026-08-27, built out 2026-08-27/28, `4ab0066`…`7ef2c62`). All five phases shipped: the catalog is served from our own DB, scores and the pool no longer scale with it, TMDB's six-month cache cap is enforced, and blobs are reclaimed by size. **The runbook — the env switches, what to watch in `/api/health`, the open IGDB question — is [docs/catalog-growth.md](docs/catalog-growth.md)**; every measurement and the phase history are in [the archive](docs/archive/history.md).
-
-  ⚠️ **"The only open action is one env var" was true until 2026-09-01 and is not any more.** All three `:future` lanes are `exhausted`, the windows are DRAINING (movie 49 → 35, show 49 → 26 in four days) and none will reach 200 by waiting. It is a decision now → **"Needs Nils" item 1**. ⚠️ Do not raise `BACKFILL_PAGES` without checking Railway spend first — the pacing is the safety feature, not a conservative default.
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
 
