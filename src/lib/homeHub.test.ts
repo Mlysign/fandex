@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run } from "@/lib/db";
-import { hubItems, hubGenres, _resetHubCacheForTests } from "./homeHub";
+import { hubItems, hubGenres, hubGenreCandidates, _resetHubCacheForTests } from "./homeHub";
 
 // SEO (2026-08-20) — the homepage hub. `/` linked to nothing at all before
 // this; these cover the two things that would quietly bring the dead end back:
@@ -114,5 +114,46 @@ describe("hubGenres — alias pairs must not become two competing facet pages", 
     expect(keys).toContain("simulation");
     expect(keys).toContain("kids");      // TMDB TV only
     expect(keys).toContain("western");   // TMDB movie
+  });
+});
+
+describe("hubGenres — a genre the sweep measured as empty is dropped (2026-09-02)", () => {
+  beforeEach(() => {
+    run("DELETE FROM facet_snapshot");
+    _resetHubCacheForTests();
+  });
+
+  it("hides a genre once the sweep records an empty pool for it", () => {
+    // `indie`, `massively multiplayer` and `platformer` are RAWG keys, and RAWG
+    // was retired 2026-09-02, so nothing resolves them any more. The homepage was
+    // linking three pages a crawler fetches, judges and drops.
+    expect(hubGenres().map((g) => g.key)).toContain("indie");
+
+    run(
+      "INSERT OR REPLACE INTO facet_snapshot (kind, key, built_at, items, linkable) VALUES ('tag','indie',1,0,0)",
+    );
+    _resetHubCacheForTests();
+
+    expect(hubGenres().map((g) => g.key)).not.toContain("indie");
+  });
+
+  it("keeps a genre the sweep measured as having a real pool", () => {
+    run(
+      "INSERT OR REPLACE INTO facet_snapshot (kind, key, built_at, items, linkable) VALUES ('tag','strategy',1,19,19)",
+    );
+    _resetHubCacheForTests();
+    expect(hubGenres().map((g) => g.key)).toContain("strategy");
+  });
+
+  it("keeps CANDIDATES unfiltered, which is what stops the chip oscillating", () => {
+    // The sweep targets candidates. If it read the filtered list instead, hiding
+    // a genre would stop it being measured, pruneUntargetedFacets would drop the
+    // row, and the genre would come straight back — on and off forever.
+    run(
+      "INSERT OR REPLACE INTO facet_snapshot (kind, key, built_at, items, linkable) VALUES ('tag','indie',1,0,0)",
+    );
+    _resetHubCacheForTests();
+    expect(hubGenreCandidates().map((g) => g.key)).toContain("indie");
+    expect(hubGenres().map((g) => g.key)).not.toContain("indie");
   });
 });

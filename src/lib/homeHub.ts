@@ -47,6 +47,24 @@ const HUB_ITEM_COUNT = 30;
 // selection across the three maps first; do not just lower the number.
 const HUB_GENRE_MAX = 60;
 
+/**
+ * A genre needs this many pool titles to earn a chip on `/`.
+ *
+ * Mirrors `MIN_INDEXABLE_TITLES` from publicFacetDetail.ts rather than importing
+ * it, for the reason popularPeople.ts gives for mirroring the same constant: that
+ * module pulls the whole provider fan-out into anything that touches it, and this
+ * one must stay a local read. A test asserts the three agree.
+ */
+const MIN_HUB_GENRE_TITLES = 3;
+
+// Separate from `_hubCache` because it is a different query with a different
+// shape, and one entry: the count map takes no parameters. Same 30-minute TTL,
+// same reasoning — the catalog barely moves and this feeds the busiest page.
+const _genreCountCache = sharedCache<string, Set<string>>("homeHub.emptyGenres", {
+  max: 1,
+  ttlMs: 30 * 60 * 1000,
+});
+
 // The catalog barely moves between syncs and this feeds the busiest page, so a
 // long TTL is right. One entry — the query takes no parameters.
 const _hubCache = sharedCache<string, HubItem[]>("homeHub", { max: 1, ttlMs: 30 * 60 * 1000 });
@@ -82,8 +100,7 @@ export function hubItems(): HubItem[] {
 /**
  * The genre facet pages worth linking from the root, as `{ key, label }`.
  *
- * Derived from the provider genre maps rather than hand-picked, so every entry
- * is guaranteed a real pool — see `providerGenreKeys`. Two filters on top:
+ * Derived from the provider genre maps rather than hand-picked. Three filters:
  *
  *   · Keys containing "&" are dropped. They are TMDB's composite TV genres
  *     ("action & adventure", "sci fi & fantasy", "war & politics"), whose parts
@@ -91,8 +108,46 @@ export function hubItems(): HubItem[] {
  *     encode the ampersand into an ugly, duplicative URL.
  *   · Everything is mapped through `canonicalTagKey` and deduped, so a bundled
  *     spelling links to the bundle's own address instead of a 308 redirect.
+ *   · **A genre nothing is filed under is dropped** (2026-09-02, below).
+ *
+ * ⚠️ THE DOC ABOVE USED TO CLAIM the provider maps guarantee "a real pool", and
+ * that is false. `providerGenreKeys()` is the provider's genre VOCABULARY, not a
+ * statement about our catalog, so it offered genres with nothing behind them:
+ * measured 2026-09-02, `/tag/indie`, `/tag/massively-multiplayer` and
+ * `/tag/platformer` all had **pool 0**. The highest-authority page on the domain
+ * was linking three dead ends, which is a page a crawler is asked to fetch, judge
+ * and drop.
+ *
+ * ⚠️ The gate is `MIN_INDEXABLE_TITLES`, the SAME threshold `/person/{slug}` uses
+ * and the same one `popularPeople` applies to the people rail, for the same
+ * reason stated there: a facet page below it is `noindex, follow`, so linking it
+ * from `/` spends this domain's best link equity on a page we have told Google to
+ * drop. Genres and people had different answers to one question; now they do not.
+ *
+ * ⚠️ It counts POOL SIZE, never linkable count. That distinction has bitten this
+ * file once already (see HUB_GENRE_MAX) and `docs/seo.md` records why the thin-
+ * page rule tests the same way: an under-linked page is a different defect from
+ * an empty one, and a linkable-count test would delete good pages over it.
  */
 export function hubGenres(): { key: string; label: string }[] {
+  const empty = measuredEmptyGenres();
+  return hubGenreCandidates()
+    .filter((g) => !empty.has(g.key))
+    .slice(0, HUB_GENRE_MAX);
+}
+
+/**
+ * Every genre the provider maps offer, before the empty ones are removed.
+ *
+ * Exported because **the facet sweep must target this list, not `hubGenres()`**.
+ * The sweep is what measures a genre's pool, and `hubGenres` hides a genre the
+ * sweep measured as empty — so if the sweep read the filtered list it would stop
+ * measuring the moment it hid something, `pruneUntargetedFacets` would drop the
+ * row, the genre would reappear, and the chip would oscillate on and off. One
+ * direction only: candidates feed the sweep, the sweep's measurements feed the
+ * filter.
+ */
+export function hubGenreCandidates(): { key: string; label: string }[] {
   const seen = new Set<string>();
   const out: { key: string; label: string }[] = [];
 
@@ -105,7 +160,42 @@ export function hubGenres(): { key: string; label: string }[] {
   }
 
   out.sort((a, b) => a.label.localeCompare(b.label));
-  return out.slice(0, HUB_GENRE_MAX);
+  return out;
+}
+
+/**
+ * Genre keys the facet sweep has actually measured as having NO pool.
+ *
+ * ⚠️ MEASURED, because it cannot be derived. The dead keys are RAWG's: `indie`,
+ * `massively multiplayer` and `platformer` come from `RAWG_GENRES`, and RAWG was
+ * **retired as a data provider on 2026-09-02**, so nothing resolves them any
+ * more. `rawgGenreSlug` now has no production caller at all.
+ *
+ * ⚠️ The obvious fix — drop `RAWG_GENRES` from `providerGenreKeys()` — is WRONG
+ * and is the bug `HUB_GENRE_MAX` above already records. Most of that map still
+ * resolves, through IGDB and the local catalog matching on the tag NAME rather
+ * than through RAWG: strategy 19, puzzle 27, arcade 63, casual 117, sports 148.
+ * Removing the map would strip every game genre from a catalog that is a third
+ * games, for the second time. Which RAWG-map keys survive is an empirical
+ * question about IGDB coverage, so it is answered with a measurement.
+ *
+ * Read straight off `facet_snapshot` rather than importing `facetSnapshot.ts`:
+ * that module imports THIS one for its target list, and a real import would be a
+ * cycle. One indexed read on a 56-row table.
+ */
+function measuredEmptyGenres(): Set<string> {
+  const hit = _genreCountCache.get("empty");
+  if (hit) return hit;
+
+  const empty = new Set(
+    query<{ key: string }>(
+      "SELECT key FROM facet_snapshot WHERE kind = 'tag' AND items < ?",
+      [MIN_HUB_GENRE_TITLES],
+    ).map((r) => r.key),
+  );
+
+  _genreCountCache.set("empty", empty);
+  return empty;
 }
 
 // "science fiction" → "Science Fiction". The keys are normalized lowercase, and
@@ -117,4 +207,7 @@ function titleCase(key: string): string {
 /** Test seam — the module-level cache would otherwise leak between cases. */
 export function _resetHubCacheForTests(): void {
   _hubCache.clear();
+  // Both caches, or a test that seeds a catalog gets genre counts from whatever
+  // the previous test's fixture happened to leave behind.
+  _genreCountCache.clear();
 }

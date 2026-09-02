@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run, get, query } from "./db";
 import {
   dueFacets, pruneUntargetedFacets, facetSweepCoverage,
-  facetSweepBatch, facetSweepEnabled, FACET_SNAPSHOT_TTL_MS,
+  facetSweepBatch, facetSweepEnabled, FACET_SNAPSHOT_TTL_MS, sitemapFacets,
 } from "./facetSnapshot";
+import { MIN_INDEXABLE_TITLES } from "./detail/publicFacetDetail";
 
 // The facet link sweep persists a bounded set of provider titles once a day so
 // the public facet pages link what they render (876 of 2,691 items linked before
@@ -215,5 +216,34 @@ describe("facetSweepCoverage — so a stalled sweep is visible", () => {
     expect(c.linkable).toBe(78);
     expect(c.pinned).toBe(3);
     expect(c.oldestBuiltAt).toBe(1000);
+  });
+});
+
+describe("sitemapFacets — what we advertise to Google", () => {
+  it("advertises a swept facet that clears the index threshold", () => {
+    stamp("tag", "action", 1000, 60, 60);
+    const urls = sitemapFacets().map((f) => `${f.kind}|${f.key}`);
+    expect(urls).toContain("tag|action");
+  });
+
+  it("never advertises a facet below MIN_INDEXABLE_TITLES", () => {
+    // Those pages send `noindex, follow`, and a sitemap entry for a noindex page
+    // is contradictory — the same rule that keeps the Impressum out.
+    stamp("tag", "tiny-facet-fixture", 1000, MIN_INDEXABLE_TITLES - 1, 1);
+    const urls = sitemapFacets().map((f) => `${f.kind}|${f.key}`);
+    expect(urls).not.toContain("tag|tiny-facet-fixture");
+  });
+
+  it("advertises ONLY swept facets, so an unswept one stays out", () => {
+    // The gate for putting facet pages in the sitemap was the under-linking, and
+    // the sweep only fixes what it has built. An unswept facet still links a
+    // third of what it renders, so it has no row and must not appear.
+    stamp("tag", "action", 1000, 60, 60);
+    const urls = sitemapFacets().map((f) => `${f.kind}|${f.key}`);
+    expect(urls).toEqual(["tag|action"]);
+  });
+
+  it("is empty when the table is", () => {
+    expect(sitemapFacets()).toEqual([]);
   });
 });

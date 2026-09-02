@@ -1,9 +1,10 @@
 import { get, query, run, transaction } from "@/lib/db";
 import { log, errorFields } from "@/lib/logger";
-import { hubGenres } from "@/lib/homeHub";
+import { hubGenreCandidates } from "@/lib/homeHub";
 import { popularPeople } from "@/lib/popularPeople";
 import { PEOPLE_RAIL_SIZE } from "@/lib/homeSnapshot";
-import { buildPublicFacetDetail } from "@/lib/detail/publicFacetDetail";
+import { buildPublicFacetDetail, MIN_INDEXABLE_TITLES } from "@/lib/detail/publicFacetDetail";
+import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import type { LinkableFacetKind } from "@/lib/facetUrl";
 
 // ── The facet link sweep (2026-09-02) ───────────────────────────────────────
@@ -43,8 +44,10 @@ import type { LinkableFacetKind } from "@/lib/facetUrl";
 //
 // 3. ⚠️ A FAILED BUILD MUST NOT CLEAR GOOD PINS. Same rule as the home
 //    snapshot: a provider outage during a sweep would otherwise unpin a facet's
-//    titles and let the next boot prune delete them. A facet that builds thin or
-//    throws is SKIPPED, keeping its previous row and its previous pins.
+//    titles and let the next boot prune delete them. An empty build keeps its
+//    pins, always. It does still record `items: 0`, because that measurement is
+//    the only way `hubGenres()` can learn a genre is dead — recording a zero is
+//    safe where clearing pins is not.
 //
 // 4. ⚠️ THE TARGET SET MOVES, SO THE TABLES NEED A SWEEP. Genres are stable but
 //    the people rail ROTATES daily, so `(kind, key)` is a growing key space —
@@ -95,7 +98,13 @@ export function facetSweepEnabled(): boolean {
  * list that would drift out of agreement with the page.
  */
 export function facetSweepTargets(): FacetTarget[] {
-  const tags: FacetTarget[] = hubGenres().map((g) => ({ kind: "tag" as const, key: g.key }));
+  // ⚠️ CANDIDATES, not `hubGenres()`. The sweep is what measures whether a genre
+  // has a pool, and `hubGenres` hides the ones measured empty — so reading the
+  // filtered list would stop the measurement the moment it hid something,
+  // `pruneUntargetedFacets` would drop the row, the genre would come back, and
+  // the chip would flicker on and off forever. Three genres cost three extra
+  // builds a day; an oscillating homepage costs a debugging session.
+  const tags: FacetTarget[] = hubGenreCandidates().map((g) => ({ kind: "tag" as const, key: g.key }));
   const people: FacetTarget[] = popularPeople()
     .slice(0, PEOPLE_RAIL_SIZE)
     .map((p) => ({ kind: "person" as const, key: p.key }));
@@ -184,11 +193,25 @@ export async function sweepFacetLinks(
         { persist: true },
       );
 
-      // Rule 3: a thin or failed build keeps the previous row AND the previous
-      // pins. `buildPublicFacetDetail` swallows a provider failure and returns
-      // whatever pool it has, so an empty payload is the signal to skip.
+      // Rule 3: an empty build keeps the previous PINS, always. A provider
+      // outage must never unpin a facet's titles and hand them to the boot
+      // prune. `buildPublicFacetDetail` swallows provider failures and returns
+      // whatever pool it has, so "empty" cannot be told from "failed" here.
+      //
+      // It does still RECORD the measurement, with `items: 0`, because that is
+      // the only way the homepage can learn a genre is dead: `indie`,
+      // `massively multiplayer` and `platformer` are RAWG keys that resolve
+      // nothing since RAWG was retired, and `hubGenres()` reads exactly this
+      // row to stop linking them. Recording a zero is safe where clearing pins
+      // is not — the worst case is one day of a chip missing after a provider
+      // blip, which the next successful sweep undoes.
       if (!payload || payload.items.length === 0) {
         skipped++;
+        run(
+          `INSERT OR REPLACE INTO facet_snapshot (kind, key, built_at, items, linkable)
+           VALUES (?, ?, ?, 0, 0)`,
+          [target.kind, target.key, now],
+        );
         log.warn("facet_sweep_thin", { kind: target.kind, key: target.key });
         continue;
       }
@@ -225,6 +248,39 @@ export async function sweepFacetLinks(
     log.info("facet_sweep_complete", { built, skipped, dropped, items, linkable });
   }
   return { built, skipped, dropped, items, linkable };
+}
+
+/**
+ * The swept facets worth advertising in `sitemap.xml` (Nils, 2026-09-02).
+ *
+ * ⚠️ SWEPT, not "every facet page". The gate for putting these in the sitemap was
+ * always the under-linking, and the sweep only fixes the facets it has actually
+ * built — the other thousands still link a third of what they render. This
+ * returns rows from `facet_snapshot`, so a facet enters the sitemap exactly when
+ * it becomes a good page and leaves when it stops being one.
+ *
+ * ⚠️ The people half ROTATES, so these URLs come and go. That is correct rather
+ * than unfortunate: a person who rotates off the rail loses their pins, the boot
+ * prune reclaims their rows, and the page goes back to being under-linked. It
+ * would be worse to keep advertising it. The pages never 404 either way; they
+ * just stop being recommended.
+ *
+ * ⚠️ Never advertise a `noindex` page — the same rule that keeps the Impressum
+ * out. `facetRobots` sends `noindex, follow` below MIN_INDEXABLE_TITLES, and
+ * `PUBLIC_ITEMS_INDEXABLE` overrides everything during a soft launch.
+ *
+ * `items` is the page's slice (capped at FACET_PAGE_SIZE), not the pool total, and
+ * for THIS threshold the two are interchangeable: below 60 the slice is the pool,
+ * and at 60 the pool is at least 60. Do not reuse the column for a bigger number.
+ */
+export function sitemapFacets(): { kind: LinkableFacetKind; key: string; builtAt: number }[] {
+  if (!PUBLIC_ITEMS_INDEXABLE) return [];
+  return query<{ kind: string; key: string; built_at: number }>(
+    `SELECT kind, key, built_at FROM facet_snapshot
+      WHERE items >= ?
+      ORDER BY kind, key`,
+    [MIN_INDEXABLE_TITLES],
+  ).map((r) => ({ kind: r.kind as LinkableFacetKind, key: r.key, builtAt: r.built_at }));
 }
 
 export interface FacetSweepCoverage {

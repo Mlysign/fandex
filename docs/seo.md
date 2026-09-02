@@ -68,7 +68,7 @@ but free, and it feeds DuckDuckGo.
 |---|---|
 | `sitemap.xml` | 2,037 URLs — 2,022 items, 8 calendar months, 6 legal, 1 root |
 | item pages | Title, description, canonical, OG, `index, follow`, **and JSON-LD since 2026-08-20**. ~25 facet links, **plus sibling titles since 2026-08-23** (`buildLocalRails`, server-rendered, 0 provider calls; 6 of 10 sampled gained 3–14 links) |
-| facet pages | Crawlable, indexable, **not in the sitemap** (deliberate, see below). Thin ones are `noindex, follow` since 2026-08-20 |
+| facet pages | Crawlable, indexable, and **the swept ones are in the sitemap since 2026-09-02** (only those; see below). Thin ones are `noindex, follow` since 2026-08-20 |
 | `/calendar/{YYYY-MM}` | **New 2026-08-20.** SSR, 8 months in the sitemap |
 | `/calendar` | The interactive app. Client-rendered, robots-disallowed, correctly |
 | `/` | **94 outbound links since 2026-08-26**: 30 titles and 20 people from the day's `home_snapshot`, plus 36 genres and 8 calendar months from the hub. All server-rendered, **0 provider calls per view** |
@@ -437,13 +437,56 @@ the provider genre maps, not the catalog, so it offers genres nothing is filed
 under. The highest-authority page on the domain linking three dead ends is worth
 fixing; it is not what the sweep is for.
 
-### 🔵 Facet pages are not in the sitemap, on purpose
+### ✅ The SWEPT facet pages are in the sitemap (2026-09-02, Nils's call)
 
-They are already crawled heavily via item-page links — that crawl is what filled
-`facet_page_cache` to 222 MB on 2026-08-19. Enumerating thousands of
-`force-dynamic` provider-fanout URLs would invite more of exactly that. **Fix the
-under-linking first, then reconsider** (see below: the pages DO render links, they
-just link only the titles we already hold).
+This section used to read "facet pages are not in the sitemap, on purpose", and
+the stated condition was **"fix the under-linking first, then reconsider"**. The
+sweep above fixed it, so the condition is met and the entries are in.
+
+⚠️ **Only the SWEPT ones, which is the whole design.** `sitemapFacets()` returns
+rows from `facet_snapshot`, so a facet is advertised exactly while it is a good
+page and drops out when it stops being one. The people half rotates daily and
+those URLs come and go with it — correct, not unfortunate: a person who rotates
+off the rail loses their pins, the boot prune reclaims their rows, and the page
+goes back to being under-linked. The pages never 404, they just stop being
+recommended. Measured on the dev catalog: **16 facet URLs at 16/56 swept**,
+growing as the sweep works through the set at 8/hour.
+
+⚠️ **The original objection still stands for the rest.** Enumerating *thousands*
+of `force-dynamic` provider-fanout URLs would invite the crawl that filled
+`facet_page_cache` to 222 MB on 2026-08-19. The sweep targets ~56 facets; there
+are 1,202 indexable people alone. **Do not widen the sitemap without widening the
+sweep first.**
+
+⚠️ Nothing below `MIN_INDEXABLE_TITLES` is advertised, and `PUBLIC_ITEMS_INDEXABLE`
+still overrides everything — a sitemap entry for a `noindex` page is contradictory,
+the same rule that keeps the Impressum out.
+
+### ✅ Three dead genre chips removed from `/` (2026-09-02)
+
+`indie`, `massively-multiplayer` and `platformer` all measured **pool 0**: the
+homepage was linking three pages a crawler fetches, judges and drops.
+
+**Root cause: RAWG.** Those keys come from `RAWG_GENRES` in `tagDiscover.ts`, and
+RAWG was retired as a data provider on 2026-09-02, so nothing resolves them any
+more (`rawgGenreSlug` now has no production caller at all). `providerGenreKeys()`
+still promised in its own doc that "a key in here resolves a provider genre pool
+by construction", which stopped being true that day.
+
+⚠️ **The obvious fix — drop `RAWG_GENRES` — is WRONG**, and is the bug
+`HUB_GENRE_MAX` already records. Most of that map still resolves through IGDB and
+the local catalog matching on the tag NAME rather than through RAWG: strategy 19,
+puzzle 27, arcade 63, casual 117, sports 148. Removing it would strip every game
+genre from a catalog that is a third games, for the second time. Which keys
+survive is an empirical question, so it is answered with the sweep's own
+measurement: `hubGenres()` hides a genre whose `facet_snapshot` row says `items`
+is below the threshold.
+
+⚠️ **The sweep targets `hubGenreCandidates()`, NOT `hubGenres()`**, and that is
+what stops the chip oscillating: reading the filtered list would stop the
+measurement the moment it hid something, `pruneUntargetedFacets` would drop the
+row, and the genre would come straight back. Verified on the rendered page: 36
+chips → 33.
 
 ### ✅ Facet pages DO server-render item links (re-measured 2026-08-26)
 

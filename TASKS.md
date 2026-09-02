@@ -129,14 +129,18 @@ The three findings that decided it, so nobody re-derives them:
   ⚠️ No sitemap or scoring impact: the rows are `browsed = 1`, so outside `POOL_WHERE` by
   construction. ⚠️ The prune pin is real: **177 of 419 rows would have been deleted by the next boot
   prune** without it. → [docs/seo.md](docs/seo.md)
-  - **⬜ Should the 56 swept facets go IN the sitemap now?** That was the stated gate, and it is the
-    natural next step: facet pages aggregate rather than repeat provider text, so they are among the
-    few pages here that can actually rank. **Nils's call** — it changes what we advertise to Google,
-    and only 56 of thousands of facets are swept, so it means a curated list, not "all facet pages".
-  - **⬜ Three genre chips on `/` link to EMPTY pages**: `indie`, `massively-multiplayer`,
-    `platformer`, all pool 0. `hubGenres()` reads the provider genre maps rather than the catalog,
-    so it offers genres nothing is filed under. The strongest page on the domain linking three dead
-    ends is its own small bug.
+  - **✅ The swept facets are in the sitemap** (2026-09-02, Nils said go). `sitemapFacets()` returns
+    rows from `facet_snapshot`, so a facet is advertised exactly while it is a good page and drops
+    out when it stops being one; the people half rotates with the rail. ⚠️ **Only the swept ones.**
+    The original objection still holds for the rest: enumerating thousands of `force-dynamic`
+    fan-out URLs invites the crawl that grew `facet_page_cache` to 222 MB. **Do not widen the
+    sitemap without widening the sweep.**
+  - **✅ The three dead genre chips are gone from `/`** (2026-09-02). Root cause was **RAWG's
+    retirement the day before**: `indie`, `massively-multiplayer` and `platformer` come from
+    `RAWG_GENRES`, and nothing resolves them now. ⚠️ Dropping that map would have stripped every
+    game genre (strategy, puzzle, arcade, casual, sports all still resolve via IGDB), so the filter
+    is the sweep's own measurement instead. ⚠️ The sweep targets `hubGenreCandidates()`, not
+    `hubGenres()`, or the chip would oscillate. Verified on the page: 36 chips → 33.
 
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now the aggregate is a raw sum rather than a damped mean. **Time-gated**: revisit after a few weeks of real scores under the new formula. ⚠️ **Re-read this after 2026-08-22.** The class weights now decide WHICH facets are selected, not just how much a selected one counts, so a re-tune is a bigger lever than when this was written, and **any measurement taken before that date describes the old selection**.
 

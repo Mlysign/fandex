@@ -4,6 +4,8 @@ import { listPublicItems } from "@/lib/detail/publicDetail";
 import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { LEGAL_LOCALES } from "@/lib/legal/types";
 import { indexableMonths } from "@/lib/calendarMonths";
+import { sitemapFacets } from "@/lib/facetSnapshot";
+import { publicFacetHref } from "@/lib/facetUrl";
 
 // P13 — sitemap: the landing page plus one entry per public item page.
 //
@@ -48,6 +50,31 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // casually. `weekly` because a month's lineup genuinely moves.
     ...indexableMonths().map((month) => ({
       url: `${BASE_URL}/calendar/${month}`,
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    })),
+    // SEO (2026-09-02, Nils's call) — the SWEPT facet hub pages.
+    //
+    // These were deliberately excluded until now, and the gate was the
+    // under-linking: a facet page rendered 60 titles and linked 33% of them, so
+    // advertising thousands of them was advertising hub pages that dead-end.
+    // `facetSnapshot` fixes the ones it builds (measured 419/419 on one run), and
+    // `sitemapFacets` returns exactly those, so a facet is advertised precisely
+    // while it is a good page.
+    //
+    // ⚠️ It is a CURATED list, not "all facet pages". There are thousands of
+    // facets and 1,202 indexable people alone; the sweep targets the ~56 the
+    // homepage links. Do not widen this to every facet without widening the sweep
+    // first — that is the same trade this entry exists to have got right.
+    //
+    // ⚠️ They are the pages most likely to actually rank. Search Console on
+    // 2026-09-02 had 4,089 of 4,090 URLs sitting in "Discovered – currently not
+    // indexed", and item pages carry provider text that appears on dozens of
+    // other sites. A facet page AGGREGATES instead of repeating, which is the
+    // difference that earns an index slot.
+    ...sitemapFacets().map((f) => ({
+      url: `${BASE_URL}${publicFacetHref({ kind: f.kind, key: f.key })}`,
+      lastModified: new Date(f.builtAt),
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
