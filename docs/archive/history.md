@@ -78,6 +78,25 @@ slugs shared across types are CORRECT** (slugs are unique per TYPE, so `/game/ba
 ONE was wrong** (a crude title-vs-label test flags 53, and 52 are the feature working:
 Prometheus → Alien, Andor → Star Wars, every Harry Potter → Wizarding World).
 
+### A false alarm from the same pass, worth keeping for the method
+
+While verifying, I reported that `/movie/being-john-malkovich` rendered no "More like this"
+rail where other movies did, and logged it as a pre-existing cosmetic bug. **It was my
+measurement.** A real browser shows the rail, and `/api/detail/similar` returns 12 items for
+that id. I had been grepping the SERVER HTML with `curl`, and `RelatedRails` is a client
+component: it paints from the server render, then upgrades from the API. An item whose
+server render fell below `MIN_SIMILAR` therefore has no rail in the HTML and a full one on
+screen.
+
+**The rule: `curl` sees the server render, not the page.** Before calling a missing element
+a bug, check whether the component that owns it is a client island.
+
+⬜ **What survives as a real, small gap:** on such an item the rail is there for a person and
+**invisible to a crawler**, since `/api/` is under the robots `Disallow` and Googlebot
+honours that for subresources. That is the standing "a client island fed by `/api/` is
+invisible to Google" invariant, hitting a surface nobody had checked. Also unexplained: why
+the server render and the API disagree for the same item when both call `buildLocalRails`.
+
 ⚠️ **The instructions were wrong and could never have run**: there is no `scripts/`
 directory in the runtime image. Ship a script in over SSH, writing it to `/app/` (not
 `/tmp`) so Node resolves `better-sqlite3` from `/app/node_modules`. Full recipe →

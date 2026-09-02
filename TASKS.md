@@ -43,12 +43,24 @@ Everything else in this file is either done or a standing constraint.
    3. **view toggle**
 
    ⚠️ **And the part that changes the scope: "shrinking the type filter must apply to all pages, not
-   just calendar. consistency is key."** So this is NOT a calendar fix. Whatever the type filter
-   becomes, it becomes that on Home, Discover, Calendar, Library and Wishlist alike — they already
-   share one `rr_type_filter` key and one `availableTypes` injection point, which is what makes a
-   consistent change feasible rather than five separate ones. Do not ship a collapsed type filter on
-   the calendar only. → [docs/advanced-filters.md](docs/advanced-filters.md), and
-   [[user-display-preferences]] for the shared-injection-point map.
+   just calendar. consistency is key."** So this is NOT a calendar fix. Do not ship a collapsed type
+   filter on the calendar only.
+
+   **Scoped 2026-09-02, and it is smaller than it sounds. Start here:**
+   - **`src/components/ui/TypeFilter.tsx` is ALREADY the single shared component**, rendered in one
+     place (`SubBar.tsx:223`) which sits above every list page. So "apply to all pages" is one
+     component change, not five. That is the whole reason his requirement is affordable.
+   - **`src/components/ui/ScopeFilter.tsx` is deliberately its twin** ("same 40px circular icon
+     chips, same anatomy"). Whatever collapse pattern TypeFilter gets, ScopeFilter almost certainly
+     wants it too, or the two drift and the consistency point is lost again.
+   - **The 175px breaks down as** a wrapping row of 40px chips (two rows at 375px) plus a 38px view
+     toggle. His three groups map to: TypeFilter, the rest of SubBar's controls (search / sort /
+     the Filters sheet), and the view toggle.
+   - ⚠️ **Verify at 375, 360 and 320**, and hit-test rather than reading the JSX: the standing rules
+     are one outcome per tap target and `truncate` needing `min-w-0`. A collapsed control that
+     expands on tap is exactly where a second clickable layer sneaks in.
+   → [docs/advanced-filters.md](docs/advanced-filters.md), [[calendar-day-first-and-viewport-fit]]
+   for the height-budget constraints this has to live inside, [[mobile-viewport-overflow]].
 
 8. **🔵 Search relevance — ANSWERED 2026-09-02 (Nils): YES, exact match first.** An exact title match pins to the top regardless of the chosen sort. ⚠️ Accepted trade, stated when asked: this visibly overrides all four sort controls for that row. Background below.
 
