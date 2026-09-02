@@ -148,6 +148,10 @@ that outlived the section are in "Still open elsewhere" below.**
 
 ## Still open elsewhere
 
+- **⬜ AGENTS.md's ~25 KB budget is unreachable, and it needs YOUR call (2026-09-02).** A compression pass took it **56.1 → 52.2 KB with all 93 invariants and all 39 `⚠️` sub-rules intact**, which is roughly where careful rewriting tops out. The arithmetic, measured: the memory index is ~10 KB and the file's non-invariant content (doc map, repo map, stack, routing) is ~10 KB, so the budget leaves **~55 bytes per rule** — one sentence, no pointer, no sub-rules. **Hitting 25 KB means deleting invariants, not prose.**
+
+  **The only structural way there:** move a whole category out (`### Data, sync…`, `### Providers…`, `### UI, layout…` are ~10 KB each) into its own memory file, leaving a two-line pointer. ⚠️ **The counter-argument is strong and it is why this is not a hygiene decision**: these rules exist *because* somebody did not know they were touching that subsystem, and a pointer only helps a reader who already worked that out. Say which categories (if any) may move; the budget line in AGENTS.md now records the measurement so nobody re-derives it.
+
 - **⬜ The 0–10 user rating colour is written twice with different palettes** (`ActionCells.tsx:32`
   brand, `QuickActions.tsx:6` stock Tailwind). Left over from feedback item A, deliberately not
   bundled with the Fandex Score fix: same class of duplication, different ramp, wants its own look.
