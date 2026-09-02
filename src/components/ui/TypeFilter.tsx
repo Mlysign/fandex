@@ -1,7 +1,7 @@
 "use client";
 import { Layers, Gamepad2, Clapperboard, Tv } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
-import { MEDIA_TYPES } from "@/lib/mediaTypes";
+import { MEDIA_TYPES, visibleTypes, enabledMediaTypes } from "@/lib/mediaTypes";
 import CollapsibleChips from "@/components/ui/CollapsibleChips";
 
 // <TypeFilter> — 03-components.md §6a. Row of circular 40px icon chips
@@ -19,6 +19,14 @@ export interface TypeFilterProps {
   activeTypes: string[];
   onToggleType: (t: string) => void;
   availableTypes?: string[];
+  /**
+   * The account's `users.media_types`, raw. Needed because `activeTypes` alone
+   * cannot say what is on screen: `[]` means "not narrowed", which resolves to
+   * this, not to every type. Without it the row claimed "All" while the lists
+   * showed two of three (Nils, 2026-09-02: "the type filters should always show
+   * the current state").
+   */
+  storedTypes?: string[];
 }
 
 const INACTIVE_CLASS =
@@ -30,8 +38,17 @@ const INACTIVE_CLASS =
 // rather than repeat the triple — a new type added to the union would otherwise
 // compile clean and silently never get a chip. mediaTypes.ts is a LEAF module
 // (one erased `import type`), so a client component can import it safely.
-export default function TypeFilter({ activeTypes, onToggleType, availableTypes = MEDIA_TYPES }: TypeFilterProps) {
-  const allActive = activeTypes.length === 0;
+export default function TypeFilter({ activeTypes, onToggleType, availableTypes = MEDIA_TYPES, storedTypes }: TypeFilterProps) {
+  // ⚠️ WHAT IS ON SCREEN, not what was clicked. `activeTypes` is the chip
+  // selection and `[]` means "not narrowed", which resolves to the account's
+  // default — so reading it directly made the row say "All" while the lists
+  // showed two types of three. Every pressed state below comes from `shown`.
+  // A widened Set, because `availableTypes` is string[] and `visibleTypes`
+  // returns MediaType[]: comparing them directly is a tsc error, and casting the
+  // callback parameter would silence the one check that keeps these two lists
+  // talking about the same thing.
+  const shown = new Set<string>(visibleTypes(activeTypes, storedTypes));
+  const allActive = availableTypes.every((t) => shown.has(t));
 
   // SM53 (Nils, 2026-09-02) — collapsed to one chip until tapped, on EVERY page
   // that renders SubBar, not just the calendar. "shrinking the type filter must
@@ -42,7 +59,7 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
   // current selection: the All icon when nothing is narrowed, the single
   // selected type's own icon and colour when one is, and All plus a count when
   // several are. → components/ui/CollapsibleChips.tsx
-  const selected = availableTypes.filter((t) => activeTypes.includes(t));
+  const selected = availableTypes.filter((t) => shown.has(t));
   const SummaryIcon = selected.length === 1 ? (TYPE_ICONS[selected[0]] ?? Layers) : Layers;
   const summary = (
     <SummaryIcon
@@ -64,12 +81,38 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
     </CollapsibleChips>
   );
 
+  /**
+   * "All" has to mean ALL, which clearing no longer achieves.
+   *
+   * It used to just empty the selection, and empty resolves to the account's
+   * default — so for someone whose default is movies+shows, the All chip
+   * delivered two types of three. It now diffs the current selection against a
+   * target and toggles the difference, which works through the plain
+   * `onToggleType` callback every surface already passes (each one is a
+   * functional setState, so the calls compose).
+   *
+   * ⚠️ The target is `[]` when the account default IS every type, and the
+   * explicit triple otherwise. Keeping `[]` for the common case matters: it is
+   * the "not narrowed" state, and writing an explicit triple into sessionStorage
+   * instead would pin this session to today's types and silently ignore a later
+   * change in Settings. Same stale-state trap as the session probe cache.
+   */
+  function selectAll() {
+    const target: string[] =
+      enabledMediaTypes(storedTypes).length === MEDIA_TYPES.length ? [] : [...MEDIA_TYPES];
+    const diff = [
+      ...activeTypes.filter((t) => !target.includes(t)),
+      ...target.filter((t) => !activeTypes.includes(t)),
+    ];
+    diff.forEach(onToggleType);
+  }
+
   function chips() {
   return (
     <div className="flex items-center gap-2" role="group" aria-label="Filter by type">
       <button
         type="button"
-        onClick={() => activeTypes.length > 0 && activeTypes.forEach(onToggleType)}
+        onClick={selectAll}
         aria-pressed={allActive}
         aria-label="All types"
         title="All"
@@ -81,7 +124,13 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
 
       {availableTypes.map((t) => {
         const Icon = TYPE_ICONS[t] ?? Layers;
-        const active = activeTypes.includes(t);
+        // ⚠️ `!allActive &&` is deliberate, and it is about what the button MEANS.
+        // A type chip is "narrow to this", not "this is visible", so when nothing
+        // is narrowed the honest state is All lit and the types dim — the look
+        // this row has always had, and the right `aria-pressed` for a control
+        // that is not engaged. It is only once the set is narrowed that the chips
+        // have to name it, which is the case that was broken.
+        const active = !allActive && shown.has(t);
         const color = TYPE_COLORS[t];
         const label = `${t.charAt(0).toUpperCase()}${t.slice(1)}s`;
         return (

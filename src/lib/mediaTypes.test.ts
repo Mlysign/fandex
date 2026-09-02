@@ -96,6 +96,21 @@ describe("the setting is a DEFAULT, not a scope", () => {
     expect(visibleTypes([], null)).toEqual(MEDIA_TYPES);
   });
 
+  it("is what the CHIP ROW must render, not the raw selection", () => {
+    // Shipped broken on 2026-09-02 and reported the same day: the lists filtered
+    // correctly while the chips read the raw `activeTypes`, so an un-narrowed row
+    // showed "All" pressed and no type pressed, while two of three were on
+    // screen. Nils: "the type filters should always show the current state."
+    //
+    // The chips ask visibleTypes the same question the list does. Anything that
+    // reads activeTypes directly to decide a pressed state is the bug returning.
+    const stored = ["movie", "show"];
+    expect(visibleTypes([], stored)).toEqual(["movie", "show"]);
+    // "All" is pressed only when every type is genuinely on screen.
+    expect(MEDIA_TYPES.every((t) => visibleTypes([], stored).includes(t))).toBe(false);
+    expect(MEDIA_TYPES.every((t) => visibleTypes([], []).includes(t))).toBe(true);
+  });
+
   it("treats a selection of only junk as no selection", () => {
     // A hand-edited or half-migrated sessionStorage value degrades to the
     // default rather than to an empty page.

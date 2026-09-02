@@ -550,6 +550,9 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
         // No `availableTypes`: the chip row shows every type, always. The media-type
         // setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
         // so hiding its chip would remove the only control that undoes it.
+        // `storedTypes` is what lets the chips show the RESOLVED state rather than
+        // the raw selection, which is a different question.
+        storedTypes={storedTypes}
         tabs={<LibraryWishlistTabs active={activeTab} onChange={changeTab} />}
         searchValue={search}
         onSearchChange={setSearch}

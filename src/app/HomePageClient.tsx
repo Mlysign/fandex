@@ -245,7 +245,7 @@ export default function HomePageClient({
       {/* No `availableTypes`: the chip row shows every type, always. The media-type
           setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
           so hiding its chip would remove the only control that undoes it. */}
-      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableViews={[]} />
+      <SubBar activeTypes={activeTypes} onToggleType={toggleType} storedTypes={storedTypes} availableViews={[]} />
 
       <main className="px-5 py-4 md:py-8">
         <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">

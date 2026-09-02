@@ -344,6 +344,9 @@ export default function CalendarPageClient() {
         // No `availableTypes`: the chip row shows every type, always. The media-type
         // setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
         // so hiding its chip would remove the only control that undoes it.
+        // `storedTypes` is what lets the chips show the RESOLVED state rather than
+        // the raw selection, which is a different question.
+        storedTypes={storedTypes}
         // Both the source filter AND the view toggle ride in the filter row now
         // (SM53). `actions` is deliberately NOT passed: on this page it was the
         // only occupant of SubBar's sort row, so leaving it there kept a whole

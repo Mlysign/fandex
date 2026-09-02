@@ -31,6 +31,9 @@ interface SubBarProps {
   activeTypes: string[];
   onToggleType: (t: string) => void;
   availableTypes?: string[];          // defaults to game/movie/show
+  /** users.media_types, raw. TypeFilter needs it to show what is actually on
+   *  screen: an empty `activeTypes` resolves to this, not to every type. */
+  storedTypes?: string[];
 
   // Source filter chips (optional)
 
@@ -97,6 +100,7 @@ export default function SubBar({
   // MEDIA_TYPES default, so the chip list is defined in exactly one place. A
   // second copy of the triple here would shadow it and silently win.
   availableTypes,
+  storedTypes,
   tabs,
   searchValue = "",
   onSearchChange,
@@ -223,7 +227,7 @@ export default function SubBar({
               lines the chips take. */}
           <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-5">
             {/* 03-components.md §6a: circular icon chips, not text pills. */}
-            <TypeFilter activeTypes={activeTypes} onToggleType={onToggleType} availableTypes={availableTypes} />
+            <TypeFilter activeTypes={activeTypes} onToggleType={onToggleType} availableTypes={availableTypes} storedTypes={storedTypes} />
 
             {hideRated && (
               <>
