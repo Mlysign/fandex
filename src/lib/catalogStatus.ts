@@ -2,6 +2,7 @@ import { retentionStatus } from "@/lib/retention";
 import { laneStates, backfillEnabled, backfillMaxItems } from "@/lib/catalogBackfill";
 import { housekeepingStatus } from "@/lib/catalogHousekeeping";
 import { catalogBrowseEnabled, catalogBrowseMin, catalogWindowCount, catalogBrowseReady } from "@/lib/catalogFeed";
+import { itemStatsStatus } from "@/lib/itemStats";
 import { get } from "@/lib/db";
 import type { MediaType } from "@/types";
 
@@ -40,5 +41,9 @@ export function catalogSnapshot() {
     },
     housekeeping: housekeepingStatus(),
     browse: { enabled: catalogBrowseEnabled(), min: catalogBrowseMin(), windows: browse },
+    // Migration 27. `computed` climbing to `total` is the initial fill
+    // draining; `stale` is the ongoing refresh queue. Both matter because a
+    // catalog-served card with no stats sorts as if nobody had voted for it.
+    stats: itemStatsStatus(),
   };
 }

@@ -38,6 +38,11 @@ interface Row {
   title: string;
   release_date: string | null;
   poster_url: string | null;
+  // Migration 27. NULL means "not computed yet", which is different from 0
+  // ("computed, nobody has voted") and is why the ORDER BY below has to say
+  // where NULLs go rather than leaving it to SQLite. → lib/itemStats.ts
+  vote_count: number | null;
+  vote_average: number | null;
 }
 
 /**
@@ -60,14 +65,32 @@ export function catalogSectionPage(
 ): FeedCandidate[] {
   const { gte, lte } = dateWindow(direction);
   const offset = Math.max(0, (page - 1) * pageSize);
+  // 2026-09-02 — ordered by CROWD SIZE first, then by date.
+  //
+  // It was date-only until migration 27, because the row held nothing else to
+  // sort on. That made page 1 of a local section an arbitrary slice of the
+  // window rather than its notable titles, which is not what the provider path
+  // it stands in for does: TMDB is asked with `sort_by=popularity.desc` and RAWG
+  // with `ordering=-added`. Paging by date meant "the next 40 by date", so a
+  // visitor scrolling a local section met obscure titles first.
+  //
+  // ⚠️ `vote_count IS NULL` FIRST in the ORDER BY, not a bare `vote_count DESC`.
+  // SQLite sorts NULL lowest, so on a fresh database (nothing computed yet) a
+  // bare DESC would put every uncomputed row LAST and quietly page the window
+  // backwards. This says explicitly: computed rows first, biggest crowd first,
+  // uncomputed rows after them in date order.
+  //
+  // `title ASC` stays as the final tiebreak so the order is total and a page
+  // boundary cannot duplicate or drop a row between requests.
   const rows = query<Row>(
-    `SELECT id, type, title, release_date, poster_url
+    `SELECT id, type, title, release_date, poster_url, vote_count, vote_average
        FROM media_items
       WHERE type = ?
         AND release_date IS NOT NULL
         AND release_date >= ?
         AND release_date <= ?
-      ORDER BY release_date ${direction === "past" ? "DESC" : "ASC"}, title ASC
+      ORDER BY vote_count IS NULL, vote_count DESC,
+               release_date ${direction === "past" ? "DESC" : "ASC"}, title ASC
       LIMIT ? OFFSET ?`,
     [type, gte, lte, pageSize, offset]
   );
@@ -103,8 +126,18 @@ export function catalogSectionPage(
     raw: null,
     genreNames: [],
     originalLanguage: null,
-    voteCount: 0,
-    voteAverage: null,
+    // Migration 27. These were hardcoded 0 / null, which `decorateSection`
+    // turns into `communityVotes: 0` for every row — and the client's
+    // Popularity sort is `votesOf(i) = i.communityVotes ?? 0`. Every catalog
+    // card tied at zero, and a stable sort then shows ARRIVAL order under a
+    // control labelled "Popularity". That is the 2026-08-29 search bug, which
+    // is why these are real numbers now. → lib/itemStats.ts
+    voteCount: r.vote_count ?? 0,
+    voteAverage: r.vote_average,
+    // Still null: the provider trending metric is a DIFFERENT quantity on four
+    // incomparable scales, and this app's own definition of "popularity" is the
+    // vote count above (discovery.ts's SortKey comparator). Nothing reads this
+    // field on the catalog path.
     popularity: null,
   }));
 }

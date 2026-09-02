@@ -198,6 +198,24 @@ export async function register() {
       if (bf.ran && bf.pages > 0) log.info("catalog_backfill", { ...bf, everyMs: BACKFILL_INTERVAL_MS });
       else if (bf.reason === "at-cap") log.warn("catalog_backfill_at_cap", { items: bf.items });
 
+      // ── Crowd stats onto the row (migration 27) ─────────────────────────
+      // AFTER the fill and the backfill, because it reads what they wrote, and
+      // BEFORE housekeeping, which is not a preference:
+      //
+      // housekeepingPass() reclaims space by DROPPING `media_links.raw_data`,
+      // and that blob is the only place the vote counts exist. An item whose
+      // blob is reclaimed before its stats are computed can never have them
+      // computed, and would sit at a stamped, permanent 0. Running here means
+      // the number is lifted out of the blob before the blob can go, so
+      // denormalising actually RESCUES the figure from housekeeping rather than
+      // racing it.
+      //
+      // Bounded and provider-free: it reads rows already on disk, so a pass
+      // costs no quota and cannot fail a request.
+      const { refreshItemStats } = await import("./lib/itemStats");
+      const stats = refreshItemStats();
+      if (stats > 0) log.info("item_stats_refreshed", { rows: stats });
+
       // ── Housekeeping by bytes (phase 5) ─────────────────────────────────
       // Last of all, and a no-op until the file passes its size threshold. It
       // reclaims the 70% of the database that is `media_links.raw_data` by

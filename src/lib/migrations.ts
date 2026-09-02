@@ -1189,6 +1189,68 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 27,
+    name: "media_items crowd stats (make the catalog feed sortable)",
+    up: (db) => {
+      // 2026-09-02. `catalogSectionPage` serves Discover's browse feed from our
+      // own rows once a window is big enough, and it could only ever order them
+      // by DATE. Its own header says why: `media_items` holds title, date,
+      // poster and slug and nothing about how popular anything is, because the
+      // votes live inside `media_links.raw_data` and reading those is the merge
+      // path that file exists to avoid (41 MB of JSON for the real library).
+      //
+      // So a catalog-served card shipped `voteCount: 0`, which `decorateSection`
+      // turns into `communityVotes: 0`, which the client's Popularity sort reads
+      // as `votesOf(i) = i.communityVotes ?? 0`. Every catalog row tied at zero,
+      // and `Array.prototype.sort` being stable, the user would have seen
+      // ARRIVAL order under a control labelled "Popularity".
+      //
+      // ⚠️ That is not a hypothetical: it is exactly the 2026-08-29 search bug,
+      // where the one branch that skipped `decorateSection` served a 1959 show
+      // above a 2026 one under the same control. Denormalising the two numbers
+      // onto the row is what lets the catalog path answer the same question the
+      // provider path already answers.
+      //
+      // ── Why these two numbers and not a third "popularity" ──────────────
+      //
+      // This app already HAS a definition of popularity and it is the vote
+      // count: `discovery.ts`'s `SortKey` includes "popularity", and its
+      // comparator is `b.communityVotes - a.communityVotes`. Storing a separate
+      // provider trending metric (TMDB `popularity`, RAWG `added`, IGDB `hypes`)
+      // would create a SECOND, competing notion of the same word, on four
+      // mutually incomparable scales. One number, matching what the rest of the
+      // codebase already means.
+      //
+      // Both are computed by the SAME pure functions the search path uses
+      // (`communityVotes` + `averageCommunity` over `merged.communityRatings`),
+      // so a catalog row and a `find()` row cannot disagree. → lib/itemStats.ts
+      //
+      // ── No index, deliberately ─────────────────────────────────────────
+      //
+      // The standing rule is that a column added by a migration gets its index
+      // in the SAME migration, because db.ts's CREATE block runs BEFORE
+      // migrations and must stay valid against the old schema. That rule is
+      // about WHERE the index goes, not about adding one that earns nothing:
+      // the feed filters `type` + a release-date range first, which the existing
+      // idx_media_type / idx_media_release already serve, and the surviving set
+      // is ~100-400 rows. Sorting that in memory is free. Revisit if the browse
+      // windows ever hold thousands.
+      const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
+      const has = (n: string) => cols.some((c) => c.name === n);
+      // Summed across sources, exactly like communityVotes(). NULL means "not
+      // computed yet", which is a different thing from 0 ("computed, no votes")
+      // and is what the refresher's queue is keyed on.
+      if (!has("vote_count")) db.exec("ALTER TABLE media_items ADD COLUMN vote_count INTEGER");
+      // 0-10, matching FeedCandidate.voteAverage. decorateSection multiplies by
+      // 10 for communityScore, so storing the 0-100 form here would double it.
+      if (!has("vote_average")) db.exec("ALTER TABLE media_items ADD COLUMN vote_average REAL");
+      // When the two above were last derived. Its own column rather than
+      // reusing updated_at, which moves for unrelated reasons and so cannot
+      // answer "is this stale".
+      if (!has("stats_at")) db.exec("ALTER TABLE media_items ADD COLUMN stats_at INTEGER");
+    },
+  },
 ];
 
 
