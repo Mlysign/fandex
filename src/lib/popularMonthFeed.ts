@@ -17,7 +17,7 @@ import { readMonthSnapshot } from "@/lib/calendarSnapshot";
 import { rankCrossSourcePopularity, POPULAR_PER_MONTH } from "@/lib/popularMonth";
 import type { FeedCandidate } from "@/lib/discoverFeed";
 import {
-  monthWindow, fetchGamePage, fetchMoviePage, fetchShowPage, fetchIgdbGamePage,
+  monthWindow, fetchMoviePage, fetchShowPage, fetchIgdbGamePage,
 } from "@/lib/discoverFeed";
 
 // Past months never change and future months move slowly, so a 6h TTL is
@@ -94,16 +94,16 @@ export async function fetchMonthCandidates(month: string, region: string): Promi
   // popularity, so page 2 holds items that could never place in a top-15.
   // `.catch` per source, not one shared await — one provider being down should
   // cost its own titles, not the whole month.
-  const [games, igdbGames, movies, shows] = await Promise.all([
-    fetchGamePage(1, "future", win).catch(() => []),
+  // ⚠️ Games are IGDB alone since 2026-09-02 (RAWG retired). The RAWG entry that
+  // used to lead this list is gone, and with it the note about RAWG winning a
+  // duplicate on richer poster data — there is no duplicate to resolve now.
+  const [igdbGames, movies, shows] = await Promise.all([
     fetchIgdbGamePage(1, "future", win).catch(() => []),
     fetchMoviePage(1, "future", region, win).catch(() => []),
     fetchShowPage(1, "future", win).catch(() => []),
   ]);
 
-  // RAWG before IGDB: on a duplicate game, rankCrossSourcePopularity keeps the
-  // first seen, and RAWG's list payload carries the richer poster/platform data.
-  const ranked = rankCrossSourcePopularity([...games, ...igdbGames, ...movies, ...shows], MONTH_POOL_DEPTH);
+  const ranked = rankCrossSourcePopularity([...igdbGames, ...movies, ...shows], MONTH_POOL_DEPTH);
   _monthCache.set(key, ranked);
   return ranked;
 }

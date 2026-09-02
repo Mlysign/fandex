@@ -46,7 +46,18 @@ export const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 //
 // Kept here rather than in src/types because it is a runtime value and every
 // export of that file is type-only (scripts/ rely on Node's type-stripping).
-export const IDENTITY_ONLY_PROVIDERS: readonly string[] = ["google"];
+// 2026-09-02: RAWG joins google, for a different reason with the identical
+// symptom. It was RETIRED as a data provider (Nils's call), so it is gone from
+// `SOURCES` and can no longer sync — and an identity whose provider has left the
+// registry reads exactly like one that never could sync. Anyone with a RAWG
+// connection would have got the doomed-POST-and-spinner described above, for the
+// life of the account, silently.
+//
+// ⚠️ Two DIFFERENT reasons live in this one list, which is fine because the
+// question it answers is a single one: "can this identity ever produce a sync?"
+// google never could; rawg no longer can. Anything removed from `SOURCES` while
+// identities still reference it belongs here in the same commit.
+export const IDENTITY_ONLY_PROVIDERS: readonly string[] = ["google", "rawg"];
 
 export function staleProviders(
   identities: { provider: string }[],

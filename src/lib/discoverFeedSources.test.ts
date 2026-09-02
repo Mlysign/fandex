@@ -91,22 +91,34 @@ describe("games are a two-source medium (SM35/SM36)", () => {
     expect(games.every((g) => g.type === "game")).toBe(true);
   });
 
-  it("merges BOTH sources when both are up, without duplicating a shared title", async () => {
-    vi.stubGlobal("fetch", rawgOk([
-      rawgGame(1, "Rawg Only Game", "2026-02-01"),
-      rawgGame(2, "Shared Title", "2026-05-20"), // same title+year as IGDB 102
-    ]));
+  // 2026-09-02 — RAWG was RETIRED as a data provider (Nils's call), so the two
+  // tests that used to live here ("merges BOTH sources", "does not lose the
+  // other source when RAWG is sparse") are gone: they asserted a world with two
+  // games providers in it.
+  //
+  // They are replaced rather than deleted, because the thing worth guarding
+  // changed rather than disappearing. **Browse must never call RAWG again**, and
+  // a re-add would otherwise be one import that tsc, lint and every other test
+  // accept happily — the same reasoning as `noOmdb.test.ts`.
+  it("does NOT call RAWG at all, even when RAWG would answer", async () => {
+    const fetchSpy = rawgOk([rawgGame(1, "Rawg Only Game", "2026-02-01")]);
+    vi.stubGlobal("fetch", fetchSpy);
+
     const games = await fetchGamePageAllSources(1, "future");
-    expect(titles(games)).toEqual(["Igdb Only Game", "Rawg Only Game", "Shared Title"]);
-    // RAWG wins the collision — it carries artwork, IGDB's entry is the filler.
-    expect(games.find((g) => g.title === "Shared Title")!.source).toBe("rawg");
+
+    // A call count, not a payload: the fact the environment can actually observe.
+    const urls = fetchSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(urls.some((u) => u.includes("api.rawg.io"))).toBe(false);
+    expect(titles(games)).not.toContain("Rawg Only Game");
+    expect(games.every((g) => g.source === "igdb")).toBe(true);
   });
 
-  it("does not lose the OTHER source's games when RAWG is up but sparse", async () => {
-    vi.stubGlobal("fetch", rawgOk([rawgGame(3, "Rawg Only Game", "2026-02-01")]));
+  // The dedupe is still wired up even with one source, so a second provider can
+  // be plugged back into fetchGamePageAllSources without touching anything else.
+  it("still dedupes, so a second source can return without a rewrite", async () => {
+    vi.stubGlobal("fetch", rawgDown());
     const games = await fetchGamePageAllSources(1, "future");
-    expect(titles(games)).toContain("Igdb Only Game");
-    expect(titles(games)).toContain("Rawg Only Game");
+    expect(new Set(titles(games)).size).toBe(titles(games).length);
   });
 });
 

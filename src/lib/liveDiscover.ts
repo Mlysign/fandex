@@ -26,7 +26,7 @@ import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
 import type {
   FeedCandidate, RawPayload} from "@/lib/discoverFeed";
-import { fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
+import { fetchMoviePage, fetchShowPage, fetchPages,
   fetchIgdbGamePage, fetchTraktMoviePage, fetchTraktShowPage, dedupeGames,
 } from "@/lib/discoverFeed";
 import type { MediaLink, MediaType } from "@/types";
@@ -477,11 +477,14 @@ export async function personalizedFeed(userId: string, region: string): Promise<
   if (hit) return hit;
 
   const idf = getCatalogIdf();
-  // Each medium pulls from two sources in parallel: RAWG + IGDB (games),
-  // TMDB + Trakt-anticipated (movies/shows). Trakt only paginates a finite
-  // anticipated list, so it contributes its first 2 pages, not the full depth.
-  const [rawgGames, igdbGames, tmdbMovies, traktMovies, tmdbShows, traktShows] = await Promise.all([
-    fetchPages((p) => fetchGamePage(p, "future"), PAGES_PER_SOURCE),
+  // Movies and shows pull two sources in parallel (TMDB + Trakt-anticipated);
+  // Trakt only paginates a finite anticipated list, so it contributes its first
+  // 2 pages rather than the full depth.
+  //
+  // ⚠️ Games are IGDB alone since 2026-09-02: RAWG was retired as a data
+  // provider after answering 401 continuously from 2026-08-20. See
+  // `fetchGamePageAllSources` for what that costs.
+  const [igdbGames, tmdbMovies, traktMovies, tmdbShows, traktShows] = await Promise.all([
     fetchPages((p) => fetchIgdbGamePage(p, "future"), PAGES_PER_SOURCE),
     fetchPages((p) => fetchMoviePage(p, "future", region), PAGES_PER_SOURCE),
     fetchPages((p) => fetchTraktMoviePage(p), 2),
@@ -489,7 +492,7 @@ export async function personalizedFeed(userId: string, region: string): Promise<
     fetchPages((p) => fetchTraktShowPage(p), 2),
   ]);
 
-  const games = dedupeGames([...rawgGames, ...igdbGames]);
+  const games = dedupeGames(igdbGames);
   const movies = dedupeById([...tmdbMovies, ...traktMovies]);
   const shows = dedupeById([...tmdbShows, ...traktShows]);
 

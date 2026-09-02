@@ -48,8 +48,9 @@ describe("orchestrateSync — budget + resume", () => {
 
 describe("providerQueue — selection", () => {
   it("returns every registered provider for 'all' / undefined", () => {
-    expect(providerQueue("all")).toEqual(["trakt", "letterboxd", "steam", "rawg", "tmdb"]);
-    expect(providerQueue()).toEqual(["trakt", "letterboxd", "steam", "rawg", "tmdb"]);
+    // rawg left this list on 2026-09-02 when it was retired as a data provider.
+    expect(providerQueue("all")).toEqual(["trakt", "letterboxd", "steam", "tmdb"]);
+    expect(providerQueue()).toEqual(["trakt", "letterboxd", "steam", "tmdb"]);
   });
 
   it("narrows to a single provider by id", () => {
@@ -57,7 +58,16 @@ describe("providerQueue — selection", () => {
   });
 
   it("intersects a resume list with the registry, preserving registry order", () => {
-    expect(providerQueue("all", ["rawg", "trakt", "bogus"])).toEqual(["trakt", "rawg"]);
+    expect(providerQueue("all", ["steam", "trakt", "bogus"])).toEqual(["trakt", "steam"]);
+  });
+
+  // 2026-09-02. A retired provider must fall out of the queue rather than drain
+  // to an empty sync: a client that still has a rawg identity (and one does)
+  // could otherwise resume it forever. `rawg` is a legal `Source` still, because
+  // 603 stored links reference it, so "unknown id" would not catch this.
+  it("drops a RETIRED provider from a resume list, like any unregistered id", () => {
+    expect(providerQueue("all", ["rawg"])).toEqual([]);
+    expect(providerQueue("rawg")).toEqual([]);
   });
 
   it("ignores an empty resume list and falls back to `only`", () => {

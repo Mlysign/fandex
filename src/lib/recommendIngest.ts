@@ -11,13 +11,9 @@ import type {
   CandidateRef} from "@/lib/sources/tagDiscover";
 import {
   tmdbGenreId,
-  rawgGenreSlug,
-  rawgTagSlug,
   resolveTmdbKeywordId,
   discoverTmdbByGenres,
   discoverTmdbByKeyword,
-  discoverRawgByGenres,
-  discoverRawgByTag,
 } from "@/lib/sources/tagDiscover";
 
 const MAX_KEYWORD_TAGS = 5;   // strongest non-genre tags to target individually
@@ -47,8 +43,9 @@ export async function ingestCandidatesForTags(tagKeys: string[]): Promise<Ingest
   if (movieGenreIds.length) jobs.push(discoverTmdbByGenres(movieGenreIds, "movie"));
   if (tvGenreIds.length) jobs.push(discoverTmdbByGenres(tvGenreIds, "show"));
 
-  const rawgSlugs = [...new Set(genreKeys.map(rawgGenreSlug).filter((x): x is string => !!x))];
-  if (rawgSlugs.length) jobs.push(discoverRawgByGenres(rawgSlugs));
+  // ⚠️ The RAWG genre job was removed 2026-09-02 with the rest of the provider.
+  // Games reach this ingest through IGDB and the existing catalog now; RAWG had
+  // been 401ing since 2026-08-20, so these calls returned nothing anyway.
 
   for (const key of otherKeys) {
     jobs.push(
@@ -59,7 +56,6 @@ export async function ingestCandidatesForTags(tagKeys: string[]): Promise<Ingest
         return [...mv, ...tv];
       })()
     );
-    jobs.push(discoverRawgByTag(rawgTagSlug(key)));
   }
 
   const refs = (await Promise.all(jobs)).flat();

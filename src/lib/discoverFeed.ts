@@ -651,14 +651,33 @@ export function dedupeGames(cands: FeedCandidate[]): FeedCandidate[] {
  * RAWG's page N plus IGDB's page N, deduped — a deeper page, not an offset one.
  * That matches how `personalizedFeed` already combines them.
  */
+/**
+ * Every games browse page, from every games source we still have.
+ *
+ * ⚠️ **It is IGDB alone as of 2026-09-02, and that is a deliberate retreat from
+ * a standing invariant, not an oversight.** "If a medium has two providers, a
+ * single-source pull is a bug" was written when games were RAWG + IGDB, and
+ * cutting RAWG from browse had been tried and reverted once before.
+ *
+ * What changed is that the second provider stopped existing in practice: RAWG
+ * has answered 401 since 2026-08-20 and still did on 2026-09-02, so its monthly
+ * quota did not reset on schedule. Browse has been IGDB-only in reality for two
+ * weeks; this makes the code say so. Nils retired it as a data provider.
+ *
+ * ⚠️ **The consequence, stated plainly: games now have ONE provider, and it is
+ * the one whose licence is unresolved and which sits behind `IGDB_ENABLED`.**
+ * Flipping that switch now takes games' browse feed to nothing rather than
+ * halving it. `withCatalogFallback` covers the outage case from our own rows,
+ * which is what makes this survivable — but do not add a third games surface
+ * without re-reading that. → `docs/catalog-growth.md`, [[provider-latency-isolation]]
+ *
+ * The name and the dedupe stay: the moment a second source returns, it plugs in
+ * here and nothing else has to change.
+ */
 export async function fetchGamePageAllSources(
   page = 1, direction: Direction = "future", window?: DateRange
 ): Promise<FeedCandidate[]> {
-  const [rawg, igdb] = await Promise.all([
-    fetchGamePage(page, direction, window),
-    fetchIgdbGamePage(page, direction, window),
-  ]);
-  return dedupeGames([...rawg, ...igdb]);
+  return dedupeGames(await fetchIgdbGamePage(page, direction, window));
 }
 
 /**

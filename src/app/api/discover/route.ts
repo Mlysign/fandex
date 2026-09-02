@@ -52,28 +52,14 @@ async function searchAll(q: string, type: string | null): Promise<SearchResult[]
   const results: SearchResult[] = [];
 
   if (!type || type === "game") {
-    try {
-      const res = await httpFetch(
-        `https://api.rawg.io/api/games?key=${RAWG_KEY}&search=${encodeURIComponent(q)}&page_size=12&search_precise=true`,
-        { appScopedAuth: true }
-      );
-      const data = await res.json();
-      for (const g of data.results ?? []) {
-        results.push({
-          id: `rawg-${g.id}`, rawId: g.id, source: "rawg", type: "game",
-          title: g.name, releaseDate: g.released ?? null,
-          posterUrl: g.background_image ?? null,
-          platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
-          ids: { rawg: g.id },
-          voteCount: g.ratings_count ?? 0,
-          voteAverage: typeof g.rating === "number" && g.rating > 0 ? g.rating * 2 : null, // 0–5 → 0–10
-          raw: { source: "rawg", sourceId: String(g.id), data: g },
-        });
-      }
-    } catch { /* continue */ }
-
-    // IGDB game search — adds titles RAWG's index misses (deduped by title+year
-    // against the RAWG hits above). No-ops when IGDB isn't configured.
+    // ⚠️ The RAWG search that used to run first was removed 2026-09-02 when RAWG
+    // was retired as a data provider. It had been answering 401 since
+    // 2026-08-20, so this block had been contributing nothing but a wasted
+    // round-trip on every game search for two weeks.
+    //
+    // IGDB is the only games index now. The dedupe below is kept: it still
+    // guards against IGDB returning the same title twice, and it is the seam a
+    // second source plugs back into.
     try {
       const existing = new Set(
         results.filter((r) => r.type === "game").map((r) => `${normalizeName(r.title)}|${(r.releaseDate ?? "").slice(0, 4)}`)
