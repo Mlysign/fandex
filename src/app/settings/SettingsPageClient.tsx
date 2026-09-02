@@ -1,8 +1,9 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import BrandGlyph from "@/components/BrandGlyph";
-import Button from "@/components/ui/Button";
+import Button, { buttonClasses } from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COUNTRIES } from "@/lib/countries";
@@ -150,7 +151,14 @@ function SettingsContent() {
     const d = await res.json();
     const stored: string[] = d.mediaTypes ?? [];
     setMediaTypes(stored);
-    setNotice({ msg: "Updated what you track.", ok: true });
+    // The session probe's module-level cache holds the OLD mediaTypes, and every
+    // list surface reads the default through it. Without this, saving here did
+    // NOTHING to Home / Discover / Calendar / My Stuff until a full reload —
+    // which reads as the setting being broken (Nils hit exactly that,
+    // 2026-09-02). `savePlatforms` below has always done this; this function was
+    // written alongside it and never got the same line.
+    resetSessionProbe();
+    setNotice({ msg: "Default types updated.", ok: true });
     return stored;
   }
 
@@ -589,6 +597,31 @@ function SettingsContent() {
             )}
           </div>
           )}
+        </section>
+
+        {/* Import (2026-09-02). `/import` shipped 2026-08-23 with the page, both
+            API routes and src/lib/import/ complete — and NOTHING anywhere in the
+            app linking to it, so the only way in was typing the URL. Nils: "i
+            never tried the letterboxd and backloggd import because i dont know
+            how. i would have expected an import button in my user settings."
+            ⚠️ Letterboxd and IMDb only. Backloggd has no export: its CSV export
+            tool is roadmap item 6 (7K votes, unbuilt, checked 2026-09-02), and
+            /settings/import_export/ on their site renders an empty panel. */}
+        <section className="space-y-3">
+          <PanelHeader
+            eyebrow="Import"
+            hint="Bring ratings and watchlists across from another tracker."
+          />
+          <div className="bg-surface-elevated border border-border rounded-xl p-5 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium text-sm text-text-primary">Import from Letterboxd or IMDb</p>
+              <p className="text-xs text-text-secondary">
+                Both let you download your own data for free. Drop the file in and Fandex reads
+                your ratings and watchlist from it.
+              </p>
+            </div>
+            <Link href="/import" className={buttonClasses()}>Import</Link>
+          </div>
         </section>
 
         {/* Region (T22) */}

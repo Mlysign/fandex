@@ -1,6 +1,7 @@
 "use client";
 import { Layers, Gamepad2, Clapperboard, Tv } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
+import { MEDIA_TYPES } from "@/lib/mediaTypes";
 import CollapsibleChips from "@/components/ui/CollapsibleChips";
 
 // <TypeFilter> — 03-components.md §6a. Row of circular 40px icon chips
@@ -23,7 +24,13 @@ export interface TypeFilterProps {
 const INACTIVE_CLASS =
   "border-border-strong text-text-secondary bg-transparent hover:border-neutral-400";
 
-export default function TypeFilter({ activeTypes, onToggleType, availableTypes = ["game", "movie", "show"] }: TypeFilterProps) {
+// ⚠️ The DEFAULT is the live path now (2026-09-02): all four list surfaces stopped
+// passing `availableTypes`, because the media-type setting became a default rather
+// than a scope and its chip has to stay on screen. So this must read MEDIA_TYPES
+// rather than repeat the triple — a new type added to the union would otherwise
+// compile clean and silently never get a chip. mediaTypes.ts is a LEAF module
+// (one erased `import type`), so a client component can import it safely.
+export default function TypeFilter({ activeTypes, onToggleType, availableTypes = MEDIA_TYPES }: TypeFilterProps) {
   const allActive = activeTypes.length === 0;
 
   // SM53 (Nils, 2026-09-02) — collapsed to one chip until tapped, on EVERY page

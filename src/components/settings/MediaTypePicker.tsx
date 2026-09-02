@@ -5,14 +5,21 @@ import PanelHeader from "@/components/insights/PanelHeader";
 import type { MediaType } from "@/types";
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from "@/lib/mediaTypes";
 
-// Settings → What you track (2026-08-27).
+// Settings → Default types (2026-08-27, semantics reversed 2026-09-02).
 //
-// Nils: "if users don't want to use fandex for games, we keep the games filter
-// permanently disabled. this will be especially relevant later when we add
-// books, board games etc."
+// Nils, 2026-08-27: "if users don't want to use fandex for games, we keep the
+// games filter permanently disabled."
 //
-// Turning a type off hides it from the type chips and from every list that
-// respects them: Home's rails, Discover, the Calendar, Library and Wishlist.
+// ⚠️ **It is a DEFAULT, not a scope, and that is a reversal.** The first version
+// removed the type's chip from the filter row entirely. Nils, 2026-09-02: "i
+// dont want to hide the games filter here, just set the default to my pref."
+// So the chip row now renders every type and this decides what an UN-NARROWED
+// list resolves to: Home's rails, Discover, the Calendar, Library and Wishlist
+// all start here, and one tap on the chip overrides it for the session.
+//
+// The chip selection lives in sessionStorage (`rr_type_filter`), so an override
+// lasts the browser session and a genuinely new visit falls back to this. →
+// lib/mediaTypes.ts `visibleTypes`
 //
 // ⚠️ It is a DISPLAY preference and nothing else. Your games stay synced and
 // stay in the database — turning games back on restores the exact same rows.
@@ -73,8 +80,8 @@ export default function MediaTypePicker({
   return (
     <section className="space-y-3">
       <PanelHeader
-        eyebrow="What you track"
-        hint="Turn off anything you don't use Fandex for. It disappears from the filters and every list."
+        eyebrow="Default types"
+        hint="Which types every list starts with. You can still switch one on from the filter row any time."
       />
       <div className="bg-surface-elevated border border-border rounded-xl p-5 flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
@@ -103,9 +110,9 @@ export default function MediaTypePicker({
 
         <p className="text-xs text-text-secondary leading-relaxed">
           {allOn
-            ? "Tracking everything."
-            : `Hidden: ${MEDIA_TYPES.filter((t) => !selected.includes(t)).map((t) => MEDIA_TYPE_LABELS[t]).join(", ")}. `}
-          {!allOn && "Nothing is deleted. Anything you have synced comes back the moment you turn it on again."}
+            ? "Every list starts with all three."
+            : `Off by default: ${MEDIA_TYPES.filter((t) => !selected.includes(t)).map((t) => MEDIA_TYPE_LABELS[t]).join(", ")}. `}
+          {!allOn && "Nothing is deleted or hidden for good. Tap the type in any list's filter row to bring it back for that visit."}
           {saving && <span className="ml-2 text-text-muted">Saving…</span>}
         </p>
       </div>

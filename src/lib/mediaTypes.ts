@@ -61,44 +61,37 @@ export function isTypeEnabled(type: string, stored: readonly string[] | null | u
 }
 
 /**
- * Narrow an already-chosen type FILTER to the enabled set.
- *
- * The filter chips and this setting are two different things: the chips are
- * "show me only games right now", the setting is "I do not use Fandex for
- * games". A stale chip selection naming a now-disabled type would otherwise
- * filter every list to nothing with no visible control to undo it — the same
- * hidden-active-filter trap as the platform chips.
- */
-export function narrowTypeFilter(
-  active: readonly string[],
-  stored: readonly string[] | null | undefined
-): MediaType[] {
-  const enabled = enabledMediaTypes(stored);
-  return active.filter((t): t is MediaType => enabled.includes(t as MediaType));
-}
-
-/**
  * The types a list should actually show: the chip selection where there is one,
- * the enabled set where there isn't.
+ * the account's DEFAULT where there isn't.
  *
  * This is the single place the two ideas meet, and every list surface should use
- * it rather than re-deriving. `activeTypes.length === 0` has always meant "all
- * types" across Home, Discover, Calendar and MyStuff (they share one
- * `rr_type_filter` key), and the setting redefines "all" as "all the ones you
- * use" without changing that convention.
+ * it rather than re-deriving. `activeTypes.length === 0` has always meant "not
+ * narrowed" across Home, Discover, Calendar and MyStuff (they share one
+ * `rr_type_filter` key), and the setting decides what "not narrowed" resolves to.
  *
- * ⚠️ A selection consisting ENTIRELY of now-disabled types falls back to the
- * enabled set rather than to nothing. Turning games off while "games only" was
- * selected should leave you looking at your movies and shows, not at an empty
- * page whose only visible control is a chip row that no longer contains the
- * culprit.
+ * ⚠️ **The setting is a DEFAULT, not a scope** (Nils, 2026-09-02: "i dont want to
+ * hide the games filter here, just set the default to my pref"). An explicit chip
+ * selection WINS OUTRIGHT, including one naming a type the setting turns off:
+ * tapping Games has to show games, or the chip is a control that lies.
+ *
+ * That is a reversal, and deleting `narrowTypeFilter` is what makes the old
+ * shape unrepresentable rather than merely unused. Its job was guarding a stale
+ * chip selection naming a now-hidden type, which could filter a list to nothing
+ * with no visible control to undo it. **That trap is gone because the chip row
+ * now renders every type**, so the control to undo it is always on screen. The
+ * guard and the hiding were two halves of one design; removing one without the
+ * other would leave a list that cannot be un-emptied.
+ *
+ * ⚠️ `rr_type_filter` is **sessionStorage**, so an explicit selection lasts the
+ * browser session and a genuinely new visit falls back to the default. That is
+ * what makes "every new visit has games off" true without freezing the chip.
  */
 export function visibleTypes(
   active: readonly string[],
   stored: readonly string[] | null | undefined
 ): MediaType[] {
-  const narrowed = narrowTypeFilter(active, stored);
-  return narrowed.length > 0 ? narrowed : enabledMediaTypes(stored);
+  const explicit = sanitizeMediaTypes(active);
+  return explicit.length > 0 ? explicit : enabledMediaTypes(stored);
 }
 
 /**

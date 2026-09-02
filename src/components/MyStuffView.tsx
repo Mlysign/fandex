@@ -176,7 +176,7 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
   // shared `rr_mystuff_*` set (2026-07-28) — the tab now does the job the two
   // routes' separate filter state used to.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
-  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
+  const { stored: storedTypes } = useEnabledTypes();
   const [search, setSearch] = usePersistedState("rr_mystuff_search", "");
   const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_mystuff_incFacets", []);
   const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_mystuff_excFacets", []);
@@ -547,7 +547,9 @@ function MyStuffContent({ route, initialTab }: { route: "library" | "wishlist"; 
       <SubBar
         activeTypes={types}
         onToggleType={(t) => setTypes((prev) => toggleFilter(prev, t as MediaType))}
-        availableTypes={enabledTypes}
+        // No `availableTypes`: the chip row shows every type, always. The media-type
+        // setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
+        // so hiding its chip would remove the only control that undoes it.
         tabs={<LibraryWishlistTabs active={activeTab} onChange={changeTab} />}
         searchValue={search}
         onSearchChange={setSearch}

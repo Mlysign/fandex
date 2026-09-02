@@ -11,15 +11,13 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Three items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
-3. **⬜ Create the Discord OAuth2 application and hand over the two credentials** (`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, from [the Discord developer portal](https://discord.com/developers/applications)), with `https://fandex.org/api/auth/discord/callback` added as a redirect URI. The code can be written and merged dark before this arrives; without it the button cannot ship. → the Discord entry under "Still open elsewhere".
-
-4. **⬜ Search Console: send the per-reason breakdown from Pages → "Why pages aren't indexed".** (2026-09-02.) The counts alone don't say whether this is Google declining to index a young site (normal, nothing to fix) or a defect we can act on. The technical setup checks out from this side, so his console holds the only evidence that separates the two. → the Search Console entry below.
+3. **⬜ Sign in to Discord in Chrome, so the OAuth app can be created.** (2026-09-02.) Nils asked me to create it myself; `discord.com/developers/applications` shows the logged-out welcome modal in his Chrome profile and the login form wants an email and password, which I will not enter. **A QR scan from the Discord phone app is the fast way in.** Once there is a session, the app, the redirect URI (`https://fandex.org/api/auth/discord/callback`) and the client ID are mine to do; `DISCORD_CLIENT_SECRET` stays his to paste into `.env` and Railway, since the code only ever reads it from the environment. → the Discord entry under "Still open elsewhere".
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
 
@@ -60,43 +58,63 @@ The three findings that decided it, so nobody re-derives them:
   mark through `<BrandGlyph source="discord" />` in the UI's text colour, because **Google is the
   only brand-colour exception** and a coloured Discord mark breaks the site-wide rule. Google's own
   routes are 75 lines total, so the build is small; the surfaces are `SignInDialog` and Settings →
-  "Add login method". ⚠️ Nils has to create the app (see Needs Nils #3).
+  "Add login method". ⚠️ **Blocked at the portal**: Nils asked me to create the app myself, and his
+  Chrome has no Discord session (see Needs Nils #3). The code can be built and merged dark first —
+  it reads both credentials from the environment, so the secret never has to pass through here.
 
-- **🔵 Search Console reports most sitemap pages not indexed — verified NOT a configuration fault.**
-  (2026-09-02.) Checked against live prod: `sitemap.xml` answers 200 with **4,341 URLs**, 4,334 of
-  them the canonical 2-segment `/{type}/{slug}` shape (so the sitemap is not full of redirects), and
-  a Googlebot-UA fetch of `/movie/the-innocents` returns 200, `index, follow`, a self-referencing
-  canonical and 29 internal links. So Google is **choosing** not to index, which is the normal
-  outcome for a 2-week-old domain with 4,341 pages, near-zero backlinks and item text that is
-  provider-derived and therefore duplicated across hundreds of sites. ⚠️ **Blocked on the per-reason
-  breakdown** (Needs Nils #4): "Discovered – currently not indexed" is a crawl-priority signal and
-  needs links, "Crawled – currently not indexed" is a quality judgment and needs thicker pages,
-  "Duplicate without user-selected canonical" and "Page with redirect" would be real bugs. The three
-  levers already on file if it is the second: fix the facet under-linking, put facet pages in the
-  sitemap once that is done, and grow the internal link graph. → [docs/seo.md](docs/seo.md)
+- **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
+  indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,
+  not the quality one**: Google has found these URLs and has not fetched them. So there is nothing
+  in the pages to fix — verified independently against live prod, where `sitemap.xml` answers 200
+  with 4,341 URLs (4,334 in the canonical 2-segment shape, so no redirect chains) and a Googlebot-UA
+  fetch of `/movie/the-innocents` returns 200, `index, follow`, a self-referencing canonical and 29
+  internal links. ⚠️ **"Crawled – currently not indexed" is the bucket that would mean thin content,
+  and it is EMPTY.** Do not go thickening pages; that is answering a question nobody asked.
+  What actually moves this: **external links** (the domain is ~2 weeks old with near-zero authority,
+  and crawl budget is rationed to unproven sites), then internal link depth. ⚠️ Dumping 4,341 URLs
+  at once on a new domain is itself part of the signal. Worth considering: submit a small sitemap of
+  the ~50 best pages so the crawler's first taste is not a wall. **Mostly it is time.** →
+  [docs/seo.md](docs/seo.md) ⚠️ that file still says 2,037 URLs; it is 4,341.
 
-- **⬜ `/import` is reachable from NOWHERE in the app.** (2026-09-02, Nils: "I never tried the
-  import because I don't know how.") The page, both API routes and `src/lib/import/` are all built
-  and shipped (PL4, 2026-08-23) — grep for `"/import"` returns zero links from any component. It
-  needs an entry point in Settings, next to "Your data", and probably a second one wherever an empty
-  library is shown. ⚠️ **Keep the page itself anonymous-reachable**: importing before signup was
-  Nils's call on 2026-08-23 and the whole point is reaching people who are on Letterboxd and not yet
-  here. → [docs/letterboxd-import.md](docs/letterboxd-import.md)
+- **✅ `/import` now has an entry point in Settings** (2026-09-02). The page, both API routes and
+  `src/lib/import/` shipped 2026-08-23 with **nothing anywhere linking to them**, so the only way in
+  was typing the URL — which is why Nils never tried it. Settings now carries an "Import" section
+  between "Add login method" and "Region". Verified end to end on a prod build: the button lands on
+  `/import` and the page renders. ⚠️ The page stays anonymous-reachable (importing before signup was
+  Nils's call, 2026-08-23). ⬜ Still open: a second entry wherever an empty library is shown. →
+  [docs/letterboxd-import.md](docs/letterboxd-import.md)
 
-- **⬜ Backloggd import does not exist and never did** — the import reads **Letterboxd and IMDb**.
-  Backloggd was left "to evaluate" on 2026-08-03, blocked purely on access method: no official API,
-  unofficial scraping only. ⚠️ **The cheap path nobody checked**: the pipeline already eats a plain
-  CSV, so IF Backloggd offers the user a CSV export of their own games, this is a parser in
-  `src/lib/import/parse.ts` and no API access at all. Verify that export exists before scoping
-  anything bigger. Value if it does: Backloggd is built on IGDB ids and so are our games, so the
-  match rate would be near-perfect.
+- **✅ The media-type setting is a DEFAULT now, not a scope, and the bug under it is fixed**
+  (2026-09-02). Nils: *"i disabled games, went back to home and the collapsed type filters still
+  used all media types. i dont want to hide the games filter here, just set the default to my pref."*
+  Two separate faults, and each one alone would have looked like the whole thing:
+  - **The save did not propagate.** `sessionProbe`'s module-level cache held the old `mediaTypes`
+    and nothing invalidated it, so the setting did nothing until a full reload. `savePlatforms` has
+    always called `resetSessionProbe()` **with a comment describing this exact failure**;
+    `saveMediaTypes`, twelve lines above it, never got the line.
+  - **The semantics were wrong for what he wants.** It removed the type's chip from the filter row
+    entirely. Now `visibleTypes` lets an explicit chip selection win outright, the chip row renders
+    every type, and `narrowTypeFilter` is **deleted** so the old shape cannot come back. Renamed
+    "What you track" → **"Default types"**.
 
-- **⬜ Does "What you track" need a clearer name?** The default-type-filter setting Nils asked for on
-  2026-09-02 **already shipped 2026-08-27** and does exactly what he described: turning Games off
-  removes the Games chip from the filter row (`availableTypes={enabledTypes}`) and hides games on
-  Home, Discover, Calendar and MyStuff, on every visit, per account. He did not find it, which makes
-  this a naming or placement question rather than a build. ⚠️ It also renders empty under
-  `next dev` along with the rest of `/settings`, so check prod before concluding it is broken.
+  ⚠️ **The guard and the hiding were two halves of one design.** `narrowTypeFilter` existed to stop
+  a stale chip naming a hidden type filtering a list to nothing with no visible control to undo it.
+  That trap is gone *because* the chip is now always on screen — remove one without the other and
+  you get an un-emptyable list. ⚠️ `rr_type_filter` is **sessionStorage**, which is what makes "every
+  new visit starts from my default" true while still letting one tap override it.
+
+- **✅ Home's "Up next" rail ignored the type filter** (2026-09-02, found while verifying the above).
+  `<ProgressRail />` rendered unconditionally; `upNext.ts` is `WHERE m.type = 'show'`, so filtering
+  Home to Games left a shows rail sitting on top of the page. Pre-existing, not a regression.
+
+- **⏸️ Backloggd import: PARKED, and the reason is now measured, not assumed** (2026-09-02). Checked
+  in Nils's own logged-in account: `/settings/import_export/` renders an **empty panel**,
+  `/settings/data` offers only destructive operations, and **"Exporting — take your Backloggd data
+  to-go with a CSV export tool" is roadmap item 6 (7K votes, unbuilt)**. So there is no export of any
+  kind and nothing for us to parse. ⚠️ **When they ship it, it is nearly free**: they have committed
+  to CSV, `src/lib/import/parse.ts` already eats a plain CSV, and Backloggd is built on IGDB ids
+  exactly as our games are, so the match rate would be near-perfect. Re-check their roadmap
+  occasionally; there is nothing else to do. The import reads **Letterboxd and IMDb** meanwhile.
 
 ### Older
 

@@ -74,7 +74,7 @@ export default function CalendarPageClient() {
   // SM2's shared type-filter key, so Games-only set on Discover/Library/Home
   // still holds here (it used to be plain useState and reset on every visit).
   const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
-  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
+  const { stored: storedTypes } = useEnabledTypes();
   const [storedScopes, setScopes] = usePersistedState<CalendarScope[]>("rr_calendar_scopes", DEFAULT_SCOPES);
 
   // What's actually applied. For an anon visitor the two personal scopes can
@@ -341,7 +341,9 @@ export default function CalendarPageClient() {
       <SubBar
         activeTypes={activeTypes}
         onToggleType={toggleType}
-        availableTypes={enabledTypes}
+        // No `availableTypes`: the chip row shows every type, always. The media-type
+        // setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
+        // so hiding its chip would remove the only control that undoes it.
         // Both the source filter AND the view toggle ride in the filter row now
         // (SM53). `actions` is deliberately NOT passed: on this page it was the
         // only occupant of SubBar's sort row, so leaving it there kept a whole

@@ -146,7 +146,7 @@ export default function HomePageClient({
   // / Wishlist / Calendar (2026-07-28). This was plain useState and reset on
   // every visit, so Home ignored a filter the user had set two pages ago.
   const [activeTypes, setActiveTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
-  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
+  const { stored: storedTypes } = useEnabledTypes();
   const [showSignIn, setShowSignIn] = useState(false);
 
   const load = useCallback(() => {
@@ -242,7 +242,10 @@ export default function HomePageClient({
 
       {/* The shared page header, same order as every other list page: media type
           filters first. Home has no tabs, nothing to search and no sort. */}
-      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableTypes={enabledTypes} availableViews={[]} />
+      {/* No `availableTypes`: the chip row shows every type, always. The media-type
+          setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
+          so hiding its chip would remove the only control that undoes it. */}
+      <SubBar activeTypes={activeTypes} onToggleType={toggleType} availableViews={[]} />
 
       <main className="px-5 py-4 md:py-8">
         <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
@@ -280,7 +283,13 @@ export default function HomePageClient({
             2026-08-26: the day's rotating highlight panels used to sit above
             this. Nils removed them ("they don't add as much as I'd hoped") and
             the progress rail took the slot outright. */}
-        {authed && <ProgressRail />}
+        {/* Gated on the type filter (2026-09-02). ProgressRail is episodes, and
+            upNext.ts is `WHERE m.type = 'show'`, so it is a SHOWS rail — but it
+            rendered unconditionally and was the one thing on this page that
+            ignored the filter. Filtering Home to Games left "Up next" sitting on
+            top of the page full of shows. Pre-existing; found while verifying
+            the default-types change on the same page. */}
+        {authed && typeIsVisible("show", activeTypes, storedTypes) && <ProgressRail />}
 
         {/* Rails. There is no page-level loading state: the public two are
             already here, server-rendered, on the first paint. */}

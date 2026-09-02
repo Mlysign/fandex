@@ -172,7 +172,7 @@ export default function DiscoverPageClient() {
   // in its own key; `filters` is merged from the rest + the shared types slice.
   // The types stored inside rr_discover_filters are ignored from now on.
   const [types, setTypes] = usePersistedState<MediaType[]>("rr_type_filter", []);
-  const { enabled: enabledTypes, stored: storedTypes } = useEnabledTypes();
+  const { stored: storedTypes } = useEnabledTypes();
   const [filtersRest, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
   const filters: UiFilters = { ...filtersRest, types };
   // Default = "popularity" (S2, 2026-07-27): H1.1 locked "Popularity for
@@ -694,7 +694,9 @@ export default function DiscoverPageClient() {
       <SubBar
         activeTypes={filters.types}
         onToggleType={toggleType}
-        availableTypes={enabledTypes}
+        // No `availableTypes`: the chip row shows every type, always. The media-type
+        // setting is a DEFAULT (what an un-narrowed list resolves to), not a scope,
+        // so hiding its chip would remove the only control that undoes it.
         searchValue={q}
         onSearchChange={setQ}
         searchPlaceholder="Search games, movies, shows…"

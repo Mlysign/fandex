@@ -93,7 +93,10 @@ function FacetChip({ pill, color, onRemove }: { pill: FacetPill; color: string; 
 export default function SubBar({
   activeTypes,
   onToggleType,
-  availableTypes = ["game", "movie", "show"],
+  // No default here on purpose: `undefined` falls through to TypeFilter's own
+  // MEDIA_TYPES default, so the chip list is defined in exactly one place. A
+  // second copy of the triple here would shadow it and silently win.
+  availableTypes,
   tabs,
   searchValue = "",
   onSearchChange,

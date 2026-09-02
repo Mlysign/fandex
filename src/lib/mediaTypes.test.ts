@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   MEDIA_TYPES, MEDIA_TYPE_LABELS, isMediaType, sanitizeMediaTypes,
-  enabledMediaTypes, isTypeEnabled, narrowTypeFilter,
+  enabledMediaTypes, isTypeEnabled, visibleTypes, typeIsVisible,
 } from "./mediaTypes";
 
-// "Which media types do you use Fandex for" (2026-08-27). The rules here are the
-// ones that are invisible when they break: what an empty list means, and what
-// happens to a filter chip naming a type you have since turned off.
+// "Which media types does every list START with" (2026-08-27, semantics reversed
+// 2026-09-02). The rules here are the ones that are invisible when they break:
+// what an empty stored list means, and whether a filter chip can override the
+// setting. It can, and must — the chip row renders every type.
 
 describe("the type list is derived, so a new type cannot be half-added", () => {
   it("lists exactly the keys of the labels record", () => {
@@ -67,26 +68,37 @@ describe("an empty list means NOT CONFIGURED, never 'uses nothing'", () => {
   });
 });
 
-describe("narrowTypeFilter — a chip for a type you turned off", () => {
-  it("drops a stale chip selection naming a disabled type", () => {
-    // Without this, "show me only games" plus "I do not use games" filters every
-    // list to nothing, with no visible control to undo it. Same hidden-active-
-    // filter trap as the platform chips.
-    expect(narrowTypeFilter(["game"], ["movie", "show"])).toEqual([]);
-    expect(narrowTypeFilter(["game", "movie"], ["movie", "show"])).toEqual(["movie"]);
+describe("the setting is a DEFAULT, not a scope", () => {
+  // Reversed 2026-09-02. The first version narrowed a chip selection to the
+  // enabled set AND hid the disabled type's chip; Nils: "i dont want to hide the
+  // games filter here, just set the default to my pref."
+  it("resolves an un-narrowed list to the account's default", () => {
+    expect(visibleTypes([], ["movie", "show"])).toEqual(["movie", "show"]);
+    expect(typeIsVisible("game", [], ["movie", "show"])).toBe(false);
+    expect(typeIsVisible("movie", [], ["movie", "show"])).toBe(true);
   });
 
-  it("leaves a valid selection alone", () => {
-    expect(narrowTypeFilter(["movie"], ["movie", "show"])).toEqual(["movie"]);
+  it("lets an explicit chip selection OVERRIDE the default, including a type it turns off", () => {
+    // The whole point of the reversal. The chip row renders every type, so
+    // tapping Games has to show games — otherwise the control lies. The old
+    // narrowTypeFilter returned [] here and the list fell back to movies+shows.
+    expect(visibleTypes(["game"], ["movie", "show"])).toEqual(["game"]);
+    expect(typeIsVisible("game", ["game"], ["movie", "show"])).toBe(true);
+    expect(typeIsVisible("movie", ["game"], ["movie", "show"])).toBe(false);
   });
 
-  it("leaves everything alone when not configured", () => {
-    expect(narrowTypeFilter(["game"], [])).toEqual(["game"]);
+  it("honours a mixed selection exactly, without dropping the disabled half", () => {
+    expect(visibleTypes(["game", "movie"], ["movie", "show"])).toEqual(["game", "movie"]);
   });
 
-  it("returns an empty filter as an empty filter, which means 'all enabled types'", () => {
-    // [] is how every list surface already spells "no type filter", so this
-    // must not be confused with "nothing matches".
-    expect(narrowTypeFilter([], ["movie"])).toEqual([]);
+  it("falls back to every type when nothing is configured", () => {
+    expect(visibleTypes([], [])).toEqual(MEDIA_TYPES);
+    expect(visibleTypes([], null)).toEqual(MEDIA_TYPES);
+  });
+
+  it("treats a selection of only junk as no selection", () => {
+    // A hand-edited or half-migrated sessionStorage value degrades to the
+    // default rather than to an empty page.
+    expect(visibleTypes(["book"], ["movie", "show"])).toEqual(["movie", "show"]);
   });
 });
