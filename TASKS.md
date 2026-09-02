@@ -17,7 +17,7 @@ Three items. Everything else in this file is work I can do without him, and ever
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
-3. **⬜ Sign in to Discord in Chrome, so the OAuth app can be created.** (2026-09-02.) Nils asked me to create it myself; `discord.com/developers/applications` shows the logged-out welcome modal in his Chrome profile and the login form wants an email and password, which I will not enter. **A QR scan from the Discord phone app is the fast way in.** Once there is a session, the app, the redirect URI (`https://fandex.org/api/auth/discord/callback`) and the client ID are mine to do; `DISCORD_CLIENT_SECRET` stays his to paste into `.env` and Railway, since the code only ever reads it from the environment. → the Discord entry under "Still open elsewhere".
+3. **⬜ Tick the hCaptcha on the Discord "Create a new app" dialog.** (2026-09-02.) The dialog is open in Chrome with the name (`Fandex`) filled and the developer ToS ticked; **solving a CAPTCHA is one of the things I am not permitted to do**, so it stops there. One click finishes it. After that the redirect URI (`https://fandex.org/api/auth/discord/callback`) and the client id are mine to set; `DISCORD_CLIENT_SECRET` stays his to paste into `.env` and Railway, since the code only ever reads it from the environment. → the Discord entry under "Still open elsewhere".
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
 
@@ -58,9 +58,11 @@ The three findings that decided it, so nobody re-derives them:
   mark through `<BrandGlyph source="discord" />` in the UI's text colour, because **Google is the
   only brand-colour exception** and a coloured Discord mark breaks the site-wide rule. Google's own
   routes are 75 lines total, so the build is small; the surfaces are `SignInDialog` and Settings →
-  "Add login method". ⚠️ **Blocked at the portal**: Nils asked me to create the app myself, and his
-  Chrome has no Discord session (see Needs Nils #3). The code can be built and merged dark first —
-  it reads both credentials from the environment, so the secret never has to pass through here.
+  "Add login method". ⚠️ **The app is one click from existing** (2026-09-02): the portal's "Create a
+  new app" dialog is filled in (name `Fandex`, developer ToS ticked) and stopped at an **hCaptcha**,
+  which I am not permitted to solve. Nils ticks that box, then the app exists and the redirect URI
+  and client id are mine to set. The code can be built and merged dark first — it reads both
+  credentials from the environment, so the secret never has to pass through here.
 
 - **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
   indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,
@@ -72,9 +74,28 @@ The three findings that decided it, so nobody re-derives them:
   and it is EMPTY.** Do not go thickening pages; that is answering a question nobody asked.
   What actually moves this: **external links** (the domain is ~2 weeks old with near-zero authority,
   and crawl budget is rationed to unproven sites), then internal link depth. ⚠️ Dumping 4,341 URLs
-  at once on a new domain is itself part of the signal. Worth considering: submit a small sitemap of
-  the ~50 best pages so the crawler's first taste is not a wall. **Mostly it is time.** →
+  at once on a new domain is itself part of the signal. **Mostly it is time.** →
   [docs/seo.md](docs/seo.md) ⚠️ that file still says 2,037 URLs; it is 4,341.
+
+  **The ranked plan, after Nils asked "would a link from nilsmlynarek.eu be enough?" (2026-09-02).**
+  Short answer no, and the goal itself is wrong: ⚠️ **"all 4,341 indexed" is not achievable and not
+  worth chasing.** Item pages are provider-derived metadata that appears on dozens of other sites,
+  so once Google does crawl them many will land in "Crawled – currently not indexed" on merit. The
+  target is the pages that can actually rank: calendar months, facet pages, and items where we add
+  something. In order of what actually moves the needle:
+  1. **External links.** nilsmlynarek.eu is real, live and topically relevant (a game developer's
+     portfolio), so it is worth adding and costs nothing. But it is a small static site with **no
+     robots.txt, no sitemap.xml and one outbound link (LinkedIn)**, so its own authority is thin.
+     Treat it as one nudge, not a fix.
+  2. **Places with real traffic**: Show HN, Product Hunt, the subreddits for the trackers we import
+     from. Mostly `nofollow`, so no PageRank, but they get the domain crawled and can earn real
+     editorial links, which is the thing that compounds.
+  3. **Internal link depth**, the only lever that is ours. "Discovered, not crawled" usually means a
+     URL is known ONLY from the sitemap with little pointing at it. Fixing the facet under-linking
+     (open, below) and then putting facet pages in the sitemap deepens the graph into the item
+     pages, which is exactly the shape that raises crawl priority.
+  4. **A smaller sitemap.** 4,341 URLs at a uniform 0.7 priority tells Google nothing about which
+     matter. Speculative, cheap, reversible.
 
 - **✅ `/import` now has an entry point in Settings** (2026-09-02). The page, both API routes and
   `src/lib/import/` shipped 2026-08-23 with **nothing anywhere linking to them**, so the only way in
