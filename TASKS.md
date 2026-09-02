@@ -100,8 +100,6 @@ The three findings that decided it, so nobody re-derives them:
 
 ### Older
 
-- **✅ AGENTS.md compressed and its budget corrected (2026-09-02, Nils delegated the call).** 56.1 → 52.7 KB with all **93 invariants and 40 `⚠️` sub-rules** intact and zero rule leads lost. Every rule stays inline; **no category moved behind a pointer**, because these exist *because* somebody did not know they were touching that subsystem, and a pointer only helps a reader who already worked that out. ⚠️ **The ~25 KB budget was measuring the wrong thing** and is corrected in the file: size is a function of how many rules it holds, and the count grew ~40 → 93 while the number stayed put. Remaining bullets average 441 B, which is rule + sub-rules + pointer with almost no narrative left. **~55 KB is the honest ceiling; the question to ask is whether each rule earned its place, not whether the file is under a byte count.**
-
 - **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
 
 - **⬜ Nothing uses the media-type setting to SPEND less.** Three places could, in value order:
