@@ -11,6 +11,8 @@
 
 Everything else in this file is either done or a standing constraint.
 
+0. **✅ Partly answered 2026-09-02: `CATALOG_BROWSE=1` is SET, and the catalog feed can now be sorted.** ⚠️ **Correction to the numbers below**: an earlier reading in that session put `past` at 426/342/199 and it was WRONG. The exact query the gate runs, re-checked against prod, gives `past` **114 / 22 / 196** and `future` **37 / 25 / 72**. **Every window is under 200, so the switch is inert today** and engages by itself when one crosses (games is closest). It is set in advance so nobody has to watch it. The real work was **migration 27**: `media_items.vote_count` / `vote_average` / `stats_at`, filled by a bounded background pass from links already on disk, at zero provider calls, so a catalog-served card stops shipping `voteCount: 0` and the Popularity sort stops tying every row at zero. → [AGENTS.md](AGENTS.md), `src/lib/itemStats.ts`, `/api/health` → `catalog.stats`. **What is still open is the paragraph below: the future windows.**
+
 1. **⚠️ The catalog backfill has FINISHED and it did not get where it was going. This needs a decision, not a wait.** (2026-09-01.) Every doc still says the only remaining action is one env var once `/api/health` → `catalog.browse.windows` reaches 200. **That will never happen.** All three `:future` lanes read `exhausted: true`, so nothing refills them, and the future window is a rolling 18 months that DRAINS as release dates pass: movie **49 → 35** and show **49 → 26** in the four days since 2026-08-28, against a `min` of 200. Game is 74, up from 29, and also retired. Catalog is 4,476 items.
 
    Two separate things fell out of the same reading:
