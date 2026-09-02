@@ -1,5 +1,6 @@
 "use client";
 import { Bookmark, Library, Flame } from "lucide-react";
+import CollapsibleChips from "@/components/ui/CollapsibleChips";
 
 // <ScopeFilter> — the calendar's "what am I looking at" control (2026-07-28).
 // Deliberately shaped like <TypeFilter> (same 40px circular icon chips, same
@@ -49,6 +50,37 @@ export interface ScopeFilterProps {
 }
 
 export default function ScopeFilter({ activeScopes, onToggleScope, anon, onRequestSignIn }: ScopeFilterProps) {
+  // SM53 — collapsed to one chip, same as its twin TypeFilter. These two were
+  // built to look identical on purpose and the last thing they need is one of
+  // them collapsing and the other not.
+  //
+  // ⚠️ The summary shows a single scope's own icon only when exactly one is on.
+  // With two or three it falls back to the generic Flame + a count, because
+  // picking one of them to represent the set would be a lie about what the
+  // calendar is currently showing.
+  const selected = CALENDAR_SCOPES.filter((s) => activeScopes.includes(s));
+  const SummaryIcon = selected.length === 1 ? SCOPE_META[selected[0]].Icon : Flame;
+  const summary = <SummaryIcon className="w-4 h-4" aria-hidden />;
+
+  return (
+    <CollapsibleChips
+      summaryIcon={summary}
+      label={
+        selected.length === 0
+          ? "Filter by source, nothing selected"
+          : `Filter by source (${selected.map((s) => SCOPE_META[s].title).join(", ")})`
+      }
+      title="Source"
+      activeCount={selected.length}
+      // Every scope on is the calendar's default. Nothing on is NOT a default —
+      // it is the state that empties the page, so it must not read as neutral.
+      isDefault={selected.length === CALENDAR_SCOPES.length}
+    >
+      {chips()}
+    </CollapsibleChips>
+  );
+
+  function chips() {
   return (
     <div className="flex items-center gap-2" role="group" aria-label="Filter by source">
       {CALENDAR_SCOPES.map((scope) => {
@@ -74,4 +106,5 @@ export default function ScopeFilter({ activeScopes, onToggleScope, anon, onReque
       })}
     </div>
   );
+}
 }

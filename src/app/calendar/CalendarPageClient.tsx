@@ -241,15 +241,33 @@ export default function CalendarPageClient() {
 
   const filtered = scoped.filter((i) => typeIsVisible(i.type as MediaType, activeTypes, storedTypes));
 
+  // SM53 (Nils, 2026-09-02) — the third of the three groups he asked to collapse.
+  //
+  // This was a 36px labelled pill in SubBar's `actions` slot, and on the calendar
+  // that slot is the ONLY thing in the sort row: no sort control, no result
+  // count, no view toggle. So the pill cost a whole row (38px plus the 12px
+  // `space-y-3` above it) to show one word.
+  //
+  // As a 40px round icon chip it joins the filter row and that row disappears.
+  // It is not wrapped in <CollapsibleChips> because there is nothing to
+  // collapse: a two-state toggle IS one chip already. Collapsing it would add a
+  // tap and save nothing.
+  //
+  // ⚠️ The icon shows the mode you would SWITCH TO, which is what the old label
+  // said too ("List" while in month view). `aria-label` says so in words, since
+  // an icon alone cannot carry "switch to".
   const modeToggle = (
     <button
+      type="button"
       onClick={() => setMode((m) => (m === "month" ? "agenda" : "month"))}
-      className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-surface-elevated border border-border text-text-primary text-label hover:border-border-strong transition-colors duration-fast whitespace-nowrap"
+      aria-label={mode === "month" ? "Switch to list view" : "Switch to month view"}
+      title={mode === "month" ? "List view" : "Month view"}
+      className="tap-44 w-10 h-10 shrink-0 rounded-full border border-border-strong text-text-secondary bg-transparent hover:border-neutral-400 flex items-center justify-center transition-colors"
     >
       {mode === "month" ? (
-        <><List className="w-3.5 h-3.5" aria-hidden />List</>
+        <List className="w-4 h-4" aria-hidden />
       ) : (
-        <><CalendarDays className="w-3.5 h-3.5" aria-hidden />Month</>
+        <CalendarDays className="w-4 h-4" aria-hidden />
       )}
     </button>
   );
@@ -324,15 +342,21 @@ export default function CalendarPageClient() {
         activeTypes={activeTypes}
         onToggleType={toggleType}
         availableTypes={enabledTypes}
+        // Both the source filter AND the view toggle ride in the filter row now
+        // (SM53). `actions` is deliberately NOT passed: on this page it was the
+        // only occupant of SubBar's sort row, so leaving it there kept a whole
+        // row alive to hold one control.
         filters={
-          <ScopeFilter
-            activeScopes={scopes}
-            onToggleScope={toggleScope}
-            anon={authed === false}
-            onRequestSignIn={() => setShowSignIn(true)}
-          />
+          <>
+            <ScopeFilter
+              activeScopes={scopes}
+              onToggleScope={toggleScope}
+              anon={authed === false}
+              onRequestSignIn={() => setShowSignIn(true)}
+            />
+            {modeToggle}
+          </>
         }
-        actions={modeToggle}
         availableViews={[]}
       />
 

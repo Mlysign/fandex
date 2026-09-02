@@ -1,6 +1,7 @@
 "use client";
 import { Layers, Gamepad2, Clapperboard, Tv } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
+import CollapsibleChips from "@/components/ui/CollapsibleChips";
 
 // <TypeFilter> — 03-components.md §6a. Row of circular 40px icon chips
 // (All/Games/Movies/Shows). Replaces SubBar's old text-pill type chips
@@ -25,6 +26,38 @@ const INACTIVE_CLASS =
 export default function TypeFilter({ activeTypes, onToggleType, availableTypes = ["game", "movie", "show"] }: TypeFilterProps) {
   const allActive = activeTypes.length === 0;
 
+  // SM53 (Nils, 2026-09-02) — collapsed to one chip until tapped, on EVERY page
+  // that renders SubBar, not just the calendar. "shrinking the type filter must
+  // apply to all pages, not just calendar. consitency is key."
+  //
+  // This component is rendered from exactly one place (SubBar), which is what
+  // makes site-wide a single change rather than five. The summary reflects the
+  // current selection: the All icon when nothing is narrowed, the single
+  // selected type's own icon and colour when one is, and All plus a count when
+  // several are. → components/ui/CollapsibleChips.tsx
+  const selected = availableTypes.filter((t) => activeTypes.includes(t));
+  const SummaryIcon = selected.length === 1 ? (TYPE_ICONS[selected[0]] ?? Layers) : Layers;
+  const summary = (
+    <SummaryIcon
+      className="w-4 h-4"
+      aria-hidden
+      style={selected.length === 1 ? { color: TYPE_COLORS[selected[0]] } : undefined}
+    />
+  );
+
+  return (
+    <CollapsibleChips
+      summaryIcon={summary}
+      label={allActive ? "Filter by type" : `Filter by type (${selected.length} selected)`}
+      title="Type"
+      activeCount={selected.length}
+      isDefault={allActive}
+    >
+      {chips()}
+    </CollapsibleChips>
+  );
+
+  function chips() {
   return (
     <div className="flex items-center gap-2" role="group" aria-label="Filter by type">
       <button
@@ -61,4 +94,5 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
       })}
     </div>
   );
+  }
 }
