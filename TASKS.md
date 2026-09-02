@@ -11,119 +11,37 @@
 
 Everything else in this file is either done or a standing constraint.
 
-0. **✅ Partly answered 2026-09-02: `CATALOG_BROWSE=1` is SET, and the catalog feed can now be sorted.** ⚠️ **Correction to the numbers below**: an earlier reading in that session put `past` at 426/342/199 and it was WRONG. The exact query the gate runs, re-checked against prod, gives `past` **114 / 22 / 196** and `future` **37 / 25 / 72**. **Every window is under 200, so the switch is inert today** and engages by itself when one crosses (games is closest). It is set in advance so nobody has to watch it. The real work was **migration 27**: `media_items.vote_count` / `vote_average` / `stats_at`, filled by a bounded background pass from links already on disk, at zero provider calls, so a catalog-served card stops shipping `voteCount: 0` and the Popularity sort stops tying every row at zero. → [AGENTS.md](AGENTS.md), `src/lib/itemStats.ts`, `/api/health` → `catalog.stats`. **What is still open is the paragraph below: the future windows.**
+1. **⚠️ The catalog's FUTURE windows can never fill, so "browse from our own DB" needs a decision.** (2026-09-01, numbers re-checked 2026-09-02.) All three `:future` lanes read `exhausted: true` and the counts are `future` **37 / 25 / 72** against a `min` of 200. This is structural, not a stalled job:
 
-1. **⚠️ The catalog backfill has FINISHED and it did not get where it was going. This needs a decision, not a wait.** (2026-09-01.) Every doc still says the only remaining action is one env var once `/api/health` → `catalog.browse.windows` reaches 200. **That will never happen.** All three `:future` lanes read `exhausted: true`, so nothing refills them, and the future window is a rolling 18 months that DRAINS as release dates pass: movie **49 → 35** and show **49 → 26** in the four days since 2026-08-28, against a `min` of 200. Game is 74, up from 29, and also retired. Catalog is 4,476 items.
+   - **The provider genuinely ran out.** `tmdbMoviePage` asks with `region=DE` **and** `with_release_type=2|3`, so "upcoming" means "already has a scheduled German theatrical date", which is a few hundred titles. `empty` in the backfill means the PROVIDER returned zero rows. The lane stopped at 409. **So resetting the lanes re-walks the same set and adds nothing.**
+   - **And the dates disagree.** The backfill queries the provider's REGIONAL date while the catalog stores the MERGED date from `remergeItem`, so an item fetched as "future" often lands in the past window. That is why 409 added yielded 37.
 
-   Two separate things fell out of the same reading:
-   - **`game:past` is retired at page 1 with 0 added**, which is the exact incident `EMPTY_STRIKES = 3` was written to prevent, happening again. RAWG is still quota-latched, `fetchGamePageAllSources` swallows the failure and answers `[]`, and three empty pages from a DOWN provider retire a lane just as permanently as three from a finished one. The strike counter cannot tell those apart. → the comment at `src/lib/catalogBackfill.ts:96` predicts this in as many words.
-   - **`resetBackfill()` exists (`catalogBackfill.ts:222`) and is wired to nothing.** No route, no script. There is currently no way to un-retire a lane on prod.
+   **Three ways out, cheapest first:** (a) drop `CATALOG_BROWSE_MIN` to something the windows actually reach and accept a shorter local feed; (b) widen the query (drop the region filter, or the theatrical-only filter) and re-run the future lanes on a schedule, so the window is topped up rather than filled once; (c) leave it, and keep paying provider calls on browse. ⚠️ `CATALOG_BROWSE=1` is already set and inert, so (c) costs nothing to choose. Done half → [the archive](docs/archive/history.md), grep `CATALOG_BROWSE turned on`.
 
-   **The decision:** "browse served from our own catalog" needs a source of UPCOMING titles that a one-shot paginated sweep cannot provide, because the target is a window that empties itself. Options, cheapest first: (a) drop `CATALOG_BROWSE_MIN` to something the windows actually reach and accept a shorter local feed; (b) expose `resetBackfill()` and re-run the future lanes on a schedule, so the window is topped up rather than filled once; (c) leave `CATALOG_BROWSE` off and keep paying the provider calls on browse. **Not chosen here** — (b) is the only one that matches the original intent, and it is also the most work.
+   ⬜ **Two loose ends from the same reading, neither blocking:** `game:past` is retired at page 1 with 0 added (RAWG quota-latched; three empty pages from a DOWN provider retire a lane as permanently as three from a finished one), and **`resetBackfill()` (`catalogBackfill.ts:222`) is exported and wired to NOTHING** — no route, no script — so a lane retired by an outage cannot be revived on prod at all.
 
-2. **✉️ One email to `partner@igdb.com`, no longer blocking.** ✅ **Decided 2026-08-28: carry on with IGDB, behind a kill switch.** `IGDB_ENABLED=0` stops every IGDB call at once (default ON, verified no `fetch` happens when off) and `scripts/purge-igdb.mjs` removes what is stored (proven on a copy: 1,008 links and 908 projections gone, all 2,770 items and 2,482 user rows untouched, 100 items left source-less and none acted on). → [docs/catalog-growth.md](docs/catalog-growth.md). **The question is still worth asking; it is just no longer holding anything up.** (2026-08-28, → [docs/catalog-growth.md](docs/catalog-growth.md).) The provider terms were read from the primary sources before sizing the backfill. TMDB is fine — its cap is on cache AGE (six months), which a refresh tier satisfies, and `lib/retention.ts` now enforces it. Steam states no limit. **IGDB is the one that does not resolve on its own.**
+2. **✉️ One email to `partner@igdb.com`. Your call, not blocking anything.** Decided 2026-08-28: carry on with IGDB behind a kill switch (`IGDB_ENABLED=0` stops every call, `scripts/purge-igdb.mjs` removes what is stored, both proven). **The question:** whether a local mirror of IGDB game metadata, refreshed by their webhooks, is covered by the free non-commercial tier or needs the commercial partnership they advertise. The Twitch DSA allows a 24-hour cache or prior written authorization, and we hold 1,008 igdb links indefinitely, yet IGDB ships webhooks whose only purpose is keeping your copy current. ⚠️ The standing "do not contact TMDB or Trakt" rule does NOT cover IGDB (that rule is about not inviting scrutiny while monetizing on a free tier, and we are not monetizing). → [docs/catalog-growth.md](docs/catalog-growth.md)
 
-   The Twitch Developer Services Agreement, which IGDB's own docs name as its licence, permits storing copies only with **prior written authorization** or a **24-hour cache**. Fandex holds 1,008 igdb links indefinitely, so on a literal reading it is *already* outside that, before any backfill. But IGDB's own API ships **webhooks whose only purpose is keeping your copy of their data current**, and its docs open on the accessibility of their data. A product built to maintain your local mirror does not square with a 24-hour cache limit.
+3. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (`Fandex`, `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
-   **What to ask:** whether maintaining a local mirror of IGDB game metadata, refreshed by their webhooks, is covered by the free non-commercial tier, or needs the commercial partnership they advertise. ⚠️ The standing "do not contact TMDB or Trakt about commercial terms" rule is about not inviting scrutiny **while monetizing on a free tier**; IGDB is not in that rule and Fandex is not monetizing yet, so the calculus differs — but sending it is still your call. **Until it is answered, be ready to flip the switch.**
+4. **RAWG's monthly quota is exhausted; the cross-link sweep waits for the reset.** Measured 2026-08-20: `api.rawg.io` answers `401 {"error": "The monthly API limit reached"}`. Not urgent — the facet paths no longer touch RAWG (PL3) and games are dual-sourced, so IGDB covers browse. Survey at the time: rawg 157, steam 113, igdb 59 of 760 games. ⚠️ **Do not use Steam as the control**; its cursor drained 2026-08-17 and it links 0 either way. ⚠️ **What SPENT the 20,000 is still unidentified**, and every RAWG figure we hold was measured AFTER the quota was gone, so it counts wasted calls rather than spent ones. The 401/403 latch makes next month's counter readable, and that is what will answer it. ⚠️ It undercuts a monetization assumption either way: `docs/monetization-go-live.md` records RAWG as free commercially to 20k req/mo, and we exhaust that at pre-launch traffic.
 
-3. **Android TWA (P15/P16): ⏸️ PAUSED BY NILS 2026-08-23 until the developer account is a BUSINESS account.** The app package is built and proven (sideloaded on the Pixel 8 with no address bar), and **the Play Console entry exists**: created 2026-08-23, name `Fandex`, package `org.fandex.twa`, App, Free. Nothing else on the Play side is done, deliberately.
+5. **Optional: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan. Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. ⚠️ **Do NOT apply to Amazon**: its 180-day / 3-sale clock starts at signup, and the self-referral shortcut closes the account rather than being a loophole.
 
-   ⚠️ **The upgrade is not only about invoicing: the 12-testers/14-days gate applies to PERSONAL developer accounts ONLY.** Google's wording is "Google Play requires *personal* developer accounts created after November 13, 2023, to test their apps before those apps are eligible for distribution" (support.google.com/googleplay/android-developer/answer/14151465, checked 2026-08-23). InFlucx is currently a **Personal account**; an organization account is not subject to it. **So running a closed test now would very likely be throwaway work.** Do the account upgrade first, then re-check whether the gate applies at all.
+6. **Calendar: three things want your eyes on a real desktop browser, not a fix** (2026-08-26, `0bc9b7a` `d36952e` `1026550`). The page is now exactly one viewport tall and never scrolls, which took desktop day cells from 128px to **95px** at 1280×900 — a visible change nobody has looked at outside the measurement. The **rail cards' hover tooltip is unverified** (`(hover: hover)` is false in the browser pane, so neither the code nor a control can be exercised there). And **does the height budget re-fit on window resize?** `boxH` comes from a `ResizeObserver`, which the pane never delivers, so no Claude session can test it; if it does not re-fit, the symptom is weeks clipped with nothing to scroll to them. Drag the window shorter and count the week rows. Everything else in 13j/13ja passes at 375 and 1280, anon and authed. → [smoketest.md](smoketest.md) 13j/13ja/13jb
 
-   **When the account is upgraded, the remaining steps are, in order:** (a) `Test and release → App content`: privacy policy `https://fandex.org/legal/en/privacy`, Data safety, content rating, target audience; (b) upload `android-package/Fandex.aab`; (c) ⚠️ **APPEND the Play App Signing SHA-256** (`Test and release → Setup → App integrity`) to `TWA_CERT_FINGERPRINT` in Railway, comma-separated. **Google re-signs the store build**, so the fingerprint already live in `assetlinks.json` (`F7:75:02:5D:…`) is the upload key and will NOT verify the copy testers install; (d) confirm `https://fandex.org/.well-known/assetlinks.json` lists BOTH fingerprints; (e) testers, only if the gate still applies. Full walkthrough → [docs/twa-play-store.md](docs/twa-play-store.md).
-
-4. **RAWG's monthly quota is exhausted, so the cross-link sweep cannot run.** Measured 2026-08-20: `api.rawg.io` answers `401 {"error": "The monthly API limit reached"}` in 0.17 s. **Not** the timeouts and Cloudflare 522s of the 2026-08-17 outage.
-
-   ✅ **2026-08-28: IGDB RECOVERED and the paragraph below is history, not state.** Re-measured on prod: `api.igdb.com` 9 requests, **8 ok, 1 networkError, `lastStatus 200`**, circuit closed. So the reading below was a transient, not a standing outage, and games are arriving again. RAWG is unchanged (5 requests, 5 × 401, 277 blocked) — the known quota latch, which no longer touches the facet paths. **The RAWG half of this item stands; the IGDB half is closed.**
-
-   ⚠️ **2026-08-27: IGDB is failing too, so the dual-source consolation below is currently FALSE and prod's browse feed has NO GAMES AT ALL.** `/api/health` after 15 min of uptime: `api.rawg.io` 5 requests / 5 clientError / `lastStatus 401` / `latchedOnAuth: true` / 21 blocked (the same quota 401 as below), and `api.igdb.com` 9 requests / **9 networkError** / 156 blocked, circuit open. `id.twitch.tv` answers 200, so the token is fine and the failures are on `api.igdb.com` itself — a timeout or an abort against `BROWSE_BUDGET_MS` counts as a network error (`http.ts:572`) and opens the breaker, which then blocks 17× more calls than it let through. Measured symptom: `GET /api/discover` on prod returns **20 movies + 20 shows, 0 games**, and `?section=games` returns `{"items":[]}`. That is also why the Filters sheet reads 0 on every chip. **Check whether IGDB is genuinely down before assuming the breaker is at fault** — and if it is a self-inflicted abort latch, that is a real bug in how browse treats a slow provider. ⚠️ **Discover no longer goes empty when this happens** (2026-08-27): an empty provider section falls back to stored catalog rows, so the symptom is now "no NEW games arriving" rather than "no games at all". That makes this less urgent and easier to miss.
-
-   **What to do: wait for the quota to reset, then run the sweep.** Survey as of 2026-08-20: **rawg 157**, steam 113, igdb 59 of 760 games. Not urgent for the sweep itself, because the dual-source design normally covers it (see the warning above for why it is not covering it today). ⚠️ **Do not use Steam as the control**: its cursor drained on 2026-08-17, so it links 0 whether or not anything is wrong.
-
-   ⚠️ **What SPENT the 20,000 is still unidentified, and the obvious answer (the facet crawler) is NOT proven**, because every RAWG number we hold was measured *after* the quota was gone, so it counts wasted calls rather than spent ones. **Do not pick between the candidates by reasoning**: this repo has mis-diagnosed a resource ramp twice that way. The 401/403 latch (2026-08-22) makes next month's counter measure calls we actually chose to make, and that is what will answer it. ⚠️ **It undercuts a monetization assumption either way**: `docs/monetization-go-live.md` records RAWG as "safe, free commercially to 20k req/mo", and we exhaust that at *pre-launch* traffic.
-
-5. **Optional, not urgent: the GOG affiliate signup.** Demoted 2026-08-19 with the rest of the affiliate plan. Worth one email anyway, because GOG's dashboard is a free click meter on a site that deliberately collects no click data of its own. **Do NOT apply to Amazon**: its 180-day / 3-sale clock starts at signup, and the self-referral shortcut is a terms breach that closes the account rather than a loophole.
-
-6. **Calendar: two things want your eyes on a real desktop browser, not a fix** (2026-08-26, `0bc9b7a` `d36952e` `1026550`). The page is now exactly one viewport tall and never scrolls, which meant **desktop day cells went from 128px to ~97px** so a six-week month fits without one; that is a visible change nobody has looked at outside the measurement. And the **rail cards' hover tooltip is unverified**: `(hover: hover)` is false in the browser pane, so neither the changed code nor a control can be exercised there. **A third joined them 2026-08-26:** does the height budget **re-fit when the window is resized**? `boxH` comes from a `ResizeObserver`, and the browser pane never delivers one, so no Claude session can test it. If it does not re-fit, the symptom is cells keeping their old height inside a shrunken `overflow-hidden` box, i.e. **weeks clipped with nothing to scroll to them**. Open `/calendar`, drag the window shorter, count the week rows. The other two are settled enough to state: desktop cells measure **95px** at 1280×900, and everything else in 13j/13ja passes at 375 and 1280, anon and authed, dev and prod. Checks are in [smoketest.md](smoketest.md) 13j/13ja/13jb.
-
-7. **SM50's data repair still has to run against PROD.** The code fix ships with this commit and
-   migration 23 applies itself on the next boot, so **no new cross-type merge can happen on prod
-   from the moment it deploys**. The rows already merged there do not fix themselves.
-
-   **✅ FULLY DONE ON PROD, 2026-09-01.** `--apply` ran: **3 repaired, 4 blobs scrubbed**, and a re-run reports **0 offenders**. Two further layers of the same damage were found and fixed in the same pass, neither of which the link repair touches. Kept here only as the record of what was wrong:
-
-   | link | sits on (wrong) | belongs to |
-   |---|---|---|
-   | `tmdb:387` SpongeBob SquarePants | **Being John Malkovich** (movie) | SpongeBob SquarePants (show) |
-   | `tmdb:67195` Legion | **The Raid 2** (movie) | Legion (show) |
-   | `tmdb:1425` House of Cards | **Ratatouille** (movie) | House of Cards (show) |
-
-   Each has `episodeRowsOnWrongItem: 0` and one `user_item_state` row the script deliberately leaves alone (it is the movie's own row and legitimate).
-
-   ✅ **The two leftovers, both fixed by the new `scripts/repair-cross-type-slugs.mjs`.** Neither was reachable from the link repair, and **both were found by reading the rendered page after it reported success**, which is the reusable lesson: a data repair that reports "3 repaired" has not told you the page is right.
-
-   1. **The slug.** All three movies wore the show's, and slugs are immutable by contract (`ensureItemSlug` assigns once, `grep -n slug` on the link repair shows it only READS the column). Now `being-john-malkovich` / `the-raid-2` / `ratatouille`; the three old urls 404, which is correct because they never named those works; the three `/show/…` urls are untouched. ⚠️ **43 of the 46 slugs shared across types are CORRECT** and must not be "fixed": slugs are unique PER TYPE, so `/game/batman` and `/movie/batman` are two right answers. Only a shared slug whose holder's title cannot produce it is damage.
-   2. **An `item_ip_override`.** `/movie/being-john-malkovich` rendered a rail headed **"More from SpongeBob SquarePants"** full of Nickelodeon games. The 2026-08-14 Wikidata sweep resolved the item by its title, which was the show's at the time, and wrote a `mode: "add"` override. Removed; the rail is gone. ⚠️ **Prod holds 498 overrides and exactly ONE was wrong.** A crude title-vs-label word-overlap test flags 53, and 52 of those are correct and are the feature working (Prometheus → Alien, Andor → Star Wars, Better Call Saul → Breaking Bad, every Harry Potter → Wizarding World). **Do not turn that heuristic into a sweep.**
-
-   ⬜ **One unrelated thing noticed while verifying, NOT caused by this and not chased:** `/movie/being-john-malkovich` renders no "More like this" rail, where `/movie/ratatouille` does and `/movie/the-raid-2` shows "More from The Raid". It was already absent before the repair (checked against the captured pre-fix HTML), and all three items have an identical link/projection shape (`imdb` pv=0, `trakt` pv=0, `tmdb` pv=3), so the stale-projection explanation is ruled out. One item, cosmetic.
-
-   **How to run it, corrected.** ⚠️ **There is no `scripts/` directory in the runtime image** — it holds only `.next`, `data`, `docker-entrypoint.sh`, `node_modules`, `package.json`, `public`, `server.js`. The command this section used to give could never have worked. Ship the script in first, and write it to **`/app/`** (not `/tmp`) so Node resolves `better-sqlite3` from `/app/node_modules`:
-   ```
-   railway ssh -- sh -c "echo '<base64 of the script>' | base64 -d > /app/repair.mjs"
-   railway ssh -- sh -c "node /app/repair.mjs /app/data/rr.db"            # report
-   railway ssh -- sh -c "node /app/repair.mjs /app/data/rr.db --apply"    # repair
-   railway ssh -- sh -c "rm -f /app/repair.mjs"
-   ```
-   → [[railway-cli-and-tool-sandbox]] for the CLI setup this depends on.
-   It is idempotent and prints its whole plan before touching anything. On the local database it
-   moved 4 links (with their episode rows and external ids) and scrubbed 4 merged payloads.
-   ⚠️ **Prod's numbers may differ** — it syncs the same Trakt account, so expect the same four, but
-   read the report rather than assuming. ⚠️ **Copy the `-wal` and `-shm` alongside the `.db` if you
-   rehearse on a copy**; a plain `cp data/rr.db` reads an older database and invented a 9-row
-   discrepancy while this was being written.
-   ✅ **The restore drill PASSED 2026-09-01, and it is no longer due.** Run over `railway ssh`, so
-   any future session can repeat it without Nils. Generation `c62d7dc17a0fd0cb`, replication lag
-   **369 ms**, snapshot index 6512 plus **475 WAL files** replayed, restored file
-   **142,024,704 bytes = byte-for-byte the size of live**, `integrity_check ok` on both, and **all
-   eight tables identical**: users 1 · user_identities 5 · media_items 4,556 · media_links 8,630 ·
-   media_external_ids 7,040 · user_library 1,941 · user_watchlist 97 · user_item_state 2,458.
-   Scratch file and uploaded scripts removed; `/app/data/rr.db` never touched. This proves
-   migrations 23–26 restore. Repeat it after the next schema change:
-   ```
-   railway ssh -- sh -c "litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db"
-   railway ssh -- sh -c "node /app/verify-restore.mjs /tmp/restore-test.db"   # ship it in first, see below
-   railway ssh -- sh -c "rm -f /tmp/restore-test.db*"
-   ```
-
-   **The half that COULD be done locally was, 2026-09-01, and both parts passed.** They are the two
-   ways this has actually broken before, so a red drill is now less likely, not merely unmeasured:
-   - **The schema carries nothing Litestream's older SQLite would reject.** That is the exact
-     failure from August: migration 16's `ORDER BY` inside an aggregate parses on the 3.53 that
-     `better-sqlite3` ships and not on the ~3.40 Litestream embeds, so replication died for two days
-     while every test, the build and `/api/health` stayed green. Dumped the live schema and checked:
-     **zero** aggregate-with-`ORDER BY`, no `string_agg`, no `concat()`, no `jsonb_*`, no
-     `GENERATED`/`STRICT`. All four `ORDER BY`s in the schema sit in a subquery, which is the shape
-     the invariant asks for.
-   - **The real upgrade path applies clean.** Ran `node scripts/migrate.mjs` against a copy of the
-     July backup (all three files, per the WAL rule): **user_version 6 → 26**, all 20 migrations,
-     then `integrity_check ok` and 8 populated tables via `verify-restore.mjs`. Green tests never
-     exercise this: every DB test starts fresh. ⚠️ The upgraded copy is missing the indexes `db.ts`
-     creates at boot, which is expected — `migrate.mjs` runs migrations only, and that is the
-     documented two-apply-path split, not a fault.
-
-8. **SM53 is a design call, not a fix, and it is yours** (12th smoke test). At 375×812 the calendar's
+7. **SM53 is a design call, not a fix, and it is yours** (12th smoke test). At 375×812 the calendar's
    sticky filter bar takes **175px, 22% of the viewport**: two wrapped rows of seven 40px icon-only
    circles, plus a 38px view-toggle row, leaving the grid 486px. Nothing is broken (hit areas pass,
    `.tap-44` gives each chip a 44×44 target with no overlap) — the point is that on the one page
    whose whole design is now a fixed height budget, the chips are the biggest single claim on it.
    **Deliberately not changed**: it is a visual decision on a page already waiting for your eyes
-   (item 5), and the standing rule here is no unprompted visual passes. Three ways out, cheapest
+   (item 6), and the standing rule here is no unprompted visual passes. Three ways out, cheapest
    first: (a) shrink the chips so all seven fit ONE row, ~48px back; (b) collapse them into a single
    "Filters" button with a count, ~90px back; (c) leave it, and accept the grid at 486px. Say which
    and it is a small change.
 
-9. **Search has no relevance term at all, and whether it should is a ranking call, not a bug** (2026-08-29). Two real faults were fixed this session — the search branch never attached crowd stats, so "Popularity" silently sorted oldest-first, and the dedupe dropped any second work sharing a title, which is what actually hid the new *Lucky* → [archive](docs/archive/history.md), grep `could not find a new title`. What is left is that nothing anywhere scores a title against what was TYPED: `find()` is `title.includes(q)` and then a global sort, so an exact match on *Lucky* still ranks below *Mr. Lucky* when *Mr. Lucky* has more votes. **Deliberately not changed**, because "exact match first" overrides all four sorts on the page and that is a visible ranking decision. Say the word and it is a small change; the alternative is to leave search meaning "filter, then sort by what you picked".
+8. **Search has no relevance term at all, and whether it should is a ranking call, not a bug** (2026-08-29). Two real faults were fixed this session — the search branch never attached crowd stats, so "Popularity" silently sorted oldest-first, and the dedupe dropped any second work sharing a title, which is what actually hid the new *Lucky* → [archive](docs/archive/history.md), grep `could not find a new title`. What is left is that nothing anywhere scores a title against what was TYPED: `find()` is `title.includes(q)` and then a global sort, so an exact match on *Lucky* still ranks below *Mr. Lucky* when *Mr. Lucky* has more votes. **Deliberately not changed**, because "exact match first" overrides all four sorts on the page and that is a visible ranking decision. Say the word and it is a small change; the alternative is to leave search meaning "filter, then sort by what you picked".
 
 **Standing constraints. Not tasks, but do not violate them:**
 - **Ko-fi: no tiers, no perks, no memberships.** A donation with consideration is a taxable supply *and* a much stronger "commercial use" reading against TMDB's non-commercial-only free tier.
@@ -186,7 +104,7 @@ The three findings that decided it, so nobody re-derives them:
 
 ## Smoke test — 2026-08-26 (12th run) ✅ WORKED THROUGH 2026-08-27
 
-**SM49, SM50, SM51 and SM52 are fixed; SM53 is a decision for Nils and lives in "Needs Nils" item 9
+**SM49, SM50, SM51 and SM52 are fixed; SM53 is a decision for Nils and lives in "Needs Nils" item 7
 above.** The findings, their measured before/after and the four things they taught are in
 [docs/archive/history.md](docs/archive/history.md) — grep `12th run`. The rules that outlived them
 are in [AGENTS.md](AGENTS.md) and their memory files ([[cross-type-identity-merge]],

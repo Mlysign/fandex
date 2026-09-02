@@ -23,6 +23,100 @@ full history.
 
 ---
 
+## SM50 repaired on prod, the restore drill passed, and the Railway CLI that made both possible (2026-09-01)
+
+`c42baf0` `dffbddb`. Three things that had been "needs a shell on the Railway box" for a
+week, all done in one pass once `@railway/cli` was authenticated by Nils's own browser login
+(no token stored). Setup and gotchas → [[railway-cli-and-tool-sandbox]].
+
+### The restore drill: PASSED, and no longer due
+
+Generation `c62d7dc17a0fd0cb`, replication lag **369 ms**, snapshot index 6512 plus **475
+WAL files** replayed. Restored file **142,024,704 bytes, byte-for-byte the size of live**;
+`integrity_check ok` on both; **all eight tables identical**: users 1 · user_identities 5 ·
+media_items 4,556 · media_links 8,630 · media_external_ids 7,040 · user_library 1,941 ·
+user_watchlist 97 · user_item_state 2,458. Covers migrations 23–26. Scratch file and
+uploaded scripts removed; `/app/data/rr.db` never touched.
+
+Repeat after any schema change:
+
+```
+railway ssh -- sh -c "litestream restore -config /etc/litestream.yml -o /tmp/restore-test.db /app/data/rr.db"
+railway ssh -- sh -c "node /app/verify-restore.mjs /tmp/restore-test.db"   # ship the verifier in first
+railway ssh -- sh -c "rm -f /tmp/restore-test.db*"
+```
+
+Two checks that CAN be done without the box, and both passed: the schema carries nothing
+Litestream's older SQLite would reject (zero aggregate-with-`ORDER BY`, no `string_agg` /
+`concat()` / `jsonb_*` / `GENERATED` / `STRICT`; all four schema `ORDER BY`s sit in a
+subquery), and the real upgrade path applies clean (a copy of the July backup went
+`user_version` **6 → 26** through `scripts/migrate.mjs`, then `integrity_check ok`).
+
+### SM50: applied, and it took three passes to actually be fixed
+
+`--apply` moved 3 links and scrubbed 4 payloads; a re-run reports 0 offenders. **Then
+reading the rendered page found two more layers**, which is the reusable lesson: *a data
+repair that reports "3 repaired" has not told you the page is right.*
+
+| link | sat on (wrong) | belongs to |
+|---|---|---|
+| `tmdb:387` SpongeBob SquarePants | Being John Malkovich (movie) | SpongeBob SquarePants (show) |
+| `tmdb:67195` Legion | The Raid 2 (movie) | Legion (show) |
+| `tmdb:1425` House of Cards | Ratatouille (movie) | House of Cards (show) |
+
+1. **The slugs.** All three movies wore the show's, and slugs are immutable by contract, so
+   the link repair cannot touch them (`grep -n slug` on it shows it only READS the column).
+   Fixed by the new `scripts/repair-cross-type-slugs.mjs`; the three old urls now 404, which
+   is correct because they never named those works, and the `/show/…` urls are untouched.
+2. **An `item_ip_override`.** `/movie/being-john-malkovich` rendered a rail headed "More
+   from SpongeBob SquarePants" full of Nickelodeon games, written by the 2026-08-14 Wikidata
+   sweep while the item still carried the show's title. Removed.
+
+⚠️ **Two "obvious" cleanups that would do real damage**, both measured first: **43 of the 46
+slugs shared across types are CORRECT** (slugs are unique per TYPE, so `/game/batman` and
+`/movie/batman` are two right answers), and **prod holds 498 ip overrides of which exactly
+ONE was wrong** (a crude title-vs-label test flags 53, and 52 are the feature working:
+Prometheus → Alien, Andor → Star Wars, every Harry Potter → Wizarding World).
+
+⚠️ **The instructions were wrong and could never have run**: there is no `scripts/`
+directory in the runtime image. Ship a script in over SSH, writing it to `/app/` (not
+`/tmp`) so Node resolves `better-sqlite3` from `/app/node_modules`. Full recipe →
+[[railway-cli-and-tool-sandbox]].
+
+## CATALOG_BROWSE turned on, and crowd stats denormalised onto the row (2026-09-02)
+
+`6b1b835` `ae56f9f`. Two halves of one question: can the catalog serve browse, and can it
+be sorted when it does.
+
+**`CATALOG_BROWSE=1` is set and INERT.** The gate is `window >= 200` and the real counts are
+`past` **114 / 22 / 196**, `future` **37 / 25 / 72**. It is set in advance so it engages by
+itself rather than needing to be watched. ⚠️ **An earlier reading in that session said
+426/342/199 and was wrong**; the correction and how a self-consistent wrong number survived
+are in [[catalog-growth-execution]].
+
+**Why the future windows can never reach 200**, which rules out resetting the lanes:
+`tmdbMoviePage` asks with `region=DE` **and** `with_release_type=2|3`, so "upcoming" means
+"already has a scheduled German theatrical date", which really is only a few hundred titles.
+`empty` in the backfill means the PROVIDER returned zero rows, so the lane genuinely ran out
+at 409. Compounding it, the backfill queries the provider's REGIONAL date while the catalog
+stores the MERGED date from `remergeItem`, so an item fetched as "future" often lands in the
+past window.
+
+**Migration 27** adds `media_items.vote_count` / `vote_average` / `stats_at`, filled by
+`refreshItemStats()` on the catalog timer, 200 rows per 30-minute tick, **zero provider
+calls**. It exists because `catalogSectionPage` shipped `voteCount: 0`, which
+`decorateSection` turns into `communityVotes: 0`, which the client's Popularity sort reads as
+`votesOf(i) = i.communityVotes ?? 0` — every catalog row tied at zero, and a stable sort then
+shows ARRIVAL order under a control labelled "Popularity". That is the 2026-08-29 search bug
+exactly. Verified on prod: 200/200 non-zero, The Dark Knight 101,598 votes @ 8.8, zero
+averages outside 0-10. Rules and traps → `AGENTS.md`.
+
+⚠️ **The boot prune is NOT eating the backfill**, checked so nobody re-chases it: 0 rows
+prunable right after a boot, `browsed = 0` → 4,266 and all 259 `browsed = 1` rows pinned. The
+backfill writes thin and prunable, `catalogFill.ts` enriches and that promotes to
+`browsed = 0`, which is permanent. Only un-enriched rows are swept, so the real cost is
+deploy churn.
+
 ## gzip /api/ responses, which Next installs a middleware for and then silently filters out (2026-09-01)
 
 `a4edd5d`, live on prod the same day. **`/api/library` went 9.77 MB to 2.23 MB, a 4.39x ratio and
