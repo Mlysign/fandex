@@ -11,11 +11,15 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Two items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
+
+3. **⬜ Create the Discord OAuth2 application and hand over the two credentials** (`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, from [the Discord developer portal](https://discord.com/developers/applications)), with `https://fandex.org/api/auth/discord/callback` added as a redirect URI. The code can be written and merged dark before this arrives; without it the button cannot ship. → the Discord entry under "Still open elsewhere".
+
+4. **⬜ Search Console: send the per-reason breakdown from Pages → "Why pages aren't indexed".** (2026-09-02.) The counts alone don't say whether this is Google declining to index a young site (normal, nothing to fix) or a defect we can act on. The technical setup checks out from this side, so his console holds the only evidence that separates the two. → the Search Console entry below.
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
 
@@ -45,6 +49,56 @@ The three findings that decided it, so nobody re-derives them:
 ---
 
 ## Still open elsewhere
+
+### Added 2026-09-02 (Nils)
+
+- **⬜ Discord as a login provider.** Identity-only: Discord holds no library, so it is the Google
+  shape, not the Trakt shape. Three registration points carry the invariants — extend
+  `AuthProvider` (`src/types/index.ts`) and **NOT `Source`**, which would make Discord legal as a
+  store link, a release date and an `/api/sync` target; add `"discord"` to `IDENTITY_ONLY_PROVIDERS`
+  (`syncClient.ts`) or `staleProviders()` fires a doomed sync on every `/library` load; render the
+  mark through `<BrandGlyph source="discord" />` in the UI's text colour, because **Google is the
+  only brand-colour exception** and a coloured Discord mark breaks the site-wide rule. Google's own
+  routes are 75 lines total, so the build is small; the surfaces are `SignInDialog` and Settings →
+  "Add login method". ⚠️ Nils has to create the app (see Needs Nils #3).
+
+- **🔵 Search Console reports most sitemap pages not indexed — verified NOT a configuration fault.**
+  (2026-09-02.) Checked against live prod: `sitemap.xml` answers 200 with **4,341 URLs**, 4,334 of
+  them the canonical 2-segment `/{type}/{slug}` shape (so the sitemap is not full of redirects), and
+  a Googlebot-UA fetch of `/movie/the-innocents` returns 200, `index, follow`, a self-referencing
+  canonical and 29 internal links. So Google is **choosing** not to index, which is the normal
+  outcome for a 2-week-old domain with 4,341 pages, near-zero backlinks and item text that is
+  provider-derived and therefore duplicated across hundreds of sites. ⚠️ **Blocked on the per-reason
+  breakdown** (Needs Nils #4): "Discovered – currently not indexed" is a crawl-priority signal and
+  needs links, "Crawled – currently not indexed" is a quality judgment and needs thicker pages,
+  "Duplicate without user-selected canonical" and "Page with redirect" would be real bugs. The three
+  levers already on file if it is the second: fix the facet under-linking, put facet pages in the
+  sitemap once that is done, and grow the internal link graph. → [docs/seo.md](docs/seo.md)
+
+- **⬜ `/import` is reachable from NOWHERE in the app.** (2026-09-02, Nils: "I never tried the
+  import because I don't know how.") The page, both API routes and `src/lib/import/` are all built
+  and shipped (PL4, 2026-08-23) — grep for `"/import"` returns zero links from any component. It
+  needs an entry point in Settings, next to "Your data", and probably a second one wherever an empty
+  library is shown. ⚠️ **Keep the page itself anonymous-reachable**: importing before signup was
+  Nils's call on 2026-08-23 and the whole point is reaching people who are on Letterboxd and not yet
+  here. → [docs/letterboxd-import.md](docs/letterboxd-import.md)
+
+- **⬜ Backloggd import does not exist and never did** — the import reads **Letterboxd and IMDb**.
+  Backloggd was left "to evaluate" on 2026-08-03, blocked purely on access method: no official API,
+  unofficial scraping only. ⚠️ **The cheap path nobody checked**: the pipeline already eats a plain
+  CSV, so IF Backloggd offers the user a CSV export of their own games, this is a parser in
+  `src/lib/import/parse.ts` and no API access at all. Verify that export exists before scoping
+  anything bigger. Value if it does: Backloggd is built on IGDB ids and so are our games, so the
+  match rate would be near-perfect.
+
+- **⬜ Does "What you track" need a clearer name?** The default-type-filter setting Nils asked for on
+  2026-09-02 **already shipped 2026-08-27** and does exactly what he described: turning Games off
+  removes the Games chip from the filter row (`availableTypes={enabledTypes}`) and hides games on
+  Home, Discover, Calendar and MyStuff, on every visit, per account. He did not find it, which makes
+  this a naming or placement question rather than a build. ⚠️ It also renders empty under
+  `next dev` along with the rest of `/settings`, so check prod before concluding it is broken.
+
+### Older
 
 - **✅ AGENTS.md compressed and its budget corrected (2026-09-02, Nils delegated the call).** 56.1 → 52.7 KB with all **93 invariants and 40 `⚠️` sub-rules** intact and zero rule leads lost. Every rule stays inline; **no category moved behind a pointer**, because these exist *because* somebody did not know they were touching that subsystem, and a pointer only helps a reader who already worked that out. ⚠️ **The ~25 KB budget was measuring the wrong thing** and is corrected in the file: size is a function of how many rules it holds, and the count grew ~40 → 93 while the number stayed put. Remaining bullets average 441 B, which is rule + sub-rules + pointer with almost no narrative left. **~55 KB is the honest ceiling; the question to ask is whether each rule earned its place, not whether the file is under a byte count.**
 
