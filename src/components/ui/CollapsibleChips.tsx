@@ -76,12 +76,22 @@ export default function CollapsibleChips({
   // somewhere else on purpose.
   const restoreFocus = useRef(false);
 
-  // Dismiss on an outside pointer or Escape. `pointerdown` rather than `click`
-  // so a tap that lands on another control closes this group BEFORE that
-  // control's own handler runs, instead of leaving two panels open at once.
+  // Dismiss on an outside CLICK, not on pointerdown.
+  //
+  // ⚠️ It was `pointerdown` first, and that quietly cost a tap. Nils: "when the
+  // type filter is open and i click the other filter, the type filter closes but
+  // the other does not open. needs a second tap."
+  //
+  // Why: a click only fires if pointerdown and pointerup land on the same
+  // element. Closing THIS group on pointerdown collapses four chips back into
+  // one, which moves every control to its right — so the finger came down on the
+  // other group's summary and came up somewhere else, and no click was ever
+  // produced. Dismissing on `click` means the layout does not move until after
+  // the other control's own handler has already run, so one tap closes this
+  // group and opens that one.
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
+    const onPointerDown = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -89,10 +99,10 @@ export default function CollapsibleChips({
       restoreFocus.current = true;
       setOpen(false);
     };
-    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("click", onPointerDown);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("click", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
