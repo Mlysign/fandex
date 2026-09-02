@@ -106,8 +106,27 @@ export function laneStates(): LaneState[] {
  */
 const EMPTY_STRIKES = 3;
 
+/**
+ * ⚠️ Movies are fetched BROAD here, and browse is not (2026-09-02).
+ *
+ * `region` + `with_release_type=2|3` restrict the query to films with an
+ * already-scheduled theatrical date in ONE country. Over an 18-month future
+ * window that is a few hundred titles, which is why `movie:future` retired at
+ * 409 with TMDB returning empty pages: it had genuinely reached the end of that
+ * question. Resetting the lane just re-walks the same set.
+ *
+ * Broad also aligns the DATE. With `region` TMDB returns that country's release
+ * date, while the catalog stores `remergeItem`'s merged date, so items pulled as
+ * "future" kept landing in the past window (409 added, 37 left in the window).
+ *
+ * ⚠️ Shows and games take no `broad` flag because there is nothing to widen:
+ * `tmdbShowPage` already sends no region and no release-type filter, and the
+ * games path is RAWG + IGDB. So this helps MOVIES and only movies. `show:future`
+ * retiring at 419 is TMDB genuinely not knowing many future `first_air_date`s,
+ * not a filter we imposed.
+ */
 function fetchLane(l: { type: MediaType; direction: Direction }, page: number): Promise<FeedCandidate[]> {
-  if (l.type === "movie") return fetchMoviePage(page, l.direction, DEFAULT_COUNTRY);
+  if (l.type === "movie") return fetchMoviePage(page, l.direction, DEFAULT_COUNTRY, undefined, true);
   if (l.type === "show") return fetchShowPage(page, l.direction);
   return fetchGamePageAllSources(page, l.direction);
 }

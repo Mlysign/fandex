@@ -165,6 +165,45 @@ describe("the browse page cache", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  // 2026-09-02. The backfill asks TMDB a WIDER question than browse does: no
+  // `region`, no `with_release_type=2|3`, because the narrow one had genuinely
+  // run out at 409 titles and retired the `movie:future` lane. A broad page
+  // therefore carries PRIMARY release dates rather than the requested country's,
+  // and serving one to a browse request is the same T22 defect the region key
+  // below exists to prevent. These two pin the separation from both directions.
+  it("sends the narrowing filters for BROWSE and drops them for the backfill", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await fetchMoviePage(1, "future", "DE");            // browse
+    await fetchMoviePage(1, "future", "DE", undefined, true); // backfill
+
+    const [browseUrl, backfillUrl] = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(browseUrl).toContain("region=DE");
+    expect(browseUrl).toContain("with_release_type=2|3");
+    expect(backfillUrl).not.toContain("region=");
+    expect(backfillUrl).not.toContain("with_release_type");
+    // Both still window the same way; only the narrowing changed.
+    expect(backfillUrl).toContain("release_date.gte=");
+    expect(backfillUrl).toContain("sort_by=popularity.desc");
+  });
+
+  it("does NOT share a cache entry between a broad and a narrow page", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ results: [
+        { id: 9, title: "Either", release_date: "2026-09-01", genre_ids: [], vote_count: 5, vote_average: 7, popularity: 10 },
+      ] }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await fetchMoviePage(1, "future", "DE");
+    await fetchMoviePage(1, "future", "DE", undefined, true);
+
+    // Two different questions, so two calls. Collapsing them would hand a
+    // German browse request a page built from primary release dates.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("keys on region, so a German visitor is not served US release dates", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ results: [

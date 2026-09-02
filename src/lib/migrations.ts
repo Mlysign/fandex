@@ -1251,6 +1251,52 @@ export const MIGRATIONS: Migration[] = [
       if (!has("stats_at")) db.exec("ALTER TABLE media_items ADD COLUMN stats_at INTEGER");
     },
   },
+  {
+    version: 28,
+    name: "reset the movie backfill lanes (their query changed)",
+    up: (db) => {
+      // 2026-09-02. `fetchLane` now pulls movies BROAD: no `region`, no
+      // `with_release_type=2|3`. The old lanes retired against the NARROW
+      // question ("films with a scheduled German theatrical date"), which TMDB
+      // had genuinely answered in full at 409 items and three empty pages.
+      //
+      // A cursor is only meaningful against the query that produced it. These
+      // two now point into a result set that no longer exists, and an
+      // `exhausted` flag earned by a different question is simply wrong. So
+      // rewind them rather than leaving the widened query unable to run.
+      //
+      // Done as a migration rather than a manual step because it must happen
+      // exactly once, on the deploy that changes the query, on every database.
+      // `resetBackfill()` is still wired to nothing (no route, no script), which
+      // stays an open item — this fixes the instance, not the gap.
+      //
+      // ⚠️ ONLY the movie lanes. `show:future` retired at 419 against a query
+      // that has no region or release-type filter to drop, so its cursor is
+      // still valid and rewinding it would re-walk 26 pages for nothing.
+      // `game:past` retired for a THIRD reason — RAWG has been answering 401
+      // since 2026-08-20 and still was on 2026-09-02, so a reset would spend
+      // three more empty pages and re-retire immediately.
+      // ⚠️ GUARDED, and the guard is the point. `backfill_cursor` is created by
+      // db.ts's CREATE TABLE block, which runs BEFORE migrations in the app but
+      // NOT on the migration-only path — `scripts/migrate.mjs` against a bare
+      // file, and every migration test, apply this list to a database that has
+      // no such table. An unguarded UPDATE here threw `no such table:
+      // backfill_cursor` and took out nine tests in three files that have
+      // nothing to do with the backfill. Same family as the standing rule that
+      // db.ts's block must stay valid against the OLD schema: the two apply
+      // paths see different tables, so a migration may not assume either one.
+      const hasCursor = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'backfill_cursor'")
+        .get();
+      if (hasCursor) {
+        db.exec(`
+          UPDATE backfill_cursor
+             SET page = 1, exhausted = 0, strikes = 0
+           WHERE lane IN ('movie:future', 'movie:past')
+        `);
+      }
+    },
+  },
 ];
 
 

@@ -223,13 +223,44 @@ export function fetchGamePage(page = 1, direction: Direction = "future", window?
     () => bestEffort("rawg", () => rawgGamePage(page, direction, window)));
 }
 
-async function tmdbMoviePage(page: number, direction: Direction, region: string, window?: DateRange): Promise<FeedCandidate[]> {
+/**
+ * `broad` drops the two filters that narrow this query hardest. It exists for
+ * the BACKFILL and must never be set on a browse path.
+ *
+ * ── Why (2026-09-02, Nils's call) ──────────────────────────────────────────
+ * `region` + `with_release_type=2|3` together mean "films with an already
+ * SCHEDULED theatrical release in this one country". Over an 18-month future
+ * window that is genuinely only a few hundred titles, and the backfill's
+ * `movie:future` lane proved it: TMDB returned empty pages after 409 items and
+ * the lane retired. Resetting it re-walks the same set, so the only way the
+ * catalog's future window grows is to ask a wider question.
+ *
+ * It also narrows a SECOND problem. With `region` set TMDB filters by AND
+ * returns that country's release date (T22), while `media_items.release_date`
+ * is the MERGED date `remergeItem` computes. Those disagree, which is why 409
+ * items fetched as "future" left only 37 in the future window. Without
+ * `region` TMDB returns the primary release date, which is much closer to what
+ * we store.
+ *
+ * ⚠️ NOT for browse, and the cache key below is what enforces it. A broad page
+ * carries primary dates rather than German ones, so serving one to a browse
+ * request is exactly the T22 regression `fetchMoviePage`'s key comment warns
+ * about.
+ */
+async function tmdbMoviePage(
+  page: number,
+  direction: Direction,
+  region: string,
+  window?: DateRange,
+  broad = false
+): Promise<FeedCandidate[]> {
   // `discover` with a release-date window sorted by popularity. With `region` set,
   // TMDB filters by + returns that country's release date (T22).
   const { gte, lte } = window ?? dateWindow(direction);
+  const narrowing = broad ? "" : `&with_release_type=2|3&region=${region}`;
   const res = await httpFetch(
     `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}` +
-      `&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${region}` +
+      `&sort_by=popularity.desc&include_adult=false${narrowing}` +
       `&release_date.gte=${gte}&release_date.lte=${lte}&page=${page}`,
     { budgetMs: BROWSE_BUDGET_MS, appScopedAuth: true }
   );
@@ -249,12 +280,26 @@ async function tmdbMoviePage(page: number, direction: Direction, region: string,
   }));
 }
 
-export function fetchMoviePage(page = 1, direction: Direction = "future", region = DEFAULT_COUNTRY, window?: DateRange): Promise<FeedCandidate[]> {
+export function fetchMoviePage(
+  page = 1,
+  direction: Direction = "future",
+  region = DEFAULT_COUNTRY,
+  window?: DateRange,
+  broad = false
+): Promise<FeedCandidate[]> {
   // `region` is in the key: TMDB filters by AND returns that country's release
   // date (T22), so two regions are genuinely different pages, not one page
   // relabelled. Dropping it here would serve a German visitor US dates.
-  return cachedPage(`tmdb-movie:${page}:${direction}:${region}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
-    () => bestEffort("tmdb", () => tmdbMoviePage(page, direction, region, window)));
+  //
+  // ⚠️ `broad` is in the key for the SAME reason and it is not optional. A broad
+  // page ignores `region` entirely and carries primary release dates, so sharing
+  // a cache entry with a narrow page would hand a browse request the very dates
+  // the line above exists to prevent. The `region` segment stays in the key even
+  // when broad (where it is unused) so the two never collide.
+  return cachedPage(
+    `tmdb-movie:${page}:${direction}:${region}:${window?.gte ?? ""}:${window?.lte ?? ""}:${broad ? "broad" : "narrow"}`,
+    () => bestEffort("tmdb", () => tmdbMoviePage(page, direction, region, window, broad))
+  );
 }
 
 async function tmdbShowPage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
