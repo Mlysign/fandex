@@ -50,6 +50,7 @@ const GLYPH_CLASS = "text-text-secondary transition-colors duration-fast group-h
 // lookup. A bare `process.env.X` inside the component body would be identical at
 // runtime but reads as if it could change between renders.
 const googleEnabled = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const discordEnabled = !!process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
 
 export default function AuthOptions({
   returnTo,
@@ -120,23 +121,45 @@ export default function AuthOptions({
           branding guidelines ask for their multi-colour "G"; the house rule is
           no brand hue in any state. Flagged, not silently decided. */}
       {googleEnabled && (
-        <>
-          {/* GoogleMark, not BrandGlyph, and no GLYPH_CLASS: Google's branding
-              guidelines forbid a monochrome G on this button and forbid changing
-              its colour at all, so it must not inherit the text colour or take
-              the shared hover treatment. See GoogleMark.tsx. */}
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href={`/api/auth/google${q}`} className={OPTION_CLASS}>
-            <GoogleMark size={18} />
-            Continue with Google
-          </a>
-          {/* The divider says the four below are a different KIND of option:
-              they connect a library, not just an identity. Without it Google
-              reads as a fifth platform to link. */}
-          <p className="text-xs text-text-secondary text-center pt-1">
-            or connect a platform and bring your library with you
-          </p>
-        </>
+        /* GoogleMark, not BrandGlyph, and no GLYPH_CLASS: Google's branding
+           guidelines forbid a monochrome G on this button and forbid changing
+           its colour at all, so it must not inherit the text colour or take
+           the shared hover treatment. See GoogleMark.tsx. */
+        /* eslint-disable-next-line @next/next/no-html-link-for-pages */
+        <a href={`/api/auth/google${q}`} className={OPTION_CLASS}>
+          <GoogleMark size={18} />
+          Continue with Google
+        </a>
+      )}
+
+      {/* ── Discord, the second identity-only door (2026-09-02, Nils) ───────
+          Same category as Google and rendered beside it: an account you almost
+          certainly already have, versus the four below which are accounts you
+          have to have chosen to own. Discord is the likeliest of the two for
+          this app's audience.
+
+          BrandGlyph, NOT a bespoke mark: Google is the ONE exception to the
+          no-brand-colour rule, and it is required rather than chosen. Discord's
+          own guidelines permit a monochrome mark, so it takes the house
+          treatment like Trakt and Steam do. */}
+      {discordEnabled && (
+        /* eslint-disable-next-line @next/next/no-html-link-for-pages */
+        <a href={`/api/auth/discord${q}`} className={OPTION_CLASS}>
+          <BrandGlyph source="discord" size={18} className={GLYPH_CLASS} />
+          Continue with Discord
+        </a>
+      )}
+
+      {/* The divider says the four below are a different KIND of option: they
+          connect a library, not just an identity. Without it the identity
+          buttons read as more platforms to link.
+          ⚠️ Gated on EITHER identity provider, not on Google alone — it used to
+          be inside the Google block, so a deploy with Discord configured and
+          Google not would have shown the buttons with no divider at all. */}
+      {(googleEnabled || discordEnabled) && (
+        <p className="text-xs text-text-secondary text-center pt-1">
+          or connect a platform and bring your library with you
+        </p>
       )}
 
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}

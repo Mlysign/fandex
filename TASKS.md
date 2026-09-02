@@ -11,13 +11,15 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Three items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
-3. **⬜ Reveal the Discord client secret and set `DISCORD_CLIENT_SECRET`** in `.env` and in Railway. (2026-09-02.) The app now EXISTS: name `Fandex`, **client id `1544627875955744818`** (public), with both redirect URIs saved (`https://fandex.org/api/auth/discord/callback` and the localhost one for dev). The secret is the only piece left and it stays his — the code reads it from the environment, so it never has to pass through a session here. Press **Reset Secret** on the app's OAuth2 page to get one. → the Discord entry under "Still open elsewhere".
+3. **⬜ ROTATE `DISCORD_CLIENT_SECRET`, then fix the Discord var names in Railway.** (2026-09-02.) ⚠️ **The secret was printed to this session's terminal** while repairing a `.env` line I corrupted (the file had no trailing newline, so an append landed on the end of the secret's value). The file is repaired and correct, but a secret that has appeared in a transcript should be replaced: **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. ⚠️ Separately, the client id must be renamed **`DISCORD_CLIENT_ID` → `NEXT_PUBLIC_DISCORD_CLIENT_ID`** in Railway (it is already correct in the local `.env`); the sign-in button is gated in a client component, so under the old name the routes work and the button never appears. → the Discord entry under "Still open elsewhere".
+
+4. **⬜ Sign in with Discord once, on prod, to prove the round-trip.** Everything else about it is verified; the token exchange and session mint have never run against live Discord. Google's took a real sign-in to close too.
 
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
@@ -51,19 +53,19 @@ The three findings that decided it, so nobody re-derives them:
 
 ### Added 2026-09-02 (Nils)
 
-- **⬜ Discord as a login provider.** Identity-only: Discord holds no library, so it is the Google
-  shape, not the Trakt shape. Three registration points carry the invariants — extend
-  `AuthProvider` (`src/types/index.ts`) and **NOT `Source`**, which would make Discord legal as a
-  store link, a release date and an `/api/sync` target; add `"discord"` to `IDENTITY_ONLY_PROVIDERS`
-  (`syncClient.ts`) or `staleProviders()` fires a doomed sync on every `/library` load; render the
-  mark through `<BrandGlyph source="discord" />` in the UI's text colour, because **Google is the
-  only brand-colour exception** and a coloured Discord mark breaks the site-wide rule. Google's own
-  routes are 75 lines total, so the build is small; the surfaces are `SignInDialog` and Settings →
-  "Add login method". ✅ **The Discord app EXISTS as of 2026-09-02**: client id
-  `1544627875955744818`, both redirect URIs saved (prod + localhost), developer ToS accepted. Only
-  `DISCORD_CLIENT_SECRET` is outstanding and it is Nils's to set (Needs Nils #3) — the code reads
-  both credentials from the environment, so the secret never passes through a session here. The
-  integration itself is still to write and can be merged dark before the secret lands.
+- **🔵 Discord as a login provider — BUILT, one live round-trip unverified** (2026-09-02). Client id
+  `1544627875955744818`, both redirect URIs saved, ToS accepted. Identity-only, mirroring Google:
+  `scope=identify` (no email, no `guilds`), and the access AND refresh tokens are **deliberately
+  discarded** — nothing calls a Discord API after login, so storing a self-renewing credential would
+  be a liability buying nothing. Verified: both routes build `ƒ (Dynamic)`, the start route 307s to
+  `discord.com/oauth2/authorize` with the right client id, `scope=identify` and a CSRF nonce, and
+  Settings renders the card identity-only (no Sync button) with the monochrome mark.
+  ⚠️ **What is NOT verified is the one thing only Nils can do: a real sign-in.** The token exchange,
+  the `users/@me` read and the session mint have never run against live Discord. Google's equivalent
+  sat "built but unproven" for a day for the same reason and the proof was a real login.
+  ⚠️ **`NEXT_PUBLIC_DISCORD_CLIENT_ID` is the var name**, not `DISCORD_CLIENT_ID` — the button is
+  gated in a client component, so the id must be public and needs the Dockerfile `ARG` (already
+  added). Railway still has the old name (Needs Nils #3).
 
 - **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
   indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,

@@ -36,7 +36,8 @@ missing.
 | `NEXT_PUBLIC_BASE_URL` | ✅ | Public origin, no trailing slash (e.g. `https://app.example.com`) — used for OAuth redirects |
 | `DB_PATH` | — | SQLite file path. Defaults to `./data/rr.db`; **set to the mounted volume in production** (e.g. `/app/data/rr.db`) |
 | `STEAM_API_KEY` | ⬚ | Steam integration |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | ⬚ | Google sign-in (identity only, no library). Both halves or the button stays hidden. The id is `NEXT_PUBLIC_` deliberately and has a Dockerfile `ARG`; the secret must never be. Register `<origin>/api/auth/google/callback` in the Google console. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | â¬ | Google sign-in (identity only, no library). Both halves or the button stays hidden. The id is `NEXT_PUBLIC_` deliberately and has a Dockerfile `ARG`; the secret must never be. Register `<origin>/api/auth/google/callback` in the Google console. |
+| `NEXT_PUBLIC_DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | ⬚ | Discord sign-in (identity only, no library). Both halves or the button stays hidden. The id is `NEXT_PUBLIC_` deliberately and has a Dockerfile `ARG`; the secret must never be. Register `<origin>/api/auth/discord/callback` in the Discord developer portal. |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
 | `BACKFILL_ENABLED` | ⬚ | **Phase 4: the seeded backfill. Default OFF.** `1` starts paced ingest toward 30–50k titles (`BACKFILL_PAGES` per 30 min, default 2; stops at `BACKFILL_MAX_ITEMS`, default 50,000). ⚠️ **The pacing is the safety feature** — 30–50k titles is 60–120k provider calls and every row is WAL that Litestream ships. Check Railway spend before raising anything. |

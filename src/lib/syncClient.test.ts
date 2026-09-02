@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { staleProviders, syncToCompletion, SYNC_STALE_MS } from "./syncClient";
+import { staleProviders, syncToCompletion, SYNC_STALE_MS, IDENTITY_ONLY_PROVIDERS } from "./syncClient";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -144,6 +144,25 @@ describe("staleProviders", () => {
       await syncToCompletion(due);
       expect(fetchSpy).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
+    });
+
+    it("never reports discord as due either (2026-09-02)", () => {
+      // The second identity-only provider. Adding a name to `AuthProvider` is
+      // HALF the job; without the IDENTITY_ONLY_PROVIDERS entry `staleProviders`
+      // reads "no sync_log row" as "overdue", which is right for a provider that
+      // CAN sync and permanently wrong for one that cannot — it reads as due
+      // forever and fires a doomed sync on every /library load, silently.
+      expect(staleProviders(ident("discord"), [], NOW)).toEqual([]);
+      expect(staleProviders(ident("discord", "trakt"), [], NOW)).toEqual(["trakt"]);
+    });
+
+    it("keeps every identity-only provider out, so a third one cannot be half-added", () => {
+      // Asserted as a SET rather than per-name: the failure this guards is
+      // somebody adding a provider to the type union and the UI and forgetting
+      // this list, which a per-name test cannot see.
+      for (const p of IDENTITY_ONLY_PROVIDERS) {
+        expect(staleProviders(ident(p), [], NOW)).toEqual([]);
+      }
     });
   });
 });

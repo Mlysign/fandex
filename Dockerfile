@@ -43,6 +43,12 @@ ENV NEXT_PUBLIC_SUPPORT_URL=$NEXT_PUBLIC_SUPPORT_URL
 # server-only and must NOT be declared here.
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+# Discord sign-in (2026-09-02). Identical reasoning to Google directly above:
+# AuthOptions and the settings page are client components and gate the Discord
+# button on this, so without the ARG the button never renders while
+# /api/auth/discord works perfectly. Public id here, SECRET never.
+ARG NEXT_PUBLIC_DISCORD_CLIENT_ID
+ENV NEXT_PUBLIC_DISCORD_CLIENT_ID=$NEXT_PUBLIC_DISCORD_CLIENT_ID
 
 RUN npm run build
 

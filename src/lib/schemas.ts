@@ -14,7 +14,7 @@ export const zSource = z.enum(["steam", "rawg", "tmdb", "trakt", "igdb", "letter
 // Anything that can mint a session, which is every Source plus the identity-only
 // providers. Mirrors the `AuthProvider` type; see src/types/index.ts for why the
 // two enums stay separate.
-export const zAuthProvider = z.enum([...zSource.options, "google"]);
+export const zAuthProvider = z.enum([...zSource.options, "google", "discord"]);
 export const zFacetRole = z.enum([
   "director", "writer", "creator", "cast",       // PersonRole
   "developer", "publisher", "studio", "network", // CompanyRole

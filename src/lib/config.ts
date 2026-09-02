@@ -42,6 +42,8 @@ const ENV: EnvSpec[] = [
   // warning is pointing the right way.
   { name: "NEXT_PUBLIC_GOOGLE_CLIENT_ID", required: false, note: "Google sign-in; also needs a Dockerfile ARG (client component reads it)" },
   { name: "GOOGLE_CLIENT_SECRET", required: false, note: "Google sign-in; server-only, never NEXT_PUBLIC_" },
+  { name: "NEXT_PUBLIC_DISCORD_CLIENT_ID", required: false, note: "Discord sign-in; also needs a Dockerfile ARG (client component reads it)" },
+  { name: "DISCORD_CLIENT_SECRET", required: false, note: "Discord sign-in; server-only, never NEXT_PUBLIC_" },
   // P15 — Android TWA Digital Asset Links (only needed once you ship the Android app).
   { name: "TWA_PACKAGE_NAME", required: false, note: "Android TWA package name for /.well-known/assetlinks.json (P15)" },
   { name: "TWA_CERT_FINGERPRINT", required: false, note: "Android signing-cert SHA-256(s) for assetlinks.json (P15); comma-separate multiple" },

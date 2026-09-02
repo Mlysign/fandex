@@ -57,7 +57,7 @@ export const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 // question it answers is a single one: "can this identity ever produce a sync?"
 // google never could; rawg no longer can. Anything removed from `SOURCES` while
 // identities still reference it belongs here in the same commit.
-export const IDENTITY_ONLY_PROVIDERS: readonly string[] = ["google", "rawg"];
+export const IDENTITY_ONLY_PROVIDERS: readonly string[] = ["google", "discord", "rawg"];
 
 export function staleProviders(
   identities: { provider: string }[],

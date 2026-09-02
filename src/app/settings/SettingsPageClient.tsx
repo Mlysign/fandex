@@ -26,6 +26,11 @@ import { Settings as SettingsIcon } from "lucide-react";
 // ⚠️ Needs the matching Dockerfile ARG, or this reads undefined in prod while
 // the server route works. → memory: next-public-env-needs-dockerfile-arg
 const googleEnabled = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+// Same gate, same reasoning, for the second identity-only provider (2026-09-02).
+// ⚠️ It has to be added in THREE places on this page — `providers`,
+// `loginMethods` and the "Add login method" buttons — which is exactly the miss
+// `loginMethods`' own comment predicts. A test asserts all three agree.
+const discordEnabled = !!process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
 
 // Table → plain-language label for the delete dialog's counts. Tables not listed
 // here (anything a future migration adds) are still deleted — they just don't
@@ -310,6 +315,9 @@ function SettingsContent() {
     ...(googleEnabled
       ? [{ key: "google", label: "Google", description: "Signs you in. No library to import.", connectUrl: "/api/auth/google", canWrite: false, identityOnly: true }]
       : []),
+    ...(discordEnabled
+      ? [{ key: "discord", label: "Discord", description: "Signs you in. No library to import.", connectUrl: "/api/auth/discord", canWrite: false, identityOnly: true }]
+      : []),
     { key: "trakt",      label: "Trakt.tv",    description: "Movies & TV shows watchlist",      connectUrl: "/api/auth/trakt",       canWrite: true,  identityOnly: false },
     { key: "tmdb",       label: "TMDB",         description: "Movie & TV watchlist and ratings", connectUrl: "/api/auth/tmdb",        canWrite: true,  identityOnly: false },
     // Letterboxd hidden until an API key is available — re-add when ready.
@@ -320,7 +328,11 @@ function SettingsContent() {
   // Q5's "everything is connected" check. Was three inlined getIdentity() calls
   // repeated in three places, which is how Google would have been added to two
   // of them and missed in the third.
-  const loginMethods = ["trakt", "steam", "rawg", ...(googleEnabled ? ["google"] : [])];
+  const loginMethods = [
+    "trakt", "steam", "rawg",
+    ...(googleEnabled ? ["google"] : []),
+    ...(discordEnabled ? ["discord"] : []),
+  ];
   const allLoginMethodsConnected = loginMethods.every((k) => getIdentity(k));
 
   if (anon) {
@@ -572,6 +584,13 @@ function SettingsContent() {
               <a href="/api/auth/google" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
                 <GoogleMark size={15} />
                 Connect Google
+              </a>
+            )}
+            {discordEnabled && !getIdentity("discord") && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
+              <a href="/api/auth/discord" className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border-strong bg-surface-elevated text-text-secondary hover:text-text-primary hover:border-neutral-400 transition-colors">
+                <BrandGlyph source="discord" size={15} />
+                Connect Discord
               </a>
             )}
             {!getIdentity("trakt") && (

@@ -10,14 +10,19 @@ export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd"
 // `AuthProvider` is "a thing that can log you in", which also covers providers
 // that hold no library and never sync.
 //
-// Google is the first of those (2026-09-01). Keeping it OUT of `Source` is what
-// stops it becoming a legal value for a store link or a release date, and keeps
-// `zSource` (the /api/sync target) rejecting it. The sync exclusion is enforced
-// separately and deliberately, by IDENTITY_ONLY_PROVIDERS in lib/syncClient.ts
-// (a runtime value, so it cannot live in this file — every export here is
-// type-only, which is what lets `scripts/*` import from it under Node's
-// type-stripping).
-export type AuthProvider = Source | "google";
+// Google was the first of those (2026-09-01), Discord the second (2026-09-02).
+// Keeping them OUT of `Source` is what stops either becoming a legal value for a
+// store link or a release date, and keeps `zSource` (the /api/sync target)
+// rejecting them. The sync exclusion is enforced separately and deliberately, by
+// IDENTITY_ONLY_PROVIDERS in lib/syncClient.ts (a runtime value, so it cannot
+// live in this file — every export here is type-only, which is what lets
+// `scripts/*` import from it under Node's type-stripping).
+//
+// ⚠️ Adding a name here is HALF the job. The other half is that list: without it
+// `staleProviders()` reads "no sync_log row" as "overdue", which is right for a
+// provider that CAN sync and permanently wrong for one that cannot — it reads as
+// due forever and fires a doomed sync on every /library load, silently.
+export type AuthProvider = Source | "google" | "discord";
 
 export interface MediaItem {
   id: string;
