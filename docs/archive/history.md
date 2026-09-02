@@ -5470,3 +5470,64 @@ In production.**
 - A client secret is shown **once** and is unrecoverable after; the console states viewing and
   downloading are no longer available. Generating a second one is the supported fix and both stay
   valid.
+
+---
+
+## 2026-09-02 — the settings session, four asks from Nils
+
+Moved out of TASKS.md the same session, per the doc convention. All four items
+below are closed; the facet sweep and the Discord integration stay live there.
+
+### ✅ `/import` got an entry point in Settings
+
+The page, both API routes and `src/lib/import/` shipped 2026-08-23 with **nothing
+anywhere in the app linking to them** — `grep '"/import"'` returned zero hits from
+any component — so the only way in was typing the URL. Nils: *"i never tried the
+letterboxd and backloggd import because i dont know how."* A dedicated Import
+section now sits between "Add login method" and "Region", verified end to end on a
+prod build. The page stays anonymous-reachable (importing before signup was Nils's
+call, 2026-08-23). ⬜ Still open in TASKS.md: a second entry on an empty library.
+
+### ✅ The media-type setting became a DEFAULT, not a scope (`d2dd618`, `4d0f7d0`)
+
+Reported as *"i disabled games, went back to home and the collapsed type filters
+still used all media types"*. **Three separate faults**, each of which alone looked
+like the whole bug:
+
+1. **The save never propagated.** `sessionProbe` caches `/api/auth/me` in a
+   module-level promise and every list surface reads the preference through it;
+   client navigation does not remount the module. `savePlatforms` had called
+   `resetSessionProbe()` since it shipped, **with a comment naming this exact
+   failure**, and `saveMediaTypes` twelve lines above it never got the line.
+2. **The semantics were wrong for the ask.** Turning a type off removed its chip
+   from the filter row, so there was no way to see games ad hoc. `visibleTypes`
+   now lets an explicit chip selection win outright; `narrowTypeFilter` was
+   **deleted** rather than left unused so the old shape cannot return. The guard
+   and the hiding were two halves of one design — the stale-chip trap the guard
+   existed for is gone *because* the chip is now always on screen.
+3. **The chips then lied about the state.** Shipped in the first fix and reported
+   within the hour: the lists filtered correctly while the row read `activeTypes`
+   directly, so an un-narrowed row showed "All" lit while two of three types were
+   on screen. The chips now resolve through `visibleTypes`, the same question the
+   list asks. "All" had to change with it (clearing resolves to the default, so it
+   was delivering two of three) and a type chip stays dim when nothing is
+   narrowed, because it means "narrow to this", not "this is visible".
+
+⚠️ `rr_type_filter` is **sessionStorage**, which is what makes "every new visit
+starts from my default" true while one tap still overrides it for the session.
+
+### ✅ Home's "Up next" rail ignored the type filter
+
+`<ProgressRail />` rendered unconditionally while `upNext.ts` is
+`WHERE m.type = 'show'`, so filtering Home to Games left a shows rail on top of the
+page. Pre-existing, found while verifying the above.
+
+### ⏸️ Backloggd import: parked, and now measured rather than assumed
+
+Checked in Nils's own logged-in account: `/settings/import_export/` renders an
+**empty panel**, `/settings/data` offers only destructive operations, and
+*"Exporting — take your Backloggd data to-go with a CSV export tool"* is **roadmap
+item 6, 7K votes, unbuilt**. So there is no export of any kind to parse. ⚠️ When
+they ship it it is nearly free: they have committed to CSV, `parse.ts` already eats
+a plain CSV, and Backloggd is built on IGDB ids exactly as our games are. The
+import reads **Letterboxd and IMDb** meanwhile.

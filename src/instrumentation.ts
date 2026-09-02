@@ -132,6 +132,19 @@ export async function register() {
 
       const { snapshotIsDue, buildHomeSnapshot } = await import("./lib/homeSnapshot");
       if (snapshotIsDue()) await buildHomeSnapshot();
+
+      // ⚠️ The facet sweep runs LAST, and after the home snapshot specifically.
+      // Its targets are the facets `/` links, which it reads from `hubGenres()`
+      // and `popularPeople()` — the same two functions the home snapshot builds
+      // from. Sweeping first would spend a provider fan-out on yesterday's
+      // rotated-out people and leave today's unlinked for a day.
+      //
+      // It inherits the same AFTER-THE-BOOT-PRUNE sequencing as the snapshots
+      // above, for the same reason and via the same `pruneDone`: the rows it
+      // pins are `browsed = 1`, so a pin landing between the prune computing its
+      // kill list and executing it is not protected.
+      const { sweepFacetLinks, facetSweepEnabled } = await import("./lib/facetSnapshot");
+      if (facetSweepEnabled()) await sweepFacetLinks();
     };
 
     // ⚠️ AFTER THE BOOT PRUNE, and this ordering is the whole reason

@@ -64,6 +64,7 @@ const PRUNABLE_WHERE = `
   AND id NOT IN (SELECT media_item_id FROM user_episode_state)
   AND id NOT IN (SELECT media_item_id FROM home_snapshot_item)
   AND id NOT IN (SELECT media_item_id FROM calendar_snapshot_item)
+  AND id NOT IN (SELECT media_item_id FROM facet_snapshot_item)
 `;
 
 function n(sql: string): number {
@@ -85,6 +86,8 @@ export type PrunePreview = {
   protectedByHomeSnapshot: number;
   /** Browsed titles kept because a public calendar month page links to them. */
   protectedByCalendarSnapshot: number;
+  /** Browsed titles kept because a public FACET page links to them (the sweep). */
+  protectedByFacetSnapshot: number;
   /**
    * Library / wishlist rows the LIVE predicate would delete. Must be 0.
    *
@@ -123,6 +126,9 @@ export function previewPrune(): PrunePreview {
     ),
     protectedByCalendarSnapshot: n(
       "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM calendar_snapshot_item)",
+    ),
+    protectedByFacetSnapshot: n(
+      "SELECT COUNT(*) n FROM media_items WHERE browsed = 1 AND id IN (SELECT media_item_id FROM facet_snapshot_item)",
     ),
     // Measured against the LIVE predicate, not a hypothetical narrower one —
     // see the field docs. Both are 0 by construction while these names are views.

@@ -399,6 +399,44 @@ sitemap, not against the route folder's name.**
 
 ## Still open
 
+### ✅ The facet link sweep (2026-09-02) — under-linking is FIXED for the 56 facets `/` links
+
+**Measured before**, across every facet the homepage links (36 genres + 20 people):
+**876 of 2,691 rendered items were linkable, 33%.** The worst were not the long tail:
+`/tag/casual` 12/60, `/tag/arcade` 13/60, `/tag/documentary` 1/60, `/tag/reality`
+0/60, `/tag/board-games` 0/5.
+
+`src/lib/facetSnapshot.ts` sweeps a bounded set once a day, off the request path,
+calling the builder with `persist: true` — the same shape `home_snapshot` and
+`calendar_snapshot` already use, and chosen over relaxing PR14, whose unbounded
+crawler-driven writes grew `media_items` to ~676k rows.
+
+**Measured after, on the anonymous path (what a crawler gets):** the 8 facets of
+one run went **214/419 → 419/419**. `/tag/arcade` 13/60 → 60/60, `/tag/casual`
+12/60 → 60/60, `/tag/board-games` 0/5 → 5/5.
+
+⚠️ **It does NOT grow the sitemap and moves no score.** The rows land `browsed = 1`
+with no user state, and `POOL_WHERE` is `(browsed = 0 OR id IN user_item_state)`,
+so they are outside the catalog pool by construction: absent from
+`listPublicItems`, from `discovery.ts`'s vectors and IDF counts, and from the hub.
+The point is a better hub page, not more thin pages.
+
+⚠️ **The prune pin is not theoretical.** Measured on the live database after one
+run: of 419 pinned rows, **177 would have been deleted by the next boot prune**
+without `facet_snapshot_item` in `PRUNABLE_WHERE`, and 0 with it.
+
+⚠️ **The write was invisible for its first version**, and it is the trap worth
+remembering: the payload cache key carries `persist`, so persisting filled the
+`persist` entry while every anonymous visitor kept reading the pre-write
+`nopersist` entry for the full 24 h TTL. The sweep logged 419/419 while the page
+served 214/419. → the cache-key invariant in [AGENTS.md](../AGENTS.md).
+
+⚠️ **Three genre chips on `/` link to EMPTY facet pages**: `indie`,
+`massively-multiplayer` and `platformer` all measured pool 0. `hubGenres()` reads
+the provider genre maps, not the catalog, so it offers genres nothing is filed
+under. The highest-authority page on the domain linking three dead ends is worth
+fixing; it is not what the sweep is for.
+
 ### 🔵 Facet pages are not in the sitemap, on purpose
 
 They are already crawled heavily via item-page links — that crawl is what filled

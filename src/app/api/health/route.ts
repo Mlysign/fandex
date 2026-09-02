@@ -8,6 +8,7 @@ import {
 import { providerBreakerSnapshot, providerCallSnapshot, hostGateSnapshot } from "@/lib/http";
 import { catalogSnapshot } from "@/lib/catalogStatus";
 import { cacheSnapshot } from "@/lib/boundedCache";
+import { facetSweepCoverage } from "@/lib/facetSnapshot";
 
 // Reads live process/cgroup state — must never be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -98,6 +99,15 @@ export async function GET() {
     // provider TERM being breached. It should be unreachable while the fill
     // drains, which is exactly why it is measured.
     catalog: catalogSnapshot(),
+    // ── The facet link sweep (2026-09-02) ────────────────────────────────
+    // `linkable / items` is the number the sweep exists to move: a public facet
+    // page renders up to 60 titles and used to link only the ones we already
+    // held (876 of 2,691 across the 56 facets `/` links, measured 2026-09-02).
+    // Reported because "not running", "running and failing" and "caught up" are
+    // indistinguishable from outside otherwise — `covered` against `targets`
+    // separates the first two, `oldestBuiltAt` catches a sweep that has stalled
+    // part-way through the set. → src/lib/facetSnapshot.ts
+    facetSweep: facetSweepCoverage(),
   };
   return NextResponse.json(body, { status: db ? 200 : 503 });
 }

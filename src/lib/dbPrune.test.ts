@@ -22,6 +22,7 @@ beforeEach(() => {
   // them and a leftover row would silently protect the next test's fixtures.
   run("DELETE FROM home_snapshot_item");
   run("DELETE FROM calendar_snapshot_item");
+  run("DELETE FROM facet_snapshot_item");
   run("INSERT INTO users (id) VALUES (?)", [USER]);
 });
 
@@ -137,6 +138,45 @@ describe("previewPrune — what is in scope", () => {
 
     runPrune();
     expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-calendar'")).toBe(1);
+  });
+
+  it("protects a browsed title a public FACET page links to (2026-09-02)", () => {
+    // The SIXTH clause, and the one the facet link sweep depends on entirely.
+    // The sweep persists provider titles so `/tag/…` and `/person/…` link what
+    // they render (876 of 2,691 were linked before it). Those rows arrive
+    // `browsed = 1` with nobody acting on them, which is precisely this
+    // predicate's target — so without the clause the very next deploy deletes
+    // exactly the rows the sweep just paid a provider fan-out to create, and the
+    // under-linking comes back with nothing to show it ever left.
+    addItem("browsed-on-facet", 1);
+    run(
+      "INSERT INTO facet_snapshot_item (kind, key, media_item_id) VALUES ('tag', 'action', 'browsed-on-facet')",
+    );
+
+    const p = previewPrune();
+    expect(p.prunable).toBe(0);
+    expect(p.protectedByFacetSnapshot).toBe(1);
+
+    runPrune();
+    expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-facet'")).toBe(1);
+  });
+
+  it("still prunes a browsed title once the facet that pinned it lets go", () => {
+    // The other half: the pin must RELEASE. `facet_snapshot_item` is keyed by
+    // facet, and the people rail rotates, so a title dropping off a swept facet
+    // has to become prunable again. A pin that never releases is a slow leak,
+    // which is the failure mode nobody connects back to this table.
+    addItem("browsed-on-facet", 1);
+    run(
+      "INSERT INTO facet_snapshot_item (kind, key, media_item_id) VALUES ('tag', 'action', 'browsed-on-facet')",
+    );
+    expect(previewPrune().prunable).toBe(0);
+
+    run("DELETE FROM facet_snapshot_item WHERE kind = 'tag' AND key = 'action'");
+
+    expect(previewPrune().prunable).toBe(1);
+    runPrune();
+    expect(count("SELECT COUNT(*) n FROM media_items WHERE id = 'browsed-on-facet'")).toBe(0);
   });
 
   it("keeps the two snapshot pins independent of each other", () => {

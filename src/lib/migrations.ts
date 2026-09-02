@@ -1297,6 +1297,73 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 29,
+    name: "facet_snapshot: make the public facet pages link what they render",
+    up: (db) => {
+      // 2026-09-02. A facet page renders up to 60 titles and links only the ones
+      // we already hold: /person/christopher-nolan linked 13 of 60. PR14 gates
+      // the thin write on a real session, so an anonymous render (which is every
+      // crawler, and every logged-out visitor) resolves uuids with a plain SELECT
+      // and leaves the rest as dead text. Under-linked, not broken, and it is why
+      // the facet pages stay out of the sitemap.
+      //
+      // The fix is the one home_snapshot and calendar_snapshot already use:
+      // persist a BOUNDED set once a day, off the request path. PR14's gate keeps
+      // its exact shape — the sweep calls the builder with `persist: true`
+      // directly rather than inventing a session, exactly as the home snapshot
+      // calls persistDiscoverItems rather than handing persistDiscoverBatch a
+      // fake user.
+      //
+      // ⚠️ WHY THIS DOES NOT GROW THE SITEMAP OR MOVE ANY SCORE. The rows land
+      // `browsed = 1` with no user state, and POOL_WHERE is
+      // `(browsed = 0 OR id IN user_item_state)` — so they are outside the
+      // catalog pool by construction: not in listPublicItems (the sitemap), not
+      // in discovery.ts's scoring vectors, not in the homepage hub. They exist to
+      // give a title a uuid and a slug so the facet page can link it. Adding
+      // thousands of thin pages to the sitemap is the opposite of what this is
+      // for.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS facet_snapshot (
+          kind TEXT NOT NULL,
+          key TEXT NOT NULL,
+          built_at INTEGER NOT NULL,
+          items INTEGER NOT NULL,
+          linkable INTEGER NOT NULL,
+          PRIMARY KEY (kind, key)
+        )
+      `);
+
+      // The prune pin, same role as home_snapshot_item and calendar_snapshot_item
+      // and for the same reason: these titles arrive `browsed = 1` with nobody
+      // acting on them, which is precisely what dbPrune deletes. Without this the
+      // next deploy would delete exactly the rows the facet pages link and put
+      // the under-linking straight back.
+      //
+      // ⚠️ Keyed by FACET, not just by item, and that is load-bearing. The sweep
+      // is ROLLING (a few facets per run, least-recently-built first), so a run
+      // must be able to replace one facet's pins without touching another's.
+      // home_snapshot_item can be a bare id list because its build rewrites the
+      // whole table in one go; this one cannot.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS facet_snapshot_item (
+          kind TEXT NOT NULL,
+          key TEXT NOT NULL,
+          media_item_id TEXT NOT NULL,
+          PRIMARY KEY (kind, key, media_item_id)
+        )
+      `);
+
+      // PRUNABLE_WHERE asks `id NOT IN (SELECT media_item_id FROM ...)`, which
+      // scans this table on every boot prune. The PK leads with `kind`, so it
+      // cannot serve that lookup; this index can. Created in the SAME migration
+      // as the table it indexes, per the standing rule — db.ts's CREATE block
+      // runs before migrations and must stay valid against the OLD schema.
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_facet_snapshot_item_media ON facet_snapshot_item(media_item_id)",
+      );
+    },
+  },
 ];
 
 

@@ -17,7 +17,8 @@ Three items. Everything else in this file is work I can do without him, and ever
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
-3. **⬜ Tick the hCaptcha on the Discord "Create a new app" dialog.** (2026-09-02.) The dialog is open in Chrome with the name (`Fandex`) filled and the developer ToS ticked; **solving a CAPTCHA is one of the things I am not permitted to do**, so it stops there. One click finishes it. After that the redirect URI (`https://fandex.org/api/auth/discord/callback`) and the client id are mine to set; `DISCORD_CLIENT_SECRET` stays his to paste into `.env` and Railway, since the code only ever reads it from the environment. → the Discord entry under "Still open elsewhere".
+3. **⬜ Reveal the Discord client secret and set `DISCORD_CLIENT_SECRET`** in `.env` and in Railway. (2026-09-02.) The app now EXISTS: name `Fandex`, **client id `1544627875955744818`** (public), with both redirect URIs saved (`https://fandex.org/api/auth/discord/callback` and the localhost one for dev). The secret is the only piece left and it stays his — the code reads it from the environment, so it never has to pass through a session here. Press **Reset Secret** on the app's OAuth2 page to get one. → the Discord entry under "Still open elsewhere".
+
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
 
@@ -58,11 +59,11 @@ The three findings that decided it, so nobody re-derives them:
   mark through `<BrandGlyph source="discord" />` in the UI's text colour, because **Google is the
   only brand-colour exception** and a coloured Discord mark breaks the site-wide rule. Google's own
   routes are 75 lines total, so the build is small; the surfaces are `SignInDialog` and Settings →
-  "Add login method". ⚠️ **The app is one click from existing** (2026-09-02): the portal's "Create a
-  new app" dialog is filled in (name `Fandex`, developer ToS ticked) and stopped at an **hCaptcha**,
-  which I am not permitted to solve. Nils ticks that box, then the app exists and the redirect URI
-  and client id are mine to set. The code can be built and merged dark first — it reads both
-  credentials from the environment, so the secret never has to pass through here.
+  "Add login method". ✅ **The Discord app EXISTS as of 2026-09-02**: client id
+  `1544627875955744818`, both redirect URIs saved (prod + localhost), developer ToS accepted. Only
+  `DISCORD_CLIENT_SECRET` is outstanding and it is Nils's to set (Needs Nils #3) — the code reads
+  both credentials from the environment, so the secret never passes through a session here. The
+  integration itself is still to write and can be merged dark before the secret lands.
 
 - **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
   indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,
@@ -97,45 +98,6 @@ The three findings that decided it, so nobody re-derives them:
   4. **A smaller sitemap.** 4,341 URLs at a uniform 0.7 priority tells Google nothing about which
      matter. Speculative, cheap, reversible.
 
-- **✅ `/import` now has an entry point in Settings** (2026-09-02). The page, both API routes and
-  `src/lib/import/` shipped 2026-08-23 with **nothing anywhere linking to them**, so the only way in
-  was typing the URL — which is why Nils never tried it. Settings now carries an "Import" section
-  between "Add login method" and "Region". Verified end to end on a prod build: the button lands on
-  `/import` and the page renders. ⚠️ The page stays anonymous-reachable (importing before signup was
-  Nils's call, 2026-08-23). ⬜ Still open: a second entry wherever an empty library is shown. →
-  [docs/letterboxd-import.md](docs/letterboxd-import.md)
-
-- **✅ The media-type setting is a DEFAULT now, not a scope, and the bug under it is fixed**
-  (2026-09-02). Nils: *"i disabled games, went back to home and the collapsed type filters still
-  used all media types. i dont want to hide the games filter here, just set the default to my pref."*
-  Two separate faults, and each one alone would have looked like the whole thing:
-  - **The save did not propagate.** `sessionProbe`'s module-level cache held the old `mediaTypes`
-    and nothing invalidated it, so the setting did nothing until a full reload. `savePlatforms` has
-    always called `resetSessionProbe()` **with a comment describing this exact failure**;
-    `saveMediaTypes`, twelve lines above it, never got the line.
-  - **The semantics were wrong for what he wants.** It removed the type's chip from the filter row
-    entirely. Now `visibleTypes` lets an explicit chip selection win outright, the chip row renders
-    every type, and `narrowTypeFilter` is **deleted** so the old shape cannot come back. Renamed
-    "What you track" → **"Default types"**.
-
-  ⚠️ **The guard and the hiding were two halves of one design.** `narrowTypeFilter` existed to stop
-  a stale chip naming a hidden type filtering a list to nothing with no visible control to undo it.
-  That trap is gone *because* the chip is now always on screen — remove one without the other and
-  you get an un-emptyable list. ⚠️ `rr_type_filter` is **sessionStorage**, which is what makes "every
-  new visit starts from my default" true while still letting one tap override it.
-
-- **✅ Home's "Up next" rail ignored the type filter** (2026-09-02, found while verifying the above).
-  `<ProgressRail />` rendered unconditionally; `upNext.ts` is `WHERE m.type = 'show'`, so filtering
-  Home to Games left a shows rail sitting on top of the page. Pre-existing, not a regression.
-
-- **⏸️ Backloggd import: PARKED, and the reason is now measured, not assumed** (2026-09-02). Checked
-  in Nils's own logged-in account: `/settings/import_export/` renders an **empty panel**,
-  `/settings/data` offers only destructive operations, and **"Exporting — take your Backloggd data
-  to-go with a CSV export tool" is roadmap item 6 (7K votes, unbuilt)**. So there is no export of any
-  kind and nothing for us to parse. ⚠️ **When they ship it, it is nearly free**: they have committed
-  to CSV, `src/lib/import/parse.ts` already eats a plain CSV, and Backloggd is built on IGDB ids
-  exactly as our games are, so the match rate would be near-perfect. Re-check their roadmap
-  occasionally; there is nothing else to do. The import reads **Letterboxd and IMDb** meanwhile.
 
 ### Older
 
@@ -159,7 +121,22 @@ The three findings that decided it, so nobody re-derives them:
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
 
-- **Facet pages link only titles we already hold** (13 of 60 on `/person/christopher-nolan`). Under-linking, not a rendering bug; they stay out of the sitemap until it is fixed. → [docs/seo.md](docs/seo.md)
+- **✅ Facet under-linking is FIXED for the 56 facets `/` links** (2026-09-02, Nils asked for it).
+  Measured before: **876 of 2,691 rendered items linkable, 33%** (`/tag/casual` 12/60, `/tag/arcade`
+  13/60, `/tag/board-games` 0/5). After, on the anonymous path: **419/419 on the 8 facets of one
+  run.** `src/lib/facetSnapshot.ts` sweeps a bounded set daily off the request path with
+  `persist: true`, the shape the home and calendar snapshots already use, chosen over relaxing PR14.
+  ⚠️ No sitemap or scoring impact: the rows are `browsed = 1`, so outside `POOL_WHERE` by
+  construction. ⚠️ The prune pin is real: **177 of 419 rows would have been deleted by the next boot
+  prune** without it. → [docs/seo.md](docs/seo.md)
+  - **⬜ Should the 56 swept facets go IN the sitemap now?** That was the stated gate, and it is the
+    natural next step: facet pages aggregate rather than repeat provider text, so they are among the
+    few pages here that can actually rank. **Nils's call** — it changes what we advertise to Google,
+    and only 56 of thousands of facets are swept, so it means a curated list, not "all facet pages".
+  - **⬜ Three genre chips on `/` link to EMPTY pages**: `indie`, `massively-multiplayer`,
+    `platformer`, all pool 0. `hubGenres()` reads the provider genre maps rather than the catalog,
+    so it offers genres nothing is filed under. The strongest page on the domain linking three dead
+    ends is its own small bug.
 
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now the aggregate is a raw sum rather than a damped mean. **Time-gated**: revisit after a few weeks of real scores under the new formula. ⚠️ **Re-read this after 2026-08-22.** The class weights now decide WHICH facets are selected, not just how much a selected one counts, so a re-tune is a bigger lever than when this was written, and **any measurement taken before that date describes the old selection**.
 

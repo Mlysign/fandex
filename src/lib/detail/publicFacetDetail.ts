@@ -555,7 +555,9 @@ export async function buildPublicFacetDetail(
   // already-cached facet page would keep serving slug-less items for a day, and
   // each of their cards would link through the legacy uuid url and its 308.
   // Bump this whenever a field is added to the payload.
-  const cacheKey = `v2:${ref.kind}:${ref.key}:${page}:${sort}:${persist ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
+  const keyFor = (p: boolean) =>
+    `v2:${ref.kind}:${ref.key}:${page}:${sort}:${p ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
+  const cacheKey = keyFor(persist);
   const cachedPayload = _facetPageCache.get(cacheKey);
   if (cachedPayload) return cachedPayload;
   // L2 before the fan-out. A hit re-populates L1 so the next request on this
@@ -689,6 +691,35 @@ export async function buildPublicFacetDetail(
   if (!buildFailed) {
     _facetPageCache.set(cacheKey, payload);
     writeFacetCache(cacheKey, JSON.stringify(payload));
+
+    // ⚠️ A PERSISTING BUILD MUST ALSO FILL THE ANONYMOUS ENTRY, or the write it
+    // just made is invisible to the people it was made for.
+    //
+    // The key carries `persist` (correctly — it changes which items are
+    // linkable), so the two flags own separate entries. Without this, a build
+    // that persisted 419 titles left the `nopersist` entry holding the payload
+    // from BEFORE the write, and every anonymous visitor and crawler kept
+    // getting the old dead-text version for the full 24 h TTL. Measured exactly
+    // that on 2026-09-02: the sweep logged `items: 419, linkable: 419` while the
+    // anonymous page still linked 214 of 419. The write worked and the surface
+    // it exists for did not move, which is the shape of bug this repo keeps
+    // recording — it measures as working because a different path genuinely is.
+    //
+    // Writing the same object under the other key is CORRECT, not an
+    // approximation: `persistDiscoverItems` and `lookupExistingUuids` resolve
+    // the same `id` map, so once the rows exist a `nopersist` build of this pool
+    // would produce a byte-identical payload. It also costs zero provider calls,
+    // where invalidating instead would buy a full fan-out on the next crawl.
+    //
+    // Only in this direction. A `nopersist` build must NEVER fill the `persist`
+    // entry: it resolved fewer uuids precisely because it did not write, and
+    // seeding the persist key with it would make a later persisting caller skip
+    // the write entirely.
+    if (persist) {
+      const anonKey = keyFor(false);
+      _facetPageCache.set(anonKey, payload);
+      writeFacetCache(anonKey, JSON.stringify(payload));
+    }
   }
   return payload;
 }
