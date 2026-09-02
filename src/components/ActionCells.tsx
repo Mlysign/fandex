@@ -7,6 +7,7 @@ import type { QuickActionItem } from "@/lib/useQuickActions";
 import { useQuickActions } from "@/lib/useQuickActions";
 import { probeSession, resetSessionProbe } from "@/lib/sessionProbe";
 import SignInDialog from "@/components/auth/SignInDialog";
+import { ratingColor } from "@/components/QuickActions";
 
 // Action toolbar shared by PosterCard + ListCard. Always visible (works on
 // touch); each cell is both an indicator and a control. The rate cell opens a
@@ -27,9 +28,11 @@ import SignInDialog from "@/components/auth/SignInDialog";
 //    picked up this bar in place of its lone BellPlus button. One row shape,
 //    not two, so ListCard inherits the right thing if list view ever returns.
 
-// Same 7/5 cutoffs as before H1.6b — only the three hexes moved onto the
-// design's tokens (success/warning/danger) instead of arbitrary literals.
-const ratingColor = (r: number) => (r >= 7 ? "#5FE39A" : r >= 5 ? "#F0A04B" : "#E5674C");
+// 2026-09-02: this file used to carry its OWN copy of ratingColor, with the same
+// 7/5 cutoffs and the brand hexes written out literally, while QuickActions had a
+// second copy on stock Tailwind. Two components rendered the same 8/10 in two
+// different greens on the same card. One definition now, on the tokens.
+// → components/QuickActions.tsx
 const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
 // N3 wrapped PosterCard/ListCard's root in a real <a> (for middle-click / open-
 // in-new-tab). stopPropagation() alone doesn't cancel that ancestor <a>'s

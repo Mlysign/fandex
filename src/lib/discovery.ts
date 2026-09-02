@@ -1751,7 +1751,38 @@ export function find(userId: string | null, req: FindRequest): FindResult {
   // false, so nothing downstream believed a score was available at all.
   const profileUsable = rawProfile.ratedItemCount >= MIN_RATED_FOR_FANDEX_SCORE;
   const fandexUsable = sort === "fandexScore" && profileUsable;
+
+  // ── Relevance, ahead of whatever sort is selected (2026-09-02) ─────────────
+  //
+  // Nils's call, and the trade was stated when it was put to him: this OVERRIDES
+  // all four sort controls, for exact matches only.
+  //
+  // Until now there was no relevance term anywhere. The filter above is
+  // `title.includes(q)` and everything after it is a global sort, so typing a
+  // title you know exists could bury it: searching "Lucky" ranked *Mr. Lucky*
+  // first because it has more votes. A title is a substring of its own sequels
+  // and of every longer title containing it, so the more famous neighbour always
+  // wins on any crowd-shaped sort. That is the same family as the 2026-08-29
+  // bug where search served arrival order under a control labelled "Popularity".
+  //
+  // Deliberately ONLY an exact match, not a fuzzy relevance score:
+  //   * an exact title is an unambiguous statement of intent, so promoting it
+  //     cannot be wrong in the way a similarity threshold can;
+  //   * it changes at most a handful of rows, so the chosen sort still describes
+  //     everything below;
+  //   * it needs no tuning, and an untuned relevance weight is a knob nobody
+  //     can calibrate against 5,000 items.
+  //
+  // Compared on the normalised title so "Wall-E" matches "wall-e" and a stray
+  // trailing space does not lose the match. `q` is already trimmed+lowercased.
+  const exact = (v: DiscoveryVector) => (q && v.title.trim().toLowerCase() === q ? 1 : 0);
+
   scored.sort((a, b) => {
+    // Rank 1 before rank 0, then fall through to the selected sort so several
+    // works sharing an exact title (a remake, a game of the film) stay ordered
+    // by what the user actually picked rather than arbitrarily.
+    const rel = exact(b.v) - exact(a.v);
+    if (rel !== 0) return rel;
     switch (sort) {
       case "releaseDate": return cmpDate(a.v.releaseDate, b.v.releaseDate); // cmpDate defaults to desc (newest first)
       case "popularity": return b.v.communityVotes - a.v.communityVotes || bayes(b.v) - bayes(a.v);
