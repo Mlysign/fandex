@@ -225,11 +225,22 @@ export const TagCategoryWeightsPutSchema = z.object({
   updates: z.array(z.object({ id: z.string(), weight: z.number().min(0), ignored: z.boolean() })),
 });
 
-// POST /api/dev/scoring/overrides — reassign one tag key to a category.
-export const TagCategoryOverridePostSchema = z.object({
-  tagKey: z.string().min(1),
-  categoryId: z.string().min(1),
-});
+// POST /api/dev/scoring/overrides — reassign one tag, or many, to a category.
+//
+// Both fields are optional and the refine requires one of them, because there
+// are TWO callers: TagTable's bulk bar sends `tagKeys`, and TagCategoryPicker
+// (the item page's inline picker) still sends the single `tagKey`. Collapsing
+// the two onto one array shape would have been tidier and would have broken the
+// second one silently, since nothing but loading that page exercises it.
+export const TagCategoryOverridePostSchema = z
+  .object({
+    tagKey: z.string().min(1).optional(),
+    tagKeys: z.array(z.string().min(1)).min(1).max(2000).optional(),
+    categoryId: z.string().min(1),
+  })
+  .refine((v) => v.tagKey !== undefined || v.tagKeys !== undefined, {
+    message: "tagKey or tagKeys required",
+  });
 
 // POST /api/dev/scoring/preview — score a sample item with draft weights.
 export const ScoringPreviewSchema = z.object({

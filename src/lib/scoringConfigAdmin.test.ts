@@ -5,9 +5,10 @@ import { buildProfile, computeFandexScore } from "./discovery";
 import { getLibraryFacetAnalysis } from "./libraryAnalysis";
 import {
   getScoringConfig, saveScoringConfig, getTagCategories, saveTagCategory, saveCategoryWeights,
-  deleteTagCategory, setTagCategoryOverride, deleteTagCategoryOverride, listTagCategoryOverrides,
-  invalidateScoringConfigCaches,
+  deleteTagCategory, setTagCategoryOverride, setTagCategoryOverrides, deleteTagCategoryOverride,
+  listTagCategoryOverrides, getTagCategoryOverrides, invalidateScoringConfigCaches,
 } from "./scoringConfig";
+import { TagCategoryOverridePostSchema } from "./schemas";
 import { DEFAULT_SCORING_CONFIG } from "./scoringDefaults";
 import { isScoringAdmin } from "./devAdmin";
 
@@ -74,6 +75,52 @@ describe("scoringConfig write paths", () => {
     expect(listTagCategoryOverrides()).toEqual([{ tagKey: "sequel", categoryId: "genre" }]);
     deleteTagCategoryOverride("sequel");
     expect(listTagCategoryOverrides()).toEqual([]);
+  });
+});
+
+// 2026-09-03 (Nils), on a search for "game awards" returning 63 IGDB award
+// keywords that all belong in Meta / Noise: "i think i need a multi edit tool
+// for the tags."
+describe("retagging many tags at once", () => {
+  it("writes every key and reports how many", () => {
+    const keys = ["the game awards nominee", "the game awards 2017", "the game awards world premiere"];
+    expect(setTagCategoryOverrides(keys, "meta")).toBe(3);
+    const overrides = getTagCategoryOverrides();
+    for (const k of keys) expect(overrides.get(k)).toBe("meta");
+  });
+
+  it("overwrites an existing assignment rather than failing on the conflict", () => {
+    setTagCategoryOverride("sequel", "genre");
+    setTagCategoryOverrides(["sequel", "action"], "meta");
+    expect(getTagCategoryOverrides().get("sequel")).toBe("meta");
+  });
+
+  it("counts a repeated key once, so 'applied' matches what the table shows", () => {
+    expect(setTagCategoryOverrides(["sequel", "sequel"], "meta")).toBe(1);
+  });
+
+  it("is a no-op on an empty list rather than a statement with no bindings", () => {
+    expect(setTagCategoryOverrides([], "meta")).toBe(0);
+    expect(listTagCategoryOverrides()).toEqual([]);
+  });
+
+  it("invalidates the override cache, so the next read sees the batch", () => {
+    // The single-tag writer nulls the cache and the batch one has to as well.
+    // Missing it would make the admin table show the pre-batch categories with
+    // the DB already changed, which reads as "the button did nothing".
+    expect(getTagCategoryOverrides().size).toBe(0); // populate the cache
+    setTagCategoryOverrides(["action"], "meta");
+    expect(getTagCategoryOverrides().get("action")).toBe("meta");
+  });
+
+  it("accepts BOTH request shapes, because two different screens post here", () => {
+    // TagTable's bulk bar sends `tagKeys`; TagCategoryPicker on the item page
+    // still sends the single `tagKey`. Collapsing them onto one shape would
+    // have broken the second silently.
+    expect(TagCategoryOverridePostSchema.safeParse({ tagKeys: ["a", "b"], categoryId: "meta" }).success).toBe(true);
+    expect(TagCategoryOverridePostSchema.safeParse({ tagKey: "a", categoryId: "meta" }).success).toBe(true);
+    expect(TagCategoryOverridePostSchema.safeParse({ categoryId: "meta" }).success).toBe(false);
+    expect(TagCategoryOverridePostSchema.safeParse({ tagKeys: [], categoryId: "meta" }).success).toBe(false);
   });
 });
 

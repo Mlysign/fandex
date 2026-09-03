@@ -42,6 +42,11 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // Bulk retagging (2026-09-03). Nils, looking at 63 IGDB award keywords that
+  // all belong in Meta / Noise: "i think i need a multi edit tool for the tags."
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,8 +56,18 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
       if (debouncedSearch.trim()) p.set("q", debouncedSearch.trim());
       const res = await fetch(`/api/dev/scoring/tags?${p}`);
       const data = await res.json();
-      setRows(data.tags ?? []);
+      const next: TagRowData[] = data.tags ?? [];
+      setRows(next);
       setTotal(data.total ?? 0);
+      // A selection may only ever contain keys that are ON SCREEN. Bundling a
+      // tag removes its row from the next load (it stops being canonical), and
+      // a key that is selected but invisible would make "63 selected" a claim
+      // the screen can't back — and would still be written on Apply.
+      const visible = new Set(next.map((r) => r.key));
+      setSelected((prev) => {
+        const kept = [...prev].filter((k) => visible.has(k));
+        return kept.length === prev.size ? prev : new Set(kept);
+      });
     } finally {
       setLoading(false);
     }
@@ -61,9 +76,55 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
   // The window resets whenever the filter/search underneath it changes, so
-  // "Load more" always means "100 more of THIS query", not a stale one.
+  // "Load more" always means "100 more of THIS query", not a stale one. The
+  // selection is dropped for a stronger reason than tidiness: a tag ticked
+  // under one search can legitimately still match the next one, so pruning
+  // alone would carry a few rows across and retag them under a query that
+  // never showed them being picked. "Load more" deliberately does NOT clear —
+  // it is the same query, just more of it.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setLimit(PAGE_SIZE); }, [filter, debouncedSearch]);
+  useEffect(() => { setLimit(PAGE_SIZE); setSelected(new Set()); }, [filter, debouncedSearch]);
+
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+
+  function toggleRow(tagKey: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(tagKey)) next.add(tagKey);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.key)));
+  }
+
+  // One request, one transaction. A loop of single-tag POSTs would be 63 round
+  // trips that can stop half way through, leaving a taxonomy nobody chose.
+  async function applyBulkCategory() {
+    if (!bulkCategory || selected.size === 0) return;
+    const tagKeys = [...selected];
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/dev/scoring/overrides", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagKeys, categoryId: bulkCategory }),
+      });
+      if (!res.ok) return;
+      // Patched in place rather than re-fetched, for the same reason the
+      // single-row dropdown is: a reload throws away the scroll position and
+      // the filter you spent the last ten minutes setting up. The rows stay
+      // visible even when they no longer match the active category filter,
+      // so you can see what you just did (and put it back).
+      const moved = new Set(tagKeys);
+      setRows((rs) => rs.map((r) => (moved.has(r.key) ? { ...r, category: bulkCategory, overridden: true } : r)));
+      setSelected(new Set());
+      setBulkCategory("");
+      onChanged();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   async function reassign(tagKey: string, categoryId: string) {
     setBusyKey(tagKey);
@@ -142,13 +203,73 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
           </select>
         </div>
       </div>
-      <p className="text-xs text-neutral-500">
-        {loading ? "Loading…" : `${rows.length} of ${total} tag${total === 1 ? "" : "s"} shown, by catalog frequency.`}
-      </p>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <p className="text-xs text-neutral-500">
+          {loading ? "Loading…" : `${rows.length} of ${total} tag${total === 1 ? "" : "s"} shown, by catalog frequency.`}
+        </p>
+        {/* The master checkbox in the header row is desktop-only (that row is
+            `hidden md:flex`), so select-all needs a control that survives the
+            narrow layout too. */}
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors underline decoration-dotted"
+          >
+            {allSelected ? "Clear selection" : `Select all ${rows.length} shown`}
+          </button>
+        )}
+      </div>
+
+      {/* Sticky, because retagging 100 rows means scrolling past the toolbar
+          long before you are done ticking. Only rendered once something is
+          selected, so it costs nothing the rest of the time.
+          ⚠️ `md:top-16` clears AppNav, which is its own `sticky top-0 z-30 h-14`
+          bar on this breakpoint — at `top-2` the bulk bar parks underneath it
+          and the Apply button is unreachable exactly when you scroll. The
+          mobile nav is at the BOTTOM, so the narrow layout needs no offset. */}
+      {selected.size > 0 && (
+        <div className="sticky top-2 md:top-16 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 shadow-xl">
+          <span className="text-sm text-neutral-200">{selected.size} selected</span>
+          <span className="text-xs text-neutral-500">Set category to</span>
+          <select
+            value={bulkCategory}
+            disabled={bulkBusy}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className={`${inputCls} w-40`}
+          >
+            <option value="">Choose…</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          {/* Deliberately NOT applied on the select's change event, unlike the
+              per-row dropdown. Arrowing through a select fires change on every
+              option you pass, which is harmless for one tag and is a hundred
+              wrong writes here. */}
+          <button
+            type="button"
+            onClick={applyBulkCategory}
+            disabled={!bulkCategory || bulkBusy}
+            className="px-3 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 text-sm text-neutral-100 transition-colors disabled:opacity-40"
+          >
+            {bulkBusy ? "Applying…" : `Apply to ${selected.size}`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            disabled={bulkBusy}
+            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors underline decoration-dotted disabled:opacity-40"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       <div className="space-y-1">
         <div className="hidden md:flex items-center gap-3 text-[11px] text-neutral-600 uppercase tracking-wide px-0.5 pb-1 border-b border-neutral-800">
-          <span className="flex-1 min-w-0">Tag</span>
+          <span className="flex items-center gap-2 flex-1 min-w-0">
+            <MasterCheckbox all={allSelected} some={selected.size > 0} onToggle={toggleAll} />
+            Tag
+          </span>
           <span className="w-14 text-right shrink-0">Count</span>
           <span className="w-36 shrink-0">Category</span>
           <span className="w-72 shrink-0">Aka</span>
@@ -159,6 +280,8 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
             row={r}
             categories={categories}
             busy={busyKey}
+            selected={selected.has(r.key)}
+            onToggleSelected={toggleRow}
             onReassign={reassign}
             onRemoveAka={removeAkaMember}
             onAddAka={addAkaMember}
@@ -180,12 +303,30 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
   );
 }
 
+// "Some but not all" is a DOM property, not an attribute, so it can only be set
+// through a ref — React has no `indeterminate` prop. Without it the header box
+// reads as empty while 40 rows are ticked.
+function MasterCheckbox({ all, some, onToggle }: { all: boolean; some: boolean; onToggle: () => void }) {
+  return (
+    <input
+      type="checkbox"
+      checked={all}
+      ref={(el) => { if (el) el.indeterminate = some && !all; }}
+      onChange={onToggle}
+      aria-label="Select all shown tags"
+      className="shrink-0 accent-neutral-400"
+    />
+  );
+}
+
 function TagRow({
-  row, categories, busy, onReassign, onRemoveAka, onAddAka, onSetDisplayName,
+  row, categories, busy, selected, onToggleSelected, onReassign, onRemoveAka, onAddAka, onSetDisplayName,
 }: {
   row: TagRowData;
   categories: TagCategoryConfig[];
   busy: string | null;
+  selected: boolean;
+  onToggleSelected: (tagKey: string) => void;
   onReassign: (tagKey: string, categoryId: string) => void;
   onRemoveAka: (alias: string) => void;
   onAddAka: (canonical: string, memberKey: string, displayLabel?: string) => void;
@@ -193,14 +334,26 @@ function TagRow({
 }) {
   return (
     <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 text-sm py-1.5 border-b border-neutral-900 last:border-0">
-      <span className="flex-1 min-w-0 truncate text-neutral-300">
-        {row.label}
-        {row.labelOverridden && (
-          <span className="ml-1.5 text-[10px] text-neutral-600" title="Shown under a name you chose">
-            renamed
-          </span>
-        )}
-      </span>
+      {/* Checkbox and label share one flex child so that in the narrow
+          (flex-col) layout the box sits beside the name it belongs to instead
+          of stacking above it. */}
+      <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelected(row.key)}
+          aria-label={`Select ${row.label}`}
+          className="shrink-0 accent-neutral-400"
+        />
+        <span className="min-w-0 truncate text-neutral-300">
+          {row.label}
+          {row.labelOverridden && (
+            <span className="ml-1.5 text-[10px] text-neutral-600" title="Shown under a name you chose">
+              renamed
+            </span>
+          )}
+        </span>
+      </label>
       <span className="w-14 text-right shrink-0 text-xs text-neutral-600">{row.count}×</span>
       <select
         value={row.category}

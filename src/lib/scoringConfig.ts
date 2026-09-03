@@ -4,7 +4,7 @@
 // hardcoded ROLE_WEIGHT/tags.ts sets directly. That swap is H5.2 — this file
 // only makes the DB-backed values loadable ahead of it.
 
-import { get, query, run } from "@/lib/db";
+import { get, query, run, transaction } from "@/lib/db";
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from "@/lib/scoringDefaults";
 import { tagAliasSignature } from "@/lib/tagAlias";
 import { ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
@@ -147,6 +147,31 @@ export function setTagCategoryOverride(tagKey: string, categoryId: string): void
     [tagKey, categoryId]
   );
   _overrideCache = null;
+}
+
+// Batch form (2026-09-03). Nils, on a search for "game awards" returning 63
+// IGDB award keywords that all belong in Meta / Noise: "i think i need a multi
+// edit tool for the tags."
+//
+// ONE transaction, not a loop of `setTagCategoryOverride`. Two reasons, and the
+// second is the load-bearing one. A partial apply would leave the taxonomy in a
+// state nobody chose and no screen names — 40 of 63 retagged, with no record of
+// which 40. And every write here invalidates a cache that `getTagCategoryOverrides`
+// re-reads, so a per-row loop re-reads the whole override table once per row.
+export function setTagCategoryOverrides(tagKeys: string[], categoryId: string): number {
+  const unique = [...new Set(tagKeys)];
+  if (unique.length === 0) return 0;
+  transaction(() => {
+    for (const tagKey of unique) {
+      run(
+        `INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (?, ?, strftime('%s','now'))
+         ON CONFLICT(tag_key) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at`,
+        [tagKey, categoryId]
+      );
+    }
+  });
+  _overrideCache = null;
+  return unique.length;
 }
 
 export function deleteTagCategoryOverride(tagKey: string): void {
