@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, EyeOff } from "lucide-react";
 import { TypeIcon } from "@/components/Badges";
 
 // MB16 — the one row used by BOTH episode surfaces: Home's "Up next" scroller
@@ -40,6 +40,12 @@ export interface EpisodeRowEntry {
   episodeTitle: string | null;
   airDate: string | null;
   href: string;
+  /**
+   * The viewer hid this show (2026-09-03). Only ever reachable on the Progress
+   * tab, and only while searching for it — so the row has to SAY so, or finding
+   * a show you deliberately hid reads as the hide not having worked.
+   */
+  hidden?: boolean;
 }
 
 /** The spec's format, verbatim: S.02 E.04. Shared with the old rail's label. */
@@ -127,6 +133,15 @@ export default function EpisodeRow({
           >
             {entry.showTitle}
           </Link>
+          {entry.hidden && (
+            <span
+              title="Hidden from your feeds. Unhide it on the show’s page."
+              className="shrink-0 inline-flex items-center gap-1 rounded-full border border-border-strong px-1.5 py-0.5 text-caption text-text-secondary"
+            >
+              <EyeOff className="w-3 h-3" aria-hidden />
+              Hidden
+            </span>
+          )}
         </div>
         <span className="font-mono text-meta text-text-secondary truncate">
           {entry.episodeTitle || `Episode ${entry.episode}`}

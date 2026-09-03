@@ -64,6 +64,8 @@ export interface ProgressEntry {
   /** WISHLIST providers, the canonical meaning everywhere (userState.ts). */
   platformSources: string[];
   addedAt: number | null;
+  /** This viewer hid the show. Present only on this tab; see the filter below. */
+  hidden?: boolean;
 }
 
 export interface ProgressFilterState {
@@ -87,6 +89,13 @@ export interface ProgressFilterState {
  */
 export function filterProgressEntries(entries: ProgressEntry[], f: ProgressFilterState): ProgressEntry[] {
   return entries.filter((e) => {
+    // ⚠️ A hidden show is in this list ONLY so the search box can reach it, so
+    // it is dropped unless somebody is actually searching. Nils asked for both
+    // halves and they pull in opposite directions: "shows should not show up on
+    // the progress feed" AND "i cannot find it on progress when typing it into
+    // the searchbox (wrong)". Gating on `f.q` is what satisfies both — the feed
+    // is what you get without typing.
+    if (e.hidden && !f.q) return false;
     if (!typeIsVisible(e.type, f.types, f.storedTypes)) return false;
     // The SHOW's title, not the episode's. Same rule as every other search box
     // in the app (they all match `item.title`), and an episode-title match would

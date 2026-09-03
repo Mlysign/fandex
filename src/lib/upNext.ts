@@ -1,4 +1,5 @@
 import { get, query } from "@/lib/db";
+import { hiddenItemIds } from "@/lib/hiddenItems";
 import { publicItemHref } from "@/lib/publicUrl";
 import { CATALOG_TTL_SECONDS, ensureShowSeasons, ensureSeasonEpisodes } from "@/lib/episodes";
 
@@ -107,6 +108,12 @@ export interface UpNextEntry {
   eventKind: "watched" | "released" | "unknown";
   /** The show's item page. */
   href: string;
+  /**
+   * This viewer hid the show (2026-09-03). Only ever true on the Progress TAB,
+   * whose fetch asks for hidden shows so its search box can still find them;
+   * every other caller filters them out at the query and never sees the flag.
+   */
+  hidden?: boolean;
 }
 
 interface EpisodeKey {
@@ -142,9 +149,22 @@ export interface ShowState {
 // hidden. Filtered HERE rather than over the finished entries, because this is
 // also what feeds the heal queue: a hidden show that never appears must not
 // spend any of buildUpNext's 3-shows-per-request provider budget either. It
-// stays in user_episode_state and in the library untouched — unhiding puts it
+// stays in user_episode_state and in the library untouched, and unhiding puts it
 // straight back with its watch history intact.
-function loadShowStates(userId: string): ShowState[] {
+//
+// ⚠️ `includeHidden` exists for ONE caller, and the reason is Nils's other rule.
+// Second pass the same day: "i cannot find it on progress when typing it into
+// the searchbox (wrong)." Hidden means "stop volunteering it", not "pretend it
+// does not exist", and the Progress TAB has a search box — so that surface has
+// to be handed the hidden shows, flagged, and drop them client-side unless the
+// person is searching. Every other caller (Home's rail, the heal queue) keeps
+// the default and never sees them.
+function loadShowStates(userId: string, includeHidden = false): ShowState[] {
+  const hiddenClause = includeHidden
+    ? ""
+    : "AND s.media_item_id NOT IN (SELECT media_item_id FROM user_hidden_items WHERE user_id = ?)";
+  const params = includeHidden ? [userId] : [userId, userId];
+
   const rows = query<{
     media_item_id: string;
     title: string;
@@ -157,9 +177,8 @@ function loadShowStates(userId: string): ShowState[] {
     `SELECT s.media_item_id, m.title, m.slug, m.poster_url, s.season_number, s.episode_number, s.watched_at
        FROM user_episode_state s
        JOIN media_items m ON m.id = s.media_item_id
-      WHERE s.user_id = ? AND m.type = 'show'
-        AND s.media_item_id NOT IN (SELECT media_item_id FROM user_hidden_items WHERE user_id = ?)`,
-    [userId, userId],
+      WHERE s.user_id = ? AND m.type = 'show' ${hiddenClause}`,
+    params,
   );
 
   const byShow = new Map<string, ShowState>();
@@ -344,10 +363,13 @@ export function nextForShow(
  */
 export async function buildUpNext(
   userId: string,
-  opts: { now?: number; maxHealShows?: number; healBudgetMs?: number; limit?: number } = {},
+  opts: { now?: number; maxHealShows?: number; healBudgetMs?: number; limit?: number; includeHidden?: boolean } = {},
 ): Promise<UpNextEntry[]> {
   const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
-  const states = loadShowStates(userId);
+  const states = loadShowStates(userId, opts.includeHidden);
+  // Only asked for when hidden shows were included, so the common path costs no
+  // query at all.
+  const hidden = opts.includeHidden ? hiddenItemIds(userId) : null;
   if (!states.length) return [];
 
   const ids = states.map((s) => s.mediaItemId);
@@ -381,7 +403,7 @@ export async function buildUpNext(
   const entries: UpNextEntry[] = [];
   for (const st of states) {
     const e = nextForShow(st, episodeIndex.get(st.mediaItemId), nowSec);
-    if (e) entries.push(e);
+    if (e) entries.push(hidden?.has(st.mediaItemId) ? { ...e, hidden: true } : e);
   }
 
   // Newest event first. An entry with no dated event at all sorts last rather

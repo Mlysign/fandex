@@ -193,3 +193,38 @@ describe("sorting", () => {
     expect(titles(sortProgressEntries(withNull, "upNext")).at(-1)).toBe("No event");
   });
 });
+
+// 2026-09-03, second pass. Nils hid The Bear (having unticked its last season so
+// it was back in Progress) and reported both halves at once:
+//
+//   "It was removed from the progress (good)"
+//   "i cannot find it on progress when typing it into the searchbox (wrong)"
+//
+// Those two pull in opposite directions, and the resolution is that the FEED is
+// what you get without typing. The tab is served the hidden shows flagged (see
+// upNextFacts' includeHidden) precisely so the search box can reach them; this
+// filter is the thing that keeps them out of the resting list.
+describe("a hidden show is out of the feed but findable by name", () => {
+  const list = [
+    entry({ showTitle: "Andor" }),
+    entry({ mediaItemId: "m2", showTitle: "The Bear", hidden: true }),
+  ];
+
+  it("is gone from the resting list", () => {
+    expect(titles(filterProgressEntries(list, noFilters))).toEqual(["Andor"]);
+  });
+
+  it("comes back when you search for it", () => {
+    expect(titles(filterProgressEntries(list, withFilters({ q: "bear" })))).toEqual(["The Bear"]);
+  });
+
+  it("still obeys the search, rather than appearing for any search at all", () => {
+    // The bug this guards: gating only on "is somebody searching" would surface
+    // every hidden show the moment a single character is typed.
+    expect(titles(filterProgressEntries(list, withFilters({ q: "andor" })))).toEqual(["Andor"]);
+  });
+
+  it("leaves a visible show untouched by any of this", () => {
+    expect(titles(filterProgressEntries(list, withFilters({ q: "a" })))).toEqual(["Andor", "The Bear"]);
+  });
+});

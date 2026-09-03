@@ -155,5 +155,23 @@ export async function GET(req: NextRequest) {
 function withUserOverlay(items: SnapshotItem[], userId: string | null) {
   if (!items.length) return [];
   const scored = userId ? decorateSection(items as never, userId) : items;
-  return annotateUserState(scored as never, userId);
+  // ⚠️ Hidden titles come out HERE, in the per-user overlay, not out of the
+  // snapshot. The snapshot stays viewer-independent by contract (that is what
+  // makes it shareable across every visitor and cheap for a crawler); this is
+  // the layer that is already per-user, so dropping a row here changes nothing
+  // about what was built.
+  //
+  // 2026-09-03, second pass. The first version filtered only the recommendation
+  // rail, on the reasoning that hiding means "stop recommending" rather than
+  // "erase from the site". Nils tested it and that reasoning was wrong: "i hid
+  // The Bear. It was removed from the progress (good), but not from 'popular
+  // right now' (wrong)." A rail on YOUR home page is something Fandex chose to
+  // show you, whatever the machinery behind it is called, and the snapshot being
+  // viewer-independent is an implementation detail nobody outside this file can
+  // see. All three rails now respect it.
+  return withoutHidden(
+    annotateUserState(scored as never, userId),
+    userId,
+    (r) => (r as { id?: string }).id,
+  );
 }

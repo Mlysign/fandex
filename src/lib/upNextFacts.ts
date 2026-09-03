@@ -35,7 +35,14 @@ export async function buildFilterableUpNext(
   userId: string,
   opts: { now?: number; maxHealShows?: number; healBudgetMs?: number } = {},
 ): Promise<{ entries: ProgressEntry[]; total: number }> {
-  const base = await buildUpNext(userId, { ...opts, limit: Infinity });
+  // ⚠️ includeHidden, and ONLY here. Nils, 2026-09-03: "i cannot find it on
+  // progress when typing it into the searchbox (wrong)." Hidden means stop
+  // volunteering it, not pretend it does not exist, and this tab has a search
+  // box — so it is handed the hidden shows FLAGGED and drops them client-side
+  // unless somebody is searching. Home's rail keeps the default and never sees
+  // them. Every filter in this app is client-side, so the list has to be fetched
+  // whole or the search finds only what you had already scrolled past.
+  const base = await buildUpNext(userId, { ...opts, limit: Infinity, includeHidden: true });
   if (!base.length) return { entries: [], total: 0 };
 
   const ids = base.map((e) => e.mediaItemId);
@@ -105,6 +112,7 @@ export async function buildFilterableUpNext(
       airDate: e.airDate,
       href: e.href,
       eventAt: e.eventAt,
+      hidden: !!e.hidden,
 
       type: "show",
       facetIds: facets.map((f) => facetId(f)),
@@ -122,5 +130,8 @@ export async function buildFilterableUpNext(
     };
   });
 
-  return { entries, total: entries.length };
+  // `total` counts the VISIBLE set. A hidden show is in the payload only so
+  // the search box can reach it; counting it would make the tab announce a
+  // number the list never shows.
+  return { entries, total: entries.filter((e) => !e.hidden).length };
 }
