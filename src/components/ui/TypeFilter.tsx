@@ -68,9 +68,9 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
   // single type it still shows that type's own icon and colour, because a chip
   // that cannot say what it filtered to is a chip you have to open to read.
   //
-  // ⚠️ `Layers` is gone from the SUMMARY only. The expanded row's "All" chip
-  // keeps it: there the icon sits next to three sibling type icons and means
-  // "select every one of these", not "Fandex".
+  // ⚠️ The SAME mark is on the expanded row's "All" chip. Splitting them was the
+  // first attempt and it read as a flicker; see the note on that button.
+  // `Layers` survives only as the fallback for a media type with no icon.
   const selected = availableTypes.filter((t) => shown.has(t));
   const SelectedIcon = selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
   const summary = SelectedIcon ? (
@@ -129,7 +129,20 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
         className={`tap-44 w-10 h-10 shrink-0 rounded-full border flex items-center justify-center transition-colors ${allActive ? "" : INACTIVE_CLASS}`}
         style={allActive ? { borderColor: "var(--color-accent)", background: "var(--color-accent)", color: "var(--color-text-on-accent)" } : undefined}
       >
-        <Layers className="w-4 h-4" aria-hidden />
+        {/* The SAME mark as the collapsed summary above, and that is the point.
+            Nils, second pass: "the fandex logo only shows up briefly after
+            loading but is then replaced by the old icon." It was not a race or a
+            cache — this button IS the old icon. On a wide screen the row starts
+            collapsed for one frame (useMediaQuery is false on the server and on
+            the client's first paint, deliberately) and then expands, so the
+            Fandex mark rendered, the row opened, and lucide's Layers took its
+            place beside the three type chips.
+
+            I had argued the two slots meant different things: "everything" next
+            to game/movie/show, versus "Fandex" on its own. From the outside they
+            are one control that changed icon mid-load, which is just a flicker.
+            One mark, both states. */}
+        <LogoOutline size={17} />
       </button>
 
       {availableTypes.map((t) => {
