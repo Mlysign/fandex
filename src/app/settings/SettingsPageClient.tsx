@@ -57,7 +57,39 @@ function SettingsContent() {
   // it once at init rather than setting state in an effect (react-hooks/set-state-in-effect).
   const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(() => {
     const connected = searchParams.get("connected");
+    const merged = searchParams.get("merged");
+    const linkError = searchParams.get("linkError");
+    const conflict = searchParams.get("conflict");
+    const provider = searchParams.get("provider");
     const error = searchParams.get("error");
+    // ⚠️ `merged` is a DIFFERENT outcome from `connected` and has to say so.
+    // The two accounts became one and the survivor is the other one, so the
+    // person is now signed in as a different user than a moment ago. Reporting
+    // that as "connected successfully" is how the original bug read.
+    if (merged) {
+      return {
+        msg: `${merged} was already linked to another Fandex account. The two are now one, and everything from both is here.`,
+        ok: true,
+      };
+    }
+    if (linkError === "provider-taken") {
+      // Two DIFFERENT providers, and naming both is the whole point of the
+      // message: `provider` is the one you just tried to connect, `conflict` is
+      // the one the other account already uses. Nils's wording — log in with the
+      // one you were connecting, drop the clash there, then reconnect.
+      const y = provider ?? "that provider";
+      const x = conflict ?? "the other provider";
+      return {
+        msg: `That ${y} account belongs to another Fandex account, and it already signs in with ${x}. To join them: log in to Fandex with ${y}, disconnect ${x} there, then connect ${x} again.`,
+        ok: false,
+      };
+    }
+    if (linkError === "both-have-data") {
+      return {
+        msg: "Both accounts have titles saved, so joining them would have to discard one side. Nothing was changed. Move what you want across by hand, or delete the account you no longer need first.",
+        ok: false,
+      };
+    }
     if (connected) return { msg: `${connected} connected successfully.`, ok: true };
     if (error) return { msg: `Connection failed: ${error}`, ok: false };
     return null;

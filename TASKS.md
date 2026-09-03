@@ -53,6 +53,21 @@ The three findings that decided it, so nobody re-derives them:
 
 ### Added 2026-09-02 (Nils)
 
+- **✅ Connecting a provider owned by ANOTHER account now merges or refuses, instead of lying**
+  (2026-09-02, Nils hit it). He signed out, signed in with Discord (which minted a new empty
+  account), then connected Google expecting to land back on his real account. The callback had one
+  unconditional token UPDATE, so it refreshed the OTHER account's row, linked nothing, and still
+  redirected to `?connected=google` — "google connected successfully" beside an unchanged Connect
+  button. Now: the signed-in account folds INTO the account that owns the identity (the established
+  one), the session cookie switches to the survivor, and rows move via the schema-derived
+  `userScopedTables()` erasure already uses. ⚠️ **Refuses, with Nils's wording, when the target
+  already signs in with that provider.** ⚠️ **Also refuses when BOTH accounts hold library rows** —
+  not in the spec, added deliberately: `user_item_state` is unique on
+  `(user_id, media_item_id, source, relation)`, so merging two real libraries needs a conflict rule
+  and silently discarding one side is worse than saying so. → `src/lib/accountMerge.ts`
+  - **⬜ Nils's own prod state**: the stray empty Discord account still exists. Signing in with
+    Discord and then connecting Google now performs the merge he expected, which cleans it up.
+
 - **🔵 Discord as a login provider — BUILT, one live round-trip unverified** (2026-09-02). Client id
   `1544627875955744818`, both redirect URIs saved, ToS accepted. Identity-only, mirroring Google:
   `scope=identify` (no email, no `guilds`), and the access AND refresh tokens are **deliberately

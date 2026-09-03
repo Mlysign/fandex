@@ -6,6 +6,7 @@ import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
 import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
+import { mergeAccounts } from "@/lib/accountMerge";
 import type { AuthProvider } from "@/types";
 
 // Normalized profile every OAuth provider resolves to after exchanging its code.
@@ -72,6 +73,42 @@ export async function handleOAuthCallback(
       [opts.provider, profile.providerUserId]
     );
 
+    // ── The identity already exists, and WHO OWNS IT decides everything ──────
+    //
+    // This branch used to be one unconditional UPDATE. When the owner was a
+    // DIFFERENT account from the session's, it refreshed that other account's
+    // tokens, linked nothing, and still redirected to `?connected=<provider>` —
+    // so the page said "connected successfully" while the provider still showed
+    // a Connect button. Nils hit exactly that signing in with Discord and then
+    // connecting Google (2026-09-02). It also wrote to another account's row
+    // from this session, which is not an escalation (you must control that
+    // provider account to get here) but is not ours to do either.
+    let mergedFrom: string | null = null;
+    if (identity && existingUserId && identity.user_id !== existingUserId) {
+      // Nils's rule: fold the signed-in account INTO the one that owns this
+      // identity, because that is the established account the user is trying to
+      // get back to. `canMerge` refuses rather than inventing an answer when the
+      // target already signs in with one of our providers, or when both sides
+      // hold real library state.
+      const outcome = mergeAccounts(existingUserId, identity.user_id);
+      if (!outcome.ok) {
+        log.info("oauth_link_refused", {
+          provider: opts.provider, reason: outcome.reason,
+          conflicting: outcome.reason === "provider-taken" ? outcome.provider : undefined,
+        });
+        // BOTH provider names, because the message names two different roles:
+        // `provider` is the one being connected, `conflict` is the one already
+        // taken on the other account. A single name made the copy read "log in
+        // with discord, disconnect discord", which is nonsense.
+        const conflict = outcome.reason === "provider-taken" ? `&conflict=${outcome.provider}` : "";
+        return fail(`/settings?linkError=${outcome.reason}&provider=${opts.provider}${conflict}`);
+      }
+      mergedFrom = existingUserId;
+      log.info("oauth_accounts_merged", {
+        provider: opts.provider, movedTables: outcome.movedTables,
+      });
+    }
+
     if (identity) {
       run(
         "UPDATE user_identities SET access_token = ?, refresh_token = ?, token_expires_at = ?, display_name = ?, avatar_url = ? WHERE id = ?",
@@ -100,15 +137,24 @@ export async function handleOAuthCallback(
     // Fresh login → the return path from the connect route (login-with-intent,
     // H2c), falling back to /wishlist. Linking an extra provider to an existing
     // account keeps returning to settings.
-    const redirect = existingUserId
-      ? `/settings?connected=${opts.connectedLabel ?? opts.provider}`
-      : (readOAuthReturn(req) ?? "/wishlist");
+    const label = opts.connectedLabel ?? opts.provider;
+    const redirect = mergedFrom
+      // The accounts became one and the SURVIVOR is the other account, so this
+      // is a different outcome from both "logged in" and "linked a provider".
+      // Saying so matters: the person is now signed in as a different user id
+      // than the one they started the request with.
+      ? `/settings?merged=${label}`
+      : existingUserId
+        ? `/settings?connected=${label}`
+        : (readOAuthReturn(req) ?? "/wishlist");
     const res = NextResponse.redirect(new URL(redirect, base));
     clearOAuthState(res);
     clearOAuthReturn(res);
-    // Only set the session cookie for a fresh login, not when linking to an
-    // already-authenticated account.
-    if (!existingUserId) res.cookies.set(setSessionCookie(token));
+    // A fresh login needs the cookie, and so does a MERGE — the session was
+    // minted for `identity.user_id`, which after a merge is the surviving
+    // account, not the one that started this request. Without this the browser
+    // would keep a cookie for a `users` row the merge just deleted.
+    if (!existingUserId || mergedFrom) res.cookies.set(setSessionCookie(token));
     return res;
   } catch (e: any) {
     log.error("oauth_callback_failed", { provider: opts.provider, ...errorFields(e) });
