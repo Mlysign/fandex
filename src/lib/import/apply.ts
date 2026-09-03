@@ -1,4 +1,6 @@
 import { recordLibraryRating, upsertWatchlistEntry } from "@/lib/matcher";
+import { persistItemFromIds } from "@/lib/persistItem";
+import { log, errorFields } from "@/lib/logger";
 import { matchLocally } from "./match";
 import type { ImportRow } from "./parse";
 
@@ -24,6 +26,8 @@ export interface ApplyResult {
   imported: number;
   ratings: number;
   wishlist: number;
+  /** Catalog rows minted from a TMDB id the analyze step resolved (2026-09-03). */
+  created: number;
   /** Rows that still resolve to nothing. Reported, never silently dropped. */
   unmatched: number;
   unmatchedTitles: string[];
@@ -32,14 +36,58 @@ export interface ApplyResult {
 /** The source label written against imported state. */
 const IMPORT_SOURCE = "local";
 
-export function applyImport(userId: string, rows: ImportRow[]): ApplyResult {
+/** Parallel item creations. Each is one TMDB fetch plus a synchronous upsert. */
+const CREATE_CONCURRENCY = 4;
+
+export async function applyImport(userId: string, rows: ImportRow[]): Promise<ApplyResult> {
   const matched = matchLocally(rows);
 
   let ratings = 0;
   let wishlist = 0;
+  let created = 0;
   const unmatchedTitles: string[] = [];
   // Seconds, matching what recordLibraryRating stores elsewhere.
   const now = Math.floor(Date.now() / 1000);
+
+  // ── Rows the catalog does not hold, but TMDB does (2026-09-03) ────────────
+  //
+  // The comment above says "an import must not invent rows to make its own
+  // numbers look better", and that still holds: nothing is minted from a TITLE
+  // here. What is minted comes from a TMDB ID resolved during the anonymous
+  // analyze step, which is a real identity for a real work, not a guess.
+  //
+  // This is the write half of the fix for "is this looking up our DB or also
+  // checking TMDB? its a big deal breaker if half my export would be lost".
+  // Before it, a title we did not already hold was simply dropped.
+  //
+  // Bounded concurrency because each of these is one TMDB detail fetch plus an
+  // upsert, and better-sqlite3 is synchronous: a wide fan-out would hold the
+  // write lock in bursts for no gain.
+  const needCreating = matched.rows.filter((r) => !r.mediaItemId && r.tmdbId != null);
+  if (needCreating.length) {
+    let cursor = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(CREATE_CONCURRENCY, needCreating.length) }, async () => {
+        for (;;) {
+          const row = needCreating[cursor++];
+          if (!row) return;
+          try {
+            const id = await persistItemFromIds({
+              type: "movie",
+              title: row.title,
+              releaseDate: row.year ? `${row.year}-01-01` : null,
+              ids: { tmdb: row.tmdbId! },
+            });
+            if (id) { row.mediaItemId = id; created++; }
+          } catch (e) {
+            // One provider failure costs one title, never the import. It falls
+            // through to unmatchedTitles below and is reported, not swallowed.
+            log.warn("import_create_failed", { title: row.title, ...errorFields(e) });
+          }
+        }
+      }),
+    );
+  }
 
   for (const row of matched.rows) {
     if (!row.mediaItemId) {
@@ -69,7 +117,11 @@ export function applyImport(userId: string, rows: ImportRow[]): ApplyResult {
     imported: ratings + wishlist,
     ratings,
     wishlist,
-    unmatched: matched.unmatched,
+    created,
+    // Recomputed rather than reusing matchLocally's count: rows created from a
+    // staged TMDB id above are no longer unmatched, and reporting the pre-create
+    // number would put the old, alarming figure back on the confirmation.
+    unmatched: matched.rows.filter((r) => !r.mediaItemId).length,
     unmatchedTitles,
   };
 }

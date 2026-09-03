@@ -23,6 +23,13 @@ export interface ImportRow {
   relation: ImportRelation;
   /** IMDb's tconst when the source carries one. Letterboxd does not. */
   imdbId: string | null;
+  /**
+   * TMDB's id, resolved during ANALYZE for a row the local catalog could not
+   * answer for (2026-09-03). Staged with the row so the apply step can create
+   * the item instead of dropping it, and so the lookup is paid for once.
+   * Absent on a freshly parsed row; `resolveMissesAtProvider` fills it in.
+   */
+  tmdbId?: number | null;
   /** ISO date the source recorded, when it has one. */
   ratedAt: string | null;
 }

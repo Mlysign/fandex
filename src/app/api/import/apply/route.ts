@@ -31,7 +31,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
     );
   }
 
-  const result = applyImport(session.userId, staged.rows);
+  const result = await applyImport(session.userId, staged.rows);
   discardStagedImport(token);
 
   log.info("import_applied", {

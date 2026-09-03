@@ -32,6 +32,10 @@ interface Analysis {
   filesRead: string[];
   total: number;
   matched: number;
+  /** The catalog's own half of `matched`. Present since 2026-09-03. */
+  matchedLocally?: number;
+  /** The half resolved at TMDB, created on import. Present since 2026-09-03. */
+  matchedAtProvider?: number;
   unmatched: number;
   ratings: number;
   wishlist: number;
@@ -193,6 +197,18 @@ export default function ImportPageClient({ signedIn }: { signedIn: boolean }) {
               {analysis.ratings.toLocaleString()} ratings and {analysis.wishlist.toLocaleString()}{" "}
               watchlist entries, read from {analysis.filesRead.join(" and ")}.
             </p>
+            {/* 2026-09-03. The headline number is now the catalog's answer PLUS
+                TMDB's, so say which is which. Nils read the old screen as "half
+                my export would be lost", and the honest reassurance is not
+                softer wording, it is the sentence that says the titles we did
+                not already hold are being fetched rather than dropped. */}
+            {(analysis.matchedAtProvider ?? 0) > 0 && (
+              <p className="text-body-sm text-text-secondary">
+                {analysis.matchedLocally?.toLocaleString()} were already in our catalog.
+                The other {analysis.matchedAtProvider!.toLocaleString()} were found on TMDB
+                and will be added when you import.
+              </p>
+            )}
           </div>
 
           {analysis.sample.length > 0 && (
@@ -209,8 +225,11 @@ export default function ImportPageClient({ signedIn }: { signedIn: boolean }) {
             // Shown BEFORE anything is applied. An import that quietly drops a
             // tail is the failure this feature exists to avoid.
             <details className="text-body-sm">
+              {/* "in our catalog" was accurate and misleading at the same time,
+                  because the catalog was the only place we looked. These are
+                  now the rows neither the catalog nor TMDB could identify. */}
               <summary className="cursor-pointer text-text-secondary">
-                {analysis.unmatched.toLocaleString()} could not be found in our catalog
+                {analysis.unmatched.toLocaleString()} could not be identified, here or on TMDB
               </summary>
               <ul className="mt-2 flex flex-col gap-0.5 text-caption text-text-muted">
                 {analysis.unmatchedSample.map((u, i) => (

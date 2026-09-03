@@ -99,9 +99,9 @@ describe("matchLocally — local first, and never a wrong guess", () => {
 });
 
 describe("applyImport — the write path rules", () => {
-  it("writes a rating and marks it watched", () => {
+  it("writes a rating and marks it watched", async () => {
     const id = catalogItem("Alien", "1979");
-    const res = applyImport(USER, [row({ title: "Alien", year: 1979, rating: 9 })]);
+    const res = await applyImport(USER, [row({ title: "Alien", year: 1979, rating: 9 })]);
 
     expect(res.ratings).toBe(1);
     const state = get<{ rating: number; status: string }>(
@@ -112,9 +112,9 @@ describe("applyImport — the write path rules", () => {
     expect(state?.status).toBe("watched");
   });
 
-  it("writes a watchlist row for an unrated entry", () => {
+  it("writes a watchlist row for an unrated entry", async () => {
     const id = catalogItem("Solaris", "1972");
-    const res = applyImport(USER, [row({ title: "Solaris", year: 1972, relation: "wishlist" })]);
+    const res = await applyImport(USER, [row({ title: "Solaris", year: 1972, relation: "wishlist" })]);
     expect(res.wishlist).toBe(1);
     const n = get<{ n: number }>(
       "SELECT COUNT(*) n FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'wishlist'",
@@ -127,29 +127,29 @@ describe("applyImport — the write path rules", () => {
   // deletes, and it is default ON in prod. An imported library stamped browsed
   // would be cascaded away by the next deploy, which is the kind of data loss
   // that only shows up days later.
-  it("never leaves an imported title flagged browsed", () => {
+  it("never leaves an imported title flagged browsed", async () => {
     const id = catalogItem("Alien", "1979");
     run("UPDATE media_items SET browsed = 0 WHERE id = ?", [id]);
-    applyImport(USER, [row({ title: "Alien", year: 1979, rating: 8 })]);
+    await applyImport(USER, [row({ title: "Alien", year: 1979, rating: 8 })]);
     expect(get<{ browsed: number }>("SELECT browsed FROM media_items WHERE id = ?", [id])?.browsed).toBe(0);
   });
 
-  it("does not invent catalog rows for titles it could not match", () => {
+  it("does not invent catalog rows for titles it could not match", async () => {
     const before = get<{ n: number }>("SELECT COUNT(*) n FROM media_items")?.n;
-    const res = applyImport(USER, [row({ title: "Not In The Catalog", year: 1999, rating: 7 })]);
+    const res = await applyImport(USER, [row({ title: "Not In The Catalog", year: 1999, rating: 7 })]);
     expect(get<{ n: number }>("SELECT COUNT(*) n FROM media_items")?.n).toBe(before);
     expect(res.imported).toBe(0);
     expect(res.unmatched).toBe(1);
   });
 
-  it("reports the unmatched titles rather than dropping them quietly", () => {
-    const res = applyImport(USER, [row({ title: "Ghost Film", year: 1999, rating: 7 })]);
+  it("reports the unmatched titles rather than dropping them quietly", async () => {
+    const res = await applyImport(USER, [row({ title: "Ghost Film", year: 1999, rating: 7 })]);
     expect(res.unmatchedTitles).toContain("Ghost Film (1999)");
   });
 
-  it("caps the returned list but keeps the COUNT exact", () => {
+  it("caps the returned list but keeps the COUNT exact", async () => {
     const many = Array.from({ length: 150 }, (_, i) => row({ title: `Missing ${i}`, year: 2000 + (i % 20) }));
-    const res = applyImport(USER, many);
+    const res = await applyImport(USER, many);
     expect(res.unmatched).toBe(150);        // exact
     expect(res.unmatchedTitles).toHaveLength(100);  // bounded
   });
