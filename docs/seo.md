@@ -38,7 +38,7 @@ it. If it still reads "Couldn't fetch" after ~24 h, that is worth chasing.
 
 | Report | The question it answers |
 |---|---|
-| **Pages** (Indexing) | How many of the 2,037 sitemap URLs are indexed, and how many sit in **"Crawled – currently not indexed"** |
+| **Pages** (Indexing) | How many sitemap URLs are indexed, and how many sit in **"Crawled – currently not indexed"** |
 | **Performance** → Queries | What people search to land here. The first real evidence of which surface earns traffic |
 | **Performance** → Pages | Whether item pages, facet pages or the calendar months carry it |
 
@@ -66,7 +66,7 @@ but free, and it feeds DuckDuckGo.
 
 | Surface | State |
 |---|---|
-| `sitemap.xml` | 2,037 URLs — 2,022 items, 8 calendar months, 6 legal, 1 root |
+| `sitemap.xml` | Items + swept facets + 8 calendar months + 6 legal + root. ⚠️ **Never write the total down here.** It tracks the catalog and moves every day: 2,037 when this table was written, 4,341 on 2026-09-02, **4,507 on 2026-09-03**. A frozen count in this file was quoted back as fact for a month. Count it: `curl -s https://fandex.org/sitemap.xml \| grep -c '<loc>'` |
 | item pages | Title, description, canonical, OG, `index, follow`, **and JSON-LD since 2026-08-20**. ~25 facet links, **plus sibling titles since 2026-08-23** (`buildLocalRails`, server-rendered, 0 provider calls; 6 of 10 sampled gained 3–14 links) |
 | facet pages | Crawlable, indexable, and **the swept ones are in the sitemap since 2026-09-02** (only those; see below). Thin ones are `noindex, follow` since 2026-08-20 |
 | `/calendar/{YYYY-MM}` | **New 2026-08-20.** SSR, 8 months in the sitemap |

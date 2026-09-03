@@ -36,6 +36,54 @@ Not tasks. Not decisions to be revisited. Things that must stay true.
 
 ---
 
+## H3 monetization: the economics, settled 2026-08-19
+
+**The plan is ads-first**: go live → wait for traction → ads → premium (ad-free + extras).
+Affiliate is **demoted, not cancelled**; the code stays built and dark behind
+`MONETIZATION_ENABLED`. Moved here from TASKS.md on 2026-09-03: it is a decision record with
+no next action, and that file is for open work. Runbook →
+[monetization-go-live.md](monetization-go-live.md).
+
+The three findings that decided it, so nobody re-derives them:
+
+- **Per 1,000 monthly actives: ads ~€150, premium ~€60, donations ~€14, affiliate ~€3.**
+  Affiliate is last by 20 to 50 times.
+- **Fandex is past-tense.** People log what they already played or watched, so a buy link on
+  an item already in a library arrives after the purchase decision. Only the **wishlist** and
+  the **calendar** are pre-purchase surfaces.
+- **Affiliate is the only method that cannot clear its own cliff.** Covering upkeep once
+  TMDB’s $149/mo commercial tier applies needs ~1,000 users on ads, ~2,300 on premium, and
+  **~45,000 on affiliate**.
+
+**The economics pivot on TMDB, not on hosting.** Upkeep is small (Railway Hobby $5/mo +
+usage, domain ~€10/yr, all APIs currently €0), but TMDB’s free API is **non-commercial only**
+and commercial use is **$149/mo**, so “commercial” multiplies upkeep ~10× overnight. Trakt
+requires case-by-case approval for monetizing apps. ⚠️ **RAWG no longer figures in this** — it
+was retired 2026-09-02, so the old “$298/mo commercial minimum” is TMDB alone. **Donations are
+the gray zone**: TMDB does not say whether donation-funded counts as commercial.
+
+**Consciously accepted risk:** Fandex monetizes on the free TMDB/Trakt tiers. The failure
+mode is **API-key revocation without notice**, not a fine.
+
+**The two gates, approved 2026-08-17 and instrumented 2026-08-19** (`/dev/analytics` measures
+both directly):
+
+- **Ads → 10,000 pageviews/mo** (Monumetric’s stated minimum). A better-RPM tier exists at
+  50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric’s $10–20). Not a second gate, just worth
+  re-checking which network fits.
+- **Freemium → 3,500 sustained weekly actives.** The old “roughly 1k+” napkin figure never
+  netted out TMDB’s $149/mo licence. Actives needed to clear **just** the licence (≈€137, no
+  margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case
+  corner is above 1k. 3,500 clears it with real margin at a conservative 3%/1.50€.
+
+⚠️ **The WAU meter is `users.last_seen_at`**, stamped in `getSession()` once per user per UTC
+day. The action-based union over `user_library`/`user_watchlist`/`user_item_state` stays as the
+conservative cross-check; it counts only users who took a WRITE action, so a pure browser is
+captured by nothing in this schema. Both live in `src/lib/telemetry.ts` (`userMetrics`) and
+`src/lib/userAnalytics.ts` — read them there rather than from a copy. → [[telemetry-self-hosted]]
+
+---
+
 ## Locked 2026-08-17
 
 Nils answered the whole open-decision list in one pass. One was later superseded by him and

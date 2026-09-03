@@ -11,39 +11,31 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Three items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
-1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
+1. **🔴 ROTATE THREE API KEYS. Burned 2026-09-03, and this one is not optional.** Looking for the prod DB path I ran `railway ssh "env | grep -i -E 'db|data|sqlite'"`, and it printed `TMDB_API_KEY`, `OMDB_API_KEY` and `STEAM_API_KEY` in full to the session transcript. Two of them match on "db"; the filter was never a safeguard, the command was the mistake. **TMDB** → rotate at themoviedb.org/settings/api, update on Railway, then **redeploy** (it is read at runtime, but a redeploy is the safe default). **Steam** → rotate at steamcommunity.com/dev/apikey, update on Railway. **OMDb** → just delete the variable; OMDb was removed from the code on licence grounds and `noOmdb.test.ts` pins it out, so nothing reads it. The rule is now in [[railway-cli-and-tool-sandbox]]: never run `env` on the prod box, filtered or not.
 
-2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
+2. **⬜ Accept or deny the taxonomy sweep** (2026-09-03, `/dev/scoring` → Taxonomy → **Review**). 217 cards: 13 tag batches, 67 franchise merges, 137 missing franchise members. ⚠️ **Check first that the Character / People, Prop / Object and Mode cards do NOT say "creates this category"** — the first version hard-coded the dev DB's ids and would have made near-duplicates beside his 233 overrides; the resolver is fixed and tested, but prod is where it matters and I cannot open that admin myself. The two Meta / Noise batches are the cheapest win. Also his call: whether **Mechanics** (the genuinely missing axis) and **Perspective & View** (weaker) get created.
 
-3. **⬜ Decide whether to rotate `DISCORD_CLIENT_SECRET`. His call, not a blocker.** (2026-09-02.) ⚠️ **The secret was printed to a session transcript** while repairing a `.env` line I corrupted: the file had no trailing newline, so an append landed on the end of the secret's value and reading it back to fix it exposed it. The file is repaired and correct. Blast radius, measured: it is in **exactly one local file**, `~/.claude/projects/…/524438af-….jsonl`, and **not** in git history, the repo, or any memory file. So the realistic risk is low and rotation is a 60-second job — **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. Deleting that one file is the alternative he weighed; it does not undo the transmission. ⚠️ The var **rename is DONE** (I did it on Railway: `NEXT_PUBLIC_DISCORD_CLIENT_ID`, mirroring Google).
+3. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
+
+4. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
+
+5. **⬜ Decide whether to rotate `DISCORD_CLIENT_SECRET`. His call, not a blocker.** (2026-09-02.) ⚠️ **The secret was printed to a session transcript** while repairing a `.env` line I corrupted: the file had no trailing newline, so an append landed on the end of the secret's value and reading it back to fix it exposed it. The file is repaired and correct. Blast radius, measured: it is in **exactly one local file**, `~/.claude/projects/…/524438af-….jsonl`, and **not** in git history, the repo, or any memory file. So the realistic risk is low and rotation is a 60-second job — **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. Deleting that one file is the alternative he weighed; it does not undo the transmission. ⚠️ The var **rename is DONE** (I did it on Railway: `NEXT_PUBLIC_DISCORD_CLIENT_ID`, mirroring Google).
 
 
-## H3: Monetization 🔵 ads-first since 2026-08-19
+## H3: Monetization 🔵 ads-first, waiting on traffic
 
-**Goal:** revenue covers upkeep (Railway, domain, third-party APIs).
+**Nothing to do until a gate is hit, and both gates are traffic.** Ads at **10,000 pageviews/mo**,
+freemium at **3,500 sustained weekly actives**; `/dev/analytics` measures both. Donations are
+live, affiliate is built and dark behind `MONETIZATION_ENABLED` and demoted rather than cancelled.
 
-**⚠️ THE PLAN CHANGED 2026-08-19.** Nils's call, after a per-1,000-user revenue model: **go live → wait for traction → ads → premium (ad-free + extras)**. Affiliate is **demoted, not cancelled**; the code stays built and dark. Full reasoning → [docs/monetization-go-live.md](docs/monetization-go-live.md), the "DIRECTION CHANGED" section.
-
-The three findings that decided it, so nobody re-derives them:
-- **Per 1,000 monthly actives: ads ~€150, premium ~€60, donations ~€14, affiliate ~€3.** Affiliate is last by 20 to 50 times.
-- **Fandex is past-tense.** People log what they already played or watched, so a buy link on an item already in a library arrives after the purchase decision. Only the **wishlist** and the **calendar** are pre-purchase surfaces.
-- **Affiliate is the only method that cannot clear its own cliff.** Covering upkeep once TMDB's $149/mo commercial tier applies needs ~1,000 users on ads, ~2,300 on premium, and **~45,000 on affiliate**.
-
-**The economics pivot on TMDB, not on hosting.** Upkeep is small (Railway Hobby $5/mo + usage, domain ~€10/yr, all APIs currently €0), but TMDB's free API is **non-commercial only** and commercial use is **$149/mo**. So "commercial" multiplies upkeep ~10× overnight; any paid model must clear ~$155/mo before netting a cent. Trakt requires case-by-case approval for monetizing apps. ⚠️ **RAWG no longer figures in this at all** — it was retired as a data provider 2026-09-02, so the "$298/mo commercial minimum" figure elsewhere (TMDB $149 + RAWG $149) is now TMDB alone. **Donations are the gray zone**: TMDB doesn't say whether donation-funded counts as commercial.
-
-**Consciously accepted risk:** Fandex monetizes on the free TMDB/Trakt tiers. Failure mode is **API-key revocation without notice**, not a fine.
-
-**Built 2026-08-03: H3.3 ✅ donations live · H3.4 ✅ affiliate DARK behind `MONETIZATION_ENABLED` · H3.9 ✅ go-live checklist.** → grep the archive for `H3 monetization v1`. **The one thing to know before touching any of it:** the catalog's store rows are Steam/PSN/GOG/Xbox/Nintendo/Epic/itch.io and only **GOG** is affiliate-capable, so `affiliate.ts` has *two* mechanisms, a rewriter for GOG-shaped links and `buildBuyLinks()` synthesizing per-title search links. → [[monetization-h3]]
-
-**H3.8 gates, approved 2026-08-17 and instrumented 2026-08-19** (`/dev/analytics` measures both directly):
-- **Ads → 10,000 pageviews/mo** (Monumetric's stated minimum). A better-RPM tier exists at 50k+ pv (Freestar/Mediavine, $15–40+ vs Monumetric's $10–20). Not a second gate, just worth re-checking which network fits.
-- **Freemium → 3,500 sustained weekly actives.** The old "roughly 1k+" napkin figure never netted out TMDB's $149/mo license. Actives needed to clear **just** the license (≈€137, no margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case corner is above 1k. 3,500 clears it with real margin at a *conservative* 3%/1.50€.
-- ⚠️ **A client beacon does NOT exclude crawlers**, whatever this line used to say: the big ones render the page and POST to it. They are filtered by user agent, and since 2026-08-31 the dashboard also skips the days before that filter shipped, so **the ads gate reads 4% and not 62%**. Both numbers were of the same two counters. Right population for an ads decision either way, wrong one for SEO (use Search Console). → [[telemetry-self-hosted]]
-- **The WAU meter is `users.last_seen_at`**, stamped in `getSession()` once per user per UTC day. The action-based union over `user_library`/`user_watchlist`/`user_item_state` stays as the conservative cross-check; it counts only users who took a WRITE action, so a pure browser is captured by nothing in this schema. Both live in `src/lib/telemetry.ts` (`userMetrics`) and `src/lib/userAnalytics.ts` — read them there rather than from a copy here.
-
-**If affiliate is ever revived:** sign up → set the env vars → flip `MONETIZATION_ENABLED` → run the post-go-live cookie check. The runbook is still accurate and still in the go-live doc; only its priority changed.
+⚠️ The economics, the two gates and the numbers behind them moved to
+[docs/decisions.md](docs/decisions.md) on 2026-09-03 — they are a decision record with no next
+action, and this file is for open work. Runbook →
+[docs/monetization-go-live.md](docs/monetization-go-live.md). The one thing to know before touching
+the code: only **GOG** of the catalog’s store rows is affiliate-capable, so `affiliate.ts` has
+two mechanisms. → [[monetization-h3]]
 
 ---
 
@@ -60,9 +52,11 @@ The three findings that decided it, so nobody re-derives them:
   internal links. ⚠️ **"Crawled – currently not indexed" is the bucket that would mean thin content,
   and it is EMPTY.** Do not go thickening pages; that is answering a question nobody asked.
   What actually moves this: **external links** (the domain is ~2 weeks old with near-zero authority,
-  and crawl budget is rationed to unproven sites), then internal link depth. ⚠️ Dumping 4,341 URLs
-  at once on a new domain is itself part of the signal. **Mostly it is time.** →
-  [docs/seo.md](docs/seo.md) ⚠️ that file still says 2,037 URLs; it is 4,341.
+  and crawl budget is rationed to unproven sites), then internal link depth. ⚠️ Dumping several
+  thousand URLs at once on a new domain is itself part of the signal. **Mostly it is time.** →
+  [docs/seo.md](docs/seo.md). ⚠️ The sitemap total moves daily with the catalog (2,037 → 4,341 →
+  4,507 in a month), so count it rather than quoting one: `curl -s https://fandex.org/sitemap.xml
+  | grep -c '<loc>'`.
 
   **The ranked plan, after Nils asked "would a link from nilsmlynarek.eu be enough?" (2026-09-02).**
   Short answer no, and the goal itself is wrong: ⚠️ **"all 4,341 indexed" is not achievable and not
@@ -84,6 +78,24 @@ The three findings that decided it, so nobody re-derives them:
   4. **A smaller sitemap.** 4,341 URLs at a uniform 0.7 priority tells Google nothing about which
      matter. Speculative, cheap, reversible.
 
+
+### Added 2026-09-03
+
+- **⬜ The catalog holds duplicate items across sources.** Found while verifying the franchise
+  sweep: `Andor` and `Star Wars: Andor` are two separate `media_items` rows, the first already in
+  the Star Wars franchise via Wikidata, the second offered by the membership suggester as if it
+  were missing. So a franchise can gain a member it visibly already has. ⚠️ **This is an identity
+  problem, not a taxonomy one** — `findMatchingItem` never folded them, presumably because the
+  titles differ by a franchise prefix that `norm_title` keeps. Worth measuring how many such pairs
+  exist before deciding whether to fix it; a title-prefix merge is exactly the shape that
+  [[cross-type-identity-merge]] warns about.
+
+- **⬜ The tag tail: ~9,000 tags in Other appearing three times or fewer.** The Review tab's rules
+  deliberately stop at the head (91% of everything appearing 20+ times). The tail is not worth a
+  card each and is not worth hand-triage either; if it is ever worth doing, it is a bulk-select
+  pass in the Tags table against a search, not more rules. ⚠️ **Do not judge coverage by tag COUNT**
+  — a rule claiming 12 tags seen 900 times changes more of the site than one claiming 80 nobody
+  carries twice.
 
 ### Older
 

@@ -5635,3 +5635,51 @@ same pass — pre-existing, found while verifying.
 carries an Import section. Backloggd has **no export of any kind** — checked in
 Nils's own account: `/settings/import_export/` is an empty panel and a CSV export
 tool is roadmap item 6, unbuilt. Nearly free when they ship it.
+
+---
+
+## Shipped 2026-09-02, archived out of STATUS.md on 2026-09-03
+
+Four rows had accumulated in STATUS.md's "What's open" table marked 🟢 and blocked on
+"Nobody", which is the archived-stub antipattern wearing a status icon. The surviving rules
+went to AGENTS.md; the narratives are here.
+
+### SM53 — the filter groups collapse
+
+The calendar's sticky bar went **175px → 65px** at 375×812 (22% of the viewport to 8%).
+Three groups, one 40px chip each, expanding on tap: `TypeFilter` **site-wide** (it renders
+from one place, which is what made Nils's consistency requirement one change rather than
+five), `ScopeFilter`, and the calendar's view toggle, which stopped being a labelled pill in
+SubBar's sort row and took that whole row with it. Hit-tested at 320 and 375, one outcome
+per target, page still never scrolls. The one question it left open (should desktop stay
+expanded?) is TASKS.md's Needs-Nils item 2.
+
+### `CATALOG_BROWSE=1` and migration 27
+
+**Migration 27 was the substantive half**: `media_items.vote_count` / `vote_average` /
+`stats_at`, filled by a bounded background pass from links already on disk at **zero
+provider calls**, so a catalog-served card carries real crowd numbers instead of
+`voteCount: 0`. Without it the client's Popularity sort would have tied every catalog row at
+zero and shown arrival order under a control labelled "Popularity", which is the 2026-08-29
+search bug again. The rule survives in AGENTS.md ("a catalog-served card must carry every
+field the client SORTS on"). Watch `/api/health` → `catalog.stats` `{total, computed,
+stale}`. Whether the switch has anything to feed on is a live question and stayed in
+STATUS.md.
+
+### Facet under-linking, fixed
+
+Was 876 of 2,691 rendered items linkable across the 56 facets `/` links (33%); now
+**419/419 on a swept facet**, measured on the anonymous path. `src/lib/facetSnapshot.ts`
+sweeps a bounded set daily off the request path, the shape the home and calendar snapshots
+use. The standing constraint (only the swept facets are advertised, and widening the sitemap
+means widening the sweep first) is now an AGENTS.md invariant.
+
+### Discord sign-in, and the account merge
+
+Discord is the second identity-only provider (`scope=identify`, no email, no `guilds`, both
+tokens discarded). Connecting a provider owned by another Fandex account used to say
+"connected successfully" and do nothing; it now folds the two together, with a **form** to
+resolve overlapping titles when both accounts hold some. A merge switches which user the
+session is for and deletes the emptied `users` row, so it mints a new cookie and moves rows
+through the schema-derived `userScopedTables()` erasure uses. Both rules are already
+AGENTS.md invariants. → `src/lib/accountMerge.ts`
