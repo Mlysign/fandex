@@ -115,6 +115,16 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const fandexScore = item.fandexScore ?? resolvedScore?.score ?? null;
   const fandexCenter = item.fandexCenter ?? resolvedScore?.center ?? null;
   const shownScore = fandexScore ?? item.communityScore;
+  // The explainer has to be told the score the CARD ended up showing, not the
+  // one the payload arrived with. `TooltipBody` branches on `fandexScore`: null
+  // means "unscoreable", and it renders the release date and a type chip
+  // instead, which are the two things the card underneath it already says, and
+  // never fetches the breakdown at all. Handing it the raw `item` therefore
+  // emptied the explainer for exactly the cards that resolve their score here,
+  // which since the RAWG retirement is most games (a thin IGDB-only row is what
+  // `fandexPending` means). Both surfaces get it: hover popover and long-press
+  // sheet.
+  const tooltipItem = { ...item, fandexScore, fandexCenter } as TooltipItem;
   const releaseLabel = item.releaseDate
     ? (() => { try { return format(parseISO(item.releaseDate), "MMM yyyy"); } catch { return item.releaseDate; } })()
     : "TBA";
@@ -270,7 +280,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
       )}
 
       {hovered && linkable && canHover && (
-        <Tooltip item={item as TooltipItem} anchorRef={ref} />
+        <Tooltip item={tooltipItem} anchorRef={ref} />
       )}
 
       {/* The touch equivalent: the same explainer, in the same bottom sheet the
@@ -279,7 +289,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           behind every card on a grid. */}
       {sheetOpen && (
         <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={item.title}>
-          <TooltipBody item={item as TooltipItem} />
+          <TooltipBody item={tooltipItem} />
           <div className="px-3 pb-4">
             <Link
               href={buildItemHref(item)}
