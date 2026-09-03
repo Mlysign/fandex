@@ -193,6 +193,73 @@ export function isCrawlerUserAgent(ua: string | null | undefined): boolean {
 }
 
 /**
+ * Does this request look like our own page calling its own beacon?
+ *
+ * ── Why a second gate at all (2026-09-03) ───────────────────────────────────
+ *
+ * Nils: "the analytics page shows crawler pageviews again. can we permanently
+ * filter them out?" Measured on prod the same day, and it is not subtle:
+ *
+ *     2026-09-02   9,917 pageviews          every other day in the window: 7-56
+ *     that day     /person 3,575 · /tag 3,218 · /[type]/[id] 2,331 · /studio 408
+ *                  ... against FORTY-TWO homepage views
+ *     blocked by the user-agent filter that day: 15
+ *
+ * 9,532 deep pages and 42 front doors is not a person, and it is the same
+ * signature as the 2026-08-20 incident. It landed on the exact day the facet
+ * sweep put swept facets into the sitemap, so we advertised thousands of pages
+ * and something read all of them.
+ *
+ * ⚠️ It is NOT Googlebot, and that is deducible rather than assumed: `/api/` is
+ * under the robots `Disallow`, and Googlebot's renderer honours robots.txt for
+ * SUBRESOURCES, so it never reaches this endpoint at all. Whatever this is
+ * renders our JS and posts to a path it was asked not to touch.
+ *
+ * ── What this gate checks, and why it is not another UA guess ───────────────
+ *
+ * The beacon is a same-origin `fetch` from our own page (TelemetryBeacon.tsx),
+ * and every browser marks such a request: `Sec-Fetch-Site: same-origin` since
+ * Chrome 76 / Firefox 90 / Safari 16.4, and an `Origin` header on a POST long
+ * before that. A scripted client — curl, python-requests, a headless driver
+ * posting directly — sends neither, whatever it puts in its User-Agent.
+ *
+ * So the rule is a shape, not a name: at least one of the two must be present
+ * and must agree with this host. Requiring only ONE keeps pre-16.4 Safari
+ * counted, which is the precision half: a false positive here silently deletes
+ * a real visitor from the number that gates the ads decision.
+ *
+ * ⚠️ This does NOT catch a real headless Chromium, which sends both correctly.
+ * Naming that one needs to know its user agent, which nothing stores — hence
+ * `SAMPLE_ACCEPTED_AGENTS` in the route.
+ */
+export function isSameOriginBeacon(headers: {
+  origin: string | null;
+  secFetchSite: string | null;
+  host: string | null;
+}): boolean {
+  const { origin, secFetchSite, host } = headers;
+
+  // An explicit cross-site marker is decisive on its own: our page can never
+  // produce one, so this is somebody else's page or a driver imitating one.
+  if (secFetchSite && secFetchSite !== "same-origin") return false;
+
+  if (origin) {
+    try {
+      // Compare HOSTS, not whole origins. Railway terminates TLS in front of the
+      // container, so the request url can read `http:` while the browser sent an
+      // `https:` origin; comparing the strings would reject every real visitor.
+      return new URL(origin).host === host;
+    } catch {
+      return false;   // a malformed Origin is not a browser
+    }
+  }
+
+  // No Origin at all is only acceptable when the browser vouched for the request
+  // the other way.
+  return secFetchSite === "same-origin";
+}
+
+/**
  * First UTC day whose pageview counts exclude crawlers.
  *
  * `isCrawlerUserAgent` landed on prod at 2026-08-20T18:14Z, so 2026-08-20 is a

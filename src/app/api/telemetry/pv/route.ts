@@ -2,12 +2,37 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withOptionalUser } from "@/lib/withUser";
 import {
-  classifyReferrer, isCrawlerUserAgent, normalizePathKey, recordCrawlerView, recordPageView,
+  classifyReferrer, isCrawlerUserAgent, isSameOriginBeacon, normalizePathKey, recordCrawlerView, recordPageView,
 } from "@/lib/telemetry";
 import { log } from "@/lib/logger";
 
 // Writes to the DB on every call. Never prerender or cache this.
 export const dynamic = "force-dynamic";
+
+/**
+ * The path keys a facet crawl walks. Deep, public, and never the ones a person
+ * spends a session on, which is what makes them the right sample frame: on
+ * 2026-09-02 these four took 9,532 of 9,917 views against 42 for "/".
+ */
+const SAMPLED_PATHS = new Set([
+  "/person/[slug]", "/tag/[slug]", "/studio/[slug]", "/[type]/[id]",
+]);
+
+/**
+ * Roughly one in this many sampled requests is logged.
+ *
+ * ⚠️ Read at CALL time, never at module load. A threshold read once at import is
+ * a switch nothing can turn off and nothing can test, which has shipped here
+ * three times (the backfill ceiling, the housekeeping threshold, the browse
+ * minimum) with a test asserting the default instead of the behaviour.
+ */
+function sampleThisOne(): boolean {
+  const raw = process.env.TELEMETRY_AGENT_SAMPLE?.trim();
+  if (raw === "0" || raw === "off" || raw === "false") return false;
+  const rate = Number(raw);
+  const n = Number.isFinite(rate) && rate >= 1 ? rate : 20;
+  return Math.random() < 1 / n;
+}
 
 // POST /api/telemetry/pv  { path: string, ref?: string }
 //
@@ -55,7 +80,22 @@ export const POST = withOptionalUser(
     // all render as the same dashboard, differing only in a number nobody could
     // see. The counter is a bare (day, count) row: no user agent, no path, no
     // IP, so a crawl is still one UPSERT and carries nothing worth storing.
-    if (isCrawlerUserAgent(req.headers.get("user-agent"))) {
+    //
+    // 2026-09-03 — a SECOND gate beside the user-agent one, and it checks a
+    // shape rather than a name. See isSameOriginBeacon for the measurement that
+    // forced it: 9,917 pageviews on 2026-09-02, of which 9,532 were facet and
+    // item pages against 42 homepage views, with 15 caught by the UA filter.
+    // Both rejections land in the same counter, because from the dashboard's
+    // point of view they are the same statement: this was not a reader.
+    const notABrowser =
+      isCrawlerUserAgent(req.headers.get("user-agent")) ||
+      !isSameOriginBeacon({
+        origin: req.headers.get("origin"),
+        secFetchSite: req.headers.get("sec-fetch-site"),
+        host: req.headers.get("host"),
+      });
+
+    if (notABrowser) {
       try {
         recordCrawlerView();
       } catch (e) {
@@ -85,6 +125,29 @@ export const POST = withOptionalUser(
       selfHost = new URL(req.url).hostname;
     } catch {
       selfHost = null;
+    }
+
+    // ── The diagnostic (2026-09-03), so the next filter is not another guess ──
+    //
+    // Nothing stores a user agent, by design — the whole schema is counters, and
+    // that is what keeps this feature a privacy argument we can win. The cost is
+    // that when something DOES get through both gates, there is no way to learn
+    // what it was: "crawlers are filtered", "the filter is eating real people"
+    // and "a new crawler walked past it" all render as the same dashboard. That
+    // is the same unfalsifiability that `recordCrawlerView` was added to fix
+    // from the other side.
+    //
+    // So: a SAMPLED log line, on the deep pages a crawl walks and never on the
+    // signed-in ones. It goes to the app log, which Railway rotates, and NOT to
+    // the database — nothing here is retained, aggregated or joined to anything.
+    // Switch it off with `TELEMETRY_AGENT_SAMPLE=0` once the question is
+    // answered; read at call time, not at module load, so the switch works.
+    if (!session && SAMPLED_PATHS.has(pathKey) && sampleThisOne()) {
+      log.info("telemetry_agent_sample", {
+        pathKey,
+        refClass: classifyReferrer(ref, selfHost),
+        ua: (req.headers.get("user-agent") ?? "").slice(0, 300),
+      });
     }
 
     try {
