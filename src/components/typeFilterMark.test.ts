@@ -55,3 +55,46 @@ describe("the type filter wears one mark in both of its states", () => {
     expect(code).toMatch(/TYPE_COLORS\[selected\[0\]\]/);
   });
 });
+
+// 2026-09-03, third pass. Nils: "the logo line icon uses different shades for
+// the cards. make them the same. the more transparent shade is barely visible.
+// also i think the stroke thickness of the other icons for the type filter is
+// slightly thicker? please verify this and adjust."
+//
+// He was right on both. Verified rather than eyeballed:
+//
+//   lucide (Gamepad2, Clapperboard, Tv)  viewBox 24, strokeWidth 2, box 16px
+//                                         → 1.333px of stroke
+//   LogoOutline, before                   viewBox 26, strokeWidth 1.7, box 17px
+//                                         → 1.111px, i.e. 20% lighter
+//
+// Measured again on the live page after the fix: 1.335px against 1.333px, which
+// is the rounding of 2.17 and nothing else.
+//
+// These assert the DERIVATION, not the number. A hard-coded 2.17 would silently
+// stop matching the moment anybody changed the box size or the viewBox, and the
+// whole point is that the value follows lucide's rather than being chosen.
+describe("the Fandex mark is drawn to match the icons beside it", () => {
+  const src = readFileSync(join("src", "components", "LogoOutline.tsx"), "utf8");
+
+  it("derives its stroke from lucide's rather than hard-coding one", () => {
+    expect(src).toMatch(/LUCIDE_PX\s*=\s*\(2 \* BOX\) \/ 24/);
+    expect(src).toMatch(/STROKE\s*=[^;]*LUCIDE_PX \* VIEWBOX\) \/ BOX/);
+  });
+
+  it("defaults to the same 16px box the lucide chips use", () => {
+    expect(src).toMatch(/const BOX = 16;/);
+    expect(src).toMatch(/size = BOX/);
+  });
+
+  it("draws both cards at the same weight", () => {
+    // The back card was dimmed to 50% to stop two outlines reading as one noisy
+    // shape. The mask solves that properly, so the dimming only made the card
+    // "barely visible" at 16px on a dark chip.
+    expect(stripComments(src)).not.toMatch(/opacity=/);
+  });
+
+  it("sets strokeLinecap, because matching a row of icons means matching all of it", () => {
+    expect(src).toMatch(/strokeLinecap="round"/);
+  });
+});

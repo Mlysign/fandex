@@ -76,7 +76,7 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
   const summary = SelectedIcon ? (
     <SelectedIcon className="w-4 h-4" aria-hidden style={{ color: TYPE_COLORS[selected[0]] }} />
   ) : (
-    <LogoOutline size={17} />
+    <LogoOutline />
   );
 
   return (
@@ -142,7 +142,7 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
             to game/movie/show, versus "Fandex" on its own. From the outside they
             are one control that changed icon mid-load, which is just a flicker.
             One mark, both states. */}
-        <LogoOutline size={17} />
+        <LogoOutline />
       </button>
 
       {availableTypes.map((t) => {
