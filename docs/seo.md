@@ -509,19 +509,21 @@ component's first
 render IS server HTML, so the links are in the first byte. Client-ness was never
 what hid them.
 
-⚠️ **What IS still open is the UNDER-LINKING, which is a different problem with a
-different fix.** Those pages render up to 60 items each and link only the ones we
-already hold: `persistDiscoverBatch` gets a null user on an anonymous render
-(PR15's write gate), so a provider title we have never ingested comes back
-`linkable: false` and renders without an href. `/person/christopher-nolan`
-linking 13 of 60 is that, not a rendering bug. See the `MIN_INDEXABLE_TITLES`
-note above for why the thin-page threshold deliberately tests pool size rather
-than linkable count.
+✅ **The UNDER-LINKING that this section used to leave open was CLOSED on
+2026-09-02** — see "The facet link sweep" above for the measurements. It was a
+different problem with a different fix: those pages render up to 60 items each and
+linked only the ones we already held, because `persistDiscoverBatch` gets a null
+user on an anonymous render (PR15's write gate), so a provider title we had never
+ingested came back `linkable: false` and rendered without an href.
+`/person/christopher-nolan` linking 13 of 60 was that, not a rendering bug.
 
-The fix, if it is worth doing, is the one the home and calendar snapshots
-already use: persist a bounded set once a day off the request path, so the
-crawler-visible page links rows that exist. Do not persist on the request path;
-that is the write amplification that grew `media_items` to ~676k rows.
+The fix was the one predicted right here: the shape the home and calendar
+snapshots already use, persisting a bounded set once a day off the request path.
+⚠️ **Do not persist on the request path** — that is the write amplification that
+grew `media_items` to ~676k rows, and it is why PR15's gate stayed untouched.
+See the `MIN_INDEXABLE_TITLES` note above for why the thin-page threshold still
+deliberately tests pool size rather than linkable count; the two are different
+questions and the sweep did not merge them.
 
 ### ✅ Item pages link to sibling items (shipped 2026-08-23)
 

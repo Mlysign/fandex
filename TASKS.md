@@ -11,15 +11,13 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Three items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 1. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
 2. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
 
-3. **⬜ ROTATE `DISCORD_CLIENT_SECRET`, then fix the Discord var names in Railway.** (2026-09-02.) ⚠️ **The secret was printed to this session's terminal** while repairing a `.env` line I corrupted (the file had no trailing newline, so an append landed on the end of the secret's value). The file is repaired and correct, but a secret that has appeared in a transcript should be replaced: **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. ⚠️ Separately, the client id must be renamed **`DISCORD_CLIENT_ID` → `NEXT_PUBLIC_DISCORD_CLIENT_ID`** in Railway (it is already correct in the local `.env`); the sign-in button is gated in a client component, so under the old name the routes work and the button never appears. → the Discord entry under "Still open elsewhere".
-
-4. **⬜ Sign in with Discord once, on prod, to prove the round-trip.** Everything else about it is verified; the token exchange and session mint have never run against live Discord. Google's took a real sign-in to close too.
+3. **⬜ Decide whether to rotate `DISCORD_CLIENT_SECRET`. His call, not a blocker.** (2026-09-02.) ⚠️ **The secret was printed to a session transcript** while repairing a `.env` line I corrupted: the file had no trailing newline, so an append landed on the end of the secret's value and reading it back to fix it exposed it. The file is repaired and correct. Blast radius, measured: it is in **exactly one local file**, `~/.claude/projects/…/524438af-….jsonl`, and **not** in git history, the repo, or any memory file. So the realistic risk is low and rotation is a 60-second job — **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. Deleting that one file is the alternative he weighed; it does not undo the transmission. ⚠️ The var **rename is DONE** (I did it on Railway: `NEXT_PUBLIC_DISCORD_CLIENT_ID`, mirroring Google).
 
 
 ## H3: Monetization 🔵 ads-first since 2026-08-19
@@ -52,42 +50,6 @@ The three findings that decided it, so nobody re-derives them:
 ## Still open elsewhere
 
 ### Added 2026-09-02 (Nils)
-
-- **✅ Connecting a provider owned by ANOTHER account now merges or refuses, instead of lying**
-  (2026-09-02, Nils hit it). He signed out, signed in with Discord (which minted a new empty
-  account), then connected Google expecting to land back on his real account. The callback had one
-  unconditional token UPDATE, so it refreshed the OTHER account's row, linked nothing, and still
-  redirected to `?connected=google` — "google connected successfully" beside an unchanged Connect
-  button. Now: the signed-in account folds INTO the account that owns the identity (the established
-  one), the session cookie switches to the survivor, and rows move via the schema-derived
-  `userScopedTables()` erasure already uses. ⚠️ **Refuses, with Nils's wording, when the target
-  already signs in with that provider.** ⚠️ **Also refuses when BOTH accounts hold library rows** —
-  not in the spec, added deliberately: `user_item_state` is unique on
-  `(user_id, media_item_id, source, relation)`. **Second pass the same day**, after Nils hit that
-  refusal: overlapping titles now open a **merge form** instead (*"it should give me a merge form
-  for me to decide and then execute the merge right after"*). Everything non-overlapping moves with
-  no decision; the overlap is counted, sampled by title, and resolved by an explicit
-  keep-mine / keep-theirs choice. ⚠️ **No option is preselected** — a default would be the silent
-  winner-picking the form exists to replace. ⚠️ The decision arrives on a LATER request than the
-  OAuth callback, so a short-lived signed cookie carries the proof; the execute route checks **both**
-  that cookie and that the live session is still the `from` account. → `src/lib/accountMerge.ts`,
-  `src/lib/pendingMerge.ts`
-  - **⬜ Nils's own prod state**: the stray empty Discord account still exists. Signing in with
-    Discord and then connecting Google now performs the merge he expected, which cleans it up.
-
-- **🔵 Discord as a login provider — BUILT, one live round-trip unverified** (2026-09-02). Client id
-  `1544627875955744818`, both redirect URIs saved, ToS accepted. Identity-only, mirroring Google:
-  `scope=identify` (no email, no `guilds`), and the access AND refresh tokens are **deliberately
-  discarded** — nothing calls a Discord API after login, so storing a self-renewing credential would
-  be a liability buying nothing. Verified: both routes build `ƒ (Dynamic)`, the start route 307s to
-  `discord.com/oauth2/authorize` with the right client id, `scope=identify` and a CSRF nonce, and
-  Settings renders the card identity-only (no Sync button) with the monochrome mark.
-  ⚠️ **What is NOT verified is the one thing only Nils can do: a real sign-in.** The token exchange,
-  the `users/@me` read and the session mint have never run against live Discord. Google's equivalent
-  sat "built but unproven" for a day for the same reason and the proof was a real login.
-  ⚠️ **`NEXT_PUBLIC_DISCORD_CLIENT_ID` is the var name**, not `DISCORD_CLIENT_ID` — the button is
-  gated in a client component, so the id must be public and needs the Dockerfile `ARG` (already
-  added). Railway still has the old name (Needs Nils #3).
 
 - **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
   indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,
@@ -144,27 +106,6 @@ The three findings that decided it, so nobody re-derives them:
   Verify every consumer on BOTH routes first.
 
 - **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
-
-- **✅ Facet under-linking is FIXED for the 56 facets `/` links** (2026-09-02, Nils asked for it).
-  Measured before: **876 of 2,691 rendered items linkable, 33%** (`/tag/casual` 12/60, `/tag/arcade`
-  13/60, `/tag/board-games` 0/5). After, on the anonymous path: **419/419 on the 8 facets of one
-  run.** `src/lib/facetSnapshot.ts` sweeps a bounded set daily off the request path with
-  `persist: true`, the shape the home and calendar snapshots already use, chosen over relaxing PR14.
-  ⚠️ No sitemap or scoring impact: the rows are `browsed = 1`, so outside `POOL_WHERE` by
-  construction. ⚠️ The prune pin is real: **177 of 419 rows would have been deleted by the next boot
-  prune** without it. → [docs/seo.md](docs/seo.md)
-  - **✅ The swept facets are in the sitemap** (2026-09-02, Nils said go). `sitemapFacets()` returns
-    rows from `facet_snapshot`, so a facet is advertised exactly while it is a good page and drops
-    out when it stops being one; the people half rotates with the rail. ⚠️ **Only the swept ones.**
-    The original objection still holds for the rest: enumerating thousands of `force-dynamic`
-    fan-out URLs invites the crawl that grew `facet_page_cache` to 222 MB. **Do not widen the
-    sitemap without widening the sweep.**
-  - **✅ The three dead genre chips are gone from `/`** (2026-09-02). Root cause was **RAWG's
-    retirement the day before**: `indie`, `massively-multiplayer` and `platformer` come from
-    `RAWG_GENRES`, and nothing resolves them now. ⚠️ Dropping that map would have stripped every
-    game genre (strategy, puzzle, arcade, casual, sports all still resolve via IGDB), so the filter
-    is the sweep's own measurement instead. ⚠️ The sweep targets `hubGenreCandidates()`, not
-    `hubGenres()`, or the chip would oscillate. Verified on the page: 36 chips → 33.
 
 - **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now the aggregate is a raw sum rather than a damped mean. **Time-gated**: revisit after a few weeks of real scores under the new formula. ⚠️ **Re-read this after 2026-08-22.** The class weights now decide WHICH facets are selected, not just how much a selected one counts, so a re-tune is a bigger lever than when this was written, and **any measurement taken before that date describes the old selection**.
 

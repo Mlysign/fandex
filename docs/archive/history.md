@@ -5531,3 +5531,107 @@ item 6, 7K votes, unbuilt**. So there is no export of any kind to parse. ⚠️ 
 they ship it it is nearly free: they have committed to CSV, `parse.ts` already eats
 a plain CSV, and Backloggd is built on IGDB ids exactly as our games are. The
 import reads **Letterboxd and IMDb** meanwhile.
+
+---
+
+## 2026-09-02 (later) — Discord sign-in, the facet sweep, and account merging
+
+Moved out of TASKS.md the same session. All closed and proven in use.
+
+### ✅ Discord sign-in (`91098c6`)
+
+The second identity-only provider, mirroring Google throughout. Client id
+`1544627875955744818`. `scope=identify` only: no email, so no new category of
+personal data, and deliberately no `guilds`. Keyed on the snowflake id, **not**
+the username, which is reusable after a change and would eventually hand one
+person's account to another. Both tokens discarded — Discord returns a refresh
+token where Google under `access_type: online` does not, and keeping a
+self-renewing credential for an integration that makes no further calls buys
+nothing. **Round-trip proven by a real sign-in** the same day.
+
+⚠️ The three registration points, each failing differently: `AuthProvider` (not
+`Source`), `IDENTITY_ONLY_PROVIDERS`, and the Dockerfile `ARG`. The settings page
+needs it in three places of its own, which its own `loginMethods` comment
+predicts going wrong; `discordSignInWiring.test.ts` asserts all of them.
+
+⚠️ **The deploy lesson**: it 404'd for 25 minutes with green CI, because the
+`NEXT_PUBLIC_` var was added to Railway eleven minutes AFTER the deploy that was
+serving. Next inlines those at build time on the server side too, so a restart
+cannot fix it — only a rebuild. The 404 is ambiguous (the route answers 404 both
+when absent and when unconfigured); `railway deployment list` is what separated
+them. → [[next-public-env-needs-dockerfile-arg]]
+
+### ✅ The facet link sweep, and the sitemap (`f4023a1`, `39a6aac`)
+
+Measured before, across the 56 facets `/` links: **876 of 2,691 rendered items
+linkable, 33%**. `src/lib/facetSnapshot.ts` now sweeps a bounded set daily off the
+request path with `persist: true` — the shape the home and calendar snapshots use,
+chosen over relaxing PR14, whose unbounded crawler writes grew `media_items` to
+~676k rows. After, on the anonymous path: **419/419 on one run's 8 facets**.
+
+⚠️ No sitemap or scoring impact from the rows themselves: they land `browsed = 1`,
+so they sit outside `POOL_WHERE` by construction. ⚠️ The prune pin is not
+theoretical — **177 of 419 pinned rows** would have been deleted by the next boot
+prune without `facet_snapshot_item` in `PRUNABLE_WHERE`.
+
+⚠️ **The bug that measured as working**: the payload cache key carries `persist`,
+so the first version filled the persist entry while every anonymous visitor kept
+reading the pre-write one for the full 24 h TTL. The sweep logged 419/419 while
+the page served 214/419.
+
+The swept facets are now advertised in `sitemap.xml` (the stated gate was fixing
+the under-linking). **Only the swept ones** — the original objection still holds
+for the other thousands.
+
+Three dead genre chips (`indie`, `massively-multiplayer`, `platformer`) came off
+`/` in the same pass. Root cause was **RAWG's retirement the day before**: those
+keys come from `RAWG_GENRES` and nothing resolves them now. Dropping that map
+would have stripped every game genre a second time, so the filter is the sweep's
+own measurement instead, and the sweep targets `hubGenreCandidates()` rather than
+the filtered list so the chip cannot oscillate.
+
+### ✅ Account merging (`95d7e6d`, `428e433`)
+
+Nils signed out, signed in with Discord (minting a new account), then connected
+Google expecting to land back on his real account. `handleOAuthCallback` had one
+unconditional token UPDATE with no ownership check, so it refreshed the OTHER
+account's row, linked nothing, and still redirected to `?connected=` — "google
+connected successfully" beside an unchanged Connect button.
+
+Three outcomes now, not one: no session → log in as the owner; owner is this
+session → refresh; **owner is someone else → merge, or refuse and say why.** The
+signed-in account folds INTO the identity's owner, because that is the established
+account; a merge switches which user the session is for, so it mints a new cookie.
+Rows move through the schema-derived `userScopedTables()` erasure already uses.
+
+**Second pass the same day**, after the first version refused outright when both
+accounts held titles. Nils: *"it should give me a merge form for me to decide and
+then execute the merge right after."* So the overlap is counted, sampled by title,
+and resolved by an explicit keep-mine / keep-theirs choice with **no option
+preselected**. A conflict is a row whose UNIQUE key already exists on the other
+side, so the same film wishlisted on one account and in the library on the other
+is not a conflict. Losing rows are DELETED FIRST and the rest moved with a plain
+UPDATE — an `OR IGNORE` there would drop whichever side lost the race rather than
+the side the user chose.
+
+⚠️ The decision arrives on a LATER request than the callback, so a short-lived
+signed cookie carries the proof; the execute route requires **both** that cookie
+and that the live session is still the `from` account. Verified end to end against
+real rows with two throwaway accounts, then cleaned up.
+
+### ✅ The media-type setting is a DEFAULT, not a scope (`d2dd618`, `4d0f7d0`)
+
+Two faults, either of which alone looked like the whole bug: `sessionProbe`'s
+module-level cache was never invalidated on save (so the setting did nothing until
+a full reload), and the semantics hid the type's chip entirely. Now an explicit
+chip selection wins outright, the row always renders every type, and the chips
+show what is ON SCREEN rather than what was clicked. `narrowTypeFilter` deleted so
+the old shape cannot return. Home's "Up next" rail was gated on the filter in the
+same pass — pre-existing, found while verifying.
+
+### ✅ `/import` reachable, and Backloggd parked
+
+`/import` shipped 2026-08-23 with nothing in the app linking to it. Settings now
+carries an Import section. Backloggd has **no export of any kind** — checked in
+Nils's own account: `/settings/import_export/` is an empty panel and a CSV export
+tool is roadmap item 6, unbuilt. Nearly free when they ship it.
