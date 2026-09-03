@@ -53,7 +53,38 @@ navigate  http://localhost:3000/api/dev/login     # sets rr2_session, redirects 
 navigate  http://localhost:3000/library           # …or any gated surface
 ```
 
-Confirm with `fetch('/api/auth/me')` → `user` non-null. **Do not hit `/api/auth/logout`** to
+### ⚠️ For anything DESTRUCTIVE, sign in as the smoke-test account instead
+
+**`?as=smoketest`.** Added 2026-09-03 (Nils: "create a new user account for you to use
+when running smoketests? this would allow you to really mess with the library and find
+more bugs like the rate game no longer working"). He is right about the cause: on the
+real account, rating a movie is a genuine write-back to Trakt and TMDB that then has to
+be undone by hand, so destructive checks were rare enough that **"you can no longer rate
+games" survived a whole session of verification, because nobody rated a game.**
+
+```bash
+node scripts/smoketest-account.mjs data/rr.db            # create, idempotent
+```
+
+Then `navigate http://localhost:3000/api/dev/login?as=smoketest`. Its identity is
+`google`, which is IDENTITY-ONLY, so it owns no writable provider: every rating,
+wishlist add and hide stays on this machine. **Wreck it freely.**
+
+```bash
+node scripts/smoketest-account.mjs data/rr.db --status   # what it holds right now
+```
+
+```bash
+node scripts/smoketest-account.mjs data/rr.db --reset    # wipe its state, keep the login
+```
+
+⚠️ It starts EMPTY, which is a different account shape from Nils's. That is a feature for
+write paths and a limitation for read ones: a cold-start profile scores nothing, so
+Fandex Score, the recommendation rail and Insights need the real account. **Use
+`?as=smoketest` for writes, the default login for anything that needs a real library.**
+
+Confirm either with `fetch('/api/auth/me')` → `user` non-null (and `userId` tells you
+which account you landed on). **Do not hit `/api/auth/logout`** to
 go anon, see the warning below (and JS can't clear an `httpOnly` cookie, so the
 `document.cookie = "rr2_session=; …"` recipe that used to be here never worked).
 

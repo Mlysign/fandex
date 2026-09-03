@@ -3,6 +3,7 @@ import { Layers, Gamepad2, Clapperboard, Tv } from "lucide-react";
 import { TYPE_COLORS } from "@/lib/constants";
 import { MEDIA_TYPES, visibleTypes, enabledMediaTypes } from "@/lib/mediaTypes";
 import CollapsibleChips from "@/components/ui/CollapsibleChips";
+import LogoOutline from "@/components/LogoOutline";
 
 // <TypeFilter> — 03-components.md §6a. Row of circular 40px icon chips
 // (All/Games/Movies/Shows). Replaces SubBar's old text-pill type chips
@@ -59,14 +60,23 @@ export default function TypeFilter({ activeTypes, onToggleType, availableTypes =
   // current selection: the All icon when nothing is narrowed, the single
   // selected type's own icon and colour when one is, and All plus a count when
   // several are. → components/ui/CollapsibleChips.tsx
+  // 2026-09-03 (Nils): "can you exchange the icon on the type filter stack to
+  // the fandex logo? a line design icon variation of that logo?" So the
+  // collapsed chip wears the brand mark as an outline when the filter is at its
+  // default, which is the state it is in almost all the time and the one where
+  // the chip is really saying "everything". The moment it IS narrowed to a
+  // single type it still shows that type's own icon and colour, because a chip
+  // that cannot say what it filtered to is a chip you have to open to read.
+  //
+  // ⚠️ `Layers` is gone from the SUMMARY only. The expanded row's "All" chip
+  // keeps it: there the icon sits next to three sibling type icons and means
+  // "select every one of these", not "Fandex".
   const selected = availableTypes.filter((t) => shown.has(t));
-  const SummaryIcon = selected.length === 1 ? (TYPE_ICONS[selected[0]] ?? Layers) : Layers;
-  const summary = (
-    <SummaryIcon
-      className="w-4 h-4"
-      aria-hidden
-      style={selected.length === 1 ? { color: TYPE_COLORS[selected[0]] } : undefined}
-    />
+  const SelectedIcon = selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
+  const summary = SelectedIcon ? (
+    <SelectedIcon className="w-4 h-4" aria-hidden style={{ color: TYPE_COLORS[selected[0]] }} />
+  ) : (
+    <LogoOutline size={17} />
   );
 
   return (

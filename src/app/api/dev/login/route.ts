@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { get } from "@/lib/db";
 import { createSession, setSessionCookie } from "@/lib/session";
 import type { SessionUser, Source } from "@/types";
+import { SMOKETEST_USER_ID } from "@/lib/smoketestAccount";
 
 // Dev-only login shortcut. Mints a REAL session for a configured users.id so a
 // local browser — or an unattended agent session driving the preview tools —
@@ -42,7 +43,23 @@ export async function GET(req: NextRequest) {
   if (process.env.NODE_ENV === "production") return notFound();
   if (!isLoopback(req)) return notFound();
 
-  const userId = process.env.DEV_LOGIN_USER_ID?.trim();
+  // ── ?as=smoketest — the throwaway account (2026-09-03) ────────────────────
+  //
+  // Nils: "can you create a new user account for you to use when running
+  // smoketests? this would allow you to really mess with the library."
+  //
+  // Without an argument this route still signs in as DEV_LOGIN_USER_ID, which is
+  // HIS account, where rating a movie is a real write-back to Trakt and TMDB
+  // that then has to be undone by hand. That cost is why destructive checks were
+  // rare, and why "you can no longer rate games" survived a whole session of
+  // verification: nobody rated a game.
+  //
+  // Note what does NOT change: both gates above still apply, and the account
+  // only exists if `scripts/smoketest-account.mjs` created it. No env var, so
+  // nothing has to be appended to `.env` — the file whose missing trailing
+  // newline concatenated a secret onto DISCORD_CLIENT_SECRET.
+  const smoketest = req.nextUrl.searchParams.get("as") === "smoketest";
+  const userId = smoketest ? SMOKETEST_USER_ID : process.env.DEV_LOGIN_USER_ID?.trim();
   if (!userId) return notFound();
 
   // The session's identity fields have to describe a real identity row: the
@@ -53,7 +70,7 @@ export async function GET(req: NextRequest) {
       WHERE user_id = ? ORDER BY created_at LIMIT 1`,
     [userId]
   );
-  if (!identity) return notFound();
+  if (!identity) return notFound();   // no identity row means the account was never created
 
   const user: SessionUser = {
     userId,

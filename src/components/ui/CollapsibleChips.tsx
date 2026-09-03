@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 // <CollapsibleChips> — a row of chips that is ONE chip until you tap it.
 //
@@ -60,6 +61,23 @@ export interface CollapsibleChipsProps {
 const INACTIVE_CLASS =
   "border-border-strong text-text-secondary bg-transparent hover:border-neutral-400";
 
+/**
+ * Wide enough that collapsing buys nothing.
+ *
+ * SM53 collapsed these to reclaim 110px of a 375x812 viewport, where the
+ * calendar's sticky bar was 22% of the screen. On a desktop bar with hundreds of
+ * spare pixels the same collapse only costs a tap, which is what Nils asked to
+ * get back on 2026-09-03: "keep it un-collapsed if there is enough space on
+ * screen."
+ *
+ * `lg` (1024px), the breakpoint the rest of the app already switches layout at,
+ * rather than a new number nobody else uses. Note the tablet range stays
+ * COLLAPSED on purpose: three expanded groups is ten 40px chips plus gaps, which
+ * is about 460px, and at 768px that wraps to a second row — the exact thing the
+ * collapse exists to prevent.
+ */
+const ROOMY = "(min-width: 1024px)";
+
 export default function CollapsibleChips({
   summaryIcon,
   label,
@@ -68,6 +86,12 @@ export default function CollapsibleChips({
   isDefault,
   children,
 }: CollapsibleChipsProps) {
+  // ⚠️ False on the server AND on the client's first paint, by construction, so
+  // there is no hydration mismatch: the collapsed chip is what both render, and
+  // the row expands one frame later on a wide screen. Getting this backwards
+  // (assuming wide, then collapsing) would make every narrow phone paint a
+  // two-row bar and snap.
+  const roomy = useMediaQuery(ROOMY);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLButtonElement>(null);
@@ -90,7 +114,11 @@ export default function CollapsibleChips({
   // the other control's own handler has already run, so one tap closes this
   // group and opens that one.
   useEffect(() => {
-    if (!open) return;
+    // ⚠️ `roomy` short-circuits BOTH effects below. With no disclosure there is
+    // nothing to dismiss, and leaving the listener armed would collapse a row
+    // that has no summary chip to reopen it with: the chips would simply vanish
+    // on the next click anywhere on the page.
+    if (!open || roomy) return;
     const onPointerDown = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -105,7 +133,7 @@ export default function CollapsibleChips({
       document.removeEventListener("click", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, roomy]);
 
   // ⚠️ Focus AFTER the collapse has rendered, not inside the Escape handler.
   // The first version called `summaryRef.current?.focus()` there, and the ref is
@@ -113,14 +141,14 @@ export default function CollapsibleChips({
   // state change paints — so Escape closed the group and dropped focus to
   // `<body>`. Measured, not guessed: `document.activeElement` came back null.
   useEffect(() => {
-    if (open || !restoreFocus.current) return;
+    if (open || roomy || !restoreFocus.current) return;
     restoreFocus.current = false;
     summaryRef.current?.focus();
-  }, [open]);
+  }, [open, roomy]);
 
   return (
     <div ref={wrapRef} className="flex items-center gap-2">
-      {open ? (
+      {open || roomy ? (
         children
       ) : (
         <button
