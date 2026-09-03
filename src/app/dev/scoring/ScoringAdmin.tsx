@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { ScoringConfigValues, TagCategoryConfig } from "./types";
 import WeightsPanel from "./WeightsPanel";
 import TaxonomyPanel from "./TaxonomyPanel";
@@ -19,10 +19,29 @@ export default function ScoringAdmin() {
   const [config, setConfig] = useState<ScoringConfigValues | null>(null);
   const [categories, setCategories] = useState<TagCategoryConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 2026-09-03 (Nils): "keeps resetting when i change a tag's category or make
+  // any other change, which means i have to scroll down again, set up the
+  // filter and keep going."
+  //
+  // Every child calls `onChanged` after a save, which lands here. `load` used to
+  // set ONE `loading` flag, and the render below swaps the whole panel for
+  // "Loading…" while it is true. So a save UNMOUNTED TaxonomyPanel and with it
+  // TagTable's search box, category filter and 100-row window, plus
+  // FranchisePanel's filter and open row. Re-mounting starts at the top with
+  // everything blank, which is why retagging felt like starting over on every
+  // single row.
+  //
+  // Two flags, because they answer different questions. `loading` is "there is
+  // nothing to render yet" and only ever true before the first response.
+  // `refreshing` is "what you are looking at is one save out of date", which is
+  // a status line, not a reason to throw the DOM away.
+  const initial = useRef(true);
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (initial.current) setLoading(true); else setRefreshing(true);
     setError(null);
     try {
       const res = await fetch("/api/dev/scoring");
@@ -33,7 +52,9 @@ export default function ScoringAdmin() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
+      initial.current = false;
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -65,7 +86,13 @@ export default function ScoringAdmin() {
 
       {loading && <p className="text-sm text-neutral-500">Loading…</p>}
       {error && <p className="text-sm text-red-400">{error}</p>}
+      {/* A status line, deliberately in a slot that always exists: it must not
+          push the panel below it around, or every save would move the row you
+          were about to click. */}
+      <p className="text-xs text-neutral-600 h-4">{refreshing ? "Saving…" : ""}</p>
 
+      {/* Rendered as soon as there IS a config and kept mounted through every
+          subsequent refetch. `loading` gates only the very first paint. */}
       {!loading && !error && config && (
         tab === "weights" ? (
           <WeightsPanel config={config} categories={categories} onSaved={load} />

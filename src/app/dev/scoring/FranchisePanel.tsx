@@ -83,9 +83,24 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
     }
   }
 
-  const shown = filter.trim()
-    ? franchises.filter((f) => f.key.includes(filter.trim().toLowerCase()) || f.label.toLowerCase().includes(filter.trim().toLowerCase()))
-    : franchises;
+  // 2026-09-03 (Nils): "the franchises list should be sorted alphabetically to
+  // easily identify bundles." surveyFranchises() returns them by member count
+  // (most first), which is the right order for "what is big" and the wrong one
+  // for "are these two rows the same franchise under two names" — the duplicates
+  // you are hunting sit next to each other only under a name sort. Alphabetical
+  // is the default now; the size order stays one click away rather than being
+  // deleted, since it is what the API still computes.
+  const [order, setOrder] = useState<"name" | "size">("name");
+
+  const term = filter.trim().toLowerCase();
+  const shown = (term
+    ? franchises.filter((f) => f.key.includes(term) || f.label.toLowerCase().includes(term))
+    : franchises
+  ).slice().sort((a, b) =>
+    order === "name"
+      ? a.label.localeCompare(b.label, undefined, { sensitivity: "base" }) || a.key.localeCompare(b.key)
+      : b.members.length - a.members.length || a.key.localeCompare(b.key),
+  );
 
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-4">
@@ -96,6 +111,14 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
             className={inputCls} placeholder="Filter franchises…"
             value={filter} onChange={(e) => setFilter(e.target.value)}
           />
+          <select
+            className={inputCls} value={order}
+            onChange={(e) => setOrder(e.target.value as "name" | "size")}
+            aria-label="Sort franchises"
+          >
+            <option value="name">A to Z</option>
+            <option value="size">Most items</option>
+          </select>
           <button className={btnCls} disabled={loading} onClick={() => void load(true)}>
             {suggestions ? "Refresh suggestions" : "Find suggestions"}
           </button>
@@ -127,7 +150,7 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
         {!loading && !shown.length && <p className="text-sm text-neutral-500">No franchises match.</p>}
         {shown.map((f) => (
           <FranchiseRow
-            key={f.key} f={f} allKeys={franchises.map((x) => x.key)}
+            key={f.key} f={f} all={franchises}
             open={openKey === f.key} onToggle={() => setOpenKey(openKey === f.key ? null : f.key)}
             busy={busy} act={act}
           />
@@ -176,10 +199,10 @@ function SuggestionList({
 }
 
 function FranchiseRow({
-  f, allKeys, open, onToggle, busy, act,
+  f, all, open, onToggle, busy, act,
 }: {
   f: Franchise;
-  allKeys: string[];
+  all: Franchise[];
   open: boolean;
   onToggle: () => void;
   busy: string | null;
@@ -189,6 +212,27 @@ function FranchiseRow({
   const [search, setSearch] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // 2026-09-03 (Nils): "the searchbox for bundle franchise to franchise does not
+  // show results like it does on the searchbox for add item to franchise."
+  //
+  // It was a native <datalist>, which is not a search box even though it looks
+  // like one. Chrome matches a datalist option on its VALUE only, by prefix, and
+  // the values here are KEYS: typing "Star Wars" against `star-wars` matches
+  // nothing, and neither does "Rings" against `the-lord-of-the-rings`. It also
+  // silently caps how many options it will render, so the long tail was
+  // unreachable even when the prefix was right.
+  //
+  // Replaced with the same shape the attach box uses: type, see a list, click
+  // one. Filtering is client-side because the whole franchise list is already in
+  // memory here, so it needs no endpoint and answers on the keystroke.
+  const bundleTerm = bundleInto.trim().toLowerCase();
+  const bundleMatches = bundleTerm.length < 1 ? [] : all
+    .filter((x) => x.key !== f.key
+      && (x.key.includes(bundleTerm) || x.label.toLowerCase().includes(bundleTerm)))
+    .slice(0, 8);
+  // An exact key is what the API takes, so a typed key that IS one needs no pick.
+  const bundleReady = all.some((x) => x.key !== f.key && x.key === bundleInto.trim());
 
   async function runSearch() {
     if (search.trim().length < 2) return;
@@ -279,30 +323,51 @@ function FranchiseRow({
           )}
 
           {/* Bundling */}
-          <div className="flex items-center gap-2 flex-wrap border-t border-neutral-800/70 pt-3">
-            <span className="text-xs text-neutral-500">Fold this franchise into:</span>
-            <input
-              className={inputCls} placeholder="canonical key…" list={`ip-keys-${f.key}`}
-              value={bundleInto} onChange={(e) => setBundleInto(e.target.value)}
-            />
-            <datalist id={`ip-keys-${f.key}`}>
-              {allKeys.filter((k) => k !== f.key).map((k) => <option key={k} value={k} />)}
-            </datalist>
-            <button
-              className={btnCls}
-              disabled={!bundleInto.trim() || busy === `b-${f.key}`}
-              onClick={() => void act({ action: "bundle", alias: f.key, canonical: bundleInto.trim() }, `b-${f.key}`)
-                .then(() => setBundleInto(""))}
-            >
-              Bundle
-            </button>
-            {f.aliases.length > 0 && (
+          <div className="border-t border-neutral-800/70 pt-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-neutral-500">Fold this franchise into:</span>
+              <input
+                className={inputCls} placeholder="Search franchises…"
+                value={bundleInto} onChange={(e) => setBundleInto(e.target.value)}
+              />
               <button
-                className={btnCls} disabled={busy === `d-${f.key}`}
-                onClick={() => void act({ action: "dissolve", canonical: f.key }, `d-${f.key}`)}
+                className={btnCls}
+                disabled={!bundleReady || busy === `b-${f.key}`}
+                onClick={() => void act({ action: "bundle", alias: f.key, canonical: bundleInto.trim() }, `b-${f.key}`)
+                  .then(() => setBundleInto(""))}
               >
-                Dissolve bundle
+                Bundle
               </button>
+              {f.aliases.length > 0 && (
+                <button
+                  className={btnCls} disabled={busy === `d-${f.key}`}
+                  onClick={() => void act({ action: "dissolve", canonical: f.key }, `d-${f.key}`)}
+                >
+                  Dissolve bundle
+                </button>
+              )}
+            </div>
+
+            {/* Results, not a datalist. Clicking one fills the exact key, which
+                is what arms the Bundle button. */}
+            {bundleTerm.length > 0 && !bundleReady && (
+              bundleMatches.length > 0 ? (
+                <div className="space-y-0.5">
+                  {bundleMatches.map((x) => (
+                    <button
+                      key={x.key}
+                      onClick={() => setBundleInto(x.key)}
+                      className="w-full text-left px-2 py-1 rounded text-xs text-neutral-300 hover:bg-neutral-800 truncate"
+                    >
+                      {x.label}
+                      <span className="text-neutral-600 font-mono"> · {x.key}</span>
+                      <span className="text-neutral-600"> · {x.members.length} item{x.members.length === 1 ? "" : "s"}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-600 px-2">No other franchise matches that.</p>
+              )
             )}
           </div>
         </div>

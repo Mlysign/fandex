@@ -12,17 +12,55 @@ const inputCls = "bg-neutral-950 border border-neutral-700 rounded-md px-2 py-1 
 // slug fix) plus ONE tag table (TagTable.tsx), which absorbed and replaced
 // what used to be a separate bundles list + a tick-many-then-bundle triage
 // list. Category reassignment and aka bundling both happen inline, per row.
+// 2026-09-03 (Nils): "it is a single long scroll. can you add sub-tabs for each
+// feature?" The three sections are separate jobs and are never done together:
+// categories is a rare CRUD, tags is a long retagging sit-down, franchises is
+// bundling. Stacked, the one you want is always the one below the fold, and the
+// tag table alone is 100 rows tall.
+//
+// The sub-tab lives here rather than in ScoringAdmin because it is state ABOUT
+// the taxonomy view, and ScoringAdmin re-renders on every save. Switching tabs
+// does unmount the other two panels, which is what a tab means; what must NOT
+// reset is the panel you are working in when you save a row, and that is fixed
+// in ScoringAdmin (see its `refreshing` note).
+type Section = "categories" | "tags" | "franchises";
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: "categories", label: "Categories" },
+  { id: "tags", label: "Tags" },
+  { id: "franchises", label: "Franchises" },
+];
+
 export default function TaxonomyPanel({
   categories, onChanged,
 }: {
   categories: TagCategoryConfig[];
   onChanged: () => void;
 }) {
+  const [section, setSection] = useState<Section>("tags");
+
   return (
-    <div className="space-y-6">
-      <CategoryList categories={categories} onChanged={onChanged} />
-      <TagTable categories={categories} onChanged={onChanged} />
-      <FranchisePanel onChanged={onChanged} />
+    <div className="space-y-4">
+      <div className="flex gap-1.5">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            aria-pressed={section === s.id}
+            className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+              section === s.id
+                ? "bg-neutral-800 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "categories" && <CategoryList categories={categories} onChanged={onChanged} />}
+      {section === "tags" && <TagTable categories={categories} onChanged={onChanged} />}
+      {section === "franchises" && <FranchisePanel onChanged={onChanged} />}
     </div>
   );
 }
