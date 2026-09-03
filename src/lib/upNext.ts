@@ -138,6 +138,12 @@ export interface ShowState {
 }
 
 /** Every show this user has any episode state for, with that state attached. */
+// 2026-09-03 (Nils): "shows should not show up on the progress feed" once
+// hidden. Filtered HERE rather than over the finished entries, because this is
+// also what feeds the heal queue: a hidden show that never appears must not
+// spend any of buildUpNext's 3-shows-per-request provider budget either. It
+// stays in user_episode_state and in the library untouched — unhiding puts it
+// straight back with its watch history intact.
 function loadShowStates(userId: string): ShowState[] {
   const rows = query<{
     media_item_id: string;
@@ -151,8 +157,9 @@ function loadShowStates(userId: string): ShowState[] {
     `SELECT s.media_item_id, m.title, m.slug, m.poster_url, s.season_number, s.episode_number, s.watched_at
        FROM user_episode_state s
        JOIN media_items m ON m.id = s.media_item_id
-      WHERE s.user_id = ? AND m.type = 'show'`,
-    [userId],
+      WHERE s.user_id = ? AND m.type = 'show'
+        AND s.media_item_id NOT IN (SELECT media_item_id FROM user_hidden_items WHERE user_id = ?)`,
+    [userId, userId],
   );
 
   const byShow = new Map<string, ShowState>();

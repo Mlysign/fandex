@@ -9,6 +9,7 @@ import { buildProfile, computeFandexScore, invalidateDiscoveryCache, MIN_RATED_F
 import type { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
+import { isHidden } from "@/lib/hiddenItems";
 import { decorateItemLinks } from "@/lib/affiliate";
 // The catalog-enrichment half lives in lib/detail/enrich.ts, shared with the
 // PUBLIC page (/{type}/{uuid}/{slug}) so the two can't drift apart — the public
@@ -178,6 +179,13 @@ export const GET = withUser(async (req: NextRequest, session) => {
       platforms,
       resolvedMediaItemId: mediaItemId,
       onAnyList,
+      // 2026-09-03. The item page is the ONE surface that must still show a
+      // hidden title, and say so: Nils's rule is "hidden items should have an
+      // icon on their details page indicating that they are hidden, click to
+      // un hide". Every feed drops them; this is where you get them back.
+      // A live-only item (no catalog row yet) has nothing to key a preference
+      // to, so it reads as not hidden rather than throwing.
+      hidden: mediaItemId ? isHidden(session.userId, mediaItemId) : false,
       fandexReasons: fandex?.reasons ?? [],
       fandexCenter: fandex?.center ?? null,
       fandexColdStart,

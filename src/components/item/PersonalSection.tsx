@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Star, Bookmark } from "lucide-react";
+import { Star, Bookmark, Eye, EyeOff } from "lucide-react";
 import type { EnrichedItem, MediaType } from "@/types";
 import type { PlatformStatus } from "@/lib/watchlistStatus";
 import type { IntentAction} from "@/lib/pendingIntent";
@@ -10,7 +10,6 @@ import SignInDialog from "@/components/auth/SignInDialog";
 import { StarPicker, QUICK_BTN_CLASS, quickBtnVars } from "@/components/ActionCells";
 import { fmtScore } from "./format";
 import RatingsSection from "./RatingsSection";
-import WishlistPanel from "./WishlistPanel";
 import FandexScoreSection from "./FandexScoreSection";
 import type { Reason } from "@/components/discovery/types";
 
@@ -22,7 +21,7 @@ import type { Reason } from "@/components/discovery/types";
 // on the client:
 //   401 → the REAL controls, but every interaction opens the sign-in dialog and
 //         remembers what you were doing (H2c login-with-intent)
-//   200 → the real Fandex Score, rate/save controls and wishlist panel
+//   200 → the real Fandex Score, the rate/save pair, and the advanced options
 //
 // It deliberately owns ALL the per-user state. The server render must never
 // depend on a session, or the public HTML would vary per user and the SSR
@@ -36,6 +35,8 @@ interface DetailResponse {
   fandexReasons?: Reason[];
   fandexCenter?: number | null;
   fandexColdStart?: boolean;
+  /** This viewer asked Fandex to stop suggesting this title (2026-09-03). */
+  hidden?: boolean;
 }
 
 export default function PersonalSection({
@@ -64,7 +65,7 @@ export default function PersonalSection({
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [mediaItemId, setMediaItemId] = useState<string | null>(null);
   const [ratingAction, setRatingAction] = useState(false);
-  const [platformAction, setPlatformAction] = useState<string | null>(null);
+  const [advancedAction, setAdvancedAction] = useState<"remove" | "hide" | null>(null);
   const [saveAction, setSaveAction] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -122,8 +123,10 @@ export default function PersonalSection({
 
   // B6 (2026-07-28) — the "Save" button's generic all-providers toggle:
   // no targetProvider on add (POST writes every writable connected provider),
-  // no source on remove (DELETE clears every provider link). The per-provider
-  // fine-grained toggles stay available below in WishlistPanel.
+  // no source on remove (DELETE clears every provider link). As of 2026-09-03
+  // this is the ONLY wishlist control on the page: the per-provider panel it
+  // used to sit above is gone (Nils: "the sync should just work without users
+  // feedback"), so "Save" means every connected provider, always.
   async function toggleSave() {
     const onList = !!detail?.onAnyList;
     setSaveAction(true);
@@ -147,25 +150,45 @@ export default function PersonalSection({
     }
   }
 
-  async function togglePlatform(provider: string, onList: boolean) {
-    setPlatformAction(provider);
+  // ── The two advanced options (2026-09-03, Nils) ───────────────────────────
+  //
+  // "sometimes i accidentally rate an item and then unrate it. but it still
+  // counts as added to library."
+  //
+  // That is the server behaving as designed and the UI never offering the other
+  // verb: recordLibraryRating NULLS the score and deliberately leaves `status`
+  // alone, because un-rating something you watched is not the same statement as
+  // never having watched it. DELETE /api/library is the verb that means the
+  // second thing, and until now only a card's watched toggle could reach it.
+  async function removeFromLibrary() {
+    setAdvancedAction("remove");
     try {
-      if (onList) {
-        await fetch("/api/watchlist", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mediaItemId: mediaItemId ?? itemId, source: provider }),
-        });
-      } else {
-        await fetch("/api/watchlist", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type, title, releaseDate, ids, targetProvider: provider }),
-        });
-      }
+      await fetch("/api/library", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaItemId: mediaItemId ?? undefined, ids }),
+      });
       await load();
     } finally {
-      setPlatformAction(null);
+      setAdvancedAction(null);
+    }
+  }
+
+  // "hide item: item does not show up as recommendations. only when searched
+  // for it." Purely a display preference — it writes to user_hidden_items and
+  // touches neither the catalog, the library, nor any provider.
+  async function toggleHidden() {
+    const nowHidden = !detail?.hidden;
+    setAdvancedAction("hide");
+    try {
+      await fetch("/api/hidden", {
+        method: nowHidden ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaItemId: mediaItemId ?? undefined, ids }),
+      });
+      await load();
+    } finally {
+      setAdvancedAction(null);
     }
   }
 
@@ -300,6 +323,50 @@ export default function PersonalSection({
         </a>
       )}
 
+      {/* ── Advanced options (2026-09-03) ────────────────────────────────────
+          Nils: "these options should be very small on the item's details page.
+          should be located somewhere around the rate/save buttons." So: a
+          single quiet text row directly under the pair, never buttons that
+          compete with them.
+
+          "Remove from library" appears only when there IS a library entry,
+          because that is the only state it means anything in, and it is the
+          verb un-rating deliberately does not perform.
+
+          Hidden reads as a STATE when it is on: Nils asked for "an icon on
+          their details page indicating that they are hidden, click to un
+          hide", so the hidden form is the accent-tinted pill with the
+          eye-off mark, and the un-hidden form is the plain offer. */}
+      {!anon && (
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          {!!item.libraryStatus && (
+            <button
+              onClick={() => void removeFromLibrary()}
+              disabled={advancedAction !== null}
+              className="text-xs text-text-secondary hover:text-danger transition-colors disabled:opacity-40"
+            >
+              {advancedAction === "remove" ? "Removing…" : "Remove from library"}
+            </button>
+          )}
+          <button
+            onClick={() => void toggleHidden()}
+            disabled={advancedAction !== null}
+            aria-pressed={!!detail?.hidden}
+            title={detail?.hidden
+              ? "Hidden from your recommendations and progress. Click to unhide."
+              : "Stop showing this in recommendations and progress. It stays searchable."}
+            className={detail?.hidden
+              ? "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-accent-subtle bg-accent-subtle text-accent transition-colors disabled:opacity-40 hover:brightness-110"
+              : "inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"}
+          >
+            {detail?.hidden ? <EyeOff className="w-3.5 h-3.5" aria-hidden /> : <Eye className="w-3.5 h-3.5" aria-hidden />}
+            {advancedAction === "hide"
+              ? "…"
+              : detail?.hidden ? "Hidden, unhide" : "Hide from suggestions"}
+          </button>
+        </div>
+      )}
+
       <RatingsSection
         hasScores={false} /* community scores are server-rendered above */
         communityRatings={[]}
@@ -312,15 +379,14 @@ export default function PersonalSection({
         review={anon ? null : (item.review ?? null)}
       />
 
-      {!anon && (
-        <WishlistPanel
-          platforms={detail?.platforms ?? []}
-          loading={false}
-          platformAction={platformAction}
-          onToggle={togglePlatform}
-          steamStoreUrl={steamStoreUrl}
-        />
-      )}
+      {/* "Your wishlists" was here until 2026-09-03. Nils: "the 'your wishlists'
+          section on a details page can be removed. we are relying more and more
+          on our own data now. the sync should just work without users
+          feedback." The per-provider add/remove toggles it carried are covered
+          by the Save button above, which already writes to every writable
+          connected provider on add and clears every link on remove. Nothing was
+          lost with it: the Steam store link renders for everyone from
+          LowerSections' storeLinks, server-side. */}
 
       {showSignIn && (
         <SignInDialog

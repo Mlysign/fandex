@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { personalizedFeed, decorateSection } from "@/lib/liveDiscover";
+import { withoutHidden } from "@/lib/hiddenItems";
 import { persistDiscoverBatch, annotateUserState } from "@/lib/annotateDiscover";
 import { RAIL_SIZE } from "@/lib/homeRails";
 import { readHomeSnapshot, buildHomeSnapshot, type SnapshotItem } from "@/lib/homeSnapshot";
@@ -114,7 +115,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       trending,
       upcoming,
-      recommendation: annotateUserState(persistDiscoverBatch(recommendation, userId), userId),
+      // ⚠️ Hidden titles come out AFTER persistDiscoverBatch: until it runs, an
+      // item's `id` is a provider string like `igdb-402959` and the local uuid
+      // the hidden set is keyed by does not exist yet. Only this rail is
+      // filtered — it is the one that CHOOSES on the viewer's behalf. Trending
+      // and upcoming come out of the viewer-independent snapshot and stay as
+      // they are; hiding is "stop recommending", not "erase from the site".
+      recommendation: withoutHidden(
+        annotateUserState(persistDiscoverBatch(recommendation, userId), userId),
+        userId,
+        (r: { id?: string }) => r.id,
+      ),
       // The signed-in marker. It used to be a `stats` object carrying the day's
       // highlight panels; Nils removed those from Home on 2026-08-26 ("they
       // don't add as much as I'd hoped"), leaving the flag they were bundled

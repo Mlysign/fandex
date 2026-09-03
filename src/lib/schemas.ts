@@ -100,6 +100,13 @@ export const LibraryDeleteSchema = z.object({
   ids: zIds.optional(),
 });
 
+// POST / DELETE /api/hidden — "stop showing me this" (2026-09-03). Same tolerant
+// identity shape as the two DELETEs above: a card may not carry the local uuid.
+export const HiddenPostSchema = z.object({
+  mediaItemId: z.string().optional(),
+  ids: zIds.optional(),
+});
+
 // POST /api/episodes — mark/un-mark watched episodes of one show (MB14).
 // Two shapes, one schema: an explicit `episodes` list, or a bare `season` meaning
 // "the whole season" (resolved server-side from the catalog, so the client never

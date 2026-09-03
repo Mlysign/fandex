@@ -131,7 +131,8 @@ export function deleteAccount(userId: string): AccountDeletionResult {
 // v2 (2026-08-16, MB14): adds `episodes` — per-episode watched state.
 // v3 (2026-08-27): adds `user.platforms` — the services and consoles you own.
 // v4 (2026-08-27): adds `user.mediaTypes` — the media types you use Fandex for.
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 4;
+// v5 (2026-09-03): adds `hidden` — titles you asked Fandex to stop suggesting.
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 5;
 
 /** A users column holding a JSON string array; a malformed row exports as empty. */
 function parseStringList(raw: string | null): string[] {
@@ -224,6 +225,11 @@ export type AccountExport = {
     episode: number;
     watchedAt: number | null;
     sources: string;
+  }>;
+  hidden: Array<{
+    mediaItemId: string;
+    title: string | null;
+    hiddenAt: number | null;
   }>;
   syncLog: Array<{
     provider: string;
@@ -328,6 +334,22 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
     [userId],
   );
 
+  // 2026-09-03. A user-scoped table is ERASED automatically (deleteAccount finds
+  // it by the literal `user_id` column) but EXPORTED only by hand, because every
+  // query here uses an explicit column list on purpose. Adding the table without
+  // this block would have left a preference the user set silently out of their
+  // own data download, which is the exact asymmetry AGENTS.md warns about.
+  const hidden = query<{
+    media_item_id: string;
+    title: string | null;
+    hidden_at: number | null;
+  }>(
+    `SELECT h.media_item_id, m.title, h.hidden_at
+       FROM user_hidden_items h LEFT JOIN media_items m ON m.id = h.media_item_id
+      WHERE h.user_id = ? ORDER BY h.hidden_at DESC`,
+    [userId],
+  );
+
   const syncLog = query<{
     provider: string;
     synced_at: number | null;
@@ -349,6 +371,7 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       "Timestamps are Unix seconds (UTC) unless they end in 'Z'.",
       "'library' and 'watchlist' are the merged per-item view; 'itemState' is the same data split per connected provider.",
       "'episodes' lists the individual show episodes you have marked as watched.",
+      "'hidden' lists titles you asked Fandex to stop suggesting. They stay in the catalog and in your library.",
       "Access tokens for connected accounts are deliberately excluded. They are credentials, not your data.",
       "Titles are shown for convenience; the catalog itself is shared and is not part of your personal data.",
     ],
@@ -409,6 +432,11 @@ export function buildAccountExport(userId: string, now = new Date()): AccountExp
       episode: e.episode_number,
       watchedAt: e.watched_at,
       sources: e.sources,
+    })),
+    hidden: hidden.map((h) => ({
+      mediaItemId: h.media_item_id,
+      title: h.title,
+      hiddenAt: h.hidden_at,
     })),
     syncLog: syncLog.map((s) => ({
       provider: s.provider,

@@ -1364,6 +1364,54 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: 30,
+    name: "user_hidden_items: 'stop showing me this'",
+    up: (db) => {
+      // 2026-09-03 (Nils): "hide item: item does not show up as recommendations,
+      // only when searched for it. Shows should not show up on the progress feed."
+      //
+      // ── Why its own table and not a `relation` in user_item_state ──────────
+      //
+      // That table's relations are WISHLIST and LIBRARY, and a great deal of code
+      // reads it per-user with no relation filter: getUserStateMap, the pool's
+      // promotion rule, libraryAnalysis, insights, the prune's protection count.
+      // A third relation would appear in every one of those as a phantom library
+      // entry, silently. Hiding is a display preference, not a membership, and
+      // the same reasoning is why users.platforms and users.media_types are not
+      // in there either. A separate table has a blast radius of exactly the
+      // queries that opt into it.
+      //
+      // ⚠️ It carries a `user_id`, which is what makes GDPR erasure find it:
+      // deleteAccount() reads sqlite_master for that literal column name. The
+      // export is the other half and is NOT automatic — it uses explicit column
+      // lists, so lib/accountExport.ts gets a block by hand.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_hidden_items (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media_item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+          hidden_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (user_id, media_item_id)
+        )
+      `);
+
+      // ⚠️ Two reasons this index exists, and the second one is load-bearing.
+      //
+      // 1. dbPrune's PRUNABLE_WHERE asks `id NOT IN (SELECT media_item_id FROM
+      //    user_hidden_items)` on every boot. The PK leads with `user_id`, so it
+      //    cannot serve that lookup; this can.
+      //
+      // 2. Without the table in PRUNABLE_WHERE at all, hiding a `browsed = 1`
+      //    title would UNDO ITSELF on the next deploy: the boot prune deletes the
+      //    media_items row, the ON DELETE CASCADE takes the hidden row with it,
+      //    and the title walks straight back into the recommendations. A hidden
+      //    discover item is exactly the kind of row that is browsed-only, so this
+      //    is the common case rather than the corner one.
+      db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_hidden_items_media ON user_hidden_items(media_item_id)",
+      );
+    },
+  },
 ];
 
 

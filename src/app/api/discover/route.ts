@@ -10,6 +10,7 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage, decorateSection } from "@/lib/liveDiscover";
 import { persistDiscoverBatch, annotateUserState, annotateAvailability } from "@/lib/annotateDiscover";
+import { withoutHidden } from "@/lib/hiddenItems";
 import type { Direction, RawPayload } from "@/lib/discoverFeed";
 import type { MediaType } from "@/types";
 import { fetchGamePageAllSources, fetchMoviePage, fetchShowPage } from "@/lib/discoverFeed";
@@ -249,7 +250,18 @@ async function handleDiscover(req: NextRequest) {
     // Both helpers live in lib/annotateDiscover.ts (shared with /api/home and
     // the calendar's popular route since 2026-07-28); the `raw`-stripping and
     // session-gating rules and the incidents behind them are documented there.
+    // ⚠️ Hidden titles are dropped AFTER persistDiscoverBatch, never before.
+    // Until it runs, an item's `id` is a provider-scoped string like
+    // `igdb-402959`; the local uuid only exists once the batch has resolved it,
+    // and that uuid is the only thing the hidden set is keyed by. Filtering
+    // first would silently drop nothing at all.
+    //
+    // Search deliberately does NOT go through this: hiding a title means "stop
+    // volunteering it", not "pretend it does not exist". The search branch below
+    // calls `persist` directly for exactly that reason.
     const persist = (items: any[]) => persistDiscoverBatch(items, userId);
+    const persistVisible = (items: any[]) =>
+      withoutHidden(persistDiscoverBatch(items, userId), userId, (r: any) => r?.id);
     // Availability rides along with the user-state annotation: same batch, one
     // more query per response, no provider call. It is what makes the "Available
     // on" filter's streaming half count anything on this feed — the provider
@@ -298,7 +310,7 @@ async function handleDiscover(req: NextRequest) {
       if (catalogBrowseReady(typeOfSection[section], direction)) {
         const local = catalogSectionPage(typeOfSection[section], direction, page);
         const decorated = userId ? filterSectionPage(userId, local) : decorateSection(local, null);
-        return NextResponse.json({ items: annotate(persist(decorated)), section, source: "catalog" });
+        return NextResponse.json({ items: annotate(persistVisible(decorated)), section, source: "catalog" });
       }
 
       // SM35: games come from RAWG *and* IGDB. This used to call fetchGamePage
@@ -321,7 +333,7 @@ async function handleDiscover(req: NextRequest) {
       // signed in) so a loaded-more page stays sortable by Popularity/Rating/
       // Fandex Score, not just the initial batch.
       results = userId ? filterSectionPage(userId, results) : decorateSection(results, null);
-      return NextResponse.json({ items: annotate(persist(results)), section });
+      return NextResponse.json({ items: annotate(persistVisible(results)), section });
     }
 
     // ── Default browse ──
@@ -331,7 +343,7 @@ async function handleDiscover(req: NextRequest) {
     // popularity — the original behavior.
     const personalized = userId ? await personalizedFeed(userId, region) : null;
     if (personalized) {
-      return NextResponse.json({ items: annotate(persist(sortByDate(personalized))) });
+      return NextResponse.json({ items: annotate(persistVisible(sortByDate(personalized))) });
     }
 
     // SM35 again, and this is the ANONYMOUS/cold-start path — the public one.
@@ -362,7 +374,7 @@ async function handleDiscover(req: NextRequest) {
       ...withCatalogFallback(shows, "show", "future").items,
     ];
     const all = sortByDate(decorateSection(filled, userId));
-    return NextResponse.json({ items: annotate(persist(all)) });
+    return NextResponse.json({ items: annotate(persistVisible(all)) });
 
   } catch (e: any) {
     log.error("discover_error", { ...errorFields(e) });

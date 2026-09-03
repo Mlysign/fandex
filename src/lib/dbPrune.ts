@@ -65,6 +65,7 @@ const PRUNABLE_WHERE = `
   AND id NOT IN (SELECT media_item_id FROM home_snapshot_item)
   AND id NOT IN (SELECT media_item_id FROM calendar_snapshot_item)
   AND id NOT IN (SELECT media_item_id FROM facet_snapshot_item)
+  AND id NOT IN (SELECT media_item_id FROM user_hidden_items)
 `;
 
 function n(sql: string): number {
