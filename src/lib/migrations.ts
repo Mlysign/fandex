@@ -1412,6 +1412,52 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: 31,
+    name: "facet_label_override: which spelling of a bundle is the one people see",
+    up: (db) => {
+      // 2026-09-03 (Nils): "when i bundle franchises or tags, i need an option to
+      // choose which version i want to use as display name on fandex. the other
+      // name should then never be displayed again."
+      //
+      // ── Why bundling alone did not already do this ────────────────────────
+      //
+      // `tag_alias` and `ip_alias` map a member KEY to a canonical KEY. Nothing
+      // maps a LABEL. `applyTagAliases` rewrites the key and keeps whatever label
+      // arrived with the facet, so a bundle displays under whichever spelling the
+      // item being rendered happens to carry: an item tagged "RPG" showed RPG, an
+      // item tagged "Role Playing (RPG)" showed that, and the two were the same
+      // tag. The catalog vocab was worse than inconsistent, it was arbitrary —
+      // its label is whichever member was folded FIRST, so it depended on catalog
+      // order.
+      //
+      // Bundling the other way round is not the fix either. The canonical KEY is
+      // persisted in `tag_category_override`, `tag_alias` and every facet url, so
+      // "display it under the other name" and "re-key the whole bundle" are
+      // different operations with very different blast radii. This table is the
+      // small one.
+      //
+      // ── Shape ─────────────────────────────────────────────────────────────
+      //
+      // Keyed by (kind, key), NOT by bundle, so it also names a tag that is not
+      // bundled at all. That falls out for free and is the same thing Nils will
+      // want the first time a provider spells something badly on its own.
+      //
+      // ⚠️ A CATALOG table: global editorial state, exactly like
+      // `tag_category_override` and `ip_alias`. It must never grow a `user_id`
+      // column — that literal name is what makes GDPR erasure delete a table's
+      // rows, and these are not anybody's personal data.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS facet_label_override (
+          kind TEXT NOT NULL,
+          key TEXT NOT NULL,
+          label TEXT NOT NULL,
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (kind, key)
+        )
+      `);
+    },
+  },
 ];
 
 

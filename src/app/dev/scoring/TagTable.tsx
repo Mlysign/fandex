@@ -4,7 +4,16 @@ import type { TagCategoryConfig } from "./types";
 import { useDebouncedValue } from "@/lib/useDebounced";
 
 interface AkaTag { key: string; label: string; count: number }
-interface TagRowData { key: string; label: string; count: number; category: string; overridden: boolean; aka: AkaTag[] }
+interface TagRowData {
+  key: string;
+  label: string;
+  count: number;
+  category: string;
+  overridden: boolean;
+  aka: AkaTag[];
+  /** `label` is a deliberate choice rather than a provider's spelling (2026-09-03). */
+  labelOverridden?: boolean;
+}
 
 const inputCls = "bg-neutral-950 border border-neutral-700 rounded-md px-2 py-1 text-sm text-neutral-100";
 const PAGE_SIZE = 100;
@@ -81,13 +90,35 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
     }
   }
 
-  async function addAkaMember(canonical: string, memberKey: string) {
+  async function addAkaMember(canonical: string, memberKey: string, displayLabel?: string) {
     setBusyKey(memberKey);
     try {
       const res = await fetch("/api/dev/scoring/aliases", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ canonical, members: [memberKey] }),
+        body: JSON.stringify({ canonical, members: [memberKey], displayLabel }),
       });
+      if (res.ok) { await load(); onChanged(); }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  // 2026-09-03 (Nils): "when i bundle franchises or tags, i need an option to
+  // choose which version i want to use as display name on fandex. the other name
+  // should then never be displayed again."
+  //
+  // A separate call from bundling, because the two are separately reversible and
+  // because a name is useful on a tag that is in no bundle at all. A null label
+  // reverts to whatever the providers call it.
+  async function setDisplayName(tagKey: string, label: string | null) {
+    setBusyKey(tagKey);
+    try {
+      const res = label
+        ? await fetch("/api/dev/scoring/labels", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "tag", key: tagKey, label }),
+          })
+        : await fetch(`/api/dev/scoring/labels?kind=tag&key=${encodeURIComponent(tagKey)}`, { method: "DELETE" });
       if (res.ok) { await load(); onChanged(); }
     } finally {
       setBusyKey(null);
@@ -131,6 +162,7 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
             onReassign={reassign}
             onRemoveAka={removeAkaMember}
             onAddAka={addAkaMember}
+            onSetDisplayName={setDisplayName}
           />
         ))}
         {!loading && rows.length === 0 && <p className="text-sm text-neutral-600 py-2">No tags match.</p>}
@@ -149,18 +181,26 @@ export default function TagTable({ categories, onChanged }: { categories: TagCat
 }
 
 function TagRow({
-  row, categories, busy, onReassign, onRemoveAka, onAddAka,
+  row, categories, busy, onReassign, onRemoveAka, onAddAka, onSetDisplayName,
 }: {
   row: TagRowData;
   categories: TagCategoryConfig[];
   busy: string | null;
   onReassign: (tagKey: string, categoryId: string) => void;
   onRemoveAka: (alias: string) => void;
-  onAddAka: (canonical: string, memberKey: string) => void;
+  onAddAka: (canonical: string, memberKey: string, displayLabel?: string) => void;
+  onSetDisplayName: (tagKey: string, label: string | null) => void;
 }) {
   return (
     <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 text-sm py-1.5 border-b border-neutral-900 last:border-0">
-      <span className="flex-1 min-w-0 truncate text-neutral-300">{row.label}</span>
+      <span className="flex-1 min-w-0 truncate text-neutral-300">
+        {row.label}
+        {row.labelOverridden && (
+          <span className="ml-1.5 text-[10px] text-neutral-600" title="Shown under a name you chose">
+            renamed
+          </span>
+        )}
+      </span>
       <span className="w-14 text-right shrink-0 text-xs text-neutral-600">{row.count}×</span>
       <select
         value={row.category}
@@ -170,8 +210,14 @@ function TagRow({
       >
         {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
       </select>
-      <div className="w-72 shrink-0">
+      <div className="w-72 shrink-0 space-y-1">
         <AkaEditor row={row} busy={busy} onRemoveAka={onRemoveAka} onAddAka={onAddAka} />
+        {/* Only offered once the tag IS a bundle. On a lone tag there is no
+            second spelling to choose between, and the row already shows the
+            only name there is. */}
+        {row.aka.length > 0 && (
+          <DisplayNamePicker row={row} busy={busy} onSetDisplayName={onSetDisplayName} />
+        )}
       </div>
     </div>
   );
@@ -268,6 +314,98 @@ function AkaEditor({
         >
           + add
         </button>
+      )}
+    </div>
+  );
+}
+
+// "Shown as" — which spelling of a bundle people actually see.
+//
+// 2026-09-03 (Nils): "when i bundle franchises or tags, i need an option to
+// choose which version i want to use as display name on fandex. the other name
+// should then never be displayed again."
+//
+// ── Why the options are LABELS and the write is a string ────────────────────
+//
+// Bundling is a key operation and naming is a label one, deliberately kept
+// apart: re-keying a bundle would move `tag_category_override` rows and every
+// facet url, while a name is a single row and a single DELETE to undo.
+//
+// So the picker offers each member's own spelling as a shortcut, plus a free
+// text field, because the honest answer is sometimes neither ("Sci-Fi" and
+// "science fiction" both being wrong for "Science Fiction"). "Whatever the
+// providers say" is the reset, and it is the only option that removes the row
+// rather than writing one.
+function DisplayNamePicker({
+  row, busy, onSetDisplayName,
+}: {
+  row: TagRowData;
+  busy: string | null;
+  onSetDisplayName: (tagKey: string, label: string | null) => void;
+}) {
+  const [custom, setCustom] = useState("");
+  const [editing, setEditing] = useState(false);
+  const disabled = busy === row.key;
+
+  // The member spellings, deduped against the name already showing. `row.label`
+  // is the CHOSEN name when one exists, so listing it would offer a no-op.
+  const options = [...new Set(row.aka.map((a) => a.label))].filter((l) => l !== row.label);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-xs text-neutral-600">
+      <span className="shrink-0">Shown as:</span>
+      <span className="text-neutral-400 truncate max-w-[8rem]" title={row.label}>{row.label}</span>
+
+      {editing ? (
+        <input
+          autoFocus
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onBlur={() => setTimeout(() => setEditing(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { setEditing(false); setCustom(""); }
+            if (e.key === "Enter" && custom.trim()) {
+              onSetDisplayName(row.key, custom.trim());
+              setCustom("");
+              setEditing(false);
+            }
+          }}
+          placeholder="Type a name, Enter"
+          className="text-xs px-1.5 py-0.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-100 w-36"
+        />
+      ) : (
+        <>
+          {options.map((label) => (
+            <button
+              key={label}
+              disabled={disabled}
+              onClick={() => onSetDisplayName(row.key, label)}
+              title={`Show this tag as "${label}" everywhere`}
+              className="px-1.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 truncate max-w-[8rem] disabled:opacity-50"
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setEditing(true)}
+            className="text-neutral-600 hover:text-neutral-300 underline decoration-dotted disabled:opacity-50"
+          >
+            custom
+          </button>
+          {row.labelOverridden && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onSetDisplayName(row.key, null)}
+              title="Go back to whatever the providers call it"
+              className="text-neutral-600 hover:text-neutral-300 underline decoration-dotted disabled:opacity-50"
+            >
+              reset
+            </button>
+          )}
+        </>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import type { NextRequest} from "next/server";
 import { NextResponse } from "next/server";
 import { withScoringAdmin } from "@/lib/devAdmin";
 import { setTagAlias, deleteTagAlias, deleteTagBundle, listTagBundles } from "@/lib/tagAlias";
+import { setFacetLabel } from "@/lib/facetLabel";
 import { invalidateDiscoveryCache } from "@/lib/discovery";
 import { parseJsonBody } from "@/lib/validate";
 import { TagAliasPostSchema } from "@/lib/schemas";
@@ -20,7 +21,7 @@ export const GET = withScoringAdmin(async () => {
 // POST /api/dev/scoring/aliases — { canonical, members[] } bundles each member
 // (except the canonical itself) under the canonical.
 export const POST = withScoringAdmin(async (req: NextRequest) => {
-  const { canonical, members } = await parseJsonBody(req, TagAliasPostSchema);
+  const { canonical, members, displayLabel } = await parseJsonBody(req, TagAliasPostSchema);
   const applied: string[] = [];
   try {
     for (const m of members) {
@@ -28,6 +29,10 @@ export const POST = withScoringAdmin(async (req: NextRequest) => {
       setTagAlias(m, canonical);
       applied.push(m);
     }
+    // 2026-09-03. Set in the SAME request as the bundle, not a follow-up call:
+    // Nils asked for the choice as part of bundling, and two requests would
+    // leave a window where the tags are folded under a name nobody picked.
+    if (displayLabel) setFacetLabel("tag", canonical, displayLabel);
   } catch (e) {
     invalidateDiscoveryCache();
     return NextResponse.json({ error: e instanceof Error ? e.message : "Could not bundle" }, { status: 400 });

@@ -10,6 +10,7 @@
 
 import { query } from "@/lib/db";
 import { ipKey } from "@/lib/facets";
+import { displayLabel, getFacetLabelOverrides } from "@/lib/facetLabel";
 import { canonicalIpKey, getIpAliases, getItemIpOverrides } from "@/lib/ipAlias";
 
 export interface FranchiseMember {
@@ -28,11 +29,15 @@ export interface FranchiseMember {
 
 export interface FranchiseRow {
   key: string;                 // canonical key
-  label: string;               // best display label seen
+  label: string;               // what the SITE shows: the chosen name, else the best one seen
   members: FranchiseMember[];
   types: string[];             // distinct media types present
   /** member spellings folded into this canonical by ip_alias */
   aliases: string[];
+  /** The label a revert would go back to (2026-09-03). */
+  rawLabel: string;
+  /** Whether `label` is a deliberate choice rather than a provider's spelling. */
+  labelOverridden: boolean;
 }
 
 interface RawIpRow { id: string; title: string | null; type: string; name: string }
@@ -62,7 +67,10 @@ export function surveyFranchises(): FranchiseRow[] {
   const aliases = getIpAliases();
   const overrides = getItemIpOverrides();
 
-  const byKey = new Map<string, FranchiseRow & { seen: Set<string> }>();
+  // The two label fields are added by the final map, once the overrides are in
+  // hand, so the accumulator deliberately does not carry them.
+  type Accum = Omit<FranchiseRow, "rawLabel" | "labelOverridden"> & { seen: Set<string> };
+  const byKey = new Map<string, Accum>();
   const touch = (key: string, label: string) => {
     let row = byKey.get(key);
     if (!row) {
@@ -111,9 +119,18 @@ export function surveyFranchises(): FranchiseRow[] {
     byKey.get(canonical)?.aliases.push(alias);
   }
 
+  // 2026-09-03: the admin list shows what the SITE shows. A chosen display name
+  // wins over the "prefer the label whose own key is the canonical" rule above,
+  // which is the rule that made a bundle render under whichever spelling turned
+  // up first. `rawLabel` is carried so the panel can offer it back as an option
+  // and say what reverting would give you.
+  const names = getFacetLabelOverrides();
   return [...byKey.values()]
     .map(({ seen: _seen, ...row }) => ({
       ...row,
+      rawLabel: row.label,
+      labelOverridden: names.has(`ip|${row.key}`),
+      label: displayLabel("ip", row.key, row.label, names),
       types: [...new Set(row.members.map((m) => m.type))].sort(),
       aliases: row.aliases.sort(),
       members: row.members.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? "")),

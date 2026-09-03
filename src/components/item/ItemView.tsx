@@ -46,12 +46,16 @@ import type { TagDisplayCategory } from "@/lib/tags";
 // is gone (rows now — see FactsSection), and there is ONE vertical rhythm token.
 const SECTION_GAP = "space-y-6";
 
-export default function ItemView({ item, tagOverrides, tagCategories, relatedRails }: {
+export default function ItemView({ item, tagOverrides, tagCategories, tagAliases, tagLabels, relatedRails }: {
   item: PublicEnrichedItem;
   // Global tag taxonomy, read on the server (see LowerSections). Viewer-
   // independent, so it doesn't compromise the SSR guarantee described above.
   tagOverrides?: Record<string, string>;
   tagCategories?: TagDisplayCategory[];
+  /** raw tag key -> canonical key (tag_alias), read on the server. */
+  tagAliases?: Record<string, string>;
+  /** canonical tag key -> the chosen display name (facet_label_override). */
+  tagLabels?: Record<string, string>;
   // Both related rails, built on the server (2026-08-23). Viewer-independent
   // for the same reason the taxonomy above is: no score, no user state, just
   // which titles are related and where they live. It is what puts real sibling
@@ -230,7 +234,7 @@ export default function ItemView({ item, tagOverrides, tagCategories, relatedRai
         {item.type === "show" && <EpisodeTracker mediaItemId={item.id} />}
 
         {/* Full-width band below both columns, one rhythm with the stack above. */}
-        <LowerSections enriched={enriched} type={item.type} tagOverrides={tagOverrides} tagCategories={tagCategories} />
+        <LowerSections enriched={enriched} type={item.type} tagOverrides={tagOverrides} tagCategories={tagCategories} tagAliases={tagAliases} tagLabels={tagLabels} />
 
         {/* "More from {franchise}" + "More like this". Mounted ONCE here (not
             per breakpoint — see RelatedRails' own comment for why that

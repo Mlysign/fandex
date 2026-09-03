@@ -24,12 +24,12 @@ const SOURCE_LABEL: Record<Member["source"], string> = {
   manual: "attached by hand",
   wikidata: "via Wikidata",
 };
-interface Franchise { key: string; label: string; members: Member[]; types: string[]; aliases: string[] }
+interface Franchise { key: string; label: string; members: Member[]; types: string[]; aliases: string[]; rawLabel?: string; labelOverridden?: boolean }
 interface Suggestion { mediaItemId: string; title: string; type: string; ipKey: string; ipLabel: string; match: "exact" | "prefix" }
 interface SearchHit { id: string; title: string; type: string }
 
 type Action =
-  | { action: "bundle"; alias: string; canonical: string }
+  | { action: "bundle"; alias: string; canonical: string; displayLabel?: string }
   | { action: "unbundle"; alias: string }
   | { action: "dissolve"; canonical: string }
   | { action: "attach"; mediaItemId: string; label: string }
@@ -59,6 +59,33 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch-on-mount
   useEffect(() => { void load(false); }, [load]);
+
+  // 2026-09-03 (Nils): "when i bundle franchises or tags, i need an option to
+  // choose which version i want to use as display name on fandex. the other name
+  // should then never be displayed again."
+  //
+  // A separate route from the franchise actions, because naming is reversible on
+  // its own and applies just as well to a franchise that is in no bundle. A null
+  // label reverts to whatever the providers call it.
+  async function setDisplayName(key: string, label: string | null) {
+    setBusy(`n-${key}`);
+    setError(null);
+    try {
+      const res = label
+        ? await fetch("/api/dev/scoring/labels", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "ip", key, label }),
+          })
+        : await fetch(`/api/dev/scoring/labels?kind=ip&key=${encodeURIComponent(key)}`, { method: "DELETE" });
+      if (!res.ok) { setError("Could not set the display name"); return; }
+      await load(false);
+      onChanged();
+    } catch {
+      setError("Could not set the display name");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(a: Action, busyKey: string) {
     setBusy(busyKey);
@@ -152,7 +179,7 @@ export default function FranchisePanel({ onChanged }: { onChanged: () => void })
           <FranchiseRow
             key={f.key} f={f} all={franchises}
             open={openKey === f.key} onToggle={() => setOpenKey(openKey === f.key ? null : f.key)}
-            busy={busy} act={act}
+            busy={busy} act={act} onSetDisplayName={setDisplayName}
           />
         ))}
       </div>
@@ -199,7 +226,7 @@ function SuggestionList({
 }
 
 function FranchiseRow({
-  f, all, open, onToggle, busy, act,
+  f, all, open, onToggle, busy, act, onSetDisplayName,
 }: {
   f: Franchise;
   all: Franchise[];
@@ -207,6 +234,7 @@ function FranchiseRow({
   onToggle: () => void;
   busy: string | null;
   act: (a: Action, busyKey: string) => Promise<void>;
+  onSetDisplayName: (key: string, label: string | null) => void;
 }) {
   const [bundleInto, setBundleInto] = useState("");
   const [search, setSearch] = useState("");
@@ -233,6 +261,8 @@ function FranchiseRow({
     .slice(0, 8);
   // An exact key is what the API takes, so a typed key that IS one needs no pick.
   const bundleReady = all.some((x) => x.key !== f.key && x.key === bundleInto.trim());
+  /** What the merged franchise would be called if we changed nothing. */
+  const bundleTargetLabel = all.find((x) => x.key === bundleInto.trim())?.label ?? bundleInto.trim();
 
   async function runSearch() {
     if (search.trim().length < 2) return;
@@ -265,6 +295,37 @@ function FranchiseRow({
 
       {open && (
         <div className="px-3 pb-3 space-y-3 border-t border-neutral-800/70 pt-3">
+          {/* "Shown as", for a franchise that is ALREADY bundled or just badly
+              named by its provider. The bundle buttons below choose at fold
+              time; this changes the answer afterwards, and is the only place a
+              free-typed name can be given. */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-600">
+            <span className="shrink-0">Shown as:</span>
+            <span className="text-neutral-300 truncate max-w-[14rem]" title={f.label}>{f.label}</span>
+            {f.labelOverridden && f.rawLabel && f.rawLabel !== f.label && (
+              <button
+                className={btnCls}
+                disabled={busy === `n-${f.key}`}
+                title={`Go back to "${f.rawLabel}", what the providers call it`}
+                onClick={() => onSetDisplayName(f.key, null)}
+              >
+                reset to &ldquo;{f.rawLabel}&rdquo;
+              </button>
+            )}
+            <input
+              className={`${inputCls} text-xs py-0.5 w-40`}
+              placeholder="Rename, then Enter"
+              disabled={busy === `n-${f.key}`}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                const v = (e.target as HTMLInputElement).value.trim();
+                if (!v) return;
+                onSetDisplayName(f.key, v);
+                (e.target as HTMLInputElement).value = "";
+              }}
+            />
+          </div>
+
           {/* Members */}
           <div className="space-y-1">
             {f.members.map((m) => (
@@ -330,14 +391,44 @@ function FranchiseRow({
                 className={inputCls} placeholder="Search franchises…"
                 value={bundleInto} onChange={(e) => setBundleInto(e.target.value)}
               />
-              <button
-                className={btnCls}
-                disabled={!bundleReady || busy === `b-${f.key}`}
-                onClick={() => void act({ action: "bundle", alias: f.key, canonical: bundleInto.trim() }, `b-${f.key}`)
-                  .then(() => setBundleInto(""))}
-              >
-                Bundle
-              </button>
+              {/* 2026-09-03 (Nils): "when i bundle franchises or tags, i need an
+                  option to choose which version i want to use as display name."
+                  Two buttons rather than a separate step, because at the moment
+                  of bundling there are exactly two candidate names and the
+                  question is which one survives. The label rides along in the
+                  same request, so there is no window where the pair is folded
+                  under a name nobody picked. */}
+              {/* The pair appears only once a target is actually picked. Before
+                  that `bundleTargetLabel` is the empty string, so the buttons
+                  read `Bundle, keep ""` — disabled, but nonsense to look at, and
+                  a disabled control that says nothing is worse than one control
+                  that says what it needs. */}
+              {bundleReady ? (
+                <>
+                  <button
+                    className={btnCls}
+                    disabled={busy === `b-${f.key}`}
+                    title={`Fold into ${bundleInto.trim()} and show it as "${bundleTargetLabel}"`}
+                    onClick={() => void act({ action: "bundle", alias: f.key, canonical: bundleInto.trim() }, `b-${f.key}`)
+                      .then(() => setBundleInto(""))}
+                  >
+                    Bundle, keep &ldquo;{bundleTargetLabel}&rdquo;
+                  </button>
+                  <button
+                    className={btnCls}
+                    disabled={busy === `b-${f.key}`}
+                    title={`Fold into ${bundleInto.trim()} but show it as "${f.label}"`}
+                    onClick={() => void act(
+                      { action: "bundle", alias: f.key, canonical: bundleInto.trim(), displayLabel: f.label },
+                      `b-${f.key}`,
+                    ).then(() => setBundleInto(""))}
+                  >
+                    Bundle, keep &ldquo;{f.label}&rdquo;
+                  </button>
+                </>
+              ) : (
+                <button className={btnCls} disabled>Bundle</button>
+              )}
               {f.aliases.length > 0 && (
                 <button
                   className={btnCls} disabled={busy === `d-${f.key}`}

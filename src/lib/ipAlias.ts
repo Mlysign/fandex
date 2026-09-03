@@ -33,6 +33,7 @@
 
 import { get, query, run, transaction } from "@/lib/db";
 import { type Facet, facetId, ipKey } from "@/lib/facets";
+import { displayLabel, getFacetLabelOverrides, type LabelOverrides } from "@/lib/facetLabel";
 
 // ── ip_alias ──────────────────────────────────────────────────────────
 let _aliasCache: { sig: string; value: Map<string, string> } | null = null;
@@ -113,13 +114,16 @@ export function getItemIpOverrides(): Map<string, ItemIpOverride[]> {
 export function applyIpFacets(
   facets: Facet[],
   mediaItemId?: string | null,
-  pre?: { aliases?: Map<string, string>; overrides?: Map<string, ItemIpOverride[]> }
+  pre?: { aliases?: Map<string, string>; overrides?: Map<string, ItemIpOverride[]>; labels?: LabelOverrides }
 ): Facet[] {
   const aliases = pre?.aliases ?? getIpAliases();
   const mine = mediaItemId
     ? (pre?.overrides ?? getItemIpOverrides()).get(mediaItemId)
     : undefined;
-  if (aliases.size === 0 && !mine) return facets;
+  // 2026-09-03: a chosen display name applies to an UNBUNDLED franchise too, so
+  // the early return has to consider it as well as the aliases and overrides.
+  const names = pre?.labels ?? getFacetLabelOverrides();
+  if (aliases.size === 0 && !mine && names.size === 0) return facets;
 
   const removed = new Set(
     (mine ?? []).filter((o) => o.mode === "remove").map((o) => aliases.get(o.ipKey) ?? o.ipKey)
@@ -136,17 +140,22 @@ export function applyIpFacets(
     }
   };
 
+  // ⚠️ Every label below is resolved from the CANONICAL key. Nils, 2026-09-03:
+  // "the other name should then never be displayed again on fandex." A bundle
+  // used to render under whichever member the item carried, and a hand-attached
+  // one under whatever label the admin happened to type when attaching it.
   for (const f of facets) {
     if (f.kind !== "ip") { out.push(f); continue; }
     const canonical = aliases.get(f.key) ?? f.key;
     if (removed.has(canonical)) continue;
-    push(canonical === f.key ? f : { ...f, key: canonical });
+    const label = displayLabel("ip", canonical, f.label, names);
+    push(canonical === f.key && label === f.label ? f : { ...f, key: canonical, label });
   }
   for (const o of mine ?? []) {
     if (o.mode !== "add") continue;
     const canonical = aliases.get(o.ipKey) ?? o.ipKey;
     if (removed.has(canonical)) continue; // an explicit remove wins over an add
-    push({ kind: "ip", role: "ip", key: canonical, label: o.label });
+    push({ kind: "ip", role: "ip", key: canonical, label: displayLabel("ip", canonical, o.label, names) });
   }
   return out;
 }

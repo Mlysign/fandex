@@ -8,6 +8,7 @@ import { get, query, run } from "@/lib/db";
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from "@/lib/scoringDefaults";
 import { tagAliasSignature } from "@/lib/tagAlias";
 import { ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
+import { facetLabelSignature } from "@/lib/facetLabel";
 
 export interface TagCategoryConfig {
   id: string;
@@ -176,8 +177,13 @@ export function scoringConfigSignature(): string {
   // one to an item by hand, changes every affected score while leaving the
   // library untouched. Without them the admin edit appears to do nothing until
   // something unrelated invalidates the cache.
+  // facetLabelSignature (2026-09-03) for the same reason again: a chosen
+  // display name changes what every reason and pill READS while leaving the
+  // library and the aliases untouched, so without it the admin edit appears to
+  // do nothing until something unrelated invalidates the cache.
   return [
     configSignature(), categorySignature(), overrideSignature(),
     tagAliasSignature(), ipAliasSignature(), itemIpOverrideSignature(),
+    facetLabelSignature(),
   ].join("|");
 }

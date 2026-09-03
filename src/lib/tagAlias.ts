@@ -12,6 +12,7 @@
 
 import { get, query, run, transaction } from "@/lib/db";
 import { type Facet, facetId } from "@/lib/facets";
+import { displayLabel, getFacetLabelOverrides, type LabelOverrides } from "@/lib/facetLabel";
 
 // ── cache ─────────────────────────────────────────────────────────────
 let _aliasCache: { sig: string; value: Map<string, string> } | null = null;
@@ -49,23 +50,39 @@ export function canonicalTagKey(key: string): string {
 // original key IS the canonical (else keeps first-seen). People/company facets
 // pass through untouched. `aliases` may be pre-fetched by loop callers to avoid a
 // signature check per item.
-export function applyTagAliases(facets: Facet[], aliases?: Map<string, string>): Facet[] {
+export function applyTagAliases(
+  facets: Facet[],
+  aliases?: Map<string, string>,
+  labels?: LabelOverrides,
+): Facet[] {
   const map = aliases ?? getTagAliases();
-  if (map.size === 0) return facets;
+  // 2026-09-03: a label override applies to an UNBUNDLED tag too, so the early
+  // return now has to consider both. Without this, naming a tag that happens to
+  // be in no bundle did nothing on a catalog with no aliases at all.
+  const names = labels ?? getFacetLabelOverrides();
+  if (map.size === 0 && names.size === 0) return facets;
 
   const out: Facet[] = [];
   const idx = new Map<string, number>(); // facetId → index in `out`
   for (const f of facets) {
     if (f.kind !== "tag") { out.push(f); continue; }
     const canonical = map.get(f.key) ?? f.key;
-    const remapped: Facet = canonical === f.key ? f : { ...f, key: canonical };
+    // ⚠️ The label is resolved from the CANONICAL key, not from `f.key`, and
+    // that is the whole point. Nils: "the other name should then never be
+    // displayed again on fandex." Before this, a bundle rendered under whichever
+    // member the item in front of you happened to carry.
+    const label = displayLabel("tag", canonical, f.label, names);
+    const remapped: Facet =
+      canonical === f.key && label === f.label ? f : { ...f, key: canonical, label };
     const id = facetId(remapped);
     const at = idx.get(id);
     if (at === undefined) {
       idx.set(id, out.length);
       out.push(remapped);
-    } else if (f.key === canonical) {
-      // The canonical spelling itself appeared — its label wins over a member's.
+    } else if (f.key === canonical && !names.has(`tag|${canonical}`)) {
+      // The canonical spelling itself appeared: its label wins over a member's.
+      // Skipped when a name has been CHOSEN, because then neither member's own
+      // spelling gets a say.
       out[at] = { ...out[at], label: f.label };
     }
   }

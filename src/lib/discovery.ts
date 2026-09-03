@@ -16,6 +16,7 @@ import { type Facet, facetId, type FacetRole, personKey, companyKey } from "@/li
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
 import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, type TagCategoryConfig } from "@/lib/scoringConfig";
 import { applyTagAliases, canonicalTagKey, getTagAliases, tagAliasSignature } from "@/lib/tagAlias";
+import { facetLabelSignature, getFacetLabelOverrides } from "@/lib/facetLabel";
 import type { ItemIpOverride } from "@/lib/ipAlias";
 import { applyIpFacets, getIpAliases, getItemIpOverrides, ipAliasSignature, itemIpOverrideSignature } from "@/lib/ipAlias";
 import { communityVotes, bayesRating, ratingPrior } from "@/lib/ratingsSort";
@@ -385,14 +386,19 @@ function buildEntries(where: string, params: unknown[] = []): PoolEntry[] {
   // per-item, matching how `aliases` is threaded below.
   const ipAliases = getIpAliases();
   const ipOverrides = getItemIpOverrides();
+  // 2026-09-03: the chosen display names, fetched ONCE for the build. Both
+  // helpers below signature-check their cache, and a helper that does that must
+  // be called once per PASS rather than once per item — the rule that made
+  // Fandex Score scoring 5.1x faster.
+  const labels = getFacetLabelOverrides();
   const entries: PoolEntry[] = [];
   for (const [id, { row, links }] of groups) {
     // Both come from facetCache — `facets` there is always RAW extractFacets
     // output (that cache deliberately doesn't bake in alias/override
     // resolution), so the applyTagAliases step below is unchanged.
     const { merged, facets: rawFacets } = derivedById.get(id)!;
-    const facets = applyIpFacets(applyTagAliases(rawFacets, aliases), id, {
-      aliases: ipAliases, overrides: ipOverrides,
+    const facets = applyIpFacets(applyTagAliases(rawFacets, aliases, labels), id, {
+      aliases: ipAliases, overrides: ipOverrides, labels,
     });
     entries.push({
       rawFacets,
@@ -649,7 +655,12 @@ function getCache() {
   // franchise rail on such an item matched only titles whose ORIGINAL key
   // happened to equal the new canonical one. Nils bundled the Spider-Man
   // franchises and the rail showed exactly one film.
-  const aliasSig = `${tagAliasSignature()}|${ipAliasSignature()}|${itemIpOverrideSignature()}`;
+  //
+  // 2026-09-03: facetLabelSignature belongs here too. A label lives in the
+  // pool's `vocabMap`, so a chosen display name changes what this cache should
+  // hold while changing nothing else it watches — exactly the shape of the ip
+  // omission above, and it would have gone stale for up to the five-minute TTL.
+  const aliasSig = `${tagAliasSignature()}|${ipAliasSignature()}|${itemIpOverrideSignature()}|${facetLabelSignature()}`;
   // An alias edit and the TTL still rebuild. The alias one has to: a bundle
   // changes what EVERY vector's facets resolve to, so there is no "what
   // changed" set smaller than the catalog. The TTL is the backstop against any

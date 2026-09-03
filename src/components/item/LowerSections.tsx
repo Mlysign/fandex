@@ -6,6 +6,7 @@ import FacetLink, { facetHref } from "@/components/FacetLink";
 import { groupTagsByCategory, type TagDisplayCategory } from "@/lib/tags";
 import { facetChipStyle, nonFacetChipStyle } from "@/lib/facetPalette";
 import { tagKey } from "@/lib/facets";
+import { buildFacetHref } from "@/lib/itemUrl";
 import TagCategoryPicker from "@/components/TagCategoryPicker";
 import BrandGlyph from "@/components/BrandGlyph";
 import StoreLink from "./StoreLink";
@@ -89,7 +90,7 @@ function BuyDisclosure() {
 
 // The stacked lower-detail sections: trailer, cast, where-to-watch, DLC, the
 // combined tags/keywords/modes/platforms block, where-to-buy, and store links.
-export default function LowerSections({ enriched, type, tagOverrides = {}, tagCategories = [] }: {
+export default function LowerSections({ enriched, type, tagOverrides = {}, tagCategories = [], tagAliases = {}, tagLabels = {} }: {
   enriched: EnrichedItem | null;
   type: MediaType;
   // Global taxonomy, resolved on the SERVER and passed down: this is a client
@@ -98,6 +99,10 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
   // may depend on a session" SSR guarantee intact.
   tagOverrides?: Record<string, string>;
   tagCategories?: TagDisplayCategory[];
+  /** raw tag key -> canonical key (tag_alias). Same server-read rule as above. */
+  tagAliases?: Record<string, string>;
+  /** canonical tag key -> the chosen display name (facet_label_override). */
+  tagLabels?: Record<string, string>;
 }) {
   const trailerKey      = enriched?.trailerYoutubeKey ?? null;
   const steamTrailerUrl = enriched?.steamTrailerUrl ?? null;
@@ -265,7 +270,20 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
         type TagGroup = { id: string; label: string; kind: "tag"; items: { key: string; label: string }[] };
         type PlainGroup = { id: string; label: string; kind: "plain"; items: string[] };
         const groups: (TagGroup | PlainGroup)[] = groupTagsByCategory(
-          [...tags, ...keywords].map((t) => ({ key: tagKey(t), label: t })),
+          // 2026-09-03 — canonicalize, THEN relabel. This block used to build
+          // `{ key: tagKey(t), label: t }` straight from the merged strings,
+          // which is the only tag surface in the app that never met the alias
+          // layer. Two things were wrong with it, and Nils hit both: a bundled
+          // member kept rendering under its own spelling ("the other name
+          // should then never be displayed again"), and an item carrying two
+          // members of one bundle showed the same tag as two chips.
+          //
+          // groupTagsByCategory already dedupes by key, so canonicalizing first
+          // collapses the duplicate for free.
+          [...tags, ...keywords].map((t) => {
+            const canonical = tagAliases[tagKey(t)] ?? tagKey(t);
+            return { key: canonical, label: tagLabels[canonical] ?? t };
+          }),
           tagOverrides,
           tagCategories,
         ).map((g) => ({ id: g.id, label: g.label, kind: "tag" as const, items: g.items }));
@@ -301,7 +319,22 @@ export default function LowerSections({ enriched, type, tagOverrides = {}, tagCa
                               className="text-xs px-2 py-1 rounded-md bg-surface-elevated border border-border-strong outline-none shadow-xl whitespace-nowrap text-text-primary"
                             />
                           </div>
-                          <FacetLink kind="tag" label={it.label} className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125" style={facetChipStyle({ kind: "tag", category: g.id })} />
+                          {/* ⚠️ The href comes from the KEY, not from FacetLink,
+                              which re-derives one by slugifying the LABEL. That
+                              was harmless while the two were built from the same
+                              string; it stops being harmless the moment a tag can
+                              be renamed, because the address would then follow the
+                              display name and point at a facet page that does not
+                              exist. `publicFacetHref` slugs the key, so the key is
+                              what has to be handed over. Same for a bundled member,
+                              whose canonical key is not its own. */}
+                          <Link
+                            href={buildFacetHref({ kind: "tag", key: it.key, label: it.label })}
+                            className="text-xs px-2 py-0.5 rounded-full transition-all hover:brightness-125"
+                            style={facetChipStyle({ kind: "tag", category: g.id })}
+                          >
+                            {it.label}
+                          </Link>
                         </div>
                       ))
                     : g.items.map((it) => (

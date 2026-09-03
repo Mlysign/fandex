@@ -10,6 +10,8 @@ import { getUserCountry } from "@/lib/userCountry";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import ItemView from "@/components/item/ItemView";
 import { getTagCategories, getTagCategoryOverrides } from "@/lib/scoringConfig";
+import { getTagAliases } from "@/lib/tagAlias";
+import { getFacetLabelOverrides } from "@/lib/facetLabel";
 import { buildItemJsonLd, jsonLdScript } from "@/lib/jsonLd";
 import { buildLocalRails } from "@/lib/detail/relatedRails";
 import { log, errorFields } from "@/lib/logger";
@@ -128,6 +130,20 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
   // and tag_category_override is a handful of rows.
   const tagOverrides = Object.fromEntries(getTagCategoryOverrides());
   const tagCategories = getTagCategories().map((c) => ({ id: c.id, label: c.label, color: c.color }));
+  // 2026-09-03 — tag bundling and chosen display names, read here for the same
+  // reason as the two above: LowerSections is a CLIENT component, so it cannot
+  // import tagAlias.ts or facetLabel.ts (both reach db.ts, and that module graph
+  // is a 500 with tsc, lint and every test green). Both maps are global
+  // editorial state, so passing them as props keeps the HTML viewer-independent.
+  //
+  // ⚠️ This surface is why the fix needed three call sites rather than one. The
+  // item page renders the merged tag STRINGS, which never went through an alias
+  // layer at all, so a bundled member kept showing its own spelling on the
+  // most-read page in the app.
+  const tagAliases = Object.fromEntries(getTagAliases());
+  const tagLabels = Object.fromEntries(
+    [...getFacetLabelOverrides()].flatMap(([k, v]) => (k.startsWith("tag|") ? [[k.slice(4), v]] : [])),
+  );
 
   // Both related rails, server-rendered (2026-08-23). This is what stops the
   // item page being a crawl dead-end: before it, `/movie/dune-part-two` emitted
@@ -161,7 +177,7 @@ export default async function ItemPage({ params }: { params: Promise<Params> }) 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(buildItemJsonLd(found.item, canonical)) }}
       />
-      <ItemView item={found.item} tagOverrides={tagOverrides} tagCategories={tagCategories} relatedRails={relatedRails} />
+      <ItemView item={found.item} tagOverrides={tagOverrides} tagCategories={tagCategories} tagAliases={tagAliases} tagLabels={tagLabels} relatedRails={relatedRails} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   setIpAlias, deleteIpAlias, deleteIpBundle,
   setItemIpOverride, deleteItemIpOverride,
 } from "@/lib/ipAlias";
+import { setFacetLabel } from "@/lib/facetLabel";
 
 // /api/dev/scoring/franchises — the Taxonomy panel's Franchises section.
 //
@@ -42,6 +43,11 @@ export const POST = withScoringAdmin(async (req: NextRequest) => {
     switch (body.action) {
       case "bundle":
         setIpAlias(body.alias, body.canonical);
+        // 2026-09-03. In the SAME request as the bundle, not a follow-up call:
+        // Nils asked for the name as part of bundling, and two requests would
+        // leave a window where the two franchises are folded under a name
+        // nobody chose.
+        if (body.displayLabel) setFacetLabel("ip", body.canonical, body.displayLabel);
         break;
       case "unbundle":
         deleteIpAlias(body.alias);

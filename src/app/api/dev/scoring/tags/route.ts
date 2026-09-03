@@ -4,6 +4,7 @@ import { withScoringAdmin } from "@/lib/devAdmin";
 import { getTagVocab, getRawTagCounts } from "@/lib/discovery";
 import { getTagCategoryOverrides } from "@/lib/scoringConfig";
 import { listTagBundles } from "@/lib/tagAlias";
+import { getFacetLabelOverrides } from "@/lib/facetLabel";
 import { categorizeTag } from "@/lib/tags";
 
 // GET /api/dev/scoring/tags?category=<id>&q=<search>&limit=<n> — the tag admin
@@ -23,10 +24,16 @@ export const GET = withScoringAdmin(async (req: NextRequest) => {
   const overrides = getTagCategoryOverrides();
   const rawCounts = getRawTagCounts();
   const bundlesByCanonical = new Map(listTagBundles().map((b) => [b.canonical, b.members]));
+  // 2026-09-03: v.label already IS the chosen display name (applyTagAliases
+  // resolves it before the vocab is built), so the table shows what the site
+  // shows. This map only says whether that name was CHOSEN, so the picker can
+  // offer a revert and mark the current one.
+  const chosenNames = getFacetLabelOverrides();
 
   const rows = getTagVocab().map((v) => ({
     key: v.key,
     label: v.label,
+    labelOverridden: chosenNames.has(`tag|${v.key}`),
     count: v.count,
     category: overrides.get(v.key) ?? categorizeTag(v.key),
     overridden: overrides.has(v.key),

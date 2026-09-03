@@ -243,7 +243,9 @@ export const ScoringPreviewSchema = z.object({
 // no others: `attach` takes a free-text label (normalized through ipKey on the
 // way in), while `detach`/`clear` address an EXISTING facet by its key.
 export const FranchiseActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("bundle"), alias: z.string().min(1), canonical: z.string().min(1) }),
+  // `displayLabel` (2026-09-03) rides along with the bundle so the name is chosen
+  // in the same click that folds the two franchises together.
+  z.object({ action: z.literal("bundle"), alias: z.string().min(1), canonical: z.string().min(1), displayLabel: z.string().min(1).max(200).optional() }),
   z.object({ action: z.literal("unbundle"), alias: z.string().min(1) }),
   z.object({ action: z.literal("dissolve"), canonical: z.string().min(1) }),
   z.object({ action: z.literal("attach"), mediaItemId: z.string().min(1), label: z.string().min(1).max(200) }),
@@ -252,7 +254,19 @@ export const FranchiseActionSchema = z.discriminatedUnion("action", [
 ]);
 
 // POST /api/dev/scoring/aliases — bundle member tag spellings under one canonical.
+//
+// `displayLabel` (2026-09-03) rides along with the bundle rather than needing a
+// second request, so choosing a name is part of the same click that folds the
+// tags. Optional: an omitted one leaves whatever name the facet already shows.
 export const TagAliasPostSchema = z.object({
   canonical: z.string().min(1),
   members: z.array(z.string().min(1)).min(1),
+  displayLabel: z.string().min(1).max(200).optional(),
+});
+
+// POST /api/dev/scoring/labels — which spelling of a facet people see.
+export const FacetLabelPostSchema = z.object({
+  kind: z.enum(["tag", "ip"]),
+  key: z.string().min(1),
+  label: z.string().min(1).max(200),
 });

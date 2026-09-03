@@ -9,6 +9,7 @@ import { getDerivedForItem, peekDerivedBatch, derivedSignature, type Derived, ty
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { facetId, type FacetKind, type FacetRole } from "@/lib/facets";
 import { applyTagAliases, getTagAliases } from "@/lib/tagAlias";
+import { getFacetLabelOverrides } from "@/lib/facetLabel";
 import { applyIpFacets, getIpAliases, getItemIpOverrides } from "@/lib/ipAlias";
 import { getScoringConfig, getTagCategoryOverrides, scoringConfigSignature } from "@/lib/scoringConfig";
 import type { MediaLink, MediaType } from "@/types";
@@ -235,6 +236,9 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
   // separate averages. Fetched once for the loop, like `aliases`.
   const ipAliases = getIpAliases();
   const ipOverrides = getItemIpOverrides();
+  // Fetched once for the whole pass, like the two maps above: getFacetLabelOverrides
+  // signature-checks its cache, and that must not happen per item.
+  const labels = getFacetLabelOverrides();
   // Q31 (2026-07-19): an admin-reassigned tag (tag_category_override) must win
   // over categorizeTag()'s code heuristic HERE too — buildProfile() already
   // resolves it this way for scoring, but Insights was still showing every
@@ -268,7 +272,7 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
       sources: rawLinks.map((l) => ({ source: l.source, sourceId: l.sourceId })),
     });
 
-    for (const f of applyIpFacets(applyTagAliases(rawFacets, aliases), item.id, { aliases: ipAliases, overrides: ipOverrides })) {
+    for (const f of applyIpFacets(applyTagAliases(rawFacets, aliases, labels), item.id, { aliases: ipAliases, overrides: ipOverrides, labels })) {
       const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
       const category = f.kind === "tag" ? (tagOverrides.get(f.key) ?? f.category) : f.category;
       const prom = f.prominence ?? 1; // Q30: 1 for everything except cast
