@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { initDb, run, get, query } from "./db";
-import { canMerge, mergeAccounts, accountHasUserData, providersFor } from "./accountMerge";
+import { canMerge, mergeAccounts, accountHasUserData, providersFor, mergeConflicts } from "./accountMerge";
 
 // Connecting a provider that already belongs to ANOTHER Fandex account.
 //
@@ -68,15 +68,15 @@ describe("canMerge — the rules, decided before anything is written", () => {
     expect(canMerge(B, A)).toEqual({ ok: false, reason: "provider-taken", provider: "discord" });
   });
 
-  it("REFUSES when both accounts hold library rows", () => {
-    // Not in the original spec, deliberately: the spec assumes the signed-in
-    // account is the throwaway one. When both are real, a merge has to pick a
-    // winner per clash, and silently discarding ratings is worse than refusing.
+  it("ALLOWS it when both hold rows — overlap is resolved, not refused", () => {
+    // This used to refuse. Nils: "it should give me a merge form for me to
+    // decide and then execute the merge right after." So the only hard refusal
+    // left is provider-taken; everything else is a question for the form.
     mkIdentity(A, "google", "g-1");
     mkIdentity(B, "discord", "d-1");
     mkState(A, "film-1");
     mkState(B, "film-2");
-    expect(canMerge(B, A)).toEqual({ ok: false, reason: "both-have-data" });
+    expect(canMerge(B, A)).toEqual({ ok: true });
   });
 
   it("allows it when only the TARGET has data, which is the common case", () => {
@@ -102,7 +102,7 @@ describe("mergeAccounts — the data actually moves", () => {
     mkIdentity(A, "google", "g-1");
     mkIdentity(B, "discord", "d-1");
 
-    const r = mergeAccounts(B, A);
+    const r = mergeAccounts(B, A, "keep-theirs");
 
     expect(r.ok).toBe(true);
     expect(providersFor(A).sort()).toEqual(["discord", "google"]);
@@ -114,7 +114,7 @@ describe("mergeAccounts — the data actually moves", () => {
     mkIdentity(B, "discord", "d-1");
     mkState(B, "film-2");
 
-    mergeAccounts(B, A);
+    mergeAccounts(B, A, "keep-theirs");
 
     expect(
       get<{ n: number }>("SELECT COUNT(*) n FROM user_item_state WHERE user_id = ?", [A])?.n,
@@ -127,7 +127,7 @@ describe("mergeAccounts — the data actually moves", () => {
     mkIdentity(B, "discord", "d-1");
     mkState(A, "film-1");
 
-    mergeAccounts(B, A);
+    mergeAccounts(B, A, "keep-theirs");
 
     const rows = query<{ media_item_id: string }>(
       "SELECT media_item_id FROM user_item_state WHERE user_id = ?", [A],
@@ -146,7 +146,7 @@ describe("mergeAccounts — the data actually moves", () => {
     mkIdentity(B, "discord", "d-new");
     mkState(B, "film-2");
 
-    const r = mergeAccounts(B, A);
+    const r = mergeAccounts(B, A, "keep-theirs");
 
     expect(r.ok).toBe(false);
     expect(providersFor(B)).toEqual(["discord"]);
@@ -158,7 +158,7 @@ describe("mergeAccounts — the data actually moves", () => {
 
   it("is a no-op when both ids are the same account", () => {
     mkIdentity(A, "google", "g-1");
-    const r = mergeAccounts(A, A);
+    const r = mergeAccounts(A, A, "keep-theirs");
     expect(r).toEqual({ ok: true, movedTables: [] });
     expect(get<{ n: number }>("SELECT COUNT(*) n FROM users WHERE id = ?", [A])?.n).toBe(1);
   });
@@ -179,11 +179,104 @@ describe("mergeAccounts — the data actually moves", () => {
       [B],
     );
 
-    mergeAccounts(B, A);
+    mergeAccounts(B, A, "keep-theirs");
 
     expect(
       get<{ n: number }>("SELECT COUNT(*) n FROM user_episode_state WHERE user_id = ?", [A])?.n,
     ).toBe(1);
     expect(get<{ n: number }>("SELECT COUNT(*) n FROM sync_log WHERE user_id = ?", [A])?.n).toBe(1);
+  });
+});
+
+describe("mergeConflicts — what the form has to show", () => {
+  beforeEach(() => {
+    mkIdentity(A, "google", "g-1");
+    mkIdentity(B, "discord", "d-1");
+  });
+
+  it("counts only rows that actually collide on the unique key", () => {
+    mkState(A, "shared-film");   // same (item, source, relation) on both
+    mkState(B, "shared-film");
+    mkState(B, "only-on-b");     // moves with no decision
+    mkState(A, "only-on-a");     // never moves; it is already home
+
+    const c = mergeConflicts(B, A);
+
+    expect(c.itemState).toBe(1);
+    expect(c.episodeState).toBe(0);
+    // B holds 2 rows; 1 collides, so 1 is clean.
+    expect(c.cleanRows).toBe(1);
+    expect(c.sampleTitles).toEqual(["shared-film"]);
+  });
+
+  it("does not count the same title under a DIFFERENT relation as a clash", () => {
+    // Wishlisted on one account and in the library on the other is not a
+    // conflict: the unique key includes `relation`, so both rows coexist.
+    mkState(A, "film-x", "library");
+    mkState(B, "film-x", "wishlist");
+    expect(mergeConflicts(B, A).itemState).toBe(0);
+  });
+
+  it("reports nothing to decide when the accounts do not overlap", () => {
+    mkState(A, "film-1");
+    mkState(B, "film-2");
+    const c = mergeConflicts(B, A);
+    expect(c.itemState + c.episodeState).toBe(0);
+    expect(c.cleanRows).toBe(1);
+  });
+});
+
+describe("the resolution decides which copy survives", () => {
+  beforeEach(() => {
+    mkIdentity(A, "google", "g-1");
+    mkIdentity(B, "discord", "d-1");
+    // One clash and one clean row on each side.
+    mkState(A, "shared-film");
+    mkState(B, "shared-film");
+    mkState(A, "only-on-a");
+    mkState(B, "only-on-b");
+  });
+
+  const rowsFor = (u: string) =>
+    query<{ id: string; media_item_id: string }>(
+      "SELECT id, media_item_id FROM user_item_state WHERE user_id = ? ORDER BY media_item_id", [u],
+    );
+
+  it("keep-mine keeps the SIGNED-IN account's copy of the clash", () => {
+    mergeAccounts(B, A, "keep-mine");
+
+    const rows = rowsFor(A);
+    expect(rows.map((r) => r.media_item_id)).toEqual(["only-on-a", "only-on-b", "shared-film"]);
+    // The surviving clash row is B's, identified by the id B's fixture gave it.
+    expect(rows.find((r) => r.media_item_id === "shared-film")!.id).toContain(B);
+  });
+
+  it("keep-theirs keeps the OTHER account's copy of the clash", () => {
+    mergeAccounts(B, A, "keep-theirs");
+
+    const rows = rowsFor(A);
+    expect(rows.map((r) => r.media_item_id)).toEqual(["only-on-a", "only-on-b", "shared-film"]);
+    expect(rows.find((r) => r.media_item_id === "shared-film")!.id).toContain(A);
+  });
+
+  it("moves the non-overlapping rows either way — 'merge where possible'", () => {
+    // The half that needs no decision must be identical under both choices.
+    mergeAccounts(B, A, "keep-mine");
+    expect(rowsFor(A).map((r) => r.media_item_id)).toContain("only-on-b");
+    expect(rowsFor(A).map((r) => r.media_item_id)).toContain("only-on-a");
+  });
+
+  it("leaves exactly one row per key, so the unique index is intact", () => {
+    mergeAccounts(B, A, "keep-theirs");
+    const dupes = query<{ n: number }>(
+      `SELECT COUNT(*) n FROM user_item_state WHERE user_id = ?
+        GROUP BY media_item_id, source, relation HAVING COUNT(*) > 1`, [A],
+    );
+    expect(dupes).toEqual([]);
+  });
+
+  it("deletes the merged-away account under either resolution", () => {
+    mergeAccounts(B, A, "keep-mine");
+    expect(get<{ n: number }>("SELECT COUNT(*) n FROM users WHERE id = ?", [B])?.n).toBe(0);
   });
 });

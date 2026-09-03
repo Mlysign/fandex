@@ -63,8 +63,15 @@ The three findings that decided it, so nobody re-derives them:
   `userScopedTables()` erasure already uses. ⚠️ **Refuses, with Nils's wording, when the target
   already signs in with that provider.** ⚠️ **Also refuses when BOTH accounts hold library rows** —
   not in the spec, added deliberately: `user_item_state` is unique on
-  `(user_id, media_item_id, source, relation)`, so merging two real libraries needs a conflict rule
-  and silently discarding one side is worse than saying so. → `src/lib/accountMerge.ts`
+  `(user_id, media_item_id, source, relation)`. **Second pass the same day**, after Nils hit that
+  refusal: overlapping titles now open a **merge form** instead (*"it should give me a merge form
+  for me to decide and then execute the merge right after"*). Everything non-overlapping moves with
+  no decision; the overlap is counted, sampled by title, and resolved by an explicit
+  keep-mine / keep-theirs choice. ⚠️ **No option is preselected** — a default would be the silent
+  winner-picking the form exists to replace. ⚠️ The decision arrives on a LATER request than the
+  OAuth callback, so a short-lived signed cookie carries the proof; the execute route checks **both**
+  that cookie and that the live session is still the `from` account. → `src/lib/accountMerge.ts`,
+  `src/lib/pendingMerge.ts`
   - **⬜ Nils's own prod state**: the stray empty Discord account still exists. Signing in with
     Discord and then connecting Google now performs the merge he expected, which cleans it up.
 

@@ -14,6 +14,7 @@ import SignInGate from "@/components/auth/SignInGate";
 import GoogleMark from "@/components/auth/GoogleMark";
 import PlatformPicker from "@/components/settings/PlatformPicker";
 import MediaTypePicker from "@/components/settings/MediaTypePicker";
+import MergePanel from "@/components/settings/MergePanel";
 import type { PlatformOption } from "@/lib/platformKeys";
 import { resetKnownPlatforms } from "@/lib/useKnownPlatforms";
 import { resetSessionProbe } from "@/lib/sessionProbe";
@@ -84,11 +85,12 @@ function SettingsContent() {
         ok: false,
       };
     }
+    // `both-have-data` used to be a dead end here. It is now the merge FORM
+    // (MergePanel below) — Nils: "it should give me a merge form for me to
+    // decide and then execute the merge right after". Kept only so an in-flight
+    // redirect from the old build does not show a blank notice.
     if (linkError === "both-have-data") {
-      return {
-        msg: "Both accounts have titles saved, so joining them would have to discard one side. Nothing was changed. Move what you want across by hand, or delete the account you no longer need first.",
-        ok: false,
-      };
+      return { msg: "That account also has titles saved. Choose what to keep below.", ok: false };
     }
     if (connected) return { msg: `${connected} connected successfully.`, ok: true };
     if (error) return { msg: `Connection failed: ${error}`, ok: false };
@@ -499,6 +501,12 @@ function SettingsContent() {
             {notice.msg}
           </div>
         )}
+
+        {/* The merge decision, ABOVE the account list on purpose: it is the
+            reason the page was opened, and the list underneath is about to
+            change. Renders nothing when there is no pending merge, so it costs
+            one cheap request on a normal visit. */}
+        <MergePanel onDone={(msg) => setNotice({ msg, ok: true })} />
 
         {/* Connected accounts */}
         <section className="space-y-3">

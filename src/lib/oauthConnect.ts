@@ -6,7 +6,8 @@ import { get, run } from "@/lib/db";
 import { createSession, getSession, setSessionCookie } from "@/lib/session";
 import { verifyOAuthState, clearOAuthState, readOAuthReturn, clearOAuthReturn } from "@/lib/oauthState";
 import { encryptSecret, encryptNullable } from "@/lib/crypto";
-import { mergeAccounts } from "@/lib/accountMerge";
+import { mergeAccounts, canMerge, mergeConflicts } from "@/lib/accountMerge";
+import { signPendingMerge, setPendingMergeCookie } from "@/lib/pendingMerge";
 import type { AuthProvider } from "@/types";
 
 // Normalized profile every OAuth provider resolves to after exchanging its code.
@@ -90,18 +91,49 @@ export async function handleOAuthCallback(
       // get back to. `canMerge` refuses rather than inventing an answer when the
       // target already signs in with one of our providers, or when both sides
       // hold real library state.
-      const outcome = mergeAccounts(existingUserId, identity.user_id);
-      if (!outcome.ok) {
-        log.info("oauth_link_refused", {
-          provider: opts.provider, reason: outcome.reason,
-          conflicting: outcome.reason === "provider-taken" ? outcome.provider : undefined,
-        });
+      const guard = canMerge(existingUserId, identity.user_id);
+      if (!guard.ok) {
+        log.info("oauth_link_refused", { provider: opts.provider, conflicting: guard.provider });
         // BOTH provider names, because the message names two different roles:
         // `provider` is the one being connected, `conflict` is the one already
         // taken on the other account. A single name made the copy read "log in
         // with discord, disconnect discord", which is nonsense.
-        const conflict = outcome.reason === "provider-taken" ? `&conflict=${outcome.provider}` : "";
-        return fail(`/settings?linkError=${outcome.reason}&provider=${opts.provider}${conflict}`);
+        return fail(
+          `/settings?linkError=provider-taken&provider=${opts.provider}&conflict=${guard.provider}`,
+        );
+      }
+
+      // ⚠️ OVERLAPPING TITLES ARE THE USER'S CALL. Nils: "it should give me a
+      // merge form for me to decide and then execute the merge right after."
+      // So this parks a signed proof that both accounts were just demonstrated
+      // to be the same person's, and hands the decision to /settings. Nothing is
+      // written here — a merge that picked a winner on its own is exactly what
+      // the form exists to prevent.
+      const conflicts = mergeConflicts(existingUserId, identity.user_id);
+      if (conflicts.itemState > 0 || conflicts.episodeState > 0) {
+        const pending = await signPendingMerge({
+          from: existingUserId, into: identity.user_id, provider: opts.provider,
+        });
+        log.info("oauth_merge_needs_resolution", {
+          provider: opts.provider,
+          itemState: conflicts.itemState, episodeState: conflicts.episodeState,
+        });
+        const res = NextResponse.redirect(new URL("/settings?mergePending=1", base));
+        clearOAuthState(res);
+        clearOAuthReturn(res);
+        setPendingMergeCookie(res, pending);
+        return res;
+      }
+
+      // No overlap: "merge where possible" needs no decision, so it just happens.
+      // The resolution is irrelevant here by construction and passed only to
+      // satisfy the signature.
+      const outcome = mergeAccounts(existingUserId, identity.user_id, "keep-theirs");
+      if (!outcome.ok) {
+        log.info("oauth_link_refused", { provider: opts.provider, conflicting: outcome.provider });
+        return fail(
+          `/settings?linkError=provider-taken&provider=${opts.provider}&conflict=${outcome.provider}`,
+        );
       }
       mergedFrom = existingUserId;
       log.info("oauth_accounts_merged", {
