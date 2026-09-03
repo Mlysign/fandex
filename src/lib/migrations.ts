@@ -1458,6 +1458,43 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 32,
+    name: "taxonomy_suggestion_dismissed: a taxonomy proposal you already said no to",
+    up: (db) => {
+      // 2026-09-03 (Nils): "can you do a sweep of all tags and franchises? the
+      // goal should be to have almost no tag in the other category ... build me
+      // an easy way to review those suggestions and either accept, deny or
+      // correct them right away."
+      //
+      // The suggestions themselves are NOT stored. They are recomputed from the
+      // live catalog on every load, which is the only way they stay true as the
+      // catalog grows: a stored queue would go stale the moment a backfill lane
+      // adds a hundred games, and it would need its own invalidation on every
+      // write path that changes a tag or a franchise.
+      //
+      // Only the NOs need a home. An accepted suggestion stops being generated
+      // by itself (the tag is no longer in "other", the franchise is no longer
+      // separate), but a rejected one comes back on every single load unless the
+      // rejection is remembered. `ref` is the suggestion's stable identity: a
+      // rule id for a tag batch, `alias>canonical` for a merge, `itemId>ipKey`
+      // for a membership.
+      //
+      // No `user_id`, deliberately and by the same rule as tag_alias: this is
+      // GLOBAL editorial state about the catalog, not a per-person preference,
+      // and a user_id column is what makes erasure delete a table's rows
+      // (deleteAccount finds its targets by reading sqlite_master for that
+      // literal name). A catalog table must not have one.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS taxonomy_suggestion_dismissed (
+          kind TEXT NOT NULL,
+          ref TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (kind, ref)
+        )
+      `);
+    },
+  },
 ];
 
 

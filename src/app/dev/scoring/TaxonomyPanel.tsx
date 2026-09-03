@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { TagCategoryConfig } from "./types";
 import TagTable from "./TagTable";
 import FranchisePanel from "./FranchisePanel";
+import ReviewPanel from "./ReviewPanel";
 import { slugify } from "@/lib/slug";
 import { facetColorVar, tagCategoryHex } from "@/lib/facetPalette";
 
@@ -23,9 +24,16 @@ const inputCls = "bg-neutral-950 border border-neutral-700 rounded-md px-2 py-1 
 // does unmount the other two panels, which is what a tab means; what must NOT
 // reset is the panel you are working in when you save a row, and that is fixed
 // in ScoringAdmin (see its `refreshing` note).
-type Section = "categories" | "tags" | "franchises";
+//
+// 2026-09-03, second pass (Nils): "can you do a sweep of all tags and
+// franchises? ... build me an easy way to review those suggestions." Review is
+// first and is the default section, because the other three are where you go to
+// fix ONE thing you already know about, and this is the one that tells you what
+// there is to fix.
+type Section = "review" | "categories" | "tags" | "franchises";
 
 const SECTIONS: { id: Section; label: string }[] = [
+  { id: "review", label: "Review" },
   { id: "categories", label: "Categories" },
   { id: "tags", label: "Tags" },
   { id: "franchises", label: "Franchises" },
@@ -37,7 +45,7 @@ export default function TaxonomyPanel({
   categories: TagCategoryConfig[];
   onChanged: () => void;
 }) {
-  const [section, setSection] = useState<Section>("tags");
+  const [section, setSection] = useState<Section>("review");
 
   return (
     <div className="space-y-4">
@@ -58,6 +66,7 @@ export default function TaxonomyPanel({
         ))}
       </div>
 
+      {section === "review" && <ReviewPanel categories={categories} onChanged={onChanged} />}
       {section === "categories" && <CategoryList categories={categories} onChanged={onChanged} />}
       {section === "tags" && <TagTable categories={categories} onChanged={onChanged} />}
       {section === "franchises" && <FranchisePanel onChanged={onChanged} />}

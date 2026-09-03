@@ -242,6 +242,15 @@ export const TagCategoryOverridePostSchema = z
     message: "tagKey or tagKeys required",
   });
 
+// POST /api/dev/scoring/suggestions — deny a taxonomy proposal (or undo that).
+// `ref` is the suggestion's stable identity: a rule id for a tag batch,
+// `alias>canonical` for a merge, `itemId>ipKey` for a membership.
+export const SuggestionDismissSchema = z.object({
+  kind: z.enum(["tag-category", "franchise-merge", "franchise-member"]),
+  ref: z.string().min(1).max(400),
+  undo: z.boolean().optional(),
+});
+
 // POST /api/dev/scoring/preview — score a sample item with draft weights.
 export const ScoringPreviewSchema = z.object({
   config: ScoringConfigPutSchema,
