@@ -37,9 +37,26 @@ export interface TagRule {
   title: string;
   /** The one-line case for the move, shown on the card. */
   why: string;
-  /** Target category id. Must exist, or be created by `creates` below. */
+  /**
+   * Preferred target category id. Only used verbatim when the live DB has no
+   * row matching any of `categoryAliases` either.
+   */
   category: string;
-  /** Set when the rule's target category does not exist yet. */
+  /**
+   * ⚠️ Other ids that mean the SAME category, checked against the live
+   * `tag_category` table before anything is created.
+   *
+   * This is not a nicety. The three hand-made categories have DIFFERENT IDS IN
+   * EVERY DATABASE, because they were typed in by hand on each one: prod has
+   * `character` / `object` / `mode` ("Character / People", "Prop / Object",
+   * "Mode") holding 233 of Nils's own overrides, while the local dev copy has
+   * `people-characters` / `objects-elements` / `modes`. A rule hard-coding one
+   * set would, on the other database, fall through to `creates` and make a
+   * SECOND category with almost the same name, splitting his work across two
+   * buckets that both look right on screen.
+   */
+  categoryAliases?: string[];
+  /** Used only when neither `category` nor any alias exists in the live table. */
   creates?: { id: string; label: string };
   words?: string[];
   patterns?: RegExp[];
@@ -64,6 +81,13 @@ export const TAG_RULES: TagRule[] = [
       /^retail games with\b/,
       /^media type\b/,
       /\b(4k ultra hd|ultra hd|hdr10|ray tracing|dlss|fsr|\d{2,3} fps)\b/,
+      // "novint falcon support", "multi monitor support", "wii u pro controller
+      // support". Every one of these is a hardware or launcher fact.
+      / support$/,
+      // "secret achievements", "difficulty achievement". `retroachievements` has
+      // no word boundary before "achievements" and is listed by name above.
+      / achievements?$/,
+      /^(nintendo|wii|playstation|sony|microsoft|sega|atari|amiga|commodore) /,
     ],
     words: [
       "achievements", "digital distribution", "humble bundle", "controller support",
@@ -73,6 +97,37 @@ export const TAG_RULES: TagRule[] = [
       "wasd movement", "touch controls", "mouse only", "keyboard only", "cloud saves",
       "steamworks", "denuvo", "drm free", "early access", "game preview",
       "crowd funded", "game reference", "protagonist's name in the title",
+      // ── the prod head ────────────────────────────────────────────────────
+      // Retuned 2026-09-03 against the REAL catalog after the first pass was
+      // measured on a stale local copy: prod carries 11,222 distinct tags to
+      // the dev DB's 6,041, and almost all of the extra ones are IGDB's very
+      // fine-grained release bookkeeping, which the local head barely had.
+      "greatest hits", "games on demand", "playstation tv support", "gamersgate",
+      "onlive", "gog preservation program", "pre order exclusive", "psone classics",
+      "windows store", "nintendo wi fi connection", "nintendo gateway system",
+      "off tv play", "wii u pro controller support", "novint falcon support",
+      "multi monitor support", "stereoscopic 3d", "retroachievements",
+      "pack in game", "launch titles", "japan only", "pc to console port",
+      "reversible cover art", "censored version", "microtransaction",
+      "in game advertising", "fake in game advertising", "product placement",
+      "secret achievements", "difficulty achievement", "online multiplayer achievements",
+      "motion control", "high definition graphics", "dolby digital", "motion blur",
+      "particle system", "full motion video", "color separation", "leaderboard",
+      "stat tracking", "voice chat", "ragdoll physics", "motion capture animation",
+      "in engine cinematic", "licensed soundtrack", "ambient music",
+      "dynamic soundtrack", "cutscene menu", "no hud", "game title announcer",
+      "photo mode", "instant replay", "text dialogue", "game with chapters",
+      "multiplayer lan", "cheat code", "in game map editor", "difficulty level",
+      "unlockable difficulty level", "quicksaving", "character select screen",
+      "high score", "alternate costumes", "color customization", "deliberately retro",
+      "tie in", "playstation home tie in", "trilogy", "interquel",
+      // Production and pop-culture trivia. Real, and never a reason to watch
+      // or skip anything.
+      "wilhelm scream", "pop culture reference", "movie reference", "meme origin",
+      "self referential humor", "fan service", "cameo appearance", "adapted to anime",
+      "book adaptation", "character models based on actual people", "controversy",
+      "japanese games based on western ips", "video game characters that play video games",
+      "women in refrigerators syndrome", "mascot", "non fiction",
       "remastered", "remaster", "port", "re release", "collectors edition",
       "season pass", "microtransactions", "in app purchases", "battle pass",
       "cross platform multiplayer", "cross save", "vr only", "vr supported",
@@ -103,16 +158,9 @@ export const TAG_RULES: TagRule[] = [
     id: "modes",
     title: "How many people play, and how",
     why: "Single player, co-op, PvP and the rest. This is a real axis people filter on, and the Modes category currently holds three tags.",
-    category: "modes",
-    // ⚠️ `modes`, `objects-elements` and `people-characters` were created BY
-    // HAND in the live DB and are not in tags.ts's CATEGORIES, so a fresh
-    // database has no row for any of them. Without a `creates`, accepting this
-    // on such a database would write overrides pointing at an id that does not
-    // exist, and `groupTagsByCategory` buckets an unresolvable id back into
-    // Other — the accept would appear to do nothing at all. On Nils's DB the
-    // rows exist, so the sweep reports `createsCategory: null` and this is
-    // never used.
-    creates: { id: "modes", label: "Modes" },
+    category: "mode",
+    categoryAliases: ["modes", "game-modes"],
+    creates: { id: "mode", label: "Mode" },
     words: [
       "co op", "online co op", "local co op", "co operative", "cooperative",
       "pvp", "pve", "pvpve", "multiplayer", "single player", "singleplayer",
@@ -123,6 +171,9 @@ export const TAG_RULES: TagRule[] = [
       "versus", "1v1", "4 player local", "6 player local", "co op campaign",
       "campaign", "story campaign", "sandbox mode", "new game plus",
       "asymmetric multiplayer", "matchmaking", "dedicated servers",
+      "split screen multiplayer", "4 player co op", "team deathmatch",
+      "player vs player", "ranked match", "griefing", "team killing",
+      "online multiplayer mode", "co op mode",
     ],
   },
   {
@@ -175,10 +226,49 @@ export const TAG_RULES: TagRule[] = [
       "rpg elements", "summoning support", "twin stick control", "mission",
       "missions", "quests", "crafting materials", "base defense", "wave defense",
       "turn order", "cooldowns", "combo system", "stealth kills", "hacking minigame",
+      "difficulty options mechanic",
       "archery", "melee combat", "vehicle combat", "capture the flag",
       "collectibles", "moral decisions", "time management", "automation",
       "replay value", "explorable world", "street racing", "car race",
       "rescue mission", "smuggling (contraband)", "level up", "respawn",
+      // ── the prod head ────────────────────────────────────────────────────
+      // IGDB tags mechanics at a granularity nothing else does, and this is
+      // where most of prod's Other actually lives.
+      "sprinting mechanics", "instant kill", "stealth kill", "character creation",
+      "destructible environment", "regenerating health", "save point",
+      "quick time event", "dual wielding", "fast traveling", "status effects",
+      "auto aim", "fetch quests", "escort mission", "branching storyline",
+      "invisibility", "lock picking", "moving platforms", "respawning",
+      "damage over time", "finishing move", "infinite ammo", "friendly fire",
+      "ranking system", "tech trees", "horde mode", "two handed weapons",
+      "physics manipulation", "weapon modification", "item combination",
+      "gore system", "environmental puzzles", "acrobatics", "gliding",
+      "telekinesis", "special attacks", "shielded enemies", "boss assistance",
+      "linear gameplay", "underwater gameplay", "secret area", "weapons swap",
+      "grapple", "countdown timer", "loot gathering", "party system",
+      "attributes", "skill points in game", "vehicle customization",
+      "button mashing", "swarming enemies", "random encounter", "sneaking mission",
+      "questing", "mana", "collecting", "grind", "vision obstruction",
+      "temporary invincibility", "falling damage", "useable vehicles",
+      "moving bodies", "invisible wall", "interactive environments",
+      "context sensitive", "scripted events", "kill feed", "notoriety system",
+      "fictional currencies", "potion", "treasure chest", "merchants",
+      "vending machine interaction", "hidden room", "recurring boss",
+      "transforming boss", "shape shifting", "necromancy", "fire manipulation",
+      "close quarters combat", "guided by radio", "in game radio", "audio logs",
+      "bots", "auto saving mechanic", "multiple gameplay perspectives",
+      "multiple playable characters", "pick your gender", "surprising character switches",
+      "a.i. companion", "rivaling factions", "descendants of other characters",
+      "drifting", "horse riding", "motorsports", "rally", "sleeping", "camping",
+      "shopping", "interrogation mechanic", "jump scare moment", "falling sequence",
+      "ice stage", "banter during gameplay", "aggressive door opening",
+      "vent crawling", "backtracking mechanic", "been here before",
+    ],
+    patterns: [
+      // "sprinting mechanics", "linear gameplay", "underwater gameplay". IGDB
+      // coins these faster than any word list can keep up with.
+      / (mechanics?|gameplay)$/,
+      / (system|mode)$/,
     ],
   },
   {
@@ -217,6 +307,10 @@ export const TAG_RULES: TagRule[] = [
       "racing game", "sports game", "fighting game", "stealth game",
       "party based", "hero collector", "gacha", "roguelike action",
       "political thriller", "turn based rpg", "old school", "playing cards", "dice",
+      // ⚠️ The single biggest miss in the whole catalog, at 800 appearances.
+      // tags.ts has "role playing" but IGDB writes the genre with its acronym
+      // attached, and nothing folded the two.
+      "role playing (rpg)", "role playing game (rpg)", "srpg", "realism",
     ],
     patterns: [
       // "Automobile Sim", "Flight Simulator", "Life Sim". Providers coin these
@@ -228,8 +322,9 @@ export const TAG_RULES: TagRule[] = [
     id: "characters",
     title: "Who is in it",
     why: "Roles, archetypes and creatures. People & Characters was created for exactly this and holds eight tags.",
-    category: "people-characters",
-    creates: { id: "people-characters", label: "People & Characters" },
+    category: "character",
+    categoryAliases: ["people-characters", "characters", "people"],
+    creates: { id: "character", label: "Character / People" },
     words: [
       "mother", "father", "daughter", "son", "sister", "brother", "grandmother",
       "grandfather", "teacher", "priest", "nun", "pilot", "journalist", "singer",
@@ -255,14 +350,28 @@ export const TAG_RULES: TagRule[] = [
       "non humanoid protagonist", "fox", "goat", "lion", "deer", "gorilla",
       "insects", "black protagonist", "masked superhero", "police officer",
       "special forces", "monk", "nasa", "astronauts",
+      // ── the prod head ────────────────────────────────────────────────────
+      "non player character", "tragic hero", "teenager", "comic book character",
+      "damsel in distress", "skeletons", "pirates", "terrorists", "royalty",
+      "reluctant hero", "secret agent", "sherlock holmes", "james bond",
+      "clone", "healer", "adventurer", "squad", "superpowers", "androgyny",
+      "students", "bats", "rat", "turtle", "sheep", "monkey", "pig", "bees",
+      "giant insects", "tentacles", "nazis", "not so bad guys", "evil organization",
+      "hunter", "innocent people die", "villain turned good", "boss enemies",
+    ],
+    patterns: [
+      // "female antagonist", "young protagonist", "new protagonist in sequel".
+      // Providers coin these endlessly and each one names who is in it.
+      /\b(protagonist|antagonist)\b/,
     ],
   },
   {
     id: "objects",
     title: "Things and creatures on screen",
     why: "Helicopters, swords, horses, spaceships. Objects & Elements exists as a category and has never had a single tag in it.",
-    category: "objects-elements",
-    creates: { id: "objects-elements", label: "Objects / Elements" },
+    category: "object",
+    categoryAliases: ["objects-elements", "objects", "props"],
+    creates: { id: "object", label: "Prop / Object" },
     words: [
       "helicopter", "explosion", "sword", "swords", "katana", "bow and arrow",
       "horse", "bird", "dog", "cat", "chicken", "shark", "wolf",
@@ -322,6 +431,12 @@ export const TAG_RULES: TagRule[] = [
       "irreverent", "sincere", "earnest", "sentimental", "moody", "bleak",
       "affectation", "blunt", "wistful", "anxious", "macabre", "hostility",
       "cliché", "slapstick comedy", "alternative reality",
+      // ── the prod head ────────────────────────────────────────────────────
+      // Trakt's emotion vocabulary, which the Mood set caught about half of.
+      "enthusiastic", "powerful", "comforting", "appreciative", "sympathetic",
+      "exhilarated", "joyous", "introspective", "candid", "reflective",
+      "provocative", "empathetic", "intimate", "antagonistic", "frightened",
+      "never ending", "extreme violence",
     ],
   },
   {
@@ -397,6 +512,17 @@ export const TAG_RULES: TagRule[] = [
       "guitar playing", "central intelligence agency cia",
       "central intelligence agency (cia)", "mafia", "yakuza", "gangs",
       "drug trafficking", "suicide attempt", "terminal illness", "exploitation",
+      // ── the prod head ────────────────────────────────────────────────────
+      "plot twist", "political", "corrupt government", "communism", "anarchism",
+      "liberation", "sadism", "sociopathy", "foreshadowing", "cliffhanger",
+      "unreliable narrator", "heroic sacrifice", "monomyth", "dream sequence",
+      "dark past", "secret history", "time paradox", "radiation", "interrogation",
+      "animal cruelty", "severed limbs", "disfigurement", "sex work",
+      "black market", "police chase", "car chase", "escaping imprisonment",
+      "guerilla warfare", "nuclear bomb", "on the run", "satanism",
+      "professional gaming", "art", "rock music", "pizza", "surveillance camera",
+      "licensed cars", "sports cars", "poisoning", "sex", "british accent",
+      "cross culture language skills", "japanese culture",
       "time", "time machine", "hiding", "fate", "poison", "corpse",
       "semi autobiographical", "narrative", "evolution", "theft", "smuggling",
       "police brutality", "marijuana", "immigrant", "alcoholic", "lesbian",

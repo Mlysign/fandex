@@ -147,6 +147,39 @@ describe("the sweep", () => {
     expect(stats.otherAfterAccepting).toBeGreaterThan(0);
   });
 
+  it("uses the category the DB ALREADY has, whichever id it was given", () => {
+    // The bug this pins, caught by Nils on 2026-09-03 and not by any test:
+    // "you said the categories i created are almost empty. that cant be true."
+    //
+    // He was right. The three hand-made categories have different ids on every
+    // database, because each was typed in by hand — prod calls them `character`
+    // / `object` / `mode` and holds 233 of his own overrides there, while the
+    // dev copy calls them `people-characters` / `objects-elements` / `modes`.
+    // Resolving by the rule's own id would have reported "creates this
+    // category" on prod and, on accept, made a SECOND "Character / People"
+    // beside his, splitting a year of retagging across two buckets that both
+    // look right.
+    gameWithTags("9007", "Sweep Test Seven", ["non player character"]);
+    const card = () => runTaxonomySweep().suggestions
+      .filter((s): s is TagCategorySuggestion => s.kind === "tag-category")
+      .find((s) => s.ref === "characters");
+
+    // Neither spelling exists yet, so the rule brings its own.
+    expect(card()?.createsCategory).toEqual({ id: "character", label: "Character / People" });
+
+    // Now give the DB the OTHER spelling, the one the rule does not prefer.
+    run(
+      `INSERT INTO tag_category (id, label, color, weight, ignored, sort_order)
+       VALUES ('people-characters','People & Characters','#AC9A72',1,0,21)`
+    );
+    invalidateSweepCache();
+    expect(card()?.categoryId).toBe("people-characters");
+    expect(card()?.categoryLabel).toBe("People & Characters");
+    expect(card()?.createsCategory).toBeNull();
+    run(`DELETE FROM tag_category WHERE id = 'people-characters'`);
+    invalidateSweepCache();
+  });
+
   it("proposes a category when one does not exist yet, and stops once it does", () => {
     gameWithTags("9004", "Sweep Test Four", ["deckbuilding"]);
     const mechanics = () => runTaxonomySweep().suggestions

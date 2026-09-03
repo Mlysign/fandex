@@ -125,6 +125,33 @@ function dismissedSet(): Set<string> {
 // ── tag suggestions ───────────────────────────────────────────────────────
 
 /**
+ * Which live category a rule actually targets.
+ *
+ * ⚠️ NEVER trust `rule.category` on its own. The three hand-made categories
+ * carry different ids in every database, because each one was typed in by hand:
+ * prod calls them `character` / `object` / `mode` and holds 233 of Nils's own
+ * overrides under those ids, while the local dev copy calls them
+ * `people-characters` / `objects-elements` / `modes`. Resolving by id alone
+ * would report `createsCategory` on whichever database used the other spelling,
+ * and accepting the card would then make a SECOND category with nearly the same
+ * name — splitting a year of manual retagging across two buckets that both look
+ * correct on screen.
+ *
+ * So: take the first candidate that EXISTS, and only create when none do.
+ */
+function resolveCategory(
+  rule: TagRule,
+  live: Map<string, string>,
+): { id: string; label: string; creates: { id: string; label: string } | null } {
+  for (const id of [rule.category, ...(rule.categoryAliases ?? [])]) {
+    const label = live.get(id);
+    if (label !== undefined) return { id, label, creates: null };
+  }
+  const creates = rule.creates ?? { id: rule.category, label: rule.category };
+  return { id: creates.id, label: creates.label, creates };
+}
+
+/**
  * Candidates are tags whose EFFECTIVE category is "other" and which carry no
  * override. Two deliberate exclusions:
  *
@@ -160,16 +187,15 @@ function tagSuggestions(dismissed: Set<string>): { list: TagCategorySuggestion[]
     if (!tags?.length) continue;
     if (dismissed.has(`tag-category|${rule.id}`)) continue;
     tags.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    const target = resolveCategory(rule, byId);
     list.push({
       kind: "tag-category",
       ref: rule.id,
       title: rule.title,
       why: rule.why,
-      categoryId: rule.category,
-      // A rule that creates its category has no live label to read, so it
-      // supplies its own. Once accepted, the row exists and this reads it.
-      categoryLabel: byId.get(rule.category) ?? rule.creates?.label ?? rule.category,
-      createsCategory: byId.has(rule.category) ? null : (rule.creates ?? null),
+      categoryId: target.id,
+      categoryLabel: target.label,
+      createsCategory: target.creates,
       tags,
       itemsAffected: tags.reduce((n, t) => n + t.count, 0),
     });
