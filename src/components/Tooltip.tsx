@@ -23,6 +23,10 @@ export interface TooltipItem {
   fandexCenter?: number | null;
   linkable?: boolean;
   ids?: Record<string, string | number>;
+  /** The feed could not score this yet and asked the client to resolve it. */
+  fandexPending?: boolean;
+  /** That resolution is still in flight. Distinct from "it came back empty". */
+  fandexResolving?: boolean;
 }
 
 interface DetailResponse { fandexReasons?: Reason[] }
@@ -124,6 +128,26 @@ export function TooltipBody({ item }: { item: TooltipItem }) {
             {item.releaseDate ? format(parseISO(item.releaseDate), "MMM d, yyyy") : "TBA"}
           </p>
           <TypeBadge type={item.type as MediaType} />
+          {/* 2026-09-03 (Nils): "no idea why the baldurs gate tooltip is still
+              not showing scores." It was not showing one because there is not
+              one, and this branch said so only by omission. A date and a type
+              chip are the two things the card underneath already says, so an
+              explainer that shows nothing else reads as an explainer that
+              broke.
+              The three ways a score can be absent are genuinely different and
+              were all rendering identically. `fandexPending` is the feed saying
+              "this row is too thin to score honestly, ask the client"; when
+              that came back empty, the honest answer is that we do not know
+              enough about the title, not silence. Without the flag no score was
+              ever coming (anonymous viewer, or a profile too cold to score
+              from), and there is nothing to explain. */}
+          {item.fandexPending && (
+            <p className="text-xs text-text-secondary">
+              {item.fandexResolving
+                ? "Working out your match…"
+                : "Not enough about this title yet to match it to your taste."}
+            </p>
+          )}
         </>
       )}
     </div>

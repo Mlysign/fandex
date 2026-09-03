@@ -48,7 +48,10 @@ describe("PosterCard's explainer sees the score the card shows", () => {
   });
 
   it("builds tooltipItem from the resolved score, not the payload's", () => {
-    expect(code).toMatch(/tooltipItem\s*=\s*\{\s*\.\.\.item,\s*fandexScore,\s*fandexCenter\s*\}/);
+    // The two locals, not `item.fandexScore` / `item.fandexCenter`. Anything
+    // else the object carries is free to change.
+    expect(code).toMatch(/tooltipItem\s*=\s*\{\s*\.\.\.item,[^}]*\bfandexScore\s*[,}]/);
+    expect(code).toMatch(/tooltipItem\s*=\s*\{\s*\.\.\.item,[^}]*\bfandexCenter\s*[,}]/);
   });
 
   it("uses it on BOTH surfaces: the hover popover and the long-press sheet", () => {

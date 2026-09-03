@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
 import Tooltip, { TooltipBody } from "@/components/Tooltip";
@@ -32,6 +32,9 @@ const LONG_PRESS_MS = 500;
 // A press that wanders further than this is a scroll, not a long-press. Rails
 // scroll horizontally and pages scroll vertically, so both axes count.
 const LONG_PRESS_SLOP_PX = 10;
+// How long the pointer has to rest on a card before the explainer opens. Long
+// enough that sweeping the mouse across a grid opens nothing.
+const HOVER_INTENT_MS = 350;
 
 export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const [hovered, setHovered] = useState(false);
@@ -67,6 +70,49 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
     if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
     pressOrigin.current = null;
   };
+
+  // ── Hover intent, on NATIVE listeners rather than React's ──────────────────
+  //
+  // 2026-09-03 (Nils): "sometimes the tooltip modal stays and does not disappear
+  // any more on web. The repro seems to be rating an item and then being outside
+  // the card when the rating band disappears."
+  //
+  // Cause, measured rather than guessed: React's synthetic `onMouseEnter` /
+  // `onMouseLeave` follow the REACT tree, and a portal is a React child wherever
+  // it renders in the DOM. ActionCells' star picker portals to document.body but
+  // is a React descendant of this card, so moving the pointer down from the Rate
+  // button into the picker is not a "leave" as far as React is concerned. Then
+  // the picker UNMOUNTS under the cursor when you pick a score, React is left
+  // tracking a detached node, and this card never receives another leave event
+  // for the rest of its life. The explainer stays open over the page, and
+  // hovering the next card opens a second one beside it.
+  //
+  // Proved on the reproduction, with both listener kinds attached at once:
+  // native mouseenter 1, native mouseleave 1, tooltip still open. The DOM was
+  // telling the truth the whole time; only the synthetic layer was stuck.
+  //
+  // So hover is tracked natively. Native enter/leave are computed from the DOM
+  // box, which is what "is the pointer over this card" actually means, and they
+  // are unaffected by where a child chooses to render. Gated on `canHover` for
+  // the same reason the React handlers were (see the MB5 note above): a touch
+  // tap synthesises mouseenter, which is what made the explainer pop when you
+  // meant to hit Rate.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !canHover) return;
+    const enter = () => { timer.current = setTimeout(() => setHovered(true), HOVER_INTENT_MS); };
+    const leave = () => {
+      if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+      setHovered(false);
+    };
+    el.addEventListener("mouseenter", enter);
+    el.addEventListener("mouseleave", leave);
+    return () => {
+      el.removeEventListener("mouseenter", enter);
+      el.removeEventListener("mouseleave", leave);
+      if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    };
+  }, [canHover]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (canHover || e.pointerType === "mouse") return;
@@ -124,7 +170,7 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
   // which since the RAWG retirement is most games (a thin IGDB-only row is what
   // `fandexPending` means). Both surfaces get it: hover popover and long-press
   // sheet.
-  const tooltipItem = { ...item, fandexScore, fandexCenter } as TooltipItem;
+  const tooltipItem = { ...item, fandexScore, fandexCenter, fandexResolving: scoreLoading } as TooltipItem;
   const releaseLabel = item.releaseDate
     ? (() => { try { return format(parseISO(item.releaseDate), "MMM yyyy"); } catch { return item.releaseDate; } })()
     : "TBA";
@@ -242,11 +288,6 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
           // this box's rounded shape) now clips itself via its own wrapper's
           // rounded-t-md + overflow-hidden, just above.
           className="group cursor-pointer rounded-md border border-border bg-surface-elevated hover:border-border-strong transition-colors duration-base relative block select-none"
-          // Hover-intent is gated on a hovering pointer: a touch tap
-          // synthesises mouseenter, which is what made the explainer pop when
-          // you meant to hit Rate. See the MB5 note above.
-          onMouseEnter={() => { if (canHover) timer.current = setTimeout(() => setHovered(true), 350); }}
-          onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={cancelPress}
