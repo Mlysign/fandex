@@ -5683,3 +5683,57 @@ resolve overlapping titles when both accounts hold some. A merge switches which 
 session is for and deletes the emptied `users` row, so it mints a new cookie and moves rows
 through the schema-derived `userScopedTables()` erasure uses. Both rules are already
 AGENTS.md invariants. → `src/lib/accountMerge.ts`
+
+---
+
+## The taxonomy sweep, built and worked through 2026-09-03
+
+Nils: "can you do a sweep of all tags and franchises? the goal should be to have almost no
+tag in the 'other' category and franchises cover all their items even spinoffs ... build me
+an easy way to review those suggestions and either accept, deny or correct them right away."
+
+Commits `4d44fb9` (bulk retag), `44b4b4e` (the Review queue), `0adb840` (the category-id fix
+and the prod retune). Design and traps → [[taxonomy-admin-editing]].
+
+### What it does
+
+`/dev/scoring` → Taxonomy → **Review**. Four suggestion kinds, three verbs on every card:
+accept, deny, or correct. Nothing is stored but the NOs (`taxonomy_suggestion_dismissed`,
+migration 32); the suggestions themselves are recomputed from the live catalog on every load,
+which is the only way they stay true as the catalog grows. Accepting posts to the SAME routes
+the manual panels post to, so no suggestion can reach a write path that manual review does
+not already exercise.
+
+### The outcome, measured on prod after
+
+| | before | after |
+|---|---|---|
+| `tag_category_override` | 233 | **1,379** |
+| `ip_alias` (franchise bundles) | ~16 | **49** |
+| hand-attached franchise members | ~450 | **591** |
+| tag categories | 12 | **14** |
+| tags in Other | 95% | **72%** (4,794 of 6,671) |
+
+All 13 tag batches accepted, 33 of 67 merges accepted and 34 denied, all 137 missing members
+added. `mechanics` (205 tags) and `perspective` (6) created; `character` / `object` / `mode`
+REUSED rather than duplicated.
+
+⚠️ **326 tags landed in Meta / Noise, which is weight 0**, so they stopped counting toward
+every user's Fandex Score on the same day. That is the category doing its job, and it is the
+reason scores moved.
+
+### Two things that were wrong first, both caught by Nils
+
+**The category ids differ per database.** The rules hard-coded the dev copy's
+`people-characters` / `objects-elements` / `modes`; prod has `character` / `object` / `mode`
+holding 233 of his own overrides. All three would have fallen through to "create" and made a
+second category with nearly the same name, splitting a year of manual retagging across two
+buckets that both look right on screen. `TagRule.categoryAliases` + `resolveCategory` now take
+the first id the LIVE table has. He caught it from a number: "you said the categories i created
+are almost empty. that cant be true."
+
+**The rules were tuned on the wrong head.** The first pass was measured entirely on
+`data/rr.db`, which carries 6,041 distinct tags to prod's 11,222, and reported as if it were
+the product. Against prod's real vocabulary that pass covered 48% of everything appearing 20+
+times, not the 100% quoted. Retuned to 91%. The biggest single miss was `role playing (rpg)` at
+800 appearances, which `tags.ts` misses because IGDB writes the genre with its acronym attached.
