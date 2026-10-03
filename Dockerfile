@@ -97,12 +97,17 @@ RUN mkdir -p /app/data
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Litestream for continuous SQLite backups (P5). Static Go binary from the release
-# .deb. Backups are OPT-IN: the entrypoint only activates Litestream when
+# Litestream for continuous SQLite backups (P5). A static Go binary.
+# Backups are OPT-IN: the entrypoint only activates Litestream when
 # AWS_S3_BUCKET_NAME is set (the Railway bucket injects the AWS_* creds), otherwise
 # it runs `node server.js` directly.
-ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.deb /tmp/litestream.deb
-RUN dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb
+#
+# Taken from the official image, not the GitHub release .deb. `ADD <url>` makes
+# BuildKit ask GitHub for a cache key on EVERY build, and GitHub answers Railway's
+# builders with a 503 (2026-10-03: two builds in a row, while the same URL returned
+# 200 from anywhere else). Docker Hub is already a dependency via the base image.
+# Same version and the same path the .deb installed to.
+COPY --from=litestream/litestream:0.3.13 /usr/local/bin/litestream /usr/bin/litestream
 COPY litestream.yml /etc/litestream.yml
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
