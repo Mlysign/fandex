@@ -65,10 +65,16 @@ ENV DB_PATH=/app/data/rr.db
 # Cap the V8 heap. Uncapped, V8 sizes itself off the host's RAM (Railway boxes
 # are big) and collects lazily, so RSS ramps into multiple GB of billed memory
 # even when the live set is a few hundred MB (observed 2026-07-20: ~4GB and
-# climbing under crawler load). 1536MB forces GC well before that while leaving
-# generous headroom over the bounded in-process caches; native memory (sharp,
-# SQLite) sits on top. If the app ever OOMs or GC-thrashes, raise to 2048.
-ENV NODE_OPTIONS="--max-old-space-size=1536"
+# climbing under crawler load).
+#
+# 640MB since 2026-10-03, down from 1536. The service now has a 1 GB memory
+# limit on Railway, and a heap ceiling ABOVE the container's limit means a burst
+# gets the process killed before V8 ever tries to collect. Measured the same day
+# with every in-process cache at its cap after 29 days up: 284MB live heap, so
+# this is a bit over twice the warm set. Native memory (sharp, SQLite, zlib) and
+# Litestream (~90MB) sit on top and have to fit under the limit too.
+# ⚠️ Keep this BELOW the Railway limit. If the app GC-thrashes, raise both.
+ENV NODE_OPTIONS="--max-old-space-size=640"
 # glibc opens up to 8 malloc arenas PER CORE and sizes them off the host's core
 # count, not the container's CPU limit. Freed native memory then sits in those
 # arenas instead of going back to the OS, so RSS ratchets up under any
