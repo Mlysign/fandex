@@ -27,7 +27,7 @@ All off or inert by default. Set them in Railway → `releaseradar` → Variable
 
 | variable | default | what it does |
 |---|---|---|
-| `BACKFILL_ENABLED` | off | `1` starts the paced ingest. **ON in prod since 2026-08-28.** |
+| `BACKFILL_ENABLED` | off | `1` starts the paced ingest. ON in prod 2026-08-28 to 2026-10-04; **OFF since**, together with `FACET_SWEEP_ENABLED=0` and `PUBLIC_CATALOG=0` (→ `app-plan.md`). |
 | `BACKFILL_MAX_ITEMS` | 50000 | Stop growing here. **Prod is set to 15000.** |
 | `BACKFILL_PAGES` | 2 | Provider pages per pass. ⚠️ See the warning below. |
 | `CATALOG_BROWSE` | off | `1` lets a ready (type, window) serve browse from the DB at zero provider calls |

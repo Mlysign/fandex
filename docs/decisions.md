@@ -162,9 +162,10 @@ Answered in one rapid-fire pass.
   user's library, so the stored links stay and there is no purge script. ✅ Shipped.
 - **GOG affiliate: DROPPED PERMANENTLY.** Not "later", not "if ads stall". ~€3 per 1,000
   monthly actives, and the free click meter was its only remaining argument.
-- **IGDB licence email: HOLD OFF.** Nothing is blocked, the kill switch is proven, and asking
-  invites a "no" we do not have to live with. **Revisit if Fandex monetizes**, which is when
-  the calculus changes. ⚠️ The "do not contact TMDB or Trakt" constraint does not cover IGDB.
+- **IGDB licence email: HOLD OFF.** ~~Nothing is blocked, the kill switch is proven, and asking
+  invites a "no" we do not have to live with. Revisit if Fandex monetizes.~~ **Superseded
+  2026-10-04: send it now** (see "Decided 2026-10-04"); the Cloudflare Worker's design depends
+  on the answer. ⚠️ The "do not contact TMDB or Trakt" constraint does not cover IGDB.
 - **The 0–10 rating colour and the Fandex Score ramp: one definition each, on the tokens.**
   ✅ Shipped.
 

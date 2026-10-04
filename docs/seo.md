@@ -1,5 +1,12 @@
 # SEO and organic reach
 
+> ⚠️ **The crawl surface is SWITCHED OFF as of 2026-10-04** (`PUBLIC_CATALOG=0` on Railway:
+> robots.txt disallows everything but `/legal/`, the sitemap lists the legal pages only, item,
+> facet and calendar pages send `noindex`). The Next.js site is a private tool until the Expo
+> app and the Cloudflare site replace it → [app-plan.md](app-plan.md). Everything below
+> describes the surface as it behaves when the switch is on, and is the reference for
+> rebuilding it on the Worker.
+
 **Why this file exists.** Monetization went ads-first on 2026-08-19, and the first
 gate is **10,000 pageviews/month**. Nothing in the repo was about getting there.
 This is the reference for what fandex.org exposes to a crawler, what was measured,
