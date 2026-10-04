@@ -17,7 +17,7 @@ export const DATABASE_NAME = 'fandex.db';
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -89,6 +89,26 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       );
     `);
     await stamp(db, (version = 2));
+  }
+
+  if (version < 3) {
+    // What Trakt says is next for each show you are part way through. One row
+    // per show that has been asked about; a null season means "caught up".
+    // `watched_count` is how many of the show's episodes were ticked when Trakt
+    // was asked, so a tick since then is what makes the row stale.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS up_next (
+        media_item_id TEXT PRIMARY KEY NOT NULL,
+        season INTEGER,
+        episode INTEGER,
+        title TEXT,
+        aired_at INTEGER,
+        last_watched_at INTEGER,
+        watched_count INTEGER NOT NULL,
+        checked_at INTEGER NOT NULL
+      );
+    `);
+    await stamp(db, (version = 3));
   }
 }
 

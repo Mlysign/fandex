@@ -13,10 +13,10 @@ code, in a browser.
 |---|---|---|
 | Calendar | One month of popular releases, grouped by day, with a type filter and month arrows. | Worker `/v1/calendar` |
 | Search | Three sections that answer independently: titles on the device, films and shows, games. | On-device SQLite, TMDB direct, Worker `/v1/search/games` |
-| Library | Your library and wishlist, by type, sorted by recency, your rating or title. Asks for sign-in when signed out. | On-device SQLite |
+| Library | Three tabs. **Up next**: the next episode of each show you are part way through, with a tick that marks it watched. **Library** and **Wishlist**: by type, sorted by recency, your rating or title. Asks for sign-in when signed out. | On-device SQLite; Trakt for Up next |
 | Browse | The catalog on the device, most-voted first, by type. Works with no network. | On-device SQLite |
-| Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Shows whether it is in your library or wishlist and what you rated it. | Worker `/v1/items`, on-device SQLite |
-| You | Sign in with Trakt, sign out, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
+| Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
+| You | Sign in with Trakt, sign out, sync Trakt now, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
 Worker to resolve the provider id (fetching the title if nobody holds it) and then replaces itself
@@ -24,23 +24,20 @@ with the item page, so Back returns to the list.
 
 ### What was verified, and what was not
 
-**Verified in a browser on 2026-10-04**, against the live Worker, signed OUT: the first sync put all
-4,559 pool titles into on-device SQLite; the calendar rendered real months for a region the Worker
-had never built; search returned all three sections for "blade runner" with the two held films
-listed once; a show the catalog did not hold opened through the doorway and came back to the search
-on Back; the Library tab asked for sign-in; "Sign in with Trakt" showed a real code from Trakt and
-polled. No console errors in normal use, no horizontal overflow at 375 px.
+Everything below ran on Nils's Pixel 8 on 2026-10-04, from the release APK, against the live Worker
+and his real Trakt account. The signed-out screens were also run in a browser.
 
-**Signed in, verified on the Pixel 8 on 2026-10-04.** Nils approved a code and the rest ran first
-time: the Worker handshake, the pull of his rows (1,952 library, 99 wishlist, his name and three
-providers on the You tab), the Library list with his ratings, and "In your library · played" on an
-item page opened from it.
+| What | Result |
+|---|---|
+| First catalog sync, calendar, search, browse, item page, Back | Work. 4,559 titles on the device. |
+| Sign in through Trakt's page in a browser tab | Works: back in the app, signed in, library present. |
+| Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
+| Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
+| Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
 
-**The browser sign-in is verified too, the same day.** It was written after that first sign-in, in
-answer to it (the code flow was "terrible", his word). Nils signed out and back in through the
-main button: Trakt's page in a browser tab, back into the app, signed in with his library, nothing
-in the log. `fandex://auth/trakt` is a redirect URI on the Trakt app. ⚠️ The reworked code flow
-("Use a code instead", the prefilled link, tap to copy) has not been run since it changed.
+⚠️ **Not run:** the tick on Up next (it would log a real play on his Trakt), the code sign-in
+since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
+again" after Trakt drops a token, and a Trakt token refresh (a token lasts a day; none had expired).
 
 The Trakt app is "Release Calendar" at `developer.trakt.tv/apps` (not under trakt.tv Settings any
 more), and editing it needs GitHub connected there, which Nils did. ⚠️ **Trakt saves a
@@ -50,19 +47,17 @@ verifier. The fix Trakt asks for is an `https://` redirect backed by verified Ap
 needs an `assetlinks.json` on a domain and the release signing certificate. Do it before the app
 is on the Play Store, not before.
 
-**Verified on a Pixel 8 on 2026-10-04**, signed OUT, from the release APK installed over adb: the
-first sync landed all 4,559 titles, and the calendar, search (all three sections for "blade
-runner"), browse, the item page through the doorway, Back, and the Library sign-in prompt all
-worked with nothing in the crash log. Three faults showed up that the browser had hidden, all
-fixed the same day: a re-released 2014 film listed first in October 2026 (TMDB's regional discover
-matches a re-release and answers with the original date; the Worker now drops any card dated
-outside its month, and the calendar screen does too for months stored earlier), an empty band
-under the item page's header (the safe-area inset applied twice; `Screen` takes `headed` for a
-screen under the stack header), and the item page's last line sitting under Android's buttons.
+### Driving the phone from a session
 
-To drive the phone from a session: `adb shell input tap` works, but **check
-`dumpsys window` says `org.fandex.app` has focus before every tap**. The app left the foreground
-once mid-run and three taps landed on the home screen and in the Google app.
+The helpers that did the above are not in the repo (they hold a session's paths), so this is what
+they do. Every tap is found by its text in a `uiautomator dump` and is made only when
+`dumpsys window` says `org.fandex.app` has focus: a blind coordinate tap once landed three taps on
+the home screen and in the Google app. `adb install` hangs without output while Play Protect asks
+"App zum Sicherheitsscan senden?"; the install script answers "Nicht senden", found the same way.
+The bundle task does not see an environment variable as an input, so a build that changes one
+re-runs it by name: `gradlew :app:createBundleReleaseJsAndAssets --rerun assembleRelease`.
+`EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN=1` at build time makes the Trakt sync log what it would change and
+write nothing; that is how the sync was proven before it was allowed to delete.
 
 ## How it is put together
 
@@ -92,6 +87,33 @@ once mid-run and three taps landed on the home screen and in the Google app.
   The Trakt tokens stay on the device (`expo-secure-store` on Android,
   `localStorage` in a browser). The Worker is handed the access token once, asks Trakt whose it is,
   and returns a Fandex session, which the app sends as a bearer header from then on.
+- **Trakt syncs from the device** (`traktSync.ts`). It pulls the seven Trakt lists, matches each
+  title to the catalog (`POST /v1/lookup` by Trakt id and TMDB id, then `resolve` by TMDB id for
+  the few nobody holds, 25 a run), compares with the account's rows whose source is `trakt`, and
+  sends the difference through `PUT /v1/me/state`. It runs on opening the app when the last sync
+  is over six hours old, after signing in, and from the You tab. **The prune invariant is on the
+  device now**, and has four guards: one failed page throws before anything is compared; the
+  comparison is against the Worker's rows, pulled fresh first; a title still waiting to be matched
+  blocks every delete for that run; and a run that would delete more than a tenth of what the
+  account holds is refused. Only `trakt` rows are touched, and an episode ticked in Fandex
+  (sources other than `trakt` alone) is never deleted.
+- **A write goes to Trakt, then the Worker, then the device's copy** (`itemActions.ts`), and a
+  step that fails stops the ones after it. The rules are the site's: a rating marks the title
+  watched or played, is written to every row that already carries a score (the rating shown is
+  the average across providers), and takes the title off the wishlist; clearing a rating keeps
+  the title in the library. Films and shows live on Trakt when the device is signed in to it.
+  Games have no provider that takes a rating, so theirs are source `local`. Steam's rows are
+  never written or deleted from here. ⚠️ **TMDB gets no write-back**: the app has no TMDB user
+  session, so a rating changed here is not changed on TMDB.
+- **Up next asks Trakt, one show at a time** (`upNext.ts`). The Worker's episode catalog stopped
+  being filled when the site did, so the device asks `/shows/{id}/progress/watched` and keeps the
+  answer in `up_next`. A show is asked again when its ticked-episode count moves, or after a day
+  (watched in the last four months) or a week (older). A run asks about twelve shows, most
+  recently watched first; the screen runs up to six passes a visit. The order is the site's: an
+  entry sits at the later of "you watched the one before" and "this one aired".
+- **The Trakt token is refreshed on the device**, without a secret. The redirect sent with the
+  refresh has to be the one the token was issued under, which the device does not record, so it
+  tries the app's address and then the out-of-band URN.
 - **Two public values ship in the app**, as `EXPO_PUBLIC_*`: the TMDB key (TMDB's terms allow it)
   and the Trakt client id (public by construction). `node mobile/scripts/sync-env.mjs` writes them
   into `mobile/.env` from the repo's `.env` without printing them. Anything `EXPO_PUBLIC_*` is
@@ -154,17 +176,12 @@ sideloading and is not a Play upload key.
 
 ## Not built yet, in the order it should be built
 
-1. **Trakt sync on the device.** Pull the library, `POST /v1/lookup` to map ids, `resolve` the
-   misses, write the result through `PUT /v1/me/state` as explicit upserts and deletes. A pull that
-   fails must send nothing. Until this exists the app shows what the Railway site last synced.
-2. **Rate and wishlist from the app.** The write path on the item page, to the Worker and to Trakt
-   and TMDB.
-3. **Google sign-in.** On Android it needs an OAuth client in the Google Cloud console, keyed to
+1. **Google sign-in.** On Android it needs an OAuth client in the Google Cloud console, keyed to
    the package name (`org.fandex.app`) and the signing certificate's SHA-1.
-4. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
+2. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
    so and stops. The form that lets the person choose is not built.
-5. **Up Next**, from Trakt progress, and then the **Kotlin widget** that reads the same SQLite file.
-6. **The Fandex Score on the device.** The catalog copy already carries every item's raw facets;
+3. **The Kotlin widget** for Up next. It reads the `up_next` table in the same SQLite file.
+4. **The Fandex Score on the device.** The catalog copy already carries every item's raw facets;
    what is missing is the taxonomy (`/v1/taxonomy`) and a port of the scoring maths out of
    `discovery.ts`, which is tied to the site's database today.
 

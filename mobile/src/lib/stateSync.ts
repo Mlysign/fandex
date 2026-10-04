@@ -113,7 +113,7 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
 }
 
 /**
- * Mirror an item write the Worker has ACCEPTED into the device's copy, so the
+ * Mirror a write the Worker has ACCEPTED into the device's copy, so the
  * screen shows it without pulling everything again.
  *
  * The stored signature is left alone on purpose. It no longer matches the
@@ -137,6 +137,15 @@ export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Pr
            reviewed_at = excluded.reviewed_at, added_at = excluded.added_at, updated_at = excluded.updated_at`,
         [r.mediaItemId, r.source, r.relation, r.status, r.rating, r.review, r.reviewedAt,
          r.addedAt ?? null, r.mediaItemId, r.source, r.relation, now, now],
+      );
+    }
+    for (const k of write.episodes?.delete ?? []) {
+      await db.runAsync('DELETE FROM episode_state WHERE media_item_id = ? AND season = ? AND episode = ?', [k.mediaItemId, k.season, k.episode]);
+    }
+    for (const e of write.episodes?.upsert ?? []) {
+      await db.runAsync(
+        'INSERT OR REPLACE INTO episode_state (media_item_id, season, episode, watched_at, sources) VALUES (?, ?, ?, ?, ?)',
+        [e.mediaItemId, e.season, e.episode, e.watchedAt, JSON.stringify(e.sources)],
       );
     }
   });

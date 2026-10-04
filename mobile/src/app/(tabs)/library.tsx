@@ -1,19 +1,27 @@
-// Your library and wishlist, from the copy of your rows on this device.
-// Reads no network: it shows what the last sync brought, which is what makes it
-// open instantly and work offline.
+// Your library and wishlist, from the copy of your rows on this device. Those
+// two read no network: they show what the last sync brought, which is what
+// makes them open instantly and work offline. Up next is the exception: it asks
+// Trakt what is next for the shows you are part way through (lib/upNext.ts).
 
 import { useRouter } from 'expo-router';
+import { Check } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Chip, Screen, ScreenTitle, StateBlock, T, TitleRow } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { longDate } from '~/lib/dates';
 import { shelf, shelfCounts, type ShelfRow, type ShelfSort } from '~/lib/db';
-import { color, space } from '~/theme';
+import { TraktAuthError } from '~/lib/trakt';
+import { markEpisodeWatched, refreshUpNext, upNextList, upNextPending, type UpNextEntry } from '~/lib/upNext';
+import { color, radius, space } from '~/theme';
 
 type Relation = 'library' | 'wishlist';
+type Tab = 'upnext' | Relation;
+
+/** Passes of the Up next refresh one visit may run. Each asks Trakt about a dozen shows. */
+const MAX_REFRESH_PASSES = 6;
 
 const TYPES: { key: string | null; label: string }[] = [
   { key: null, label: 'All' },
@@ -35,7 +43,8 @@ export default function LibraryScreen() {
   const auth = useAuth();
   const catalog = useCatalogSync();
 
-  const [relation, setRelation] = useState<Relation>('library');
+  const [tab, setTab] = useState<Tab>('library');
+  const relation: Relation = tab === 'wishlist' ? 'wishlist' : 'library';
   const [type, setType] = useState<string | null>(null);
   const [sort, setSort] = useState<ShelfSort>('added');
   const [rows, setRows] = useState<ShelfRow[]>([]);
@@ -87,6 +96,23 @@ export default function LibraryScreen() {
   }
 
   const total = relation === 'library' ? counts.library : counts.wishlist;
+  const tabs = (
+    <View style={styles.chips}>
+      <Chip label="Up next" selected={tab === 'upnext'} onPress={() => setTab('upnext')} />
+      <Chip label="Library" selected={tab === 'library'} onPress={() => setTab('library')} />
+      <Chip label="Wishlist" selected={tab === 'wishlist'} onPress={() => setTab('wishlist')} />
+    </View>
+  );
+
+  if (tab === 'upnext') {
+    return (
+      <Screen>
+        <ScreenTitle eyebrow="Shows you are part way through" title="Up next" />
+        {tabs}
+        <UpNext />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -95,10 +121,7 @@ export default function LibraryScreen() {
         title={relation === 'library' ? 'Library' : 'Wishlist'}
       />
 
-      <View style={styles.chips}>
-        <Chip label="Library" selected={relation === 'library'} onPress={() => setRelation('library')} />
-        <Chip label="Wishlist" selected={relation === 'wishlist'} onPress={() => setRelation('wishlist')} />
-      </View>
+      {tabs}
       <View style={styles.chips}>
         {TYPES.map((t) => (
           <Chip key={t.label} label={t.label} selected={type === t.key} onPress={() => setType(t.key)} />
@@ -160,7 +183,118 @@ export default function LibraryScreen() {
   );
 }
 
+function UpNext() {
+  const router = useRouter();
+  const db = useSQLiteContext();
+  const auth = useAuth();
+  const catalog = useCatalogSync();
+  const [entries, setEntries] = useState<UpNextEntry[] | null>(null);
+  const [pending, setPending] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [marking, setMarking] = useState<string | null>(null);
+
+  const show = useCallback(async () => {
+    const [list, waiting] = await Promise.all([upNextList(db), upNextPending(db)]);
+    setEntries(list);
+    setPending(waiting);
+  }, [db]);
+
+  // Show what is stored at once, then ask Trakt about the shows that are due,
+  // a few at a time, repainting as each pass lands.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      await show();
+      setRefreshing(true);
+      setError(null);
+      try {
+        for (let pass = 0; pass < MAX_REFRESH_PASSES && live; pass++) {
+          const res = await refreshUpNext(db);
+          if (!live) return;
+          if (res.checked) await show();
+          if (!res.waiting || !res.checked) break;
+        }
+      } catch (e) {
+        if (live) setError(describeTrakt(e));
+      } finally {
+        if (live) setRefreshing(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [db, show, auth.rowsRevision, catalog.revision]);
+
+  const mark = useCallback(async (entry: UpNextEntry) => {
+    setMarking(entry.mediaItemId);
+    setError(null);
+    try {
+      await markEpisodeWatched(db, entry);
+      await show();
+    } catch (e) {
+      setError(describeTrakt(e));
+    } finally {
+      setMarking(null);
+    }
+  }, [db, show]);
+
+  if (entries === null) return <StateBlock loading />;
+
+  if (!entries.length) {
+    // Empty has three causes and they must not look the same: still asking,
+    // could not ask, and nothing to watch.
+    return refreshing ? (
+      <StateBlock loading title="Asking Trakt what is next" />
+    ) : error ? (
+      <StateBlock title="Could not reach Trakt" detail={error} />
+    ) : (
+      <StateBlock title="You are caught up" detail="A show appears here when it has an episode out that you have not watched." />
+    );
+  }
+
+  const status = error ?? (refreshing && pending > 0 ? 'Asking Trakt what is next…' : null);
+  return (
+    <>
+      {status ? <T variant="caption" style={error ? styles.banner : styles.note}>{status}</T> : null}
+      <FlatList
+        data={entries}
+        keyExtractor={(e) => e.mediaItemId}
+        renderItem={({ item }) => (
+          <TitleRow
+            title={item.title}
+            kind="show"
+            posterUrl={item.posterUrl}
+            meta={`S${item.season} E${item.episode}${item.episodeTitle ? ` · ${item.episodeTitle}` : ''}`}
+            onPress={() => router.push(`/item/${item.mediaItemId}`)}
+            right={
+              <Pressable
+                onPress={() => void mark(item)}
+                disabled={marking !== null}
+                accessibilityRole="button"
+                accessibilityLabel={`Mark ${item.title} season ${item.season} episode ${item.episode} as watched`}
+                style={({ pressed }) => [styles.tick, (pressed || marking !== null) && { opacity: 0.5 }]}>
+                {marking === item.mediaItemId
+                  ? <ActivityIndicator size="small" color={color.accent} />
+                  : <Check color={color.accent} size={20} />}
+              </Pressable>
+            }
+          />
+        )}
+      />
+    </>
+  );
+}
+
+function describeTrakt(e: unknown): string {
+  if (e instanceof TraktAuthError) return 'Trakt needs you to sign in again. You can do that on the You tab.';
+  if (e instanceof Error && /Network request failed/i.test(e.message)) return 'No connection. Showing what this device already knows.';
+  return e instanceof Error ? e.message : 'Trakt did not answer.';
+}
+
 const styles = StyleSheet.create({
+  tick: {
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
+  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm },
   banner: { paddingHorizontal: space.lg, paddingBottom: space.sm, color: color.warning },
   note: { paddingHorizontal: space.lg, paddingBottom: space.sm },

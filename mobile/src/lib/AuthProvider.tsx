@@ -25,6 +25,7 @@ import {
   clearTraktTokens, codeFromRedirect, exchangeCode, loadTraktTokens, pollDeviceToken, requestDeviceCode, saveTraktTokens,
   startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, type TraktTokens,
 } from '~/lib/trakt';
+import { clearUpNext } from '~/lib/upNext';
 import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktSyncResult } from '~/lib/traktSync';
 
 const SESSION_KEY = 'fandex.session';
@@ -167,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const forget = useCallback(async () => {
     setSessionToken(null);
-    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db)]);
+    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearUpNext(db)]);
     setTraktSync({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
     setProfile(null);
     setRowsRevision((r) => r + 1);

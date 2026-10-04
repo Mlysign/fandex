@@ -281,6 +281,14 @@ export async function traktList(endpoint: string, accessToken: string, limit = 2
   return out;
 }
 
+/** One Trakt answer that is not a list. Throws on any failure, as traktList does. */
+export async function traktGet(endpoint: string, accessToken: string): Promise<unknown> {
+  const res = await fetch(`${BASE}${endpoint}`, { headers: apiHeaders(accessToken) });
+  if (res.status === 401 || res.status === 403) throw new TraktAuthError();
+  if (!res.ok) throw new Error(`Trakt answered ${res.status} for ${endpoint}.`);
+  return res.json();
+}
+
 /** A write to Trakt: a rating, the watchlist, the history. Throws with Trakt's status on failure. */
 export async function traktPost(endpoint: string, accessToken: string, body: unknown): Promise<void> {
   const res = await fetch(`${BASE}${endpoint}`, { method: 'POST', headers: apiHeaders(accessToken), body: JSON.stringify(body) });
