@@ -176,7 +176,9 @@ at a drive root, and one mapped to the repo root fails because Node resolves the
 real path and Gradle then sees two different roots.
 
 What works is a real short path. Copy `mobile/` and the site's `src/` side by side into one, and
-build there:
+build there. After the first copy only `mobile/src`, `mobile/modules`, `mobile/package.json` and
+the site's `src` need copying again; a new native dependency also needs its whole folder under
+`node_modules` (its `build/` is the JavaScript, do not leave it out).
 
 ```bash
 robocopy mobile C:\fx\mobile /E /XD android\build android\app\build android\.gradle .expo
