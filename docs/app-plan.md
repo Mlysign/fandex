@@ -4,6 +4,28 @@ _Review draft 2, 2026-10-04. The illustrated version with the diagrams and chart
 at https://claude.ai/artifact/BJVFj7tRaqVAWzsFTtecgv (private to Nils). This file is the repo copy
 so the next session does not have to reconstruct it. Not yet decided: see "Open decisions"._
 
+## Where it stands (2026-10-04, end of day)
+
+| Phase | State |
+|---|---|
+| 0. Make the data safe | 🟡 A verified snapshot of the Railway database is in R2 and on disk, and `node scripts/snapshot-prod-to-r2.mjs` repeats it in 40 seconds. The continuous Litestream replica to R2 is built, validated on the box and inert: it waits on two R2 secrets only Nils can create. The restore drill against R2 follows that. |
+| 1. Worker and D1 with accounts | ✅ Built, tested (141 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
+| 2. Minimal app | ⬜ Not started. |
+| 3. Website | ⬜ Its first task, the CPU measurement, has a partial answer already: see below. |
+| 4. Switch over | ⬜ |
+
+**What phase 1 measured that changes the later phases:**
+
+- A Worker read costs 1 to 4 ms of CPU, so the free plan carries the API. The paths that FETCH from
+  a provider reach 10 to 20 ms on a cold isolate. Cloudflare tolerated every one, but this is the
+  same question phase 3 asks about React rendering, and the answer leans the same way: anything
+  heavier than splicing stored strings is at the edge of the free plan.
+- The seed cost exactly the row writes predicted (79,770 of the day's 100,000). The write model in
+  worker.md can be trusted for sizing.
+- D1 holds the pool with its provider blobs in 110 MB of 500. The plan's "11 MB without blobs"
+  figure was not needed: keeping the blobs is what lets the Worker re-derive an item without
+  asking the provider again.
+
 ## Why
 
 The Railway bill was ~€11/month for one real user, and 85% of it was memory held around the clock
@@ -160,8 +182,9 @@ they mean building the UI twice (the web client is Expo's web target for free).
   `BACKFILL_ENABLED=0`, `FACET_SWEEP_ENABLED=0` set on Railway 2026-10-04.
 - **IGDB licence: email partner@igdb.com now.**
 
-Still needed from Nils: R2 enabled on his Cloudflare account and a read/write token for a bucket
-`fandex-litestream` (step 0), and the IGDB email sent.
+Still needed from Nils: an R2 API token for the bucket `fandex-litestream` and its two values set
+on Railway as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (step 0; the bucket, the endpoint and
+the config are done), and the IGDB email sent.
 
 ## Rules that carry over unchanged
 

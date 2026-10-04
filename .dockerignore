@@ -15,3 +15,5 @@ npm-debug.log*
 README.md
 IMPROVEMENTS.md
 TASKS.md
+# The Cloudflare Worker (2026-10-04). Its own package, never part of this image.
+worker

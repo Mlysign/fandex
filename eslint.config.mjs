@@ -40,6 +40,11 @@ const eslintConfig = defineConfig([
     // 1,236 errors against generated chunks. The glob covers whatever the next
     // one is called; the two above stay for the history.
     ".next-*/**",
+    // 2026-10-04: the Cloudflare Worker. Its own package with its own
+    // typecheck and tests (CI's `worker` job); this config's Next and React
+    // rules do not describe it, and its node_modules and .wrangler build output
+    // would be scanned otherwise, for the same reason as the three above.
+    "worker/**",
   ]),
   {
     rules: {

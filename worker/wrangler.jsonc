@@ -1,0 +1,51 @@
+// The Fandex API Worker (docs/app-plan.md, phase 1).
+//
+// One Worker, free tier: the shared catalog in D1, the account layer, the IGDB
+// proxy, and a daily cron. The limits this file is written against, read
+// 2026-10-04: 100k requests/day, 10 ms CPU per request AND per cron run,
+// 50 subrequests and 50 D1 queries per invocation, 100k D1 row writes/day
+// (a hard stop for the rest of the UTC day, and every index is one more write).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fandex-api",
+  "main": "src/index.ts",
+  // Not newer than the workerd the test pool bundles, or the tests cannot start.
+  "compatibility_date": "2026-08-01",
+  // nodejs_compat populates process.env from the bindings, which is what lets
+  // src/lib/sources/{tmdb,igdb}.ts and src/lib/http.ts run here unchanged.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fandex",
+      "database_id": "6daba7e4-ea55-4c72-b297-eb92ada8c581",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "BACKUPS", "bucket_name": "fandex-backups", "jurisdiction": "eu" }
+  ],
+  // One of the account's five cron triggers. Every ten minutes, a small slice
+  // each time: a cron run gets the same 10 ms of CPU a request does, so the
+  // throughput comes from the number of runs, not the size of one. src/cron.ts.
+  "triggers": { "crons": ["*/10 * * * *"] },
+  // Per-location counters, not exact ones. Enough to stop one client turning a
+  // provider-calling or row-writing route into an amplifier.
+  "ratelimits": [
+    { "name": "RL_RESOLVE", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } },
+    { "name": "RL_AUTH", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_WRITE", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+  ],
+  "vars": {
+    // Origins allowed to call the API with credentials. The app's web build
+    // lives on fandex.org; localhost is the Expo web dev server.
+    "ALLOWED_ORIGINS": "https://fandex.org,http://localhost:8081,http://localhost:19006",
+    // New catalog rows the Worker may create per UTC day, across all callers.
+    // One created item costs about 12 row writes, so 2,000 is ~24k of the 100k.
+    "DAILY_FETCH_CAP": "2000"
+  }
+  // Secrets, set with `node scripts/push-secrets.mjs` (never committed):
+  //   JWT_SECRET, TMDB_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET,
+  //   GOOGLE_CLIENT_ID, TRAKT_CLIENT_ID
+}

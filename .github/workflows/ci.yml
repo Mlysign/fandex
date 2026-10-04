@@ -45,6 +45,35 @@ jobs:
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
         run: npm run build
 
+  worker:
+    # The Cloudflare Worker (worker/), its own package. It compiles sixteen of
+    # the site's modules from ../src, so a change there can break it without
+    # touching worker/ at all, which is why this runs on every push and not only
+    # on changes under worker/.
+    #
+    # ⚠️ Railway waits for CI. A red job here blocks the SITE's deploy too.
+    name: Worker · Typecheck · Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      # worker-configuration.d.ts is generated, not committed.
+      - name: Generate runtime types
+        run: npx wrangler types
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Test
+        # Runs inside workerd against a local D1: the same SQLite build as prod.
+        run: npm test
+
   audit:
     name: npm audit
     runs-on: ubuntu-latest

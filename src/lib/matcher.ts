@@ -4,6 +4,7 @@ import { query, run, get, transaction } from "./db";
 import { normalizeName, extractYear, mergeForCanonical } from "./merge";
 import { averageFromMetadata } from "./ratings";
 import { ensureItemSlug } from "./itemSlug";
+import { mergeRawData, extractCrossIds } from "./matcherPure";
 import type { Source, MediaType } from "@/types";
 
 interface SourceItem {
@@ -32,18 +33,10 @@ interface SourceItem {
   thin?: boolean;
 }
 
-// Preserve detail-only fields when a sparser payload re-syncs over a richer one
-// (D9). List endpoints (Steam owned-games = appid/name/playtime, RAWG played-list)
-// omit `developers`/`publishers`/`screenshots` that a prior detail fetch persisted,
-// so a plain overwrite would drop them every sync. Shallow-merge new over old:
-// fresh fields win, but keys absent from the new payload are kept.
-function mergeRawData(prevJson: string | null | undefined, next: any): any {
-  if (!prevJson) return next;
-  let prev: any;
-  try { prev = JSON.parse(prevJson); } catch { return next; }
-  const plain = (v: any) => v && typeof v === "object" && !Array.isArray(v);
-  return plain(prev) && plain(next) ? { ...prev, ...next } : next;
-}
+// `mergeRawData` and `extractCrossIds` live in matcherPure.ts (2026-10-04): they
+// touch no database, and the Cloudflare Worker's D1 write path runs the same two
+// rules. Re-exported here so every existing importer is unchanged.
+export { extractCrossIds };
 
 // Find or create a media_item for the given source item.
 // Returns the media_item_id.
@@ -122,32 +115,6 @@ export function upsertMediaItem(item: SourceItem): string {
 // 0 for a list payload so the first detail read refetches it. See SourceItem.thin.
 function linkVersion(item: SourceItem): number {
   return item.thin ? 0 : PROJECTION_VERSION;
-}
-
-// Cross-reference ids this source item carries (used to tell apart two distinct
-// works that share a title/year — e.g. two different "Dracula" movies).
-export function extractCrossIds(source: Source, rawData: any): Record<string, string> {
-  const ids: Record<string, string> = {};
-  if (!rawData) return ids;
-  switch (source) {
-    case "trakt":
-      if (rawData.ids?.trakt != null) ids.trakt = String(rawData.ids.trakt);
-      if (rawData.ids?.tmdb != null) ids.tmdb = String(rawData.ids.tmdb);
-      break;
-    case "tmdb":
-      if (rawData.id != null) ids.tmdb = String(rawData.id);
-      break;
-    case "letterboxd": {
-      if (rawData.id != null) ids.letterboxd = String(rawData.id);
-      const t = (rawData.links ?? []).find((l: any) => l.type === "tmdb");
-      if (t?.id != null) ids.tmdb = String(t.id);
-      break;
-    }
-    case "rawg":  if (rawData.id != null) ids.rawg = String(rawData.id); break;
-    case "steam": if (rawData.appid != null) ids.steam = String(rawData.appid); break;
-    case "igdb":  if (rawData.id != null) ids.igdb = String(rawData.id); break;
-  }
-  return ids;
 }
 
 function findMatchingItem(item: SourceItem): string | null {

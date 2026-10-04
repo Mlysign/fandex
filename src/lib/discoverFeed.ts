@@ -15,6 +15,7 @@ import { normalizeName, extractYear } from "@/lib/merge";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { discoverIgdbUpcoming, getIgdbSimilarGames, igdbConfigured, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
+import type { IgdbDiscoverShape } from "@/lib/sources/igdb";
 import {
   getTraktAnticipatedMovies, getTraktAnticipatedShows,
   getTraktTrendingMovies, getTraktTrendingShows, traktConfigured,
@@ -341,14 +342,16 @@ export function fetchShowPage(page = 1, direction: Direction = "future", window?
 // pick the ranking from the window instead of refusing to answer — a past month
 // ranks by how many people ended up rating the game. Only the direction-derived
 // path (which spans 18 months back, all of it stale) still no-ops.
-async function igdbGamePage(page: number, direction: Direction, window?: DateRange): Promise<FeedCandidate[]> {
+async function igdbGamePage(
+  page: number, direction: Direction, window?: DateRange, shape: IgdbDiscoverShape = "full"
+): Promise<FeedCandidate[]> {
   if (!igdbConfigured()) return [];
   if (!window && direction === "past") return [];
   const win = window ?? dateWindow(direction);
   const { gte, lte } = win;
   const gteU = Math.floor(new Date(gte).getTime() / 1000);
   const lteU = Math.floor(new Date(lte).getTime() / 1000);
-  const games = await discoverIgdbUpcoming(gteU, lteU, 40, (page - 1) * 40, isPastWindow(win) ? "total_rating_count" : "hypes");
+  const games = await discoverIgdbUpcoming(gteU, lteU, 40, (page - 1) * 40, isPastWindow(win) ? "total_rating_count" : "hypes", shape);
   return games.map((g: any): FeedCandidate => ({
     id: `igdb-${g.id}`, rawId: g.id, source: "igdb", type: "game",
     title: g.name, releaseDate: igdbReleaseDate(g),
@@ -361,7 +364,10 @@ async function igdbGamePage(page: number, direction: Direction, window?: DateRan
       igdbImageUrl(g.screenshots?.[0]?.image_id, "t_720p"),
     platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
     ids: { igdb: g.id },
-    raw: { source: "igdb", sourceId: String(g.id), data: g },
+    // A card-shaped payload is not a link worth storing: it has no keywords,
+    // companies or franchises, and persisting it as a thin row would hand the
+    // detail page a blob it could never render from.
+    raw: shape === "card" ? null : { source: "igdb", sourceId: String(g.id), data: g },
     genreNames: [
       ...(g.genres ?? []).map((x: any) => x?.name),
       ...(g.themes ?? []).map((x: any) => x?.name),
@@ -375,9 +381,19 @@ async function igdbGamePage(page: number, direction: Direction, window?: DateRan
   }));
 }
 
-export function fetchIgdbGamePage(page = 1, direction: Direction = "future", window?: DateRange): Promise<FeedCandidate[]> {
-  return cachedPage(`igdb:${page}:${direction}:${window?.gte ?? ""}:${window?.lte ?? ""}`,
-    () => bestEffort("igdb", () => igdbGamePage(page, direction, window)));
+/**
+ * `shape: "card"` asks IGDB for card fields only and returns candidates with
+ * `raw: null`. For a caller that shows the list and persists nothing (the
+ * Cloudflare Worker's calendar). Every site caller wants the default.
+ *
+ * ⚠️ The shape is in the cache key. A card page served to a caller expecting
+ * full payloads would persist nothing and look like it worked.
+ */
+export function fetchIgdbGamePage(
+  page = 1, direction: Direction = "future", window?: DateRange, shape: IgdbDiscoverShape = "full"
+): Promise<FeedCandidate[]> {
+  return cachedPage(`igdb:${page}:${direction}:${window?.gte ?? ""}:${window?.lte ?? ""}${shape === "card" ? ":card" : ""}`,
+    () => bestEffort("igdb", () => igdbGamePage(page, direction, window, shape)));
 }
 
 // Trakt "anticipated" → candidates keyed by their TMDB id (source "tmdb") so they

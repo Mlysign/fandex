@@ -53,16 +53,50 @@ export function igdbConfigured(): boolean {
 // Cached app access token (Twitch tokens last ~60 days — never mint per request).
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
+// ── A shared home for the token (2026-10-04) ────────────────────────────────
+//
+// The module-level cache above is enough for ONE long-lived process, which is
+// what Railway runs. A Cloudflare Worker is many short-lived isolates, each
+// starting with `cachedToken = null`, so without somewhere shared every cold
+// isolate would mint its own token. Twitch caps how many live app tokens a
+// client id may hold and invalidates the oldest past it, so that is not just
+// waste: it would log the other isolates out mid-request.
+//
+// The Worker registers a store backed by a D1 row. Nothing registers one on
+// Railway, so behaviour there is unchanged. Both halves are best-effort: a
+// store that throws falls through to minting, which is the pre-existing path.
+export interface IgdbTokenStore {
+  get(): Promise<{ token: string; expiresAt: number } | null>;
+  set(t: { token: string; expiresAt: number }): Promise<void>;
+}
+let tokenStore: IgdbTokenStore | null = null;
+export function setIgdbTokenStore(store: IgdbTokenStore | null): void {
+  tokenStore = store;
+}
+
 async function getToken(): Promise<string> {
   if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("IGDB not configured");
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.token;
+  if (tokenStore) {
+    try {
+      const shared = await tokenStore.get();
+      if (shared && shared.expiresAt > now + 60_000) {
+        cachedToken = shared;
+        return shared.token;
+      }
+    } catch { /* fall through to minting */ }
+  }
   const p = new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: "client_credentials" });
   const res = await httpFetch(`${TWITCH_TOKEN_URL}?${p}`, { method: "POST", appScopedAuth: true });
   if (!res.ok) throw new Error(`Twitch token failed: ${res.status}`);
   const data = await res.json();
-  cachedToken = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) * 1000 };
-  return cachedToken.token;
+  const minted = { token: data.access_token as string, expiresAt: now + (data.expires_in ?? 3600) * 1000 };
+  cachedToken = minted;
+  if (tokenStore) {
+    try { await tokenStore.set(minted); } catch { /* the in-memory copy still serves this isolate */ }
+  }
+  return minted.token;
 }
 
 // POST an Apicalypse query body to an IGDB endpoint.
@@ -167,15 +201,29 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
 // it (the same signal discoverIgdbByTag uses).
 export type IgdbDiscoverSort = "hypes" | "total_rating_count";
 
+// What a CARD needs and nothing else (2026-10-04). GAME_FIELDS is the full
+// detail shape, ~5 KB a game, and the site asks for it here because it stores
+// every browsed game as a thin link. The Cloudflare Worker stores only the
+// card, and parsing forty full payloads is most of the 10 ms of CPU a Worker
+// request is allowed. Same query, same ranking, a tenth of the bytes.
+//
+// A closed set like `sort`, never a caller-supplied field list: it is
+// interpolated into the Apicalypse query.
+const GAME_CARD_FIELDS =
+  "fields name,first_release_date,hypes,total_rating,total_rating_count," +
+  "cover.image_id,artworks.image_id,screenshots.image_id,genres.name,themes.name,platforms.name;";
+export type IgdbDiscoverShape = "full" | "card";
+
 export async function discoverIgdbUpcoming(
-  gte: number, lte: number, limit = 40, offset = 0, sort: IgdbDiscoverSort = "hypes"
+  gte: number, lte: number, limit = 40, offset = 0, sort: IgdbDiscoverSort = "hypes",
+  shape: IgdbDiscoverShape = "full"
 ): Promise<any[]> {
   if (!igdbConfigured()) return [];
   const sortField = sort === "total_rating_count" ? "total_rating_count" : "hypes";
   try {
     return await igdbQuery(
       "games",
-      `${GAME_FIELDS} ` +
+      `${shape === "card" ? GAME_CARD_FIELDS : GAME_FIELDS} ` +
         `where first_release_date >= ${safeInt(gte, 0)} & first_release_date <= ${safeInt(lte, 0)} ` +
         `& version_parent = null & parent_game = null; ` +
         `sort ${sortField} desc; limit ${safeInt(limit, 40)}; offset ${safeInt(offset, 0)};`,

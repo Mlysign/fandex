@@ -494,7 +494,19 @@ function retryAfterMs(res: Response, attempt: number): number {
   return Number.isFinite(secs) && secs > 0 ? secs * 1000 : (BACKOFF_MS[attempt] ?? 500);
 }
 
-export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): Promise<Response> {
+/**
+ * A `Response` whose `json()` is `any`, stated rather than assumed (2026-10-04).
+ *
+ * Every caller reads `(await res.json()).someField`, which compiles under the
+ * DOM lib because it types `json()` as `Promise<any>`. The Cloudflare Worker
+ * compiles these same modules against the Workers runtime types, where it is
+ * `Promise<unknown>` and every one of those reads is an error. Saying `any`
+ * here keeps the provider modules compiling in both places without an
+ * annotation at each call site. No runtime effect.
+ */
+export type HttpResponse = Omit<Response, "json"> & { json(): Promise<any> };
+
+export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): Promise<HttpResponse> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, retries, budgetMs, appScopedAuth, ...rest } = init;
   const method = (rest.method ?? "GET").toUpperCase();
   const idempotent = method === "GET" || method === "HEAD";
