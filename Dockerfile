@@ -115,6 +115,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # Same version and the same path the .deb installed to.
 COPY --from=litestream/litestream:0.3.13 /usr/local/bin/litestream /usr/bin/litestream
 COPY litestream.yml /etc/litestream.yml
+# The same, plus a second replica on Cloudflare R2. Inert until the four R2_*
+# variables exist; the entrypoint picks between the two files.
+COPY litestream-r2.yml /etc/litestream-r2.yml
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 

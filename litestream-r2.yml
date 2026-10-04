@@ -1,0 +1,43 @@
+# Litestream config with a SECOND replica on Cloudflare R2 (2026-10-04).
+#
+# Step 0 of docs/app-plan.md: until this is active, the only continuous copy of
+# the database is a bucket provisioned through Railway, and cancelling the
+# Railway plan deletes the volume and that bucket together.
+#
+# docker-entrypoint.sh uses THIS file instead of litestream.yml when
+# R2_ACCESS_KEY_ID is set, and litestream.yml otherwise. So nothing changes on
+# Railway until the two R2 secrets exist, and removing them puts it back.
+#
+# The Railway replica is kept, unchanged and unnamed (its name stays the default
+# "s3"), so it carries on from its current generation. R2 is added beside it:
+# two replicas, not a move, until the restore drill has passed against R2.
+#
+# R2_ENDPOINT is the EU-jurisdiction endpoint, because the bucket was created
+# with `--jurisdiction eu`:
+#   https://<account-id>.eu.r2.cloudflarestorage.com
+#
+# sync-interval is 60s, not Litestream's default 1s. R2's free tier allows one
+# million Class A operations a month, and a write every second while the app is
+# busy would spend that in under two weeks. A minute of possible loss is the
+# price, on a database whose only writer is one person.
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - type: s3
+        bucket: ${AWS_S3_BUCKET_NAME}
+        path: rr.db
+        endpoint: ${AWS_ENDPOINT_URL}
+        region: ${AWS_DEFAULT_REGION}
+        access-key-id: ${AWS_ACCESS_KEY_ID}
+        secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+        force-path-style: true
+      - type: s3
+        name: r2
+        bucket: ${R2_BUCKET}
+        path: rr.db
+        endpoint: ${R2_ENDPOINT}
+        region: auto
+        access-key-id: ${R2_ACCESS_KEY_ID}
+        secret-access-key: ${R2_SECRET_ACCESS_KEY}
+        force-path-style: true
+        sync-interval: 60s
