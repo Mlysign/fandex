@@ -1,8 +1,11 @@
 # Fandex as an app and a website on Cloudflare: the plan
 
-_Review draft 2, 2026-10-04. The illustrated version with the diagrams and charts is the artifact
-at https://claude.ai/artifact/BJVFj7tRaqVAWzsFTtecgv (private to Nils). This file is the repo copy
-so the next session does not have to reconstruct it. Not yet decided: see "Open decisions"._
+_Decided 2026-10-04 and being built; the table below says how far. The illustrated version with the
+diagrams and charts is the artifact at https://claude.ai/artifact/BJVFj7tRaqVAWzsFTtecgv (private
+to Nils). This file is the repo copy so the next session does not have to reconstruct it. What was
+decided is under "Decisions" at the end. Two things are still unanswered, and neither is a call
+for Nils to make today: where the public pages render (a measurement at the start of phase 3) and
+IGDB's answer on storing its data._
 
 ## Where it stands (2026-10-04, end of day)
 

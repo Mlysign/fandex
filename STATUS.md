@@ -144,9 +144,11 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 | Android TWA (P15/P16) | ⏸️ built + running on-device; paused on the account upgrade → [docs/twa-play-store.md](docs/twa-play-store.md) |
 | **SEO / organic reach** | 🔵 open since 2026-08-20. The technical holes are closed (facet under-linking fixed 2026-09-02); what is left is **crawl priority**, which needs external links and time, not code → [docs/seo.md](docs/seo.md) |
 
-## ✅ Quality bar (re-run and confirmed 2026-09-03, end of session)
+## ✅ Quality bar (re-run and confirmed 2026-10-04, end of session)
 
-**1,516 tests pass** (144 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** (485 warnings, all `no-explicit-any` noise) · `npm run build` clean. **This is the standing bar. Don't land work below it.**
+**The site: 1,524 tests pass** (146 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** (486 warnings, all `no-explicit-any` noise) · `npm run build` clean. **This is the standing bar. Don't land work below it.**
+
+**Two more packages since 2026-10-04, each with its own bar, run from its own folder:** `worker/` **141 tests** (8 files, inside workerd against a local D1) and `tsc` clean · `mobile/` **24 tests** (3 files) and `tsc` clean. CI runs all three as separate jobs, and ⚠️ **Railway waits for CI, so a red Worker or App job blocks the site's deploy too.**
 
 ⚠️ **`npm audit` is RED again as of 2026-09-01, and CI is green, and both are correct.** Third instance of the pattern below: two new advisories against `browserslist <=4.28.6` (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) on a tree nobody changed. **It does NOT block the deploy**, verified rather than assumed by running CI's exact command: `npm audit --audit-level=high --omit=dev` answers `found 0 vulnerabilities`, because browserslist reaches this repo only as `eslint-config-next → eslint-plugin-react-hooks → @babel/core → browserslist`, which is entirely devDependency. **So check with CI's flags before reacting**: a bare `npm audit` includes dev and will read red while the deploy is perfectly fine.
 

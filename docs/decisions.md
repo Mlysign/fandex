@@ -139,6 +139,10 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Step 0, whatever else happens: the Litestream replica moves to R2 and the restore drill
   re-runs BEFORE the Railway plan is touched.** The only backup lives in a Railway-provisioned
   bucket.
+  - _How it was carried out, 2026-10-04:_ as a SECOND replica beside the Railway one, not a
+    move (`litestream-r2.yml`), so the existing replica keeps its generation until the drill
+    has passed against R2. It is inert until Nils sets the two R2 secrets. A verified snapshot
+    is in R2 meanwhile. The "before the Railway plan is touched" condition still stands.
 
 ---
 

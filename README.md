@@ -107,6 +107,15 @@ the effective backup window is the default for the **v0.3.13** binary the `Docke
 (different config schema entirely). The privacy policy quotes that same 24h figure as the true
 erasure horizon; if the pinned Litestream version ever changes, re-check both.
 
+⚠️ That replica lives in a bucket provisioned through Railway, so it does not survive losing the
+Railway plan. Two things cover that since 2026-10-04:
+
+- [`litestream-r2.yml`](litestream-r2.yml) adds a second replica on Cloudflare R2 beside the first.
+  The entrypoint uses it only when all four `R2_*` variables are set (see the table above).
+- `node scripts/snapshot-prod-to-r2.mjs` takes a consistent snapshot of the live database, keeps
+  a copy under `data/prod-snapshots/`, and uploads one to R2. It needs the `railway` and
+  `wrangler` CLIs logged in. Run it before changing anything on Railway.
+
 ## Project docs
 
 - `STATUS.md` — short human-readable digest of live state + next actions (read this first)
@@ -117,3 +126,15 @@ erasure horizon; if the pinned Litestream version ever changes, re-check both.
 - `.claude/plans/` — session plans written by one session and executed by another (the audit trail
   of planned-vs-shipped); the only tracked path under `.claude/`
 - `AGENTS.md` — contributor/agent notes: this Next.js version has breaking changes (read the bundled docs), the project doc map, load-bearing data-model invariants, and model/agent-routing guidance
+- `docs/app-plan.md`: where the project is going, an Android app and a website on Cloudflare, with Railway gone. `docs/worker.md` and `docs/app.md` are the references for the two parts already built
+
+## Two more packages in this repo
+
+Since 2026-10-04 the repo also holds the first two pieces of that plan. Each is its own package
+with its own `package.json`, and neither is part of the Next.js build or the Docker image.
+
+- `worker/`: the Cloudflare Worker and its D1 schema. It holds the shared catalog, accounts and
+  the IGDB proxy. Live at `fandex-api.fandex-worker.workers.dev`. `npm test` and `npx wrangler deploy` from
+  that folder. → `docs/worker.md`
+- `mobile/`: the Expo app (Android, and the same code in a browser). `npm run web` from that
+  folder. → `docs/app.md`

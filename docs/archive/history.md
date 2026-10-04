@@ -23,6 +23,65 @@ full history.
 
 ---
 
+## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
+
+`644ddc2` `bc3f2d2` `6e2325b`. One session, phases 0 to 2 of `docs/app-plan.md`. The live
+references are `docs/worker.md` and `docs/app.md`; what is still open is `TASKS.md` item 0.
+This entry is the record of what was tried and why, for a grep. Incident detail →
+[[cloudflare-worker-d1]], [[expo-app-phase2]].
+
+### Step 0, the backup
+
+A consistent snapshot of the Railway database (`VACUUM INTO`, 236 MB, `integrity_check ok`,
+`user_version` 32) was taken, streamed back over `railway ssh` as base64, checksum-verified,
+and uploaded to R2 `fandex-backups/railway/`, then read back and verified again.
+`scripts/snapshot-prod-to-r2.mjs` repeats it in 40 seconds.
+
+The continuous replica was built as a SECOND Litestream replica beside the Railway one, not
+a move. `litestream databases` on the real box listed `s3,r2` for the new config and exited 1
+for a deliberately broken one, which is what the entrypoint's fallback rests on. It is inert:
+the two R2 secrets were left to Nils, because the dashboard shows a token once and it would
+have had to pass through the session. **The restore drill against R2 has NOT run.**
+
+### Phase 1, the Worker and D1
+
+Built, deployed to `fandex-api.fandex-worker.workers.dev`, seeded with 4,560 items and the
+one user's rows. 141 tests inside workerd.
+
+- **The port is the site's own code.** Sixteen `src/lib` modules run in the Worker unchanged.
+  `verify-derive.mjs` compared every pool item's derived doc with `media_item_projection`:
+  4,506 of 4,507 byte-identical, and the one difference was the site's cache being behind on a
+  vote count that changed without changing the blob's byte length.
+- **The write model held exactly.** Predicted 79,770 row writes for the seed; D1 reported 79,770.
+- **D1 keeps the provider blobs** (110 MB of 500), against the plan's "11 MB without blobs".
+  Keeping them is what lets an item be re-derived without asking the provider again.
+- **CPU, measured:** reads 1 to 4 ms; fetch paths 4 to 7 ms warm and 10 to 20 ms on a cold
+  isolate, against a 10 ms limit. Nothing was terminated in about fifty requests.
+- **Tried and reverted:** annotating each `res.json()` call site as `any` for the Workers
+  runtime types. Replaced by one `HttpResponse` type on `httpFetch`.
+- **Probed, not assumed:** D1 refuses `pragma_table_info()` as a table function, which is why
+  `userScopedTables()` parses the CREATE TABLE text.
+
+### Phase 2, the app, about a third
+
+An Expo SDK 57 app in `mobile/`. Calendar, search, browse, item pages and the catalog sync
+(4,559 titles into on-device SQLite) were verified in a browser against the live Worker.
+Trakt device-code sign-in and the library screens were written and **not verified signed in**:
+approving the code on Nils's Trakt account was left to him. The Android release APK builds
+(arm64, 48 MB) and has not run on a device.
+
+- **The APK cannot be built at the repo's path** (Windows' 260 characters). `subst` to
+  `mobile/` fails on Expo autolinking, `subst` to the repo root fails on mixed roots. A real
+  short path works: 12m54s for four ABIs.
+- **A blank page in the web build was the database file's lock**, held by the previous page on
+  a fast reload, and not the migration it was first taken for. The root error boundary now
+  reloads quietly.
+- **The on-device migration stamped itself current.** A hot reload between bumping the
+  constant and adding the step marked the database version 2 with no tables. Each step now
+  stamps its own number.
+
+---
+
 ## SM50 repaired on prod, the restore drill passed, and the Railway CLI that made both possible (2026-09-01)
 
 `c42baf0` `dffbddb`. Three things that had been "needs a shell on the Railway box" for a
