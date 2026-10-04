@@ -36,11 +36,11 @@ time: the Worker handshake, the pull of his rows (1,952 library, 99 wishlist, hi
 providers on the You tab), the Library list with his ratings, and "In your library · played" on an
 item page opened from it.
 
-⚠️ **NOT verified end to end: the browser sign-in.** It was written after that sign-in, in answer
-to it (the code flow was "terrible", his word). `fandex://auth/trakt` has been a redirect URI on
-the Trakt app since 2026-10-04, and Trakt shows its consent page for it. What has not run is the
-return into the app and the exchange. Until a sign-in has gone through it, "Use a code instead" is
-the path known to work.
+**The browser sign-in is verified too, the same day.** It was written after that first sign-in, in
+answer to it (the code flow was "terrible", his word). Nils signed out and back in through the
+main button: Trakt's page in a browser tab, back into the app, signed in with his library, nothing
+in the log. `fandex://auth/trakt` is a redirect URI on the Trakt app. ⚠️ The reworked code flow
+("Use a code instead", the prefilled link, tap to copy) has not been run since it changed.
 
 The Trakt app is "Release Calendar" at `developer.trakt.tv/apps` (not under trakt.tv Settings any
 more), and editing it needs GitHub connected there, which Nils did. ⚠️ **Trakt saves a
@@ -154,19 +154,17 @@ sideloading and is not a Play upload key.
 
 ## Not built yet, in the order it should be built
 
-1. **The first browser sign-in**, once the redirect URI is on the Trakt app. See "NOT verified"
-   above.
-2. **Trakt sync on the device.** Pull the library, `POST /v1/lookup` to map ids, `resolve` the
+1. **Trakt sync on the device.** Pull the library, `POST /v1/lookup` to map ids, `resolve` the
    misses, write the result through `PUT /v1/me/state` as explicit upserts and deletes. A pull that
    fails must send nothing. Until this exists the app shows what the Railway site last synced.
-3. **Rate and wishlist from the app.** The write path on the item page, to the Worker and to Trakt
+2. **Rate and wishlist from the app.** The write path on the item page, to the Worker and to Trakt
    and TMDB.
-4. **Google sign-in.** On Android it needs an OAuth client in the Google Cloud console, keyed to
+3. **Google sign-in.** On Android it needs an OAuth client in the Google Cloud console, keyed to
    the package name (`org.fandex.app`) and the signing certificate's SHA-1.
-5. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
+4. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
    so and stops. The form that lets the person choose is not built.
-6. **Up Next**, from Trakt progress, and then the **Kotlin widget** that reads the same SQLite file.
-7. **The Fandex Score on the device.** The catalog copy already carries every item's raw facets;
+5. **Up Next**, from Trakt progress, and then the **Kotlin widget** that reads the same SQLite file.
+6. **The Fandex Score on the device.** The catalog copy already carries every item's raw facets;
    what is missing is the taxonomy (`/v1/taxonomy`) and a port of the scoring maths out of
    `discovery.ts`, which is tied to the site's database today.
 
