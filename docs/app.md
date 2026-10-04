@@ -36,10 +36,19 @@ time: the Worker handshake, the pull of his rows (1,952 library, 99 wishlist, hi
 providers on the You tab), the Library list with his ratings, and "In your library · played" on an
 item page opened from it.
 
-⚠️ **NOT verified: the browser sign-in.** It was written after that sign-in, in answer to it (the
-code flow was "terrible", his word). Trakt accepts the app's address only once
-`fandex://auth/trakt` is listed as a redirect URI on the Trakt app, which is his to add. Until a
-sign-in has gone through it, "Use a code instead" is the path known to work.
+⚠️ **NOT verified end to end: the browser sign-in.** It was written after that sign-in, in answer
+to it (the code flow was "terrible", his word). `fandex://auth/trakt` has been a redirect URI on
+the Trakt app since 2026-10-04, and Trakt shows its consent page for it. What has not run is the
+return into the app and the exchange. Until a sign-in has gone through it, "Use a code instead" is
+the path known to work.
+
+The Trakt app is "Release Calendar" at `developer.trakt.tv/apps` (not under trakt.tv Settings any
+more), and editing it needs GitHub connected there, which Nils did. ⚠️ **Trakt saves a
+custom-scheme redirect with an "Insecure redirect URIs" warning**: any app on the phone can claim
+`fandex://`. PKCE is what makes that tolerable, since a stolen code is useless without the
+verifier. The fix Trakt asks for is an `https://` redirect backed by verified App Links, which
+needs an `assetlinks.json` on a domain and the release signing certificate. Do it before the app
+is on the Play Store, not before.
 
 **Verified on a Pixel 8 on 2026-10-04**, signed OUT, from the release APK installed over adb: the
 first sync landed all 4,559 titles, and the calendar, search (all three sections for "blade
