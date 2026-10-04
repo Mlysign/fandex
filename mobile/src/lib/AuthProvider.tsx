@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.changed) setRowsRevision((r) => r + 1);
     } catch (e) {
       // The old rows are still there: a failed pull writes nothing.
+      console.warn('rows_pull_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
       setRowsError(e instanceof ApiError && e.code === 'offline'
         ? 'No connection. Showing what is already on this device.'
         : 'Could not refresh your library.');

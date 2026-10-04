@@ -35,7 +35,7 @@ and his real Trakt account. The signed-out screens were also run in a browser.
 | Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
 | Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
 | Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
-| The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. |
+| The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. Nils then ticked real episodes on it: the first was marked, the next stuck at "Marking…" (the two faults under "How it is put together"), and after the fix two ticks in a row ran with the app open behind the launcher and the library untouched. |
 | Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
 
 ⚠️ **Not run by me:** a real tick (it logs a real play on his Trakt). Nils ticked episodes in the app and through the widget's first version, which opened the app; the background version has only run against a made-up id. Also not run: the code sign-in
@@ -145,6 +145,15 @@ write nothing; that is how the sync was proven before it was allowed to delete.
     ActivityNotFoundException", which it throws for ANY failure. So the app publishes the rows
     again 1.5 s after it goes to the background (`AuthProvider`), when the launcher is showing.
     A widget whose taps are dead and whose rows are right is this, not the tap's target.
+  - ⚠️ **The background task opens its OWN database connection** (`useNewConnection: true`).
+    Without it expo-sqlite hands back the one connection the app's provider is using, and the
+    task's `closeAsync()` closed the app's database: Nils's first tick worked and every call
+    after it, in the app and in the next tick, was rejected. Both connections set
+    `busy_timeout` (in `migrate`), so a tick that meets the app's own write waits for it.
+  - ⚠️ **The receiver clears the "marking" flag itself when the task ends**, whatever the
+    JavaScript did. The task used to be trusted to rewrite the rows, and when it died before
+    it could, the row sat at "Marking S1 E8 watched…" with no tick and could never be tapped
+    again. A flag set in Kotlin is cleared in Kotlin.
   ⚠️ The module needs `com.facebook.react:react-android` on its own classpath for the headless
   API; the Expo gradle plugin does not provide it. ⚠️ The build copies `mobile/modules/` and
   `mobile/index.js` to the short build path too.

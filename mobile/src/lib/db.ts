@@ -20,6 +20,13 @@ export const DATABASE_NAME = 'fandex.db';
 const SCHEMA_VERSION = 3;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
+  // Two connections write this file: the app's, and the one the widget's
+  // background tick opens (headless.ts). Without a wait, a write that meets the
+  // other's transaction fails at once with "database is locked", and a tick
+  // that has already reached Trakt would then report failure. Set on every
+  // open, before anything else, because it is per connection.
+  await db.execAsync('PRAGMA busy_timeout = 8000');
+
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;

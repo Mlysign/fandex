@@ -22,7 +22,11 @@ interface TickData { id?: string; season?: number; episode?: number }
 
 async function tick(data: TickData): Promise<void> {
   const { id, season, episode } = data;
-  const db = await openDatabaseAsync(DATABASE_NAME);
+  // ⚠️ A connection of its own. Without `useNewConnection`, expo-sqlite hands
+  // back the ONE connection the app's provider is using, and closing it below
+  // closed the app's database: the first tick worked and every call after it,
+  // in the app and in the next tick, was rejected.
+  const db = await openDatabaseAsync(DATABASE_NAME, { useNewConnection: true });
   try {
     await migrate(db);
     try {

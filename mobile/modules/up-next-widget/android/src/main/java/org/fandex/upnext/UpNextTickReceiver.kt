@@ -86,7 +86,13 @@ class UpNextTickReceiver : BroadcastReceiver() {
             if (finishedId != taskId) return
             tasks.removeTaskEventListener(this)
             main.removeCallbacks(giveUp)
-            // The task rewrote the rows itself. This only clears a flag it may have left.
+            // On success the task rewrote the rows and there is no flag left to
+            // clear. It may also have died before it could (it did, once: the
+            // database would not open), and a row left saying "marking" with no
+            // tick can never be tapped again. So the flag is cleared HERE,
+            // whatever the JavaScript did.
+            UpNextStore.setBusy(app, null, false)
+            UpNextWidgetProvider.refreshAll(app)
             finish.run()
           }
         }
