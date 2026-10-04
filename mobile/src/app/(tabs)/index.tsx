@@ -69,7 +69,10 @@ export default function CalendarScreen() {
   }, [month, load]);
 
   const sections = useMemo(() => {
-    const items = (data?.data.items ?? []).filter((i) => i.releaseDate && (!type || i.type === type));
+    // A date outside the month is a re-release carrying its original date. The
+    // Worker drops those now; a month it stored earlier may still hold one.
+    const inMonth = data?.month ?? '';
+    const items = (data?.data.items ?? []).filter((i) => i.releaseDate?.startsWith(inMonth) && (!type || i.type === type));
     const byDay = new Map<string, CalendarCard[]>();
     for (const item of items) {
       const day = item.releaseDate as string;

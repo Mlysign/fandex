@@ -113,6 +113,17 @@ function toCard(c: FeedCandidate): CalendarCard {
 }
 
 /**
+ * Only the candidates whose date falls in the month. TMDB's regional discover
+ * matches a film on ANY release in the window, a re-release included, and then
+ * answers with the film's original date: a 2014 film came back for October
+ * 2026. Its re-release day is not in the payload, so it cannot be placed, and
+ * it is dropped before the ranking so it does not take a slot.
+ */
+export function inWindow(candidates: FeedCandidate[], win: { gte: string; lte: string }): FeedCandidate[] {
+  return candidates.filter((c) => !!c.releaseDate && c.releaseDate >= win.gte && c.releaseDate <= win.lte);
+}
+
+/**
  * Fetch and rank one month. Returns null when EVERY source came back empty,
  * which is treated as "the providers are down" and never stored: an empty
  * month cached for a day would pin an outage in place.
@@ -130,7 +141,7 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
     fetchMoviePage(1, "future", region, win).catch(() => [] as FeedCandidate[]),
     fetchShowPage(1, "future", win).catch(() => [] as FeedCandidate[]),
   ]);
-  const ranked = rankCrossSourcePopularity([...games, ...movies, ...shows], MONTH_POOL_DEPTH);
+  const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows], win), MONTH_POOL_DEPTH);
   if (!ranked.length) return null;
   return { partial: !games.length || !movies.length || !shows.length, items: ranked.map(toCard) };
 }

@@ -49,7 +49,7 @@ export default function OpenScreen() {
   }, [open]);
 
   return (
-    <Screen>
+    <Screen headed>
       {failure ? (
         <StateBlock
           title={failure.title}

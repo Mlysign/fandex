@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Poster, Screen, StateBlock, T, TypeTag } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { compactCount, longDate, todayIso } from '~/lib/dates';
@@ -42,6 +43,8 @@ function runtime(minutes: number | null): string | null {
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const region = useMemo(deviceRegion, []);
+  // The page draws under Android's navigation buttons, so the last line has to clear them.
+  const { bottom } = useSafeAreaInsets();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState<{ title: string; detail: string } | null>(null);
 
@@ -82,14 +85,14 @@ export default function ItemScreen() {
 
   if (error) {
     return (
-      <Screen>
+      <Screen headed>
         <StateBlock title={error.title} detail={error.detail} action={{ label: 'Try again', onPress: () => void load() }} />
       </Screen>
     );
   }
   if (!item) {
     return (
-      <Screen>
+      <Screen headed>
         <StateBlock loading />
       </Screen>
     );
@@ -106,9 +109,9 @@ export default function ItemScreen() {
     .join(' · ');
 
   return (
-    <Screen>
+    <Screen headed>
       <Stack.Screen options={{ title: m.title }} />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: space.section + bottom }]}>
         {m.backdropUrl ? <Image source={{ uri: m.backdropUrl }} style={styles.backdrop} contentFit="cover" transition={120} /> : null}
 
         <View style={styles.head}>

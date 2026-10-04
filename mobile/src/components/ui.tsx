@@ -18,10 +18,14 @@ export function T({ variant = 'body', style, children, numberOfLines }: {
   return <Text style={[type[variant], style]} numberOfLines={numberOfLines}>{children}</Text>;
 }
 
-/** A full screen: the surface colour, the safe area at the top, a readable width on a wide window. */
-export function Screen({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+/**
+ * A full screen: the surface colour, the safe area at the top, a readable width
+ * on a wide window. `headed` is for a screen under the stack's own header, which
+ * already clears the status bar: insetting again leaves an empty band below it.
+ */
+export function Screen({ children, style, headed }: { children: ReactNode; style?: StyleProp<ViewStyle>; headed?: boolean }) {
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.screen} edges={headed ? ['left', 'right'] : ['top', 'left', 'right']}>
       <View style={[styles.column, style]}>{children}</View>
     </SafeAreaView>
   );

@@ -37,8 +37,19 @@ rows, the Library and Wishlist lists and the "in your library" line on an item p
 in unit tests (the sync logic) and against the Worker's own tests (the routes). The first real
 sign-in is the test.
 
-⚠️ **The Android build compiles but has not run on a device.** No phone was attached and there is
-no emulator image on the machine. Every screen above was exercised in the browser build only.
+**Verified on a Pixel 8 on 2026-10-04**, signed OUT, from the release APK installed over adb: the
+first sync landed all 4,559 titles, and the calendar, search (all three sections for "blade
+runner"), browse, the item page through the doorway, Back, and the Library sign-in prompt all
+worked with nothing in the crash log. Three faults showed up that the browser had hidden, all
+fixed the same day: a re-released 2014 film listed first in October 2026 (TMDB's regional discover
+matches a re-release and answers with the original date; the Worker now drops any card dated
+outside its month, and the calendar screen does too for months stored earlier), an empty band
+under the item page's header (the safe-area inset applied twice; `Screen` takes `headed` for a
+screen under the stack header), and the item page's last line sitting under Android's buttons.
+
+To drive the phone from a session: `adb shell input tap` works, but **check
+`dumpsys window` says `org.fandex.app` has focus before every tap**. The app left the foreground
+once mid-run and three taps landed on the home screen and in the Google app.
 
 ## How it is put together
 

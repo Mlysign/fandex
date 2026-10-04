@@ -23,14 +23,38 @@ const game = (id: number, name: string, date: string, hypes: number) => ({
 
 interface Feeds { movies?: unknown[] | "down"; shows?: unknown[] | "down"; games?: unknown[] | "down" }
 
-/** Fake the three provider pages. "down" answers 500, which the fetchers degrade to an empty list. */
-function providers(feeds: Feeds): string[] {
+/** The month a provider call asks for: TMDB says it in the url, IGDB as a unix time in the body. */
+function askedMonth(url: string, body: unknown): string | null {
+  const iso = url.match(/_date\.gte=(\d{4}-\d{2})/);
+  if (iso) return iso[1];
+  const unix = typeof body === "string" ? body.match(/\b(\d{9,10})\b/) : null;
+  return unix ? new Date(Number(unix[1]) * 1000 + 86_400_000).toISOString().slice(0, 7) : null;
+}
+
+/** Move a fixture row into `month`, keeping its day, the way a real provider answers per window. */
+function redate(row: any, month: string): any {
+  const day = (iso: string) => `${month}${iso.slice(7)}`;
+  if (typeof row.release_date === "string") return { ...row, release_date: day(row.release_date) };
+  if (typeof row.first_air_date === "string") return { ...row, first_air_date: day(row.first_air_date) };
+  const iso = new Date(row.first_release_date * 1000).toISOString().slice(0, 10);
+  return { ...row, first_release_date: Math.floor(Date.parse(`${day(iso)}T00:00:00Z`) / 1000) };
+}
+
+/**
+ * Fake the three provider pages. "down" answers 500, which the fetchers degrade
+ * to an empty list. `follow` answers every month with the fixtures moved into
+ * it, for the cron tests that walk twelve months off one set of rows.
+ */
+function providers(feeds: Feeds, follow = false): string[] {
   const calls: string[] = [];
-  const page = (rows: unknown[] | "down" | undefined, wrap: (r: unknown[]) => unknown) =>
-    rows === "down" ? new Response("down", { status: 500 }) : Response.json(wrap(rows ?? []));
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     calls.push(url);
+    const month = follow ? askedMonth(url, init?.body) : null;
+    const page = (rows: unknown[] | "down" | undefined, wrap: (r: unknown[]) => unknown) =>
+      rows === "down"
+        ? new Response("down", { status: 500 })
+        : Response.json(wrap((rows ?? []).map((r) => (month ? redate(r, month) : r))));
     if (url.includes("id.twitch.tv")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
     if (url.includes("/discover/movie")) return page(feeds.movies, (r) => ({ results: r }));
     if (url.includes("/discover/tv")) return page(feeds.shows, (r) => ({ results: r }));
@@ -87,6 +111,16 @@ describe("serving a month", () => {
     const stored = await db.prepare("SELECT payload FROM calendar_month WHERE region = 'DE' AND month = '2026-11'").first<{ payload: string }>();
     expect(stored!.payload).not.toContain('"raw"');
     expect(stored!.payload.startsWith('{"partial":false')).toBe(true);
+  });
+
+  it("drops a re-release that comes back carrying its original date", async () => {
+    // TMDB matched the film on a 2026 re-release and answered with its 2014 date.
+    providers({ ...full, movies: [movie(9, "Old Film", "2014-11-20", 500), movie(1, "Big Film", "2026-11-06", 90)] });
+    const out = await calendarMonth(env, "2026-11", "DE", undefined, NOW);
+    if (!out.ok) throw new Error("expected a month");
+    const titles = JSON.parse(out.body).data.items.map((i: any) => i.title);
+    expect(titles).toContain("Big Film");
+    expect(titles).not.toContain("Old Film");
   });
 
   it("serves a stored month without calling a provider again", async () => {
@@ -165,7 +199,7 @@ describe("the cron's half", () => {
   });
 
   it("fills the window one month per run, never-built first", async () => {
-    providers(full);
+    providers(full, true);
     const built = new Set<string>();
     for (let i = 0; i < 12; i++) {
       clearBrowsePageCache();
@@ -182,7 +216,7 @@ describe("the cron's half", () => {
   });
 
   it("refreshes a month once it is past its TTL, and keeps the old row if the build fails", async () => {
-    providers(full);
+    providers(full, true);
     for (let i = 0; i < 12; i++) { clearBrowsePageCache(); await runCalendarStep(env, NOW); }
     await db.prepare("UPDATE calendar_month SET built_at = built_at - 2 * 86400 WHERE month = '2026-11'").run();
     const before = await db.prepare("SELECT payload FROM calendar_month WHERE month = '2026-11'").first<{ payload: string }>();
@@ -196,7 +230,7 @@ describe("the cron's half", () => {
 
     // And it stands down for a while instead of retrying the same month every run.
     vi.restoreAllMocks();
-    const calls = providers(full);
+    const calls = providers(full, true);
     expect(await runCalendarStep(env, NOW)).toEqual({ built: null });
     expect(calls).toEqual([]);
 
@@ -205,7 +239,7 @@ describe("the cron's half", () => {
   });
 
   it("does not refetch a month that has fully elapsed for thirty days", async () => {
-    providers(full);
+    providers(full, true);
     for (let i = 0; i < 12; i++) { clearBrowsePageCache(); await runCalendarStep(env, NOW); }
     // Ten days on: the past months are still inside their TTL, the open ones are not.
     const later = new Date(NOW.getTime() + 10 * 86_400_000);
