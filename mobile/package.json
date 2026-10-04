@@ -50,5 +50,10 @@
     "test": "vitest run",
     "env": "node ./scripts/sync-env.mjs"
   },
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  },
   "private": true
 }

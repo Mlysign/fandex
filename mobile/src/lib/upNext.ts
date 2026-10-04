@@ -21,6 +21,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { api } from '~/lib/api';
 import { applyLocalWrite } from '~/lib/stateSync';
 import { traktAccessToken, traktGet, traktPost } from '~/lib/trakt';
+import { refreshWidget } from '~/lib/widget';
 
 /** Shows asked about per run. Each is one request to Trakt. */
 const RUN_BUDGET = 12;
@@ -169,6 +170,7 @@ export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: numb
     }));
   }
   if (checked === 0 && firstError) throw firstError;
+  if (checked) refreshWidget();
   return { checked, waiting: due.length - checked };
 }
 
@@ -227,9 +229,11 @@ export async function markEpisodeWatched(db: SQLiteDatabase, entry: Pick<UpNextE
     // episode that was just watched; the next run asks again.
     await db.runAsync('DELETE FROM up_next WHERE media_item_id = ?', [entry.mediaItemId]);
   }
+  refreshWidget();
 }
 
 /** Signing out: the next account must not see this one's shows. */
 export async function clearUpNext(db: SQLiteDatabase): Promise<void> {
   await db.runAsync('DELETE FROM up_next');
+  refreshWidget();
 }

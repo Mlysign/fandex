@@ -14,6 +14,7 @@ import { catalogCounts, shelfCounts } from '~/lib/db';
 import { deviceRegion } from '~/lib/region';
 import { activationUrl } from '~/lib/trakt';
 import type { TraktSyncResult } from '~/lib/traktSync';
+import { requestWidget, widgetAvailable } from '~/lib/widget';
 import { color, font, radius, space } from '~/theme';
 
 function Line({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -172,6 +173,31 @@ function TraktSync() {
           ? <Button label="Sign in to Trakt again" onPress={startTraktSignIn} />
           : <Button label="Sync Trakt now" onPress={syncTraktNow} quiet />}
       </View>
+      <WidgetOffer />
+    </View>
+  );
+}
+
+/** The Up next home-screen widget. Android only; on the web there is nothing to offer. */
+function WidgetOffer() {
+  const [note, setNote] = useState<string | null>(null);
+  if (!widgetAvailable) return null;
+  return (
+    <View style={styles.subgroup}>
+      <T variant="eyebrow">Home screen</T>
+      <T variant="caption">
+        The Up next widget shows the next episode of each show you are watching, with a tick that marks it watched.
+      </T>
+      <View style={styles.actions}>
+        <Button
+          label="Add the Up next widget"
+          quiet
+          onPress={() => setNote(requestWidget()
+            ? null
+            : 'This home screen cannot add it for you. Long-press the home screen, open Widgets, and pick Fandex.')}
+        />
+      </View>
+      {note ? <T variant="caption" style={{ color: color.warning }}>{note}</T> : null}
     </View>
   );
 }

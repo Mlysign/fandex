@@ -1,0 +1,7 @@
+{
+  "name": "up-next-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Up next home-screen widget. Android only; lives in the app's repo and is autolinked from modules/.",
+  "main": "index.ts"
+}

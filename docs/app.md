@@ -16,7 +16,8 @@ code, in a browser.
 | Library | Three tabs. **Up next**: the next episode of each show you are part way through, with a tick that marks it watched. **Library** and **Wishlist**: by type, sorted by recency, your rating or title. Asks for sign-in when signed out. | On-device SQLite; Trakt for Up next |
 | Browse | The catalog on the device, most-voted first, by type, with your Fandex Score on each row when signed in. Works with no network. | On-device SQLite |
 | Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: your Fandex Score with the facets that made it, rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
-| You | Sign in with Trakt, sign out, sync Trakt now, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
+| You | Sign in with Trakt, sign out, sync Trakt now, add the home-screen widget, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
+| Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page; the tick opens the app, which marks the episode watched. | The `up_next` table, read by Kotlin |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
 Worker to resolve the provider id (fetching the title if nobody holds it) and then replaces itself
@@ -34,9 +35,10 @@ and his real Trakt account. The signed-out screens were also run in a browser.
 | Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
 | Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
 | Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
+| The widget | Added from the You tab through the launcher's own sheet. It showed the same four shows as the Up next tab, and tapping one opened that show's page in the app. |
 | Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
 
-⚠️ **Not run:** the tick on Up next (it would log a real play on his Trakt), the code sign-in
+⚠️ **Not run:** the tick, on the Up next tab or on the widget (it would log a real play on his Trakt), the code sign-in
 since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
 again" after Trakt drops a token, and a Trakt token refresh (a token lasts a day; none had expired).
 
@@ -112,6 +114,18 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   (watched in the last four months) or a week (older). A run asks about twelve shows, most
   recently watched first; the screen runs up to six passes a visit. The order is the site's: an
   entry sits at the later of "you watched the one before" and "this one aired".
+- **The widget is Kotlin in a local Expo module** (`mobile/modules/up-next-widget`), autolinked
+  through `expo.autolinking.nativeModulesDir` in `package.json`. That is what keeps it out of the
+  generated `android/` folder: the module carries its own manifest entries, layouts and classes,
+  so `expo prebuild` cannot wipe it and no config plugin is needed. It is a classic `RemoteViews`
+  list, not Glance, to add no dependency. **It holds no logic.** The rows are whatever the app
+  last wrote to `up_next` (opened read-only at `files/SQLite/fandex.db`), and both taps are
+  addresses the app answers: `fandex://item/{id}` and `fandex://tick/{id}/{season}/{episode}`.
+  The tick therefore opens the app, where `src/app/tick/…` marks the episode on Trakt and in
+  your rows; the Trakt token and the write path stay in one place. The app calls
+  `refreshWidget()` whenever it writes `up_next`, and Android re-reads it every thirty minutes.
+  ⚠️ A mutable `PendingIntent` template must name its activity on Android 14, or creating it
+  throws. ⚠️ The build copies `mobile/modules/` to the short build path too.
 - **The Fandex Score is computed on the device** (`fandexScore.ts`, `ScoreProvider.tsx`). It is a
   port of the site's `buildProfile` and `computeFandexScore` with the database taken out: pure
   functions of the titles you rated (with the catalog copy's raw facets), the taxonomy from
@@ -192,7 +206,6 @@ sideloading and is not a Play upload key.
    the package name (`org.fandex.app`) and the signing certificate's SHA-1.
 2. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
    so and stops. The form that lets the person choose is not built.
-3. **The Kotlin widget** for Up next. It reads the `up_next` table in the same SQLite file.
 
 ## Known problems
 

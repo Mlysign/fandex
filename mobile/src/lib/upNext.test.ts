@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
+vi.mock('~/lib/widget', () => ({ refreshWidget: vi.fn() }));
 
 import { readProgress, showsToCheck } from './upNext';
 
