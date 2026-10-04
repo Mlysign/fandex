@@ -31,11 +31,15 @@ listed once; a show the catalog did not hold opened through the doorway and came
 on Back; the Library tab asked for sign-in; "Sign in with Trakt" showed a real code from Trakt and
 polled. No console errors in normal use, no horizontal overflow at 375 px.
 
-⚠️ **NOT verified: anything after sign-in.** Finishing a Trakt sign-in means approving the code on
-Nils's Trakt account, which is his to do. So the Worker handshake that follows, the pull of his
-rows, the Library and Wishlist lists and the "in your library" line on an item page have run only
-in unit tests (the sync logic) and against the Worker's own tests (the routes). The first real
-sign-in is the test.
+**Signed in, verified on the Pixel 8 on 2026-10-04.** Nils approved a code and the rest ran first
+time: the Worker handshake, the pull of his rows (1,952 library, 99 wishlist, his name and three
+providers on the You tab), the Library list with his ratings, and "In your library · played" on an
+item page opened from it.
+
+⚠️ **NOT verified: the browser sign-in.** It was written after that sign-in, in answer to it (the
+code flow was "terrible", his word). Trakt accepts the app's address only once
+`fandex://auth/trakt` is listed as a redirect URI on the Trakt app, which is his to add. Until a
+sign-in has gone through it, "Use a code instead" is the path known to work.
 
 **Verified on a Pixel 8 on 2026-10-04**, signed OUT, from the release APK installed over adb: the
 first sync landed all 4,559 titles, and the calendar, search (all three sections for "blade
@@ -69,8 +73,14 @@ once mid-run and three taps landed on the home screen and in the Google app.
   (`stateSync.ts`). The replace deletes, so every page is fetched into memory first and the delete
   and the inserts are one transaction: a pull that fails leaves the library as it was. That is the
   prune invariant, on the device.
-- **Signing in is Trakt's device flow**: a code the person types at trakt.tv, no redirect, no
-  client secret. The Trakt tokens stay on the device (`expo-secure-store` on Android,
+- **Signing in has two flows, and neither needs the client secret.** On Android the default opens
+  Trakt's consent page in a browser tab, which returns to the app at `fandex://auth/trakt` with a
+  code the app exchanges itself (with PKCE and a `state` check). One tap for somebody already
+  signed in to Trakt. `src/app/auth/trakt.tsx` exists only so the router has a screen for that
+  address. The fallback, and the web build's only flow, is Trakt's device flow: a short code,
+  confirmed at trakt.tv. "Open Trakt" opens the page with the code already filled in, and tapping
+  the code copies it. **Anything a person would have to retype must be copyable by tapping it.**
+  The Trakt tokens stay on the device (`expo-secure-store` on Android,
   `localStorage` in a browser). The Worker is handed the access token once, asks Trakt whose it is,
   and returns a Fandex session, which the app sends as a bearer header from then on.
 - **Two public values ship in the app**, as `EXPO_PUBLIC_*`: the TMDB key (TMDB's terms allow it)
@@ -135,7 +145,8 @@ sideloading and is not a Play upload key.
 
 ## Not built yet, in the order it should be built
 
-1. **The first real sign-in**, and whatever it shakes out. See "what was not verified" above.
+1. **The first browser sign-in**, once the redirect URI is on the Trakt app. See "NOT verified"
+   above.
 2. **Trakt sync on the device.** Pull the library, `POST /v1/lookup` to map ids, `resolve` the
    misses, write the result through `PUT /v1/me/state` as explicit upserts and deletes. A pull that
    fails must send nothing. Until this exists the app shows what the Railway site last synced.

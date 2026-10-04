@@ -1,8 +1,10 @@
 // Your account on this device: signing in and out, and what the device holds.
 
+import * as Clipboard from 'expo-clipboard';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Divider, Screen, ScreenTitle, T } from '~/components/ui';
 import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
@@ -10,6 +12,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { deviceRegion } from '~/lib/region';
+import { activationUrl } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
 
 function Line({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -36,20 +39,37 @@ const PROVIDER_NAME: Record<string, string> = { trakt: 'Trakt', google: 'Google'
 function SignIn() {
   const auth = useAuth();
   const flow = auth.trakt;
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   if (flow.phase === 'waiting') {
+    // The page opens with the code already filled in. On Android it opens in a
+    // tab over the app, so closing it lands back here.
+    const url = activationUrl(flow);
+    const open = () => void (Platform.OS === 'web' ? Linking.openURL(url) : WebBrowser.openBrowserAsync(url));
+    const copy = () => void Clipboard.setStringAsync(flow.userCode).then(() => setCopied(true));
     return (
       <View style={styles.card}>
-        <T variant="serifSm">Enter this code on Trakt</T>
+        <T variant="serifSm">Confirm this code on Trakt</T>
         <T variant="caption">
-          Open the Trakt page below on this device or any other, sign in to Trakt there, and type the code. This screen
-          carries on by itself once you have.
+          Open Trakt and the code is already filled in. Confirm it there and this screen carries on by itself. On another
+          device, go to trakt.tv/activate and type it.
         </T>
-        <View style={styles.codeBox} accessibilityLabel={`Code ${flow.userCode.split('').join(' ')}`}>
+        <Pressable
+          onPress={copy}
+          accessibilityRole="button"
+          accessibilityLabel={`Code ${flow.userCode.split('').join(' ')}. Tap to copy.`}
+          style={({ pressed }) => [styles.codeBox, pressed && { opacity: 0.6 }]}>
           <T variant="serifLg" style={styles.code}>{flow.userCode}</T>
-        </View>
+          <T variant="meta" style={{ color: copied ? color.accent : color.textMuted }}>{copied ? 'Copied' : 'Tap to copy'}</T>
+        </Pressable>
         <View style={styles.actions}>
-          <Button label="Open Trakt" onPress={() => void Linking.openURL(flow.verificationUrl)} />
+          <Button label="Open Trakt" onPress={open} />
           <Button label="Cancel" onPress={auth.cancelTraktSignIn} quiet />
         </View>
         <View style={styles.waiting}>
@@ -71,11 +91,13 @@ function SignIn() {
       {busy ? (
         <View style={styles.waiting}>
           <ActivityIndicator size="small" color={color.accent} />
-          <T variant="caption">{flow.phase === 'starting' ? 'Asking Trakt for a code…' : 'Signing you in…'}</T>
+          <T variant="caption">{flow.phase === 'starting' ? 'Waiting for Trakt…' : 'Signing you in…'}</T>
         </View>
       ) : (
         <View style={styles.actions}>
           <Button label="Sign in with Trakt" onPress={auth.startTraktSignIn} />
+          {/* The web build already signs in with a code, so there is nothing to fall back to. */}
+          {Platform.OS !== 'web' ? <Button label="Use a code instead" onPress={auth.startTraktCodeSignIn} quiet /> : null}
         </View>
       )}
     </View>
@@ -190,7 +212,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
   },
   codeBox: {
-    alignItems: 'center', paddingVertical: space.lg, borderRadius: radius.md,
+    alignItems: 'center', gap: space.xs, paddingVertical: space.lg, borderRadius: radius.md,
     backgroundColor: color.surfaceInset, borderWidth: 1, borderColor: color.borderStrong,
   },
   code: { fontFamily: font.mono, letterSpacing: 6, color: color.accent },

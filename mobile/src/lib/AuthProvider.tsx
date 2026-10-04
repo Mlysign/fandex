@@ -8,17 +8,23 @@
 //                        here. The Worker sees the access token once, to ask
 //                        Trakt whose it is.
 //
-// Signing in with Trakt is: get a code, the person approves it at trakt.tv, the
-// device receives Trakt tokens, hands the access token to the Worker, and gets a
-// Fandex session back. After that the device pulls the account's rows.
+// Signing in with Trakt is: the person approves at trakt.tv (in a browser tab
+// that returns to the app, or by confirming a code), the device receives Trakt
+// tokens, hands the access token to the Worker, and gets a Fandex session back.
+// After that the device pulls the account's rows.
 
 import { useSQLiteContext } from 'expo-sqlite';
+import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { api, ApiError, setSessionToken, type Profile } from '~/lib/api';
 import { traktConfigured } from '~/lib/config';
 import { clearState, syncState } from '~/lib/stateSync';
 import { secretDelete, secretGet, secretSet } from '~/lib/storage';
-import { clearTraktTokens, pollDeviceToken, requestDeviceCode, saveTraktTokens } from '~/lib/trakt';
+import {
+  clearTraktTokens, codeFromRedirect, exchangeCode, pollDeviceToken, requestDeviceCode, saveTraktTokens,
+  startBrowserSignIn, TRAKT_REDIRECT_URI, type TraktTokens,
+} from '~/lib/trakt';
 
 const SESSION_KEY = 'fandex.session';
 
@@ -37,7 +43,10 @@ interface Auth {
   /** Null while signed in but offline: the device knows it has a session and nothing more. */
   profile: Profile | null;
   trakt: TraktFlow;
+  /** The platform's default: Trakt's page in a browser tab on Android, a code on the web. */
   startTraktSignIn: () => void;
+  /** The code flow, for when the browser one does not come back. */
+  startTraktCodeSignIn: () => void;
   cancelTraktSignIn: () => void;
   signOut: () => Promise<void>;
   /** Pulling your rows from the Worker. */
@@ -145,7 +154,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTrakt({ phase: 'idle' });
   }, []);
 
-  const startTraktSignIn = useCallback(() => {
+  /** Trakt said yes: keep its tokens here, trade the access token for a Fandex session, pull the rows. */
+  const finish = useCallback(async (tokens: TraktTokens, alive: () => boolean) => {
+    setTrakt({ phase: 'finishing' });
+    await saveTraktTokens(tokens);
+    const result = await api.signInWithTrakt(tokens.accessToken);
+    if (!alive()) return;
+    await secretSet(SESSION_KEY, result.token);
+    setSessionToken(result.token);
+    setProfile(await api.me().catch(() => null));
+    setStatus('signedIn');
+    setTrakt({ phase: 'idle' });
+    void pullRows(true);
+  }, [pullRows]);
+
+  const startTraktBrowserSignIn = useCallback(() => {
+    if (!traktConfigured()) {
+      setTrakt({ phase: 'error', message: 'Trakt sign-in is not set up in this build.' });
+      return;
+    }
+    const mine = ++flow.current;
+    const alive = () => flow.current === mine;
+    setTrakt({ phase: 'starting' });
+
+    (async () => {
+      try {
+        const asked = await startBrowserSignIn();
+        const result = await WebBrowser.openAuthSessionAsync(asked.url, TRAKT_REDIRECT_URI);
+        if (!alive()) return;
+        // The person closed the tab. Not an error: they are back where they started.
+        if (result.type !== 'success') { setTrakt({ phase: 'idle' }); return; }
+        const code = codeFromRedirect(result.url, asked.state);
+        if (!code) {
+          setTrakt({ phase: 'error', message: 'Trakt did not confirm the sign-in. Try again, or use a code instead.' });
+          return;
+        }
+        setTrakt({ phase: 'finishing' });
+        await finish(await exchangeCode(code, asked.verifier), alive);
+      } catch (e) {
+        if (alive()) setTrakt({ phase: 'error', message: signInMessage(e) });
+      }
+    })();
+  }, [finish]);
+
+  const startTraktCodeSignIn = useCallback(() => {
     if (!traktConfigured()) {
       setTrakt({ phase: 'error', message: 'Trakt sign-in is not set up in this build.' });
       return;
@@ -173,16 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (poll.state === 'denied') { setTrakt({ phase: 'error', message: 'The sign-in was declined on Trakt.' }); return; }
           if (poll.state === 'expired') break;
 
-          setTrakt({ phase: 'finishing' });
-          await saveTraktTokens(poll.tokens);
-          const result = await api.signInWithTrakt(poll.tokens.accessToken);
-          if (!alive()) return;
-          await secretSet(SESSION_KEY, result.token);
-          setSessionToken(result.token);
-          setProfile(await api.me().catch(() => null));
-          setStatus('signedIn');
-          setTrakt({ phase: 'idle' });
-          void pullRows(true);
+          await finish(poll.tokens, alive);
           return;
         }
         if (alive()) setTrakt({ phase: 'error', message: 'The code expired before it was approved. Start again for a new one.' });
@@ -190,7 +233,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (alive()) setTrakt({ phase: 'error', message: signInMessage(e) });
       }
     })();
-  }, [pullRows]);
+  }, [finish]);
+
+  // A browser tab has no app address for Trakt to send the person back to, so
+  // the web build signs in with a code.
+  const startTraktSignIn = Platform.OS === 'web' ? startTraktCodeSignIn : startTraktBrowserSignIn;
 
   const signOut = useCallback(async () => {
     flow.current++;
@@ -206,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      status, profile, trakt, startTraktSignIn, cancelTraktSignIn, signOut,
+      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows,
     }}>
       {children}

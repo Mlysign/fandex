@@ -1,10 +1,16 @@
 // Trakt, from the device. Sign-in here, and later the library sync.
 //
-// The flow is Trakt's DEVICE flow: the app asks for a short code, the person
-// types it at trakt.tv/activate on any browser, and the app polls until Trakt
-// says yes. It needs no redirect back into the app, so it works the same in the
-// Android build and in a browser tab, and it needs no client secret (optional
-// for clients since 2026-10-01).
+// Two flows, neither needing the client secret (optional for clients since
+// 2026-10-01):
+//
+//   the BROWSER flow   the Android app's default. Trakt's consent page opens in
+//                      a browser tab and hands a code back to the app through
+//                      its own address (fandex://auth/trakt). One tap for
+//                      somebody already signed in to Trakt. That address has to
+//                      be listed as a redirect URI on the Trakt app.
+//   the DEVICE flow    the fallback, and what the web build uses. The app shows
+//                      a short code, the person confirms it at trakt.tv, and
+//                      the app polls until Trakt says yes. It needs no redirect.
 //
 // Probed against the live API with this app's client id on 2026-10-04:
 // /oauth/device/code answers 200 with an 8-character code, a 600 s lifetime and
@@ -15,6 +21,7 @@
 // The tokens stay on this device (docs/decisions.md, 2026-10-04). The Worker
 // sees the access token once, to learn whose it is, and does not keep it.
 
+import * as Crypto from 'expo-crypto';
 import { TRAKT_CLIENT_ID } from '~/lib/config';
 import { secretDelete, secretGet, secretSet } from '~/lib/storage';
 
@@ -46,6 +53,85 @@ export type PollResult =
   | { state: 'expired' };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+/** Where Trakt sends the person back to. Must match a redirect URI on the Trakt app exactly. */
+export const TRAKT_REDIRECT_URI = 'fandex://auth/trakt';
+
+function tokensFrom(d: Record<string, unknown>): TraktTokens {
+  if (typeof d.access_token !== 'string') throw new Error('Trakt approved the sign-in but sent no token.');
+  const created = typeof d.created_at === 'number' ? d.created_at : Math.floor(Date.now() / 1000);
+  const lifetime = typeof d.expires_in === 'number' ? d.expires_in : 86_400;
+  return {
+    accessToken: d.access_token,
+    refreshToken: typeof d.refresh_token === 'string' ? d.refresh_token : null,
+    expiresAt: created + lifetime,
+  };
+}
+
+const base64Url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+function randomToken(bytes: number): string {
+  return Array.from(Crypto.getRandomBytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export interface BrowserSignIn {
+  /** The Trakt consent page to open. */
+  url: string;
+  /** Echoed back by Trakt. A redirect carrying a different one was not started here. */
+  state: string;
+  /** PKCE: proves at the exchange that the app that asked is the app that came back. */
+  verifier: string;
+}
+
+export async function startBrowserSignIn(): Promise<BrowserSignIn> {
+  const state = randomToken(16);
+  const verifier = randomToken(32);
+  const challenge = base64Url(
+    await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 }),
+  );
+  const q = new URLSearchParams({
+    response_type: 'code',
+    client_id: TRAKT_CLIENT_ID,
+    redirect_uri: TRAKT_REDIRECT_URI,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  });
+  return { url: `https://trakt.tv/oauth/authorize?${q.toString()}`, state, verifier };
+}
+
+/**
+ * Read the address Trakt sent the person back to. Null means the redirect is
+ * not one this sign-in started, or carries no code: nothing is exchanged.
+ */
+export function codeFromRedirect(url: string, state: string): string | null {
+  const query = url.split('#')[0].split('?')[1];
+  if (!query) return null;
+  const params = new URLSearchParams(query);
+  if (params.get('state') !== state) return null;
+  return params.get('code');
+}
+
+export async function exchangeCode(code: string, verifier: string): Promise<TraktTokens> {
+  const res = await fetch(`${BASE}/oauth/token`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      code,
+      client_id: TRAKT_CLIENT_ID,
+      redirect_uri: TRAKT_REDIRECT_URI,
+      grant_type: 'authorization_code',
+      code_verifier: verifier,
+    }),
+  });
+  if (!res.ok) throw new Error(`Trakt would not finish the sign-in (${res.status}).`);
+  return tokensFrom((await res.json()) as Record<string, unknown>);
+}
+
+/** The activation page with the code already filled in, so nobody has to type it. */
+export function activationUrl(code: { verificationUrl: string; userCode: string }): string {
+  return `${code.verificationUrl.replace(/\/+$/, '')}/${encodeURIComponent(code.userCode)}`;
+}
 
 export async function requestDeviceCode(): Promise<DeviceCode> {
   const res = await fetch(`${BASE}/oauth/device/code`, {
@@ -79,18 +165,7 @@ export async function pollDeviceToken(deviceCode: string): Promise<PollResult> {
     body: JSON.stringify({ code: deviceCode, client_id: TRAKT_CLIENT_ID }),
   });
   if (res.status === 200) {
-    const d = (await res.json()) as Record<string, unknown>;
-    if (typeof d.access_token !== 'string') throw new Error('Trakt approved the sign-in but sent no token.');
-    const created = typeof d.created_at === 'number' ? d.created_at : Math.floor(Date.now() / 1000);
-    const lifetime = typeof d.expires_in === 'number' ? d.expires_in : 86_400;
-    return {
-      state: 'approved',
-      tokens: {
-        accessToken: d.access_token,
-        refreshToken: typeof d.refresh_token === 'string' ? d.refresh_token : null,
-        expiresAt: created + lifetime,
-      },
-    };
+    return { state: 'approved', tokens: tokensFrom((await res.json()) as Record<string, unknown>) };
   }
   if (res.status === 400) return { state: 'pending' };
   if (res.status === 429) return { state: 'slow-down' };
