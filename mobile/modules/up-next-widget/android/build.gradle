@@ -16,4 +16,7 @@ android {
 
 dependencies {
   implementation "androidx.core:core-ktx:1.17.0"
+  // The tick runs the app's JavaScript as a headless task, which is React
+  // Native's API and not Expo's. The version comes from the app's build.
+  implementation "com.facebook.react:react-android"
 }

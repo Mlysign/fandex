@@ -17,7 +17,7 @@ code, in a browser.
 | Browse | The catalog on the device, most-voted first, by type, with your Fandex Score on each row when signed in. Works with no network. | On-device SQLite |
 | Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: your Fandex Score with the facets that made it, rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
 | You | Sign in with Trakt, sign out, sync Trakt now, add the home-screen widget, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
-| Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page; the tick opens the app, which marks the episode watched. | The `up_next` table, read by Kotlin |
+| Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
 Worker to resolve the provider id (fetching the title if nobody holds it) and then replaces itself
@@ -35,10 +35,10 @@ and his real Trakt account. The signed-out screens were also run in a browser.
 | Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
 | Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
 | Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
-| The widget | Added from the You tab through the launcher's own sheet. It showed the same four shows as the Up next tab, and tapping one opened that show's page in the app. |
+| The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. |
 | Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
 
-⚠️ **Not run:** the tick, on the Up next tab or on the widget (it would log a real play on his Trakt), the code sign-in
+⚠️ **Not run by me:** a real tick (it logs a real play on his Trakt). Nils ticked episodes in the app and through the widget's first version, which opened the app; the background version has only run against a made-up id. Also not run: the code sign-in
 since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
 again" after Trakt drops a token, and a Trakt token refresh (a token lasts a day; none had expired).
 
@@ -118,14 +118,36 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   through `expo.autolinking.nativeModulesDir` in `package.json`. That is what keeps it out of the
   generated `android/` folder: the module carries its own manifest entries, layouts and classes,
   so `expo prebuild` cannot wipe it and no config plugin is needed. It is a classic `RemoteViews`
-  list, not Glance, to add no dependency. **It holds no logic.** The rows are whatever the app
-  last wrote to `up_next` (opened read-only at `files/SQLite/fandex.db`), and both taps are
-  addresses the app answers: `fandex://item/{id}` and `fandex://tick/{id}/{season}/{episode}`.
-  The tick therefore opens the app, where `src/app/tick/…` marks the episode on Trakt and in
-  your rows; the Trakt token and the write path stay in one place. The app calls
-  `refreshWidget()` whenever it writes `up_next`, and Android re-reads it every thirty minutes.
-  ⚠️ A mutable `PendingIntent` template must name its activity on Android 14, or creating it
-  throws. ⚠️ The build copies `mobile/modules/` to the short build path too.
+  list, not Glance, to add no dependency. **It holds no logic**, and four things about it are
+  each the shape of something that went wrong:
+  - **The tick runs the app's own JavaScript in the background, and opens nothing** (Nils,
+    2026-10-04: "i dont want it to open anything"). The tap lands on `WidgetTapActivity`, which
+    draws nothing and finishes inside `onCreate`; it hands the episode to `UpNextTickReceiver`,
+    which starts the headless task `FandexUpNextTick` (`src/headless.ts`, registered in
+    `index.js` before the router) and holds `goAsync()` until it finishes. The task calls the
+    same `markEpisodeWatched` the Up next tab calls, so the Trakt token, its refresh and the
+    write path exist once. A receiver, not a service: a backgrounded app may not start a
+    service and a cached one is frozen within seconds, and a receiver in `goAsync()` is neither.
+    From a killed process the task answered in about a second.
+  - **A list in a widget has ONE tap template**, so one component takes both taps (open a show,
+    tick an episode) and tells them apart by the address the row fills in
+    (`widget://open/{id}`, `widget://tick/{id}/{season}/{episode}`). The template is mutable, and
+    Android 14 only allows a mutable one that names its component.
+  - **The widget does not read the app's SQLite file.** Android's SQLite and the one expo-sqlite
+    ships are two copies of the library, and two copies on one file in one process do not see
+    each other's locks. The app hands the widget its rows (`publishWidget` → `setRows` → a small
+    JSON file), whenever it writes `up_next`.
+  - ⚠️ **Android defers a widget update sent while the launcher is hidden**, which is whenever
+    the app is in front, and on the Pixel launcher the deferred frame did not replace the old
+    one: the rows changed and the taps did not. After an app update or a force-stop (either
+    cancels every tap a widget has registered) the widget showed the right episodes and every
+    tap on it failed, with nothing in any log but the launcher's "Cannot send pending intent …
+    ActivityNotFoundException", which it throws for ANY failure. So the app publishes the rows
+    again 1.5 s after it goes to the background (`AuthProvider`), when the launcher is showing.
+    A widget whose taps are dead and whose rows are right is this, not the tap's target.
+  ⚠️ The module needs `com.facebook.react:react-android` on its own classpath for the headless
+  API; the Expo gradle plugin does not provide it. ⚠️ The build copies `mobile/modules/` and
+  `mobile/index.js` to the short build path too.
 - **The Fandex Score is computed on the device** (`fandexScore.ts`, `ScoreProvider.tsx`). It is a
   port of the site's `buildProfile` and `computeFandexScore` with the database taken out: pure
   functions of the titles you rated (with the catalog copy's raw facets), the taxonomy from

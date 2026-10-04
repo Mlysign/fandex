@@ -1,14 +1,19 @@
 // The Up next home-screen widget, from the app's side.
 //
-// The widget itself is Kotlin (modules/up-next-widget). It reads the `up_next`
-// table this app writes, so all the app has to do is say when that table has
-// changed. On the web, and in any build without the native module, every call
-// here does nothing.
+// The widget itself is Kotlin (modules/up-next-widget). It shows the rows the
+// app hands it and nothing else, so all the app has to do is hand them over
+// whenever the `up_next` table changes. On the web, and in any build without
+// the native module, every call here does nothing.
+//
+// The widget does NOT read the app's SQLite file. Android's SQLite and the one
+// expo-sqlite ships are two copies of the library, and two copies on one file
+// in one process do not see each other's locks.
 
 import { requireOptionalNativeModule } from 'expo';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
 interface UpNextWidgetNative {
-  refresh(): void;
+  setRows(json: string): void;
   placed(): number;
   requestPin(): boolean;
 }
@@ -17,9 +22,31 @@ const native = requireOptionalNativeModule<UpNextWidgetNative>('UpNextWidget');
 
 export const widgetAvailable = native != null;
 
-/** The `up_next` table changed: have every placed widget read it again. Never throws. */
-export function refreshWidget(): void {
-  try { native?.refresh(); } catch { /* A widget that did not refresh is not worth failing a sync over. */ }
+/** How many rows the widget is given. It shows three or four and scrolls. */
+const WIDGET_ROWS = 12;
+
+/**
+ * Hand the widget its rows, read from `up_next`. The same query and order as
+ * the Up next tab (upNext.ts → upNextList), kept here so this file imports
+ * nothing that imports it back. Never throws: a widget that did not redraw is
+ * not worth failing a sync over.
+ */
+export async function publishWidget(db: SQLiteDatabase): Promise<void> {
+  if (!native) return;
+  try {
+    const rows = await db.getAllAsync<{ id: string; title: string; season: number; episode: number; episodeTitle: string | null }>(
+      `SELECT u.media_item_id AS id, c.title, u.season, u.episode, u.title AS episodeTitle
+         FROM up_next u JOIN catalog c ON c.id = u.media_item_id
+        WHERE u.season IS NOT NULL
+          AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
+        ORDER BY MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0)) DESC, c.title
+        LIMIT ?`,
+      [WIDGET_ROWS],
+    );
+    native.setRows(JSON.stringify(rows));
+  } catch (e) {
+    console.warn('widget_rows_failed', e instanceof Error ? e.message : String(e));
+  }
 }
 
 /** How many Up next widgets are on the home screen. */

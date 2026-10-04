@@ -16,11 +16,13 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { api, ApiError, setSessionToken, type Profile } from '~/lib/api';
 import { traktConfigured } from '~/lib/config';
 import { clearState, syncState } from '~/lib/stateSync';
-import { secretDelete, secretGet, secretSet } from '~/lib/storage';
+import { onRowsChangedElsewhere } from '~/lib/rowsBus';
+import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
+import { publishWidget } from '~/lib/widget';
 import {
   clearTraktTokens, codeFromRedirect, exchangeCode, loadTraktTokens, pollDeviceToken, requestDeviceCode, saveTraktTokens,
   startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, type TraktTokens,
@@ -28,7 +30,6 @@ import {
 import { clearUpNext } from '~/lib/upNext';
 import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktSyncResult } from '~/lib/traktSync';
 
-const SESSION_KEY = 'fandex.session';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
@@ -194,6 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // The Trakt sync pulls the rows itself first, so it replaces the plain
         // pull when there is a Trakt to sync and it is due.
         void pullRows().then(() => runTraktSync(true));
+        // A widget placed before this build, or after the data was cleared, has no rows yet.
+        void publishWidget(db);
       } catch (e) {
         if (!live) return;
         if (e instanceof ApiError && e.status === 401) {
@@ -312,6 +315,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
   const syncTraktNow = useCallback(() => void runTraktSync(false), [runTraktSync]);
   const rowsChanged = useCallback(() => setRowsRevision((r) => r + 1), []);
+
+  // The widget's tick writes your rows with no screen mounted. When the app is
+  // open behind it, this is how the lists find out.
+  useEffect(() => onRowsChangedElsewhere(rowsChanged), [rowsChanged]);
+
+  // Hand the widget its rows again once the app has left the screen.
+  //
+  // ⚠️ Not tidiness. Android DEFERS a widget update sent while the launcher is
+  // hidden, which is whenever this app is in front, and on this launcher the
+  // deferred frame did not replace the old one: the rows changed and the taps
+  // did not. After the app had been force-stopped or updated (either cancels
+  // every tap the widget had registered) the widget showed the right episodes
+  // and every tap on it failed, with nothing in any log but the launcher's
+  // generic "cannot send pending intent". A frame sent while the launcher is
+  // showing is applied at once, so one is sent a moment after leaving.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (next === 'background') timer = setTimeout(() => void publishWidget(db), 1500);
+    });
+    return () => { sub.remove(); if (timer) clearTimeout(timer); };
+  }, [db]);
 
   return (
     <Ctx.Provider value={{

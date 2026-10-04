@@ -15,5 +15,17 @@
       android:name=".UpNextWidgetService"
       android:exported="false"
       android:permission="android.permission.BIND_REMOTEVIEWS" />
+    <!-- Takes every tap on the widget and is gone before it draws. Its own task,
+         kept out of Recents, so a tick never brings the app's screen forward. -->
+    <activity
+      android:name=".WidgetTapActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.NoDisplay"
+      android:taskAffinity=""
+      android:excludeFromRecents="true"
+      android:noHistory="true" />
+    <receiver
+      android:name=".UpNextTickReceiver"
+      android:exported="false" />
   </application>
 </manifest>

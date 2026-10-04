@@ -11,6 +11,9 @@ import { Platform } from 'react-native';
 
 const web = Platform.OS === 'web';
 
+/** Where the Fandex session token is kept. Read by the app and by the widget's background task. */
+export const SESSION_KEY = 'fandex.session';
+
 export async function secretGet(key: string): Promise<string | null> {
   try {
     if (web) return globalThis.localStorage?.getItem(key) ?? null;

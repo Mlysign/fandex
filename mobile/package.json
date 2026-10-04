@@ -1,6 +1,6 @@
 {
   "name": "fandex-app",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "0.1.0",
   "dependencies": {
     "@expo-google-fonts/dm-serif-display": "^0.4.2",

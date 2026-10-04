@@ -14,8 +14,12 @@ class UpNextWidgetModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("UpNextWidget")
 
-    /** Re-read `up_next` in every placed widget. */
-    Function("refresh") {
+    /**
+     * The rows to show, as a JSON list of {id, title, season, episode, episodeTitle},
+     * and redraw. This is the only way rows reach the widget.
+     */
+    Function("setRows") { json: String ->
+      UpNextStore.write(context, json)
       UpNextWidgetProvider.refreshAll(context)
     }
 
