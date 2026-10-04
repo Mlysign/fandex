@@ -180,3 +180,9 @@ lives under `data/`, which git ignores.
   and not applied. The franchise rail is phase 5.
 - **A final user-row sync at switch-over.** D1 was seeded from the 2026-10-04 snapshot. Anything
   rated on the Railway site after that is only there. Re-run the seed's user files at phase 4.
+- **A restore from the nightly export.** The export itself runs: its first day finished on
+  2026-10-04 at 12:20 UTC (18 tables, 37,588 rows, `d1/2026-10-04/manifest.json`). Nothing reads
+  it back, so it is an untested backup. It needs a script that loads one day into a scratch D1
+  and compares row counts per table, before phase 4 makes D1 the only copy of anyone's library.
+  ⚠️ Listing the bucket with `wrangler r2 object list` returned nothing useful here; fetch
+  `manifest.json` by key to check a day.
