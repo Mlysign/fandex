@@ -10,7 +10,7 @@ so the next session does not have to reconstruct it. Not yet decided: see "Open 
 |---|---|
 | 0. Make the data safe | 🟡 A verified snapshot of the Railway database is in R2 and on disk, and `node scripts/snapshot-prod-to-r2.mjs` repeats it in 40 seconds. The continuous Litestream replica to R2 is built, validated on the box and inert: it waits on two R2 secrets only Nils can create. The restore drill against R2 follows that. |
 | 1. Worker and D1 with accounts | ✅ Built, tested (141 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
-| 2. Minimal app | ⬜ Not started. |
+| 2. Minimal app | 🔵 About a third done. An Expo app with the calendar, search, browse and item pages over an on-device copy of the catalog, verified in a browser against the live Worker; the Android release APK builds. Trakt sign-in and the library and wishlist screens are written but NOT verified signed in, because approving the sign-in is Nils's to do. Missing: Trakt sync from the device, rating from the app, Up Next, the widget, Google sign-in. → [app.md](app.md) |
 | 3. Website | ⬜ Its first task, the CPU measurement, has a partial answer already: see below. |
 | 4. Switch over | ⬜ |
 

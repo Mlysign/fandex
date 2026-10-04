@@ -45,6 +45,8 @@ const eslintConfig = defineConfig([
     // rules do not describe it, and its node_modules and .wrangler build output
     // would be scanned otherwise, for the same reason as the three above.
     "worker/**",
+    // The Expo app, for the same reason: its own package and its own rules.
+    "mobile/**",
   ]),
   {
     rules: {

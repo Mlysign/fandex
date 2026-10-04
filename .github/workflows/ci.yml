@@ -74,6 +74,30 @@ jobs:
         # Runs inside workerd against a local D1: the same SQLite build as prod.
         run: npm test
 
+  app:
+    # The Expo app (mobile/), its own package. Typecheck and the logic tests
+    # only: nothing here builds an APK. Like the Worker it compiles site
+    # modules from ../src, so it runs on every push.
+    #
+    # ⚠️ Railway waits for CI. A red job here blocks the SITE's deploy too.
+    name: App · Typecheck · Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Test
+        run: npm test
+
   audit:
     name: npm audit
     runs-on: ubuntu-latest
