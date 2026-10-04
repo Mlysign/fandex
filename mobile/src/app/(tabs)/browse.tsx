@@ -5,7 +5,8 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Chip, Screen, ScreenTitle, StateBlock, T, TitleRow } from '~/components/ui';
+import { Chip, FandexBadge, Screen, ScreenTitle, StateBlock, T, TitleRow } from '~/components/ui';
+import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { compactCount } from '~/lib/dates';
 import { browseCatalog, type CatalogRow } from '~/lib/db';
@@ -57,6 +58,8 @@ export default function BrowseScreen() {
   }, [db, type, rows.length]);
 
   const syncing = sync.state === 'syncing';
+  const scores = useScores();
+  const rowScores = useRowScores(rows.map((r) => r.id));
 
   return (
     <Screen>
@@ -93,7 +96,14 @@ export default function BrowseScreen() {
               kind={item.type}
               posterUrl={item.poster_url}
               meta={[item.year, item.community_votes ? `${compactCount(item.community_votes)} votes` : null].filter(Boolean).join(' · ') || null}
-              right={item.community_score != null ? <T variant="title" style={styles.score}>{item.community_score}</T> : null}
+              // Signed in with a profile, the number on the right is YOUR score
+              // for the title. Otherwise it is the crowd's, in a quieter colour,
+              // so the two are never mistaken for each other.
+              right={
+                scores.center != null
+                  ? (rowScores.has(item.id) ? <FandexBadge score={rowScores.get(item.id)!} center={scores.center} /> : null)
+                  : item.community_score != null ? <T variant="title" style={styles.score}>{item.community_score}</T> : null
+              }
               onPress={() => router.push(`/item/${item.id}`)}
             />
           )}

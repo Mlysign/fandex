@@ -14,8 +14,8 @@ code, in a browser.
 | Calendar | One month of popular releases, grouped by day, with a type filter and month arrows. | Worker `/v1/calendar` |
 | Search | Three sections that answer independently: titles on the device, films and shows, games. | On-device SQLite, TMDB direct, Worker `/v1/search/games` |
 | Library | Three tabs. **Up next**: the next episode of each show you are part way through, with a tick that marks it watched. **Library** and **Wishlist**: by type, sorted by recency, your rating or title. Asks for sign-in when signed out. | On-device SQLite; Trakt for Up next |
-| Browse | The catalog on the device, most-voted first, by type. Works with no network. | On-device SQLite |
-| Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
+| Browse | The catalog on the device, most-voted first, by type, with your Fandex Score on each row when signed in. Works with no network. | On-device SQLite |
+| Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: your Fandex Score with the facets that made it, rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
 | You | Sign in with Trakt, sign out, sync Trakt now, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
@@ -34,6 +34,7 @@ and his real Trakt account. The signed-out screens were also run in a browser.
 | Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
 | Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
 | Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
+| Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
 
 ⚠️ **Not run:** the tick on Up next (it would log a real play on his Trakt), the code sign-in
 since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
@@ -111,6 +112,17 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   (watched in the last four months) or a week (older). A run asks about twelve shows, most
   recently watched first; the screen runs up to six passes a visit. The order is the site's: an
   entry sits at the later of "you watched the one before" and "this one aired".
+- **The Fandex Score is computed on the device** (`fandexScore.ts`, `ScoreProvider.tsx`). It is a
+  port of the site's `buildProfile` and `computeFandexScore` with the database taken out: pure
+  functions of the titles you rated (with the catalog copy's raw facets), the taxonomy from
+  `/v1/taxonomy` (kept in SQLite, re-asked twice a day with its ETag) and the facets of the title
+  being scored. The profile is rebuilt when your rows, the catalog copy or the taxonomy change.
+  ⚠️ **The port and the site must give the same number**, and nothing but
+  `scripts/probe-app-score.mjs` checks that. Run it after touching either side's scoring:
+  `BENCH_DB=<a COPY of a snapshot> node scripts/probe-app-score.mjs`. It loads `fandexScore.ts`
+  under plain Node, so that file stays erasable TypeScript and imports through `@/` only.
+  A title that is not a catalog row (a calendar card, a search result) has no facets on the
+  device and so no score until it is opened.
 - **The Trakt token is refreshed on the device**, without a secret. The redirect sent with the
   refresh has to be the one the token was issued under, which the device does not record, so it
   tries the app's address and then the out-of-band URN.
@@ -181,9 +193,6 @@ sideloading and is not a Play upload key.
 2. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
    so and stops. The form that lets the person choose is not built.
 3. **The Kotlin widget** for Up next. It reads the `up_next` table in the same SQLite file.
-4. **The Fandex Score on the device.** The catalog copy already carries every item's raw facets;
-   what is missing is the taxonomy (`/v1/taxonomy`) and a port of the scoring maths out of
-   `discovery.ts`, which is tied to the site's database today.
 
 ## Known problems
 

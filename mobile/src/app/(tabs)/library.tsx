@@ -8,7 +8,8 @@ import { Check } from 'lucide-react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Chip, Screen, ScreenTitle, StateBlock, T, TitleRow } from '~/components/ui';
+import { Button, Chip, FandexBadge, Screen, ScreenTitle, StateBlock, T, TitleRow } from '~/components/ui';
+import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { longDate } from '~/lib/dates';
@@ -79,6 +80,11 @@ export default function LibraryScreen() {
       loadingMore.current = false;
     }
   }, [db, relation, type, sort, rows.length]);
+
+  // A wishlist is titles you have not rated, so what goes on the right is how
+  // well each one matches your taste. The library shows your own rating there.
+  const scores = useScores();
+  const rowScores = useRowScores(tab === 'wishlist' ? rows.map((r) => r.id) : []);
 
   // An auth gate must ASK. A signed-out visitor sees what this tab is for and
   // the way in, never an empty list that reads as "you have nothing".
@@ -172,7 +178,11 @@ export default function LibraryScreen() {
                   ? longDate(item.release_date) ?? (item.year ? String(item.year) : null)
                   : item.year ? String(item.year) : null
               }
-              right={item.rating != null ? <T variant="title" style={styles.rating}>{item.rating}</T> : null}
+              right={
+                relation === 'wishlist'
+                  ? (rowScores.has(item.id) ? <FandexBadge score={rowScores.get(item.id)!} center={scores.center} /> : null)
+                  : item.rating != null ? <T variant="title" style={styles.rating}>{item.rating}</T> : null
+              }
               onPress={() => router.push(`/item/${item.id}`)}
             />
           )}

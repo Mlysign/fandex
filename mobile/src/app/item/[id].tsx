@@ -4,14 +4,16 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Poster, Screen, StateBlock, T, TypeTag } from '~/components/ui';
+import { FandexBadge, Poster, Screen, StateBlock, T, TypeTag } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { compactCount, longDate, todayIso } from '~/lib/dates';
 import { itemStateFor } from '~/lib/db';
+import type { ScoreReason } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
+import { useScores } from '~/lib/ScoreProvider';
 import { deviceRegion } from '~/lib/region';
 import { TraktAuthError } from '~/lib/trakt';
 import { color, radius, space } from '~/theme';
@@ -36,6 +38,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const RATINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+const ROLE_LABEL: Record<string, string> = {
+  director: 'Director', creator: 'Creator', writer: 'Writer', cast: 'Cast',
+  developer: 'Developer', publisher: 'Publisher', studio: 'Studio', network: 'Network', ip: 'Franchise',
+};
+
+/** What kind of thing a reason is, in a word: its role for a person or company, its category for a tag. */
+function reasonKind(r: ScoreReason, categoryLabel: (id: string | undefined) => string | null): string {
+  if (r.kind === 'tag') return categoryLabel(r.category) ?? 'Tag';
+  return ROLE_LABEL[r.role ?? ''] ?? (r.kind === 'ip' ? 'Franchise' : r.kind === 'person' ? 'Person' : 'Company');
+}
 
 function runtime(minutes: number | null): string | null {
   if (!minutes) return null;
@@ -87,6 +100,8 @@ export default function ItemScreen() {
     return () => { live = false; };
   }, [db, id, auth.status, auth.rowsRevision]);
 
+  const scores = useScores();
+  const [whyOpen, setWhyOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
@@ -124,6 +139,11 @@ export default function ItemScreen() {
   }
 
   const m = item.merged;
+  // Scored from the facets the Worker sent with the page, so a title that is
+  // not in the device's catalog copy (one just opened from search) scores too.
+  const fandex = scores.score(item.id, item.facets);
+  const counted = fandex ? fandex.reasons.filter((r) => !r.capped) : [];
+  const uncounted = fandex ? fandex.reasons.length - counted.length : 0;
   const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
   const released = longDate(m.releaseDate);
   const upcoming = !!m.releaseDate && m.releaseDate.slice(0, 10) > todayIso();
@@ -164,6 +184,43 @@ export default function ItemScreen() {
               ].filter(Boolean).join(' · ')}
             </T>
             {mine.rating != null ? <T variant="label">You rated it {mine.rating}</T> : null}
+          </View>
+        ) : null}
+
+        {fandex ? (
+          <View style={styles.fandex}>
+            <View style={styles.fandexHead}>
+              <FandexBadge score={fandex.score} center={fandex.center} large />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T variant="title">Fandex Score</T>
+                <T variant="caption">
+                  How well this matches your taste. A title you have no opinion about scores {Math.round(fandex.center)}, your own average.
+                </T>
+              </View>
+            </View>
+            {counted.slice(0, whyOpen ? counted.length : 4).map((r) => (
+              <View key={`${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T variant="body" numberOfLines={1}>{r.label}</T>
+                  <T variant="meta" numberOfLines={1}>
+                    {reasonKind(r, scores.categoryLabel)} · you rate these {r.BA.toFixed(1)} over {r.n} {r.n === 1 ? 'title' : 'titles'}
+                  </T>
+                </View>
+                <T variant="title" style={{ color: r.contribution >= 0 ? color.success : color.danger }}>
+                  {r.contribution >= 0 ? '+' : '−'}{Math.abs(r.contribution).toFixed(1)}
+                </T>
+              </View>
+            ))}
+            {counted.length > 4 || uncounted > 0 ? (
+              <Pressable onPress={() => setWhyOpen((v) => !v)} accessibilityRole="button" style={styles.whyToggle}>
+                <T variant="label" style={{ color: color.accent }}>
+                  {whyOpen ? 'Show less' : `Show all ${counted.length} that count`}
+                </T>
+                {whyOpen && uncounted > 0 ? (
+                  <T variant="meta">{uncounted} more matched and were left out: only the strongest few count.</T>
+                ) : null}
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -310,6 +367,13 @@ const styles = StyleSheet.create({
     marginHorizontal: space.lg, marginBottom: space.md, padding: space.md,
     borderRadius: radius.md, backgroundColor: color.accentSubtle,
   },
+  fandex: {
+    marginHorizontal: space.lg, marginBottom: space.lg, padding: space.md, gap: space.sm,
+    borderRadius: radius.md, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
+  },
+  fandexHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  reason: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  whyToggle: { minHeight: 44, justifyContent: 'center', gap: space.xxs },
   actionsBlock: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.sm },
   // Ten across a 360 px screen: flex shares the row, the height is the tap target.
   stars: { flexDirection: 'row', gap: space.xs },

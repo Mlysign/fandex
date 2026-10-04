@@ -12,6 +12,7 @@ import { StateBlock } from '~/components/ui';
 import { AuthProvider } from '~/lib/AuthProvider';
 import { CatalogSyncProvider } from '~/lib/CatalogSyncProvider';
 import { DATABASE_NAME, migrate } from '~/lib/db';
+import { ScoreProvider } from '~/lib/ScoreProvider';
 import { color, font } from '~/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -106,6 +107,7 @@ export default function RootLayout() {
       <DatabaseOpened />
       <AuthProvider>
       <CatalogSyncProvider>
+      <ScoreProvider>
         <StatusBar style="light" />
         <Stack
           screenOptions={{
@@ -119,6 +121,7 @@ export default function RootLayout() {
           <Stack.Screen name="item/[id]" options={{ title: '' }} />
           <Stack.Screen name="open/[source]/[type]/[id]" options={{ title: '' }} />
         </Stack>
+      </ScoreProvider>
       </CatalogSyncProvider>
       </AuthProvider>
     </SQLiteProvider>

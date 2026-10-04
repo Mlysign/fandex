@@ -138,6 +138,23 @@ export function StateBlock({ loading, title, detail, action }: {
   );
 }
 
+/**
+ * The Fandex Score as a bare number: how well a title matches YOUR taste. It is
+ * coloured against your own average, not against 50, and is not clamped: a
+ * score over 100 is rare and is meant to stand out (docs/fandex-score.md §1).
+ */
+export function FandexBadge({ score, center, large }: { score: number; center: number | null; large?: boolean }) {
+  const tone = center == null ? color.textPrimary
+    : score >= center + 10 ? color.success
+    : score <= center - 10 ? color.danger
+    : color.textPrimary;
+  return (
+    <View style={[styles.badge, large && styles.badgeLarge, { borderColor: tone }]} accessibilityLabel={`Fandex Score ${Math.round(score)}`}>
+      <T variant={large ? 'serifMd' : 'title'} style={{ color: tone }}>{Math.round(score)}</T>
+    </View>
+  );
+}
+
 export function Divider() {
   return <View style={styles.divider} />;
 }
@@ -172,4 +189,9 @@ const styles = StyleSheet.create({
   buttonQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.borderStrong },
   state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md, padding: space.xxl },
   divider: { height: 1, backgroundColor: color.border, marginHorizontal: space.lg },
+  badge: {
+    minWidth: 40, height: 32, paddingHorizontal: space.xs, alignItems: 'center', justifyContent: 'center',
+    borderRadius: radius.sm, borderWidth: 1,
+  },
+  badgeLarge: { minWidth: 60, height: 52, borderRadius: radius.md },
 });
