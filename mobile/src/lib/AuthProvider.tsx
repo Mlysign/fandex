@@ -22,9 +22,10 @@ import { traktConfigured } from '~/lib/config';
 import { clearState, syncState } from '~/lib/stateSync';
 import { secretDelete, secretGet, secretSet } from '~/lib/storage';
 import {
-  clearTraktTokens, codeFromRedirect, exchangeCode, pollDeviceToken, requestDeviceCode, saveTraktTokens,
-  startBrowserSignIn, TRAKT_REDIRECT_URI, type TraktTokens,
+  clearTraktTokens, codeFromRedirect, exchangeCode, loadTraktTokens, pollDeviceToken, requestDeviceCode, saveTraktTokens,
+  startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, type TraktTokens,
 } from '~/lib/trakt';
+import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktSyncResult } from '~/lib/traktSync';
 
 const SESSION_KEY = 'fandex.session';
 
@@ -55,7 +56,25 @@ interface Auth {
   /** Bumped whenever the device's copy of your rows changes, so a list can re-query. */
   rowsRevision: number;
   syncRows: () => void;
+  traktSync: TraktSyncState;
+  syncTraktNow: () => void;
 }
+
+export interface TraktSyncState {
+  running: boolean;
+  /** Why the last run did not finish, in words. Nothing was deleted. */
+  error: string | null;
+  /** Trakt dropped this device's sign-in. Only signing in to Trakt again fixes it. */
+  needsSignIn: boolean;
+  last: TraktSyncResult | null;
+  /** Unix ms of the last run that finished. */
+  syncedAt: number | null;
+}
+
+/** A sync on opening the app runs when the last one is older than this. */
+const TRAKT_STALE_MS = 6 * 60 * 60 * 1000;
+/** A build made with this set works out what a sync would change, logs the counts, and writes nothing. */
+const TRAKT_SYNC_DRY_RUN = process.env.EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN === '1';
 
 const Ctx = createContext<Auth | null>(null);
 
@@ -109,9 +128,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [db]);
 
+  // ── Trakt, synced from this device ──
+  const [traktSync, setTraktSync] = useState<TraktSyncState>({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
+  const syncingTrakt = useRef(false);
+
+  const runTraktSync = useCallback(async (onlyIfStale: boolean) => {
+    if (syncingTrakt.current) return;
+    if (!(await loadTraktTokens())) return; // Signed in some other way: there is no Trakt to sync.
+    const syncedAt = await traktSyncedAt(db);
+    if (onlyIfStale && syncedAt && Date.now() - syncedAt < TRAKT_STALE_MS) {
+      setTraktSync((s) => ({ ...s, syncedAt }));
+      return;
+    }
+    syncingTrakt.current = true;
+    setTraktSync((s) => ({ ...s, running: true, error: null, needsSignIn: false }));
+    try {
+      const last = await syncTrakt(db, { dryRun: TRAKT_SYNC_DRY_RUN });
+      setTraktSync({ running: false, error: null, needsSignIn: false, last, syncedAt: await traktSyncedAt(db) });
+      // The rows on the device changed, and a title new to the catalog is now in the pool.
+      if (last.itemsChanged + last.itemsRemoved + last.episodesChanged + last.episodesRemoved > 0) setRowsRevision((r) => r + 1);
+    } catch (e) {
+      // Whatever went wrong, nothing was deleted: see traktSync.ts.
+      const needsSignIn = e instanceof TraktAuthError;
+      const error =
+        needsSignIn ? 'Trakt needs you to sign in again.'
+        : e instanceof TraktSyncRefused ? e.message
+        : e instanceof ApiError && e.code === 'offline' ? 'No connection. Your library is unchanged.'
+        : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot save more changes until tomorrow.'
+        : 'The Trakt sync did not finish. Your library is unchanged.';
+      console.warn('trakt_sync_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      setTraktSync((s) => ({ ...s, running: false, error, needsSignIn }));
+    } finally {
+      syncingTrakt.current = false;
+    }
+  }, [db]);
+
   const forget = useCallback(async () => {
     setSessionToken(null);
-    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db)]);
+    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db)]);
+    setTraktSync({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
     setProfile(null);
     setRowsRevision((r) => r + 1);
     setStatus('signedOut');
@@ -133,7 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!live) return;
         setProfile(me);
         setStatus('signedIn');
-        void pullRows();
+        // The Trakt sync pulls the rows itself first, so it replaces the plain
+        // pull when there is a Trakt to sync and it is due.
+        void pullRows().then(() => runTraktSync(true));
       } catch (e) {
         if (!live) return;
         if (e instanceof ApiError && e.status === 401) {
@@ -147,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { live = false; };
-  }, [forget, pullRows]);
+  }, [forget, pullRows, runTraktSync]);
 
   const cancelTraktSignIn = useCallback(() => {
     flow.current++;
@@ -165,8 +222,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     setTrakt({ phase: 'idle' });
-    void pullRows(true);
-  }, [pullRows]);
+    void pullRows(true).then(() => runTraktSync(false));
+  }, [pullRows, runTraktSync]);
 
   const startTraktBrowserSignIn = useCallback(() => {
     if (!traktConfigured()) {
@@ -250,11 +307,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [forget]);
 
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
+  const syncTraktNow = useCallback(() => void runTraktSync(false), [runTraktSync]);
 
   return (
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, signOut,
-      rowsSyncing, rowsError, rowsRevision, syncRows,
+      rowsSyncing, rowsError, rowsRevision, syncRows, traktSync, syncTraktNow,
     }}>
       {children}
     </Ctx.Provider>

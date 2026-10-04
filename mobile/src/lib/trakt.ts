@@ -192,3 +192,100 @@ export async function loadTraktTokens(): Promise<TraktTokens | null> {
 export async function clearTraktTokens(): Promise<void> {
   await secretDelete(TOKENS_KEY);
 }
+
+// ── Talking to Trakt as the person ───────────────────────────────────────────
+
+/** Trakt no longer accepts what this device holds. The person has to sign in to Trakt again. */
+export class TraktAuthError extends Error {
+  constructor(message = 'Trakt needs you to sign in again.') {
+    super(message);
+    this.name = 'TraktAuthError';
+  }
+}
+
+/** Refresh when the token has less than this left. A sync is several requests long. */
+const REFRESH_MARGIN_SECONDS = 300;
+
+async function refreshTokens(refreshToken: string): Promise<TraktTokens> {
+  // The redirect has to be the one the tokens were issued under. A browser
+  // sign-in used the app's address; a code sign-in had none, which Trakt spells
+  // as the out-of-band URN. The device does not record which it was, so it
+  // tries the first and then the second.
+  let status = 0;
+  for (const redirect of [TRAKT_REDIRECT_URI, 'urn:ietf:wg:oauth:2.0:oob']) {
+    const res = await fetch(`${BASE}/oauth/token`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+        client_id: TRAKT_CLIENT_ID,
+        redirect_uri: redirect,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (res.ok) return tokensFrom((await res.json()) as Record<string, unknown>);
+    status = res.status;
+    // Anything but "that grant is not valid" is Trakt being unwell, not a dead token.
+    if (status !== 400 && status !== 401) throw new Error(`Trakt would not refresh the sign-in (${status}).`);
+  }
+  throw new TraktAuthError();
+}
+
+/**
+ * An access token that will last the next few minutes, refreshed if it has to
+ * be. Throws TraktAuthError when the device holds no Trakt sign-in or Trakt has
+ * dropped it, which a caller reports as "sign in to Trakt again" and never as
+ * an empty library.
+ */
+export async function traktAccessToken(now = Math.floor(Date.now() / 1000)): Promise<string> {
+  const tokens = await loadTraktTokens();
+  if (!tokens) throw new TraktAuthError('This device is not signed in to Trakt.');
+  if (tokens.expiresAt - now > REFRESH_MARGIN_SECONDS) return tokens.accessToken;
+  if (!tokens.refreshToken) throw new TraktAuthError();
+  const fresh = await refreshTokens(tokens.refreshToken);
+  // Trakt rotates the refresh token. Losing the new one strands the device.
+  await saveTraktTokens({ ...fresh, refreshToken: fresh.refreshToken ?? tokens.refreshToken });
+  return fresh.accessToken;
+}
+
+function apiHeaders(accessToken: string): Record<string, string> {
+  return {
+    ...JSON_HEADERS,
+    'trakt-api-version': '2',
+    'trakt-api-key': TRAKT_CLIENT_ID,
+    Authorization: `Bearer ${accessToken}`,
+  };
+}
+
+/**
+ * Every page of a Trakt list.
+ *
+ * ⚠️ THROWS on any page that fails, and that is the point. What this returns
+ * decides what gets deleted (traktSync.ts), so "the pages that worked" would
+ * read as "the person removed the rest". Trakt answers the first page only
+ * unless the page count header is followed, which once capped a library at 100.
+ */
+export async function traktList(endpoint: string, accessToken: string, limit = 250): Promise<unknown[]> {
+  const sep = endpoint.includes('?') ? '&' : '?';
+  const out: unknown[] = [];
+  let pages = 1;
+  for (let page = 1; page <= pages; page++) {
+    const res = await fetch(`${BASE}${endpoint}${sep}page=${page}&limit=${limit}`, { headers: apiHeaders(accessToken) });
+    if (res.status === 401 || res.status === 403) throw new TraktAuthError();
+    if (!res.ok) throw new Error(`Trakt answered ${res.status} for ${endpoint}.`);
+    pages = Number(res.headers.get('x-pagination-page-count')) || 1;
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) throw new Error(`Trakt answered ${endpoint} with something that is not a list.`);
+    out.push(...data);
+  }
+  return out;
+}
+
+/** A write to Trakt: a rating, the watchlist, the history. Throws with Trakt's status on failure. */
+export async function traktPost(endpoint: string, accessToken: string, body: unknown): Promise<void> {
+  const res = await fetch(`${BASE}${endpoint}`, { method: 'POST', headers: apiHeaders(accessToken), body: JSON.stringify(body) });
+  if (res.status === 401 || res.status === 403) throw new TraktAuthError();
+  // 420 is Trakt's "this account is at its limit" (watchlist and rating caps on free accounts).
+  if (res.status === 420) throw new Error('Your Trakt account is at its limit, so this did not save there.');
+  if (!res.ok) throw new Error(`Trakt answered ${res.status}.`);
+}

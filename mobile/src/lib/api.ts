@@ -254,4 +254,38 @@ export const api = {
       `/v1/me/state/episodes${q({ afterItem: after?.mediaItemId, afterSeason: after?.season, afterEpisode: after?.episode })}`,
     ),
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
+
+  /** Which of these provider ids the catalog holds. Never fetches. At most 2,000 refs. */
+  lookup: (refs: ProviderRef[]) => request<LookupResult>('/v1/lookup', json('POST', { refs })),
+
+  /**
+   * Explicit upserts and explicit deletes, at most 2,000 rows. The Worker never
+   * infers a delete, so what is sent here is the whole of what changes.
+   */
+  writeState: (write: StateWrite) => request<StateWriteResult>('/v1/me/state', json('PUT', write)),
 };
+
+export interface ProviderRef { source: string; type: string; id: string }
+export interface LookupResult {
+  found: (ProviderRef & { mediaItemId: string })[];
+  missing: ProviderRef[];
+}
+
+export interface ItemStateKey { mediaItemId: string; source: string; relation: 'wishlist' | 'library' | 'ignored' }
+export interface ItemStateUpsert extends ItemStateKey {
+  status: string | null;
+  rating: number | null;
+  review: string | null;
+  reviewedAt: number | null;
+  /** Left out, the Worker keeps the row's own added date, or stamps now for a new row. */
+  addedAt?: number | null;
+}
+export interface EpisodeStateKey { mediaItemId: string; season: number; episode: number }
+export interface EpisodeStateUpsert extends EpisodeStateKey { watchedAt: number | null; sources: string[] }
+
+export interface StateWrite {
+  items?: { upsert?: ItemStateUpsert[]; delete?: ItemStateKey[] };
+  episodes?: { upsert?: EpisodeStateUpsert[]; delete?: EpisodeStateKey[] };
+  hidden?: { add?: string[]; remove?: string[] };
+}
+export interface StateWriteResult { ok: true; applied: Record<string, number>; skipped: number }

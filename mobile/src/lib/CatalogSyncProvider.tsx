@@ -5,6 +5,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '~/lib/api';
+import { useAuth } from '~/lib/AuthProvider';
 import { lastSyncedAt, resetCatalog, syncCatalog } from '~/lib/catalogSync';
 import { catalogCount } from '~/lib/db';
 
@@ -89,6 +90,16 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
     })();
     return () => { live = false; };
   }, [db, run]);
+
+  // Writing state for a title puts it in the pool, so a change to your rows can
+  // mean a title this device does not hold yet. One delta request finds out.
+  const { rowsRevision } = useAuth();
+  const seenRows = useRef(rowsRevision);
+  useEffect(() => {
+    if (seenRows.current === rowsRevision) return;
+    seenRows.current = rowsRevision;
+    void run(false);
+  }, [rowsRevision, run]);
 
   const sync = useCallback(() => void run(false), [run]);
   const resync = useCallback(() => void run(true), [run]);

@@ -13,6 +13,7 @@ import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { deviceRegion } from '~/lib/region';
 import { activationUrl } from '~/lib/trakt';
+import type { TraktSyncResult } from '~/lib/traktSync';
 import { color, font, radius, space } from '~/theme';
 
 function Line({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -131,6 +132,46 @@ function Account() {
         <Button label="Sign out" onPress={() => void auth.signOut()} quiet />
       </View>
       <T variant="meta" style={{ color: color.textMuted }}>Signing out signs out every device on this account.</T>
+      {names.includes('Trakt') ? <TraktSync /> : null}
+    </View>
+  );
+}
+
+/** What the last Trakt sync did, in one line. */
+function traktSummary(r: TraktSyncResult): string {
+  const changed = r.itemsChanged + r.episodesChanged;
+  const removed = r.itemsRemoved + r.episodesRemoved;
+  const parts = [
+    changed ? `${changed.toLocaleString('en')} updated` : null,
+    removed ? `${removed.toLocaleString('en')} removed` : null,
+    r.deferred ? `${r.deferred.toLocaleString('en')} new titles waiting for the next sync` : null,
+  ].filter(Boolean);
+  const what = parts.length ? parts.join(', ') : 'Nothing had changed';
+  return r.dryRun ? `Test run, nothing written. Would be: ${what.toLowerCase()}.` : `${what}.`;
+}
+
+function TraktSync() {
+  const { traktSync, syncTraktNow, startTraktSignIn } = useAuth();
+  return (
+    <View style={styles.subgroup}>
+      <T variant="eyebrow">Trakt</T>
+      <Line
+        label="Last synced"
+        value={traktSync.running ? 'Syncing…' : ago(traktSync.syncedAt)}
+        tone={traktSync.error ? color.warning : undefined}
+      />
+      {traktSync.last && !traktSync.running ? (
+        <T variant="caption">
+          {traktSync.last.library.toLocaleString('en')} watched, {traktSync.last.wishlist.toLocaleString('en')} on your watchlist,{' '}
+          {traktSync.last.episodes.toLocaleString('en')} episodes. {traktSummary(traktSync.last)}
+        </T>
+      ) : null}
+      {traktSync.error ? <T variant="caption" style={{ color: color.warning }}>{traktSync.error}</T> : null}
+      <View style={styles.actions}>
+        {traktSync.needsSignIn
+          ? <Button label="Sign in to Trakt again" onPress={startTraktSignIn} />
+          : <Button label="Sync Trakt now" onPress={syncTraktNow} quiet />}
+      </View>
     </View>
   );
 }
@@ -218,6 +259,7 @@ const styles = StyleSheet.create({
   code: { fontFamily: font.mono, letterSpacing: 6, color: color.accent },
   waiting: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   group: { padding: space.lg, gap: space.sm },
+  subgroup: { paddingTop: space.lg, gap: space.sm },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, minHeight: 28 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingTop: space.xs },
 });
