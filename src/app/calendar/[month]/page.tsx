@@ -5,6 +5,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
 import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { publicCatalogEnabled } from "@/lib/publicCatalog";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { TYPE_COLORS } from "@/lib/constants";
 import { popularForMonth } from "@/lib/popularMonthFeed";
@@ -62,7 +63,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const label = monthLabel(month);
   const title = `Game, movie and TV releases in ${label}`;
   const description = `Everything coming out in ${label} across games, movies and shows, ranked by how much attention each release is getting. Free to browse on Fandex.`;
-  const robots = monthRobots(month, items.length, PUBLIC_ITEMS_INDEXABLE);
+  const robots = monthRobots(month, items.length, PUBLIC_ITEMS_INDEXABLE && publicCatalogEnabled());
 
   return {
     title,

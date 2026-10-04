@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
 import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { publicCatalogEnabled } from "@/lib/publicCatalog";
 import type { FacetPrefix } from "@/lib/facetUrl";
 import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref } from "@/lib/facetUrl";
 import { canonicalTagKey } from "@/lib/tagAlias";
@@ -66,7 +67,7 @@ export async function buildFacetMetadata(
   // SEO (2026-08-20) — the soft-launch switch, plus a noindex for the thin tail
   // (a facet listing fewer than 3 titles). See facetRobots for why the test is
   // pool size and not linkable count.
-  const robots = facetRobots(found.total, PUBLIC_ITEMS_INDEXABLE);
+  const robots = facetRobots(found.total, PUBLIC_ITEMS_INDEXABLE && publicCatalogEnabled());
 
   return {
     title: label,

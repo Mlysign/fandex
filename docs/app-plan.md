@@ -133,8 +133,9 @@ they mean building the UI twice (the web client is Expo's web target for free).
    for Google/Trakt/Steam, sessions, your rows, export, erasure); cron; fetch cap; nightly R2
    export; D1 in the EU; tests for the write paths and erasure. Reuses normalisers, merge, facets,
    session and account-merge logic.
-2. **Minimal app (18–55 days by stack).** Google or Trakt sign-in, catalog download and delta sync,
-   calendar, library and watchlist, item detail, rate, search. Sideloaded; no Play work.
+2. **Minimal app (18–30 days in Expo).** Google or Trakt sign-in, catalog download and delta sync,
+   calendar, library and watchlist, Up Next, item detail, rate, search, and the Kotlin Up Next
+   widget with tick-to-watched. Sideloaded; no Play work.
 3. **Website (10–20 days).** The measurement first; then public layer with JSON-LD, sitemap,
    robots, caching, the page rate limit, the beacon; personal layer as the web build; App Links.
 4. **Switch over (1 day).** A week of daily use, one copy of the old DB in R2, delete Railway,
@@ -145,18 +146,22 @@ they mean building the UI twice (the web client is Expo's web target for free).
 6. **Google Play, if wanted (calendar time).** Organisation account or 12 testers for 14 days;
    Data safety; attribution screens; account deletion in the app.
 
-## Open decisions (Nils)
+## Decisions (Nils, 2026-10-04, all as recommended)
 
-- **Stack.** Expo is half the time, keeps a third of the code, and its web build is the website's
-  personal layer. Kotlin is the native toolchain, keeps none, and means a second UI for the web.
-- **Keep Steam?** The one provider that forces a browser page for sign-in; keeping it keeps owned
-  games synced.
-- **Where Trakt tokens live.** On the device and in the browser (each client syncs Trakt itself,
-  then writes to your rows; the plan here), or encrypted in D1 so the Worker can sync in the
-  background without the app open.
-- **Railway during the build.** $5/month with the public catalog off, or $0 and no Fandex until
-  phase 4.
-- **IGDB licence.** One email to partner@igdb.com settles the 24-hour-clause question either way.
+- **Stack: Expo, with the home-screen widget in Kotlin.** The widget is a requirement: tick
+  episodes watched in Up Next from the home screen. It is native code in every stack (Glance),
+  reads the on-device SQLite the app writes, and posts to Trakt directly. Expo with custom
+  native code means Gradle dev builds rather than Expo Go.
+- **Steam: kept, in phase 5.** Not in the minimal app.
+- **Trakt tokens: on the device and in the browser.** Each client syncs Trakt itself and writes
+  the result to the user's rows. No background sync with the app closed; the widget covers the
+  case that matters.
+- **Railway during the build: the $5 floor, public catalog off.** `PUBLIC_CATALOG=0`,
+  `BACKFILL_ENABLED=0`, `FACET_SWEEP_ENABLED=0` set on Railway 2026-10-04.
+- **IGDB licence: email partner@igdb.com now.**
+
+Still needed from Nils: R2 enabled on his Cloudflare account and a read/write token for a bucket
+`fandex-litestream` (step 0), and the IGDB email sent.
 
 ## Rules that carry over unchanged
 

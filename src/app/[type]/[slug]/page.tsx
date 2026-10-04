@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { BASE_URL } from "@/lib/baseUrl";
 import { isPublicType, isUuid, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
+import { publicCatalogEnabled } from "@/lib/publicCatalog";
 import type { ResolvedPublic } from "@/lib/detail/publicDetail";
 import { resolvePublicDetail, resolvePublicDetailBySlug } from "@/lib/detail/publicDetail";
 import { getSession } from "@/lib/session";
@@ -95,7 +96,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   return {
     title,
     description,
-    ...(PUBLIC_ITEMS_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
+    ...(PUBLIC_ITEMS_INDEXABLE && publicCatalogEnabled() ? {} : { robots: { index: false, follow: false } }),
     alternates: { canonical },
     openGraph: {
       title,

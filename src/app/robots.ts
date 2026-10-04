@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { BASE_URL } from "@/lib/baseUrl";
 import { PUBLIC_TYPES } from "@/lib/publicUrl";
+import { publicCatalogEnabled } from "@/lib/publicCatalog";
 
 // P13 — robots policy. The landing page and the public item pages
 // (`/{type}/{uuid}/{slug}`) are server-rendered catalog content, meant to be
@@ -56,6 +57,18 @@ const ALLOW = ["/", ...PUBLIC_TYPES.map((t) => `/${t}/`), "/person/", "/tag/", "
 const DISALLOW = ["/api/", "/dashboard", "/wishlist", "/calendar", "/profile", "/discover", "/library", "/insights", "/settings", "/item", "/r/", "/*?sort="];
 
 export default function robots(): MetadataRoute.Robots {
+  // PUBLIC_CATALOG=0 (2026-10-04): the site is a private tool until the app
+  // and the Cloudflare site replace it. Only /legal/ stays fetchable, because
+  // the privacy policy and imprint have to be reachable regardless. The
+  // pages behind the Disallow also send noindex; a crawler that still fetches
+  // one sees it, and one that obeys this file never fetches it.
+  if (!publicCatalogEnabled()) {
+    return {
+      rules: [{ userAgent: "*", allow: ["/legal/"], disallow: ["/"] }],
+      sitemap: `${BASE_URL}/sitemap.xml`,
+      host: BASE_URL,
+    };
+  }
   return {
     rules: [
       { userAgent: "*", allow: ALLOW, disallow: DISALLOW },

@@ -107,6 +107,41 @@ is struck through rather than deleted, so the reversal stays visible.
 
 ---
 
+## Decided 2026-10-04: the direction
+
+The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
+
+- **Fandex becomes a native Android app AND a website on one Cloudflare backend (Workers +
+  D1, free tiers); Railway goes.** Bill target: the domain only. The Next.js site is a private
+  tool until the switch-over, with the public catalog OFF (`PUBLIC_CATALOG=0`,
+  `BACKFILL_ENABLED=0`, `FACET_SWEEP_ENABLED=0` on Railway) so it sits at the $5 floor.
+- **Stack: React Native / Expo. Kotlin only for the home-screen widget.** Reason: one
+  codebase for the app and the website's personal layer, a third of today's TypeScript and its
+  tests carry over, and the widget is native code in every stack anyway. ⚠️ Expo with custom
+  native code means Gradle dev builds, not Expo Go.
+- **The Up Next widget is a requirement, not a nice-to-have:** tick episodes watched from the
+  home screen. Written in Kotlin (Glance) inside the Expo app, reading the on-device SQLite,
+  posting to Trakt directly.
+- **Trakt tokens live ON THE DEVICE (and in the browser), not in D1.** Each client syncs
+  Trakt itself and writes the result to the user's rows. Consequence accepted: no background
+  sync with the app closed; the widget covers the one case that matters.
+- **Accounts stay, in D1.** Google, Trakt and Steam are three ways to prove it is you; no
+  provider is the identity. Game ratings and wishlists have no provider home, which is the
+  reason. Export, erasure and counters come back with them.
+- **Steam: KEPT, but phase 5, not the minimal app.** The only provider that forces a browser
+  page for sign-in.
+- **The public web pages: ONE React component for crawlable HTML and interactive page, no
+  template.** Where it renders is decided by a measurement at the start of phase 3 (free
+  Worker if the heaviest item page renders well under 10 ms; else the daily Pages build by
+  default, $5 Workers Paid as the upgrade). Exactly one route gets built.
+- **IGDB licence email: SEND IT NOW** (reverses the 2026-09-02 hold). The Worker's design
+  differs depending on the answer.
+- **Step 0, whatever else happens: the Litestream replica moves to R2 and the restore drill
+  re-runs BEFORE the Railway plan is touched.** The only backup lives in a Railway-provisioned
+  bucket.
+
+---
+
 ## Decided 2026-09-02
 
 Answered in one rapid-fire pass.

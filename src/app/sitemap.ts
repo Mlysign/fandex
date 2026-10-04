@@ -6,6 +6,7 @@ import { LEGAL_LOCALES } from "@/lib/legal/types";
 import { indexableMonths } from "@/lib/calendarMonths";
 import { sitemapFacets } from "@/lib/facetSnapshot";
 import { publicFacetHref } from "@/lib/facetUrl";
+import { publicCatalogEnabled } from "@/lib/publicCatalog";
 
 // P13 — sitemap: the landing page plus one entry per public item page.
 //
@@ -35,6 +36,21 @@ export const dynamic = "force-dynamic";
 const INDEXABLE_LEGAL_DOCS = ["privacy", "terms", "support"] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const legal: MetadataRoute.Sitemap = LEGAL_LOCALES.flatMap((locale) =>
+    INDEXABLE_LEGAL_DOCS.map((doc) => ({
+      url: `${BASE_URL}/legal/${locale}/${doc}`,
+      changeFrequency: "yearly" as const,
+      priority: 0.3,
+    }))
+  );
+
+  // PUBLIC_CATALOG=0 (2026-10-04): the crawlable catalog is switched off while
+  // the Next.js site is a private tool (docs/app-plan.md). robots.txt disallows
+  // everything but /legal/, so advertising anything else here would be inviting
+  // fetches the robots file forbids. The legal pages stay listed because the
+  // privacy policy has to be reachable regardless.
+  if (!publicCatalogEnabled()) return legal;
+
   const landing: MetadataRoute.Sitemap = [
     {
       url: `${BASE_URL}/`,
@@ -78,13 +94,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
-    ...LEGAL_LOCALES.flatMap((locale) =>
-      INDEXABLE_LEGAL_DOCS.map((doc) => ({
-        url: `${BASE_URL}/legal/${locale}/${doc}`,
-        changeFrequency: "yearly" as const,
-        priority: 0.3,
-      }))
-    ),
+    ...legal,
   ];
 
   // Soft launch (PUBLIC_ITEMS_INDEXABLE=false): pages stay readable + unfurlable,
