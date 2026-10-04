@@ -28,7 +28,10 @@ const WIDGET_ROWS = 12;
 /**
  * Hand the widget its rows, read from `up_next`. The same query and order as
  * the Up next tab (upNext.ts → upNextList), kept here so this file imports
- * nothing that imports it back. Never throws: a widget that did not redraw is
+ * nothing that imports it back. ⚠️ The ORDER BY is the same expression in both
+ * and has to stay so: it counts this device's own record of your last tick,
+ * because Trakt's `last_watched_at` lags a tick made seconds earlier and a
+ * show ticked again and again stayed below one ticked before it. Never throws: a widget that did not redraw is
  * not worth failing a sync over.
  */
 export async function publishWidget(db: SQLiteDatabase): Promise<void> {
@@ -39,7 +42,7 @@ export async function publishWidget(db: SQLiteDatabase): Promise<void> {
          FROM up_next u JOIN catalog c ON c.id = u.media_item_id
         WHERE u.season IS NOT NULL
           AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
-        ORDER BY MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0)) DESC, c.title
+        ORDER BY MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) DESC, c.title
         LIMIT ?`,
       [WIDGET_ROWS],
     );

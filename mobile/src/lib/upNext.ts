@@ -131,7 +131,11 @@ async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: numb
   await db.runAsync(
     `INSERT OR REPLACE INTO up_next (media_item_id, season, episode, title, aired_at, last_watched_at, watched_count, checked_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [show.mediaItemId, p.season, p.episode, p.title, p.airedAt, p.lastWatchedAt ?? show.lastWatchedAt, show.watchedCount, now],
+    // The later of what Trakt says and what this device recorded. Trakt's
+    // `last_watched_at` lagged behind a tick made seconds earlier, and a show
+    // ticked again and again stayed below one ticked before it.
+    [show.mediaItemId, p.season, p.episode, p.title, p.airedAt,
+     Math.max(p.lastWatchedAt ?? 0, show.lastWatchedAt ?? 0) || null, show.watchedCount, now],
   );
 }
 
@@ -180,7 +184,7 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
     season: number; episode: number; episode_title: string | null; event_at: number | null;
   }>(
     `SELECT u.media_item_id, c.title, c.poster_url, u.season, u.episode, u.title AS episode_title,
-            MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0)) AS event_at
+            MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) AS event_at
        FROM up_next u JOIN catalog c ON c.id = u.media_item_id
       WHERE u.season IS NOT NULL
         AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
