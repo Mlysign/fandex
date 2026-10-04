@@ -38,7 +38,8 @@ and his real Trakt account. The signed-out screens were also run in a browser.
 | The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. Nils then ticked real episodes on it: the first was marked, the next stuck at "Marking…" (the two faults under "How it is put together"), and after the fix two ticks in a row ran with the app open behind the launcher and the library untouched. |
 | Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
 
-⚠️ **Not run by me:** a real tick (it logs a real play on his Trakt). Nils ticked episodes in the app and through the widget's first version, which opened the app; the background version has only run against a made-up id. Also not run: the code sign-in
+**Real ticks were Nils's to run, and he ran them** (2026-10-04): in the app, and on the widget in the background, several in a row, with the row moving on and the ticked show moving to the top.
+⚠️ **Not run:** the code sign-in
 since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
 again" after Trakt drops a token, and a Trakt token refresh (a token lasts a day; none had expired).
 
@@ -113,7 +114,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   answer in `up_next`. A show is asked again when its ticked-episode count moves, or after a day
   (watched in the last four months) or a week (older). A run asks about twelve shows, most
   recently watched first; the screen runs up to six passes a visit. The order is the site's: an
-  entry sits at the later of "you watched the one before" and "this one aired".
+  entry sits at the later of "you watched the one before" and "this one aired". ⚠️ "Watched" is
+  the later of Trakt's `last_watched_at` and this device's own newest tick for the show: Trakt's
+  value lagged a tick made seconds earlier, and a show ticked again and again stayed in second
+  place. The tab and the widget share that one ORDER BY and it has to stay the same in both.
 - **The widget is Kotlin in a local Expo module** (`mobile/modules/up-next-widget`), autolinked
   through `expo.autolinking.nativeModulesDir` in `package.json`. That is what keeps it out of the
   generated `android/` folder: the module carries its own manifest entries, layouts and classes,
@@ -241,6 +245,18 @@ sideloading and is not a Play upload key.
    so and stops. The form that lets the person choose is not built.
 
 ## Known problems
+
+- **The widget's look and feel is not right yet** (Nils, 2026-10-04: "the ux not feeling and
+  looking great"). He deferred the pass and has not said which part. Ask before changing it.
+  It is text only, the row swaps to "Marking … watched" for about a second, and it does not
+  use the app's fonts.
+- **The web build has not been run since the entry point changed.** `index.js` now imports
+  `src/headless.ts` before the router, and the score, Up next and the widget module all landed
+  after the last browser check. `tsc` and the tests pass; nothing has loaded it in a browser.
+- **Seen once, not explained:** the Library showed "0 titles" and "Could not refresh your
+  library" straight after a reinstall over a session whose database connection had been closed
+  under it. The server's rows were intact and the next launch was fine. A failed pull now logs
+  `rows_pull_failed` with the reason.
 
 - **A fast reload in a browser can fail to open the database.** The SQLite file is locked by the
   page that opened it, and a reload starts the new page before the old one has let go
