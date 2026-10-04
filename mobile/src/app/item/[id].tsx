@@ -11,7 +11,9 @@ import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { compactCount, longDate, todayIso } from '~/lib/dates';
 import { itemStateFor } from '~/lib/db';
+import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { deviceRegion } from '~/lib/region';
+import { TraktAuthError } from '~/lib/trakt';
 import { color, radius, space } from '~/theme';
 
 function Fact({ label, value }: { label: string; value: string | null | undefined }) {
@@ -32,6 +34,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </View>
   );
 }
+
+const RATINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 function runtime(minutes: number | null): string | null {
   if (!minutes) return null;
@@ -83,6 +87,27 @@ export default function ItemScreen() {
     return () => { live = false; };
   }, [db, id, auth.status, auth.rowsRevision]);
 
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  /** Run one action; say why if it failed. A failed step wrote nothing after it. */
+  const act = useCallback((run: () => Promise<void>) => {
+    setBusy(true);
+    setActionError(null);
+    run()
+      .then(() => auth.rowsChanged())
+      .catch((e: unknown) => {
+        console.warn('item_action_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        setActionError(
+          e instanceof TraktAuthError ? 'Trakt needs you to sign in again. You can do that on the You tab.'
+          : e instanceof ApiError && e.code === 'offline' ? 'No connection. Nothing was changed.'
+          : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot save more changes until tomorrow.'
+          : e instanceof ApiError ? 'Fandex could not save that. Nothing was changed.'
+          : e instanceof Error ? e.message : 'That did not work. Nothing was changed.',
+        );
+      })
+      .finally(() => setBusy(false));
+  }, [auth]);
+
   if (error) {
     return (
       <Screen headed>
@@ -99,6 +124,7 @@ export default function ItemScreen() {
   }
 
   const m = item.merged;
+  const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
   const released = longDate(m.releaseDate);
   const upcoming = !!m.releaseDate && m.releaseDate.slice(0, 10) > todayIso();
   const made = item.type === 'game'
@@ -138,6 +164,52 @@ export default function ItemScreen() {
               ].filter(Boolean).join(' · ')}
             </T>
             {mine.rating != null ? <T variant="label">You rated it {mine.rating}</T> : null}
+          </View>
+        ) : null}
+
+        {auth.status === 'signedIn' && mine ? (
+          <View style={styles.actionsBlock}>
+            <T variant="eyebrow">Your rating</T>
+            <View style={styles.stars}>
+              {RATINGS.map((n) => {
+                const on = mine.rating != null && Math.round(mine.rating) === n;
+                return (
+                  <Pressable
+                    key={n}
+                    disabled={busy}
+                    // Tapping the rating it already has takes the rating away.
+                    onPress={() => act(() => rateItem(db, target, on ? null : n))}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={on ? `Remove your rating of ${n}` : `Rate ${n} out of 10`}
+                    style={({ pressed }) => [styles.star, on && styles.starOn, (pressed || busy) && { opacity: 0.6 }]}>
+                    <T variant="label" style={{ color: on ? color.textOnAccent : color.textSecondary }}>{n}</T>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.actionRow}>
+              <Pressable
+                disabled={busy}
+                onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mine.inWishlist }}
+                style={({ pressed }) => [styles.action, mine.inWishlist && styles.actionOn, (pressed || busy) && { opacity: 0.6 }]}>
+                <T variant="label" style={mine.inWishlist ? { color: color.accent } : undefined}>
+                  {mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'}
+                </T>
+              </Pressable>
+              {mine.inLibrary ? (
+                <Pressable
+                  disabled={busy}
+                  onPress={() => act(() => removeFromLibrary(db, target))}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.action, (pressed || busy) && { opacity: 0.6 }]}>
+                  <T variant="label">Remove from library</T>
+                </Pressable>
+              ) : null}
+            </View>
+            {actionError ? <T variant="caption" style={{ color: color.warning }}>{actionError}</T> : null}
           </View>
         ) : null}
 
@@ -238,6 +310,20 @@ const styles = StyleSheet.create({
     marginHorizontal: space.lg, marginBottom: space.md, padding: space.md,
     borderRadius: radius.md, backgroundColor: color.accentSubtle,
   },
+  actionsBlock: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.sm },
+  // Ten across a 360 px screen: flex shares the row, the height is the tap target.
+  stars: { flexDirection: 'row', gap: space.xs },
+  star: {
+    flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center',
+    borderRadius: radius.sm, borderWidth: 1, borderColor: color.borderStrong,
+  },
+  starOn: { backgroundColor: color.accent, borderColor: color.accent },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  action: {
+    paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center',
+    borderRadius: radius.md, borderWidth: 1, borderColor: color.borderStrong,
+  },
+  actionOn: { borderColor: color.accent },
   ratings: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.lg },
   rating: {
     paddingHorizontal: space.md, paddingVertical: space.sm, gap: space.xxs,

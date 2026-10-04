@@ -56,6 +56,8 @@ interface Auth {
   /** Bumped whenever the device's copy of your rows changes, so a list can re-query. */
   rowsRevision: number;
   syncRows: () => void;
+  /** A screen wrote to the device's copy of your rows (a rating, the wishlist). */
+  rowsChanged: () => void;
   traktSync: TraktSyncState;
   syncTraktNow: () => void;
 }
@@ -308,11 +310,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
   const syncTraktNow = useCallback(() => void runTraktSync(false), [runTraktSync]);
+  const rowsChanged = useCallback(() => setRowsRevision((r) => r + 1), []);
 
   return (
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, signOut,
-      rowsSyncing, rowsError, rowsRevision, syncRows, traktSync, syncTraktNow,
+      rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
     }}>
       {children}
     </Ctx.Provider>

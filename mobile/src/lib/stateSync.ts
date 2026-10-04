@@ -14,7 +14,7 @@
 // half-empty library.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { api, type EpisodeStateRow, type ItemStateRow, type StateCounts } from '~/lib/api';
+import { api, type EpisodeStateRow, type ItemStateRow, type StateCounts, type StateWrite } from '~/lib/api';
 import { getMeta, setMeta } from '~/lib/db';
 
 const SIGNATURE_KEY = 'state_signature';
@@ -110,6 +110,36 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
   });
 
   return { changed: true, items: items.length, episodes: episodes.length, hidden: hidden.rows.length };
+}
+
+/**
+ * Mirror an item write the Worker has ACCEPTED into the device's copy, so the
+ * screen shows it without pulling everything again.
+ *
+ * The stored signature is left alone on purpose. It no longer matches the
+ * Worker, so the next sync pulls the lot and replaces this approximation with
+ * the truth (the Worker's own timestamps, and anything another device wrote).
+ */
+export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db.withTransactionAsync(async () => {
+    for (const k of write.items?.delete ?? []) {
+      await db.runAsync('DELETE FROM item_state WHERE media_item_id = ? AND source = ? AND relation = ?', [k.mediaItemId, k.source, k.relation]);
+    }
+    for (const r of write.items?.upsert ?? []) {
+      // The same rule the Worker applies to added_at: what was sent, else what
+      // the row had, else now.
+      await db.runAsync(
+        `INSERT INTO item_state (media_item_id, source, relation, status, rating, review, reviewed_at, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT added_at FROM item_state WHERE media_item_id = ? AND source = ? AND relation = ?), ?), ?)
+         ON CONFLICT(media_item_id, source, relation) DO UPDATE SET
+           status = excluded.status, rating = excluded.rating, review = excluded.review,
+           reviewed_at = excluded.reviewed_at, added_at = excluded.added_at, updated_at = excluded.updated_at`,
+        [r.mediaItemId, r.source, r.relation, r.status, r.rating, r.review, r.reviewedAt,
+         r.addedAt ?? null, r.mediaItemId, r.source, r.relation, now, now],
+      );
+    }
+  });
 }
 
 /** Signing out: the device forgets the account's rows. The Worker's copy is untouched. */
