@@ -14,7 +14,7 @@ IGDB's answer on storing its data._
 | 0. Make the data safe | ✅ Closed differently than planned. A verified snapshot of the Railway database from 2026-10-05 is in R2 and on disk. The continuous Litestream replica to R2 was never switched on and is no longer needed, because the Railway service was stopped that day. |
 | 1. Worker and D1 with accounts | ✅ Built, tested (142 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
 | 2. Minimal app | 🟢 Built and running on Nils's Pixel 8 against his real account: catalog download and delta sync, sign-in through Trakt in a browser tab, Trakt synced from the phone, calendar, search, browse, library and wishlist, item pages with rating and wishlisting, Up next, the Fandex Score computed on the device (identical to the site's on all 4,559 titles), and the Kotlin Up next widget. Two things the phase named are not built: Google sign-in, and the form for joining two accounts, which only matters once a second way to sign in exists. The widget's tick opens the app to mark the episode instead of posting to Trakt from Kotlin, so the Trakt token stays in one place. → [app.md](app.md) |
-| 3. Website | ⬜ Its first task, the CPU measurement, has a partial answer already: see below. |
+| 3. Website | 🔵 Started 2026-10-05. The measurement is done: live React rendering does not fit the free Worker (median 4 ms, worst 35 against a 10 ms limit), so the public pages are a daily static build. The item page is split so the app and the website render one component. Next: real links and images in that component, then the build itself. → "The website" below |
 | 4. Switch over | 🟡 Railway was deleted early, on 2026-10-05, before the website exists (Nils's call, to stop the cost and prove nothing depends on it). fandex.org is dark until phase 3 has something to serve. Left: the DNS records that point at Railway go, the domain moves to Cloudflare with phase 3, and the privacy policy is rewritten. |
 
 **What phase 1 measured that changes the later phases:**
@@ -134,6 +134,36 @@ First task of phase 3 is the measurement: the real item page's React render on a
 timed on the twenty heaviest items. Under ~5 ms on all of them → free Worker. Otherwise → the
 daily build by default, with the $5 plan as the upgrade for the day the lag matters. Only one route
 is built.
+
+### Measured 2026-10-05: the free Worker cannot render pages live
+
+The app's own item page (`mobile/src/components/ItemPage.tsx`, the component the item screen
+renders) was rendered to HTML with react-native-web in a probe Worker on the free plan, over the
+60 largest docs in D1 (20 per media type). CPU read with `wrangler tail`, 170 renders logged.
+
+| | CPU |
+|---|--:|
+| The control: the D1 read and the parse, no render | 0 to 1 ms |
+| Render, requests 0.7 s apart: median / p90 / worst | 4 / 8 / 14 ms |
+| Render, requests back to back: p90 / worst | 13 / 35 ms |
+| First render on a fresh isolate | 28 ms |
+
+Of 119 calm renders, 27 were over 5 ms and 5 were at or over the 10 ms limit. Cloudflare
+terminated none of the 170. That is the tolerance worker.md describes, and it is not a budget to
+build a website on: the slow renders are the cold ones, which are the ones a crawler asks for.
+
+**So, by the rule set before measuring: the public pages are a daily build.** Static HTML, no CPU
+limit, and a new title gets its page the next day. The $5 plan stays the upgrade for the day that
+lag matters. The probe is `mobile/ssr-probe/` (build, deploy, tail, delete, each one command); the
+Worker it deployed is deleted.
+
+Two things the render showed that the component needs before any route publishes it:
+
+- **The HTML has no `<img>` and no `<a>`.** react-native-web's Image draws nothing until it runs
+  in a browser, and the page's links are `Pressable`s with an `onPress`. A crawler gets the text
+  and nothing to follow, and no image to index. 20 KB of HTML, 106 elements, for the largest film.
+- **Fonts do not arrive with the HTML.** The app loads them in JavaScript, so the static page
+  shows the browser's default until it hydrates.
 
 ## Effort (working days, from the repo's line counts)
 

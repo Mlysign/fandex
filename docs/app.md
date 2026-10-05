@@ -71,6 +71,12 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   directory up, so the app can import the site's pure modules unchanged (`metro.config.js` and
   `tsconfig.json` both map it). Today that is `normalize.ts` and `countries.ts`. A site module
   imported here must not reach `@/lib/db` or anything Node-only: the Worker's rule.
+- **The item page is two files, and the split is the website's.** `src/components/ItemPage.tsx`
+  is the title as everybody sees it and knows nothing about who is looking: no database, no
+  session, no router. `src/app/item/[id].tsx` loads the item and passes what is yours (your state,
+  your score, the rating row) in as `personal`. The website renders `ItemPage` alone to HTML, so
+  anything device-only imported there breaks that build. `mobile/ssr-probe/` is the proof it
+  renders on a server, and where its CPU cost was measured (docs/app-plan.md, "The website").
 - **The device holds a copy of the scoring pool** in SQLite (`expo-sqlite`, also on the web).
   `catalogSync.ts` pulls the Worker's delta a page at a time and advances its cursor in the same
   transaction that writes the page, so a sync that dies half way resumes from the last page that
@@ -250,9 +256,11 @@ sideloading and is not a Play upload key.
   looking great"). He deferred the pass and has not said which part. Ask before changing it.
   It is text only, the row swaps to "Marking … watched" for about a second, and it does not
   use the app's fonts.
-- **The web build has not been run since the entry point changed.** `index.js` now imports
-  `src/headless.ts` before the router, and the score, Up next and the widget module all landed
-  after the last browser check. `tsc` and the tests pass; nothing has loaded it in a browser.
+- **The web build has only been spot-checked since the entry point changed.** `index.js` now
+  imports `src/headless.ts` before the router, and the score, Up next and the widget module all
+  landed after the last full browser check. On 2026-10-05 it started and an item page loaded
+  signed out, with its images and fonts and no console error. Nothing else has been looked at
+  in a browser: not sign-in, not the tabs, not the score.
 - **Seen once, not explained:** the Library showed "0 titles" and "Could not refresh your
   library" straight after a reinstall over a session whose database connection had been closed
   under it. The server's rows were intact and the next launch was fine. A failed pull now logs

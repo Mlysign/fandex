@@ -1,0 +1,15 @@
+// The render probe (worker.tsx). Free plan, read-only against the live D1.
+// Deployed for a measurement and deleted after it:
+//
+//   node mobile/ssr-probe/build.mjs
+//   cd worker && npx wrangler deploy --config ../mobile/ssr-probe/wrangler.jsonc
+//   cd worker && npx wrangler delete --config ../mobile/ssr-probe/wrangler.jsonc
+{
+  "name": "fandex-ssr-probe",
+  "main": "dist/worker.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-08-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "fandex", "database_id": "6daba7e4-ea55-4c72-b297-eb92ada8c581" }
+  ]
+}

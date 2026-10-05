@@ -1,15 +1,15 @@
-// One title: what it is, when it is out, who made it, where to get it.
+// One title on the device: the shared page (components/ItemPage) with what is
+// yours slotted in: your state, your Fandex Score, the rating row.
 
-import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { FandexBadge, Poster, Screen, StateBlock, T, TypeTag } from '~/components/ui';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { ItemPage } from '~/components/ItemPage';
+import { FandexBadge, Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
-import { compactCount, longDate, todayIso } from '~/lib/dates';
 import { itemStateFor } from '~/lib/db';
 import type { ScoreReason } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
@@ -17,25 +17,6 @@ import { useScores } from '~/lib/ScoreProvider';
 import { deviceRegion } from '~/lib/region';
 import { TraktAuthError } from '~/lib/trakt';
 import { color, radius, space } from '~/theme';
-
-function Fact({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <View style={styles.fact}>
-      <T variant="eyebrow">{label}</T>
-      <T variant="body">{value}</T>
-    </View>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <T variant="eyebrow">{title}</T>
-      {children}
-    </View>
-  );
-}
 
 const RATINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -48,13 +29,6 @@ const ROLE_LABEL: Record<string, string> = {
 function reasonKind(r: ScoreReason, categoryLabel: (id: string | undefined) => string | null): string {
   if (r.kind === 'tag') return categoryLabel(r.category) ?? 'Tag';
   return ROLE_LABEL[r.role ?? ''] ?? (r.kind === 'ip' ? 'Franchise' : r.kind === 'person' ? 'Person' : 'Company');
-}
-
-function runtime(minutes: number | null): string | null {
-  if (!minutes) return null;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h ? `${h} h ${m ? `${m} min` : ''}`.trim() : `${m} min`;
 }
 
 export default function ItemScreen() {
@@ -85,8 +59,7 @@ export default function ItemScreen() {
     void load();
   }, [load]);
 
-  // What this device knows about you and this title. Read-only for now: rating
-  // and wishlisting from the app come with the write path.
+  // What this device knows about you and this title.
   const db = useSQLiteContext();
   const auth = useAuth();
   const [mine, setMine] = useState<Awaited<ReturnType<typeof itemStateFor>> | null>(null);
@@ -138,230 +111,121 @@ export default function ItemScreen() {
     );
   }
 
-  const m = item.merged;
   // Scored from the facets the Worker sent with the page, so a title that is
   // not in the device's catalog copy (one just opened from search) scores too.
   const fandex = scores.score(item.id, item.facets);
   const counted = fandex ? fandex.reasons.filter((r) => !r.capped) : [];
   const uncounted = fandex ? fandex.reasons.length - counted.length : 0;
   const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
-  const released = longDate(m.releaseDate);
-  const upcoming = !!m.releaseDate && m.releaseDate.slice(0, 10) > todayIso();
-  const made = item.type === 'game'
-    ? [m.developer, m.publisher && m.publisher !== m.developer ? m.publisher : null].filter(Boolean).join(' · ')
-    : m.director ?? null;
-  const metaLine = [item.vector.year ? String(item.vector.year) : null, runtime(m.runtimeMinutes), m.certification[0]]
-    .filter(Boolean)
-    .join(' · ');
+
+  const personal = (
+    <>
+      {mine && (mine.inLibrary || mine.inWishlist) ? (
+        <View style={styles.mine}>
+          <T variant="label" style={{ color: color.accent }}>
+            {[
+              mine.inLibrary ? (mine.status ? `In your library · ${mine.status}` : 'In your library') : null,
+              mine.inWishlist ? 'On your wishlist' : null,
+            ].filter(Boolean).join(' · ')}
+          </T>
+          {mine.rating != null ? <T variant="label">You rated it {mine.rating}</T> : null}
+        </View>
+      ) : null}
+
+      {fandex ? (
+        <View style={styles.fandex}>
+          <View style={styles.fandexHead}>
+            <FandexBadge score={fandex.score} center={fandex.center} large />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T variant="title">Fandex Score</T>
+              <T variant="caption">
+                How well this matches your taste. A title you have no opinion about scores {Math.round(fandex.center)}, your own average.
+              </T>
+            </View>
+          </View>
+          {counted.slice(0, whyOpen ? counted.length : 4).map((r) => (
+            <View key={`${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T variant="body" numberOfLines={1}>{r.label}</T>
+                <T variant="meta" numberOfLines={1}>
+                  {reasonKind(r, scores.categoryLabel)} · you rate these {r.BA.toFixed(1)} over {r.n} {r.n === 1 ? 'title' : 'titles'}
+                </T>
+              </View>
+              <T variant="title" style={{ color: r.contribution >= 0 ? color.success : color.danger }}>
+                {r.contribution >= 0 ? '+' : '−'}{Math.abs(r.contribution).toFixed(1)}
+              </T>
+            </View>
+          ))}
+          {counted.length > 4 || uncounted > 0 ? (
+            <Pressable onPress={() => setWhyOpen((v) => !v)} accessibilityRole="button" style={styles.whyToggle}>
+              <T variant="label" style={{ color: color.accent }}>
+                {whyOpen ? 'Show less' : `Show all ${counted.length} that count`}
+              </T>
+              {whyOpen && uncounted > 0 ? (
+                <T variant="meta">{uncounted} more matched and were left out: only the strongest few count.</T>
+              ) : null}
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {auth.status === 'signedIn' && mine ? (
+        <View style={styles.actionsBlock}>
+          <T variant="eyebrow">Your rating</T>
+          <View style={styles.stars}>
+            {RATINGS.map((n) => {
+              const on = mine.rating != null && Math.round(mine.rating) === n;
+              return (
+                <Pressable
+                  key={n}
+                  disabled={busy}
+                  // Tapping the rating it already has takes the rating away.
+                  onPress={() => act(() => rateItem(db, target, on ? null : n))}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={on ? `Remove your rating of ${n}` : `Rate ${n} out of 10`}
+                  style={({ pressed }) => [styles.star, on && styles.starOn, (pressed || busy) && { opacity: 0.6 }]}>
+                  <T variant="label" style={{ color: on ? color.textOnAccent : color.textSecondary }}>{n}</T>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.actionRow}>
+            <Pressable
+              disabled={busy}
+              onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mine.inWishlist }}
+              style={({ pressed }) => [styles.action, mine.inWishlist && styles.actionOn, (pressed || busy) && { opacity: 0.6 }]}>
+              <T variant="label" style={mine.inWishlist ? { color: color.accent } : undefined}>
+                {mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'}
+              </T>
+            </Pressable>
+            {mine.inLibrary ? (
+              <Pressable
+                disabled={busy}
+                onPress={() => act(() => removeFromLibrary(db, target))}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.action, (pressed || busy) && { opacity: 0.6 }]}>
+                <T variant="label">Remove from library</T>
+              </Pressable>
+            ) : null}
+          </View>
+          {actionError ? <T variant="caption" style={{ color: color.warning }}>{actionError}</T> : null}
+        </View>
+      ) : null}
+    </>
+  );
 
   return (
     <Screen headed>
-      <Stack.Screen options={{ title: m.title }} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: space.section + bottom }]}>
-        {m.backdropUrl ? <Image source={{ uri: m.backdropUrl }} style={styles.backdrop} contentFit="cover" transition={120} /> : null}
-
-        <View style={styles.head}>
-          <Poster uri={m.posterUrl} width={104} kind={item.type} />
-          <View style={styles.headBody}>
-            <TypeTag kind={item.type} />
-            <T variant="serifMd">{m.title}</T>
-            {metaLine ? <T variant="meta">{metaLine}</T> : null}
-            {released ? (
-              <T variant="caption" style={upcoming ? { color: color.accent } : undefined}>
-                {upcoming ? `Out ${released}` : `Released ${released}`}
-                {item.region !== 'US' && item.type === 'movie' ? ` (${item.region})` : ''}
-              </T>
-            ) : null}
-          </View>
-        </View>
-
-        {mine && (mine.inLibrary || mine.inWishlist) ? (
-          <View style={styles.mine}>
-            <T variant="label" style={{ color: color.accent }}>
-              {[
-                mine.inLibrary ? (mine.status ? `In your library · ${mine.status}` : 'In your library') : null,
-                mine.inWishlist ? 'On your wishlist' : null,
-              ].filter(Boolean).join(' · ')}
-            </T>
-            {mine.rating != null ? <T variant="label">You rated it {mine.rating}</T> : null}
-          </View>
-        ) : null}
-
-        {fandex ? (
-          <View style={styles.fandex}>
-            <View style={styles.fandexHead}>
-              <FandexBadge score={fandex.score} center={fandex.center} large />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T variant="title">Fandex Score</T>
-                <T variant="caption">
-                  How well this matches your taste. A title you have no opinion about scores {Math.round(fandex.center)}, your own average.
-                </T>
-              </View>
-            </View>
-            {counted.slice(0, whyOpen ? counted.length : 4).map((r) => (
-              <View key={`${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <T variant="body" numberOfLines={1}>{r.label}</T>
-                  <T variant="meta" numberOfLines={1}>
-                    {reasonKind(r, scores.categoryLabel)} · you rate these {r.BA.toFixed(1)} over {r.n} {r.n === 1 ? 'title' : 'titles'}
-                  </T>
-                </View>
-                <T variant="title" style={{ color: r.contribution >= 0 ? color.success : color.danger }}>
-                  {r.contribution >= 0 ? '+' : '−'}{Math.abs(r.contribution).toFixed(1)}
-                </T>
-              </View>
-            ))}
-            {counted.length > 4 || uncounted > 0 ? (
-              <Pressable onPress={() => setWhyOpen((v) => !v)} accessibilityRole="button" style={styles.whyToggle}>
-                <T variant="label" style={{ color: color.accent }}>
-                  {whyOpen ? 'Show less' : `Show all ${counted.length} that count`}
-                </T>
-                {whyOpen && uncounted > 0 ? (
-                  <T variant="meta">{uncounted} more matched and were left out: only the strongest few count.</T>
-                ) : null}
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        {auth.status === 'signedIn' && mine ? (
-          <View style={styles.actionsBlock}>
-            <T variant="eyebrow">Your rating</T>
-            <View style={styles.stars}>
-              {RATINGS.map((n) => {
-                const on = mine.rating != null && Math.round(mine.rating) === n;
-                return (
-                  <Pressable
-                    key={n}
-                    disabled={busy}
-                    // Tapping the rating it already has takes the rating away.
-                    onPress={() => act(() => rateItem(db, target, on ? null : n))}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: on }}
-                    accessibilityLabel={on ? `Remove your rating of ${n}` : `Rate ${n} out of 10`}
-                    style={({ pressed }) => [styles.star, on && styles.starOn, (pressed || busy) && { opacity: 0.6 }]}>
-                    <T variant="label" style={{ color: on ? color.textOnAccent : color.textSecondary }}>{n}</T>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={styles.actionRow}>
-              <Pressable
-                disabled={busy}
-                onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
-                accessibilityRole="button"
-                accessibilityState={{ selected: mine.inWishlist }}
-                style={({ pressed }) => [styles.action, mine.inWishlist && styles.actionOn, (pressed || busy) && { opacity: 0.6 }]}>
-                <T variant="label" style={mine.inWishlist ? { color: color.accent } : undefined}>
-                  {mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'}
-                </T>
-              </Pressable>
-              {mine.inLibrary ? (
-                <Pressable
-                  disabled={busy}
-                  onPress={() => act(() => removeFromLibrary(db, target))}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.action, (pressed || busy) && { opacity: 0.6 }]}>
-                  <T variant="label">Remove from library</T>
-                </Pressable>
-              ) : null}
-            </View>
-            {actionError ? <T variant="caption" style={{ color: color.warning }}>{actionError}</T> : null}
-          </View>
-        ) : null}
-
-        {m.communityRatings.length ? (
-          <View style={styles.ratings}>
-            {m.communityRatings.map((r) => (
-              <View key={r.source} style={styles.rating}>
-                {/* Scores arrive on three scales. 100 and 10 read on their own; a
-                    bare "4.6" does not, so anything else says what it is out of. */}
-                <T variant="title">
-                  {r.outOf === 100 ? Math.round(r.score) : r.score.toFixed(1)}
-                  {r.outOf !== 100 && r.outOf !== 10 ? ` / ${r.outOf}` : ''}
-                </T>
-                <T variant="meta">
-                  {r.label}
-                  {r.votes ? ` · ${compactCount(r.votes)}` : ''}
-                </T>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        {m.tagline ? <T variant="serifSm" style={styles.tagline}>{m.tagline}</T> : null}
-        {m.description ? <T variant="body" style={styles.block}>{m.description}</T> : null}
-
-        <View style={styles.facts}>
-          <Fact label={item.type === 'game' ? 'Made by' : item.type === 'show' ? 'Created by' : 'Directed by'} value={made} />
-          <Fact label="Network" value={m.network} />
-          <Fact label="Status" value={m.status} />
-          <Fact
-            label="Seasons"
-            value={m.seasonCount ? `${m.seasonCount}${m.episodeCount ? ` · ${m.episodeCount} episodes` : ''}` : null}
-          />
-          <Fact label="Platforms" value={m.platforms.length ? m.platforms.join(', ') : null} />
-        </View>
-
-        {m.streamingProviders.length ? (
-          <Section title={`Where to watch · ${item.region}`}>
-            <T variant="body">{m.streamingProviders.map((p) => p.name).join(', ')}</T>
-          </Section>
-        ) : null}
-
-        {m.cast?.length ? (
-          <Section title="Cast">
-            {m.cast.slice(0, 8).map((c) => (
-              <View key={`${c.name}:${c.character ?? ''}`} style={styles.castRow}>
-                <T variant="body" style={{ flexShrink: 1 }}>{c.name}</T>
-                {c.character ? <T variant="caption" numberOfLines={1} style={styles.castRole}>{c.character}</T> : null}
-              </View>
-            ))}
-          </Section>
-        ) : null}
-
-        {m.tags.length ? (
-          <Section title="Tags">
-            <View style={styles.tags}>
-              {m.tags.slice(0, 14).map((t) => (
-                <View key={t} style={styles.tag}>
-                  <T variant="caption">{t}</T>
-                </View>
-              ))}
-            </View>
-          </Section>
-        ) : null}
-
-        {m.storeLinks.length ? (
-          <Section title="Links">
-            <View style={styles.tags}>
-              {m.storeLinks.slice(0, 10).map((l) => (
-                <Pressable
-                  key={`${l.name}:${l.url}`}
-                  onPress={() => void Linking.openURL(l.url)}
-                  accessibilityRole="link"
-                  accessibilityLabel={`Open ${l.name}`}
-                  style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
-                  <T variant="label">{l.name}</T>
-                </Pressable>
-              ))}
-            </View>
-          </Section>
-        ) : null}
-
-        <T variant="meta" style={styles.sourceLine}>
-          Data from {[...new Set(m.dates.map((d) => d.source.toUpperCase()))].join(', ') || item.vector.sources.map((s) => s.source.toUpperCase()).join(', ')}
-        </T>
-      </ScrollView>
+      <Stack.Screen options={{ title: item.merged.title }} />
+      <ItemPage item={item} personal={personal} bottomInset={bottom} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: space.section },
-  backdrop: { width: '100%', aspectRatio: 16 / 9, backgroundColor: color.surfaceElevated },
-  head: { flexDirection: 'row', gap: space.lg, padding: space.lg, alignItems: 'flex-end' },
-  headBody: { flex: 1, minWidth: 0, gap: space.xs },
   mine: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: space.sm,
     marginHorizontal: space.lg, marginBottom: space.md, padding: space.md,
@@ -388,26 +252,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, borderWidth: 1, borderColor: color.borderStrong,
   },
   actionOn: { borderColor: color.accent },
-  ratings: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.lg },
-  rating: {
-    paddingHorizontal: space.md, paddingVertical: space.sm, gap: space.xxs,
-    borderRadius: radius.md, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
-  },
-  tagline: { paddingHorizontal: space.lg, paddingTop: space.lg, color: color.textSecondary },
-  block: { paddingHorizontal: space.lg, paddingTop: space.md },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: space.lg, padding: space.lg },
-  fact: { gap: space.xxs, minWidth: 130, maxWidth: '100%' },
-  section: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.sm },
-  castRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md },
-  castRole: { flex: 1, minWidth: 0 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  tag: {
-    paddingHorizontal: space.md, paddingVertical: space.xs,
-    borderRadius: radius.full, borderWidth: 1, borderColor: color.border,
-  },
-  link: {
-    paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center',
-    borderRadius: radius.md, borderWidth: 1, borderColor: color.borderStrong,
-  },
-  sourceLine: { padding: space.lg, color: color.textMuted },
 });
