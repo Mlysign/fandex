@@ -1,9 +1,9 @@
 // One title on the device: the shared page (components/ItemPage) with what is
 // yours slotted in: your state, your Fandex Score, the rating row.
 
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 import { ItemPage } from '~/components/ItemPage';
 import { FandexBadge, Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -34,8 +34,10 @@ function reasonKind(r: ScoreReason, categoryLabel: (id: string | undefined) => s
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const region = useMemo(deviceRegion, []);
-  // The page draws under Android's navigation buttons, so the last line has to clear them.
-  const { bottom } = useSafeAreaInsets();
+  const router = useRouter();
+  // The hero runs under the status bar and the page under Android's navigation
+  // buttons, so the hero's buttons and the last line each have to clear one.
+  const { top, bottom } = useSafeAreaInsets();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState<{ title: string; detail: string } | null>(null);
 
@@ -217,28 +219,42 @@ export default function ItemScreen() {
     </>
   );
 
+  // The address somebody else can open. The website serves it; until it does,
+  // the link is still the right one to hand out.
+  const share = () => {
+    const url = `https://fandex.org/${item.type}/${item.slug ?? item.id}`;
+    void Share.share(Platform.OS === 'ios' ? { url, title: item.merged.title } : { message: url, title: item.merged.title }).catch(() => {});
+  };
+
   return (
     <Screen headed>
-      <Stack.Screen options={{ title: item.merged.title }} />
-      <ItemPage item={item} personal={personal} bottomInset={bottom} />
+      <ItemPage
+        item={item}
+        personal={personal}
+        taxonomy={scores.taxonomy}
+        topInset={top}
+        bottomInset={bottom}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        onShare={share}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  // The page sets the gutter and the gap between blocks; these only shape themselves.
   mine: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: space.sm,
-    marginHorizontal: space.lg, marginBottom: space.md, padding: space.md,
-    borderRadius: radius.md, backgroundColor: color.accentSubtle,
+    padding: space.md, borderRadius: radius.md, backgroundColor: color.accentSubtle,
   },
   fandex: {
-    marginHorizontal: space.lg, marginBottom: space.lg, padding: space.md, gap: space.sm,
-    borderRadius: radius.md, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
+    padding: space.md, gap: space.sm,
+    borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
   },
   fandexHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   reason: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   whyToggle: { minHeight: 44, justifyContent: 'center', gap: space.xxs },
-  actionsBlock: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.sm },
+  actionsBlock: { gap: space.sm },
   // Ten across a 360 px screen: flex shares the row, the height is the tap target.
   stars: { flexDirection: 'row', gap: space.xs },
   star: {

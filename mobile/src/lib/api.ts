@@ -110,10 +110,28 @@ export interface MergedItem {
   episodeCount: number | null;
   cast?: { name: string; character: string | null; profileUrl?: string | null }[];
   trailerYoutubeKey: string | null;
-  storeLinks: { name: string; url: string; source: string }[];
+  steamTrailerUrl?: string | null;
+  storeLinks: { name: string; url: string; source: string; affiliate?: boolean }[];
   streamingProviders: { name: string; logoPath: string | null; providerId: number }[];
   streamingLink: string | null;
+  /** flatrate | free | ads | rent | buy: how the region's providers offer it. */
+  streamingOfferType?: string | null;
   dates: { source: string; date: string }[];
+  // The rest of the site's EnrichedItem. The Worker has always sent these; the
+  // app's first item page did not read them.
+  keywords?: string[];
+  metacritic?: number | null;
+  steamReviewLabel?: string | null;
+  collection?: string | null;
+  originalLanguage?: string | null;
+  country?: string | null;
+  budget?: number | null;
+  revenue?: number | null;
+  nextEpisode?: { name: string | null; airDate: string | null; season: number | null; episode: number | null } | null;
+  gameModes?: string[];
+  playtimeHours?: number | null;
+  timeToBeat?: { hastily: number | null; normally: number | null; completely: number | null } | null;
+  dlc?: string[];
 }
 
 export interface ItemDetail {

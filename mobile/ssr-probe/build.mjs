@@ -17,8 +17,9 @@ const esbuild = await import(pathToFileURL(path.join(mobile, '..', 'worker', 'no
 const result = await esbuild.build({
   // Aliases resolve from the working directory, so it has to be the package that holds react-native-web.
   absWorkingDir: mobile,
-  entryPoints: [path.join(here, 'worker.tsx')],
-  outfile: path.join(here, 'dist', 'worker.js'),
+  // worker.js is the probe Worker; render.js is the same page as a plain function, for check-html.mjs.
+  entryPoints: [path.join(here, 'worker.tsx'), path.join(here, 'render.tsx')],
+  outdir: path.join(here, 'dist'),
   bundle: true,
   format: 'esm',
   platform: 'browser',
@@ -30,7 +31,7 @@ const result = await esbuild.build({
   minify: true,
   metafile: true,
   define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
-  alias: { 'react-native': 'react-native-web', 'expo-image': path.join(here, 'expo-image.tsx') },
+  alias: { 'react-native': 'react-native-web' },
   plugins: [{
     name: 'app-paths',
     setup(build) {
@@ -41,12 +42,12 @@ const result = await esbuild.build({
   logLevel: 'warning',
 });
 
-const out = Object.values(result.metafile.outputs)[0];
+const out = Object.entries(result.metafile.outputs).find(([file]) => file.endsWith('worker.js'))[1];
 const byPackage = {};
 for (const [file, info] of Object.entries(out.inputs)) {
   const m = file.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
   const key = m ? m[1] : 'app';
   byPackage[key] = (byPackage[key] ?? 0) + info.bytesInOutput;
 }
-console.log(`bundle ${(out.bytes / 1024).toFixed(0)} KB minified`);
+console.log(`worker bundle ${(out.bytes / 1024).toFixed(0)} KB minified`);
 for (const [k, v] of Object.entries(byPackage).sort((a, b) => b[1] - a[1]).slice(0, 8)) console.log(`  ${k.padEnd(34)} ${(v / 1024).toFixed(0)} KB`);

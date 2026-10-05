@@ -118,7 +118,8 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: color.surface },
           }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="item/[id]" options={{ title: '' }} />
+          {/* No header: the page's hero carries its own back and share buttons. */}
+          <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="open/[source]/[type]/[id]" options={{ title: '' }} />
         </Stack>
       </ScoreProvider>

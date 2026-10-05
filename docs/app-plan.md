@@ -14,7 +14,8 @@ IGDB's answer on storing its data._
 | 0. Make the data safe | ✅ Closed differently than planned. A verified snapshot of the Railway database from 2026-10-05 is in R2 and on disk. The continuous Litestream replica to R2 was never switched on and is no longer needed, because the Railway service was stopped that day. |
 | 1. Worker and D1 with accounts | ✅ Built, tested (142 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
 | 2. Minimal app | 🟢 Built and running on Nils's Pixel 8 against his real account: catalog download and delta sync, sign-in through Trakt in a browser tab, Trakt synced from the phone, calendar, search, browse, library and wishlist, item pages with rating and wishlisting, Up next, the Fandex Score computed on the device (identical to the site's on all 4,559 titles), and the Kotlin Up next widget. Two things the phase named are not built: Google sign-in, and the form for joining two accounts, which only matters once a second way to sign in exists. The widget's tick opens the app to mark the episode instead of posting to Trakt from Kotlin, so the Trakt token stays in one place. → [app.md](app.md) |
-| 3. Website | 🔵 Started 2026-10-05. The measurement is done: live React rendering does not fit the free Worker (median 4 ms, worst 35 against a 10 ms limit), so the public pages are a daily static build. The item page is split so the app and the website render one component. Next: real links and images in that component, then the build itself. → "The website" below |
+| 3. Website | 🔵 Started 2026-10-05. The measurement is done: live React rendering does not fit the free Worker (median 4 ms, worst 35 against a 10 ms limit), so the public pages are a daily static build. The item page is one component for the app and the website, and its public half is at parity with the old site, with real images and links in the HTML (17 and 14 on the largest film). Next: the rest of the item page, then the build itself. → "The website" below |
+| 5. Parity | 🔵 A requirement since 2026-10-05, run alongside phase 3. About a third of the old site is covered. The list and the order → [app-parity.md](app-parity.md) |
 | 4. Switch over | 🟡 Railway was deleted early, on 2026-10-05, before the website exists (Nils's call, to stop the cost and prove nothing depends on it). fandex.org is dark until phase 3 has something to serve. Left: the DNS records that point at Railway go, the domain moves to Cloudflare with phase 3, and the privacy policy is rewritten. |
 
 **What phase 1 measured that changes the later phases:**
@@ -159,9 +160,14 @@ Worker it deployed is deleted.
 
 Two things the render showed that the component needs before any route publishes it:
 
-- **The HTML has no `<img>` and no `<a>`.** react-native-web's Image draws nothing until it runs
-  in a browser, and the page's links are `Pressable`s with an `onPress`. A crawler gets the text
+- **The HTML had no `<img>` and no `<a>`.** react-native-web's Image draws nothing until it runs
+  in a browser, and the page's links were `Pressable`s with an `onPress`. A crawler got the text
   and nothing to follow, and no image to index. 20 KB of HTML, 106 elements, for the largest film.
+  ✅ Fixed the same day: `Img.web.tsx` is a real `<img>` and `ExtLink` a real anchor.
+  `node mobile/ssr-probe/check-html.mjs` renders three titles in Node and fails if a page comes
+  out without an image, a link or exactly one heading. The largest film now carries 17 images
+  and 14 links in 46 KB. ⚠️ Those are all links OUT. The links a crawler needs most, to a tag, a
+  person and related titles, wait for those pages to exist (app-parity.md, stages 1 and 7).
 - **Fonts do not arrive with the HTML.** The app loads them in JavaScript, so the static page
   shows the browser's default until it hydrates.
 
@@ -196,8 +202,11 @@ they mean building the UI twice (the web client is Expo's web target for free).
 4. **Switch over (1 day).** A week of daily use, one copy of the old DB in R2, delete Railway,
    point fandex.org at Cloudflare, rewrite the privacy policy (Cloudflare as host and processor, D1
    in the EU, accounts, three sign-ins).
-5. **Parity (40–125 days).** Score explainer, Up Next and episodes, Insights, Discover filters,
-   platform and media-type prefs, import, franchise rail, taxonomy admin on the web client.
+5. **Parity (40–125 days).** ⚠️ **A requirement since 2026-10-05, and no longer last in line.**
+   Nils: the app "looks vastly different and is missing features", and he wants UI parity with the
+   old site. The screen-by-screen list of what is owed, the order it is built in, and the routes
+   the Worker still lacks are in **[app-parity.md](app-parity.md)**. It runs alongside phase 3:
+   a page type goes to the website when its screen reaches parity, the item page first.
 6. **Google Play, if wanted (calendar time).** Organisation account or 12 testers for 14 days;
    Data safety; attribution screens; account deletion in the app.
 

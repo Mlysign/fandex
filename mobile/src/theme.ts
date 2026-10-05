@@ -27,6 +27,9 @@ export const color = {
   warning: '#F0A04B',
   danger: '#E5674C',
 
+  // What a chip is about, the site's four facet colours (src/lib/facetPalette.ts).
+  facet: { person: '#E0B15C', genre: '#C8A24B', tag: '#AC9A72', company: '#C08152' },
+
   // The media-type axis. Not brand colours: a type, not a provider.
   media: { game: '#4ade80', movie: '#f59e0b', show: '#a78bfa' } as Record<string, string>,
 } as const;
@@ -52,6 +55,8 @@ export const type = {
   serifSm: { fontFamily: font.serif, fontSize: 17, lineHeight: 20, color: color.textPrimary },
   serifMd: { fontFamily: font.serif, fontSize: 22, lineHeight: 25, color: color.textPrimary },
   serifLg: { fontFamily: font.serif, fontSize: 28, lineHeight: 30, color: color.textPrimary },
+  // The detail hero's title. The handoff's own 34: it sits over artwork, where a nudge would crowd it.
+  serif2xl: { fontFamily: font.serif, fontSize: 34, lineHeight: 35, color: color.textPrimary },
 } satisfies Record<string, TextStyle>;
 
 export const TYPE_LABEL: Record<string, string> = { game: 'Game', movie: 'Film', show: 'Show' };

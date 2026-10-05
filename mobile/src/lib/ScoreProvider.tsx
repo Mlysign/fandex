@@ -37,6 +37,8 @@ interface Scores {
   center: number | null;
   /** Category id → its name, for the breakdown. */
   categoryLabel: (id: string | undefined) => string | null;
+  /** Tag categories, bundles and chosen names. Null until the first one has loaded. */
+  taxonomy: Taxonomy | null;
   /** Score one title from its raw facets. Null when there is no profile or nothing matches. */
   score: (id: string, facets: ScoreFacet[]) => FandexScore | null;
   /** Scores for catalog titles by id, read off the device. Titles with no score are absent. */
@@ -163,7 +165,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     // The same rounding the score itself uses, so the two never disagree by a tenth.
     const center = profile && profile.w.size > 0 && profile.ratedItemCount >= 3 ? Math.round(profile.baseline * 100) / 10 : null;
     return {
-      ready, center, score, scoresFor, revision,
+      ready, center, score, scoresFor, revision, taxonomy,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
     };
   }, [ready, profile, taxonomy, score, scoresFor, revision]);

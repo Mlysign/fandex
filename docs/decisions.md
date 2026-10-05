@@ -144,6 +144,18 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
     has passed against R2. It is inert until Nils sets the two R2 secrets. A verified snapshot
     is in R2 meanwhile. The "before the Railway plan is touched" condition still stands.
 
+### Added 2026-10-05
+
+- **Railway was deleted ahead of the website** (Nils), to stop the cost and to prove nothing
+  depended on it. fandex.org serves nothing until phase 3 does. The Litestream step above was
+  overtaken: the database left Railway as two verified snapshots, not a replica.
+- **UI and feature parity with the old site is a requirement, not a later phase** (Nils: the app
+  "looks vastly different and is missing features"). The list, the order and the rule for when
+  a screen counts as done are in [app-parity.md](app-parity.md).
+- **The public pages are a daily static build.** The measurement the bullet above called for came
+  out at a median 4 ms and a worst 35 ms against the free Worker's 10 ms, so the plan's own rule
+  picked the build. Workers Paid at $5 stays the upgrade.
+
 ---
 
 ## Decided 2026-09-02

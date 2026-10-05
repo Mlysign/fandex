@@ -1,10 +1,10 @@
 // The handful of primitives every screen is built from. Deliberately few: a
 // screen that needs something else writes it where it is used.
 
-import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Img } from '~/components/Img';
 import { color, radius, space, type, TYPE_LABEL } from '~/theme';
 
 type Variant = keyof typeof type;
@@ -64,7 +64,7 @@ export function Poster({ uri, width, kind }: { uri: string | null; width: number
       </View>
     );
   }
-  return <Image source={{ uri }} style={[styles.poster, { width, height }]} contentFit="cover" transition={120} />;
+  return <Img uri={uri} width={width} style={[styles.poster, { width, height }]} alt="" />;
 }
 
 /** One title in a list: poster, name, a line of meta, and whatever goes on the right. */
