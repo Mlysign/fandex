@@ -78,7 +78,7 @@ function Scrim() {
   );
 }
 
-function Hero({ images, title, kind, metaParts, topInset, onBack, onShare }: {
+function Hero({ images, title, kind, metaParts, topInset, onBack, onShare, onHeight }: {
   images: string[];
   title: string;
   kind: string;
@@ -86,6 +86,8 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, onShare }: {
   topInset: number;
   onBack?: () => void;
   onShare?: () => void;
+  /** How tall the hero came out, so the page knows when it has scrolled away. */
+  onHeight?: (height: number) => void;
 }) {
   // The pager needs the hero's size in pixels, which exists only after layout.
   // Until then (and on a server, always) the first image stands alone, so the
@@ -115,7 +117,12 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, onShare }: {
     );
 
   return (
-    <View style={styles.hero} onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+    <View
+      style={styles.hero}
+      onLayout={(e) => {
+        setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+        onHeight?.(e.nativeEvent.layout.height);
+      }}>
       {!images.length ? null : paged ? (
         <ScrollView
           ref={pager}
@@ -249,9 +256,26 @@ export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottom
   const offer = offerLabel(m.streamingOfferType);
   const sources = [...new Set(m.dates.map((d) => d.source))];
 
+  // The hero runs under the status bar on purpose. Once it has scrolled away the
+  // page's text would run under the clock too (seen on the phone, 2026-10-05), so
+  // from that point the bar gets the page's own colour behind it.
+  const [heroHeight, setHeroHeight] = useState(0);
+  const [pastHero, setPastHero] = useState(false);
+  const onPageScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = heroHeight > 0 && e.nativeEvent.contentOffset.y > heroHeight - topInset;
+    setPastHero((prev) => (prev === next ? prev : next));
+  };
+
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: space.section + bottomInset }}>
-      <Hero images={images} title={m.title} kind={item.type} metaParts={metaParts} topInset={topInset} onBack={onBack} onShare={onShare} />
+    <View style={styles.page}>
+    <ScrollView
+      contentContainerStyle={{ paddingBottom: space.section + bottomInset }}
+      onScroll={topInset > 0 ? onPageScroll : undefined}
+      scrollEventThrottle={32}>
+      <Hero
+        images={images} title={m.title} kind={item.type} metaParts={metaParts}
+        topInset={topInset} onBack={onBack} onShare={onShare} onHeight={setHeroHeight}
+      />
 
       <View style={styles.body}>
         {/* The release date, said in full. The hero's line only has room for the year. */}
@@ -464,10 +488,14 @@ export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottom
         </T>
       </View>
     </ScrollView>
+    {topInset > 0 && pastHero ? <View style={[styles.statusBarCover, { height: topInset }]} /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1 },
+  statusBarCover: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: color.surface },
   fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
 
   // Full-bleed 3:4, capped so a wide window does not get a poster taller than itself.

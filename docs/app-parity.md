@@ -286,6 +286,9 @@ Parity must not cost any of these.
 
 ## Not checked
 
-- How any of this looks on the phone itself. The comparison was read from code and a browser.
+- How the screens not yet ported look on the phone. The comparison was read from code and a
+  browser. The item page is the exception: it was installed on the Pixel 8 on 2026-10-05 and
+  read top to bottom, signed in. The phone showed one fault the browser could not, text
+  scrolling under the status bar once the hero was gone, which is fixed.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.
 - What expo-router shows for an unknown address. No not-found screen exists.
