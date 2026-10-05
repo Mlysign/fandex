@@ -11,7 +11,7 @@ are in app-plan.md; the settled calls are in [decisions.md](decisions.md)._
 | Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev` | Free plan. Not on fandex.org yet; that is phase 4. |
 | D1 database `fandex` | id `6daba7e4-ea55-4c72-b297-eb92ada8c581`, EU jurisdiction | 110 MB of a 500 MB cap after the seed. |
 | R2 `fandex-backups` (EU) | bound as `BACKUPS` | `railway/` holds snapshots of the old database, `d1/{day}/` the nightly export. |
-| R2 `fandex-litestream` (EU) | not bound | The Litestream replica's future home. Empty until Nils sets two secrets on Railway. |
+| R2 `fandex-litestream` (EU) | not bound | Empty and no longer needed: Railway was stopped on 2026-10-05 before the replica was switched on. Safe to delete. |
 | Cloudflare access | Wrangler, by OAuth | Logged in from Nils's machine through his browser. No API token exists, and none should be minted for a session. |
 
 Everything is created with `--jurisdiction eu`. An EU bucket has its own S3 endpoint
@@ -178,9 +178,9 @@ lives under `data/`, which git ignores.
   "is anything pointing at this" check erasure uses, before anything deletes.
 - **`franchise_members`**: 10,841 rows, built as `data/d1-seed/90_franchise_members.deferred.sql`
   and not applied. The franchise rail is phase 5.
-- **A final user-row sync at switch-over.** D1 was seeded from the 2026-10-04 snapshot. Anything
-  rated on the Railway site after that is only there. Re-run the seed's user files at phase 4.
-- **A restore from the nightly export.** The export itself runs: its first day finished on
+- **A restore from the nightly export. DUE NOW:** Railway was stopped on 2026-10-05, so D1 is the
+  only live copy of the library. (The user-row sync this list used to ask for turned out to be
+  unnecessary: the Railway rows had not changed since the seed, and D1 was ahead.) The export itself runs: its first day finished on
   2026-10-04 at 12:20 UTC (18 tables, 37,588 rows, `d1/2026-10-04/manifest.json`). Nothing reads
   it back, so it is an untested backup. It needs a script that loads one day into a scratch D1
   and compares row counts per table, before phase 4 makes D1 the only copy of anyone's library.

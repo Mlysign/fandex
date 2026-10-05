@@ -7,15 +7,15 @@ decided is under "Decisions" at the end. Two things are still unanswered, and ne
 for Nils to make today: where the public pages render (a measurement at the start of phase 3) and
 IGDB's answer on storing its data._
 
-## Where it stands (2026-10-04, end of day)
+## Where it stands (2026-10-05)
 
 | Phase | State |
 |---|---|
-| 0. Make the data safe | 🟡 A verified snapshot of the Railway database is in R2 and on disk, and `node scripts/snapshot-prod-to-r2.mjs` repeats it in 40 seconds. The continuous Litestream replica to R2 is built, validated on the box and inert: it waits on two R2 secrets only Nils can create. The restore drill against R2 follows that. |
+| 0. Make the data safe | ✅ Closed differently than planned. A verified snapshot of the Railway database from 2026-10-05 is in R2 and on disk. The continuous Litestream replica to R2 was never switched on and is no longer needed, because the Railway service was stopped that day. |
 | 1. Worker and D1 with accounts | ✅ Built, tested (142 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
 | 2. Minimal app | 🟢 Built and running on Nils's Pixel 8 against his real account: catalog download and delta sync, sign-in through Trakt in a browser tab, Trakt synced from the phone, calendar, search, browse, library and wishlist, item pages with rating and wishlisting, Up next, the Fandex Score computed on the device (identical to the site's on all 4,559 titles), and the Kotlin Up next widget. Two things the phase named are not built: Google sign-in, and the form for joining two accounts, which only matters once a second way to sign in exists. The widget's tick opens the app to mark the episode instead of posting to Trakt from Kotlin, so the Trakt token stays in one place. → [app.md](app.md) |
 | 3. Website | ⬜ Its first task, the CPU measurement, has a partial answer already: see below. |
-| 4. Switch over | ⬜ |
+| 4. Switch over | 🟡 Railway was stopped early, on 2026-10-05, before the website exists (Nils's call, to stop the cost and prove nothing depends on it). fandex.org is dark until phase 3 has something to serve. Left: Nils deletes the project and cancels the plan, the DNS records that point at Railway go, the domain moves to Cloudflare with phase 3, and the privacy policy is rewritten. |
 
 **What phase 1 measured that changes the later phases:**
 
@@ -185,9 +185,8 @@ they mean building the UI twice (the web client is Expo's web target for free).
   `BACKFILL_ENABLED=0`, `FACET_SWEEP_ENABLED=0` set on Railway 2026-10-04.
 - **IGDB licence: email partner@igdb.com now.**
 
-Still needed from Nils: an R2 API token for the bucket `fandex-litestream` and its two values set
-on Railway as `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (step 0; the bucket, the endpoint and
-the config are done), and the IGDB email sent.
+Still needed from Nils: the final Railway delete (TASKS.md item 0), and the IGDB email sent. The R2
+token for a Litestream replica is no longer needed.
 
 ## Rules that carry over unchanged
 
