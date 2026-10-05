@@ -25,7 +25,7 @@ import {
 import { rankCrossSourcePopularity } from "@/lib/popularMonth";
 import { DEFAULT_COUNTRY, normalizeCountry } from "@/lib/countries";
 import { capFrom, kvGet, kvSet, spend } from "./budget";
-import { all, first, nowSeconds, run } from "./d1";
+import { all, first, run } from "./d1";
 import type { Env } from "./env";
 import { useSharedIgdbToken } from "./catalog/resolve";
 
@@ -90,6 +90,8 @@ export function validMonth(month: string, now = new Date()): boolean {
   return Math.abs(monthDistance(monthKey(now), month)) <= SERVABLE_MONTHS;
 }
 
+const seconds = (d: Date): number => Math.floor(d.getTime() / 1000);
+
 function ttlFor(month: string, partial: boolean, now: Date): number {
   if (partial) return TTL_PARTIAL;
   return monthWindow(month).lte < now.toISOString().slice(0, 10) ? TTL_PAST : TTL_OPEN;
@@ -146,12 +148,14 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
   return { partial: !games.length || !movies.length || !shows.length, items: ranked.map(toCard) };
 }
 
-async function storeMonth(db: D1Database, region: string, month: string, built: StoredMonth): Promise<void> {
+// `at` is the caller's clock, the same one staleness is judged against. Stamping
+// with a second clock made "is this month due" depend on which one was ahead.
+async function storeMonth(db: D1Database, region: string, month: string, built: StoredMonth, at: Date): Promise<void> {
   await run(
     db,
     `INSERT INTO calendar_month (region, month, built_at, payload) VALUES (?, ?, ?, ?)
      ON CONFLICT(region, month) DO UPDATE SET built_at = excluded.built_at, payload = excluded.payload`,
-    [region, month, nowSeconds(), JSON.stringify(built)],
+    [region, month, seconds(at), JSON.stringify(built)],
   );
 }
 
@@ -187,7 +191,7 @@ export async function calendarMonth(
     // Served whatever its age. `stale` tells the client it may be a day behind;
     // the cron refreshes the window, and a stale month beats a slow one.
     const partial = row.payload.startsWith('{"partial":true');
-    const stale = nowSeconds() - row.built_at > ttlFor(monthRaw, partial, now);
+    const stale = seconds(now) - row.built_at > ttlFor(monthRaw, partial, now);
     return { ok: true, body: envelope(monthRaw, region, row.built_at, row.payload, stale) };
   }
 
@@ -197,8 +201,8 @@ export async function calendarMonth(
   }
   const built = await buildMonth(env, monthRaw, region);
   if (!built) return { ok: false, reason: "provider" };
-  await storeMonth(env.DB, region, monthRaw, built);
-  return { ok: true, body: envelope(monthRaw, region, nowSeconds(), JSON.stringify(built), false) };
+  await storeMonth(env.DB, region, monthRaw, built, now);
+  return { ok: true, body: envelope(monthRaw, region, seconds(now), JSON.stringify(built), false) };
 }
 
 // ── The cron's half ──────────────────────────────────────────────────────────
@@ -246,7 +250,7 @@ export async function runCalendarStep(env: Env, now = new Date()): Promise<{ bui
   );
   const byKey = new Map(stored.map((r) => [`${r.region}:${r.month}`, r]));
 
-  const nowS = Math.floor(now.getTime() / 1000);
+  const nowS = seconds(now);
   let pick: { region: string; month: string; overdue: number } | null = null;
   for (const region of regions) {
     for (const month of months) {
@@ -266,6 +270,6 @@ export async function runCalendarStep(env: Env, now = new Date()): Promise<{ bui
     await kvSet(env.DB, CALENDAR_BACKOFF_KEY, "1", CALENDAR_BACKOFF_SECONDS);
     return { built: `${pick.region}:${pick.month}`, failed: true };
   }
-  await storeMonth(env.DB, pick.region, pick.month, built);
+  await storeMonth(env.DB, pick.region, pick.month, built, now);
   return { built: `${pick.region}:${pick.month}` };
 }
