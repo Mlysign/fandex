@@ -166,6 +166,46 @@ The seed is `data/d1-seed/*.sql`, applied in filename order with
 `npx wrangler d1 execute fandex --remote --file=… --yes`. It holds one person's library, so it
 lives under `data/`, which git ignores.
 
+## Backup and restore
+
+Railway was deleted on 2026-10-05, so D1 is the only live copy of the library. Three things stand
+behind it:
+
+| Copy | Covers | Where |
+|---|---|---|
+| D1 Time Travel | The last 7 days, any minute. The answer to a bad write or a bad migration. | Cloudflare, built in |
+| The nightly export | Every row of every table that cannot be rebuilt, as of about 01:20 UTC. No provider blobs, no derived docs. | R2 `fandex-backups/d1/{day}/` |
+| The base | The catalog's content as of 2026-10-04: every blob and doc. | `data/d1-seed/`, rebuilt from `rr-2026-10-04.db` (R2 `railway/` and `data/prod-snapshots/`) with `build-seed.mjs` |
+
+⚠️ **The base is part of the backup set for good. Never delete `rr-2026-10-04.db`.** The export
+leaves the blobs out because TMDB and IGDB can serve them again. RAWG, Steam and Trakt blobs
+cannot be refetched (RAWG is retired, the Worker holds no Steam or Trakt credential), and they
+exist only in that snapshot.
+
+**The drill: `node worker/scripts/restore-drill.mjs`** (from the repo root). It downloads a day,
+applies the base to a local scratch SQLite, lays the export over it, and checks keys, foreign
+keys, the manifest's row total and the personal tables against live D1. `--emit-sql` also writes
+the files a real restore would apply and loads them into an empty database to prove they do.
+It is local on purpose: a scratch D1 would spend the day's row writes, which the live database
+shares.
+
+**Passed 2026-10-05** on that day's export: 52 objects, 37,610 rows, all 18 tables restored to
+the exported count, no duplicate keys, no broken foreign key, and `user_item_state` (2,482),
+`user_episode_state` (12,411) and `user_hidden_items` (1) identical to live row for row.
+
+What it showed a real restore still needs:
+
+- **A refetch for titles newer than the base.** 14 items (8 TMDB links, 6 IGDB) came back as rows
+  with no blob and no doc, 2 of them in the pool. All refetchable; nothing does it yet. The
+  number grows with every title somebody resolves.
+- **A day of row writes.** Applying the emitted files to a new D1 is about what the seed cost
+  (80,000), so on the free plan a restore is a day on which nothing else may write.
+- ⚠️ The export pages by `OFFSET` across cron runs ten minutes apart, so a write in between can
+  export a row twice or skip one. The drill counts duplicates (none so far) and compares the total
+  with the manifest; a skipped row would only show against live.
+- ⚠️ `wrangler r2 object list` returned nothing useful, so the drill walks each table's chunks by
+  key until one is missing. A failed download throws; it is never read as the end of a table.
+
 ## Not built yet
 
 - **The catalog on fandex.org.** The Worker answers on workers.dev. Moving the domain is phase 4.
@@ -178,11 +218,5 @@ lives under `data/`, which git ignores.
   "is anything pointing at this" check erasure uses, before anything deletes.
 - **`franchise_members`**: 10,841 rows, built as `data/d1-seed/90_franchise_members.deferred.sql`
   and not applied. The franchise rail is phase 5.
-- **A restore from the nightly export. DUE NOW:** Railway was stopped on 2026-10-05, so D1 is the
-  only live copy of the library. (The user-row sync this list used to ask for turned out to be
-  unnecessary: the Railway rows had not changed since the seed, and D1 was ahead.) The export itself runs: its first day finished on
-  2026-10-04 at 12:20 UTC (18 tables, 37,588 rows, `d1/2026-10-04/manifest.json`). Nothing reads
-  it back, so it is an untested backup. It needs a script that loads one day into a scratch D1
-  and compares row counts per table, before phase 4 makes D1 the only copy of anyone's library.
-  ⚠️ Listing the bucket with `wrangler r2 object list` returned nothing useful here; fetch
-  `manifest.json` by key to check a day.
+- **The refetch step of a restore.** See "Backup and restore" below: titles added after the base
+  come back as rows without content, and nothing refetches them yet. 14 on 2026-10-05.

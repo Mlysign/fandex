@@ -36,7 +36,7 @@ jobs:
         run: npm test
       - name: Build
         # Dummy values only satisfy boot-time config validation (P10); they are
-        # never used at runtime here. Real secrets live on Railway.
+        # never used at runtime here. The site has no host since 2026-10-05.
         env:
           JWT_SECRET: ci-placeholder-not-used-at-runtime
           TOKEN_ENCRYPTION_KEY: ci-placeholder-not-used-at-runtime
@@ -51,7 +51,6 @@ jobs:
     # touching worker/ at all, which is why this runs on every push and not only
     # on changes under worker/.
     #
-    # ⚠️ Railway waits for CI. A red job here blocks the SITE's deploy too.
     name: Worker · Typecheck · Test
     runs-on: ubuntu-latest
     defaults:
@@ -79,7 +78,6 @@ jobs:
     # only: nothing here builds an APK. Like the Worker it compiles site
     # modules from ../src, so it runs on every push.
     #
-    # ⚠️ Railway waits for CI. A red job here blocks the SITE's deploy too.
     name: App · Typecheck · Test
     runs-on: ubuntu-latest
     defaults:
