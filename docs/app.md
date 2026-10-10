@@ -74,6 +74,15 @@ write nothing; that is how the sync was proven before it was allowed to delete.
 - **Every screen is a child of `src/app/(tabs)/_layout.tsx`**, the item page and Settings too. That layout draws the navigation around the navigator (a bar at the bottom under 768 px, across the top from there) and switches the navigator's own tab bar off. A screen outside that folder has no navigation. ⚠️ These screens stay mounted, so one that takes an address parameter has to reset itself when the parameter changes: the item screen clears its item at the start of each load.
 - **A card's state is one query for the whole list** (`lib/cards.ts`, `useCardStates`), and its two buttons go through the item page's write path. A card for a title nobody holds yet (a calendar or search result) asks the Worker to find or fetch it first.
 - **The type filter is one choice for the whole app**, kept in the `meta` table under the site's own key, `rr_type_filter` (`lib/typeFilter.tsx`).
+- **A browser check proves nothing about the Android build.** The same component runs on both
+  and a prop one accepts can crash the other: `accessibilityRole="navigation"` is fine on the web
+  and killed the app at launch on the phone, with tsc, the tests and the site all green
+  (`AppNav.tsx` sets it on the web only). A change to a shared component is not checked until an
+  APK with it has opened on the device.
+- **A data attribute is written `dataSet={{ item: 'grid' }}`, never `data-item="grid"`.**
+  react-native-web keeps a bare `data-*` prop in the server render and drops it in the browser,
+  so the static page gets its layout and the running app silently does not. `part()` in
+  `components/itemLayout.ts` is the helper.
 - **`mobile/` is its own package.** Excluded from the site's `tsconfig.json`, eslint and Docker
   context. CI runs `tsc` and the tests as the `app` job.
 - **Two import prefixes.** `~/…` is the app's own `mobile/src`. `@/…` is the SITE's `src`, one

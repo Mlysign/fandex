@@ -62,10 +62,10 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 |--:|---|---|
 | 1 | **Settings**, with export and delete. | The privacy policy points at an email address until these two buttons exist. |
 | 2 | **"Available on"** in the Filters sheet. | The catalog copy on the device does not carry platforms or streaming services; the Worker's delta has to send them first. |
-| 3 | **The item page's rest**: score panel, episode tracker, "More like this", desktop layout. | The page every other screen leads to. |
-| 4 | **Facet pages** and the links to them, and Popular people on Home. | New Worker routes. Also what Google already holds addresses for. |
+| 3 | **The item page's rest**: score panel, episode tracker, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
+| 4 | **Static facet pages**, a person's photo and biography, and Popular people on Home. | The screens and the links to them exist; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
 | 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
-| 6 | **Insights, Import, sign-in beyond Trakt, admin.** | Insights can be computed on the device. |
+| 6 | **Import, sign-in beyond Trakt, admin, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
 ## The kit
 
@@ -81,10 +81,10 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | partial (`Filters.tsx`): must include and exclude, your lists, release year. No "Available on"; the year is two fields where the site had a slider. |
 | Episode row, Up next rail | `EpisodeRow.tsx`, `ProgressRail.tsx` | **yes** (`UpNext.tsx`), with the tick's fill, hold and fade. |
 | Nav bars | `AppNav.tsx` | **yes** (`AppNav.tsx`). |
-| Button, Panel, Eyebrow, EmptyState, Avatar, StatStrip, Skeleton, Sheet, Toast | `ui/*` | **yes** (`kit.tsx`, `Toast.tsx`). The skeleton breathes where the site's shimmers. Sheet is built and nothing uses it yet. |
+| Button, Panel, Eyebrow, EmptyState, Avatar, StatStrip, Skeleton, Sheet, Toast | `ui/*` | **yes** (`kit.tsx`, `Toast.tsx`). The skeleton breathes where the site's shimmers. |
 | Score badges | `FandexScoreBadge.tsx`, `CommunityScoreBadge.tsx` | **yes**. |
 | Logo, type glyphs | `Logo.tsx`, `LogoOutline.tsx`, `Badges.tsx` | **yes** (`Logo.tsx`). |
-| Not in the app at all | `Tooltip.tsx`, `ui/ConfirmDialog.tsx`, `ui/TriToggle.tsx`, `DualRangeSlider.tsx`, `ListCard.tsx`, `auth/SignInDialog.tsx` | |
+| Not in the app at all | `Tooltip.tsx`, `ui/ConfirmDialog.tsx`, `DualRangeSlider.tsx`, `ListCard.tsx`, `auth/SignInDialog.tsx` | |
 
 ## What the Worker does not serve yet
 
