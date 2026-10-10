@@ -9,6 +9,7 @@ import { pickRegionalReleaseDate } from "@/lib/sources/normalize";
 import type { MediaLink, MediaType, Source } from "@/types";
 import { kvGet, kvSet } from "../budget";
 import { all, first, nowSeconds } from "../d1";
+import { poolSize } from "../keptCounts";
 import { DERIVE_VERSION } from "./derive";
 
 // ── One item ─────────────────────────────────────────────────────────────────
@@ -230,13 +231,12 @@ export async function catalogDeltaJson(
     next = { since: Math.max(cursor.since, now - CURSOR_SETTLE_SECONDS), after: "" };
   }
 
-  let poolCount: number | null = null;
-  if (done && withCount) {
-    // Lets a client notice a deletion, which a delta cannot express: if its own
-    // row count is higher than this once it is caught up, it resyncs from zero.
-    // Opt-in, because the count reads every pool row's index entry.
-    poolCount = (await first<{ n: number }>(db, "SELECT COUNT(*) n FROM media_items WHERE browsed = 0"))?.n ?? null;
-  }
+  // Lets a client notice a deletion, which a delta cannot express: if its own
+  // row count is higher than this once it is caught up, it resyncs from zero.
+  // Only the LAST page carries it. For a device that is up to date the first
+  // page is the last, so every sync there is asks, and the answer is a kept one
+  // (keptCounts.ts): counting read every pool row's index entry each time.
+  const poolCount = done && withCount ? await poolSize(db) : null;
 
   const items = rows.map((r) => `{"updatedAt":${r.updated_at},"vector":${r.vector},"facets":${r.facets}}`).join(",");
   return (

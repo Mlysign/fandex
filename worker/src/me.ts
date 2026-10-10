@@ -18,8 +18,9 @@
 
 import { normalizeCountry } from "@/lib/countries";
 import { capFrom, spend } from "./budget";
-import { all, first, run } from "./d1";
+import { first, run } from "./d1";
 import type { Env } from "./env";
+import { DROP_POOL_COUNT_SQL, dropStateCounts, type StateKind } from "./keptCounts";
 
 export const MAX_ROWS_PER_WRITE = 2000;
 export const STATE_PAGE_DEFAULT = 3000;
@@ -301,6 +302,9 @@ export function stateWriteSize(w: StateWrite): number {
     w.episodeDeletes.length + w.hide.length + w.unhide.length;
 }
 
+/** The titles of an item write that nobody has acted on before. `?1` is the rows, as JSON. */
+const NOT_YET_IN_POOL = "browsed = 1 AND id IN (SELECT j.value ->> 'mediaItemId' FROM json_each(?1) j)";
+
 export type StateWriteResult =
   | { ok: true; applied: Record<string, number>; skipped: number }
   | { ok: false; reason: "budget" };
@@ -322,6 +326,15 @@ export async function applyStateWrite(env: Env, userId: string, w: StateWrite): 
   }
 
   const statements: { name: string; stmt: D1PreparedStatement; sent: number }[] = [];
+  // Bookkeeping that rides in the same batch and is not part of what the write
+  // reports: the kept counts this write makes untrue (keptCounts.ts). `before`
+  // runs ahead of the named statements and `after` behind them.
+  const before: D1PreparedStatement[] = [];
+  const touched: StateKind[] = [];
+  if (w.itemUpserts.length || w.itemDeletes.length) touched.push("items");
+  if (w.episodeUpserts.length || w.episodeDeletes.length) touched.push("episodes");
+  if (w.hide.length || w.unhide.length) touched.push("hidden");
+  const after = touched.length ? [dropStateCounts(db, userId, touched)] : [];
 
   if (w.itemDeletes.length) {
     statements.push({
@@ -362,11 +375,14 @@ export async function applyStateWrite(env: Env, userId: string, w: StateWrite): 
     // is what makes the next delta sync carry it to every other device.
     statements.push({
       name: "promoted", sent: 0,
-      stmt: db.prepare(
-        `UPDATE media_items SET browsed = 0, updated_at = unixepoch()
-          WHERE browsed = 1 AND id IN (SELECT j.value ->> 'mediaItemId' FROM json_each(?1) j)`,
-      ).bind(json),
+      stmt: db.prepare(`UPDATE media_items SET browsed = 0, updated_at = unixepoch() WHERE ${NOT_YET_IN_POOL}`).bind(json),
     });
+    // The pool is about to grow, so its kept size goes, and only then: rating a
+    // film that is already in the pool must not cost the next sync a count. It
+    // asks the promotion's own question, ahead of it, while the answer is still
+    // "yes". ⚠️ A promotion that did not drop the count would leave it too low,
+    // which is the one direction that is not allowed (poolSize in keptCounts.ts).
+    before.push(db.prepare(`${DROP_POOL_COUNT_SQL} AND EXISTS (SELECT 1 FROM media_items WHERE ${NOT_YET_IN_POOL})`).bind(json));
   }
   if (w.episodeDeletes.length) {
     statements.push({
@@ -413,29 +429,15 @@ export async function applyStateWrite(env: Env, userId: string, w: StateWrite): 
     });
   }
 
-  const results = await db.batch(statements.map((s) => s.stmt));
+  const results = await db.batch([...before, ...statements.map((s) => s.stmt), ...after]);
   const applied: Record<string, number> = {};
   let skipped = 0;
   statements.forEach((s, i) => {
-    const n = results[i].meta.changes ?? 0;
+    const n = results[before.length + i].meta.changes ?? 0;
     applied[s.name] = n;
     // Only the inserts can skip (an unknown item). A delete matching fewer rows
     // than it named is a row that was already gone, which is the outcome asked for.
     if (s.name === "itemsUpserted" || s.name === "episodesUpserted") skipped += Math.max(0, s.sent - n);
   });
   return { ok: true, applied, skipped };
-}
-
-/** How many rows of each kind a user holds. Cheap; used by the client to decide whether to pull. */
-export async function stateCounts(db: D1Database, userId: string): Promise<Record<string, number>> {
-  const rows = await all<{ k: string; n: number; mx: number | null }>(
-    db,
-    `SELECT 'items' k, COUNT(*) n, MAX(updated_at) mx FROM user_item_state WHERE user_id = ?1
-     UNION ALL SELECT 'episodes', COUNT(*), MAX(updated_at) FROM user_episode_state WHERE user_id = ?1
-     UNION ALL SELECT 'hidden', COUNT(*), MAX(hidden_at) FROM user_hidden_items WHERE user_id = ?1`,
-    [userId],
-  );
-  const out: Record<string, number> = {};
-  for (const r of rows) { out[r.k] = r.n; out[`${r.k}UpdatedAt`] = r.mx ?? 0; }
-  return out;
 }

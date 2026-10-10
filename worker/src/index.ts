@@ -54,8 +54,9 @@ import type { Env } from "./env";
 import { allow, BodyError, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
   applyStateWrite, BadRequest, DEFAULT_DAILY_USER_WRITE_CAP, episodeStateJson, hiddenJson, itemStateJson, parsePrefs,
-  parseStateWrite, profileJson, stateCounts, writePrefs,
+  parseStateWrite, profileJson, writePrefs,
 } from "./me";
+import { stateCounts } from "./keptCounts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;

@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
   applyStateWrite, BadRequest, episodeStateJson, hiddenJson, itemStateJson, MAX_ROWS_PER_WRITE,
-  parsePrefs, parseStateWrite, profileJson, stateCounts, writePrefs,
+  parsePrefs, parseStateWrite, profileJson, writePrefs,
 } from "../src/me";
+import { stateCounts } from "../src/keptCounts";
 import { count, db, env, gameItem, movieItem, showItem, wipe } from "./helpers";
 
 const USER = "aaaaaaaa-0000-4000-8000-000000000001";

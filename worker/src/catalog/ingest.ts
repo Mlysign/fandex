@@ -30,6 +30,7 @@ import { extractCrossIds, mergeRawData } from "@/lib/matcherPure";
 import { slugCandidate } from "@/lib/publicUrl";
 import type { MediaType, Source } from "@/types";
 import { all, first, isConstraintError, stmt } from "../d1";
+import { DROP_POOL_COUNT_SQL } from "../keptCounts";
 import { buildVector, deriveItem, DERIVE_VERSION, type ParsedLink } from "./derive";
 
 export interface SourceItem {
@@ -271,6 +272,9 @@ async function createItem(
       [ns, ext, id],
     ));
   }
+  // A title created straight into the pool makes the pool's kept size untrue.
+  // In the batch, so a create that loses its race drops nothing.
+  if (browsed === 0) statements.push(db.prepare(DROP_POOL_COUNT_SQL));
   await db.batch(statements);
   return id;
 }

@@ -40,8 +40,17 @@ const EXPORT_SKIP_TABLES = new Set([
   "item_doc", "franchise_members", "calendar_month", "show_seasons", "show_episodes",
   "kv", "daily_budget", "d1_migrations",
 ]);
-/** Columns left out of an exported table: the provider blobs, which are refetchable and 90% of the bytes. */
-const EXPORT_SKIP_COLUMNS: Record<string, Set<string>> = { media_links: new Set(["raw_data"]) };
+/**
+ * Columns left out of an exported table: the provider blobs, which are
+ * refetchable and 90% of the bytes, and a user's kept state counts. The export
+ * pages across runs ten minutes apart, so a kept count could be written out
+ * before the rows it counts and restored as a count of something else. Left
+ * out, it restores as NULL, which means "count again".
+ */
+const EXPORT_SKIP_COLUMNS: Record<string, Set<string>> = {
+  media_links: new Set(["raw_data"]),
+  users: new Set(["counted_items", "counted_episodes", "counted_hidden"]),
+};
 
 const EXPORT_CURSOR_KEY = "export_cursor";
 const EXPORT_CHUNK_ROWS = 1000;

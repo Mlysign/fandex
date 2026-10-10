@@ -180,6 +180,36 @@ Each of these is a way the Worker differs from the site, and each has a test.
   the row-value form is a range seek on the partial index; the other reads the whole pool on every
   sync, and D1 bills each row. A final page hands back a cursor a few seconds in the past so a
   write in the same second is not skipped.
+- **Two counts are kept, and whatever changes what they count drops them** (`src/keptCounts.ts`,
+  migration 0002). A device asks for its state counts before every pull and for the pool's size at
+  the end of every catalog sync, nearly always to hear "nothing changed". Counting each time read
+  14,899 and 4,561 rows a call (2026-10-10: 1.33 million and 611,000 in the day). Now each is
+  counted once and kept: the state counts on the user's row (`counted_items`, `counted_episodes`,
+  `counted_hidden`, as `count:newest`, NULL for "count again"), the pool's size in `kv` under
+  `pool_count` with a day's expiry. Measured on the local D1 at the real sizes: **1 row** for an
+  ask when nothing changed; 14,896 for the first ask after all three tables changed, 12,414 after
+  one episode is ticked; 4,563 for the first sync after the pool changed. A device is sent the
+  same numbers as before, because a kept number is always one the old COUNT produced.
+  - The drop rides in the writer's own batch. A state write adds at most one row write (none if
+    the count was already dropped) and, when a pool count is kept, a look-up of 3 rows per title
+    written to ask whether the write will promote one (6,001 rows for 2,000 titles, the same as
+    the promotion itself).
+  - ⚠️ **A statement that writes `user_item_state`, `user_episode_state`, `user_hidden_items`, or
+    that puts a title into the pool or takes one out, must drop the count in the same batch.**
+    `test/keptCounts.test.ts` lists every such statement in `src/` and fails on a new one.
+  - ⚠️ **The pool's size must never be answered too low.** A device holding more titles than the
+    number it is given throws its catalog away and downloads it again, on every sync while the
+    number stays low. An addition that forgets `DROP_POOL_COUNT_SQL` is that bug.
+  - ⚠️ **The same goes for SQL run by hand**, and for a rollback: the old code writes without
+    dropping. After either, run `UPDATE users SET counted_items = NULL, counted_episodes = NULL,
+    counted_hidden = NULL` and `DELETE FROM kv WHERE key = 'pool_count'`. Both are safe at any time
+    and cost one recount each.
+  - Not triggers, though a trigger could not be forgotten: D1 reports a trigger's row changes as
+    the changes of the statement that fired it (an upsert of two rows reported three), and the
+    state write tells the client what it applied and skipped from that number. A test pins it.
+  - The count is asked for on the LAST page of a sync only, and always was (`done && withCount`).
+    For a device that is up to date the first page is the last, so asking on the first page only
+    would have saved nothing: the 134 counts on 2026-10-10 were 134 syncs, not 134 pages.
 - **The cron is a state machine.** One trigger, every ten minutes, a few steps each run, cursors
   in the `kv` table. Four jobs: the nightly export to R2, the TMDB refresh (links older than 150
   days, inside TMDB's six-month cap), the upcoming refresh, one calendar month. IGDB is not
@@ -213,7 +243,8 @@ Run from `worker/` unless a path says otherwise.
 | Tests | `npm test` |
 | Typecheck | `npx wrangler types` once, then `npx tsc --noEmit` |
 | Deploy | `npx wrangler deploy` |
-| Apply a migration | `npx wrangler d1 migrations apply fandex --remote` |
+| Apply a migration | `npx wrangler d1 migrations apply fandex --remote`, and BEFORE the deploy that needs it |
+| What read the most rows today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (answers while D1 refuses queries) |
 | Query D1 | `npx wrangler d1 execute fandex --remote --command "…"` |
 | Logs with CPU time | `npx wrangler tail fandex-api --format json` |
 | Set secrets from `.env` | `node worker/scripts/push-secrets.mjs` (from the repo root) |
@@ -276,7 +307,10 @@ What it showed a real restore still needs:
   the plan has the client take episodes from Trakt.
 - **Dropping stale rows.** A `browsed = 1` row nobody acted on should be dropped, not refreshed,
   once it is 150 days old. The first such row is due in March 2027. Needs the same schema-derived
-  "is anything pointing at this" check erasure uses, before anything deletes.
+  "is anything pointing at this" check erasure uses, before anything deletes. ⚠️ Two costs to
+  price first. Deleting ONE title read 24,834 rows on the local D1 with 12,411 episode rows in
+  the table (2026-10-10): the cascade looks through every state row, because no index on the
+  state tables leads with `media_item_id`. And a deleted pool title has to drop `pool_count`.
 - **`franchise_members`**: 10,841 rows, built as `data/d1-seed/90_franchise_members.deferred.sql`
   and not applied. The franchise rail is phase 5.
 - **The refetch step of a restore.** See "Backup and restore" below: titles added after the base

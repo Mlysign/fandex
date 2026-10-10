@@ -19,6 +19,7 @@
 // at it, and every one of those goes.
 
 import { all, first } from "./d1";
+import { dropStateCounts } from "./keptCounts";
 
 // ── Which tables hold this user's data ──────────────────────────────────────
 
@@ -255,6 +256,8 @@ export async function disconnectIdentity(
   await db.batch([
     db.prepare("DELETE FROM user_identities WHERE user_id = ? AND provider = ?").bind(userId, provider),
     db.prepare("DELETE FROM user_item_state WHERE user_id = ? AND source = ?").bind(userId, provider),
+    // Their devices decide whether to pull from a kept count of these rows.
+    dropStateCounts(db, userId, ["items"]),
   ]);
   return { ok: true, removedRows: rows, remaining: { provider: remaining.provider, displayName: remaining.display_name } };
 }
@@ -377,6 +380,10 @@ export async function mergeAccounts(
   // The emptied account. Its preferences go with it on purpose: the surviving
   // account is the established one and its settings are the ones the person chose.
   statements.push(db.prepare("DELETE FROM users WHERE id = ?").bind(fromUserId));
+  // The surviving account's rows are not what was counted any more, whichever
+  // side won: it lost its clashing rows or gained the other's. Last, so the
+  // indexes read back below still point at the moves.
+  statements.push(dropStateCounts(db, intoUserId, ["items", "episodes", "hidden"]));
 
   const results = await db.batch(statements);
   const moved: string[] = [];
