@@ -32,7 +32,9 @@ import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/ig
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import {
-  deleteCategory, parseCategory, parseCategoryWeights, parseScoringConfig, saveCategory, saveCategoryWeights, saveScoringConfig,
+  clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
+  parseLabel, parseScoringConfig, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
+  setTagOverrides, type AliasTable,
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
@@ -341,6 +343,47 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
     }
     if (method === "DELETE" && d) {
       await deleteCategory(db, d);
+      return saved();
+    }
+  }
+  const q = c.url.searchParams;
+  if (b === "tag-overrides" && !d) {
+    if (method === "POST") {
+      const { tagKeys, categoryId } = parseTagOverrides(await readJson(c.request, LOOKUP_BODY_MAX));
+      await setTagOverrides(db, tagKeys, categoryId);
+      return saved();
+    }
+    if (method === "DELETE") {
+      await clearTagOverride(db, q.get("tagKey") ?? "");
+      return saved();
+    }
+  }
+  // One pair of routes for both alias tables: tags that are one tag, franchises that are one franchise.
+  if ((b === "tag-aliases" || b === "ip-aliases") && !d) {
+    const table: AliasTable = b === "tag-aliases" ? "tag_alias" : "ip_alias";
+    if (method === "POST") {
+      const { canonical, members, displayLabel } = parseAliases(await readJson(c.request, AUTH_BODY_MAX));
+      for (const m of members) if (m !== canonical) await setAlias(db, table, m, canonical);
+      if (displayLabel) await setLabel(db, table === "tag_alias" ? "tag" : "ip", canonical, displayLabel);
+      return saved();
+    }
+    if (method === "DELETE") {
+      const alias = q.get("alias");
+      const canonical = q.get("canonical");
+      if (alias) await deleteAlias(db, table, alias);
+      else if (canonical) await deleteBundle(db, table, canonical);
+      else return error(400, "bad-request", "alias or canonical required");
+      return saved();
+    }
+  }
+  if (b === "labels" && !d) {
+    if (method === "POST") {
+      const l = parseLabel(await readJson(c.request, AUTH_BODY_MAX));
+      await setLabel(db, l.kind, l.key, l.label);
+      return saved();
+    }
+    if (method === "DELETE") {
+      await clearLabel(db, q.get("kind"), q.get("key"));
       return saved();
     }
   }

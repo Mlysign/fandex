@@ -47,6 +47,8 @@ interface Scores {
   revision: number;
   /** Fetch the taxonomy again now. The Scoring admin calls it after a save, so its own edit shows at once. */
   reloadTaxonomy: () => Promise<void>;
+  /** Use a taxonomy the Worker just answered a write with, without asking for it again. */
+  adoptTaxonomy: (json: TaxonomyJson) => Promise<void>;
 }
 
 const Ctx = createContext<Scores | null>(null);
@@ -169,14 +171,22 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     if (fresh) setTaxonomy(fresh);
   }, [db]);
 
+  const adoptTaxonomy = useCallback(async (json: TaxonomyJson) => {
+    const next = prepareTaxonomy(json);
+    await setMeta(db, TAXONOMY_KEY, JSON.stringify(json));
+    // The stored ETag no longer describes what is stored. Dropping it makes the next check a full fetch.
+    await setMeta(db, TAXONOMY_ETAG_KEY, '');
+    setTaxonomy(next);
+  }, [db]);
+
   const value = useMemo<Scores>(() => {
     // The same rounding the score itself uses, so the two never disagree by a tenth.
     const center = profile && profile.w.size > 0 && profile.ratedItemCount >= 3 ? Math.round(profile.baseline * 100) / 10 : null;
     return {
-      ready, center, score, scoresFor, revision, taxonomy, reloadTaxonomy,
+      ready, center, score, scoresFor, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
     };
-  }, [ready, profile, taxonomy, score, scoresFor, revision, reloadTaxonomy]);
+  }, [ready, profile, taxonomy, score, scoresFor, revision, reloadTaxonomy, adoptTaxonomy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

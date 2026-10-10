@@ -9,7 +9,7 @@
  */
 
 import { BadRequest } from "./me";
-import { run } from "./d1";
+import { first, run } from "./d1";
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const num = (v: unknown, name: string): number => {
@@ -132,4 +132,99 @@ export async function saveCategory(db: D1Database, c: CategoryEdit): Promise<voi
  */
 export async function deleteCategory(db: D1Database, id: string): Promise<void> {
   await run(db, "DELETE FROM tag_category WHERE id = ?", [categoryId(id)]);
+}
+
+// ── Tags: which category, which spelling, which tags are one tag ─────────────
+
+const key = (v: unknown, name: string): string => {
+  if (typeof v !== "string" || !v || v.length > 200) throw new BadRequest(`${name} is required`);
+  return v;
+};
+
+export function parseTagOverrides(body: unknown): { tagKeys: string[]; categoryId: string } {
+  if (!isObj(body)) throw new BadRequest("Expected {tagKeys, categoryId}");
+  const many = body.tagKeys === undefined ? [] : body.tagKeys;
+  if (!Array.isArray(many) || many.length > 2000) throw new BadRequest("tagKeys must be a list of at most 2,000");
+  const tagKeys = [...new Set([...many.map((k) => key(k, "tagKey")), ...(body.tagKey === undefined ? [] : [key(body.tagKey, "tagKey")])])];
+  if (!tagKeys.length) throw new BadRequest("tagKey or tagKeys required");
+  return { tagKeys, categoryId: categoryId(body.categoryId) };
+}
+
+/** Move tags into a category by hand. Answers how many were moved. */
+export async function setTagOverrides(db: D1Database, tagKeys: string[], category: string): Promise<number> {
+  // The foreign key would refuse an unknown category with a constraint error;
+  // this says it in words instead.
+  if (!(await first<{ id: string }>(db, "SELECT id FROM tag_category WHERE id = ?", [category]))) throw new BadRequest("No such category");
+  const put = db.prepare(
+    `INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (?, ?, unixepoch())
+     ON CONFLICT(tag_key) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at`,
+  );
+  // D1 takes at most a hundred statements in a batch.
+  for (let i = 0; i < tagKeys.length; i += 100) await db.batch(tagKeys.slice(i, i + 100).map((k) => put.bind(k, category)));
+  return tagKeys.length;
+}
+
+/** Back to wherever the code puts the tag. */
+export async function clearTagOverride(db: D1Database, tagKey: string): Promise<void> {
+  await run(db, "DELETE FROM tag_category_override WHERE tag_key = ?", [key(tagKey, "tagKey")]);
+}
+
+/** `tag_alias` folds tags into one tag; `ip_alias` folds franchises into one franchise. Same shape, same rules. */
+export type AliasTable = "tag_alias" | "ip_alias";
+
+export function parseAliases(body: unknown): { canonical: string; members: string[]; displayLabel?: string } {
+  if (!isObj(body) || !Array.isArray(body.members) || !body.members.length || body.members.length > 500) throw new BadRequest("Expected {canonical, members}");
+  let displayLabel: string | undefined;
+  if (body.displayLabel !== undefined) {
+    if (typeof body.displayLabel !== "string" || !body.displayLabel.trim() || body.displayLabel.length > 200) throw new BadRequest("displayLabel must be a short name");
+    displayLabel = body.displayLabel.trim();
+  }
+  return { canonical: key(body.canonical, "canonical"), members: body.members.map((m) => key(m, "member")), displayLabel };
+}
+
+/**
+ * Make `alias` another name for `canonical`. Flat by construction, as on the
+ * site: the target is resolved to its own canonical first, and anything that
+ * pointed at `alias` is re-pointed, so no chain is ever stored.
+ */
+export async function setAlias(db: D1Database, table: AliasTable, alias: string, canonical: string): Promise<void> {
+  const target = (await first<{ c: string }>(db, `SELECT canonical_key c FROM ${table} WHERE alias_key = ?`, [canonical]))?.c ?? canonical;
+  if (alias === target) throw new BadRequest("A tag cannot be an alias of itself.");
+  await db.batch([
+    db.prepare(`UPDATE ${table} SET canonical_key = ?, updated_at = unixepoch() WHERE canonical_key = ?`).bind(target, alias),
+    db.prepare(
+      `INSERT INTO ${table} (alias_key, canonical_key, updated_at) VALUES (?, ?, unixepoch())
+       ON CONFLICT(alias_key) DO UPDATE SET canonical_key = excluded.canonical_key, updated_at = excluded.updated_at`,
+    ).bind(alias, target),
+  ]);
+}
+
+export async function deleteAlias(db: D1Database, table: AliasTable, alias: string): Promise<void> {
+  await run(db, `DELETE FROM ${table} WHERE alias_key = ?`, [key(alias, "alias")]);
+}
+
+/** Take a whole bundle apart: every name that pointed at `canonical` stands alone again. */
+export async function deleteBundle(db: D1Database, table: AliasTable, canonical: string): Promise<void> {
+  await run(db, `DELETE FROM ${table} WHERE canonical_key = ?`, [key(canonical, "canonical")]);
+}
+
+export function parseLabel(body: unknown): { kind: "tag" | "ip"; key: string; label: string } {
+  if (!isObj(body) || (body.kind !== "tag" && body.kind !== "ip")) throw new BadRequest("kind must be tag or ip");
+  if (typeof body.label !== "string" || !body.label.trim() || body.label.length > 200) throw new BadRequest("A display name cannot be blank.");
+  return { kind: body.kind, key: key(body.key, "key"), label: body.label.trim() };
+}
+
+/** The spelling people see for a tag or a franchise, whatever the providers call it. */
+export async function setLabel(db: D1Database, kind: "tag" | "ip", k: string, label: string): Promise<void> {
+  await run(
+    db,
+    `INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES (?, ?, ?, unixepoch())
+     ON CONFLICT(kind, key) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`,
+    [kind, k, label],
+  );
+}
+
+export async function clearLabel(db: D1Database, kind: string | null, k: string | null): Promise<void> {
+  if (kind !== "tag" && kind !== "ip") throw new BadRequest("kind must be tag or ip");
+  await run(db, "DELETE FROM facet_label_override WHERE kind = ? AND key = ?", [kind, key(k, "key")]);
 }

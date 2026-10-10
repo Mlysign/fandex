@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminOnly, DashHeader, devStyles } from '~/components/dev/parts';
+import { TaxonomyPanel } from '~/components/dev/TaxonomyPanel';
 import { WeightsPanel } from '~/components/dev/WeightsPanel';
 import { Screen } from '~/components/ui';
 import { api } from '~/lib/api';
@@ -12,7 +13,7 @@ import { useScores } from '~/lib/ScoreProvider';
 import { color, font } from '~/theme';
 
 type Tab = 'weights' | 'taxonomy';
-const TABS: [Tab, string][] = [['weights', 'Weights & Tuning']];
+const TABS: [Tab, string][] = [['weights', 'Weights & Tuning'], ['taxonomy', 'Taxonomy']];
 
 function Admin() {
   const scores = useScores();
@@ -42,6 +43,12 @@ function Admin() {
     await Promise.all([load(), scores.reloadTaxonomy()]);
   }, [load, scores]);
 
+  // A taxonomy write answers with the taxonomy as stored. This page and the app's scores both take it.
+  const adopt = useCallback(async (next: TaxonomyJson) => {
+    setJson(next);
+    await scores.adoptTaxonomy(next);
+  }, [scores]);
+
   const taxonomy = json ? prepareTaxonomy(json) : null;
   return (
     <Screen wide>
@@ -64,6 +71,7 @@ function Admin() {
           // Keyed on the stored version, so a save redraws the panel from what was stored.
           <WeightsPanel key={json.scoring?.version ?? 0} config={taxonomy.config} categories={json.tagCategories} taxonomy={taxonomy} onSaved={saved} />
         ) : null}
+        {json && tab === 'taxonomy' ? <TaxonomyPanel json={json} onChanged={adopt} /> : null}
       </ScrollView>
     </Screen>
   );

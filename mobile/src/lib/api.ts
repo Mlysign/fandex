@@ -282,6 +282,20 @@ export const api = {
   adminSaveScoring: (config: ScoringConfigValues) => request<TaxonomyJson>('/v1/admin/scoring', json('PUT', config)),
   adminSaveCategoryWeights: (updates: { id: string; weight: number; ignored: boolean }[]) =>
     request<TaxonomyJson>('/v1/admin/categories', json('PUT', { updates })),
+  adminSaveCategory: (c: { id: string; label: string; color: string; weight: number; ignored: boolean }) =>
+    request<TaxonomyJson>('/v1/admin/categories', json('POST', c)),
+  adminDeleteCategory: (id: string) => request<TaxonomyJson>(`/v1/admin/categories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  adminTagOverrides: (tagKeys: string[], categoryId: string) =>
+    request<TaxonomyJson>('/v1/admin/tag-overrides', json('POST', { tagKeys, categoryId })),
+  /** `tag` folds tags into one tag, `ip` folds franchises into one franchise. */
+  adminAddAliases: (kind: 'tag' | 'ip', canonical: string, members: string[], displayLabel?: string) =>
+    request<TaxonomyJson>(`/v1/admin/${kind}-aliases`, json('POST', { canonical, members, displayLabel })),
+  adminDeleteAlias: (kind: 'tag' | 'ip', alias: string) =>
+    request<TaxonomyJson>(`/v1/admin/${kind}-aliases${q({ alias })}`, { method: 'DELETE' }),
+  adminDeleteBundle: (kind: 'tag' | 'ip', canonical: string) =>
+    request<TaxonomyJson>(`/v1/admin/${kind}-aliases${q({ canonical })}`, { method: 'DELETE' }),
+  adminSetLabel: (kind: 'tag' | 'ip', key: string, label: string) => request<TaxonomyJson>('/v1/admin/labels', json('POST', { kind, key, label })),
+  adminClearLabel: (kind: 'tag' | 'ip', key: string) => request<TaxonomyJson>(`/v1/admin/labels${q({ kind, key })}`, { method: 'DELETE' }),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),

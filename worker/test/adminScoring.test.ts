@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  deleteCategory, parseCategory, parseCategoryWeights, parseScoringConfig, saveCategory, saveCategoryWeights, saveScoringConfig,
+  clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights, parseLabel,
+  parseScoringConfig, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel, setTagOverrides,
 } from "../src/adminScoring";
 import { taxonomyJson } from "../src/catalog/read";
 import { count, db, wipe } from "./helpers";
@@ -69,5 +70,57 @@ describe("tag categories", () => {
     await deleteCategory(db, "genre");
     expect(await count("tag_category")).toBe(0);
     expect(await count("tag_category_override")).toBe(0);
+  });
+});
+
+describe("tags", () => {
+  const cat = (id: string) => saveCategory(db, parseCategory({ id, label: id, color: "#112233", weight: 1, ignored: false }));
+
+  it("moves many tags into a category at once, and one back out", async () => {
+    await cat("mood");
+    const { tagKeys, categoryId } = parseTagOverrides({ tagKeys: ["dark", "cozy", "dark"], tagKey: "bleak", categoryId: "mood" });
+    expect(await setTagOverrides(db, tagKeys, categoryId)).toBe(3);
+    await clearTagOverride(db, "cozy");
+    expect((await taxonomy()).tagCategoryOverrides).toEqual([["bleak", "mood"], ["dark", "mood"]]);
+  });
+
+  it("refuses a category that does not exist, in words", async () => {
+    await expect(setTagOverrides(db, ["dark"], "nowhere")).rejects.toThrow("No such category");
+    expect(() => parseTagOverrides({ categoryId: "mood" })).toThrow("tagKey or tagKeys required");
+  });
+
+  it("keeps aliases flat: no chain is ever stored", async () => {
+    await setAlias(db, "tag_alias", "sci fi", "science fiction");
+    // Bundling the canonical into something else re-points its members too.
+    await setAlias(db, "tag_alias", "science fiction", "sf");
+    expect((await taxonomy()).tagAliases).toEqual([["sci fi", "sf"], ["science fiction", "sf"]]);
+    // Aiming at a member lands on that member's canonical.
+    await setAlias(db, "tag_alias", "scifi", "sci fi");
+    expect((await taxonomy()).tagAliases).toContainEqual(["scifi", "sf"]);
+    await expect(setAlias(db, "tag_alias", "sf", "sci fi")).rejects.toThrow("alias of itself");
+  });
+
+  it("takes one name out of a bundle, or the whole bundle apart", async () => {
+    await setAlias(db, "tag_alias", "a", "x");
+    await setAlias(db, "tag_alias", "b", "x");
+    await setAlias(db, "ip_alias", "star wars saga", "star wars");
+    await deleteAlias(db, "tag_alias", "a");
+    expect((await taxonomy()).tagAliases).toEqual([["b", "x"]]);
+    await deleteBundle(db, "tag_alias", "x");
+    const after = await taxonomy();
+    expect(after.tagAliases).toEqual([]);
+    // The other table is a different list.
+    expect(after.ipAliases).toEqual([["star wars saga", "star wars"]]);
+  });
+
+  it("stores a chosen display name trimmed, and forgets it on request", async () => {
+    const l = parseLabel({ kind: "tag", key: "sf", label: "  Science Fiction " });
+    await setLabel(db, l.kind, l.key, l.label);
+    expect((await taxonomy()).facetLabels).toEqual([["tag", "sf", "Science Fiction"]]);
+    expect(() => parseLabel({ kind: "tag", key: "sf", label: "   " })).toThrow("cannot be blank");
+    expect(() => parseLabel({ kind: "person", key: "x", label: "X" })).toThrow("tag or ip");
+    await clearLabel(db, "tag", "sf");
+    expect((await taxonomy()).facetLabels).toEqual([]);
+    expect(parseAliases({ canonical: "sf", members: ["a"], displayLabel: " SF " }).displayLabel).toBe("SF");
   });
 });
