@@ -9,7 +9,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // heute aktives Merkmal. Keine Rechtsberatung.
 const terms: LegalDocument = {
   title: "Nutzungsbedingungen",
-  updated: "2026-07-30",
+  updated: "2026-10-10",
   intro: [
     "Fandex ist ein kostenloses Hobbyprojekt einer Einzelperson. Diese Bedingungen sind bewusst einfach und ehrlich formuliert, kein Vorlagentext. Sie stellen keine Rechtsberatung dar und befinden sich in Überarbeitung, bis eine fachliche Rechtsberatung vorliegt.",
   ],
@@ -23,10 +23,10 @@ const terms: LegalDocument = {
     {
       heading: "Ihr Konto",
       body: [
-        "Sie legen kein Fandex-eigenes Passwort an. Sie melden sich an, indem Sie ein Anbieterkonto verknüpfen (Trakt, Steam, TMDB oder RAWG); Fandex identifiziert Sie über diese Verknüpfung. Für die Sicherheit Ihres Anbieterkontos sind Sie selbst verantwortlich. Fandex verwaltet keine eigenen Zugangsdaten dazu.",
+        "Sie legen kein Fandex-eigenes Passwort an. Sie melden sich mit einem Anbieterkonto an (derzeit Trakt); Fandex identifiziert Sie über diese Verknüpfung. Für die Sicherheit Ihres Anbieterkontos sind Sie selbst verantwortlich. Fandex verwaltet keine eigenen Zugangsdaten dazu.",
         // H4.10 (2026-08-02) — deutsche Entsprechung des EN-Absatzes; siehe dort
         // für die Begründung und die geprüfte Code-Grundlage.
-        "Ein Unterschied sei ausdrücklich genannt: Trakt, Steam und TMDB nutzen eine weiterleitungsbasierte Anmeldung: Ihr Passwort geben Sie dort ein, Fandex bekommt es nie zu sehen. Für RAWG existiert kein solcher Weg; das Anmeldeformular wird deshalb von Fandex bereitgestellt, und Ihr RAWG-Passwort läuft über den Server von Fandex, um von RAWG ein Sitzungs-Token abzurufen. Das Passwort wird ausschließlich für diese eine Anfrage verwendet und nicht gespeichert. Aufbewahrt wird nur das daraus resultierende RAWG-Token, verschlüsselt. Wenn Sie nicht möchten, dass Fandex Ihr Passwort überhaupt verarbeitet, verknüpfen Sie stattdessen einen der drei anderen Anbieter.",
+        "Ihr Passwort geben Sie auf der Seite des Anbieters ein, Fandex bekommt es nie zu sehen.",
       ],
     },
     {
@@ -44,13 +44,13 @@ const terms: LegalDocument = {
     {
       heading: "Verfügbarkeit",
       body: [
-        "Dies ist ein von einer Einzelperson betriebenes Hobbyprojekt, kein Unternehmen mit einer Verfügbarkeitszusage. Fandex wird „wie besehen“ bereitgestellt, ohne Verfügbarkeitsgarantie, und der Dienst kann jederzeit pausiert, geändert oder eingestellt werden. Sollte er dauerhaft abgeschaltet werden, ist der selbstbedienbare Datenexport (Einstellungen → Ihre Daten) der Weg, Ihre eigenen Daten vorher mitzunehmen. Ihn zu nutzen, solange der Dienst noch läuft, ist die richtige Vorgehensweise, falls dies eine Sorge ist.",
+        "Dies ist ein von einer Einzelperson betriebenes Hobbyprojekt, kein Unternehmen mit einer Verfügbarkeitszusage. Fandex wird „wie besehen“ bereitgestellt, ohne Verfügbarkeitsgarantie, und der Dienst kann jederzeit pausiert, geändert oder eingestellt werden. Sollte er dauerhaft abgeschaltet werden, ist der in der Datenschutzerklärung beschriebene Datenexport der Weg, Ihre eigenen Daten vorher mitzunehmen. Ihn anzufordern, solange der Dienst noch läuft, ist die richtige Vorgehensweise, falls dies eine Sorge ist.",
       ],
     },
     {
       heading: "Beendigung der Nutzung",
       body: [
-        "Sie können die Nutzung von Fandex jederzeit beenden, indem Sie die App einfach nicht mehr verwenden, einen Anbieter in den Einstellungen trennen oder Ihr Konto samt allem, was Fandex über Sie speichert, dauerhaft löschen (Einstellungen → Ihre Daten). Die Kontolöschung ist unwiderruflich. Die genauen Löschvorgänge sind in der Datenschutzerklärung beschrieben.",
+        "Sie können die Nutzung von Fandex jederzeit beenden, indem Sie die App einfach nicht mehr verwenden, sich abmelden oder Ihr Konto samt allem, was Fandex über Sie speichert, dauerhaft löschen lassen. Die Kontolöschung ist unwiderruflich. Wie Sie sie anfordern und was genau gelöscht wird, ist in der Datenschutzerklärung beschrieben.",
         "Fandex kann den Zugang bei einem Verstoß gegen den obigen Abschnitt zur zulässigen Nutzung aussetzen oder beenden.",
       ],
     },

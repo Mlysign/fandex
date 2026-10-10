@@ -9,6 +9,7 @@ import { Button, Divider, Screen, ScreenTitle, T } from '~/components/ui';
 import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
+import { LegalLinks } from '~/components/LegalLinks';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { deviceRegion } from '~/lib/region';
@@ -265,7 +266,14 @@ export default function YouScreen() {
             value={server === 'checking' ? 'Checking…' : server === 'up' ? 'Reachable' : 'Not reachable'}
             tone={server === 'down' ? color.danger : undefined}
           />
-          <T variant="meta" style={{ color: color.textMuted }}>{API_URL.replace(/^https?:\/\//, '')}</T>
+          {/* A browser on the website reaches the Worker through its own address, so there is none to show. */}
+          {API_URL ? <T variant="meta" style={{ color: color.textMuted }}>{API_URL.replace(/^https?:\/\//, '')}</T> : null}
+        </View>
+
+        <Divider />
+
+        <View style={styles.group}>
+          <LegalLinks />
         </View>
       </ScrollView>
     </Screen>

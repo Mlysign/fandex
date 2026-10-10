@@ -1,0 +1,36 @@
+// fandex.org: the website (docs/app-plan.md, phase 3). Files first, and
+// worker.ts for whatever no file answers.
+//
+//   node mobile/web/publish.mjs     build, check the result, publish
+//
+// Never `wrangler deploy` this by hand: publish.mjs is what checks that
+// dist/site is a whole site first.
+//
+// A separate Worker from the API (worker/) on purpose. Publishing replaces the
+// whole set of files with what is in dist/site on this machine; if the API
+// Worker carried them, deploying an API change from a checkout with no build
+// would take the website down.
+{
+  "$schema": "../../worker/node_modules/wrangler/config-schema.json",
+  "name": "fandex-web",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "dist/site",
+    "binding": "ASSETS",
+    // /movie/dune is served from movie/dune.html, and a trailing slash redirects to it.
+    "html_handling": "auto-trailing-slash"
+    // ⚠️ No "not_found_handling". Set to "404-page" it makes Cloudflare answer a
+    // browser's navigation to an unknown address itself, without running
+    // worker.ts, and every app-only address becomes a 404 in a browser.
+  },
+  // /v1/* goes to the API Worker without leaving Cloudflare.
+  "services": [{ "binding": "API", "service": "fandex-api" }],
+  // Cloudflare creates the DNS record and the certificate for a custom domain
+  // itself. The zone's mail records and the Search Console TXT are not touched.
+  "routes": [{ "pattern": "fandex.org", "custom_domain": true }],
+  // Left on as a second address for the same files: it is where a build can be
+  // looked at if the domain ever has a problem. Every page's canonical says fandex.org.
+  "workers_dev": true
+}

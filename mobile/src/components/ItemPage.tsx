@@ -26,6 +26,7 @@ import { T } from '~/components/ui';
 import type { CommunityRating, ItemDetail } from '~/lib/api';
 import { compactCount, longDate, todayIso } from '~/lib/dates';
 import type { Taxonomy } from '~/lib/fandexScore';
+import { ITEM_SCROLL_ID } from '~/lib/prerender';
 import { tagGroups } from '~/lib/itemTags';
 import { color, font, radius, space, TYPE_LABEL } from '~/theme';
 
@@ -78,13 +79,14 @@ function Scrim() {
   );
 }
 
-function Hero({ images, title, kind, metaParts, topInset, onBack, onShare, onHeight }: {
+function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onShare, onHeight }: {
   images: string[];
   title: string;
   kind: string;
   metaParts: string[];
   topInset: number;
   onBack?: () => void;
+  backHref?: string;
   onShare?: () => void;
   /** How tall the hero came out, so the page knows when it has scrolled away. */
   onHeight?: (height: number) => void;
@@ -145,10 +147,16 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, onShare, onHei
 
       <Scrim />
 
-      {onBack || onShare ? (
+      {onBack || backHref || onShare ? (
         <View style={[styles.heroButtons, { top: space.md + topInset }]}>
           {onBack ? (
             <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.circle}>
+              <ArrowLeft size={20} color={color.textPrimary} />
+            </Pressable>
+          ) : backHref ? (
+            // The same button as a link, for a page with no script behind it.
+            // react-native-web renders a view with an `href` as an <a>.
+            <Pressable {...({ href: backHref } as object)} accessibilityRole="link" accessibilityLabel="Fandex, home" style={styles.circle}>
               <ArrowLeft size={20} color={color.textPrimary} />
             </Pressable>
           ) : <View />}
@@ -223,10 +231,12 @@ function ScorePill({ label, value, href, hint }: { label: string; value: string;
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottomInset = 0, onBack, onShare }: {
+export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare }: {
   item: ItemDetail;
   /** Rendered between the score pills and the synopsis. */
   personal?: ReactNode;
+  /** Rendered after the last line of the page. The website's legal links. */
+  footer?: ReactNode;
   /** Tag categories, bundles and chosen names. Without it the tags still group, by the built-in rules. */
   taxonomy?: Taxonomy | null;
   /** The status bar's height, on a device whose hero runs under it. */
@@ -235,6 +245,8 @@ export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottom
   bottomInset?: number;
   /** The hero's two buttons. A page with no history to go back to passes neither. */
   onBack?: () => void;
+  /** Where the back button leads on a static page, which has no handler to call. */
+  backHref?: string;
   onShare?: () => void;
 }) {
   const m = item.merged;
@@ -269,12 +281,14 @@ export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottom
   return (
     <View style={styles.page}>
     <ScrollView
+      // How the app finds this element in a static page it takes over from (lib/prerender.ts).
+      testID={ITEM_SCROLL_ID}
       contentContainerStyle={{ paddingBottom: space.section + bottomInset }}
       onScroll={topInset > 0 ? onPageScroll : undefined}
       scrollEventThrottle={32}>
       <Hero
         images={images} title={m.title} kind={item.type} metaParts={metaParts}
-        topInset={topInset} onBack={onBack} onShare={onShare} onHeight={setHeroHeight}
+        topInset={topInset} onBack={onBack} backHref={backHref} onShare={onShare} onHeight={setHeroHeight}
       />
 
       <View style={styles.body}>
@@ -486,6 +500,8 @@ export function ItemPage({ item, personal, taxonomy = null, topInset = 0, bottom
         <T variant="meta" style={{ color: color.textMuted }}>
           Data from {(sources.length ? sources : item.vector.sources.map((s) => s.source)).map((s) => SOURCE_LABEL[s] ?? s.toUpperCase()).join(', ')}
         </T>
+
+        {footer}
       </View>
     </ScrollView>
     {topInset > 0 && pastHero ? <View style={[styles.statusBarCover, { height: topInset }]} /> : null}

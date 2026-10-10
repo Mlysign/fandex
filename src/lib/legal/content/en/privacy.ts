@@ -1,13 +1,29 @@
 import type { LegalDocument } from "@/lib/legal/types";
 
-// H4.3 — every factual claim here must be traceable to this repo (a table, a
-// cookie, a provider in the registry, a config value). Where a fact isn't
-// verifiable from the code, it's marked TODO(H4.3) rather than guessed.
+// H4.3: every factual claim here must be traceable to this repo (a table, a
+// cookie, a provider, a config value).
+//
+// Rewritten 2026-10-10 for the move to Cloudflare (docs/app-plan.md). What each
+// section was checked against:
+//   what is stored        worker/migrations/0001_init.sql, the five user tables
+//   no provider tokens    user_identities has no token column (docs/worker.md)
+//   on your device        mobile/src/lib/storage.ts, db.ts, AuthProvider.signOut
+//   one cookie            worker/src/auth/session.ts, sessionCookie()
+//   no usage statistics   the counter tables exist and nothing writes them
+//   last seen, daily      worker/src/auth/session.ts
+//   TMDB from the device  mobile/src/lib/tmdb.ts
+//   Trakt from the device mobile/src/lib/trakt.ts, traktSync.ts
+//   backups               worker/src/cron.ts (nightly, to R2, EU), D1 Time Travel
+//   export and deletion   the Worker has both routes; no screen calls them yet,
+//                         which is why this says "write to us"
+// ⚠️ The 30-day backup figure is a lifecycle rule on the R2 bucket, not code.
+// If the rule is ever removed, that sentence is false.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-08-19",
+  updated: "2026-10-10",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why, rather than assembled from a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
+    "It covers the website at fandex.org and the Fandex app for Android. Both are the same app and work the same way.",
   ],
   sections: [
     {
@@ -20,85 +36,90 @@ const privacy: LegalDocument = {
     {
       heading: "What Fandex stores about you",
       body: [
-        "Fandex does not ask for your name or email address. Your account is identified only by the provider account(s) you connect. Specifically, the app's database stores:",
+        "You can use Fandex without an account: the calendar, search and every title page work signed out, and nothing about you is stored. If you sign in, Fandex does not ask for your name or email address. Your account is identified only by the provider account you sign in with. Specifically, the database stores:",
         {
           list: [
-            "Account: an internal account id, when the account was created, when you were last seen, your country setting (used to localize release dates and streaming availability), and a session-invalidation counter used when you sign out or disconnect a provider.",
-            "Connected providers: which provider (Trakt, Steam, TMDB, RAWG; see \"Providers we work with\" below) you connected, that provider's own account id and display name for you, your avatar image URL if the provider supplies one, and an access token (and refresh token, where the provider issues one) so the app can act on your behalf. Tokens are encrypted at rest before they are stored. The database never holds them in plain text.",
-            "Your library: which titles you've marked watched/played, your rating and any written review, and which of your connected providers each entry came from.",
-            "Your wishlist: which titles you want, and which providers each came from.",
-            "Per-provider item state: for items with more nuanced state across providers (e.g. \"in progress\" on one service), a record per provider of that title's status, rating and review.",
-            "Sync history: a log of each sync run per provider (when it ran, how many items it touched, and whether it succeeded), used only for diagnosing sync problems.",
+            "Account: an internal account id, when the account was created, the day you were last seen, your country and display preferences if you set them (which media types and platforms you want shown), and a counter used to end your sessions when you sign out.",
+            "Sign-in provider: which provider you signed in with (today that is Trakt), that provider's own account id and display name for you, and your avatar image URL if the provider supplies one. Fandex's servers do not store a password or an access token for your provider account.",
+            "Your library and wishlist: which titles you've marked watched or played, which you want, your rating and any written review, the status of each, and where each entry came from (Trakt, Steam, or Fandex itself).",
+            "Episodes: which episodes of a show you've marked watched.",
+            "Hidden titles: the titles you asked Fandex not to suggest.",
           ],
         },
       ],
     },
     {
-      heading: "What Fandex does NOT store",
+      heading: "What is kept on your own device",
       body: [
-        "No email address, no real name (only whatever display name your connected provider gives us), no payment information (Fandex has no payment feature today), and no third-party analytics or advertising identifiers. Fandex does count pageviews, but it does so itself and without identifying anyone; see \"Usage statistics\" below.",
+        "Fandex keeps a working copy on the device you use it on, so that it is fast and works without a connection. That copy holds the public catalog, your own library rows, your Fandex session and, if you signed in with Trakt, the Trakt access tokens.",
+        "In a browser this lives in the browser's own storage for fandex.org. In the Android app it lives in the app's private storage, with the session and the tokens in the system keystore. The Trakt tokens are used only to talk to Trakt from your device. They are never sent to Fandex's servers, apart from the single moment of sign-in described below.",
+        "Signing out removes the session, the tokens and your library rows from the device.",
       ],
     },
     {
-      heading: "Cookies",
+      heading: "What Fandex does NOT store",
       body: [
-        "Fandex sets three cookies, all strictly necessary for the app to function and none used for tracking or advertising: a session cookie so you stay signed in, and two short-lived (10-minute) security cookies used only during the moment you connect a provider account, to prevent a cross-site forgery of that connection. Because every cookie is strictly necessary, German law (§25 TDDDG) doesn't require a consent banner for them. That conclusion, and the full list with exact names and lifetimes, is recorded separately for anyone who wants the detail.",
+        "No email address, no real name (only whatever display name your provider gives us), no payment information (Fandex has no payment feature today), no provider password or token on its servers, and no third-party analytics or advertising identifiers.",
+      ],
+    },
+    {
+      heading: "Cookies and device storage",
+      body: [
+        "Fandex sets one cookie: a session cookie, so that you stay signed in in a browser. It is strictly necessary and is not used for tracking or advertising. The device storage described above is likewise only what the app needs in order to work. Because all of it is strictly necessary for a service you asked for, German law (§25 TDDDG) doesn't require a consent banner for it.",
         "If Fandex ever adds analytics, advertising, or affiliate-tracking cookies, a consent banner will be added before that happens, not after.",
       ],
     },
     {
       heading: "Usage statistics",
       body: [
-        "Fandex counts how much the site is used, so the operator can tell whether it is worth continuing to run and pay for. That counting is done by Fandex itself, in its own database. There is no Google Analytics, no other third-party analytics service, no tracking script, no advertising identifier and no fingerprinting.",
-        "What a count records: the calendar day, what KIND of page was opened, whether the visitor was signed in, and a coarse category for where the visit came from (a search engine, a social site, a link inside Fandex, or no referrer at all). \"Kind of page\" means a route template, so opening a specific tag, person or item page is recorded only as \"a tag page\", \"a person page\" or \"an item page\" and never as the particular one you looked at.",
-        "What a count does not record: any identifier of any kind. No user id, no IP address, no session id, no device or browser details, and no time more precise than the day. Counts are stored only as running daily totals, so there is nothing in them that could be traced back to you, and no way to reconstruct what any one person did.",
-        "Because nothing is stored on or read from your device, this needs no consent banner under §25 TDDDG, and because no personal data is kept there is nothing here for the GDPR to attach to. Sending a count is an ordinary web request, and like every request to any website it briefly shows your IP address to the server; it is used only to apply a rate limit, exactly as it is on every other part of the app, and is never stored alongside the counts.",
-        "For signed-in accounts Fandex also records the date each account was last seen, at most once per day, so the operator can tell how many accounts are still in use. That date is stored on your account and is removed when you delete it.",
-        "These statistics are visible only to the operator.",
+        "Fandex currently keeps no usage statistics of its own. There is no pageview counting, no Google Analytics, no other analytics service, no tracking script, no advertising identifier and no fingerprinting.",
+        "For signed-in accounts Fandex records the day each account was last seen, at most once per day, so the operator can tell how many accounts are still in use. That date is stored on your account and is removed when you delete it.",
+        "If Fandex starts counting pageviews again, it will count daily totals per kind of page with no identifier of any kind, and this section will describe it before it happens.",
       ],
     },
     {
-      heading: "Providers we work with, and what we send them",
+      heading: "Providers we work with, and what is sent to them",
       body: [
-        "TMDB, RAWG and IGDB supply the movie/show/game metadata (titles, posters, descriptions, genres) Fandex displays. The app queries them with a title or id, and doesn't send them anything about you unless you connect your own account with that provider.",
+        "TMDB and IGDB supply the movie, show and game information Fandex displays (titles, posters, descriptions, genres). Neither is told anything about your account.",
         {
           list: [
-            "TMDB (The Movie Database): metadata always; if you connect your TMDB account, the app also sends your own ratings and watchlist actions to your TMDB account, and reads them back.",
-            "Trakt: if you connect your Trakt account, the app sends your ratings, watched status and watchlist actions to your Trakt account, and reads your existing Trakt library back.",
-            "RAWG: game metadata always; if you connect your RAWG account, the app also sends your ratings and wishlist actions to it, and reads them back.",
-            "Steam: if you connect your Steam account, the app reads your owned games and playtime. Steam's API does not support writing ratings or watchlist changes back, so nothing is sent to Steam beyond the read request itself.",
-            "IGDB: game metadata only, via an app-level API key. It never sees anything about you individually.",
+            "TMDB (The Movie Database): Fandex's servers ask TMDB about titles. In addition, when you search in the app, your device asks TMDB directly. TMDB then receives your search term and, like any server you contact, your IP address.",
+            "IGDB (part of Twitch): game information, asked for by Fandex's servers only. IGDB never sees anything about you individually.",
+            "Trakt: if you sign in with Trakt, the app on your device talks to Trakt directly. It reads your Trakt history, ratings and watchlist, and it sends your ratings, watched status and watchlist changes to your Trakt account. Fandex's servers contact Trakt once, at sign-in, to confirm which Trakt account is signing in. The token used for that one request is not kept.",
+            "Images: posters and artwork are loaded by your device straight from the image servers of TMDB, IGDB and, for some games, Steam and RAWG. Each of them receives your IP address when an image loads, as any website does.",
+            "Trailers: a title page with a trailer embeds YouTube's player. YouTube (Google) receives your IP address when that page loads and may set its own cookies. What YouTube does with that is governed by Google's privacy policy.",
           ],
         },
         "Most of these providers are based in the United States. What that means for your data depends on which of them we are talking about, so rather than one blanket statement, here is each case:",
         {
           list: [
-            "Metadata only: no personal data leaves Fandex. IGDB always, and TMDB and RAWG whenever you have not connected an account with them, receive a title or an id and nothing about you. There is no transfer of your personal data to base on anything.",
-            "Accounts you connect yourself. If you link your TMDB, Trakt, RAWG or Steam account, data goes to an account you already hold with that provider, at your instruction, and only for as long as the connection exists. You can disconnect at any time in Settings. That transfer happens because you explicitly asked for it (Art. 49(1)(a) GDPR), and from the moment it arrives that provider handles it under its own privacy policy, not this one.",
-            "Providers that process data on Fandex's behalf. These are Railway (hosting, including the database) and Cloudflare (DNS, and routing the hello@fandex.org mailbox). The database is stored in the Netherlands, in Railway's europe-west4 region. Both companies are based in the United States and their staff can reach what they host for us, which counts as a transfer, so both self-certify under the EU–US Data Privacy Framework, and both additionally commit to the European Commission's Standard Contractual Clauses as a fallback should that certification lapse. Checked August 2026. Certifications can be withdrawn, so this is re-checked rather than assumed.",
+            "Catalog information only: no personal data leaves Fandex's servers. A request from Fandex to TMDB or IGDB carries a title or an id and nothing about you.",
+            "Requests your own device makes. Searches to TMDB, images and trailers go from your device to that provider, as they would if you visited its website. They carry your IP address and nothing from your Fandex account.",
+            "The account you sign in with. If you sign in with Trakt, data goes to an account you already hold there, at your instruction, and only while you stay signed in. That transfer happens because you explicitly asked for it (Art. 49(1)(a) GDPR), and from the moment it arrives Trakt handles it under its own privacy policy, not this one.",
+            "The provider that processes data on Fandex's behalf. That is Cloudflare, which delivers the website, runs the database and its backups, and routes the hello@fandex.org mailbox. The database and the backups are kept in the European Union. Cloudflare is based in the United States and its staff can reach what it hosts for us, which counts as a transfer, so Cloudflare self-certifies under the EU-US Data Privacy Framework and additionally commits to the European Commission's Standard Contractual Clauses as a fallback should that certification lapse. Checked August 2026. Certifications can be withdrawn, so this is re-checked rather than assumed.",
           ],
         },
-        "Fandex is hosted on Railway, with DNS and the hello@fandex.org contact mailbox routed through Cloudflare. Both providers process data as part of running the service (hosting the database, delivering the app, and routing the one contact address) rather than receiving it for their own purposes.",
+        "Cloudflare processes this data as part of running the service, not for its own purposes. To deliver a page it necessarily sees your IP address, and it keeps short-lived technical logs of requests (the address requested, the time, and details such as the country the request came from) for a few days.",
       ],
     },
     {
       heading: "How long we keep it",
       body: [
-        "Your account data is kept for as long as your account exists. If you delete your account (Settings → Your data), every table that stores anything about you is erased in one transaction. See \"Deleting your account\" below for how that is actually implemented, not just promised.",
-        "The database is continuously backed up for disaster recovery. Backup snapshots are retained for 24 hours before being replaced by a fresh one, so after an account deletion, a small window (up to 24 hours) can exist where a backup snapshot still reflects the pre-deletion state, purely as a byproduct of that backup cycle rather than active retention of deleted data.",
-        "CSP violation reports (a security mechanism that logs when the browser blocks a resource the app didn't intend to load) are written to Railway's server logs, which are operational logs rather than a database table with its own separate retention setting.",
+        "Your account data is kept for as long as your account exists. When an account is deleted, every table that stores anything about you is erased in one step.",
+        "The database is backed up for disaster recovery in two ways: Cloudflare can restore it to any point in the last 7 days, and a copy is written to backup storage in the European Union every night and kept for 30 days. After an account deletion, backups made before it can therefore still hold the pre-deletion state for up to 30 days, purely as a byproduct of that backup cycle rather than active retention of deleted data.",
       ],
     },
     {
       heading: "Your rights",
       body: [
-        "Under the GDPR you have the right to access the data held about you, correct it if it's wrong, have it erased, restrict or object to its processing, and receive it in a portable format. Two of these are already self-serve, not just promised on paper:",
+        "Under the GDPR you have the right to access the data held about you, correct it if it's wrong, have it erased, restrict or object to its processing, and receive it in a portable format.",
         {
           list: [
-            "Export your data: Settings → Your data → download a JSON file of everything the app holds about you, readable on its own without any knowledge of the app's internals.",
-            "Delete your account: Settings → Your data → a type-to-confirm dialog that erases every table holding anything about you. This is irreversible; there is no undo.",
+            "Export your data: write to hello@fandex.org. You will be asked to show that the account is yours before anything is sent. You then get a JSON file of everything the app holds about you, readable on its own without any knowledge of the app's internals.",
+            "Delete your account: write to hello@fandex.org, with the same check. Every table holding anything about you is erased. This is irreversible; there is no undo.",
           ],
         },
+        "Both will be buttons in the app's settings again. Until they are, the email route is the way, and it is answered by a person.",
         "For anything else, such as correction, restriction or objection, contact hello@fandex.org.",
         "You also have the right to lodge a complaint with a data protection supervisory authority. Under Art. 77 GDPR you can do that with the authority in the EU or EEA country where you live, where you work, or where you believe the problem occurred. It does not have to be a German one, even though Fandex's controller is based in Germany.",
       ],

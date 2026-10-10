@@ -1,0 +1,12 @@
+// www.fandex.org: a redirect to fandex.org and nothing else (worker.ts).
+// It changes about never, so it is deployed by hand:
+//
+//   cd worker && npx wrangler deploy --config ../mobile/web/www/wrangler.jsonc
+{
+  "$schema": "../../../worker/node_modules/wrangler/config-schema.json",
+  "name": "fandex-www",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "www.fandex.org", "custom_domain": true }]
+}

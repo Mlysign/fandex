@@ -12,6 +12,7 @@ import { StateBlock } from '~/components/ui';
 import { AuthProvider } from '~/lib/AuthProvider';
 import { CatalogSyncProvider } from '~/lib/CatalogSyncProvider';
 import { DATABASE_NAME, migrate } from '~/lib/db';
+import { dropPlaceholder } from '~/lib/prerender';
 import { ScoreProvider } from '~/lib/ScoreProvider';
 import { color, font } from '~/theme';
 
@@ -82,6 +83,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 function DatabaseOpened() {
   useEffect(() => {
     if (Platform.OS === 'web') globalThis.sessionStorage?.removeItem(LOCK_RELOADS_KEY);
+    // The website's home page shows a placeholder until the app is up. It is up now.
+    dropPlaceholder();
   }, []);
   return null;
 }
@@ -120,6 +123,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           {/* No header: the page's hero carries its own back and share buttons. */}
           <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
+          {/* The same screen at its public address, /{type}/{slug}. */}
+          <Stack.Screen name="[type]/[slug]" options={{ headerShown: false }} />
           <Stack.Screen name="open/[source]/[type]/[id]" options={{ title: '' }} />
         </Stack>
       </ScoreProvider>

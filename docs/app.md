@@ -77,6 +77,9 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   your score, the rating row) in as `personal`. The website renders `ItemPage` alone to HTML, so
   anything device-only imported there breaks that build. `mobile/ssr-probe/` is the proof it
   renders on a server, and where its CPU cost was measured (docs/app-plan.md, "The website").
+  The screen answers two addresses: `/item/{id}`, the app's own, and `/{type}/{slug}`, the public
+  one (`src/app/[type]/[slug].tsx` re-exports it). On the website it may start under a static
+  copy of the same page and removes that copy once the item is on screen (`src/lib/prerender.ts`).
 - **The device holds a copy of the scoring pool** in SQLite (`expo-sqlite`, also on the web).
   `catalogSync.ts` pulls the Worker's delta a page at a time and advances its cursor in the same
   transaction that writes the page, so a sync that dies half way resumes from the last page that
@@ -201,6 +204,7 @@ From `mobile/`:
 | Task | Command |
 |---|---|
 | Run in a browser | `npm run web` (or the `app-web` launch config, port 8081) |
+| Build and publish the website | `node mobile/web/publish.mjs`, from the repo root → [website.md](website.md) |
 | Typecheck | `npx tsc --noEmit` |
 | Tests | `npm test` |
 | Write `.env` from the repo's | `npm run env` |
@@ -256,11 +260,7 @@ sideloading and is not a Play upload key.
   looking great"). He deferred the pass and has not said which part. Ask before changing it.
   It is text only, the row swaps to "Marking … watched" for about a second, and it does not
   use the app's fonts.
-- **The web build has only been spot-checked since the entry point changed.** `index.js` now
-  imports `src/headless.ts` before the router, and the score, Up next and the widget module all
-  landed after the last full browser check. On 2026-10-05 it started and an item page loaded
-  signed out, with its images and fonts and no console error. Nothing else has been looked at
-  in a browser: not sign-in, not the tabs, not the score.
+- **The web build is live as fandex.org since 2026-10-10** ([website.md](website.md)) and was checked there signed out: the calendar, Browse after a full catalog sync, the item page, an unknown address, the You tab. Still not looked at in a browser: sign-in, the Library, the score, rating and saving.
 - **Seen once, not explained:** the Library showed "0 titles" and "Could not refresh your
   library" straight after a reinstall over a session whose database connection had been closed
   under it. The server's rows were intact and the next launch was fine. A failed pull now logs
@@ -272,9 +272,6 @@ sideloading and is not a Play upload key.
   reloads itself quietly up to four times, which got through every time it was provoked, and shows
   an error with a retry after that. A proper fix is to wait on the old page's release before
   opening. Android is not affected.
-- **The web build's SQLite runs without cross-origin isolation**, and works. The two headers
-  `metro.config.js` sets reach the JavaScript bundle but not the HTML page, so
-  `crossOriginIsolated` is false. Expo's docs say the web build needs them. Check before the web
-  build is deployed anywhere, because the host has to send them on the page.
+- **The web build's SQLite runs without cross-origin isolation, and the website sends no such headers on purpose.** Checked on the live build: `crossOriginIsolated` is false and the catalog synced. Safari has no `COEP: credentialless` at all, so the app has to work without it anyway. The dev server still sends the two headers (`metro.config.js`), which is why `Trailer.web.tsx` marks its frame `credentialless`.
 - **The Library screen has three rows of filter chips.** On the site the same filters collapse
   into one chip each (the 2026-09-02 decision). Not carried over yet.

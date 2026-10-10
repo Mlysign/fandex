@@ -48,7 +48,7 @@ Old: `src/components/item/*`. App: `mobile/src/components/ItemPage.tsx` (everybo
 | Feature | Old site | App |
 |---|---|---|
 | Swipeable 3:4 image hero with dots, title in the scrim | `DetailHero.tsx` | **yes** |
-| Back and share buttons on the hero | `DetailHero.tsx` | **yes**. Share hands out the fandex.org address, which serves nothing until phase 3 |
+| Back and share buttons on the hero | `DetailHero.tsx` | **yes**. Share hands out the fandex.org address, which is the title's static page |
 | Meta line: year · runtime · director | `ItemView.tsx` | **yes** |
 | Release dates per source with provider logos, when sources disagree | `ItemView.tsx` | **yes** |
 | Community score pills, with the Steam review label, linking out | `RatingsSection.tsx` | **yes** |
@@ -212,7 +212,7 @@ Old: `src/app/profile/ProfilePageClient.tsx`, `src/app/settings/SettingsPageClie
 | Default types, Your platforms | `settings/MediaTypePicker.tsx`, `PlatformPicker.tsx` | no |
 | Download your data, Delete account | settings | no. The Worker has both routes |
 | Import from Letterboxd or IMDb | `src/app/import/ImportPageClient.tsx` | no |
-| Legal pages in English and German, footer | `src/components/legal/*` | no |
+| Legal pages in English and German, footer | `src/components/legal/*` | partial. Static pages on the website, linked from the You tab and from every item page in a browser. No in-app screen, and no donations link |
 
 ### Navigation, sign-in, admin
 

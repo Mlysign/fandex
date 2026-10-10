@@ -8,7 +8,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // triggered, not something live today. Not legal advice.
 const terms: LegalDocument = {
   title: "Terms of Service",
-  updated: "2026-07-30",
+  updated: "2026-10-10",
   intro: [
     "Fandex is a free, one-person hobby project. These terms are written to be plain and honest about what that means, not a template. They are not legal advice and are under review pending professional legal advice.",
   ],
@@ -22,15 +22,11 @@ const terms: LegalDocument = {
     {
       heading: "Your account",
       body: [
-        "You don't create a Fandex-specific password. You sign in by connecting a provider account (Trakt, Steam, TMDB or RAWG), and Fandex identifies you by that connection. You're responsible for keeping your provider account secure. Fandex has no separate credential to protect on its side.",
-        // H4.10 (2026-08-02): the sentence above described all four providers
-        // uniformly, which is not inaccurate but omits that RAWG is the one
-        // whose password actually passes through Fandex. Verified against
-        // src/app/api/auth/rawg/route.ts before wording this: the password is
-        // used once for the RAWG login call and never stored (the former
-        // bcrypt hash was removed in S5); only the returned session token is
-        // kept, encrypted at rest.
-        "One difference worth naming: Trakt, Steam and TMDB use a redirect-based sign-in, so your password is entered on their site and Fandex never sees it. RAWG has no such flow, so its connect form is hosted by Fandex and your RAWG password passes through Fandex's server to obtain a session token from RAWG. That password is used for that single request and is never stored. Only the resulting RAWG token is kept, encrypted. If you'd rather Fandex never handled it at all, connect one of the other three providers instead.",
+        "You don't create a Fandex-specific password. You sign in with a provider account (today that is Trakt), and Fandex identifies you by that connection. You're responsible for keeping your provider account secure. Fandex has no separate credential to protect on its side.",
+        // 2026-10-10: the RAWG paragraph that stood here is gone with the RAWG
+        // sign-in itself. Trakt's sign-in is on Trakt's own page, and the
+        // Worker stores no provider token at all (docs/worker.md).
+        "Your password is entered on the provider's own site and Fandex never sees it.",
       ],
     },
     {
@@ -48,13 +44,13 @@ const terms: LegalDocument = {
     {
       heading: "Availability",
       body: [
-        "This is a hobby project run by one person, not a company with an uptime commitment. Fandex is provided \"as is\", with no guarantee of availability, and the service can be paused, changed or discontinued at any time. If it's ever shut down permanently, the self-serve data export (Settings → Your data) is the way to take your own data with you before that happens. Using it while the service is still running is the right call if that's a concern.",
+        "This is a hobby project run by one person, not a company with an uptime commitment. Fandex is provided \"as is\", with no guarantee of availability, and the service can be paused, changed or discontinued at any time. If it's ever shut down permanently, the data export described in the Privacy Policy is the way to take your own data with you before that happens. Asking for it while the service is still running is the right call if that's a concern.",
       ],
     },
     {
       heading: "Ending your use",
       body: [
-        "You can stop using Fandex at any time by simply not using it, or disconnect a provider from Settings, or permanently delete your account and everything Fandex holds about you from Settings → Your data. Account deletion is irreversible. See the Privacy Policy for exactly what gets erased and how.",
+        "You can stop using Fandex at any time by simply not using it, or by signing out, or by having your account and everything Fandex holds about you permanently deleted. Account deletion is irreversible. See the Privacy Policy for how to ask for it and exactly what gets erased.",
         "Fandex may suspend or terminate access for a violation of the acceptable-use section above.",
       ],
     },

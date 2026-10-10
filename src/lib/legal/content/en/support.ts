@@ -3,7 +3,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // H4.8 — support/contact page around the already-live hello@fandex.org.
 const support: LegalDocument = {
   title: "Support",
-  updated: "2026-07-30",
+  updated: "2026-10-10",
   intro: [
     "Fandex is built and run by one person, as a hobby project alongside everything else in their life, not as a company with a support team. Here's what that actually means for you.",
   ],
@@ -23,14 +23,14 @@ const support: LegalDocument = {
     {
       heading: "Before you write in",
       body: [
-        "Two things are already self-serve and don't need an email. Both live in Settings → Your data:",
+        "Two requests come up most, and both go to the address above:",
         {
           list: [
-            "Downloading everything Fandex holds about you, as a file you can keep.",
+            "Getting everything Fandex holds about you, as a file you can keep.",
             "Permanently deleting your account and everything in it.",
           ],
         },
-        "If your question is about either of those, you may not need to wait for a reply at all.",
+        "For either one you'll be asked to show that the account is yours first. Both will be buttons in the app's settings again; until then, this is the way.",
       ],
     },
     {

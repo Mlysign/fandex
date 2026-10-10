@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 import { ItemPage } from '~/components/ItemPage';
+import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { FandexBadge, Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +14,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { itemStateFor } from '~/lib/db';
 import type { ScoreReason } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
+import { dropItemPrerender } from '~/lib/prerender';
 import { useScores } from '~/lib/ScoreProvider';
 import { deviceRegion } from '~/lib/region';
 import { TraktAuthError } from '~/lib/trakt';
@@ -31,8 +33,16 @@ function reasonKind(r: ScoreReason, categoryLabel: (id: string | undefined) => s
   return ROLE_LABEL[r.role ?? ''] ?? (r.kind === 'ip' ? 'Franchise' : r.kind === 'person' ? 'Person' : 'Company');
 }
 
+const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
+
 export default function ItemScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // Two addresses lead here. `/item/{id}` is the app's own. `/{type}/{slug}` is
+  // the public one, the address the website's static pages live at and the one
+  // Share hands out (src/app/[type]/[slug].tsx re-exports this screen). The
+  // Worker answers both under /v1/items/.
+  const params = useLocalSearchParams<{ id?: string; type?: string; slug?: string }>();
+  const known = params.id != null || PUBLIC_TYPES.has(params.type ?? '');
+  const address = params.id ?? `${params.type}/${params.slug}`;
   const region = useMemo(deviceRegion, []);
   const router = useRouter();
   // The hero runs under the status bar and the page under Android's navigation
@@ -43,8 +53,14 @@ export default function ItemScreen() {
 
   const load = useCallback(async () => {
     setError(null);
+    // An address that is not a title's shape (a mistyped link, a probe) is
+    // answered here, without asking the Worker.
+    if (!known) {
+      setError({ title: 'Nothing here', detail: 'Fandex has no page at this address.' });
+      return;
+    }
     try {
-      setItem(await api.item(id, region));
+      setItem(await api.item(address, region));
     } catch (e) {
       const code = e instanceof ApiError ? e.code : '';
       setError(
@@ -55,25 +71,37 @@ export default function ItemScreen() {
             : { title: 'Could not load this title', detail: 'Something went wrong.' },
       );
     }
-  }, [id, region]);
+  }, [address, known, region]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // What this device knows about you and this title.
+  // On the website this screen may have started under a static copy of the
+  // same page. Once the item is on screen the copy goes (lib/prerender.ts).
+  // An effect runs after the page is in the document, so the next frame the
+  // browser paints already has it. Not requestAnimationFrame: that never fires
+  // in a tab nobody is looking at, and the copy would sit there until they did.
+  const loaded = item != null;
+  useEffect(() => {
+    if (loaded) dropItemPrerender();
+  }, [loaded]);
+
+  // What this device knows about you and this title. Keyed by the item's own
+  // id, which the public address does not carry.
+  const itemId = item?.id ?? null;
   const db = useSQLiteContext();
   const auth = useAuth();
   const [mine, setMine] = useState<Awaited<ReturnType<typeof itemStateFor>> | null>(null);
   useEffect(() => {
     let live = true;
-    if (auth.status !== 'signedIn') {
+    if (auth.status !== 'signedIn' || !itemId) {
       setMine(null);
       return;
     }
-    void itemStateFor(db, id).then((s) => { if (live) setMine(s); });
+    void itemStateFor(db, itemId).then((s) => { if (live) setMine(s); });
     return () => { live = false; };
-  }, [db, id, auth.status, auth.rowsRevision]);
+  }, [db, itemId, auth.status, auth.rowsRevision]);
 
   const scores = useScores();
   const [whyOpen, setWhyOpen] = useState(false);
@@ -219,10 +247,9 @@ export default function ItemScreen() {
     </>
   );
 
-  // The address somebody else can open. The website serves it; until it does,
-  // the link is still the right one to hand out.
+  // The address somebody else can open: the website's page for this title.
   const share = () => {
-    const url = `https://fandex.org/${item.type}/${item.slug ?? item.id}`;
+    const url = `${SITE_URL}/${item.type}/${item.slug ?? item.id}`;
     void Share.share(Platform.OS === 'ios' ? { url, title: item.merged.title } : { message: url, title: item.merged.title }).catch(() => {});
   };
 
@@ -231,6 +258,8 @@ export default function ItemScreen() {
       <ItemPage
         item={item}
         personal={personal}
+        // The static page ends with the legal links, so in a browser this one does too.
+        footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}
         topInset={top}
         bottomInset={bottom}

@@ -8,7 +8,7 @@ are in app-plan.md; the settled calls are in [decisions.md](decisions.md)._
 
 | Thing | Where | Notes |
 |---|---|---|
-| Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev` | Free plan. Not on fandex.org yet; that is phase 4. |
+| Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev`, and `https://fandex.org/v1/*` | Free plan. The Android app uses the first address. The website's Worker hands `/v1/*` to this one through a service binding ([website.md](website.md)), so a browser on fandex.org calls its own origin. |
 | D1 database `fandex` | id `6daba7e4-ea55-4c72-b297-eb92ada8c581`, EU jurisdiction | 110 MB of a 500 MB cap after the seed. |
 | R2 `fandex-backups` (EU) | bound as `BACKUPS` | `railway/` holds snapshots of the old database, `d1/{day}/` the nightly export. |
 | R2 `fandex-litestream` (EU) | not bound | Empty and no longer needed: Railway was stopped on 2026-10-05 before the replica was switched on. Safe to delete. |
@@ -208,9 +208,8 @@ What it showed a real restore still needs:
 
 ## Not built yet
 
-- **The catalog on fandex.org.** The Worker answers on workers.dev. Moving the domain is phase 4.
+- **The telemetry beacon and App Links.** The API is on fandex.org since 2026-10-10; these two parts of phase 3 are not.
 - **Steam**: sign-in and the owned-games proxy. Phase 5 by decision.
-- **Telemetry beacon.** The three counter tables are seeded; nothing writes them. Phase 3.
 - **Episode fill on demand.** Seeded shows have their episodes. A show resolved later does not;
   the plan has the client take episodes from Trakt.
 - **Dropping stale rows.** A `browsed = 1` row nobody acted on should be dropped, not refreshed,

@@ -6,6 +6,10 @@
 // device spends its own (docs/app-plan.md). The IGDB and Steam credentials are
 // the ones that may never be here, which is why games go through the Worker.
 
+//
+// The website's build sets EXPO_PUBLIC_API_URL to "/", which leaves this empty:
+// every request is then relative, and fandex.org hands /v1/* to the API Worker
+// itself (mobile/web/worker.ts). Same origin, so no preflight per request.
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://fandex-api.fandex-worker.workers.dev').replace(/\/+$/, '');
 
 export const TMDB_API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '';

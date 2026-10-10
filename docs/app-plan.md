@@ -3,20 +3,19 @@
 _Decided 2026-10-04 and being built; the table below says how far. The illustrated version with the
 diagrams and charts is the artifact at https://claude.ai/artifact/BJVFj7tRaqVAWzsFTtecgv (private
 to Nils). This file is the repo copy so the next session does not have to reconstruct it. What was
-decided is under "Decisions" at the end. Two things are still unanswered, and neither is a call
-for Nils to make today: where the public pages render (a measurement at the start of phase 3) and
-IGDB's answer on storing its data._
+decided is under "Decisions" at the end. One thing is still unanswered, and it is not a call for
+Nils to make: IGDB's answer on storing its data._
 
-## Where it stands (2026-10-05)
+## Where it stands (2026-10-10)
 
 | Phase | State |
 |---|---|
 | 0. Make the data safe | ✅ Closed differently than planned. A verified snapshot of the Railway database from 2026-10-05 is in R2 and on disk. The continuous Litestream replica to R2 was never switched on and is no longer needed, because the Railway service was stopped that day. |
 | 1. Worker and D1 with accounts | ✅ Built, tested (142 tests, in workerd), deployed, seeded with the real catalog and Nils's rows. → [worker.md](worker.md) |
 | 2. Minimal app | 🟢 Built and running on Nils's Pixel 8 against his real account: catalog download and delta sync, sign-in through Trakt in a browser tab, Trakt synced from the phone, calendar, search, browse, library and wishlist, item pages with rating and wishlisting, Up next, the Fandex Score computed on the device (identical to the site's on all 4,559 titles), and the Kotlin Up next widget. Two things the phase named are not built: Google sign-in, and the form for joining two accounts, which only matters once a second way to sign in exists. The widget's tick opens the app to mark the episode instead of posting to Trakt from Kotlin, so the Trakt token stays in one place. → [app.md](app.md) |
-| 3. Website | 🔵 Started 2026-10-05. The measurement is done: live React rendering does not fit the free Worker (median 4 ms, worst 35 against a 10 ms limit), so the public pages are a daily static build. The item page is one component for the app and the website, and its public half is at parity with the old site, with real images and links in the HTML (17 and 14 on the largest film). Next: the rest of the item page, then the build itself. → "The website" below |
+| 3. Website | 🟢 Online 2026-10-10 at fandex.org. The measurement decided the route: live React rendering does not fit the free Worker (median 4 ms, worst 35 against a 10 ms limit), so the public pages are a static build. What is live: the app in a browser, a static page per pool title (4,561) rendered from the app's own item page with its metadata and JSON-LD, the legal pages, sitemap, robots, the old item addresses redirecting. Not built: the daily rebuild (it runs by hand), the beacon, App Links, and every page type whose screen is not at parity yet. → [website.md](website.md) |
 | 5. Parity | 🔵 A requirement since 2026-10-05, run alongside phase 3. About a third of the old site is covered. The list and the order → [app-parity.md](app-parity.md) |
-| 4. Switch over | 🟡 Railway was deleted early, on 2026-10-05, before the website exists (Nils's call, to stop the cost and prove nothing depends on it). fandex.org is dark until phase 3 has something to serve. Left: the DNS records that point at Railway go, the domain moves to Cloudflare with phase 3, and the privacy policy is rewritten. |
+| 4. Switch over | 🟢 Done except one line. Railway was deleted 2026-10-05, fandex.org points at Cloudflare since 2026-10-10 (a custom domain on the website's Worker, www redirecting), and the privacy policy is rewritten. Left: the R2 lifecycle rule the policy's 30-day sentence depends on (TASKS.md item 0). |
 
 **What phase 1 measured that changes the later phases:**
 
@@ -224,8 +223,7 @@ they mean building the UI twice (the web client is Expo's web target for free).
   `BACKFILL_ENABLED=0`, `FACET_SWEEP_ENABLED=0` set on Railway 2026-10-04.
 - **IGDB licence: email partner@igdb.com now.**
 
-Still needed from Nils: the final Railway delete (TASKS.md item 0), and the IGDB email sent. The R2
-token for a Litestream replica is no longer needed.
+Still needed from Nils: the four things in TASKS.md item 0.
 
 ## Rules that carry over unchanged
 
