@@ -113,6 +113,14 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   line-up belongs to a country. Names become the site's platform keys (`@/lib/platformKeys`) on the
   device. The filter sheet's "Available on" and the Settings picker both read `usePlatformIndex()`,
   which is null until the copy is read: treat null as "not known yet", never as "on nothing".
+- **No air date means not aired** (`lib/upNext.ts`, `readProgress`, and the two list queries). Trakt lists the first
+  episode of an announced season with a placeholder title and `first_aired: null`; reading that as "out" put shows in
+  Up next that nobody can watch. The site had the same rule and the same fault.
+- **A facet page is the device's rows first, then TMDB's** (`lib/facetProviders.ts`, `FacetScreen.tsx`). The catalog
+  copy holds what somebody acted on, so a director's page built from it alone showed one film. The page asks TMDB from
+  the device for the rest (a filmography, or discover by company, genre or keyword) and gives each title the Worker
+  already knows its Fandex id through `/v1/lookup`. A title without one opens through `/open/tmdb/…`, which is what
+  creates it. Films and shows only.
 - **A show's episodes come from two places.** The Worker's `/v1/shows/{id}/episodes` holds the
   seasons, and episode lists only for seasons somebody opened on the old site. For the rest the
   item page asks TMDB from the device when a season is opened (`tmdbSeasonEpisodes`), which is

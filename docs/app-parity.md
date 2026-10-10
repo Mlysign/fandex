@@ -39,10 +39,10 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
 | Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). People and tag results. Scroll and query restored on Back. |
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
-| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. The two related rails. |
+| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. The two related rails. (More than the site had: each episode shows its date and opens a sheet with its still and synopsis.) |
 | Profile | partial | The Support Fandex row. |
 | Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
-| Facet pages (tag, person, studio) | partial | A person's photo and biography, "also known as", "you score X higher than the crowd", titles the catalog does not hold. No static page yet, so a crawler gets the app's shell. |
+| Facet pages (tag, person, studio) | partial | Games from the providers (a studio's or a tag's page asks TMDB only; IGDB needs a Worker route). "Also known as", "you score X higher than the crowd". No static page yet, so a crawler gets the app's shell. |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
 | Admin pages (`/dev`) | partial | Users, Scoring and Traffic are built. Only Scoring → Taxonomy → Review is not. See "The admin pages" below. |
 | Import | **no** | All of it. |
@@ -64,7 +64,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | 1 | **The Review section** of `/dev/scoring`. | The last piece of the admin pages Nils asked for on 2026-10-10. |
 | 2 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
 | 3 | **Settings' rest**: Import, a second login method, the download on a phone. | |
-| 4 | **Static facet pages**, a person's photo and biography, and Popular people on Home. | The screens and the links to them exist; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
+| 4 | **Static facet pages**, games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
 | 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 6 | **Import, sign-in beyond Trakt, admin, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
@@ -114,7 +114,7 @@ Checked against `worker/src/index.ts`.
 - Trending (Home's "Popular right now") and popular people.
 - The Discover feed: paged provider browse, and catalog find with filters.
 - Autocomplete over people, tags and studios.
-- Facet pages: the grid for a person, tag or studio, a person's bio, the crowd averages.
+- Facet pages: a studio's or a tag's GAMES. Films, shows and a person's biography come from TMDB on the device.
 - Franchise members (`franchise_members` is built and not applied, docs/worker.md).
 - Steam (sign-in and owned games), the import, telemetry, and every admin write.
 - Episodes for most seasons. The site stored a season's episodes the first time somebody opened
