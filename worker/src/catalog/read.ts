@@ -61,7 +61,7 @@ export async function itemDetailJson(
 
   return (
     `{"id":${JSON.stringify(row.id)},"type":${JSON.stringify(row.type)},"slug":${JSON.stringify(row.slug)},` +
-    `"inPool":${row.browsed === 0},"updatedAt":${row.updated_at},"region":${JSON.stringify(region)},` +
+    `"inPool":${row.browsed === 0},"updatedAt":${row.updated_at},"deriveVersion":${DERIVE_VERSION},"region":${JSON.stringify(region)},` +
     `"vector":${row.vector},"facets":${row.facets},"merged":${merged}}`
   );
 }
@@ -230,7 +230,9 @@ export async function catalogDeltaJson(
   const items = rows.map((r) => `{"updatedAt":${r.updated_at},"vector":${r.vector},"facets":${r.facets}}`).join(",");
   return (
     `{"items":[${items}],"next":${JSON.stringify(next)},"done":${done},` +
-    `"poolCount":${poolCount === null ? "null" : poolCount},"serverTime":${now}}`
+    // deriveVersion: the rule every item read is answered under. A change of rule
+    // moves no row's updated_at, so the website's build compares this instead.
+    `"poolCount":${poolCount === null ? "null" : poolCount},"serverTime":${now},"deriveVersion":${DERIVE_VERSION}}`
   );
 }
 

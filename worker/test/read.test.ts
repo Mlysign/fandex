@@ -14,7 +14,9 @@ describe("item detail", () => {
     const { id } = await upsertMediaItem(db, movieItem());
 
     const byId = JSON.parse((await itemDetailJson(db, { id }))!);
-    expect(byId).toMatchObject({ id, type: "movie", slug: "the-matrix", inPool: true, region: "US" });
+    expect(byId).toMatchObject({ id, type: "movie", slug: "the-matrix", inPool: true, region: "US", deriveVersion: DERIVE_VERSION });
+    // The delta names the same rule, which is how the website's build knows a cached title is behind it.
+    expect(JSON.parse(await catalogDeltaJson(db, parseCursor(null, null), 10)).deriveVersion).toBe(DERIVE_VERSION);
     expect(byId.vector.title).toBe("The Matrix");
     expect(byId.merged.description).toContain("hacker");
     expect(Array.isArray(byId.facets)).toBe(true);

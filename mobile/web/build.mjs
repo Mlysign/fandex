@@ -134,10 +134,13 @@ if (!taxonomy) throw new Error('No taxonomy');
 /** @type {{ updatedAt: number, vector: any }[]} */
 const pool = [];
 let poolCount = null;
+/** The merge rule the Worker answers under. A cached title fetched under another one is fetched again. */
+let deriveVersion;
 for (let cursor = { since: 0, after: '' }; ;) {
   const page = await getJson(`${API}/v1/catalog/delta?since=${cursor.since}&after=${encodeURIComponent(cursor.after)}&limit=200&count=1`);
   if (!page) throw new Error('The catalog delta answered 404');
   poolCount ??= page.poolCount;
+  deriveVersion ??= page.deriveVersion;
   for (const it of page.items) pool.push({ updatedAt: it.updatedAt, vector: it.vector });
   if (page.done) break;
   cursor = page.next;
@@ -153,6 +156,9 @@ step(`${byId.size} titles in the pool, ${unaddressed} without an address`);
 
 // One request per title, eight at a time. A title is asked for again only when
 // its `updatedAt` moved, so a second build the same day asks for almost nothing.
+// ⚠️ Or when the Worker's merge rule changed: that changes what an item read
+// answers and moves no `updatedAt`. Without the second check the site kept
+// 4,561 pages on the old release-date rule after the API had the new one.
 fs.mkdirSync(CACHE, { recursive: true });
 const details = new Map();
 let fetched = 0;
@@ -161,7 +167,7 @@ async function detail(p) {
   const file = path.join(CACHE, `${p.vector.id}.json`);
   try {
     const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (cached.updatedAt === p.updatedAt) return cached;
+    if (cached.updatedAt === p.updatedAt && cached.deriveVersion === deriveVersion) return cached;
   } catch { /* not cached, or half written */ }
   const item = await getJson(`${API}/v1/items/${p.vector.id}`);
   // Removed between the two reads. The only way a title may be missing from a build.
