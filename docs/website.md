@@ -101,9 +101,11 @@ reads as a CORS error and is not one).
   grant on Nils's Trakt account, so it is his to run.
 - **What Google's renderer makes of `/`.** The links in the placeholder are in the HTML Google
   fetches. What it indexes for the page is whatever the app shows after it boots there.
-- fandex.org in a browser on Nils's network during the first half hour: the zone had answered
-  "no such name" since 2026-10-05 and resolvers remember that for 30 minutes. Fetched through
-  1.1.1.1 it answered 200 with a valid certificate.
+- Anything signed in, in a browser: the Library, the score, rating and saving, and the handoff
+  with a real session (it was triggered by hand, by loading the bundle on a static page).
+
+fandex.org did not resolve on Nils's network for its first half hour: the zone had answered "no
+such name" since 2026-10-05 and resolvers remember that for 30 minutes. It does now.
 
 ## Not built yet
 
