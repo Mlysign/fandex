@@ -32,8 +32,8 @@ import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/ig
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import {
-  clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
-  parseLabel, parseScoringConfig, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
+  clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
+  parseIpOverride, parseLabel, parseScoringConfig, setIpOverride, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
   setTagOverrides, type AliasTable,
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
@@ -373,6 +373,16 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
       if (alias) await deleteAlias(db, table, alias);
       else if (canonical) await deleteBundle(db, table, canonical);
       else return error(400, "bad-request", "alias or canonical required");
+      return saved();
+    }
+  }
+  if (b === "ip-overrides" && !d) {
+    if (method === "POST") {
+      await setIpOverride(db, parseIpOverride(await readJson(c.request, AUTH_BODY_MAX)));
+      return saved();
+    }
+    if (method === "DELETE") {
+      await clearIpOverride(db, q.get("mediaItemId"), q.get("ipKey"));
       return saved();
     }
   }

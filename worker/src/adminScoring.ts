@@ -8,6 +8,7 @@
  * time it asks. Nothing stored per item has to be rewritten.
  */
 
+import { ipKey } from "@/lib/facets";
 import { BadRequest } from "./me";
 import { first, run } from "./d1";
 
@@ -227,4 +228,51 @@ export async function setLabel(db: D1Database, kind: "tag" | "ip", k: string, la
 export async function clearLabel(db: D1Database, kind: string | null, k: string | null): Promise<void> {
   if (kind !== "tag" && kind !== "ip") throw new BadRequest("kind must be tag or ip");
   await run(db, "DELETE FROM facet_label_override WHERE kind = ? AND key = ?", [kind, key(k, "key")]);
+}
+
+// ── Franchises: which titles belong to one, by hand ──────────────────────────
+
+export interface IpOverride { mediaItemId: string; raw: string; mode: "add" | "remove"; label: string }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Attach a title to a franchise, or detach it from one a provider put it in.
+ * `raw` is a franchise key or a name; either way it goes through `ipKey`, so an
+ * attach by name and the provider's own spelling land on the same franchise.
+ */
+export function parseIpOverride(body: unknown): IpOverride {
+  if (!isObj(body)) throw new BadRequest("Expected {mediaItemId, mode, label}");
+  if (typeof body.mediaItemId !== "string" || !UUID.test(body.mediaItemId)) throw new BadRequest("mediaItemId must be an item id");
+  if (body.mode !== "add" && body.mode !== "remove") throw new BadRequest("mode must be add or remove");
+  const raw = key(body.ipKey ?? body.label, "label");
+  const label = body.label === undefined || body.label === "" ? raw : key(body.label, "label");
+  return { mediaItemId: body.mediaItemId.toLowerCase(), raw, mode: body.mode, label: label.trim() };
+}
+
+/** The franchise a key or a name belongs to after bundling. */
+async function canonicalIp(db: D1Database, raw: string): Promise<string> {
+  const k = ipKey(raw);
+  if (!k) throw new BadRequest("Empty franchise key.");
+  return (await first<{ c: string }>(db, "SELECT canonical_key c FROM ip_alias WHERE alias_key = ?", [k]))?.c ?? k;
+}
+
+export async function setIpOverride(db: D1Database, o: IpOverride): Promise<{ ipKey: string }> {
+  const k = await canonicalIp(db, o.raw);
+  // A row somebody made by hand is never overwritten by one a job made.
+  await run(
+    db,
+    `INSERT INTO item_ip_override (media_item_id, ip_key, label, mode, source, updated_at)
+     VALUES (?, ?, ?, ?, 'manual', unixepoch())
+     ON CONFLICT(media_item_id, ip_key) DO UPDATE SET
+       label = excluded.label, mode = excluded.mode, source = excluded.source, updated_at = excluded.updated_at`,
+    [o.mediaItemId, k, o.label, o.mode],
+  );
+  return { ipKey: k };
+}
+
+/** Forget a hand-made attach or detach: the title goes back to what the providers say. */
+export async function clearIpOverride(db: D1Database, mediaItemId: string | null, raw: string | null): Promise<void> {
+  if (!mediaItemId || !UUID.test(mediaItemId)) throw new BadRequest("mediaItemId must be an item id");
+  await run(db, "DELETE FROM item_ip_override WHERE media_item_id = ? AND ip_key = ?", [mediaItemId.toLowerCase(), await canonicalIp(db, key(raw, "ipKey"))]);
 }

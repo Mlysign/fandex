@@ -296,6 +296,11 @@ export const api = {
     request<TaxonomyJson>(`/v1/admin/${kind}-aliases${q({ canonical })}`, { method: 'DELETE' }),
   adminSetLabel: (kind: 'tag' | 'ip', key: string, label: string) => request<TaxonomyJson>('/v1/admin/labels', json('POST', { kind, key, label })),
   adminClearLabel: (kind: 'tag' | 'ip', key: string) => request<TaxonomyJson>(`/v1/admin/labels${q({ kind, key })}`, { method: 'DELETE' }),
+  /** Attach a title to a franchise by name, or overrule a provider that put it in one. */
+  adminIpOverride: (o: { mediaItemId: string; mode: 'add' | 'remove'; label: string; ipKey?: string }) =>
+    request<TaxonomyJson>('/v1/admin/ip-overrides', json('POST', o)),
+  adminClearIpOverride: (mediaItemId: string, ipKey: string) =>
+    request<TaxonomyJson>(`/v1/admin/ip-overrides${q({ mediaItemId, ipKey })}`, { method: 'DELETE' }),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),

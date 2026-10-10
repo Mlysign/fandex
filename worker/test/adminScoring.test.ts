@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights, parseLabel,
-  parseScoringConfig, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel, setTagOverrides,
+  clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights, parseLabel,
+  parseIpOverride, parseScoringConfig, parseTagOverrides, setIpOverride, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel, setTagOverrides,
 } from "../src/adminScoring";
 import { taxonomyJson } from "../src/catalog/read";
 import { count, db, wipe } from "./helpers";
@@ -122,5 +122,33 @@ describe("tags", () => {
     await clearLabel(db, "tag", "sf");
     expect((await taxonomy()).facetLabels).toEqual([]);
     expect(parseAliases({ canonical: "sf", members: ["a"], displayLabel: " SF " }).displayLabel).toBe("SF");
+  });
+});
+
+describe("franchises", () => {
+  const ITEM = "11111111-2222-4333-8444-555555555555";
+
+  it("attaches by name and lands on the bundled franchise", async () => {
+    await setAlias(db, "ip_alias", "star wars saga", "star wars");
+    // "The Star Wars Saga Collection" peels to "star wars saga", which is bundled into "star wars".
+    const o = parseIpOverride({ mediaItemId: ITEM.toUpperCase(), mode: "add", label: "Star Wars Saga Collection" });
+    expect(await setIpOverride(db, o)).toEqual({ ipKey: "star wars" });
+    expect((await taxonomy()).itemIpOverrides).toEqual([
+      { mediaItemId: ITEM, ipKey: "star wars", label: "Star Wars Saga Collection", mode: "add", source: "manual" },
+    ]);
+  });
+
+  it("turns an attach into a detach in place, and forgets either on request", async () => {
+    await setIpOverride(db, parseIpOverride({ mediaItemId: ITEM, mode: "add", label: "Alien" }));
+    await setIpOverride(db, parseIpOverride({ mediaItemId: ITEM, mode: "remove", ipKey: "alien", label: "Alien" }));
+    expect((await taxonomy()).itemIpOverrides).toMatchObject([{ ipKey: "alien", mode: "remove" }]);
+    await clearIpOverride(db, ITEM, "alien");
+    expect((await taxonomy()).itemIpOverrides).toEqual([]);
+  });
+
+  it("refuses an id that is not an item, a mode it does not know, and an empty name", async () => {
+    expect(() => parseIpOverride({ mediaItemId: "x", mode: "add", label: "Alien" })).toThrow("item id");
+    expect(() => parseIpOverride({ mediaItemId: ITEM, mode: "replace", label: "Alien" })).toThrow("add or remove");
+    await expect(setIpOverride(db, parseIpOverride({ mediaItemId: ITEM, mode: "add", label: "!!!" }))).rejects.toThrow("Empty franchise key");
   });
 });

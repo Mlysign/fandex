@@ -6,7 +6,7 @@
 // to the Worker and comes back as the whole taxonomy, which the rows are then
 // rebuilt from, so the table never shows what it sent in place of what was stored.
 //
-// Not here yet: the Review and Franchises sections.
+// Franchises is its own file (FranchisePanel.tsx). Not here yet: the Review section.
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
@@ -18,10 +18,11 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { TaxonomyJson } from '~/lib/fandexScore';
 import { buildTagRows, filterTagRows, rawTagCounts, type TagRow } from '~/lib/tagVocab';
 import { breakpoint, color, font, radius } from '~/theme';
+import { FranchisePanel } from './FranchisePanel';
 import type { Category } from './WeightsPanel';
 
-type Section = 'categories' | 'tags';
-const SECTIONS: [Section, string][] = [['categories', 'Categories'], ['tags', 'Tags']];
+type Section = 'categories' | 'tags' | 'franchises';
+const SECTIONS: [Section, string][] = [['categories', 'Categories'], ['tags', 'Tags'], ['franchises', 'Franchises']];
 const PAGE_SIZE = 100;
 
 /** A write to the Worker: the taxonomy it answers with, or the reason it did not happen. */
@@ -353,6 +354,7 @@ export function TaxonomyPanel({ json, onChanged }: {
       {error ? <Text style={[styles.tiny, { color: color.danger }]}>{error}</Text> : null}
       {section === 'categories' ? <CategoryList categories={json.tagCategories} write={write} /> : null}
       {section === 'tags' ? <TagTable categories={json.tagCategories} json={json} write={write} /> : null}
+      {section === 'franchises' ? <FranchisePanel json={json} write={write} /> : null}
     </View>
   );
 }
