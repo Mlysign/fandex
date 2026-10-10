@@ -8,6 +8,7 @@
 // route that does not exist yet (docs/app-parity.md). Also not carried over:
 // people and tag results.
 
+import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -59,6 +60,7 @@ export default function DiscoverScreen() {
   const [games, setGames] = useState<Remote>(IDLE);
   const [shown, setShown] = useState(STEP);
   const auth = useAuth();
+  const router = useRouter();
   const [filters, setFilters] = useState(noFilters);
   const [sheet, setSheet] = useState(false);
 
@@ -176,6 +178,7 @@ export default function DiscoverScreen() {
       <FilterSheet
         open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters}
         resultCount={sorted.length} noun="titles" signedIn={auth.status === 'signedIn'}
+        items={typed} onEditPlatforms={() => { setSheet(false); router.push('/settings' as never); }}
       />
     </Screen>
   );

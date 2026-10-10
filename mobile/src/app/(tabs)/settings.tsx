@@ -2,18 +2,17 @@
 // pickers (src/components/settings/), section for section: connected accounts,
 // region, default types, account, your data.
 //
-// Not carried yet: "Your platforms" (it narrows the "Available on" filter, and
-// the catalog on the device holds no platforms for either), the Import row, and
-// joining two accounts. Kept from the app: the widget offer and what this device
+// Not carried yet: the Import row and joining two accounts. Kept from the app: the widget offer and what this device
 // holds, which the site had no use for.
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { COUNTRIES } from '@/lib/countries';
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from '@/lib/mediaTypes';
+import { platformMarkName, type PlatformOption } from '@/lib/platformKeys';
 import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button, Sheet } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
@@ -24,6 +23,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
+import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
 import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
@@ -337,6 +337,146 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
   );
 }
 
+// ── Your platforms ───────────────────────────────────────────────────────────
+
+/** How many chips a group shows before "Show all". The site measured two rows; this is about two on a phone. */
+const PLATFORM_FOLD = 8;
+
+function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
+  label: string; items: PlatformOption[]; selected: string[]; onToggle: (key: string) => void; collapsible: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Selected first, in the order they had when the group was last opened or
+  // closed: a chip must not jump away under the finger that just tapped it.
+  const orderKey = `${items.map((o) => o.key).join('|')}|${expanded}`;
+  const order = useMemo(() => {
+    const picked = new Set(selected);
+    return [...items.filter((o) => picked.has(o.key)), ...items.filter((o) => !picked.has(o.key))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKey]);
+  if (items.length === 0) return null;
+  const collapsed = collapsible && !expanded;
+  const shown = collapsed ? order.slice(0, PLATFORM_FOLD) : order;
+  return (
+    <View style={{ gap: space.sm }}>
+      <T variant="meta">{label}</T>
+      <View style={styles.platformChips}>
+        {shown.map((o) => {
+          const on = selected.includes(o.key);
+          return (
+            <Pressable
+              key={o.key} onPress={() => onToggle(o.key)} accessibilityRole="button" accessibilityState={{ selected: on }}
+              style={[styles.platformChip, on && styles.chipOn]}
+            >
+              <BrandGlyph source={platformMarkName(o.label)} size={16} tint={on ? color.textPrimary : color.textSecondary} />
+              <T variant="label" style={{ color: on ? color.textPrimary : color.textSecondary }} numberOfLines={1}>{o.label}</T>
+              <T variant="meta" style={{ color: color.textMuted }}>{o.count}</T>
+            </Pressable>
+          );
+        })}
+      </View>
+      {collapsible && items.length > PLATFORM_FOLD ? (
+        <Pressable onPress={() => setExpanded((v) => !v)} accessibilityRole="button" accessibilityState={{ expanded }} style={styles.textButton}>
+          <T variant="label" style={{ color: color.accent }}>{expanded ? 'Show fewer' : `Show all ${items.length}`}</T>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function YourPlatforms({ onNotice }: { onNotice: (n: Notice) => void }) {
+  const db = useSQLiteContext();
+  const auth = useAuth();
+  const index = usePlatformIndex();
+  const value = auth.profile?.user.platforms ?? null;
+  const [selected, setSelected] = useState<string[]>(value ?? []);
+  const [options, setOptions] = useState<PlatformOption[] | null>(null);
+  const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef<string[]>(value ?? []);
+
+  const valueKey = (value ?? []).join(',');
+  useEffect(() => {
+    setSelected(value ?? []);
+    latest.current = value ?? [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueKey]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  // What your library and wishlist are on: the survey the site ran on its server.
+  useEffect(() => {
+    let live = true;
+    if (!index) return;
+    void shelfItemIds(db).then((ids) => { if (live) setOptions(index.optionsFor(ids)); });
+    return () => { live = false; };
+  }, [db, index, auth.rowsRevision]);
+
+  const save = (next: string[], wait: number) => {
+    latest.current = next;
+    setSelected(next);
+    if (timer.current) clearTimeout(timer.current);
+    setSaving(true);
+    timer.current = setTimeout(() => {
+      auth.savePrefs({ platforms: next })
+        .then(() => onNotice({ msg: next.length ? 'Platforms updated.' : 'Platform filter reset to show everything.', ok: true }))
+        .catch((e: unknown) => {
+          setSelected(value ?? []);
+          latest.current = value ?? [];
+          onNotice({ msg: failure(e, 'Could not save your platforms. Please try again.'), ok: false });
+        })
+        .finally(() => setSaving(false));
+    }, wait);
+  };
+  const toggle = (key: string) => {
+    const current = latest.current;
+    save(current.includes(key) ? current.filter((k) => k !== key) : [...current, key], 500);
+  };
+
+  const q = query.trim().toLowerCase();
+  const shown = (options ?? []).filter((o) => !q || o.label.toLowerCase().includes(q));
+  return (
+    <Section eyebrow="Your platforms" hint="Pick what you subscribe to and own. The “Available on” filter then offers only these.">
+      <Card>
+        {!options ? (
+          <T variant="bodySm">Reading your library…</T>
+        ) : options.length === 0 ? (
+          <T variant="bodySm">
+            Nothing in your library says where it can be watched or played yet. Sync an account, or add a few titles, and
+            the services they are on will show up here.
+          </T>
+        ) : (
+          <>
+            <View style={styles.platformHead}>
+              <T variant="bodySm" style={{ flex: 1 }}>
+                {selected.length === 0 ? `Nothing selected. The filter offers all ${options.length}.` : `${selected.length} of ${options.length} selected.`}
+                {saving ? ' Saving…' : ''}
+              </T>
+              {selected.length > 0 ? (
+                <Pressable onPress={() => save([], 0)} accessibilityRole="button" style={styles.textButton}>
+                  <T variant="label" style={{ color: color.accent }}>Clear</T>
+                </Pressable>
+              ) : null}
+            </View>
+            {options.length > 12 ? (
+              <TextInput
+                value={query} onChangeText={setQuery} placeholder="Find a service or console…" placeholderTextColor={color.textSecondary}
+                accessibilityLabel="Find a service or console" autoCapitalize="none" autoCorrect={false} style={[styles.input, { minHeight: 44 }]}
+              />
+            ) : null}
+            {shown.length === 0 ? <T variant="bodySm">Nothing matches “{query}”.</T> : (
+              <View style={{ gap: space.lg }}>
+                <PlatformGroup label="Movies & shows" items={shown.filter((o) => o.group === 'streaming')} selected={selected} onToggle={toggle} collapsible={!q} />
+                <PlatformGroup label="Games" items={shown.filter((o) => o.group === 'games')} selected={selected} onToggle={toggle} collapsible={!q} />
+              </View>
+            )}
+          </>
+        )}
+      </Card>
+    </Section>
+  );
+}
+
 // ── Your data ────────────────────────────────────────────────────────────────
 
 function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts: { library: number; wishlist: number } }) {
@@ -556,6 +696,7 @@ export default function SettingsScreen() {
 
             <Region onNotice={setNotice} />
             <DefaultTypes onNotice={setNotice} />
+            <YourPlatforms onNotice={setNotice} />
 
             <Section eyebrow="Account">
               <Card>
@@ -631,6 +772,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
   },
   chipOn: { backgroundColor: color.accentSubtle, borderColor: color.accent },
+  platformChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  platformChip: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44, paddingHorizontal: space.md,
+    borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
+  },
+  platformHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  textButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: space.sm },
 
   sheetBody: { padding: 24, gap: space.lg },
   sheetActions: { flexDirection: 'row', gap: space.sm, paddingTop: 4 },

@@ -14,7 +14,12 @@ import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { SlidersHorizontal, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { groupOfKey, narrowToOwned, platformMarkName, withKnownPlatforms, type PlatformGroup, type PlatformOption } from '@/lib/platformKeys';
+import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button, Sheet } from '~/components/kit';
+import { useAuth } from '~/lib/AuthProvider';
+import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
+import { useTypeFilter } from '~/lib/typeFilter';
 import type { CardItem, CardState } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { color, font, radius, type } from '~/theme';
@@ -29,14 +34,16 @@ export interface Filters {
   /** Empty means no bound. */
   yearFrom: string;
   yearTo: string;
+  /** Platform keys (`p:` a console, `s:` a streaming service). Any one of them is enough. */
+  platforms: string[];
 }
 
-export const noFilters = (): Filters => ({ include: [], exclude: [], membership: {}, yearFrom: '', yearTo: '' });
+export const noFilters = (): Filters => ({ include: [], exclude: [], membership: {}, yearFrom: '', yearTo: '', platforms: [] });
 
 export function countActive(f: Filters): number {
   return f.include.length + f.exclude.length
     + Object.values(f.membership).filter(Boolean).length
-    + (f.yearFrom ? 1 : 0) + (f.yearTo ? 1 : 0);
+    + (f.yearFrom ? 1 : 0) + (f.yearTo ? 1 : 0) + f.platforms.length;
 }
 
 const pillId = (p: { kind: string; key: string }) => `${p.kind}|${p.key}`;
@@ -84,6 +91,8 @@ export function useFiltered<T extends CardItem>(items: T[], filters: Filters, st
   const db = useSQLiteContext();
   const sync = useCatalogSync();
   const needsFacets = filters.include.length > 0 || filters.exclude.length > 0;
+  const needsPlatforms = filters.platforms.length > 0;
+  const platforms = usePlatformIndex(needsPlatforms);
   const [facets, setFacets] = useState<Vocab | null>(null);
   useEffect(() => {
     let live = true;
@@ -97,7 +106,8 @@ export function useFiltered<T extends CardItem>(items: T[], filters: Filters, st
     const to = Number(filters.yearTo) || null;
     const { library, wishlist, rated } = filters.membership;
     const listed = !!(library || wishlist || rated);
-    if (!needsFacets && !from && !to && !listed) return items;
+    if (!needsFacets && !needsPlatforms && !from && !to && !listed) return items;
+    const wanted = new Set(filters.platforms);
     const want = (rule: Membership, is: boolean) => !rule || (rule === 'only' ? is : !is);
     return items.filter((it) => {
       if (from || to) {
@@ -118,9 +128,14 @@ export function useFiltered<T extends CardItem>(items: T[], filters: Filters, st
         if (!filters.include.every((p) => mine.has(pillId(p)))) return false;
         if (filters.exclude.some((p) => mine.has(pillId(p)))) return false;
       }
+      if (needsPlatforms) {
+        // A title we hold no availability for is hidden while this is on, as on the site.
+        const keys = platforms?.keysOf(it.id);
+        if (!keys || !keys.some((k) => wanted.has(k))) return false;
+      }
       return true;
     });
-  }, [items, filters, stateOf, needsFacets, facets]);
+  }, [items, filters, stateOf, needsFacets, facets, needsPlatforms, platforms]);
 }
 
 // ── The button on the list header ────────────────────────────────────────────
@@ -235,7 +250,121 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-export function FilterSheet({ open, onClose, filters, onChange, resultCount, noun, signedIn }: {
+const PLATFORM_PREVIEW = 8;
+
+function PlatformChip({ option, active, onToggle }: { option: PlatformOption; active: boolean; onToggle: () => void }) {
+  const empty = option.count === 0;
+  const ink = active ? color.textPrimary : empty ? color.textMuted : color.textSecondary;
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[styles.platformChip, active ? styles.platformChipOn : empty && { borderColor: color.border }]}
+    >
+      <BrandGlyph source={platformMarkName(option.label)} size={16} tint={ink} />
+      <Text numberOfLines={1} style={[type.label, { color: ink }]}>{option.label}</Text>
+      <Text style={[type.meta, { color: color.textMuted }]}>{option.count}</Text>
+    </Pressable>
+  );
+}
+
+function PlatformGroupRow({ label, options, selected, onToggle, emptyHint }: {
+  label: string; options: PlatformOption[]; selected: string[]; onToggle: (k: string) => void; emptyHint: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? options : options.filter((o, i) => i < PLATFORM_PREVIEW || selected.includes(o.key));
+  const hidden = options.length - shown.length;
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[type.meta, { color: color.textMuted }]}>{label}</Text>
+      {options.length === 0 ? <Text style={[type.caption, { color: color.textMuted }]}>{emptyHint}</Text> : (
+        <View style={styles.pills}>
+          {shown.map((o) => <PlatformChip key={o.key} option={o} active={selected.includes(o.key)} onToggle={() => onToggle(o.key)} />)}
+          {hidden > 0 ? (
+            <Pressable onPress={() => setExpanded(true)} accessibilityRole="button" style={[styles.platformChip, styles.platformMore]}>
+              <Text style={[type.label, { color: color.accent }]}>+{hidden} more</Text>
+            </Pressable>
+          ) : null}
+          {expanded && options.length > PLATFORM_PREVIEW ? (
+            <Pressable onPress={() => setExpanded(false)} accessibilityRole="button" style={[styles.platformChip, styles.platformMore]}>
+              <Text style={[type.label, { color: color.textSecondary }]}>Show less</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** "Available on": the services and consoles the list's titles are on, narrowed to the ones you own. */
+function AvailableOn({ items, selected, onChange, onEdit }: {
+  items: CardItem[]; selected: string[]; onChange: (next: string[]) => void; onEdit?: () => void;
+}) {
+  const db = useSQLiteContext();
+  const auth = useAuth();
+  const types = useTypeFilter().shown as string[];
+  const index = usePlatformIndex();
+  const owned = auth.profile?.user.platforms ?? null;
+  const [shelf, setShelf] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    if (auth.status !== 'signedIn') { setShelf([]); return; }
+    void shelfItemIds(db).then((ids) => { if (live) setShelf(ids); });
+    return () => { live = false; };
+  }, [db, auth.status, auth.rowsRevision]);
+
+  const { all, narrowed } = useMemo(() => {
+    if (!index) return { all: [] as PlatformOption[], narrowed: [] as PlatformOption[] };
+    // What this list offers, plus what your own shelves are on (at a count of 0
+    // when nothing here is on it), so a platform you own never drops off the row.
+    const merged = withKnownPlatforms(index.optionsFor(items.map((i) => i.id)), index.optionsFor(shelf));
+    return { all: merged, narrowed: narrowToOwned(merged, owned, selected) };
+  }, [index, items, shelf, owned, selected]);
+
+  const toggle = (key: string) => onChange(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+  const showStreaming = types.includes('movie') || types.includes('show');
+  const showGames = types.includes('game');
+  const hint = (group: PlatformGroup, none: string) =>
+    owned?.length && !owned.some((k) => groupOfKey(k) === group) ? 'You have not picked any of these in your platforms, in Settings.' : none;
+
+  return (
+    <Section label={`Available on · ${auth.region}`}>
+      {!index ? <Text style={type.bodySm}>Loading where things can be watched and played…</Text>
+        : !showStreaming && !showGames ? <Text style={type.bodySm}>Nothing to filter: no media types are switched on.</Text> : (
+          <View style={{ gap: 12 }}>
+            {showStreaming ? (
+              <PlatformGroupRow
+                label="Movies & shows" options={narrowed.filter((o) => o.group === 'streaming')} selected={selected} onToggle={toggle}
+                emptyHint={hint('streaming', 'Nothing loaded here says where it streams. Upcoming releases usually don’t yet.')}
+              />
+            ) : null}
+            {showGames ? (
+              <PlatformGroupRow
+                label="Games" options={narrowed.filter((o) => o.group === 'games')} selected={selected} onToggle={toggle}
+                emptyHint={hint('games', 'Nothing loaded here says which platforms it runs on.')}
+              />
+            ) : null}
+            {narrowed.length < all.length ? (
+              <Text style={[type.caption, { color: color.textMuted }]}>
+                Showing the platforms you own.{onEdit ? ' ' : ''}
+                {onEdit ? <Text onPress={onEdit} accessibilityRole="link" style={{ color: color.accent, textDecorationLine: 'underline' }}>Edit</Text> : null}
+              </Text>
+            ) : null}
+            {selected.length > 0 ? (
+              <Text style={[type.caption, { color: color.textMuted }]}>Titles we hold no availability for are hidden while this is on.</Text>
+            ) : null}
+          </View>
+        )}
+    </Section>
+  );
+}
+
+export function FilterSheet({ open, onClose, filters, onChange, resultCount, noun, signedIn, items, onEditPlatforms }: {
+  /** The list before these filters, so each platform can say how many of it there are. */
+  items: CardItem[];
+  /** Opens Settings, where "Your platforms" is edited. */
+  onEditPlatforms?: () => void;
   open: boolean;
   onClose: () => void;
   filters: Filters;
@@ -276,6 +405,7 @@ export function FilterSheet({ open, onClose, filters, onChange, resultCount, nou
             <Tri label="Rated" value={filters.membership.rated} onChange={(v) => set({ membership: { ...filters.membership, rated: v } })} />
           </Section>
         ) : null}
+        {open ? <AvailableOn items={items} selected={filters.platforms} onChange={(platforms) => set({ platforms })} onEdit={onEditPlatforms} /> : null}
         <Section label="Release year">
           <View style={styles.years}>
             <View style={{ flex: 1, gap: 4 }}>
@@ -319,6 +449,12 @@ const styles = StyleSheet.create({
   suggestions: { borderWidth: 1, borderColor: color.border, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: color.surfaceElevated },
   suggestion: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  platformChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12,
+    borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
+  },
+  platformChipOn: { backgroundColor: color.accentSubtle, borderColor: color.accent },
+  platformMore: { borderStyle: 'dashed' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: radius.full },
   triRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   tri: { flexDirection: 'row', borderWidth: 1, borderColor: color.borderStrong, borderRadius: radius.lg, overflow: 'hidden' },

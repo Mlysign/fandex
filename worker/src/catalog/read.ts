@@ -6,6 +6,7 @@
 import { DEFAULT_COUNTRY, normalizeCountry } from "@/lib/countries";
 import { mergeLinks } from "@/lib/merge";
 import type { MediaLink, MediaType, Source } from "@/types";
+import { kvGet, kvSet } from "../budget";
 import { all, first, nowSeconds } from "../d1";
 
 // ── One item ─────────────────────────────────────────────────────────────────
@@ -165,6 +166,70 @@ export async function catalogDeltaJson(
     `{"items":[${items}],"next":${JSON.stringify(next)},"done":${done},` +
     `"poolCount":${poolCount === null ? "null" : poolCount},"serverTime":${now}}`
   );
+}
+
+// ── Where every pool title can be played or watched ─────────────────────────
+
+/** A day. Streaming line-ups move slowly, and a build reads every TMDB blob in the pool. */
+const PLATFORMS_TTL_SECONDS = 86_400;
+
+/**
+ * Game platforms and streaming services for the whole pool, as names: what the
+ * app's "Available on" filter and its platform picker are built from. One
+ * answer for everybody in a country, so it is built once a day per country and
+ * kept in `kv`; a request after that is two row reads and no JSON work.
+ *
+ * Streaming is the country's own line-up, else the US one, else the UK one.
+ * ⚠️ The item page falls back one step further, to whichever country TMDB lists
+ * first. That step is left out on purpose: reaching it needs `json_each` over
+ * every country of every title, which D1 counts as 179,000 rows read per build
+ * (measured 2026-10-10) against 5,000 for this. A film nobody in Germany, the
+ * US or the UK can stream is not "available on" a German account's services.
+ *
+ * `mayBuild` is asked before a country's line-up is computed, never before it
+ * is read back: a stranger cycling through countries is the only way this costs
+ * anything.
+ */
+export async function catalogPlatformsJson(
+  db: D1Database,
+  regionRaw: string | null | undefined,
+  mayBuild: () => Promise<boolean> = async () => true,
+): Promise<string | null> {
+  const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
+  let games = await kvGet(db, "platforms:games");
+  let streaming = await kvGet(db, `platforms:streaming:${region}`);
+  if (games === null || streaming === null) {
+    if (!(await mayBuild())) return null;
+    if (games === null) {
+      games = (await first<{ j: string | null }>(
+        db,
+        `SELECT json_group_object(d.media_item_id, json(json_extract(d.merged, '$.platforms'))) j
+           FROM item_doc d JOIN media_items m ON m.id = d.media_item_id
+          WHERE m.browsed = 0 AND m.type = 'game' AND json_array_length(d.merged, '$.platforms') > 0`,
+      ))?.j ?? "{}";
+      await kvSet(db, "platforms:games", games, PLATFORMS_TTL_SECONDS);
+    }
+    if (streaming === null) {
+      // The region is one of the thirty-one codes normalizeCountry lets through,
+      // so it is safe inside a JSON path. A path cannot be a bound parameter's
+      // value AND keep the query plan simple, so it is spelled in.
+      const at = (code: string) => `json_extract(l.raw_data, '$."watch/providers".results.${code}')`;
+      streaming = (await first<{ j: string | null }>(
+        db,
+        `SELECT json_group_object(id, json(names)) j FROM (
+           SELECT t.id, json_group_array(json_extract(o.value, '$.provider_name')) names
+             FROM (SELECT l.media_item_id id, COALESCE(${at(region)}, ${at("US")}, ${at("GB")}) blob
+                     FROM media_links l JOIN media_items m ON m.id = l.media_item_id
+                    WHERE l.source = 'tmdb' AND m.browsed = 0 AND json_valid(l.raw_data)) t,
+                  json_each(t.blob, '$.' || json_extract(t.blob, '$.offerType')) o
+            WHERE json_extract(t.blob, '$.offerType') IS NOT NULL
+              AND json_extract(o.value, '$.provider_name') IS NOT NULL
+            GROUP BY t.id)`,
+      ))?.j ?? "{}";
+      await kvSet(db, `platforms:streaming:${region}`, streaming, PLATFORMS_TTL_SECONDS);
+    }
+  }
+  return `{"region":${JSON.stringify(region)},"games":${games},"streaming":${streaming}}`;
 }
 
 // ── Taxonomy ─────────────────────────────────────────────────────────────────

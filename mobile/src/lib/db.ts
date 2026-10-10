@@ -17,7 +17,7 @@ export const DATABASE_NAME = 'fandex.db';
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
@@ -116,6 +116,21 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       );
     `);
     await stamp(db, (version = 3));
+  }
+
+  if (version < 4) {
+    // Where each title can be played or watched, as the providers name it. One
+    // row per title: a game's platforms (grp 'p') or a film's or show's
+    // streaming services in one country (grp 's'). Replaced whole by
+    // lib/platforms.ts; which country and which day is in `meta`.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS item_platform (
+        media_item_id TEXT PRIMARY KEY NOT NULL,
+        grp TEXT NOT NULL,
+        names TEXT NOT NULL
+      );
+    `);
+    await stamp(db, (version = 4));
   }
 }
 

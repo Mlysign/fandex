@@ -272,6 +272,8 @@ export const api = {
       `/v1/me/state/episodes${q({ afterItem: after?.mediaItemId, afterSeason: after?.season, afterEpisode: after?.episode })}`,
     ),
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
+  catalogPlatforms: (region: string) =>
+    request<{ region: string; games: Record<string, string[]>; streaming: Record<string, string[]> }>(`/v1/catalog/platforms${q({ region })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
   exportAccount: () => request<Record<string, unknown>>('/v1/me/export'),

@@ -177,7 +177,7 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
         actions={<SyncButton />}
         trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}
       />
-      <FilterSheet open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters} resultCount={cards.length} noun="titles" signedIn />
+      <FilterSheet open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters} resultCount={cards.length} noun="titles" signedIn items={allCards} onEditPlatforms={() => { setSheet(false); router.push('/settings' as never); }} />
       <PosterGrid
         items={sections ? undefined : cards}
         sections={sections}

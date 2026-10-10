@@ -35,7 +35,7 @@ import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
 import { capFrom, spend, spent } from "./budget";
 import { calendarMonth } from "./calendar";
-import { catalogDeltaJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "./catalog/read";
+import { catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
 import { nowSeconds } from "./d1";
@@ -101,6 +101,15 @@ async function route(c: Ctx): Promise<Response> {
     );
     // Not cacheable: the answer for a given cursor changes as items change.
     return json(body, 200, { "Cache-Control": "no-store" });
+  }
+
+  if (a === "catalog" && b === "platforms" && method === "GET") {
+    // A build is the only costly path, so only a build meets the limiter and
+    // the day's cap. Thirty-one countries exist; a normal day builds a handful.
+    const body = await catalogPlatformsJson(c.env.DB, url.searchParams.get("region"), async () =>
+      (await allow(c.env.RL_RESOLVE, `platforms:${clientIp(request)}`)) && (await spend(c.env.DB, "platform_builds", 40)));
+    if (!body) return error(503, "budget-exhausted", "This country's line-up is not built yet. Try again later.");
+    return json(body, 200, { "Cache-Control": "public, max-age=3600" });
   }
 
   if (a === "taxonomy" && method === "GET") {

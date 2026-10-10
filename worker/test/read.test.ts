@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { upsertMediaItem } from "../src/catalog/ingest";
-import { catalogDeltaJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "../src/catalog/read";
+import { catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "../src/catalog/read";
 import { db, gameItem, movieItem, showItem, wipe } from "./helpers";
 
 beforeEach(wipe);
@@ -181,5 +181,47 @@ describe("episodes", () => {
     expect(await showEpisodesJson(db, "00000000-0000-4000-8000-000000000000")).toBeNull();
     const { id } = await upsertMediaItem(db, showItem());
     expect(JSON.parse((await showEpisodesJson(db, id))!)).toMatchObject({ seasons: [], episodes: [] });
+  });
+});
+
+describe("where the pool can be played or watched", () => {
+  const providers = (name: string) => ({ flatrate: [{ provider_id: 1, provider_name: name, logo_path: "/x.png" }], link: "https://example.test" });
+
+  it("lists a game's platforms and a film's services for the country asked", async () => {
+    const game = await upsertMediaItem(db, gameItem());
+    const film = await upsertMediaItem(db, movieItem({ "watch/providers": { results: { DE: providers("WOW"), US: providers("Max") } } }));
+
+    const de = JSON.parse((await catalogPlatformsJson(db, "DE"))!);
+    expect(de.region).toBe("DE");
+    expect(de.games[game.id]).toEqual(["PC (Microsoft Windows)"]);
+    expect(de.streaming[film.id]).toEqual(["WOW"]);
+
+    const us = JSON.parse((await catalogPlatformsJson(db, "US"))!);
+    expect(us.streaming[film.id]).toEqual(["Max"]);
+  });
+
+  it("falls back to the US line-up, and leaves out a title with none", async () => {
+    const film = await upsertMediaItem(db, movieItem({ "watch/providers": { results: { US: providers("Max") } } }));
+    const bare = await upsertMediaItem(db, movieItem({ id: 604, title: "The Matrix Reloaded" }));
+    const de = JSON.parse((await catalogPlatformsJson(db, "DE"))!);
+    expect(de.streaming[film.id]).toEqual(["Max"]);
+    expect(de.streaming[bare.id]).toBeUndefined();
+  });
+
+  it("builds a country once, and asks before building, not before reading back", async () => {
+    await upsertMediaItem(db, movieItem({ "watch/providers": { results: { DE: providers("WOW") } } }));
+    let asked = 0;
+    const gate = async () => { asked++; return true; };
+    const first = await catalogPlatformsJson(db, "DE", gate);
+    // A title added after the build is not in the kept answer: that is the cache.
+    await upsertMediaItem(db, movieItem({ id: 605, title: "Later", "watch/providers": { results: { DE: providers("Netflix") } } }));
+    expect(await catalogPlatformsJson(db, "DE", gate)).toBe(first);
+    expect(asked).toBe(1);
+    // A refusal builds nothing and says so.
+    expect(await catalogPlatformsJson(db, "FR", async () => false)).toBeNull();
+  });
+
+  it("treats an unknown country as the default one", async () => {
+    expect(JSON.parse((await catalogPlatformsJson(db, "ZZ'); DROP TABLE kv; --"))!).region).toBe("US");
   });
 });
