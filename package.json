@@ -13,7 +13,7 @@
     "start:alt": "set NEXT_DIST_DIR=.next-prod&& next start --port 3110"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^13.0.3",
     "date-fns": "^4.4.0",
     "jose": "^6.2.8",
     "lucide-react": "^1.31.0",
