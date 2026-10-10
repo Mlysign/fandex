@@ -173,9 +173,18 @@ Each of these is a way the Worker differs from the site, and each has a test.
   sync, and D1 bills each row. A final page hands back a cursor a few seconds in the past so a
   write in the same second is not skipped.
 - **The cron is a state machine.** One trigger, every ten minutes, a few steps each run, cursors
-  in the `kv` table. Three jobs: the nightly export to R2, the TMDB refresh (links older than 150
-  days, inside TMDB's six-month cap), one calendar month. IGDB is not refreshed on a timer; its
-  retention question is open.
+  in the `kv` table. Four jobs: the nightly export to R2, the TMDB refresh (links older than 150
+  days, inside TMDB's six-month cap), the upcoming refresh, one calendar month. IGDB is not
+  refreshed on a timer; its retention question is open.
+- **A pool title that is not out yet is refetched daily when near and weekly when far**
+  (`runUpcomingRefreshStep`). Near is from 30 days after its date to 90 days before it; far is
+  later than that or undated. Measured 2026-10-10: 63 such titles of 1,674 TMDB links, 11 of them
+  near, so about 18 fetches and 55 row writes a day, and one scan of 1,741 rows read when it looks.
+  A run fetches two titles at most across both refreshes, the 150-day one first, so 288 a day is
+  the ceiling and past it the cadence stretches instead of the cost growing. ⚠️ A failed fetch
+  here never moves `last_synced`: the six-month cap is counted from that column. The title goes
+  on a skip list in `kv` for three days. Not covered: a title nobody acted on (`browsed = 1`),
+  any game, and a running show's next season, whose first air date is long past.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer.**
   `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges a doc with
   an older stamp from its blobs, whatever the region, and the next write of the item re-stamps it.
