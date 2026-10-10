@@ -246,6 +246,14 @@ const HEAD_START = '<!doctype html><html lang="en"><head><meta charset="utf-8"><
 //
 // The second half makes the back arrow go back, when there is a Fandex page to
 // go back to. Without it the arrow is a plain link home, which is also fine.
+// The pageview beacon for a page that is plain HTML: a title page nobody is
+// signed in on never starts the app, and a legal page has no app at all. It
+// leaves the path in __fxpv so the app, when it does start here, does not count
+// the same visit again (mobile/src/lib/pageview.ts). What is counted and what is
+// not: worker/src/telemetry.ts and the privacy policy's "Usage statistics".
+const PV_SCRIPT = `(function(){try{window.__fxpv=location.pathname;fetch("/v1/t/pv",{method:"POST",headers:{"Content-Type":"application/json"},`
+  + `body:JSON.stringify({path:location.pathname,ref:document.referrer}),keepalive:true,credentials:"same-origin"}).catch(function(){})}catch(e){}})();`;
+
 const ITEM_SCRIPT = `(function(){var b=document.querySelector('#prerender a[aria-label="Fandex, home"]');`
   + `if(b&&history.length>1&&document.referrer.indexOf(location.origin+"/")===0)b.addEventListener("click",function(e){e.preventDefault();history.back()});`
   + `try{if(!localStorage.getItem("fandex.session"))return}catch(e){return}`
@@ -271,7 +279,7 @@ for (const item of details.values()) {
   const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
     + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical, image: head.image, alt: item.merged.title })}`
     + `<style>${fontCss}${FRAME_CSS}</style>${css}<style id="fandex-item-layout">${ITEM_PAGE_CSS}</style><script type="application/ld+json">${head.jsonLd}</script></head>`
-    + `<body><div id="prerender" data-page="item">${body}</div><div id="root"></div><script>${ITEM_SCRIPT}</script></body></html>`;
+    + `<body><div id="prerender" data-page="item">${body}</div><div id="root"></div><script>${PV_SCRIPT}${ITEM_SCRIPT}</script></body></html>`;
   const dir = path.join(STAGE, item.type);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${item.slug}.html`), html);
@@ -368,7 +376,7 @@ for (const { locale, doc, content } of legal) {
       `<a href="/legal/${l}/${doc}"${l === locale ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav></div>`
     + `<h1>${esc(content.title)}</h1><p class="updated">${locale === 'de' ? 'Zuletzt aktualisiert' : 'Last updated'}: ${esc(content.updated)}</p>`
     + (content.intro ?? []).map((p) => `<p>${esc(p)}</p>`).join('') + body + legalNav(locale)
-    + `</main>${usesProtected ? `<script>${PROTECTED_SCRIPT}</script>` : ''}</body></html>`;
+    + `</main><script>${PV_SCRIPT}</script>${usesProtected ? `<script>${PROTECTED_SCRIPT}</script>` : ''}</body></html>`;
   const dir = path.join(STAGE, 'legal', locale);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${doc}.html`), html);

@@ -49,7 +49,7 @@ const privacy: LegalDocument = {
     {
       heading: "Was Fandex NICHT speichert",
       body: [
-        "Keine E-Mail-Adresse, kein echter Name (nur der Anzeigename, den Ihr Anbieter liefert), keine Zahlungsdaten (Fandex hat derzeit keine Zahlungsfunktion), kein Anbieter-Passwort oder -Token auf den eigenen Servern und keine Analyse- oder Werbe-Kennungen Dritter.",
+        "Keine E-Mail-Adresse, kein echter Name (nur der Anzeigename, den Ihr Anbieter liefert), keine Zahlungsdaten (Fandex hat derzeit keine Zahlungsfunktion), kein Anbieter-Passwort oder -Token auf den eigenen Servern und keine Analyse- oder Werbe-Kennungen Dritter. Fandex zählt zwar Seitenaufrufe, tut dies aber selbst und ohne jede Identifizierung; siehe „Nutzungsstatistik“ weiter unten.",
       ],
     },
     {
@@ -62,9 +62,12 @@ const privacy: LegalDocument = {
     {
       heading: "Nutzungsstatistik",
       body: [
-        "Fandex führt derzeit keine eigene Nutzungsstatistik. Es gibt keine Zählung von Seitenaufrufen, kein Google Analytics, keinen anderen Analysedienst, kein Tracking-Skript, keine Werbe-Kennung und kein Fingerprinting.",
+        "Fandex zählt, wie stark die Website genutzt wird, damit der Betreiber einschätzen kann, ob sich der weitere Betrieb lohnt. Gezählt wird von Fandex selbst, in der eigenen Datenbank. Es gibt kein Google Analytics, keinen anderen Analysedienst Dritter, kein Tracking-Skript, keine Werbe-Kennung und kein Fingerprinting.",
+        "Erfasst wird: der Kalendertag, um welche ART von Seite es sich handelte, ob die Person angemeldet war, sowie eine grobe Kategorie für die Herkunft des Aufrufs (Suchmaschine, soziales Netzwerk, ein Link innerhalb von Fandex oder gar kein Verweis). „Art von Seite“ bedeutet ein Routen-Muster: Der Aufruf einer bestimmten Tag-, Personen- oder Titelseite wird nur als „eine Tag-Seite“, „eine Personenseite“ bzw. „eine Titelseite“ gezählt, niemals als die konkrete Seite, die Sie angesehen haben.",
+        "Nicht erfasst wird: irgendeine Kennung. Keine Nutzer-ID, keine IP-Adresse, keine Sitzungs-ID, keine Geräte- oder Browserdaten und keine Uhrzeit, die genauer wäre als der Tag. Gespeichert werden ausschließlich laufende Tagessummen. Es gibt darin nichts, was sich auf Sie zurückführen ließe, und keine Möglichkeit, das Verhalten einer einzelnen Person zu rekonstruieren.",
+        "Da hierfür nichts auf Ihrem Endgerät gespeichert oder ausgelesen wird, ist kein Consent-Banner nach § 25 TDDDG erforderlich; und da keine personenbezogenen Daten aufbewahrt werden, gibt es hier auch keinen Anknüpfungspunkt für die DSGVO. Die Übermittlung einer Zählung ist ein gewöhnlicher Web-Request und macht wie jeder Request an jede Website kurzzeitig Ihre IP-Adresse gegenüber dem Server sichtbar; sie wird ausschließlich für die Rate-Begrenzung verwendet, genau wie in jedem anderen Teil von Fandex, und niemals zusammen mit den Zählungen gespeichert.",
+        "Gezählt werden nur Seiten, die in einem Webbrowser geöffnet werden. Die Android-App übermittelt keine Zählungen.",
         "Für angemeldete Konten speichert Fandex den Tag, an dem das Konto zuletzt gesehen wurde, höchstens einmal pro Tag. So lässt sich erkennen, wie viele Konten noch genutzt werden. Dieses Datum liegt an Ihrem Konto und wird mit dessen Löschung entfernt.",
-        "Sollte Fandex Seitenaufrufe wieder zählen, dann als Tagessummen je Art von Seite und ohne jede Kennung, und dieser Abschnitt beschreibt es, bevor es geschieht.",
       ],
     },
     {

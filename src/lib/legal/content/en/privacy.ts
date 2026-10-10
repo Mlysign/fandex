@@ -9,7 +9,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 //   no provider tokens    user_identities has no token column (docs/worker.md)
 //   on your device        mobile/src/lib/storage.ts, db.ts, AuthProvider.signOut
 //   one cookie            worker/src/auth/session.ts, sessionCookie()
-//   no usage statistics   the counter tables exist and nothing writes them
+//   usage statistics      worker/src/telemetry.ts: daily counters, no identifier (counting again since 2026-10-10)
 //   last seen, daily      worker/src/auth/session.ts
 //   TMDB from the device  mobile/src/lib/tmdb.ts
 //   Trakt from the device mobile/src/lib/trakt.ts, traktSync.ts
@@ -59,7 +59,7 @@ const privacy: LegalDocument = {
     {
       heading: "What Fandex does NOT store",
       body: [
-        "No email address, no real name (only whatever display name your provider gives us), no payment information (Fandex has no payment feature today), no provider password or token on its servers, and no third-party analytics or advertising identifiers.",
+        "No email address, no real name (only whatever display name your provider gives us), no payment information (Fandex has no payment feature today), no provider password or token on its servers, and no third-party analytics or advertising identifiers. Fandex does count pageviews, but it does so itself and without identifying anyone; see \"Usage statistics\" below.",
       ],
     },
     {
@@ -72,9 +72,12 @@ const privacy: LegalDocument = {
     {
       heading: "Usage statistics",
       body: [
-        "Fandex currently keeps no usage statistics of its own. There is no pageview counting, no Google Analytics, no other analytics service, no tracking script, no advertising identifier and no fingerprinting.",
+        "Fandex counts how much the website is used, so the operator can tell whether it is worth continuing to run. That counting is done by Fandex itself, in its own database. There is no Google Analytics, no other third-party analytics service, no tracking script, no advertising identifier and no fingerprinting.",
+        "What a count records: the calendar day, what KIND of page was opened, whether the visitor was signed in, and a coarse category for where the visit came from (a search engine, a social site, a link inside Fandex, or no referrer at all). \"Kind of page\" means a route template, so opening a specific tag, person or title page is recorded only as \"a tag page\", \"a person page\" or \"a title page\" and never as the particular one you looked at.",
+        "What a count does not record: any identifier of any kind. No user id, no IP address, no session id, no device or browser details, and no time more precise than the day. Counts are stored only as running daily totals, so there is nothing in them that could be traced back to you, and no way to reconstruct what any one person did.",
+        "Because nothing is stored on or read from your device for this, it needs no consent banner under §25 TDDDG, and because no personal data is kept there is nothing here for the GDPR to attach to. Sending a count is an ordinary web request, and like every request to any website it briefly shows your IP address to the server; it is used only to apply a rate limit, exactly as it is on every other part of Fandex, and is never stored alongside the counts.",
+        "Only pages opened in a web browser are counted. The Android app sends no counts.",
         "For signed-in accounts Fandex records the day each account was last seen, at most once per day, so the operator can tell how many accounts are still in use. That date is stored on your account and is removed when you delete it.",
-        "If Fandex starts counting pageviews again, it will count daily totals per kind of page with no identifier of any kind, and this section will describe it before it happens.",
       ],
     },
     {

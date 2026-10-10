@@ -20,7 +20,7 @@ code, in a browser.
 | Insights (`/insights`) | Your taste in numbers, from the rows on the device: overview, how you rate, the spread per medium, taste by era, you against the crowd, how you rate tags, people and studios, who turns up most. | On-device SQLite |
 | Tag, person, studio (`/tag/{key}`, `/person/{key}`, `/studio/{key}`) | What it is, the crowd's average and yours, and every title in the catalog that carries it. Reached from the item page's tags, cast and facts. | On-device SQLite |
 | Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, your platforms, the account, download and delete, the home-screen widget, what the device holds, and for an admin the links to `/dev`. Not there: Import, joining accounts ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
-| Admin (`/dev/users`, `/dev/scoring`) | Who is registered and what they hold. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions). An admin only: anybody else sees "Nothing here". | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
+| Admin (`/dev/users`, `/dev/scoring`, `/dev/analytics`) | Who is registered and what they hold. Pageviews, where they came from and the two thresholds they are counted for. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions). An admin only: anybody else sees "Nothing here". | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
@@ -97,6 +97,16 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   been a second play on Trakt. `auth.rowsSyncing` is the flag; the tracker disables its ticks on
   it. Its sibling: after a failed write, read the device again. Putting back a snapshot taken
   before the request paints over rows that arrived while it was out.
+- **The website counts pageviews, the app does not** (`lib/pageview.ts`). One POST to `/v1/t/pv` per page opened, sent
+  only by the web build on fandex.org. ⚠️ Never send it from Android: the request has no Origin, the Worker files it
+  under "crawler", and the privacy policy says the app is not counted. A static title page counts itself with an
+  inline script and leaves the path in `window.__fxpv`, so the app does not count the same visit when it starts there.
+- **The widget's text is a picture** (`modules/up-next-widget`, `WidgetText.kt`). A launcher does not load another
+  app's font files: `android:fontFamily="@font/…"` on a widget's TextView compiles, installs and is drawn in Roboto.
+  The text is drawn in the app's process with its own fonts and handed over as a bitmap, cut to the widget's width,
+  with the words set as the content description. Each row is the app's Up next row; change the two together.
+- **A sheet pads its foot by the system bar's inset** (`kit.tsx`, `Sheet`). Android draws a modal edge to edge, and
+  without it the last row sits under the navigation bar.
 - **Where a title can be watched or played is its own table, filled per country** (`lib/platforms.ts`,
   `item_platform`). The Worker's `/v1/catalog/platforms?region=` answers for the whole pool at once;
   the device asks once a day and again when the account's country changes, because a streaming

@@ -35,7 +35,7 @@ export function AdminOnly({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function HintMark({ open, onPress, label }: { open: boolean; onPress: () => void; label: string }) {
+export function HintMark({ open, onPress, label }: { open: boolean; onPress: () => void; label: string }) {
   return (
     <Pressable
       onPress={onPress} hitSlop={12} accessibilityRole="button" accessibilityState={{ expanded: open }}

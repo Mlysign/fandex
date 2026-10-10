@@ -48,7 +48,14 @@ A build is under a second and about 5,000 rows read; the same answer with the it
 fallback step (any country TMDB lists) read 179,000, which is why that step is left out. A build
 meets the rate limiter and a cap of 40 a day; reading a built one meets neither.
 
-Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/users`,
+`POST /v1/t/pv` is the pageview beacon (`src/telemetry.ts`): `{path, ref}` from a page on fandex.org. It keeps a
+daily total per kind of page, signed in or not, and per class of referrer, and nothing that identifies anybody.
+A request that is not a browser on our own origin (by `Origin` or `Sec-Fetch-Site`, then by user agent) is counted
+only as a crawler turned away. A counted view is three row writes, capped at 5,000 views a day
+(`DAILY_PAGEVIEW_CAP`), and it answers 200 whatever it decided. ⚠️ The privacy policy's "Usage statistics" section
+describes exactly this. Change one and the other is wrong.
+
+Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/users`,
 `PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`, `POST` and `DELETE`
 on `/v1/admin/tag-overrides`, `/v1/admin/tag-aliases`, `/v1/admin/ip-aliases`, `/v1/admin/ip-overrides`
 and `/v1/admin/labels`. Every write answers with the taxonomy as stored. An alias is stored flat:

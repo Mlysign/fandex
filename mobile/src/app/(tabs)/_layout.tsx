@@ -8,16 +8,19 @@
 
 import { usePathname, useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
+import { sendPageview } from '~/lib/pageview';
 import { breakpoint, color } from '~/theme';
 
 export default function TabsLayout() {
   const { width } = useWindowDimensions();
   const desktop = width >= breakpoint.md;
   const pathname = usePathname();
+  // Every screen is a child of this layout, so this is every page opened. The website only: see lib/pageview.ts.
+  useEffect(() => { sendPageview(pathname); }, [pathname]);
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
   const go = useCallback((href: string) => router.navigate(href as never), [router]);

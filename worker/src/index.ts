@@ -31,6 +31,7 @@
 import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
+import { analyticsSnapshot, countPageView } from "./telemetry";
 import {
   clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
   parseIpOverride, parseLabel, parseScoringConfig, setIpOverride, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
@@ -164,6 +165,17 @@ async function route(c: Ctx): Promise<Response> {
     if (b === "google" || b === "trakt") return authenticate(c, b);
     if (b === "merge") return merge(c);
     if (b === "logout") return logout(c);
+  }
+
+  // The pageview beacon. It answers 200 whatever it decided: a page has no use
+  // for the outcome, and a script probing the gate learns nothing from it.
+  if (a === "t" && b === "pv" && method === "POST" && !d) {
+    if (!(await allow(c.env.RL_WRITE, `pv:${clientIp(request)}`))) return json({ ok: true }, 200, PRIVATE);
+    const session = await readSession(c.env, request, c.defer);
+    let body: unknown = null;
+    try { body = await readJson(request, AUTH_BODY_MAX); } catch { /* an unreadable body is a bad request, decided below */ }
+    await countPageView(c.env, request, body, !!session);
+    return json({ ok: true }, 200, PRIVATE);
   }
 
   if (a === "me") return me(c, method, b, d);
@@ -320,6 +332,9 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
   const session = await readSession(c.env, c.request, c.defer);
   if (!session || !isAdmin(c.env, session.user.userId)) return error(404, "not-found");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
+  if (b === "analytics" && method === "GET") {
+    return json(await analyticsSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+  }
   if (b === "users" && method === "GET") {
     return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
   }

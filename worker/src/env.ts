@@ -17,6 +17,8 @@ export interface Env {
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;
   DAILY_FETCH_CAP: string;
+  /** Counted pageviews allowed per UTC day. Optional; telemetry.ts has the default. */
+  DAILY_PAGEVIEW_CAP?: string;
   /** Fandex user ids that may call /v1/admin/*, comma separated. Unset means nobody. */
   ADMIN_USER_IDS?: string;
   /** User-state row writes allowed per UTC day across everyone. Optional; me.ts has the default. */

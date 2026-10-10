@@ -301,6 +301,8 @@ export const api = {
     request<TaxonomyJson>('/v1/admin/ip-overrides', json('POST', o)),
   adminClearIpOverride: (mediaItemId: string, ipKey: string) =>
     request<TaxonomyJson>(`/v1/admin/ip-overrides${q({ mediaItemId, ipKey })}`, { method: 'DELETE' }),
+  pageview: (path: string, ref: string) => request<{ ok: boolean }>('/v1/t/pv', { ...json('POST', { path, ref }), keepalive: true }),
+  adminAnalytics: (days: number) => request<AnalyticsSnapshot>(`/v1/admin/analytics${q({ days })}`),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
@@ -374,5 +376,19 @@ export interface UsersSnapshot {
   writeActivity: { day: string; count: number }[];
   signedInPageviews: { day: string; count: number }[];
   users: { id: string; createdAt: number; lastSeenAt: number | null; library: number; wishlist: number; rated: number; providers: string[] }[];
+  generatedAt: string;
+}
+
+/** /v1/admin/analytics. The Worker's src/telemetry.ts is where each number is defined. */
+export interface AnalyticsSnapshot {
+  gates: { pageviews30d: number; adsGate: number; adsPct: number; wau: number; freemiumGate: number; freemiumPct: number };
+  series: { day: string; anon: number; authed: number; total: number }[];
+  topPages: { pathKey: string; count: number }[];
+  referrers: { refClass: string; count: number }[];
+  users: { total: number; dau: number; wau: number; mau: number; activeInRange: number; signups: { day: string; count: number }[] };
+  crawler: { blockedInRange: number; sharePct: number | null; busiestDay: { day: string; count: number } | null; since: string | null };
+  excluded: { pageviews: number; throughDay: string; inRange: boolean };
+  gap: { from: string; through: string } | null;
+  days: number;
   generatedAt: string;
 }
