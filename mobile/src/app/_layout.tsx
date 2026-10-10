@@ -97,6 +97,24 @@ function DatabaseOpened() {
   return null;
 }
 
+/**
+ * On Android this app's screen gets a database connection of its own.
+ *
+ * By default expo-sqlite hands every opener of one file the same native
+ * connection. Android can start the app's root twice in one process (seen when
+ * an update lands while the app is in the background: "Running main" twice in
+ * the log), and when the first root goes away its provider closes that shared
+ * connection under the second. Reads worked for half a minute, then every
+ * prepared statement failed with a NullPointerException, Search listed nothing
+ * and the library read "Could not refresh" (Pixel 8, 2026-10-10; filed once
+ * before as "seen once, not explained"). With a connection each, one closing
+ * cannot take the other's.
+ *
+ * Not on the web: one tab is one root there, and its storage has rules of its
+ * own (mobile/patches, docs/app.md).
+ */
+const OWN_CONNECTION = Platform.OS === 'android' ? { useNewConnection: true } : undefined;
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     DMSerifDisplay_400Regular,
@@ -116,7 +134,7 @@ export default function RootLayout() {
   return (
     // In a browser a second tab of the site gets this database in memory: the
     // first tab holds the stored one (mobile/patches, docs/app.md).
-    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrate}>
+    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrate} options={OWN_CONNECTION}>
       <DatabaseOpened />
       <AuthProvider>
       <CatalogSyncProvider>

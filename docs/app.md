@@ -314,6 +314,13 @@ sideloading and is not a Play upload key.
   It is text only, the row swaps to "Marking … watched" for about a second, and it does not
   use the app's fonts.
 - **The web build is live as fandex.org since 2026-10-10** ([website.md](website.md)) and was checked there signed out: the calendar, Browse after a full catalog sync, the item page, an unknown address, the You tab. Still not looked at in a browser: sign-in, the Library, the score, rating and saving.
+- **Seen twice on the phone, fixed on a diagnosis that could not be reproduced on demand:** Search listed nothing and
+  every prepared statement failed with a NullPointerException, half a minute after an update landed while the app was
+  in the background. The log showed the app's root started twice in one process. expo-sqlite gives every opener of
+  one file the same native connection, so the first root's provider closing it takes it from the second. The Android
+  screen now opens a connection of its own (`OWN_CONNECTION` in `src/app/_layout.tsx`). Two installs over a
+  backgrounded app were clean afterwards, one of them with two roots; the failure was intermittent before, so that is
+  evidence and not proof. A force-stop and reopen cleared it each time.
 - **Seen once, not explained:** during a look at the live site with saves blocked, the Trakt sync
   logged `Database not found - nativeDatabaseId[2]` once, after I had moved between pages by
   writing to `history` from the console. Not seen in normal use.
