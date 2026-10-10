@@ -1,50 +1,86 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/up_next_row"
   android:layout_width="match_parent"
-  android:layout_height="wrap_content"
-  android:gravity="center_vertical"
-  android:minHeight="52dp"
-  android:orientation="horizontal"
-  android:paddingStart="16dp"
-  android:paddingEnd="10dp">
+  android:layout_height="68dp"
+  android:background="@drawable/up_next_widget_row"
+  android:clipToOutline="true"
+  android:orientation="horizontal">
 
+  <ImageView
+    android:id="@+id/up_next_poster"
+    android:layout_width="48dp"
+    android:layout_height="match_parent"
+    android:background="#0B0A08"
+    android:importantForAccessibility="no"
+    android:scaleType="centerCrop" />
+
+  <!-- The three lines of text are pictures drawn by WidgetText, in the app's fonts. -->
   <LinearLayout
     android:id="@+id/up_next_open"
     android:layout_width="0dp"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:layout_weight="1"
+    android:gravity="center_vertical"
     android:orientation="vertical"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp">
+    android:paddingStart="12dp"
+    android:paddingEnd="8dp">
 
-    <TextView
-      android:id="@+id/up_next_title"
+    <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:ellipsize="end"
-      android:maxLines="1"
-      android:textColor="#EDE7DC"
-      android:textSize="15sp"
-      android:textStyle="bold" />
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
 
-    <TextView
+      <ImageView
+        android:id="@+id/up_next_code"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/up_next_widget_chip"
+        android:importantForAccessibility="no"
+        android:paddingStart="6dp"
+        android:paddingTop="3dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="3dp" />
+
+      <ImageView
+        android:id="@+id/up_next_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_weight="1"
+        android:scaleType="fitStart" />
+    </LinearLayout>
+
+    <ImageView
       android:id="@+id/up_next_episode"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:ellipsize="end"
-      android:maxLines="1"
-      android:textColor="#9A8F80"
-      android:textSize="12sp" />
+      android:layout_marginTop="5dp"
+      android:importantForAccessibility="no"
+      android:scaleType="fitStart" />
   </LinearLayout>
 
-  <TextView
+  <FrameLayout
     android:id="@+id/up_next_tick"
-    android:layout_width="44dp"
-    android:layout_height="44dp"
-    android:background="@drawable/up_next_widget_tick"
-    android:contentDescription="@string/up_next_widget_tick"
-    android:gravity="center"
-    android:text="✓"
-    android:textColor="#C8A24B"
-    android:textSize="18sp" />
+    android:layout_width="48dp"
+    android:layout_height="match_parent"
+    android:contentDescription="@string/up_next_widget_tick">
+
+    <ImageView
+      android:id="@+id/up_next_box"
+      android:layout_width="28dp"
+      android:layout_height="28dp"
+      android:layout_gravity="center"
+      android:importantForAccessibility="no"
+      android:src="@drawable/up_next_widget_box" />
+
+    <ImageView
+      android:id="@+id/up_next_done"
+      android:layout_width="28dp"
+      android:layout_height="28dp"
+      android:layout_gravity="center"
+      android:importantForAccessibility="no"
+      android:src="@drawable/up_next_widget_box_done"
+      android:visibility="gone" />
+  </FrameLayout>
 </LinearLayout>

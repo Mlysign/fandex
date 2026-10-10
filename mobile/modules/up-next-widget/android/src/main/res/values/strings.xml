@@ -3,5 +3,5 @@
   <string name="up_next_widget_description">The next episode of each show you are part way through.</string>
   <string name="up_next_widget_empty">Nothing to watch. Open Fandex to check again.</string>
   <string name="up_next_widget_tick">Mark watched</string>
-  <string name="up_next_widget_marking">Marking %1$s watched…</string>
+  <string name="up_next_widget_episode">Episode %1$d</string>
 </resources>

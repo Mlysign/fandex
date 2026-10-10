@@ -37,8 +37,8 @@ const WIDGET_ROWS = 12;
 export async function publishWidget(db: SQLiteDatabase): Promise<void> {
   if (!native) return;
   try {
-    const rows = await db.getAllAsync<{ id: string; title: string; season: number; episode: number; episodeTitle: string | null }>(
-      `SELECT u.media_item_id AS id, c.title, u.season, u.episode, u.title AS episodeTitle
+    const rows = await db.getAllAsync<{ id: string; title: string; season: number; episode: number; episodeTitle: string | null; posterUrl: string | null }>(
+      `SELECT u.media_item_id AS id, c.title, u.season, u.episode, u.title AS episodeTitle, c.poster_url AS posterUrl
          FROM up_next u JOIN catalog c ON c.id = u.media_item_id
         WHERE u.season IS NOT NULL
           AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)

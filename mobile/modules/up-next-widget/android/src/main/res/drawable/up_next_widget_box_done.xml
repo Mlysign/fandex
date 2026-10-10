@@ -1,0 +1,9 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item>
+    <shape android:shape="rectangle">
+      <solid android:color="#C8A24B" />
+      <corners android:radius="7dp" />
+    </shape>
+  </item>
+  <item android:drawable="@drawable/up_next_widget_check" android:gravity="center" android:width="20dp" android:height="20dp" />
+</layer-list>

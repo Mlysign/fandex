@@ -3,6 +3,7 @@
 // StatStrip, the two score badges, SearchBar, and the popover a menu or a star
 // picker opens in. Each says which file it came from. Sizes are that file's.
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronDown, Search, User, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -288,11 +289,14 @@ export function SortMenu<K extends string>({ value, options, onChange }: { value
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const { width } = useWindowDimensions();
   const wide = width >= breakpoint.sm;
+  // Android draws a modal edge to edge, under the system's navigation bar. Without
+  // this the last row of a sheet (the filter sheet's "Show N titles") sits beneath it.
+  const { bottom } = useSafeAreaInsets();
   return (
     <Modal transparent visible={open} animationType={wide ? 'fade' : 'slide'} onRequestClose={onClose}>
       <View style={[styles.sheetRoot, wide && { justifyContent: 'center' }]}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} onPress={onClose} accessibilityLabel="Close" />
-        <View accessibilityViewIsModal accessibilityLabel={title} style={[styles.sheet, wide && styles.sheetWide]}>
+        <View accessibilityViewIsModal accessibilityLabel={title} style={[styles.sheet, wide ? styles.sheetWide : { paddingBottom: bottom }]}>
           {wide ? null : <View style={styles.sheetGrip}><View style={styles.sheetGripBar} /></View>}
           {children}
         </View>

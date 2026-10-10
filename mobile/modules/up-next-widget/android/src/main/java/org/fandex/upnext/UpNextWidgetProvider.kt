@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.widget.RemoteViews
 
 /**
@@ -27,9 +28,20 @@ class UpNextWidgetProvider : AppWidgetProvider() {
     manager.notifyAppWidgetViewDataChanged(ids, R.id.up_next_list)
   }
 
+  /** Resized: the rows cut their text to the width, so they are drawn again. */
+  override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
+    manager.updateAppWidget(id, views(context, id))
+    @Suppress("DEPRECATION")
+    manager.notifyAppWidgetViewDataChanged(id, R.id.up_next_list)
+  }
+
   companion object {
     private fun views(context: Context, widgetId: Int): RemoteViews {
       val views = RemoteViews(context.packageName, R.layout.up_next_widget)
+      views.setImageViewBitmap(
+        R.id.up_next_heading,
+        WidgetText.line(context, context.getString(R.string.up_next_widget_name), R.font.dm_serif_display, 19f, WidgetText.PRIMARY, 240f),
+      )
 
       val service = Intent(context, UpNextWidgetService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
