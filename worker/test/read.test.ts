@@ -3,6 +3,7 @@ import { upsertMediaItem } from "../src/catalog/ingest";
 import { DERIVE_VERSION } from "../src/catalog/derive";
 import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
+  RELEASE_DATES_SQL,
   showEpisodesJson, taxonomyJson,
 } from "../src/catalog/read";
 import { db, gameItem, movieItem, showItem, wipe } from "./helpers";
@@ -96,6 +97,27 @@ describe("release dates for a country", () => {
       release_dates: { results: [{ iso_3166_1: "DE", release_dates: [day("2026-08-27", 2)] }] },
     }));
     expect(JSON.parse(await regionalReleaseDatesJson(db, [film.id], "DE")).dates).toEqual({});
+  });
+
+  it("reads a few rows per film asked about, not every TMDB link in the catalog", async () => {
+    // D1 bills every row a query touches and stops ALL queries past the day's
+    // allowance. Left to the planner, this query walked every TMDB link on each
+    // call and spent that allowance in 35 calls (2026-10-10).
+    const ids: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      ids.push((await upsertMediaItem(db, movieItem({ id: 5000 + i, title: `Plan ${i}`, belongs_to_collection: null, external_ids: {} }))).id);
+    }
+    const asked = JSON.stringify(ids.slice(0, 3));
+
+    const plan = await db.prepare(`EXPLAIN QUERY PLAN ${RELEASE_DATES_SQL}`).bind(asked, "DE").all<{ detail: string }>();
+    const detail = plan.results.map((r) => r.detail).join(" | ");
+    // From the id list inward: the list, then each item by its key, then its links by the item.
+    expect(detail).toMatch(/^SCAN j .*\| SEARCH mi USING PRIMARY KEY \(id=\?\) \| SEARCH l USING INDEX idx_links_item/);
+
+    const res = await db.prepare(RELEASE_DATES_SQL).bind(asked, "DE").all();
+    expect(res.results).toHaveLength(3);
+    // Forty films are stored and three were asked about. The planner's own order read 200 rows here.
+    expect(res.meta.rows_read).toBeLessThanOrEqual(15);
   });
 
   it("takes only a list of item ids, and not more than the cap", () => {

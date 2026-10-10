@@ -88,10 +88,29 @@ async function mergedForRegion(db: D1Database, id: string, type: MediaType, regi
 
 // ── Release dates for a country, for a handful of films ──────────────────────
 
-/** Films per request. Each costs one blob read and about thirty json_each rows. */
+/** Films per request. Each costs four rows read (measured), so a full request is about 800. */
 export const RELEASE_DATES_MAX = 200;
 
 const ITEM_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * ⚠️ The join ORDER is written out (CROSS JOIN, and the index by name) because
+ * the planner's own choice took the API down on 2026-10-10. Written as plain
+ * joins, SQLite started from `media_links` by its primary key (`source =
+ * 'tmdb'`) and read every TMDB link in the catalog for each call, whatever the
+ * number of ids: 110,000 rows a call, 3.9 million in 35 calls, which is the
+ * free plan's whole day of reads. From the id list inward it is four rows a
+ * film. A test holds both the plan and the row count.
+ */
+export const RELEASE_DATES_SQL = `
+  SELECT mi.id, mi.release_date primary_date,
+         (SELECT e.value ->> 'release_dates'
+            FROM json_each(l.raw_data, '$.release_dates.results') e
+           WHERE e.value ->> 'iso_3166_1' = ?2 LIMIT 1) dates
+    FROM json_each(?1) j
+   CROSS JOIN media_items mi ON mi.id = j.value
+   CROSS JOIN media_links l INDEXED BY idx_links_item ON l.media_item_id = mi.id
+   WHERE +mi.type = 'movie' AND l.source = 'tmdb' AND l.media_type = 'movie'`;
 
 /** `{ids: [uuid, …]}` as a list of ids, or null if it is not that. */
 export function parseItemIds(body: unknown): string[] | null {
@@ -123,15 +142,7 @@ export function parseItemIds(body: unknown): string[] | null {
 export async function regionalReleaseDatesJson(db: D1Database, ids: string[], regionRaw?: string | null): Promise<string> {
   const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
   const rows = await all<{ id: string; primary_date: string | null; dates: string | null }>(
-    db,
-    `SELECT mi.id, mi.release_date primary_date,
-            (SELECT e.value ->> 'release_dates'
-               FROM json_each(l.raw_data, '$.release_dates.results') e
-              WHERE e.value ->> 'iso_3166_1' = ?2 LIMIT 1) dates
-       FROM json_each(?1) j
-       JOIN media_items mi ON mi.id = j.value AND mi.type = 'movie'
-       JOIN media_links l ON l.media_item_id = mi.id AND l.source = 'tmdb' AND l.media_type = 'movie'`,
-    [JSON.stringify(ids), region],
+    db, RELEASE_DATES_SQL, [JSON.stringify(ids), region],
   );
   const dates: Record<string, string> = {};
   for (const r of rows) {

@@ -60,6 +60,14 @@ showed a festival screening as the release (7 of 48 German calendar films). Of 2
 have a German date that is not the catalog's, so the lists are a day or more off for most films;
 whether they should follow the country is an open question in TASKS.md.
 
+⚠️ **`release-dates` took the API down on its first day (2026-10-10).** Its join, left to the
+planner, read every TMDB link in the catalog on each call: 110,394 rows a call and 3.86 million in
+35 calls, which with the day's other traffic passed D1's 5 million. Every query then failed until
+midnight UTC. The query now names its join order and its index (`RELEASE_DATES_SQL`), which is four
+rows a film on the local D1, and a test holds the plan and the count. **Not yet measured on live
+D1**, which refused all queries for the rest of that day: run one request and read `rows_read`
+before relying on it.
+
 `POST /v1/t/pv` is the pageview beacon (`src/telemetry.ts`): `{path, ref}` from a page on fandex.org. It keeps a
 daily total per kind of page, signed in or not, and per class of referrer, and nothing that identifies anybody.
 A request that is not a browser on our own origin (by `Origin` or `Sec-Fetch-Site`, then by user agent) is counted
