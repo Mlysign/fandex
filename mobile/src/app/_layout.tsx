@@ -11,9 +11,12 @@ import { Platform, View } from 'react-native';
 import { StateBlock } from '~/components/ui';
 import { AuthProvider } from '~/lib/AuthProvider';
 import { CatalogSyncProvider } from '~/lib/CatalogSyncProvider';
-import { DATABASE_NAME, migrate } from '~/lib/db';
+import { migrate } from '~/lib/db';
+import { useDatabaseName } from '~/lib/dbName';
 import { dropPlaceholder } from '~/lib/prerender';
 import { ScoreProvider } from '~/lib/ScoreProvider';
+import { TypeFilterProvider } from '~/lib/typeFilter';
+import { ToastProvider } from '~/components/Toast';
 import { color, font } from '~/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -43,8 +46,12 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
     // The splash is still up if this is the very first render.
     void SplashScreen.hideAsync();
+    // The website's placeholder lies over the app. An error under it is an error nobody sees.
+    if (!quiet) dropPlaceholder();
     if (!quiet) return;
     globalThis.sessionStorage?.setItem(LOCK_RELOADS_KEY, String(attempts + 1));
+    // Twice is a reload that came too soon. More than that and somebody else has the
+    // file for good: take the next slot instead of asking for this one again.
     // Long enough for the previous page's worker to be torn down. At 900 ms it
     // took three or four reloads to get through; the lock is held for about
     // that long after a navigation.
@@ -63,7 +70,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <View style={{ flex: 1, backgroundColor: color.surface }}>
       <StateBlock
         title="Fandex could not start"
-        detail={error.message || 'Something went wrong while opening the app.'}
+        detail={locked
+          ? 'It is open in another tab that has not let go yet. Close or reload that tab, then try again.'
+          : error.message || 'Something went wrong while opening the app.'}
         action={{
           label: 'Try again',
           // In a browser a retry inside the same page cannot reopen the
@@ -103,14 +112,33 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
-  if (!ready) return null;
+  // In a browser the app runs in one tab at a time (lib/dbName.ts).
+  const database = useDatabaseName();
+  useEffect(() => {
+    // The home page's placeholder would otherwise cover this message.
+    if (database.state === 'waiting') dropPlaceholder();
+  }, [database.state]);
+  if (!ready || database.state === 'pending') return null;
+  if (database.state === 'waiting') {
+    return (
+      <View style={{ flex: 1, backgroundColor: color.surface }}>
+        <StateBlock
+          title="Fandex is open in another tab"
+          detail="It runs in one tab at a time. Carry on there, or move it to this one."
+          action={{ label: 'Use Fandex here', onPress: database.takeOver }}
+        />
+      </View>
+    );
+  }
 
   return (
-    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrate}>
+    <SQLiteProvider databaseName={database.name} onInit={migrate}>
       <DatabaseOpened />
       <AuthProvider>
       <CatalogSyncProvider>
       <ScoreProvider>
+      <TypeFilterProvider>
+      <ToastProvider>
         <StatusBar style="light" />
         <Stack
           screenOptions={{
@@ -120,13 +148,12 @@ export default function RootLayout() {
             headerShadowVisible: false,
             contentStyle: { backgroundColor: color.surface },
           }}>
+          {/* Every screen is inside the tabs layout, which draws the navigation around it. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          {/* No header: the page's hero carries its own back and share buttons. */}
-          <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
-          {/* The same screen at its public address, /{type}/{slug}. */}
-          <Stack.Screen name="[type]/[slug]" options={{ headerShown: false }} />
-          <Stack.Screen name="open/[source]/[type]/[id]" options={{ title: '' }} />
+          <Stack.Screen name="auth/trakt" options={{ headerShown: false }} />
         </Stack>
+      </ToastProvider>
+      </TypeFilterProvider>
       </ScoreProvider>
       </CatalogSyncProvider>
       </AuthProvider>

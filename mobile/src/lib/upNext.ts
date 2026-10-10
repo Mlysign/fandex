@@ -41,6 +41,10 @@ export interface UpNextEntry {
   episodeTitle: string | null;
   /** Unix seconds: the later of "you watched the one before" and "this one aired". */
   eventAt: number | null;
+  // The show's own figures, for the Progress tab's other sorts.
+  releaseDate: string | null;
+  votes: number;
+  communityScore: number | null;
 }
 
 interface ShowWatch {
@@ -182,8 +186,10 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
   const rows = await db.getAllAsync<{
     media_item_id: string; title: string; poster_url: string | null;
     season: number; episode: number; episode_title: string | null; event_at: number | null;
+    release_date: string | null; community_votes: number; community_score: number | null;
   }>(
-    `SELECT u.media_item_id, c.title, c.poster_url, u.season, u.episode, u.title AS episode_title,
+    `SELECT u.media_item_id, c.title, c.poster_url, c.release_date, c.community_votes, c.community_score,
+            u.season, u.episode, u.title AS episode_title,
             MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) AS event_at
        FROM up_next u JOIN catalog c ON c.id = u.media_item_id
       WHERE u.season IS NOT NULL
@@ -195,6 +201,7 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
   return rows.map((r) => ({
     mediaItemId: r.media_item_id, title: r.title, posterUrl: r.poster_url,
     season: r.season, episode: r.episode, episodeTitle: r.episode_title, eventAt: r.event_at || null,
+    releaseDate: r.release_date, votes: r.community_votes ?? 0, communityScore: r.community_score,
   }));
 }
 

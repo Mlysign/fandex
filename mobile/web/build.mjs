@@ -210,7 +210,9 @@ const MONO = '"SpaceMono_400Regular",ui-monospace,monospace';
 // body that does not scroll, because the screens scroll inside themselves.
 const FRAME_CSS = `html,body{height:100%;margin:0;background:${C.surface}}body{overflow:hidden}#root{display:flex;height:100%;flex:1}`
   // The static copy lies over the app's empty root until the app removes it (src/lib/prerender.ts).
-  + `#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}`;
+  + `#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}`
+  // The static page carries both navigation bars and shows the one for its width. The app picks in JavaScript.
+  + `@media (min-width:768px){[data-nav="bottom"]{display:none}}@media (max-width:767px){[data-nav="top"]{display:none}}`;
 
 const LEGAL = {
   en: [['privacy', 'Privacy'], ['terms', 'Terms'], ['support', 'Contact'], ['imprint', 'Imprint']],
@@ -364,7 +366,7 @@ if (legal.length !== 8) throw new Error(`Expected 8 legal pages, wrote ${legal.l
 fs.writeFileSync(path.join(STAGE, '404.html'),
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">`
   + `<meta name="theme-color" content="${C.surface}"><link rel="icon" href="/favicon.ico"><title>Nothing here · Fandex</title><style>${fontCss}${DOC_CSS}</style></head>`
-  + `<body><main><div class="top"><a href="/">Fandex</a></div><h1>Nothing here</h1><p>Fandex has no page at this address.</p><p><a href="/">Go to the calendar</a></p>${legalNav('en')}</main></body></html>`);
+  + `<body><main><div class="top"><a href="/">Fandex</a></div><h1>Nothing here</h1><p>Fandex has no page at this address.</p><p><a href="/">Go to the home page</a></p>${legalNav('en')}</main></body></html>`);
 
 // /v1/ is the API. A crawler that runs the home page's script would otherwise
 // spend the Worker's daily requests on a catalog sync; the calendar is the one
@@ -374,7 +376,8 @@ fs.writeFileSync(path.join(STAGE, 'robots.txt'), [
   'Allow: /',
   'Allow: /v1/calendar/',
   'Disallow: /v1/',
-  ...['/item/', '/open/', '/auth/', '/search', '/library', '/browse', '/you', '/app-shell'].map((p) => `Disallow: ${p}`),
+  // The old site's list (src/app/robots.ts): the screens that are yours, or that need the app to show anything.
+  ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/app-shell'].map((p) => `Disallow: ${p}`),
   '',
   `Sitemap: ${SITE}/sitemap.xml`,
   '',
@@ -425,8 +428,19 @@ const OLD = path.join(DIST, 'site.old');
 const sweep = { recursive: true, force: true, maxRetries: 5, retryDelay: 300 };
 fs.rmSync(OLD, sweep);
 fs.rmSync(path.join(DIST, 'build.json'), { force: true });
-if (fs.existsSync(OUT)) fs.renameSync(OUT, OLD);
-fs.renameSync(STAGE, OUT);
+// This folder is inside OneDrive on the machine it is built on, and OneDrive
+// holds a folder it is still scanning: a rename then fails with EPERM for a few
+// seconds. Wait and try again; a failure after that leaves the old site as it was.
+async function rename(from, to) {
+  for (let attempt = 1; ; attempt++) {
+    try { fs.renameSync(from, to); return; } catch (e) {
+      if (attempt >= 12 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  }
+}
+if (fs.existsSync(OUT)) await rename(OUT, OLD);
+await rename(STAGE, OUT);
 fs.writeFileSync(path.join(DIST, 'build.json'), JSON.stringify({ builtAt: new Date().toISOString(), itemPages, files, poolCount, limited: !!limit }, null, 2));
 try { fs.rmSync(OLD, sweep); } catch { /* the next build clears it */ }
 step(`done: ${itemPages} item pages, ${files} files in ${path.relative(repo, OUT)}${limit ? '  (LIMITED BUILD, do not deploy)' : ''}`);

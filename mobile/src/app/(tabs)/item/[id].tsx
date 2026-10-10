@@ -2,9 +2,12 @@
 // yours slotted in: your state, your Fandex Score, the rating row.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Bookmark, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
+import { StarPicker } from '~/components/cards';
 import { ItemPage } from '~/components/ItemPage';
+import { Button } from '~/components/kit';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { FandexBadge, Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -47,12 +50,14 @@ export default function ItemScreen() {
   const router = useRouter();
   // The hero runs under the status bar and the page under Android's navigation
   // buttons, so the hero's buttons and the last line each have to clear one.
-  const { top, bottom } = useSafeAreaInsets();
+  const { top } = useSafeAreaInsets();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState<{ title: string; detail: string } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
+    // This screen stays mounted between titles, so the last one must not show under the next one's address.
+    setItem(null);
     // An address that is not a title's shape (a mistyped link, a probe) is
     // answered here, without asking the Worker.
     if (!known) {
@@ -202,46 +207,28 @@ export default function ItemScreen() {
       {auth.status === 'signedIn' && mine ? (
         <View style={styles.actionsBlock}>
           <T variant="eyebrow">Your rating</T>
-          <View style={styles.stars}>
-            {RATINGS.map((n) => {
-              const on = mine.rating != null && Math.round(mine.rating) === n;
-              return (
-                <Pressable
-                  key={n}
-                  disabled={busy}
-                  // Tapping the rating it already has takes the rating away.
-                  onPress={() => act(() => rateItem(db, target, on ? null : n))}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={on ? `Remove your rating of ${n}` : `Rate ${n} out of 10`}
-                  style={({ pressed }) => [styles.star, on && styles.starOn, (pressed || busy) && { opacity: 0.6 }]}>
-                  <T variant="label" style={{ color: on ? color.textOnAccent : color.textSecondary }}>{n}</T>
-                </Pressable>
-              );
-            })}
+          {/* The site's ten stars. The one that is already your rating takes it away. */}
+          <View style={[styles.starsPanel, busy && { opacity: 0.6 }]} pointerEvents={busy ? 'none' : 'auto'}>
+            <StarPicker rating={mine.rating} onPick={(n) => act(() => rateItem(db, target, n))} />
+            <T variant="meta">{mine.rating != null ? `${mine.rating}/10` : 'Not rated'}</T>
           </View>
           <View style={styles.actionRow}>
-            <Pressable
-              disabled={busy}
+            <Button
+              label={mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'} variant={mine.inWishlist ? 'outline' : 'secondary'} size="md" disabled={busy}
+              icon={<Bookmark size={14} color={mine.inWishlist ? color.accent : color.textPrimary} fill={mine.inWishlist ? color.accent : 'none'} />}
               onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
-              accessibilityRole="button"
-              accessibilityState={{ selected: mine.inWishlist }}
-              style={({ pressed }) => [styles.action, mine.inWishlist && styles.actionOn, (pressed || busy) && { opacity: 0.6 }]}>
-              <T variant="label" style={mine.inWishlist ? { color: color.accent } : undefined}>
-                {mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'}
-              </T>
-            </Pressable>
+            />
             {mine.inLibrary ? (
-              <Pressable
-                disabled={busy}
-                onPress={() => act(() => removeFromLibrary(db, target))}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.action, (pressed || busy) && { opacity: 0.6 }]}>
-                <T variant="label">Remove from library</T>
-              </Pressable>
+              <Button label="Remove from library" variant="outline" size="md" disabled={busy} onPress={() => act(() => removeFromLibrary(db, target))} />
             ) : null}
           </View>
           {actionError ? <T variant="caption" style={{ color: color.warning }}>{actionError}</T> : null}
+        </View>
+      ) : auth.status === 'signedOut' ? (
+        // Shown to everybody, as on the site: a control that is missing reads as a feature that is missing.
+        <View style={styles.actionRow}>
+          <Button label="Rate" variant="secondary" size="md" icon={<Star size={14} color={color.textPrimary} />} onPress={() => router.push('/profile' as never)} />
+          <Button label="Add to wishlist" variant="secondary" size="md" icon={<Bookmark size={14} color={color.textPrimary} />} onPress={() => router.push('/profile' as never)} />
         </View>
       ) : null}
     </>
@@ -262,7 +249,8 @@ export default function ItemScreen() {
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}
         topInset={top}
-        bottomInset={bottom}
+        // The navigation bar is below this screen and clears the phone's own buttons itself.
+        bottomInset={0}
         onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         onShare={share}
       />
@@ -292,6 +280,10 @@ const styles = StyleSheet.create({
   },
   starOn: { backgroundColor: color.accent, borderColor: color.accent },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  starsPanel: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, paddingRight: space.md,
+    borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
+  },
   action: {
     paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center',
     borderRadius: radius.md, borderWidth: 1, borderColor: color.borderStrong,

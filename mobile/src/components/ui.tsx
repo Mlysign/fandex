@@ -23,10 +23,14 @@ export function T({ variant = 'body', style, children, numberOfLines }: {
  * on a wide window. `headed` is for a screen under the stack's own header, which
  * already clears the status bar: insetting again leaves an empty band below it.
  */
-export function Screen({ children, style, headed }: { children: ReactNode; style?: StyleProp<ViewStyle>; headed?: boolean }) {
+export function Screen({ children, style, headed, wide }: {
+  children: ReactNode; style?: StyleProp<ViewStyle>; headed?: boolean;
+  /** A list screen: the whole window, and its own header and grid decide the width. */
+  wide?: boolean;
+}) {
   return (
     <SafeAreaView style={styles.screen} edges={headed ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <View style={[styles.column, style]}>{children}</View>
+      <View style={[styles.column, wide && { maxWidth: '100%' }, style]}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -143,18 +147,22 @@ export function StateBlock({ loading, title, detail, action }: {
  * coloured against your own average, not against 50, and is not clamped: a
  * score over 100 is rare and is meant to stand out (docs/fandex-score.md §1).
  */
+/**
+ * Your Fandex Score as the site draws it (src/components/FandexScoreBadge.tsx):
+ * a bare serif number in its band's colour. Green is a strong match, orange a
+ * weak one. Not red: red means something went wrong.
+ */
 export function FandexBadge({ score, center, large }: { score: number; center: number | null; large?: boolean }) {
-  const tone = center == null ? color.textPrimary
-    : score >= center + 10 ? color.success
-    : score <= center - 10 ? color.danger
-    : color.textPrimary;
+  const c = center ?? 50;
+  const tone = score >= c + 10 ? color.scoreHigh : score <= c - 10 ? color.scoreLow : color.scoreBaseline;
   return (
-    <View style={[styles.badge, large && styles.badgeLarge, { borderColor: tone }]} accessibilityLabel={`Fandex Score ${Math.round(score)}`}>
-      <T variant={large ? 'serifMd' : 'title'} style={{ color: tone }}>{Math.round(score)}</T>
-    </View>
+    <Text
+      accessibilityLabel={`Fandex Score ${Math.round(score)}`}
+      style={{ fontFamily: 'DMSerifDisplay_400Regular', fontSize: large ? 34 : 19, lineHeight: large ? 36 : 21, color: tone, fontVariant: ['tabular-nums'], minWidth: large ? 44 : undefined }}>
+      {Math.round(score)}
+    </Text>
   );
 }
-
 export function Divider() {
   return <View style={styles.divider} />;
 }

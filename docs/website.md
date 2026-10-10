@@ -14,7 +14,7 @@ any code, so a visitor or a crawler costs no Worker request, no CPU and no datab
 | `/` | `index.html` | The app (it opens on the calendar), plus a placeholder a crawler can read: the name, the tagline, the 30 most-voted titles of each type as links, the legal links. The app removes it once it is up. |
 | `/{type}/{slug}` | `{type}/{slug}.html`, one per pool title (4,561 on 2026-10-10) | The app's own `ItemPage` rendered to HTML, with title, description, canonical, Open Graph, and JSON-LD (`Movie` / `TVSeries` / `VideoGame` + a two-step breadcrumb). 46 to 60 KB. |
 | `/legal/{en,de}/{privacy,terms,support,imprint}` | static pages | Written from `src/lib/legal`. The imprint is `noindex, nofollow, noarchive, nosnippet` twice over (meta tag and header) and out of the sitemap; its address is decoded in the browser. |
-| `/search`, `/library`, `/browse`, `/you`, `/item/{id}`, `/open/…`, `/auth/trakt`, an unknown `/{type}/{slug}` | the Worker → `app-shell.html` | The app with nothing else. `noindex`. |
+| `/discover`, `/calendar`, `/wishlist`, `/library`, `/profile`, `/settings`, `/item/{id}`, `/open/…`, `/auth/trakt`, an unknown `/{type}/{slug}` | the Worker → `app-shell.html` | The app with nothing else. `noindex`. The one-word addresses are the old site's. |
 | `/{type}/{uuid}` and `/{type}/{uuid}/{slug}` | the Worker → 308 | The addresses items had before 2026-08-21. Redirects to the stored slug, never the one in the link. |
 | `/v1/*` | the Worker → the API Worker (service binding) | Same origin for the app in a browser, so no preflight. |
 | anything else | the Worker → `404.html`, status 404 | |
@@ -84,6 +84,10 @@ Output is `mobile/web/dist/` (ignored by git): `app/` the Expo export, `site/` w
   `COEP: credentialless` at all, and an isolated page blocks the YouTube trailer in Firefox.
 - **A font URL in a static page is written `%40expo-google-fonts`.** Cloudflare answers a raw `@`
   in a path with a 307 to the encoded form.
+
+- **Stop the app's dev server before publishing.** Metro watches `mobile/`, the build's output folder included, and on Windows a watched folder cannot be renamed: the build's last step failed with `EPERM` for as long as `app-web` was running, retries and all. The moved route files also came back as OneDrive placeholders that Metro could not read (`EINVAL: readlink`) until they were rewritten.
+- **An upload can fail with `fetch failed` and be retried as is**: `node mobile/web/publish.mjs --skip-build`. It took three tries once. A change to the app re-uploads all 4,561 item pages, because each names the bundle's hashed file.
+- **A static item page carries both navigation bars** and its CSS shows the one for the window's width (`data-nav`), because a server cannot know the width. The app picks in JavaScript.
 
 ## What was checked, and what was not
 

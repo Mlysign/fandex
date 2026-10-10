@@ -11,12 +11,13 @@ code, in a browser.
 
 | Screen | Does | Data from |
 |---|---|---|
-| Calendar | One month of popular releases, grouped by day, with a type filter and month arrows. | Worker `/v1/calendar` |
-| Search | Three sections that answer independently: titles on the device, films and shows, games. | On-device SQLite, TMDB direct, Worker `/v1/search/games` |
-| Library | Three tabs. **Up next**: the next episode of each show you are part way through, with a tick that marks it watched. **Library** and **Wishlist**: by type, sorted by recency, your rating or title. Asks for sign-in when signed out. | On-device SQLite; Trakt for Up next |
-| Browse | The catalog on the device, most-voted first, by type, with your Fandex Score on each row when signed in. Works with no network. | On-device SQLite |
+| Home (`/`) | The type filter, then rails: Up next, Recommended for you, Popular right now, Upcoming. A guest panel when signed out. | Worker `/v1/calendar` (four months) and `/v1/lookup`, on-device SQLite, Trakt for Up next |
+| Search (`/discover`) | One field, one grid of poster cards, four sorts. Typing searches the device at once and the databases a moment later, merged. | On-device SQLite, TMDB direct, Worker `/v1/search/games` |
+| Wishlist (`/wishlist`) | Three tabs: Wishlist, Progress, Library. A grid with search within, five sorts and month dividers by release date; Progress is the next episode per show with a tick. Asks for sign-in when signed out. | On-device SQLite; Trakt for Progress |
+| Calendar (`/calendar`) | A month grid that fits the screen, a day's titles in a rail under it, three sources (wishlist, library, popular), a list view, swipe between months. | Worker `/v1/calendar`, on-device SQLite |
 | Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Signed in: your Fandex Score with the facets that made it, rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library. | Worker `/v1/items`, on-device SQLite, Trakt |
-| You | Sign in with Trakt, sign out, sync Trakt now, add the home-screen widget, what the device holds, when it last synced. | Trakt, Worker `/v1/auth`, `/v1/me` |
+| You (`/profile`) | Who you are, three counts, rows to your pages, Sign out, recently added, coming up, a rail of recommendations. Signed out it is the sign-in card. | On-device SQLite, Worker `/v1/me` |
+| Settings (`/settings`) | Sync Trakt now, add the home-screen widget, what the device holds, when it last synced, the legal links. Not at parity: it is the old device panel. | Trakt, Worker `/v1/auth`, `/v1/me` |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
@@ -24,6 +25,8 @@ Worker to resolve the provider id (fetching the title if nobody holds it) and th
 with the item page, so Back returns to the list.
 
 ### What was verified, and what was not
+
+⚠️ **The screens were rebuilt on 2026-10-10 to match the old site, and nothing below has been re-run since.** That pass was looked at signed out, in a browser. No APK was built from it, and no signed-in screen was seen: [app-parity.md](app-parity.md), "Not checked".
 
 Everything below ran on Nils's Pixel 8 on 2026-10-04, from the release APK, against the live Worker
 and his real Trakt account. The signed-out screens were also run in a browser.
@@ -65,6 +68,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
 
 ## How it is put together
 
+- **The screens are ports of the old site's components**, not designs of their own: `src/components/kit.tsx`, `cards.tsx`, `SubBar.tsx`, `AppNav.tsx` and `UpNext.tsx` each name the file they came from, and their numbers are that file's. What is and is not at parity is [app-parity.md](app-parity.md).
+- **Every screen is a child of `src/app/(tabs)/_layout.tsx`**, the item page and Settings too. That layout draws the navigation around the navigator (a bar at the bottom under 768 px, across the top from there) and switches the navigator's own tab bar off. A screen outside that folder has no navigation. ⚠️ These screens stay mounted, so one that takes an address parameter has to reset itself when the parameter changes: the item screen clears its item at the start of each load.
+- **A card's state is one query for the whole list** (`lib/cards.ts`, `useCardStates`), and its two buttons go through the item page's write path. A card for a title nobody holds yet (a calendar or search result) asks the Worker to find or fetch it first.
+- **The type filter is one choice for the whole app**, kept in the `meta` table under the site's own key, `rr_type_filter` (`lib/typeFilter.tsx`).
 - **`mobile/` is its own package.** Excluded from the site's `tsconfig.json`, eslint and Docker
   context. CI runs `tsc` and the tests as the `app` job.
 - **Two import prefixes.** `~/…` is the app's own `mobile/src`. `@/…` is the SITE's `src`, one
@@ -266,6 +273,7 @@ sideloading and is not a Play upload key.
   under it. The server's rows were intact and the next launch was fine. A failed pull now logs
   `rows_pull_failed` with the reason.
 
+- **In a browser the app runs in ONE tab at a time.** expo-sqlite's web build locks its whole storage folder for the tab that opened it, so a second tab could not start at all (seen on fandex.org, 2026-10-10). A different file name per tab does not help and neither does an in-memory database: the lock is taken when the library starts. `lib/dbName.ts` makes the limit explicit: the turn is a Web Lock, a second tab says "Fandex is open in another tab" and offers "Use Fandex here", and the first tab stands down by reloading. A static title page needs no turn. ⚠️ The real fix is one database worker shared by every tab. A tab still running a build from before 2026-10-10 holds the folder without the lock, and a new tab then ends on "Close or reload that tab".
 - **A fast reload in a browser can fail to open the database.** The SQLite file is locked by the
   page that opened it, and a reload starts the new page before the old one has let go
   (`NoModificationAllowedError`, then `Invalid VFS state` on a retry inside the same page). The app
@@ -273,5 +281,3 @@ sideloading and is not a Play upload key.
   an error with a retry after that. A proper fix is to wait on the old page's release before
   opening. Android is not affected.
 - **The web build's SQLite runs without cross-origin isolation, and the website sends no such headers on purpose.** Checked on the live build: `crossOriginIsolated` is false and the catalog synced. Safari has no `COEP: credentialless` at all, so the app has to work without it anyway. The dev server still sends the two headers (`metro.config.js`), which is why `Trailer.web.tsx` marks its frame `credentialless`.
-- **The Library screen has three rows of filter chips.** On the site the same filters collapse
-  into one chip each (the 2026-09-02 decision). Not carried over yet.

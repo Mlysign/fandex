@@ -37,6 +37,24 @@ export function longDate(date: string | null | undefined): string | null {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
 }
 
+/** "Nov 2026" for a YYYY-MM-DD: the date line on a poster card. "TBA" when there is none. */
+export function monthYear(date: string | null | undefined): string {
+  if (!date) return 'TBA';
+  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  return `${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
+}
+
+/** "Oct 10, 2026" for a YYYY-MM-DD or a unix time in seconds. */
+export function shortDate(date: string | number | null | undefined): string | null {
+  if (date == null) return null;
+  const d = typeof date === 'number' ? new Date(date * 1000) : new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return typeof date === 'number'
+    ? `${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${d.getFullYear()}`
+    : `${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
 export function todayIso(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }

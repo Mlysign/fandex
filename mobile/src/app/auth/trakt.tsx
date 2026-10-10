@@ -7,5 +7,5 @@
 import { Redirect } from 'expo-router';
 
 export default function TraktReturn() {
-  return <Redirect href="/you" />;
+  return <Redirect href="/profile" />;
 }

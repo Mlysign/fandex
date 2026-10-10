@@ -290,3 +290,12 @@ export async function searchCatalog(db: SQLiteDatabase, normTerm: string, limit 
     [`%${escaped}%`, normTerm, `${escaped}%`, limit],
   );
 }
+
+/**
+ * Every title on the device, as cards. A few hundred kilobytes for the whole
+ * pool, which is what lets Search filter and sort it without paging: a filter
+ * over one page of a list only finds what has already been scrolled past.
+ */
+export async function catalogCards(db: SQLiteDatabase): Promise<CatalogRow[]> {
+  return db.getAllAsync<CatalogRow>(`SELECT ${CARD_COLUMNS} FROM catalog`);
+}

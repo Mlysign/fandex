@@ -7,7 +7,7 @@
 //   /{type}/{uuid}[/{slug}]     the addresses items had before 2026-08-21. Every
 //                               link shared back then points at one. 308 to the
 //                               title's real address
-//   an app address              /search, /library, /item/…, and a /{type}/{slug}
+//   an app address              /discover, /wishlist, /item/…, and a /{type}/{slug}
 //                               too new to have a static page: the app's shell
 //   anything else               the 404 page
 //
@@ -22,8 +22,8 @@ interface Env {
 const TYPES = new Set(['movie', 'show', 'game']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
-/** The app's tabs, other than the first, which is `/` and a file. */
-const TABS = new Set(['search', 'library', 'browse', 'you']);
+/** The app's one-word screens, other than Home, which is `/` and a file. The site's own addresses. */
+const TABS = new Set(['discover', 'calendar', 'wishlist', 'library', 'profile', 'settings']);
 
 /** Is this an address only the app can answer? The route table is mobile/src/app. */
 function appRoute(parts: string[]): boolean {

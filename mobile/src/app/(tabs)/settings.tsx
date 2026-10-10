@@ -10,6 +10,7 @@ import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { LegalLinks } from '~/components/LegalLinks';
+import { SignIn } from '~/components/SignIn';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { deviceRegion } from '~/lib/region';
@@ -38,74 +39,6 @@ function ago(ms: number | null): string {
 }
 
 const PROVIDER_NAME: Record<string, string> = { trakt: 'Trakt', google: 'Google', steam: 'Steam' };
-
-function SignIn() {
-  const auth = useAuth();
-  const flow = auth.trakt;
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  if (flow.phase === 'waiting') {
-    // The page opens with the code already filled in. On Android it opens in a
-    // tab over the app, so closing it lands back here.
-    const url = activationUrl(flow);
-    const open = () => void (Platform.OS === 'web' ? Linking.openURL(url) : WebBrowser.openBrowserAsync(url));
-    const copy = () => void Clipboard.setStringAsync(flow.userCode).then(() => setCopied(true));
-    return (
-      <View style={styles.card}>
-        <T variant="serifSm">Confirm this code on Trakt</T>
-        <T variant="caption">
-          Open Trakt and the code is already filled in. Confirm it there and this screen carries on by itself. On another
-          device, go to trakt.tv/activate and type it.
-        </T>
-        <Pressable
-          onPress={copy}
-          accessibilityRole="button"
-          accessibilityLabel={`Code ${flow.userCode.split('').join(' ')}. Tap to copy.`}
-          style={({ pressed }) => [styles.codeBox, pressed && { opacity: 0.6 }]}>
-          <T variant="serifLg" style={styles.code}>{flow.userCode}</T>
-          <T variant="meta" style={{ color: copied ? color.accent : color.textMuted }}>{copied ? 'Copied' : 'Tap to copy'}</T>
-        </Pressable>
-        <View style={styles.actions}>
-          <Button label="Open Trakt" onPress={open} />
-          <Button label="Cancel" onPress={auth.cancelTraktSignIn} quiet />
-        </View>
-        <View style={styles.waiting}>
-          <ActivityIndicator size="small" color={color.accent} />
-          <T variant="caption">Waiting for Trakt…</T>
-        </View>
-      </View>
-    );
-  }
-
-  const busy = flow.phase === 'starting' || flow.phase === 'finishing';
-  return (
-    <View style={styles.card}>
-      <T variant="serifSm">Sign in</T>
-      <T variant="caption">
-        Your library, ratings and wishlist live in your Fandex account. Sign in with Trakt to bring them to this device.
-      </T>
-      {flow.phase === 'error' ? <T variant="caption" style={{ color: color.danger }}>{flow.message}</T> : null}
-      {busy ? (
-        <View style={styles.waiting}>
-          <ActivityIndicator size="small" color={color.accent} />
-          <T variant="caption">{flow.phase === 'starting' ? 'Waiting for Trakt…' : 'Signing you in…'}</T>
-        </View>
-      ) : (
-        <View style={styles.actions}>
-          <Button label="Sign in with Trakt" onPress={auth.startTraktSignIn} />
-          {/* The web build already signs in with a code, so there is nothing to fall back to. */}
-          {Platform.OS !== 'web' ? <Button label="Use a code instead" onPress={auth.startTraktCodeSignIn} quiet /> : null}
-        </View>
-      )}
-    </View>
-  );
-}
 
 function Account() {
   const auth = useAuth();
@@ -230,14 +163,14 @@ export default function YouScreen() {
 
   return (
     <Screen>
-      <ScreenTitle title="You" />
+      <ScreenTitle title="Settings" />
       <ScrollView contentContainerStyle={styles.scroll}>
         {auth.status === 'loading' ? (
           <View style={styles.group}><ActivityIndicator color={color.accent} /></View>
         ) : auth.status === 'signedIn' ? (
           <Account />
         ) : (
-          <SignIn />
+          <View style={styles.group}><SignIn /></View>
         )}
 
         <Divider />
