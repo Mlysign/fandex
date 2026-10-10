@@ -19,7 +19,7 @@ code, in a browser.
 | You (`/profile`) | Who you are, three counts, rows to your pages, Sign out, recently added, coming up, a rail of recommendations. Signed out it is the sign-in card. | On-device SQLite, Worker `/v1/me` |
 | Insights (`/insights`) | Your taste in numbers, from the rows on the device: overview, how you rate, the spread per medium, taste by era, you against the crowd, how you rate tags, people and studios, who turns up most. | On-device SQLite |
 | Tag, person, studio (`/tag/{key}`, `/person/{key}`, `/studio/{key}`) | What it is, the crowd's average and yours, and every title in the catalog that carries it. Reached from the item page's tags, cast and facts. | On-device SQLite |
-| Settings (`/settings`) | Sync Trakt now, add the home-screen widget, what the device holds, when it last synced, the legal links. Not at parity: it is the old device panel. | Trakt, Worker `/v1/auth`, `/v1/me` |
+| Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, the account, download and delete, the home-screen widget, what the device holds. Not there: "Your platforms", Import, joining accounts ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
@@ -83,6 +83,24 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   react-native-web keeps a bare `data-*` prop in the server render and drops it in the browser,
   so the static page gets its layout and the running app silently does not. `part()` in
   `components/itemLayout.ts` is the helper.
+- **Every write transaction goes through `inTransaction` (`lib/db.ts`), never
+  `db.withTransactionAsync` directly.** expo-sqlite's helper is a BEGIN and a COMMIT on the one
+  shared connection, and nothing stops a second caller starting in between: its BEGIN fails, its
+  ROLLBACK cancels the first caller's work, and that one then dies with "cannot rollback - no
+  transaction is active". The catalog download and the pull of your rows overlap in any tab or
+  install that is still downloading, and what the screen showed was "Could not refresh your
+  library" over 0 titles. `inTransaction` queues them.
+- **A screen that shows your rows must say when they are still arriving.** A fresh tab or a new
+  sign-in has an empty copy for some seconds. Insights said "No rated items" and the episode
+  tracker said "0 of 19 watched" in that window, and a tick made from the second one would have
+  been a second play on Trakt. `auth.rowsSyncing` is the flag; the tracker disables its ticks on
+  it. Its sibling: after a failed write, read the device again. Putting back a snapshot taken
+  before the request paints over rows that arrived while it was out.
+- **A show's episodes come from two places.** The Worker's `/v1/shows/{id}/episodes` holds the
+  seasons, and episode lists only for seasons somebody opened on the old site. For the rest the
+  item page asks TMDB from the device when a season is opened (`tmdbSeasonEpisodes`), which is
+  when the site asked. How many you have watched is counted from your own rows, never from the
+  episode list, so a season whose list is not loaded still reads right.
 - **`mobile/` is its own package.** Excluded from the site's `tsconfig.json`, eslint and Docker
   context. CI runs `tsc` and the tests as the `app` job.
 - **Two import prefixes.** `~/…` is the app's own `mobile/src`. `@/…` is the SITE's `src`, one
@@ -279,10 +297,9 @@ sideloading and is not a Play upload key.
   It is text only, the row swaps to "Marking … watched" for about a second, and it does not
   use the app's fonts.
 - **The web build is live as fandex.org since 2026-10-10** ([website.md](website.md)) and was checked there signed out: the calendar, Browse after a full catalog sync, the item page, an unknown address, the You tab. Still not looked at in a browser: sign-in, the Library, the score, rating and saving.
-- **Seen once, not explained:** the Library showed "0 titles" and "Could not refresh your
-  library" straight after a reinstall over a session whose database connection had been closed
-  under it. The server's rows were intact and the next launch was fine. A failed pull now logs
-  `rows_pull_failed` with the reason.
+- **Seen once, not explained:** during a look at the live site with saves blocked, the Trakt sync
+  logged `Database not found - nativeDatabaseId[2]` once, after I had moved between pages by
+  writing to `history` from the console. Not seen in normal use.
 
 - **A second browser tab runs on a database in memory.** expo-sqlite's web build keeps its files behind exclusive handles on a whole storage folder, so only the first tab of a site can open the stored database; a second tab threw at start and never drew anything (seen on fandex.org, 2026-10-10). `mobile/patches/expo-sqlite+57.0.3.patch` makes the library try four times (a reloaded page's old worker lets go within a second) and then carry on in memory. That tab fetches the catalog and your rows again, about thirty requests, and forgets them when it closes. ⚠️ Tried first and thrown away: a file per tab (the lock is on the folder) and a hand-over between tabs with a Web Lock (it deadlocked behind a background tab). The better fix is one database worker shared by every tab.
 - **A fast reload in a browser can fail to open the database.** The SQLite file is locked by the

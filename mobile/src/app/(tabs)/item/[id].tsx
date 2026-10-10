@@ -6,6 +6,7 @@ import { Bookmark, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 import { StarPicker } from '~/components/cards';
+import { EpisodeTracker } from '~/components/EpisodeTracker';
 import { ItemPage } from '~/components/ItemPage';
 import { Button } from '~/components/kit';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
@@ -19,7 +20,6 @@ import type { ScoreReason } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { dropItemPrerender } from '~/lib/prerender';
 import { useScores } from '~/lib/ScoreProvider';
-import { deviceRegion } from '~/lib/region';
 import { TraktAuthError } from '~/lib/trakt';
 import { color, radius, space } from '~/theme';
 
@@ -46,7 +46,8 @@ export default function ItemScreen() {
   const params = useLocalSearchParams<{ id?: string; type?: string; slug?: string }>();
   const known = params.id != null || PUBLIC_TYPES.has(params.type ?? '');
   const address = params.id ?? `${params.type}/${params.slug}`;
-  const region = useMemo(deviceRegion, []);
+  const auth = useAuth();
+  const region = auth.region;
   const router = useRouter();
   // The hero runs under the status bar and the page under Android's navigation
   // buttons, so the hero's buttons and the last line each have to clear one.
@@ -96,7 +97,6 @@ export default function ItemScreen() {
   // id, which the public address does not carry.
   const itemId = item?.id ?? null;
   const db = useSQLiteContext();
-  const auth = useAuth();
   const [mine, setMine] = useState<Awaited<ReturnType<typeof itemStateFor>> | null>(null);
   useEffect(() => {
     let live = true;
@@ -245,6 +245,7 @@ export default function ItemScreen() {
       <ItemPage
         item={item}
         personal={personal}
+        progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}

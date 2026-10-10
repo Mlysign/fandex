@@ -27,7 +27,6 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
 import type { CatalogRow } from '~/lib/db';
 import { lookupHeld, toCard } from '~/lib/homeFeed';
-import { deviceRegion } from '~/lib/region';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -182,7 +181,7 @@ export default function CalendarScreen() {
   const auth = useAuth();
   const catalog = useCatalogSync();
   const types = useTypeFilter();
-  const region = useMemo(deviceRegion, []);
+  const { region } = useAuth();
   const { width } = useWindowDimensions();
   const desktop = width >= breakpoint.md;
   const signedIn = auth.status === 'signedIn';

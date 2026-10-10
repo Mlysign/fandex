@@ -58,7 +58,10 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 
 if (!flag('skip-export')) {
   step('exporting the app for the web');
-  fs.rmSync(APP, { recursive: true, force: true });
+  // The checkout is in OneDrive, which holds a file open while it uploads it. A
+  // build started soon after the last one found `metadata.json` locked for
+  // about half a minute, so the delete waits up to a minute before giving up.
+  fs.rmSync(APP, { recursive: true, force: true, maxRetries: 20, retryDelay: 3000 });
   execSync('npx expo export --platform web --output-dir web/dist/app', {
     cwd: mobile,
     stdio: ['ignore', 'ignore', 'inherit'],

@@ -6,14 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCardStates, type CardItem } from '~/lib/cards';
 import { genreFacets, loadHomeFeed, recommend, type HomeFeed } from '~/lib/homeFeed';
-import { deviceRegion } from '~/lib/region';
 import { useScores } from '~/lib/ScoreProvider';
 
 export function useHomeRails() {
   const db = useSQLiteContext();
   const auth = useAuth();
   const scores = useScores();
-  const region = useMemo(deviceRegion, []);
+  const { region } = useAuth();
 
   const [feed, setFeed] = useState<HomeFeed | null>(null);
   const [failed, setFailed] = useState(false);

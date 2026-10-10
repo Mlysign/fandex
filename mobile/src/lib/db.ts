@@ -257,6 +257,26 @@ export async function shelfCounts(db: SQLiteDatabase): Promise<{ library: number
 }
 
 /** Everything this device knows about your relationship to one title. */
+let writes: Promise<unknown> = Promise.resolve();
+
+/**
+ * A write transaction, one at a time.
+ *
+ * expo-sqlite's `withTransactionAsync` is a BEGIN and a COMMIT on the one shared
+ * connection, with nothing stopping a second caller from starting in between.
+ * The catalog download and the pull of your rows both use one, and when they
+ * overlap the second BEGIN fails, its ROLLBACK cancels the FIRST caller's work,
+ * and that one then fails with "cannot rollback - no transaction is active".
+ * On the screen that was "Could not refresh your library" over 0 titles, in any
+ * tab that was still downloading the catalog. Every transaction goes through
+ * here, so they queue instead.
+ */
+export function inTransaction(db: SQLiteDatabase, task: () => Promise<void>): Promise<void> {
+  const run = writes.then(() => db.withTransactionAsync(task));
+  writes = run.catch(() => undefined);
+  return run;
+}
+
 export async function itemStateFor(db: SQLiteDatabase, id: string): Promise<{
   inLibrary: boolean; inWishlist: boolean; rating: number | null; status: string | null;
 }> {

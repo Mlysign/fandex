@@ -40,3 +40,33 @@ export async function searchTmdb(query: string, signal?: AbortSignal): Promise<P
     }))
     .sort((a, b) => b.votes - a.votes);
 }
+
+export interface SeasonEpisode {
+  season: number;
+  episode: number;
+  title: string | null;
+  airDate: string | null;
+  runtimeMinutes: number | null;
+}
+
+/**
+ * One season's episodes, for a season the Worker's catalog has no list for. The
+ * site filled a season the first time somebody opened it, so most seasons were
+ * never stored; the device asks TMDB the same question instead.
+ */
+export async function tmdbSeasonEpisodes(tmdbId: string, season: number, signal?: AbortSignal): Promise<SeasonEpisode[]> {
+  if (!tmdbConfigured()) throw new Error('TMDB is not set up in this build.');
+  const res = await fetch(`${BASE}/tv/${encodeURIComponent(tmdbId)}/season/${season}?api_key=${TMDB_API_KEY}`, { signal });
+  if (!res.ok) throw new Error(`TMDB season answered ${res.status}`);
+  const data = (await res.json()) as { episodes?: any[] };
+  return (data.episodes ?? [])
+    .filter((e) => e && Number.isInteger(e.episode_number))
+    .map((e): SeasonEpisode => ({
+      season,
+      episode: e.episode_number,
+      title: typeof e.name === 'string' && e.name ? e.name : null,
+      airDate: typeof e.air_date === 'string' && e.air_date ? e.air_date : null,
+      runtimeMinutes: typeof e.runtime === 'number' ? e.runtime : null,
+    }))
+    .sort((a, b) => a.episode - b.episode);
+}

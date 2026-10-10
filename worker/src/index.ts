@@ -29,11 +29,11 @@
 //     DELETE /v1/me
 
 import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
-import { buildAccountExportJson, deleteAccount, type MergeResolution } from "./account";
-import { clearedSessionCookie, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
+import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
+import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
-import { spent } from "./budget";
+import { capFrom, spend, spent } from "./budget";
 import { calendarMonth } from "./calendar";
 import { catalogDeltaJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
@@ -42,7 +42,7 @@ import { nowSeconds } from "./d1";
 import type { Env } from "./env";
 import { allow, BodyError, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
-  applyStateWrite, BadRequest, episodeStateJson, hiddenJson, itemStateJson, parsePrefs,
+  applyStateWrite, BadRequest, DEFAULT_DAILY_USER_WRITE_CAP, episodeStateJson, hiddenJson, itemStateJson, parsePrefs,
   parseStateWrite, profileJson, stateCounts, writePrefs,
 } from "./me";
 
@@ -331,6 +331,25 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
     }
   }
 
+  if (b === "identities" && d && method === "DELETE") {
+    if (!(await allow(c.env.RL_WRITE, `write:${userId}`))) return error(429, "rate-limited");
+    const out = await disconnectIdentity(db, userId, d.toLowerCase(),
+      (rows) => spend(db, "user_writes", capFrom(c.env.DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP), rows));
+    if (!out.ok) {
+      if (out.reason === "not-connected") return error(404, "not-connected");
+      if (out.reason === "only-login") return error(409, "only-login", "Cannot disconnect your only login method");
+      return error(503, "budget-exhausted", "Fandex cannot save more changes until tomorrow (UTC).");
+    }
+    // Every token minted before this is dead, the caller's included: one of
+    // them may have come from the identity that just went. The answer carries
+    // the replacement, signed in through an identity that is still there.
+    await bumpSessionEpoch(db, userId);
+    const user = { userId, provider: out.remaining.provider, displayName: out.remaining.displayName };
+    const token = await createSession(c.env, user);
+    const headers: Record<string, string> = { ...PRIVATE };
+    if (trustedOrigin(c.env, c.request)) headers["Set-Cookie"] = sessionCookie(token);
+    return json({ ok: true, removedRows: out.removedRows, token, user }, 200, headers);
+  }
   if (b === "export" && method === "GET") {
     const body = await buildAccountExportJson(db, userId);
     if (!body) return error(401, "unauthorized");

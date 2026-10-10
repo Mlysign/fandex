@@ -24,6 +24,8 @@ interface TypeFilter {
   toggle: (type: string) => void;
   /** The "all" circle: clear the pick, or widen it when the account tracks only some types. */
   selectAll: () => void;
+  /** Drop the chip selection, so the account's default shows again. */
+  reset: () => void;
   isVisible: (type: string) => boolean;
 }
 
@@ -57,6 +59,7 @@ export function TypeFilterProvider({ children }: { children: ReactNode }) {
       stored,
       shown,
       toggle: (type) => save(active.includes(type) ? active.filter((t) => t !== type) : [...active, type]),
+      reset: () => save([]),
       selectAll: () => save(enabledMediaTypes(stored).length === MEDIA_TYPES.length ? [] : [...MEDIA_TYPES]),
       isVisible: (type) => shown.includes(type as never),
     };

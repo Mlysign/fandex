@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  accountFootprint, buildAccountExportJson, declaresUserId, deleteAccount, userScopedTables,
+  accountFootprint, buildAccountExportJson, declaresUserId, deleteAccount, disconnectIdentity, userScopedTables,
 } from "../src/account";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import { count, db, gameItem, movieItem, showItem, wipe } from "./helpers";
@@ -143,5 +143,47 @@ describe("export", () => {
     const ex = JSON.parse((await buildAccountExportJson(db, "empty"))!);
     expect(ex).toMatchObject({ identities: [], itemState: [], episodes: [], hidden: [] });
     expect(ex.user.platforms).toEqual([]);
+  });
+});
+describe("disconnecting a way of signing in", () => {
+  it("refuses the last one, and changes nothing", async () => {
+    await seedUser("u1", "g-1");
+    expect(await disconnectIdentity(db, "u1", "google")).toEqual({ ok: false, reason: "only-login" });
+    expect(await count("user_identities", "user_id = 'u1'")).toBe(1);
+    expect(await count("user_item_state", "user_id = 'u1'")).toBe(2);
+  });
+
+  it("says so when the provider was never connected", async () => {
+    await seedUser("u1", "g-1");
+    expect(await disconnectIdentity(db, "u1", "trakt")).toEqual({ ok: false, reason: "not-connected" });
+  });
+
+  it("removes the identity and that source's rows, and nobody else's", async () => {
+    await seedUser("u1", "g-1");
+    await seedUser("u2", "g-2");
+    await db.batch([
+      db.prepare("INSERT INTO user_identities (provider, provider_user_id, user_id, display_name) VALUES ('trakt', 't-1', 'u1', 'nils')"),
+      db.prepare("INSERT INTO user_identities (provider, provider_user_id, user_id, display_name) VALUES ('trakt', 't-2', 'u2', 'other')"),
+    ]);
+    const charged: number[] = [];
+    const out = await disconnectIdentity(db, "u1", "trakt", async (rows) => { charged.push(rows); return true; });
+    expect(out).toEqual({ ok: true, removedRows: 1, remaining: { provider: "google", displayName: "Nils" } });
+    // One row plus the identity itself.
+    expect(charged).toEqual([2]);
+    expect(await count("user_identities", "user_id = 'u1'")).toBe(1);
+    expect(await count("user_item_state", "user_id = 'u1' AND source = 'trakt'")).toBe(0);
+    // The row that came from somewhere else stays, and so do the episodes.
+    expect(await count("user_item_state", "user_id = 'u1' AND source = 'local'")).toBe(1);
+    expect(await count("user_episode_state", "user_id = 'u1'")).toBe(1);
+    expect(await count("user_identities", "user_id = 'u2'")).toBe(2);
+    expect(await count("user_item_state", "user_id = 'u2' AND source = 'trakt'")).toBe(1);
+  });
+
+  it("deletes nothing when the day's write budget says no", async () => {
+    await seedUser("u1", "g-1");
+    await db.prepare("INSERT INTO user_identities (provider, provider_user_id, user_id) VALUES ('trakt', 't-1', 'u1')").run();
+    expect(await disconnectIdentity(db, "u1", "trakt", async () => false)).toEqual({ ok: false, reason: "budget" });
+    expect(await count("user_identities", "user_id = 'u1'")).toBe(2);
+    expect(await count("user_item_state", "user_id = 'u1' AND source = 'trakt'")).toBe(1);
   });
 });

@@ -39,9 +39,9 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
 | Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). "Available on" in the Filters sheet. People and tag results. Scroll and query restored on Back. |
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
-| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. Episode tracker. The two related rails. |
+| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. The two related rails. |
 | Profile | partial | The Support Fandex row. |
-| Settings | **no** | It is the old device panel under a new address. Connected accounts as panels, country, default types, your platforms, download and delete. |
+| Settings | partial | "Your platforms" (it narrows "Available on", and the device holds no platforms for either). The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. |
 | Facet pages (tag, person, studio) | partial | A person's photo and biography, "also known as", "you score X higher than the crowd", titles the catalog does not hold. No static page yet, so a crawler gets the app's shell. |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
 | Import, admin pages | **no** | All of it. |
@@ -60,12 +60,32 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **Settings**, with export and delete. | The privacy policy points at an email address until these two buttons exist. |
-| 2 | **"Available on"** in the Filters sheet. | The catalog copy on the device does not carry platforms or streaming services; the Worker's delta has to send them first. |
-| 3 | **The item page's rest**: score panel, episode tracker, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
+| 1 | **The admin pages** (`/dev/scoring`, `/dev/users`, `/dev/analytics`). | Nils asked for them on 2026-10-10. Nothing of them exists on the new stack: see "The admin pages" below. |
+| 2 | **"Available on"** in the Filters sheet, and with it **"Your platforms"** in Settings. | One feature in two places. The catalog copy on the device carries no platforms or streaming services, and streaming is per country: the Worker's stored page is the US one. Price the query before building it (see below). |
+| 3 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
 | 4 | **Static facet pages**, a person's photo and biography, and Popular people on Home. | The screens and the links to them exist; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
 | 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 6 | **Import, sign-in beyond Trakt, admin, and the rest of Insights.** | Insights is computed on the device and needs no route. |
+
+## The admin pages
+
+Not built, and not a port: the old pages were 3,000 lines of screens over thirteen routes that
+edited tables on the server the same process then scored from. On the new stack each piece needs a
+decision first.
+
+- **Who is an admin.** The site read `SCORING_ADMIN_USER_IDS`. The Worker has no such variable and
+  no admin route.
+- **`/dev/users`.** Counts over `users`, `user_identities` and the state tables. One read route.
+- **`/dev/analytics`.** `page_view_daily`, `referrer_daily` and `crawler_view_daily` came across
+  with their history and nothing writes to them: the Worker has no beacon. The page would show
+  numbers that stop on 2026-10-04. Cloudflare's own analytics is the live source now.
+- **`/dev/scoring`.** Weights, categories, aliases, labels and franchises are tables in D1 and the
+  app reads them through `/v1/taxonomy`. Editing one is a few row writes. ⚠️ What an edit CHANGES
+  is the hard part: `item_doc.vector` and `facets` are written once per item, with the aliases of
+  that moment folded in. The site re-derived in memory on the next request. Here an alias or a
+  category move has to rewrite every item that carries the tag, and a row write is the budget
+  (docs/worker.md). Decide whether aliases are applied on the device instead before building any
+  of it.
 
 ## The kit
 
@@ -97,11 +117,12 @@ Checked against `worker/src/index.ts`.
 - Franchise members (`franchise_members` is built and not applied, docs/worker.md).
 - The platform survey behind "Your platforms" and the "available on" counts.
 - Steam (sign-in and owned games), the import, telemetry, and every admin write.
-- Episodes for a show resolved after the seed.
+- Episodes for most seasons. The site stored a season's episodes the first time somebody opened
+  it, so D1 holds them for those seasons only. The app asks TMDB for the rest, from the device.
+- A way to disconnect that also removes episode rows (the site left them too).
 
-Routes that exist and the app does not call: `PUT /v1/me/prefs`, `GET /v1/me/export`,
-`DELETE /v1/me`, `POST /v1/auth/google`, `POST /v1/auth/merge`, `GET /v1/shows/{id}/episodes`,
-and the `hidden` half of `PUT /v1/me/state`.
+Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, and
+the `hidden` half of `PUT /v1/me/state`.
 
 ⚠️ Every new route is priced in D1 row writes and Worker CPU before it is built (docs/worker.md).
 
@@ -118,12 +139,13 @@ Parity must not cost any of these.
 
 ## Not checked
 
-- **Writes, signed in.** Seen on Nils's account in his Chrome on 2026-10-10, looking only: Home
-  with Up next and the recommendations, Search with his ratings on the cards, the item page in
-  two columns, a person page, Insights, the Filters sheet narrowing 4,561 titles to 496. A
-  rating was clicked with every save blocked in that tab, to see the request it would send
-  (the right one). Nothing was actually rated, saved or ticked.
-- **The phone, beyond its first screen.** An APK of this pass is on the Pixel 8 and opens on Home
-  with Up next and the recommendations. The first build crashed at launch on a web-only
-  accessibility role, which no browser check could have shown. No other screen was opened there.
+- **Writes, signed in.** Seen on Nils's account in his Chrome on 2026-10-10, with every save
+  blocked in that tab: Home, Search, the item page in two columns, a person page, Insights, the
+  Filters sheet, Settings with its three connected accounts, and a show's "Your progress" (19 of
+  19 on a show he has finished, a season's episodes loading from TMDB). Clicking a rating and
+  un-ticking an episode sent Trakt the right requests. Nils has since rated a film for real, and
+  it worked. **Never run for real by anybody: an episode tick from the item page, Disconnect,
+  Download, Delete, a change of country or default types.**
+- **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
+  have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.

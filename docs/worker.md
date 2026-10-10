@@ -39,7 +39,13 @@ Sign-in: `POST /v1/auth/google {idToken}`, `POST /v1/auth/trakt {accessToken}`,
 
 Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/me/state/{items|episodes|hidden|counts}`, `PUT /v1/me/state`, `GET /v1/me/export`,
-`DELETE /v1/me`.
+`DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`.
+
+`DELETE /v1/me/identities/{provider}` removes one way of signing in and the wishlist and library
+rows that came from it (episode rows stay, as on the site). It refuses the last identity with
+`409 only-login`. It ends every session and answers with a new token, minted from an identity that
+is still there, so the caller stays signed in. The rows it deletes are charged to the day's
+`user_writes` budget before anything is deleted.
 
 A session is a JWT. The app sends it as `Authorization: Bearer`; a browser on an allowed origin
 also gets it as an `HttpOnly` cookie. A state-changing request on a cookie session must carry an

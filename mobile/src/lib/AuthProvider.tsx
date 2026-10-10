@@ -15,9 +15,10 @@
 
 import { useSQLiteContext } from 'expo-sqlite';
 import * as WebBrowser from 'expo-web-browser';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform } from 'react-native';
-import { api, ApiError, setSessionToken, type Profile } from '~/lib/api';
+import { api, ApiError, setSessionToken, type PrefsPatch, type Profile } from '~/lib/api';
+import { deviceRegion } from '~/lib/region';
 import { traktConfigured } from '~/lib/config';
 import { clearState, syncState } from '~/lib/stateSync';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
@@ -62,6 +63,14 @@ interface Auth {
   rowsChanged: () => void;
   traktSync: TraktSyncState;
   syncTraktNow: () => void;
+  /** The country release dates and "where to watch" use: the account's, or the device's until one is chosen. */
+  region: string;
+  /** Save a preference to the account. Throws when it did not save. */
+  savePrefs: (patch: PrefsPatch) => Promise<void>;
+  /** Remove a way of signing in and the rows that came from it. Throws with the reason when refused. */
+  disconnect: (provider: string) => Promise<void>;
+  /** Delete the account and everything Fandex holds for it, then forget it on this device. */
+  deleteAccount: () => Promise<void>;
 }
 
 export interface TraktSyncState {
@@ -313,6 +322,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTrakt({ phase: 'idle' });
   }, [forget]);
 
+  const fallbackRegion = useMemo(deviceRegion, []);
+  const region = profile?.user.country ?? fallbackRegion;
+
+  const savePrefs = useCallback(async (patch: PrefsPatch) => {
+    setProfile(await api.savePrefs(patch));
+  }, []);
+
+  const disconnect = useCallback(async (provider: string) => {
+    const out = await api.disconnect(provider);
+    // The old token died with the disconnect. The answer carries its replacement.
+    await secretSet(SESSION_KEY, out.token);
+    setSessionToken(out.token);
+    if (provider === 'trakt') {
+      await Promise.all([clearTraktTokens(), clearTraktSync(db), clearUpNext(db)]);
+      setTraktSync({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
+    }
+    setProfile(await api.me().catch(() => null));
+    await pullRows(true);
+  }, [db, pullRows]);
+
+  const deleteAccount = useCallback(async () => {
+    flow.current++;
+    await api.deleteAccount();
+    await forget();
+    setTrakt({ phase: 'idle' });
+  }, [forget]);
+
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
   const syncTraktNow = useCallback(() => void runTraktSync(false), [runTraktSync]);
   const rowsChanged = useCallback(() => setRowsRevision((r) => r + 1), []);
@@ -344,6 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
+      region, savePrefs, disconnect, deleteAccount,
     }}>
       {children}
     </Ctx.Provider>

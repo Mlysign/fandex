@@ -15,7 +15,7 @@
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api, type EpisodeStateRow, type ItemStateRow, type StateCounts, type StateWrite } from '~/lib/api';
-import { getMeta, setMeta } from '~/lib/db';
+import { getMeta, setMeta, inTransaction } from '~/lib/db';
 
 const SIGNATURE_KEY = 'state_signature';
 /** A runaway guard. The Worker pages at 3,000 rows; no account is this many pages. */
@@ -69,7 +69,7 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
   // Everything, in memory, BEFORE the first local write. See the header.
   const [items, episodes, hidden] = await Promise.all([allItems(), allEpisodes(), api.stateHidden()]);
 
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM item_state');
     await db.runAsync('DELETE FROM episode_state');
     await db.runAsync('DELETE FROM hidden_item');
@@ -122,7 +122,7 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
  */
 export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     for (const k of write.items?.delete ?? []) {
       await db.runAsync('DELETE FROM item_state WHERE media_item_id = ? AND source = ? AND relation = ?', [k.mediaItemId, k.source, k.relation]);
     }
@@ -153,7 +153,7 @@ export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Pr
 
 /** Signing out: the device forgets the account's rows. The Worker's copy is untouched. */
 export async function clearState(db: SQLiteDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM item_state');
     await db.runAsync('DELETE FROM episode_state');
     await db.runAsync('DELETE FROM hidden_item');

@@ -215,32 +215,55 @@ export async function upNextPending(db: SQLiteDatabase): Promise<number> {
 }
 
 /**
- * Tick an episode as watched: Trakt, then the Worker, then this device, then
- * ask Trakt what is next for that show. The same order as every other write,
- * for the same reason (itemActions.ts).
+ * Mark episodes of one show watched or unwatched: Trakt, then the Worker, then
+ * this device, then ask Trakt what is next for that show. The same order as
+ * every other write, for the same reason (itemActions.ts).
+ *
+ * Every episode is named. Trakt can mark "a whole season" in one word, and then
+ * what it marked is its own list, not ours: the rows saved here would be a guess
+ * at what the provider did.
  */
-export async function markEpisodeWatched(db: SQLiteDatabase, entry: Pick<UpNextEntry, 'mediaItemId' | 'season' | 'episode'>): Promise<void> {
-  const traktId = await traktIdOf(db, entry.mediaItemId);
+export async function setEpisodesWatched(
+  db: SQLiteDatabase,
+  mediaItemId: string,
+  episodes: { season: number; episode: number }[],
+  watched: boolean,
+): Promise<void> {
+  if (!episodes.length) return;
+  const traktId = await traktIdOf(db, mediaItemId);
   if (traktId == null) throw new Error('This show is not linked to Trakt, so the episode could not be marked.');
   const token = await traktAccessToken();
   const now = Math.floor(Date.now() / 1000);
-  await traktPost('/sync/history', token, {
-    shows: [{ ids: { trakt: traktId }, seasons: [{ number: entry.season, episodes: [{ number: entry.episode }] }] }],
-  });
-  const write = { episodes: { upsert: [{ mediaItemId: entry.mediaItemId, season: entry.season, episode: entry.episode, watchedAt: now, sources: ['trakt'] }] } };
+
+  const bySeason = new Map<number, number[]>();
+  for (const e of episodes) bySeason.set(e.season, [...(bySeason.get(e.season) ?? []), e.episode]);
+  const seasons = [...bySeason].map(([number, list]) => ({ number, episodes: list.map((n) => ({ number: n })) }));
+  await traktPost(watched ? '/sync/history' : '/sync/history/remove', token, { shows: [{ ids: { trakt: traktId }, seasons }] });
+
+  const write = watched
+    ? { episodes: { upsert: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode, watchedAt: now, sources: ['trakt'] })) } }
+    : { episodes: { delete: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode })) } };
   await api.writeState(write);
   await applyLocalWrite(db, write);
 
-  const count = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM episode_state WHERE media_item_id = ?', [entry.mediaItemId]);
-  const show: ShowWatch = { mediaItemId: entry.mediaItemId, watchedCount: count?.n ?? 0, lastWatchedAt: now };
+  const left = await db.getFirstAsync<{ n: number; last: number | null }>(
+    'SELECT COUNT(*) n, MAX(watched_at) last FROM episode_state WHERE media_item_id = ?', [mediaItemId],
+  );
   try {
-    await checkShow(db, token, show, now);
+    // Nothing watched any more: the show is no longer in progress.
+    if (!left?.n) await db.runAsync('DELETE FROM up_next WHERE media_item_id = ?', [mediaItemId]);
+    else await checkShow(db, token, { mediaItemId, watchedCount: left.n, lastWatchedAt: watched ? now : left.last }, now);
   } catch {
     // The tick is saved. Drop the stale answer so the list does not offer the
     // episode that was just watched; the next run asks again.
-    await db.runAsync('DELETE FROM up_next WHERE media_item_id = ?', [entry.mediaItemId]);
+    await db.runAsync('DELETE FROM up_next WHERE media_item_id = ?', [mediaItemId]);
   }
   await publishWidget(db);
+}
+
+/** The Up next row's tick, and the widget's. */
+export function markEpisodeWatched(db: SQLiteDatabase, entry: Pick<UpNextEntry, 'mediaItemId' | 'season' | 'episode'>): Promise<void> {
+  return setEpisodesWatched(db, entry.mediaItemId, [{ season: entry.season, episode: entry.episode }], true);
 }
 
 /** Signing out: the next account must not see this one's shows. */

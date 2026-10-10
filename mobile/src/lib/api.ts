@@ -272,6 +272,12 @@ export const api = {
       `/v1/me/state/episodes${q({ afterItem: after?.mediaItemId, afterSeason: after?.season, afterEpisode: after?.episode })}`,
     ),
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
+  showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
+  savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
+  exportAccount: () => request<Record<string, unknown>>('/v1/me/export'),
+  deleteAccount: () => request<{ deleted: boolean }>('/v1/me', { method: 'DELETE' }),
+  disconnect: (provider: string) =>
+    request<{ ok: true; removedRows: number; token: string; user: SessionUser }>(`/v1/me/identities/${provider}`, { method: 'DELETE' }),
 
   /** Which of these provider ids the catalog holds. Never fetches. At most 2,000 refs. */
   lookup: (refs: ProviderRef[]) => request<LookupResult>('/v1/lookup', json('POST', { refs })),
@@ -307,3 +313,14 @@ export interface StateWrite {
   hidden?: { add?: string[]; remove?: string[] };
 }
 export interface StateWriteResult { ok: true; applied: Record<string, number>; skipped: number }
+
+
+/** The episode catalog for one show. Empty lists for a show resolved after the seed. */
+export interface ShowEpisodes {
+  item: { id: string; type: string };
+  seasons: { season: number; name: string | null; episodeCount: number; airDate: string | null }[];
+  episodes: { season: number; episode: number; title: string | null; airDate: string | null; runtimeMinutes: number | null }[];
+}
+
+/** A field left out is left alone; null clears it. */
+export interface PrefsPatch { country?: string | null; platforms?: string[] | null; mediaTypes?: string[] | null }

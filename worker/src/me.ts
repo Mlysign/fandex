@@ -25,7 +25,7 @@ export const MAX_ROWS_PER_WRITE = 2000;
 export const STATE_PAGE_DEFAULT = 3000;
 export const STATE_PAGE_MAX = 4000;
 /** User-state row writes allowed per UTC day, across everyone. See budget.ts. */
-const DEFAULT_DAILY_USER_WRITE_CAP = 40_000;
+export const DEFAULT_DAILY_USER_WRITE_CAP = 40_000;
 
 const RELATIONS = new Set(["wishlist", "library", "ignored"]);
 const SOURCES = new Set(["trakt", "tmdb", "steam", "rawg", "igdb", "letterboxd", "local"]);

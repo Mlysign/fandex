@@ -12,7 +12,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { normalizeName } from '@/lib/normalize';
 import { api, type DeltaCursor } from '~/lib/api';
-import { catalogCount, getMeta, setMeta } from '~/lib/db';
+import { catalogCount, getMeta, setMeta, inTransaction } from '~/lib/db';
 
 const CURSOR_KEY = 'catalog_cursor';
 const LAST_SYNC_KEY = 'catalog_synced_at';
@@ -51,7 +51,7 @@ export async function lastSyncedAt(db: SQLiteDatabase): Promise<number | null> {
 
 /** Forget everything and start again from zero on the next sync. */
 export async function resetCatalog(db: SQLiteDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM catalog');
     await db.runAsync('DELETE FROM meta WHERE key IN (?, ?)', [CURSOR_KEY, LAST_SYNC_KEY]);
   });
@@ -72,7 +72,7 @@ export async function syncCatalog(
     const res = await api.catalogDelta(cursor, PAGE_SIZE, true);
 
     if (res.items.length) {
-      await db.withTransactionAsync(async () => {
+      await inTransaction(db, async () => {
         const insert = await db.prepareAsync(
           `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, year,
                                 community_score, community_votes, updated_at, vector, facets)

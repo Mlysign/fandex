@@ -86,6 +86,7 @@ Output is `mobile/web/dist/` (ignored by git): `app/` the Expo export, `site/` w
   in a path with a 307 to the encoded form.
 
 - **Stop the app's dev server before publishing.** Metro watches `mobile/`, the build's output folder included, and on Windows a watched folder cannot be renamed: the build's last step failed with `EPERM` for as long as `app-web` was running, retries and all. The moved route files also came back as OneDrive placeholders that Metro could not read (`EINVAL: readlink`) until they were rewritten.
+- **A build started straight after another can wait up to a minute at "exporting the app".** The checkout is in OneDrive, which holds a file open while it uploads it; `build.mjs` retries the delete of the last export instead of failing with `EPERM`.
 - **An upload can fail with `fetch failed` and be retried as is**: `node mobile/web/publish.mjs --skip-build`. It failed five times in a row once, on 250 MB.
 - **A static page names `/app-boot.js`, never the app's bundle.** The bundle's file name changes with every build of the app; a page that carried it was rewritten and re-uploaded each time, all 4,561 of them. `app-boot.js` is the one small file that knows the current name. A change to the app now uploads six files. A change to `ItemPage`, `AppNav` or `itemLayout.ts` still rewrites every page, because it changes their HTML.
 - **A static item page carries both navigation bars** and its CSS shows the one for the window's width (`data-nav`), because a server cannot know the width. The app picks in JavaScript.

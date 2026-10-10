@@ -219,6 +219,46 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
   );
 }
 
+// ── Disconnect ──────────────────────────────────────────────────────────────
+
+export type DisconnectResult =
+  | { ok: false; reason: "not-connected" | "only-login" | "budget" }
+  | { ok: true; removedRows: number; remaining: { provider: string; displayName: string | null } };
+
+/**
+ * Remove one way of signing in, and the wishlist and library rows that came
+ * from it. The site's rule, kept: the last identity cannot go, because an
+ * account nobody can sign in to is a deleted account with its data still held.
+ * Deleting the account is its own route.
+ *
+ * `charge` is asked before anything is deleted, with the number of rows the
+ * delete will write. Episode rows stay, as they did on the site.
+ */
+export async function disconnectIdentity(
+  db: D1Database,
+  userId: string,
+  provider: string,
+  charge: (rows: number) => Promise<boolean> = async () => true,
+): Promise<DisconnectResult> {
+  const identities = await all<{ provider: string; display_name: string | null }>(
+    db, "SELECT provider, display_name FROM user_identities WHERE user_id = ? ORDER BY created_at", [userId],
+  );
+  if (!identities.some((i) => i.provider === provider)) return { ok: false, reason: "not-connected" };
+  const remaining = identities.find((i) => i.provider !== provider);
+  if (!remaining) return { ok: false, reason: "only-login" };
+
+  const rows = (await first<{ n: number }>(
+    db, "SELECT COUNT(*) n FROM user_item_state WHERE user_id = ? AND source = ?", [userId, provider],
+  ))?.n ?? 0;
+  if (!(await charge(rows + 1))) return { ok: false, reason: "budget" };
+
+  await db.batch([
+    db.prepare("DELETE FROM user_identities WHERE user_id = ? AND provider = ?").bind(userId, provider),
+    db.prepare("DELETE FROM user_item_state WHERE user_id = ? AND source = ?").bind(userId, provider),
+  ]);
+  return { ok: true, removedRows: rows, remaining: { provider: remaining.provider, displayName: remaining.display_name } };
+}
+
 // ── Merge ───────────────────────────────────────────────────────────────────
 
 export async function providersFor(db: D1Database, userId: string): Promise<string[]> {

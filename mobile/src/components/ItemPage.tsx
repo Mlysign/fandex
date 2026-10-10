@@ -279,10 +279,12 @@ function ScorePill({ label, value, href, hint }: { label: string; value: string;
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
+export function ItemPage({ item, personal, progress, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
   item: ItemDetail;
   /** Rendered between the score pills and the synopsis. */
   personal?: ReactNode;
+  /** A show's episode tracker. Full width, above the sections, where the site had it. */
+  progress?: ReactNode;
   /** Rendered after the last line of the page. The website's legal links. */
   footer?: ReactNode;
   /** Follow a link to a tag, person or studio page without a page load. Left out on a static page, where the links are anchors. */
@@ -427,6 +429,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
       </View>
 
       <View {...part('lower')} style={styles.lower}>
+        {progress}
         {m.trailerYoutubeKey ? (
           <View>
             <SectionHeading>Trailer</SectionHeading>
