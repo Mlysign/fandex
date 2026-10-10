@@ -131,7 +131,7 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 | Domain + OAuth + email (fandex.org) | ✅ |
 | Backups | ✅ D1 Time Travel (7 days) and a nightly export to R2 in the EU, restore drill passed 2026-10-05. ⚠️ The exports are kept forever until the lifecycle rule in TASKS.md item 0 exists. → [docs/worker.md](docs/worker.md) |
 | **Cloudflare Worker + D1** (phase 1 of the app plan) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, nightly export to R2. → [docs/worker.md](docs/worker.md) |
-| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. The build with the old site's look is on the phone since 2026-10-10 (`mobile/dist/fandex-0.2.0.apk`); only its Home screen has been looked at there. Not built: Google sign-in, account joining. → [docs/app.md](docs/app.md), [docs/app-parity.md](docs/app-parity.md) |
+| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. The build with the old site's look is on the phone since 2026-10-10 (`mobile/dist/fandex-0.2.0.apk`, last installed that evening). Seen there by me: Home, a show's page with its episodes, the filter sheet, the widget on the home screen. Nils has used the rest. Not built: Google sign-in, account joining. → [docs/app.md](docs/app.md), [docs/app-parity.md](docs/app-parity.md) |
 | **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser, 4,561 static item pages, legal pages, sitemap. Not built: the daily rebuild, facet and calendar-month pages, export and delete buttons. → [docs/website.md](docs/website.md) |
 | Observability (`/api/health`, structured logs) | ✅ incl. `openProviderCircuits` + `providerCalls` |
 | Security (S1–S13, CSP enforced) | ✅ |

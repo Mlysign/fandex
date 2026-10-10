@@ -75,6 +75,10 @@ only as a crawler turned away. A counted view is three row writes, capped at 5,0
 (`DAILY_PAGEVIEW_CAP`), and it answers 200 whatever it decided. ⚠️ The privacy policy's "Usage statistics" section
 describes exactly this. Change one and the other is wrong.
 
+⚠️ `GET /v1/admin/users` groups every row of `user_item_state` several times over. With one account of 2,500 rows that is an
+estimated ten to fifteen thousand rows read per view, NOT measured, and it grows with every account. Measure it before
+there are more accounts, and keep the page off any timer.
+
 Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/users`,
 `PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`, `POST` and `DELETE`
 on `/v1/admin/tag-overrides`, `/v1/admin/tag-aliases`, `/v1/admin/ip-aliases`, `/v1/admin/ip-overrides`
