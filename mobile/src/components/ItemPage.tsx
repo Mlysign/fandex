@@ -15,11 +15,14 @@
 // to its own page (the app has no such pages yet).
 
 import { ArrowLeft, Globe, Share2 } from 'lucide-react-native';
-import { useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { companyKey, personKey } from '@/lib/facets';
+import { keyToSlug } from '@/lib/facetUrl';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { BrandGlyph, hasBrandMark } from '~/components/BrandGlyph';
 import { ExtLink } from '~/components/ExtLink';
+import { part, useItemPageCss } from '~/components/itemLayout';
 import { Img } from '~/components/Img';
 import { Trailer } from '~/components/Trailer';
 import { T } from '~/components/ui';
@@ -120,6 +123,7 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
 
   return (
     <View
+      {...part('hero')}
       style={styles.hero}
       onLayout={(e) => {
         setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
@@ -145,7 +149,7 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
         slide(images[0], 0)
       )}
 
-      <Scrim />
+      <View {...part('hero-scrim')} style={styles.scrimWrap}><Scrim /></View>
 
       {onBack || backHref || onShare ? (
         <View style={[styles.heroButtons, { top: space.md + topInset }]}>
@@ -169,7 +173,7 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
       ) : null}
 
       {/* Everything over the artwork lets a swipe through, except the dots themselves. */}
-      <View style={styles.heroText}>
+      <View {...part('hero-text')} style={styles.heroText}>
         {paged ? (
           <View style={styles.dots}>
             {images.map((_, i) => (
@@ -184,12 +188,15 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
             ))}
           </View>
         ) : null}
-        <View style={styles.typeRow}>
-          <View style={[styles.typeDot, { backgroundColor: color.media[kind] ?? color.textMuted }]} />
-          <T variant="eyebrow">{TYPE_LABEL[kind] ?? kind}</T>
+        {/* On a wide window the title sits beside the artwork, not on it (itemLayout.ts). */}
+        <View {...part('hero-title')}>
+          <View style={styles.typeRow}>
+            <View style={[styles.typeDot, { backgroundColor: color.media[kind] ?? color.textMuted }]} />
+            <T variant="eyebrow">{TYPE_LABEL[kind] ?? kind}</T>
+          </View>
+          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+          {metaParts.length ? <T variant="meta" style={styles.heroMeta}>{metaParts.join(' · ')}</T> : null}
         </View>
-        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
-        {metaParts.length ? <T variant="meta" style={styles.heroMeta}>{metaParts.join(' · ')}</T> : null}
       </View>
     </View>
   );
@@ -201,12 +208,53 @@ function SectionHeading({ children }: { children: string }) {
   return <T variant="eyebrow" style={styles.sectionHeading}>{children}</T>;
 }
 
-function Fact({ label, value }: { label: string; value: string | null | undefined }) {
+/**
+ * How a link to a tag, person or studio page is followed. The app's screen gives
+ * a function that navigates in place. A static page gives nothing, and the link
+ * is then a plain anchor: this file knows no router.
+ */
+const FacetNav = createContext<((href: string) => void) | undefined>(undefined);
+
+/** A link to a tag, a person or a studio. A real anchor in a browser. */
+function FacetLink({ href, label, style, children }: { href: string; label?: string; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const open = useContext(FacetNav);
+  // react-native-web renders a pressable with an `href` as an <a>.
+  const anchor = Platform.OS === 'web' ? ({ href } as object) : null;
+  return (
+    <Pressable
+      {...anchor}
+      onPress={open ? (e?: GestureResponderEvent) => {
+        (e as unknown as { preventDefault?: () => void } | undefined)?.preventDefault?.();
+        open(href);
+      } : undefined}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      style={({ pressed }) => [style, pressed && { opacity: 0.6 }]}>
+      {children}
+    </Pressable>
+  );
+}
+
+/** One row of the facts table. `linkTo` makes each name in the value a link to its own page. */
+function Fact({ label, value, linkTo }: { label: string; value: string | null | undefined; linkTo?: 'person' | 'studio' }) {
   if (!value) return null;
+  const names = linkTo ? value.split(', ').filter(Boolean) : [];
   return (
     <View style={styles.fact}>
       <T variant="caption">{label}</T>
-      <T variant="body" style={styles.factValue}>{value}</T>
+      {linkTo ? (
+        <View style={styles.factLinks}>
+          {names.map((name) => {
+            const key = linkTo === 'person' ? personKey(name) : companyKey(name);
+            const tint = linkTo === 'person' ? color.facet.person : color.facet.company;
+            return key ? (
+              <FacetLink key={name} href={`/${linkTo}/${keyToSlug(key)}`}>
+                <T variant="body" style={[styles.factValue, { color: tint }]}>{name}</T>
+              </FacetLink>
+            ) : <T key={name} variant="body" style={styles.factValue}>{name}</T>;
+          })}
+        </View>
+      ) : <T variant="body" style={styles.factValue}>{value}</T>}
     </View>
   );
 }
@@ -231,12 +279,14 @@ function ScorePill({ label, value, href, hint }: { label: string; value: string;
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare }: {
+export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
   item: ItemDetail;
   /** Rendered between the score pills and the synopsis. */
   personal?: ReactNode;
   /** Rendered after the last line of the page. The website's legal links. */
   footer?: ReactNode;
+  /** Follow a link to a tag, person or studio page without a page load. Left out on a static page, where the links are anchors. */
+  onOpenFacet?: (href: string) => void;
   /** Tag categories, bundles and chosen names. Without it the tags still group, by the built-in rules. */
   taxonomy?: Taxonomy | null;
   /** The status bar's height, on a device whose hero runs under it. */
@@ -249,6 +299,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
   backHref?: string;
   onShare?: () => void;
 }) {
+  useItemPageCss();
   const m = item.merged;
   const images = [m.posterUrl, ...m.images].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
 
@@ -279,6 +330,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
   };
 
   return (
+    <FacetNav.Provider value={onOpenFacet}>
     <View style={styles.page}>
     <ScrollView
       // How the app finds this element in a static page it takes over from (lib/prerender.ts).
@@ -286,12 +338,23 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
       contentContainerStyle={{ paddingBottom: space.section + bottomInset }}
       onScroll={topInset > 0 ? onPageScroll : undefined}
       scrollEventThrottle={32}>
+      <View {...part('grid')}>
       <Hero
         images={images} title={m.title} kind={item.type} metaParts={metaParts}
         topInset={topInset} onBack={onBack} backHref={backHref} onShare={onShare} onHeight={setHeroHeight}
       />
 
-      <View style={styles.body}>
+      <View {...part('upper')} style={styles.body}>
+        {/* The wide window's title block. Hidden until 1024 px by itemLayout.ts's rules. */}
+        <View {...part('title-wide')} style={styles.titleWide}>
+          <View style={[styles.typeRow, { marginBottom: 0 }]}>
+            <View style={[styles.typeDot, { backgroundColor: color.media[item.type] ?? color.textMuted }]} />
+            <T variant="eyebrow">{TYPE_LABEL[item.type] ?? item.type}</T>
+          </View>
+          <Text accessibilityRole="header" style={styles.title}>{m.title}</Text>
+          {metaParts.length ? <T variant="meta">{metaParts.join(' · ')}</T> : null}
+        </View>
+
         {/* The release date, said in full. The hero's line only has room for the year. */}
         {released ? (
           <T variant="caption" style={upcoming ? { color: color.accent } : undefined}>
@@ -330,14 +393,14 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
 
         {personal}
 
-        {m.tagline ? <Text style={styles.tagline}>{m.tagline}</Text> : null}
-        {m.description ? <Text style={styles.description}>{m.description}</Text> : null}
+        {m.tagline ? <Text {...part('prose')} style={styles.tagline}>{m.tagline}</Text> : null}
+        {m.description ? <Text {...part('prose')} style={styles.description}>{m.description}</Text> : null}
 
         <View>
-          <Fact label={item.type === 'show' ? 'Creator' : 'Director'} value={m.director} />
-          <Fact label="Developer" value={m.developer} />
-          <Fact label="Publisher" value={m.publisher && m.publisher !== m.developer ? m.publisher : null} />
-          <Fact label="Network" value={m.network} />
+          <Fact label={item.type === 'show' ? 'Creator' : 'Director'} value={m.director} linkTo="person" />
+          <Fact label="Developer" value={m.developer} linkTo="studio" />
+          <Fact label="Publisher" value={m.publisher && m.publisher !== m.developer ? m.publisher : null} linkTo="studio" />
+          <Fact label="Network" value={m.network} linkTo="studio" />
           <Fact label="Rated" value={m.certification.length ? m.certification.join(' · ') : null} />
           <Fact label="Runtime" value={m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null} />
           <Fact label="Status" value={m.status} />
@@ -363,7 +426,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
         </View>
       </View>
 
-      <View style={styles.lower}>
+      <View {...part('lower')} style={styles.lower}>
         {m.trailerYoutubeKey ? (
           <View>
             <SectionHeading>Trailer</SectionHeading>
@@ -381,7 +444,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
             <SectionHeading>Cast</SectionHeading>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.castStrip}>
               {m.cast.map((c, i) => (
-                <View key={`${c.name}-${i}`} style={styles.castCard}>
+                <FacetLink key={`${c.name}-${i}`} href={`/person/${keyToSlug(personKey(c.name))}`} label={c.character ? `${c.name} as ${c.character}` : c.name} style={styles.castCard}>
                   <View style={styles.castPortrait}>
                     {c.profileUrl
                       ? <Img uri={c.profileUrl} width={64} alt={c.name} style={styles.fill} />
@@ -389,7 +452,7 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
                   </View>
                   <T variant="label" numberOfLines={2} style={styles.castName}>{c.name}</T>
                   {c.character ? <Text numberOfLines={1} style={styles.castRole}>{c.character}</Text> : null}
-                </View>
+                </FacetLink>
               ))}
             </ScrollView>
           </View>
@@ -458,9 +521,9 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
                   <View key={g.id} style={styles.chips}>
                     <Text style={styles.groupLabel}>{g.label}</Text>
                     {g.items.map((it) => (
-                      <View key={it.key} style={[styles.chip, { backgroundColor: `${tint}21` }]}>
+                      <FacetLink key={it.key} href={`/tag/${keyToSlug(it.key)}`} style={[styles.chip, { backgroundColor: `${tint}21` }]}>
                         <Text style={[styles.chipText, { color: tint }]}>{it.label}</Text>
-                      </View>
+                      </FacetLink>
                     ))}
                   </View>
                 );
@@ -503,9 +566,11 @@ export function ItemPage({ item, personal, footer, taxonomy = null, topInset = 0
 
         {footer}
       </View>
+      </View>
     </ScrollView>
     {topInset > 0 && pastHero ? <View style={[styles.statusBarCover, { height: topInset }]} /> : null}
     </View>
+    </FacetNav.Provider>
   );
 }
 
@@ -517,6 +582,9 @@ const styles = StyleSheet.create({
   // Full-bleed 3:4, capped so a wide window does not get a poster taller than itself.
   hero: { width: '100%', aspectRatio: 3 / 4, maxHeight: 640, backgroundColor: '#2A2521', overflow: 'hidden' },
   scrim: { position: 'absolute', left: 0, bottom: 0, width: '100%', height: '67%', pointerEvents: 'none' },
+  scrimWrap: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' },
+  // Shown from 1024 px only, by CSS. On a phone and on a server it does not exist.
+  titleWide: { display: 'none', gap: 10 },
   heroButtons: {
     position: 'absolute', left: space.lg, right: space.lg,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -554,6 +622,7 @@ const styles = StyleSheet.create({
   tagline: { fontFamily: font.sans, fontStyle: 'italic', fontSize: 16, lineHeight: 23, color: color.textSecondary },
   description: { fontFamily: font.sans, fontSize: 14, lineHeight: 23, color: color.textSecondary },
 
+  factLinks: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 10 },
   fact: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.lg,
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: color.border,

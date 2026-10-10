@@ -11,8 +11,7 @@ import { Platform, View } from 'react-native';
 import { StateBlock } from '~/components/ui';
 import { AuthProvider } from '~/lib/AuthProvider';
 import { CatalogSyncProvider } from '~/lib/CatalogSyncProvider';
-import { migrate } from '~/lib/db';
-import { useDatabaseName } from '~/lib/dbName';
+import { DATABASE_NAME, migrate } from '~/lib/db';
 import { dropPlaceholder } from '~/lib/prerender';
 import { ScoreProvider } from '~/lib/ScoreProvider';
 import { TypeFilterProvider } from '~/lib/typeFilter';
@@ -71,7 +70,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
       <StateBlock
         title="Fandex could not start"
         detail={locked
-          ? 'It is open in another tab that has not let go yet. Close or reload that tab, then try again.'
+          ? 'Its storage is held by another tab. Reload this page; if that does not help, close the other Fandex tabs first.'
           : error.message || 'Something went wrong while opening the app.'}
         action={{
           label: 'Try again',
@@ -112,27 +111,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
-  // In a browser the app runs in one tab at a time (lib/dbName.ts).
-  const database = useDatabaseName();
-  useEffect(() => {
-    // The home page's placeholder would otherwise cover this message.
-    if (database.state === 'waiting') dropPlaceholder();
-  }, [database.state]);
-  if (!ready || database.state === 'pending') return null;
-  if (database.state === 'waiting') {
-    return (
-      <View style={{ flex: 1, backgroundColor: color.surface }}>
-        <StateBlock
-          title="Fandex is open in another tab"
-          detail="It runs in one tab at a time. Carry on there, or move it to this one."
-          action={{ label: 'Use Fandex here', onPress: database.takeOver }}
-        />
-      </View>
-    );
-  }
+  if (!ready) return null;
 
   return (
-    <SQLiteProvider databaseName={database.name} onInit={migrate}>
+    // In a browser a second tab of the site gets this database in memory: the
+    // first tab holds the stored one (mobile/patches, docs/app.md).
+    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrate}>
       <DatabaseOpened />
       <AuthProvider>
       <CatalogSyncProvider>

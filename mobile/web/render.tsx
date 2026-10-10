@@ -14,6 +14,7 @@ import { AppRegistry, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
 import { ItemPage } from '~/components/ItemPage';
+import { ITEM_PAGE_CSS } from '~/components/itemLayout';
 import { LegalLinks } from '~/components/LegalLinks';
 import { Screen } from '~/components/ui';
 import type { ItemDetail } from '~/lib/api';
@@ -22,6 +23,8 @@ import { buildEntityJsonLd, jsonLdScript } from '@/lib/jsonLd';
 import { everyLegalRoute, getLegalDocument } from '@/lib/legal/registry';
 
 export const SITE = 'https://fandex.org';
+/** The item page's wide layout, for the static page's <head>. */
+export { ITEM_PAGE_CSS };
 
 // A server has no screen to measure, so the provider is told its answer.
 const NO_INSETS = { frame: { x: 0, y: 0, width: 0, height: 0 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
@@ -33,14 +36,14 @@ function Page({ item, taxonomy }: { item: ItemDetail; taxonomy: Taxonomy | null 
       {/* The app's own frame (src/app/(tabs)/_layout.tsx). A server cannot know the
           window's width, so both bars are here and the page's CSS shows one. */}
       <View style={{ flex: 1, backgroundColor: '#100E0C' }}>
-        <View {...({ 'data-nav': 'top' } as object)}><AppNav variant="top" pathname={path} /></View>
+        <View {...({ dataSet: { nav: 'top' } } as object)}><AppNav variant="top" pathname={path} /></View>
         <View style={{ flex: 1 }}>
-          <Screen headed>
+          <Screen headed wide>
             {/* No handlers: nothing runs on a static page. The back button is a link home. */}
             <ItemPage item={item} taxonomy={taxonomy} backHref="/" footer={<LegalLinks />} />
           </Screen>
         </View>
-        <View {...({ 'data-nav': 'bottom' } as object)}><AppNav variant="bottom" pathname={path} /></View>
+        <View {...({ dataSet: { nav: 'bottom' } } as object)}><AppNav variant="bottom" pathname={path} /></View>
       </View>
     </SafeAreaProvider>
   );

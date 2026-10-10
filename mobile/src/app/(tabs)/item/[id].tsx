@@ -241,13 +241,14 @@ export default function ItemScreen() {
   };
 
   return (
-    <Screen headed>
+    <Screen headed wide>
       <ItemPage
         item={item}
         personal={personal}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}
+        onOpenFacet={(href) => router.push(href as never)}
         topInset={top}
         // The navigation bar is below this screen and clears the phone's own buttons itself.
         bottomInset={0}

@@ -31,6 +31,8 @@ function appRoute(parts: string[]): boolean {
   if (parts[0] === 'item') return parts.length === 2 && UUID.test(parts[1]);
   if (parts[0] === 'open') return parts.length === 4;
   if (parts[0] === 'auth') return parts.length === 2 && parts[1] === 'trakt';
+  // A tag, a person, a studio: built in the app from the catalog on the device. No static page yet.
+  if (parts[0] === 'tag' || parts[0] === 'person' || parts[0] === 'studio') return parts.length === 2 && parts[1].length <= 200;
   return parts.length === 2 && TYPES.has(parts[0]) && SLUG.test(parts[1]);
 }
 

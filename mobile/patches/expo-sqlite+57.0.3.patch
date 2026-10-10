@@ -1,0 +1,78 @@
+diff --git a/node_modules/expo-sqlite/web/worker.ts b/node_modules/expo-sqlite/web/worker.ts
+index deaf721..403d3a9 100644
+--- a/node_modules/expo-sqlite/web/worker.ts
++++ b/node_modules/expo-sqlite/web/worker.ts
+@@ -54,6 +54,8 @@ const MIN_INT32 = -0x80000000;
+ let _sqlite3: SQLiteAPI | null = null;
+ let _vfs: AccessHandlePoolVFS | null = null;
+ let _vfsMemory: MemoryVFS | null = null;
++// FANDEX PATCH: true when another tab holds the persistent store.
++let _persistentUnavailable = false;
+ 
+ const databaseIdMap = new Map<number, DatabaseEntity>();
+ const statementIdMap = new Map<number, StatementEntity>();
+@@ -264,7 +266,7 @@ async function closeDatabase(nativeDatabaseId: number) {
+ 
+ async function deleteDatabase(databasePath: string): Promise<void> {
+   const { vfs } = await maybeInitAsync();
+-  if (databasePath !== ':memory:') {
++  if (databasePath !== ':memory:' && !_persistentUnavailable) {
+     vfs.jDelete(databasePath, 0 /* unused arg for AccessHandlePoolVFS */);
+   }
+ }
+@@ -402,7 +404,9 @@ async function openDatabase(
+     }
+ 
+     const flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
+-    const vfsName = databasePath === ':memory:' ? VFS_NAME_MEMORY : VFS_NAME_PERSISTENT;
++    // FANDEX PATCH: in memory when the persistent store is another tab's.
++    const vfsName =
++      databasePath === ':memory:' || _persistentUnavailable ? VFS_NAME_MEMORY : VFS_NAME_PERSISTENT;
+     pointer = await sqlite3.open_v2(databasePath, flags, vfsName);
+   }
+ 
+@@ -786,13 +790,23 @@ async function maybeInitAsync(): Promise<{
+       throw new Error('Failed to initialize wa-sqlite');
+     }
+ 
+-    if (_vfs == null) {
+-      _vfs = await AccessHandlePoolVFS.create(VFS_NAME_PERSISTENT, module);
+-      if (_vfs == null) {
+-        throw new Error('Failed to initialize AccessHandlePoolVFS');
++    // FANDEX PATCH (mobile/patches): the persistent store takes exclusive handles on
++    // its whole OPFS folder, so only ONE tab of a site can open it; a second tab
++    // threw here and the app never started. Try a few times (a reloaded page's
++    // old worker lets go within about a second), then carry on without it: every
++    // database this tab opens then lives in memory.
++    if (_vfs == null && !_persistentUnavailable) {
++      for (let attempt = 0; attempt < 4 && _vfs == null; attempt++) {
++        try {
++          _vfs = await AccessHandlePoolVFS.create(VFS_NAME_PERSISTENT, module);
++        } catch {
++          _vfs = null;
++          if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 700));
++        }
+       }
++      if (_vfs == null) _persistentUnavailable = true;
+     }
+-    _sqlite3.vfs_register(_vfs, true);
++    if (_vfs != null) _sqlite3.vfs_register(_vfs, true);
+ 
+     if (_vfsMemory == null) {
+       _vfsMemory = await MemoryVFS.create(VFS_NAME_MEMORY, module);
+@@ -800,12 +814,12 @@ async function maybeInitAsync(): Promise<{
+         throw new Error('Failed to initialize MemoryVFS');
+       }
+     }
+-    _sqlite3.vfs_register(_vfsMemory, false);
++    _sqlite3.vfs_register(_vfsMemory, _vfs == null);
+   }
+-  if (_vfs == null || _vfsMemory == null) {
++  if ((_vfs == null && !_persistentUnavailable) || _vfsMemory == null) {
+     throw new Error('Invalid VFS state');
+   }
+-  return { sqlite3: _sqlite3, vfs: _vfs, vfsMemory: _vfsMemory };
++  return { sqlite3: _sqlite3, vfs: _vfs as AccessHandlePoolVFS, vfsMemory: _vfsMemory };
+ }
+ 
+ //#endregion Internal helpers

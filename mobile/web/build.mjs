@@ -107,7 +107,7 @@ await esbuild.build({
   }],
   logLevel: 'warning',
 });
-const { renderItem, itemHead, legalDocuments } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
+const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
 
 // ── 3. The data ──────────────────────────────────────────────────────────────
 
@@ -184,6 +184,10 @@ step(`${details.size} titles loaded (${fetched} fetched, ${details.size - fetche
 fs.rmSync(STAGE, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 fs.cpSync(APP, STAGE, { recursive: true });
 fs.rmSync(path.join(STAGE, 'metadata.json'), { force: true });
+// The site's own icons, the ones the old site served (src/app/favicon.ico, icon.svg, public/icon-*.png).
+fs.copyFileSync(path.join(repo, 'src', 'app', 'favicon.ico'), path.join(STAGE, 'favicon.ico'));
+fs.copyFileSync(path.join(repo, 'src', 'app', 'icon.svg'), path.join(STAGE, 'icon.svg'));
+fs.copyFileSync(path.join(repo, 'public', 'icon-192.png'), path.join(STAGE, 'icon-192.png'));
 
 // The app loads its fonts in JavaScript. A static page has to name them itself,
 // under the family names the app's styles use (src/theme.ts).
@@ -212,7 +216,7 @@ const FRAME_CSS = `html,body{height:100%;margin:0;background:${C.surface}}body{o
   // The static copy lies over the app's empty root until the app removes it (src/lib/prerender.ts).
   + `#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}`
   // The static page carries both navigation bars and shows the one for its width. The app picks in JavaScript.
-  + `@media (min-width:768px){[data-nav="bottom"]{display:none}}@media (max-width:767px){[data-nav="top"]{display:none}}`;
+  + `@media (min-width:768px){[data-nav="bottom"]{display:none!important}}@media (max-width:767px){[data-nav="top"]{display:none!important}}`;
 
 const LEGAL = {
   en: [['privacy', 'Privacy'], ['terms', 'Terms'], ['support', 'Contact'], ['imprint', 'Imprint']],
@@ -228,8 +232,9 @@ function social({ title, description, url, image, alt }) {
     + (image ? `<meta name="twitter:image" content="${esc(image)}">` : '');
 }
 
+const ICONS = '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icon-192.png">';
 const HEAD_START = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-  + `<meta name="theme-color" content="${C.surface}"><link rel="icon" href="/favicon.ico">`;
+  + `<meta name="theme-color" content="${C.surface}">${ICONS}`;
 
 // An item page starts the app only for somebody signed in. Everybody else,
 // crawlers included, already has the whole page: the app would add nothing but
@@ -241,7 +246,14 @@ const HEAD_START = '<!doctype html><html lang="en"><head><meta charset="utf-8"><
 const ITEM_SCRIPT = `(function(){var b=document.querySelector('#prerender a[aria-label="Fandex, home"]');`
   + `if(b&&history.length>1&&document.referrer.indexOf(location.origin+"/")===0)b.addEventListener("click",function(e){e.preventDefault();history.back()});`
   + `try{if(!localStorage.getItem("fandex.session"))return}catch(e){return}`
-  + `var s=document.createElement("script");s.src=${JSON.stringify(bundle)};document.body.appendChild(s)})()`;
+  + `var s=document.createElement("script");s.src="/app-boot.js";document.body.appendChild(s)})()`;
+
+// The pages name this small file and not the app's bundle, whose name changes with
+// every build of the app. Otherwise a one-line change to the app rewrote all 4,561
+// pages, and publishing meant uploading 250 MB again (it failed five times in a row
+// on 2026-10-10). This file is the only thing that knows the bundle's current name.
+const APP_BOOT = `(function(){var s=document.createElement("script");s.src=${JSON.stringify(bundle)};document.body.appendChild(s)})()`;
+fs.writeFileSync(path.join(STAGE, 'app-boot.js'), APP_BOOT);
 
 step(`rendering ${details.size} item pages`);
 const urls = [];
@@ -255,7 +267,7 @@ for (const item of details.values()) {
   if (!body.includes('role="heading"')) throw new Error(`${item.type}/${item.slug} rendered without a heading`);
   const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
     + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical, image: head.image, alt: item.merged.title })}`
-    + `<style>${fontCss}${FRAME_CSS}</style>${css}<script type="application/ld+json">${head.jsonLd}</script></head>`
+    + `<style>${fontCss}${FRAME_CSS}</style>${css}<style id="fandex-item-layout">${ITEM_PAGE_CSS}</style><script type="application/ld+json">${head.jsonLd}</script></head>`
     + `<body><div id="prerender" data-page="item">${body}</div><div id="root"></div><script>${ITEM_SCRIPT}</script></body></html>`;
   const dir = path.join(STAGE, item.type);
   fs.mkdirSync(dir, { recursive: true });
@@ -344,7 +356,7 @@ for (const { locale, doc, content } of legal) {
   const body = content.sections.map((s) => `<section><h2>${esc(s.heading)}</h2>${s.body.map((b) => legalBlock(b, locale)).join('')}</section>`).join('');
   const usesProtected = content.sections.some((s) => s.body.some((b) => typeof b === 'object' && 'protected' in b));
   const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
-    + `<meta name="theme-color" content="${C.surface}"><link rel="icon" href="/favicon.ico"><title>${esc(content.title)} · Fandex</title>`
+    + `<meta name="theme-color" content="${C.surface}">${ICONS}<title>${esc(content.title)} · Fandex</title>`
     + `<link rel="canonical" href="${canonical}">${['en', 'de'].map((l) => `<link rel="alternate" hreflang="${l}" href="${SITE}/legal/${l}/${doc}">`).join('')}`
     // The imprint carries a home address. Out of every index, as on the old site.
     + (doc === 'imprint' ? '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">' : '')
@@ -365,7 +377,7 @@ if (legal.length !== 8) throw new Error(`Expected 8 legal pages, wrote ${legal.l
 
 fs.writeFileSync(path.join(STAGE, '404.html'),
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">`
-  + `<meta name="theme-color" content="${C.surface}"><link rel="icon" href="/favicon.ico"><title>Nothing here · Fandex</title><style>${fontCss}${DOC_CSS}</style></head>`
+  + `<meta name="theme-color" content="${C.surface}">${ICONS}<title>Nothing here · Fandex</title><style>${fontCss}${DOC_CSS}</style></head>`
   + `<body><main><div class="top"><a href="/">Fandex</a></div><h1>Nothing here</h1><p>Fandex has no page at this address.</p><p><a href="/">Go to the home page</a></p>${legalNav('en')}</main></body></html>`);
 
 // /v1/ is the API. A crawler that runs the home page's script would otherwise
@@ -402,6 +414,9 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
   '  Cache-Control: public, max-age=31536000, immutable',
   '/assets/*',
   '  Cache-Control: public, max-age=31536000, immutable',
+  // Always asked for again: it is what points a static page at the current app.
+  '/app-boot.js',
+  '  Cache-Control: no-cache',
   '/legal/:locale/imprint',
   '  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet',
   '/app-shell',
