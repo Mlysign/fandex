@@ -341,6 +341,8 @@ export function ItemPage({ item, personal, progress, footer, taxonomy = null, to
       onScroll={topInset > 0 ? onPageScroll : undefined}
       scrollEventThrottle={32}>
       <View {...part('grid')}>
+      {/* The two columns of a wide window. Their own box, so the sticky artwork stops where they end. */}
+      <View {...part('columns')}>
       <Hero
         images={images} title={m.title} kind={item.type} metaParts={metaParts}
         topInset={topInset} onBack={onBack} backHref={backHref} onShare={onShare} onHeight={setHeroHeight}
@@ -426,6 +428,7 @@ export function ItemPage({ item, personal, progress, footer, taxonomy = null, to
           <Fact label="Budget" value={m.budget ? money(m.budget) : null} />
           <Fact label="Box office" value={m.revenue ? money(m.revenue) : null} />
         </View>
+      </View>
       </View>
 
       <View {...part('lower')} style={styles.lower}>

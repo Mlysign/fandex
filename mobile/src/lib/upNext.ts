@@ -80,6 +80,13 @@ function unix(v: unknown): number | null {
  * Read `/shows/{id}/progress/watched`. A show with nothing left answers
  * `next_episode: null`, which is "caught up" and is stored as such. An episode
  * that has not aired yet is not "next": you cannot watch it.
+ *
+ * ⚠️ No air date is "not aired", never "aired". Trakt lists the first episode
+ * of an announced season before anybody has scheduled it, with a placeholder
+ * title and `first_aired: null` (seen 2026-10-10: Dune: Prophecy S02E01
+ * "Episode #2.1", Sabikui Bisco S02E01 "Episode 1"). Reading null as "out"
+ * put shows in Up next that nobody can watch. An episode that really aired
+ * with no date on Trakt is rare, and missing it costs a row, not a wrong one.
  */
 export function readProgress(answer: unknown, now: number): Progress {
   const a = obj(answer);
@@ -88,7 +95,7 @@ export function readProgress(answer: unknown, now: number): Progress {
   const episode = int(next.number);
   const airedAt = unix(next.first_aired);
   const lastWatchedAt = unix(a.last_watched_at);
-  if (season == null || episode == null || season === 0 || (airedAt != null && airedAt > now)) {
+  if (season == null || episode == null || season === 0 || airedAt == null || airedAt > now) {
     return { season: null, episode: null, title: null, airedAt: null, lastWatchedAt };
   }
   return { season, episode, title: typeof next.title === 'string' ? next.title : null, airedAt, lastWatchedAt };
@@ -192,7 +199,7 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
             u.season, u.episode, u.title AS episode_title,
             MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) AS event_at
        FROM up_next u JOIN catalog c ON c.id = u.media_item_id
-      WHERE u.season IS NOT NULL
+      WHERE u.season IS NOT NULL AND u.aired_at IS NOT NULL
         AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
       ORDER BY event_at DESC, c.title
       LIMIT ?`,

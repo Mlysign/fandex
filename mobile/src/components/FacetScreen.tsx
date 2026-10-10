@@ -16,12 +16,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { slugToKey } from '@/lib/facetUrl';
 import { PosterGrid } from '~/components/cards';
-import { EmptyState, SortMenu, StatStrip } from '~/components/kit';
+import { Avatar, EmptyState, SortMenu, StatStrip } from '~/components/kit';
 import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
+import { longDate } from '~/lib/dates';
+import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { color, radius, type } from '~/theme';
 
@@ -55,6 +57,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const sync = useCatalogSync();
   const { center } = useScores();
   const [sort, setSort] = useState<Sort>('popularity');
+  const [bioOpen, setBioOpen] = useState(false);
   const [found, setFound] = useState<{ label: string; roles: string[]; cards: CardItem[] } | null>(null);
 
   useEffect(() => {
@@ -86,7 +89,32 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     return () => { live = false; };
   }, [db, kind, key, sync.revision]);
 
-  const cards = found?.cards;
+  // What TMDB has beyond the catalog copy. The device's rows show at once; these join them.
+  const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const label = found?.label ?? '';
+  const ready = found != null;
+  useEffect(() => {
+    setMore(null);
+    if (!ready) return;
+    const abort = new AbortController();
+    setAsking(true);
+    providerFacet(kind, key, label || key, abort.signal)
+      .then((p) => { if (!abort.signal.aborted) setMore(p); })
+      .catch(() => { /* offline or TMDB down: the page is what the device holds */ })
+      .finally(() => { if (!abort.signal.aborted) setAsking(false); });
+    return () => abort.abort();
+  }, [kind, key, label, ready]);
+
+  const cards = useMemo(() => {
+    const own = found?.cards;
+    if (!own || !more) return own;
+    // The same title is one card: by Fandex id where the Worker knows it, else by type, name and year.
+    const ident = (c: CardItem) => `${c.type}|${c.title.toLowerCase().replace(/[^a-z0-9]+/g, '')}|${c.releaseDate?.slice(0, 4) ?? ''}`;
+    const ids = new Set(own.map((c) => c.id));
+    const names = new Set(own.map(ident));
+    return [...own, ...more.cards.filter((c) => !(c.id && ids.has(c.id)) && !names.has(ident(c)))];
+  }, [found, more]);
   const ids = useMemo(() => (cards ?? []).map((c) => c.id), [cards]);
   const stateOf = useCardStates(ids);
   const scores = useRowScores(useMemo(() => (sort === 'fandexScore' ? ids.filter((i): i is string => !!i) : []), [sort, ids]));
@@ -116,7 +144,9 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 
   if (!found) return <Screen wide><StateBlock loading /></Screen>;
 
-  const name = found.label || key.replace(/-/g, ' ');
+  const person = more?.person ?? null;
+  const name = found.label || person?.name || key.replace(/-/g, ' ');
+  const life = person ? [person.birthday ? `Born ${longDate(person.birthday) ?? person.birthday}` : null, person.deathday ? `died ${longDate(person.deathday) ?? person.deathday}` : null, person.placeOfBirth].filter(Boolean).join(' · ') : '';
   const header = (
     <View style={styles.header}>
       <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/discover' as never))} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.back}>
@@ -125,10 +155,21 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       <Text style={[type.eyebrow, { color: color.accent }]}>
         {kind === 'tag' ? KIND_LABEL.tag : found.roles.length ? found.roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ') : KIND_LABEL[kind]}
       </Text>
-      <Text accessibilityRole="header" style={[type.serifXl, { marginTop: 6 }]}>{name}</Text>
+      <View style={styles.who}>
+        {person?.profileUrl ? <Avatar src={person.profileUrl} name={name} size={84} /> : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text accessibilityRole="header" style={[type.serifXl, { marginTop: 6 }]}>{name}</Text>
+          {life ? <Text style={[type.meta, { marginTop: 4 }]}>{life}</Text> : null}
+        </View>
+      </View>
+      {person?.biography ? (
+        <Pressable onPress={() => setBioOpen((v) => !v)} accessibilityRole="button" accessibilityLabel={bioOpen ? 'Show less of the biography' : 'Show the whole biography'}>
+          <Text numberOfLines={bioOpen ? undefined : 4} style={[type.bodySm, styles.bio]}>{person.biography}</Text>
+        </Pressable>
+      ) : null}
       <View style={{ marginTop: 16 }}><StatStrip cells={tiles} /></View>
       <View style={styles.sortRow}>
-        <Text style={[type.micro, { color: color.accent, letterSpacing: 0.8 }]}>titles · {found.cards.length}</Text>
+        <Text style={[type.micro, { color: color.accent, letterSpacing: 0.8 }]}>titles · {(cards ?? []).length}{asking ? ' · asking TMDB for more…' : ''}</Text>
         <SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />
       </View>
     </View>
@@ -139,7 +180,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       <PosterGrid
         items={sorted}
         header={header}
-        empty={<EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog carries this.'} />}
+        empty={asking ? <StateBlock loading /> : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or on TMDB carries this.'} />}
       />
     </Screen>
   );
@@ -147,6 +188,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 
 const styles = StyleSheet.create({
   header: { paddingBottom: 16 },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  bio: { marginTop: 12, maxWidth: 720 },
   back: {
     width: 36, height: 36, marginBottom: 16, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
     backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,

@@ -70,3 +70,32 @@ export async function tmdbSeasonEpisodes(tmdbId: string, season: number, signal?
     }))
     .sort((a, b) => a.episode - b.episode);
 }
+
+export interface EpisodeDetail {
+  title: string | null;
+  overview: string | null;
+  airDate: string | null;
+  runtimeMinutes: number | null;
+  stillUrl: string | null;
+  /** TMDB's crowd score, 0-10, and how many votes it is made of. */
+  voteAverage: number | null;
+  voteCount: number;
+}
+
+/** What TMDB knows about one episode: the synopsis and the still the catalog's list does not carry. */
+export async function tmdbEpisode(tmdbId: string, season: number, episode: number, signal?: AbortSignal): Promise<EpisodeDetail> {
+  if (!tmdbConfigured()) throw new Error('TMDB is not set up in this build.');
+  const res = await fetch(`${BASE}/tv/${encodeURIComponent(tmdbId)}/season/${season}/episode/${episode}?api_key=${TMDB_API_KEY}`, { signal });
+  if (!res.ok) throw new Error(`TMDB episode answered ${res.status}`);
+  const e = (await res.json()) as any;
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return {
+    title: text(e.name),
+    overview: text(e.overview),
+    airDate: text(e.air_date),
+    runtimeMinutes: typeof e.runtime === 'number' && e.runtime > 0 ? e.runtime : null,
+    stillUrl: e.still_path ? `https://image.tmdb.org/t/p/w780${e.still_path}` : null,
+    voteAverage: typeof e.vote_average === 'number' && e.vote_count > 0 ? e.vote_average : null,
+    voteCount: typeof e.vote_count === 'number' ? e.vote_count : 0,
+  };
+}

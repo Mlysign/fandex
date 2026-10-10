@@ -28,6 +28,9 @@ describe("reading Trakt's answer for a show", () => {
   it('does not offer an episode that has not aired, or a special', () => {
     expect(readProgress({ next_episode: { season: 2, number: 6, first_aired: '2026-10-09T01:00:00.000Z' } }, NOW).season).toBeNull();
     expect(readProgress({ next_episode: { season: 0, number: 1, first_aired: '2020-01-01T00:00:00.000Z' } }, NOW).season).toBeNull();
+    // An announced season nobody has scheduled: Trakt lists its first episode with no date.
+    expect(readProgress({ next_episode: { season: 2, number: 1, title: 'Episode #2.1', first_aired: null } }, NOW).season).toBeNull();
+    expect(readProgress({ next_episode: { season: 2, number: 1, title: 'Episode 1' } }, NOW).season).toBeNull();
   });
 
   it('survives an answer that is not the expected shape', () => {

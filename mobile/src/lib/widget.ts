@@ -40,7 +40,7 @@ export async function publishWidget(db: SQLiteDatabase): Promise<void> {
     const rows = await db.getAllAsync<{ id: string; title: string; season: number; episode: number; episodeTitle: string | null; posterUrl: string | null }>(
       `SELECT u.media_item_id AS id, c.title, u.season, u.episode, u.title AS episodeTitle, c.poster_url AS posterUrl
          FROM up_next u JOIN catalog c ON c.id = u.media_item_id
-        WHERE u.season IS NOT NULL
+        WHERE u.season IS NOT NULL AND u.aired_at IS NOT NULL
           AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
         ORDER BY MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) DESC, c.title
         LIMIT ?`,

@@ -6,17 +6,22 @@
 // The Worker holds an episode list only for the seasons somebody opened on the
 // old site, so a season without one is asked of TMDB when it is opened, which is
 // when the site asked. A tick goes to Trakt first (lib/upNext.ts).
+//
+// Two things the site did not have, asked for on 2026-10-10: every episode
+// shows its date, and a tap on an episode opens its details. The tick is its
+// own target at the end of the row, so one tap has one outcome.
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { Skeleton } from '~/components/kit';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Img } from '~/components/Img';
+import { Button, Sheet, Skeleton } from '~/components/kit';
 import { useToast } from '~/components/Toast';
 import { T } from '~/components/ui';
 import { api, ApiError, type ShowEpisodes } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { shortDate } from '~/lib/dates';
-import { tmdbSeasonEpisodes } from '~/lib/tmdb';
+import { tmdbEpisode, tmdbSeasonEpisodes, type EpisodeDetail } from '~/lib/tmdb';
 import { TraktAuthError } from '~/lib/trakt';
 import { setEpisodesWatched } from '~/lib/upNext';
 import { breakpoint, color, radius, space } from '~/theme';
@@ -52,6 +57,7 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [fetched, setFetched] = useState<Record<number, Episode[]>>({});
   const [loadingSeason, setLoadingSeason] = useState<number | null>(null);
+  const [detail, setDetail] = useState<Episode | null>(null);
 
   const signedIn = auth.status === 'signedIn';
 
@@ -245,21 +251,30 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
                     const on = watched.has(`${e.season}:${e.episode}`);
                     const key = `e${e.season}-${e.episode}`;
                     return (
-                      <Pressable
-                        key={e.episode}
-                        onPress={() => push(key, [{ season: e.season, episode: e.episode }], !on)}
-                        disabled={busy != null || settling}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: on }}
-                        style={[styles.episode, (busy === key || settling) && styles.dim]}
-                      >
-                        <T variant="micro" style={styles.code}>{e.season}×{String(e.episode).padStart(2, '0')}</T>
-                        <T variant="bodySm" style={[styles.primary, styles.episodeTitle]} numberOfLines={1}>
-                          {e.title || `Episode ${e.episode}`}
-                        </T>
-                        {roomy && e.airDate ? <T variant="micro">{shortDate(e.airDate)}</T> : null}
-                        {busy === key ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={on} />}
-                      </Pressable>
+                      <View key={e.episode} style={[styles.episode, (busy === key || settling) && styles.dim]}>
+                        <Pressable
+                          onPress={() => setDetail(e)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${e.title || `Episode ${e.episode}`}, details`}
+                          style={styles.episodeOpen}
+                        >
+                          <T variant="micro" style={styles.code}>{e.season}×{String(e.episode).padStart(2, '0')}</T>
+                          <View style={styles.episodeText}>
+                            <T variant="bodySm" style={styles.primary} numberOfLines={1}>{e.title || `Episode ${e.episode}`}</T>
+                            <T variant="micro" style={styles.episodeDate}>{airLabel(e.airDate)}</T>
+                          </View>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => push(key, [{ season: e.season, episode: e.episode }], !on)}
+                          disabled={busy != null || settling}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: on }}
+                          accessibilityLabel={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
+                          style={styles.episodeTick}
+                        >
+                          {busy === key ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={on} />}
+                        </Pressable>
+                      </View>
                     );
                   })}
                 </View>
@@ -268,7 +283,83 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
           );
         })}
       </View>
+      <EpisodeSheet
+        episode={detail}
+        tmdbId={tmdbId}
+        watched={detail ? watched.has(`${detail.season}:${detail.episode}`) : false}
+        busy={busy != null || settling}
+        onClose={() => setDetail(null)}
+        onToggle={(e, next) => push(`e${e.season}-${e.episode}`, [{ season: e.season, episode: e.episode }], next)}
+      />
     </View>
+  );
+}
+
+/** "Oct 7, 2026", "Airs Nov 4, 2026" for one that is not out, "No date yet" when nobody has scheduled it. */
+function airLabel(airDate: string | null): string {
+  if (!airDate) return 'No date yet';
+  const label = shortDate(airDate) ?? airDate;
+  return airDate.slice(0, 10) > new Date().toISOString().slice(0, 10) ? `Airs ${label}` : label;
+}
+
+/**
+ * One episode, opened: its still, when it aired, how long it runs, what happens
+ * in it. The list knows the title and the date; the rest is asked of TMDB when
+ * the sheet opens, and the sheet shows what it has until that answers.
+ */
+function EpisodeSheet({ episode, tmdbId, watched, busy, onClose, onToggle }: {
+  episode: Episode | null; tmdbId: string | null; watched: boolean; busy: boolean;
+  onClose: () => void; onToggle: (e: Episode, next: boolean) => void;
+}) {
+  const [more, setMore] = useState<EpisodeDetail | null>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const season = episode?.season;
+  const number = episode?.episode;
+
+  useEffect(() => {
+    setMore(null);
+    if (season == null || number == null || !tmdbId) { setState('idle'); return; }
+    const abort = new AbortController();
+    setState('loading');
+    tmdbEpisode(tmdbId, season, number, abort.signal)
+      .then((d) => { setMore(d); setState('idle'); })
+      .catch(() => { if (!abort.signal.aborted) setState('failed'); });
+    return () => abort.abort();
+  }, [tmdbId, season, number]);
+
+  if (!episode) return null;
+  const title = more?.title ?? episode.title ?? `Episode ${episode.episode}`;
+  const airDate = more?.airDate ?? episode.airDate;
+  const runtime = more?.runtimeMinutes ?? episode.runtimeMinutes;
+  const unaired = !airDate || airDate.slice(0, 10) > new Date().toISOString().slice(0, 10);
+  const facts = [
+    `Season ${episode.season} · Episode ${episode.episode}`,
+    airLabel(airDate),
+    runtime ? `${runtime} min` : null,
+    more?.voteAverage != null ? `${more.voteAverage.toFixed(1)}/10 on TMDB` : null,
+  ].filter(Boolean).join('  ·  ');
+
+  return (
+    <Sheet open onClose={onClose} title={title}>
+      <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={styles.sheet}>
+        {more?.stillUrl ? <View style={styles.still}><Img uri={more.stillUrl} width={480} alt="" style={styles.fill} /></View> : null}
+        <View style={{ gap: space.xs }}>
+          <T variant="serifMd">{title}</T>
+          <T variant="meta">{facts}</T>
+        </View>
+        {more?.overview ? <T variant="body" style={{ color: color.textSecondary }}>{more.overview}</T>
+          : state === 'loading' ? <ActivityIndicator color={color.accent} />
+          : <T variant="bodySm">{state === 'failed' ? 'Could not load more about this episode. It needs a connection.' : 'No synopsis for this episode yet.'}</T>}
+        <View style={styles.sheetActions}>
+          <Button
+            label={watched ? 'Mark unwatched' : 'Mark watched'} variant={watched ? 'outline' : 'primary'} size="md" style={{ flex: 1 }}
+            disabled={busy || (unaired && !watched)} onPress={() => { onToggle(episode, !watched); onClose(); }}
+          />
+          <Button label="Close" variant="outline" size="md" onPress={onClose} />
+        </View>
+        {unaired && !watched ? <T variant="caption">It has not aired, so it cannot be marked watched yet.</T> : null}
+      </ScrollView>
+    </Sheet>
   );
 }
 
@@ -302,9 +393,16 @@ const styles = StyleSheet.create({
   seasonTick: { width: 48, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: color.border },
   dim: { opacity: 0.5 },
   none: { paddingHorizontal: space.lg, paddingVertical: space.md },
-  episode: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingLeft: 44, paddingRight: space.lg, paddingVertical: 10 },
+  episode: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: 44 },
+  episodeOpen: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8 },
+  episodeText: { flex: 1, minWidth: 0, gap: 2 },
+  episodeDate: { textTransform: 'none' },
+  episodeTick: { width: 52, alignItems: 'center', justifyContent: 'center' },
   code: { width: 32, textTransform: 'none' },
-  episodeTitle: { flex: 1, minWidth: 0 },
+  sheet: { padding: 20, gap: space.lg },
+  sheetActions: { flexDirection: 'row', gap: space.sm },
+  still: { width: '100%', aspectRatio: 16 / 9, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: color.surfaceInset },
+  fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   tick: {
     width: 20, height: 20, borderRadius: 2, borderWidth: 1, borderColor: color.borderStrong,
     alignItems: 'center', justifyContent: 'center',
