@@ -64,6 +64,17 @@ describe("routing", () => {
     expect((await call("/v1/items/not-a-uuid")).status).toBe(400);
   });
 
+  it("answers which films open on another day in a country, and rejects anything but item ids", async () => {
+    const { id } = await upsertMediaItem(db, movieItem({
+      release_dates: { results: [{ iso_3166_1: "DE", release_dates: [{ release_date: "1999-06-17T00:00:00.000Z", type: 3 }] }] },
+    }));
+    const ok = await call("/v1/catalog/release-dates", { method: "POST", ...jsonBody({ region: "DE", ids: [id] }) });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ region: "DE", dates: { [id]: "1999-06-17" } });
+    expect((await call("/v1/catalog/release-dates", { method: "POST", ...jsonBody({ region: "DE", ids: ["nope"] }) })).status).toBe(400);
+    expect((await call("/v1/catalog/release-dates", { method: "POST", ...jsonBody({ region: "DE" }) })).status).toBe(400);
+  });
+
   it("serves the taxonomy with an etag, and a 304 for a client that has it", async () => {
     const first = await call("/v1/taxonomy");
     const etag = first.headers.get("ETag")!;

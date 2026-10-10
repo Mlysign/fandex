@@ -27,6 +27,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
 import type { CatalogRow } from '~/lib/db';
 import { lookupHeld, toCard } from '~/lib/homeFeed';
+import { ownWindow, placeInMonth, regionalDates } from '~/lib/regionalDates';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -222,19 +223,30 @@ export default function CalendarScreen() {
     })();
   }, [month, region]);
 
-  // What of yours comes out this month, from the device.
+  // What of yours comes out this month, from the device. The device holds one
+  // date per title, so a film is placed by the day it opens in your country,
+  // which the Worker is asked for (lib/regionalDates.ts). The rows are read from
+  // a window around the month, because that day can fall in another month than
+  // the device's date does.
   const [mine, setMine] = useState<{ card: CardItem; relation: string }[]>([]);
   useEffect(() => {
     let live = true;
     if (!signedIn) { setMine([]); return; }
-    void db.getAllAsync<CatalogRow & { relation: string }>(
-      `SELECT DISTINCT c.id, c.type, c.title, c.slug, c.poster_url, c.release_date, c.year, c.community_score, c.community_votes, s.relation
-         FROM item_state s JOIN catalog c ON c.id = s.media_item_id
-        WHERE s.relation IN ('wishlist', 'library') AND c.release_date LIKE ?`,
-      [`${month}%`],
-    ).then((rows) => { if (live) setMine(rows.map((r) => ({ card: cardFromCatalog(r), relation: r.relation }))); });
+    const win = ownWindow(month);
+    void (async () => {
+      const rows = await db.getAllAsync<CatalogRow & { relation: string }>(
+        `SELECT DISTINCT c.id, c.type, c.title, c.slug, c.poster_url, c.release_date, c.year, c.community_score, c.community_votes, s.relation
+           FROM item_state s JOIN catalog c ON c.id = s.media_item_id
+          WHERE s.relation IN ('wishlist', 'library') AND c.release_date >= ? AND c.release_date < ?`,
+        [win.from, win.to],
+      );
+      // No answer (offline, or the Worker is busy) leaves every film on the device's date.
+      const dates = await regionalDates(region, rows.filter((r) => r.type === 'movie').map((r) => r.id))
+        .catch(() => new Map<string, string>());
+      if (live) setMine(placeInMonth(rows, dates, month).map((r) => ({ card: cardFromCatalog(r), relation: r.relation })));
+    })();
     return () => { live = false; };
-  }, [db, month, signedIn, auth.rowsRevision, catalog.revision]);
+  }, [db, month, region, signedIn, auth.rowsRevision, catalog.revision]);
 
   const items = useMemo(() => {
     const out = new Map<string, CardItem>();

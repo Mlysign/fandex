@@ -19,10 +19,16 @@ import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
 
 /**
  * Bump when the SHAPE of a stored doc changes (a field added to the vector, a
- * different merge rule). The cron re-derives rows stamped with an older number
- * from the blobs already stored, with no provider call.
+ * different merge rule). A doc stamped with an older number is corrected in
+ * two ways: the item read re-merges it from the stored blobs on the way out
+ * (catalog/read.ts), and the next write of the item re-derives and re-stamps it.
+ * ⚠️ Nothing re-derives a stale row on a timer, so a bump that changes the
+ * VECTOR or the facets reaches a device only as rows are refreshed.
+ *
+ * 2 (2026-10-10): a country's release date is its cinema date, not the earliest
+ * of any kind. Only `merged.releaseDate` of a film moves.
  */
-export const DERIVE_VERSION = 1;
+export const DERIVE_VERSION = 2;
 
 /** One media_links row as the write path holds it: the blob already parsed. */
 export interface ParsedLink {

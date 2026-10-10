@@ -64,11 +64,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   // window covers genuine staggered international releases while excluding those.
   const primaryReleaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
   const regionDate = norm.get("tmdb")?.releaseDatesByRegion?.[region] ?? null;
-  const sameReleaseCycle = !!regionDate && (
-    !primaryReleaseDate ||
-    Math.abs(Date.parse(regionDate) - Date.parse(primaryReleaseDate)) <= 3 * 365 * 86400000
-  );
-  const releaseDate = sameReleaseCycle ? regionDate : primaryReleaseDate;
+  const releaseDate = regionalReleaseDate(primaryReleaseDate, regionDate);
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
   const backdropUrl = pickField(BACKDROP_PRIORITY, norm, "backdrop");
   const metacritic = pickField(["rawg"], norm, "metacritic");
@@ -378,6 +374,20 @@ export function extractYear(date: string | null): number | null {
 }
 
 // ── Policy helpers ─────────────────────────────────────────────────
+
+const SAME_RELEASE_CYCLE_MS = 3 * 365 * 86400000;
+
+/**
+ * The date to show for a country: its own, when that belongs to the same
+ * release cycle as the primary date, else the primary. The rule is explained
+ * where mergeLinks calls it. Exported so the Worker's dates-for-my-titles
+ * answer applies the same guard as the item page.
+ */
+export function regionalReleaseDate(primary: string | null, regionDate: string | null): string | null {
+  if (!regionDate) return primary;
+  if (!primary) return regionDate;
+  return Math.abs(Date.parse(regionDate) - Date.parse(primary)) <= SAME_RELEASE_CYCLE_MS ? regionDate : primary;
+}
 
 // Pick a per-region value for the user's country, with a best-effort fallback
 // (US → GB → any) so "where to watch" still shows something when the exact

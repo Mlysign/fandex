@@ -13,6 +13,7 @@
 //     GET  /v1/shows/{id}/episodes
 //     GET  /v1/search/games?q                          IGDB search (the secret stays here)
 //     GET  /v1/calendar/{YYYY-MM}?region               the month's popular releases
+//     POST /v1/catalog/release-dates {region, ids}     films whose date in that country differs
 //
 //   Sign-in
 //     POST /v1/auth/google   {idToken}
@@ -42,7 +43,10 @@ import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
 import { capFrom, spend, spent } from "./budget";
 import { calendarMonth } from "./calendar";
-import { catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "./catalog/read";
+import {
+  catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
+  showEpisodesJson, taxonomyJson,
+} from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
 import { nowSeconds } from "./d1";
@@ -59,6 +63,7 @@ const TYPES = new Set(["movie", "show", "game"]);
 
 const AUTH_BODY_MAX = 16 * 1024;
 const LOOKUP_BODY_MAX = 256 * 1024;
+const DATES_BODY_MAX = 16 * 1024;
 const STATE_BODY_MAX = 2 * 1024 * 1024;
 
 /** A short client-side cache for catalog reads. The data changes on the scale of days. */
@@ -117,6 +122,16 @@ async function route(c: Ctx): Promise<Response> {
       (await allow(c.env.RL_RESOLVE, `platforms:${clientIp(request)}`)) && (await spend(c.env.DB, "platform_builds", 40)));
     if (!body) return error(503, "budget-exhausted", "This country's line-up is not built yet. Try again later.");
     return json(body, 200, { "Cache-Control": "public, max-age=3600" });
+  }
+
+  if (a === "catalog" && b === "release-dates" && method === "POST" && !d) {
+    const body = (await readJson(request, DATES_BODY_MAX)) as { region?: unknown } | null;
+    const ids = parseItemIds(body);
+    if (!ids) return error(400, "bad-request", `Expected {region, ids: [item id]}, at most ${RELEASE_DATES_MAX}`);
+    // Every film asked about is a blob read, so this one meets the limiter on every call.
+    if (!(await allow(c.env.RL_RESOLVE, `dates:${clientIp(request)}`))) return error(429, "rate-limited");
+    const region = typeof body?.region === "string" ? body.region : null;
+    return json(await regionalReleaseDatesJson(c.env.DB, ids, region), 200, { "Cache-Control": "no-store" });
   }
 
   if (a === "taxonomy" && method === "GET") {

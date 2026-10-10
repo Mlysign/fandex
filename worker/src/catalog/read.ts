@@ -4,10 +4,12 @@
 // page of item docs would spend it, and string concatenation does not.
 
 import { DEFAULT_COUNTRY, normalizeCountry } from "@/lib/countries";
-import { mergeLinks } from "@/lib/merge";
+import { mergeLinks, regionalReleaseDate } from "@/lib/merge";
+import { pickRegionalReleaseDate } from "@/lib/sources/normalize";
 import type { MediaLink, MediaType, Source } from "@/types";
 import { kvGet, kvSet } from "../budget";
 import { all, first, nowSeconds } from "../d1";
+import { DERIVE_VERSION } from "./derive";
 
 // ── One item ─────────────────────────────────────────────────────────────────
 
@@ -20,10 +22,11 @@ interface ItemDocRow {
   vector: string | null;
   facets: string | null;
   merged: string | null;
+  derive_version: number | null;
 }
 
 const ITEM_DOC_SELECT = `
-  SELECT mi.id, mi.type, mi.slug, mi.browsed, mi.updated_at, d.vector, d.facets, d.merged
+  SELECT mi.id, mi.type, mi.slug, mi.browsed, mi.updated_at, d.vector, d.facets, d.merged, d.derive_version
     FROM media_items mi LEFT JOIN item_doc d ON d.media_item_id = mi.id`;
 
 /**
@@ -34,6 +37,10 @@ const ITEM_DOC_SELECT = `
  * region and for any item with no TMDB link. Another region re-merges from the
  * item's stored blobs: one more query and a few hundred microseconds, on the
  * one read path where that is affordable because it is one item.
+ *
+ * A doc written under an older merge rule takes the same path whatever the
+ * region, so a rule change is true on the next read and not in five months,
+ * when the refresh next writes the row.
  */
 export async function itemDetailJson(
   db: D1Database,
@@ -47,7 +54,7 @@ export async function itemDetailJson(
 
   const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
   let merged = row.merged;
-  if (region !== DEFAULT_COUNTRY) {
+  if (region !== DEFAULT_COUNTRY || (row.derive_version ?? 0) < DERIVE_VERSION) {
     const regional = await mergedForRegion(db, row.id, row.type as MediaType, region);
     if (regional) merged = regional;
   }
@@ -77,6 +84,65 @@ async function mergedForRegion(db: D1Database, id: string, type: MediaType, regi
   });
   const full = mergeLinks(links, type, region);
   return JSON.stringify({ ...full, sources: full.sources.map((s) => ({ source: s.source, sourceId: s.sourceId })) });
+}
+
+// ── Release dates for a country, for a handful of films ──────────────────────
+
+/** Films per request. Each costs one blob read and about thirty json_each rows. */
+export const RELEASE_DATES_MAX = 200;
+
+const ITEM_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** `{ids: [uuid, …]}` as a list of ids, or null if it is not that. */
+export function parseItemIds(body: unknown): string[] | null {
+  const ids = (body as { ids?: unknown } | null)?.ids;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > RELEASE_DATES_MAX) return null;
+  const out = new Set<string>();
+  for (const id of ids) {
+    if (typeof id !== "string" || !ITEM_ID.test(id.toLowerCase())) return null;
+    out.add(id.toLowerCase());
+  }
+  return [...out];
+}
+
+/**
+ * The release date in one country for the films asked about, as a JSON string:
+ * `{"region":"DE","dates":{"<item id>":"2026-10-01",…}}`. Only a film whose
+ * date there DIFFERS from the catalog's one date is listed, so an id that is
+ * missing means "the date you hold is right", and so does a show or a game.
+ *
+ * A device holds one date per title. This is what lets the calendar put your
+ * own films on the day they open where you live, the day the popular feed
+ * already uses.
+ *
+ * SQLite hands back only the asked country's entries out of each blob, a few
+ * hundred bytes a film, and the pick is made here by the item page's own two
+ * functions. Doing the pick in SQL would be a second copy of the rule, and the
+ * two drifting apart is how a film ends up on two days.
+ */
+export async function regionalReleaseDatesJson(db: D1Database, ids: string[], regionRaw?: string | null): Promise<string> {
+  const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
+  const rows = await all<{ id: string; primary_date: string | null; dates: string | null }>(
+    db,
+    `SELECT mi.id, mi.release_date primary_date,
+            (SELECT e.value ->> 'release_dates'
+               FROM json_each(l.raw_data, '$.release_dates.results') e
+              WHERE e.value ->> 'iso_3166_1' = ?2 LIMIT 1) dates
+       FROM json_each(?1) j
+       JOIN media_items mi ON mi.id = j.value AND mi.type = 'movie'
+       JOIN media_links l ON l.media_item_id = mi.id AND l.source = 'tmdb' AND l.media_type = 'movie'`,
+    [JSON.stringify(ids), region],
+  );
+  const dates: Record<string, string> = {};
+  for (const r of rows) {
+    if (!r.dates) continue;
+    let listed: { release_date?: string | null; type?: number }[] = [];
+    try { listed = JSON.parse(r.dates); } catch { continue; }
+    if (!Array.isArray(listed)) continue;
+    const date = regionalReleaseDate(r.primary_date, pickRegionalReleaseDate(listed));
+    if (date && date !== r.primary_date) dates[r.id] = date;
+  }
+  return `{"region":${JSON.stringify(region)},"dates":${JSON.stringify(dates)}}`;
 }
 
 // ── The pool, as a delta ─────────────────────────────────────────────────────

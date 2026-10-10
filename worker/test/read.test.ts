@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { upsertMediaItem } from "../src/catalog/ingest";
-import { catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, showEpisodesJson, taxonomyJson } from "../src/catalog/read";
+import { DERIVE_VERSION } from "../src/catalog/derive";
+import {
+  catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
+  showEpisodesJson, taxonomyJson,
+} from "../src/catalog/read";
 import { db, gameItem, movieItem, showItem, wipe } from "./helpers";
 
 beforeEach(wipe);
@@ -46,6 +50,59 @@ describe("item detail", () => {
   it("reports an on-demand row as outside the pool", async () => {
     const { id } = await upsertMediaItem(db, gameItem(), { browsed: 1 });
     expect(JSON.parse((await itemDetailJson(db, { id }))!).inPool).toBe(false);
+  });
+
+  it("re-merges a doc written under an older rule, for the default region too", async () => {
+    const { id } = await upsertMediaItem(db, movieItem({ release_dates: { results: [usDates, deDates] } }));
+    // What an older version of the merge left behind: a premiere as the US date.
+    await db.prepare(
+      "UPDATE item_doc SET merged = json_set(merged, '$.releaseDate', '1999-03-24'), derive_version = ? WHERE media_item_id = ?",
+    ).bind(DERIVE_VERSION - 1, id).run();
+    expect(JSON.parse((await itemDetailJson(db, { id }))!).merged.releaseDate).toBe("1999-03-31");
+
+    // A current doc is served as stored: the default region costs no second query.
+    await db.prepare("UPDATE item_doc SET derive_version = ? WHERE media_item_id = ?").bind(DERIVE_VERSION, id).run();
+    expect(JSON.parse((await itemDetailJson(db, { id }))!).merged.releaseDate).toBe("1999-03-24");
+  });
+});
+
+const day = (date: string, type: number) => ({ release_date: `${date}T00:00:00.000Z`, type });
+const usDates = { iso_3166_1: "US", release_dates: [day("1999-03-24", 1), day("1999-03-31", 3)] };
+const deDates = { iso_3166_1: "DE", release_dates: [day("1999-02-12", 1), day("1999-06-17", 3), day("1999-11-01", 4)] };
+
+describe("release dates for a country", () => {
+  it("lists a film whose date there differs, by its cinema date and not its premiere", async () => {
+    const film = await upsertMediaItem(db, movieItem({ release_dates: { results: [usDates, deDates] } }));
+    const de = JSON.parse(await regionalReleaseDatesJson(db, [film.id], "de"));
+    expect(de).toEqual({ region: "DE", dates: { [film.id]: "1999-06-17" } });
+    // The item page says the same day: one rule, two answers.
+    expect(JSON.parse((await itemDetailJson(db, { id: film.id }, "DE"))!).merged.releaseDate).toBe("1999-06-17");
+  });
+
+  it("leaves out a film whose date is the one the device holds, a show, and an id nobody holds", async () => {
+    const same = await upsertMediaItem(db, movieItem({ release_dates: { results: [usDates] } }));
+    const bare = await upsertMediaItem(db, movieItem({ id: 604, title: "The Matrix Reloaded", release_date: "2003-05-15" }));
+    const show = await upsertMediaItem(db, showItem());
+    const ids = [same.id, bare.id, show.id, "00000000-0000-4000-8000-000000000000"];
+    expect(JSON.parse(await regionalReleaseDatesJson(db, ids, "US")).dates).toEqual({});
+    // Germany is not listed for either film, so the one date stands there too.
+    expect(JSON.parse(await regionalReleaseDatesJson(db, ids, "DE")).dates).toEqual({});
+  });
+
+  it("keeps the original date when the country's entry is a re-release decades later", async () => {
+    const film = await upsertMediaItem(db, movieItem({
+      release_dates: { results: [{ iso_3166_1: "DE", release_dates: [day("2026-08-27", 2)] }] },
+    }));
+    expect(JSON.parse(await regionalReleaseDatesJson(db, [film.id], "DE")).dates).toEqual({});
+  });
+
+  it("takes only a list of item ids, and not more than the cap", () => {
+    const id = "aaaaaaaa-0000-4000-8000-000000000001";
+    expect(parseItemIds({ ids: [id, id.toUpperCase()] })).toEqual([id]);
+    expect(parseItemIds({ ids: [] })).toBeNull();
+    expect(parseItemIds({ ids: ["x'); DROP TABLE kv; --"] })).toBeNull();
+    expect(parseItemIds({ ids: Array.from({ length: RELEASE_DATES_MAX + 1 }, () => id) })).toBeNull();
+    expect(parseItemIds(null)).toBeNull();
   });
 });
 

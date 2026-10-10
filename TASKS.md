@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Six items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: the website is online (2026-10-10). Four things need Nils.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** Fixed from his passes on 2026-10-10: the episode section on title pages, Settings (accounts, country, default types, your platforms), "Available on" in the filters. He confirmed a rating, an episode tick and a default-types change work. **Never run for real by anybody: Disconnect, Download, Delete, a change of country or platforms, any write on `/dev/scoring`.**
@@ -30,6 +30,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 4. **⬜ Decide whether to rotate `DISCORD_CLIENT_SECRET`. His call, not a blocker.** (2026-09-02.) ⚠️ **The secret was printed to a session transcript** while repairing a `.env` line I corrupted: the file had no trailing newline, so an append landed on the end of the secret's value and reading it back to fix it exposed it. The file is repaired and correct. Blast radius, measured: it is in **exactly one local file**, `~/.claude/projects/…/524438af-….jsonl`, and **not** in git history, the repo, or any memory file. So the realistic risk is low and rotation is a 60-second job — **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. Deleting that one file is the alternative he weighed; it does not undo the transmission. ⚠️ The var **rename is DONE** (I did it on Railway: `NEXT_PUBLIC_DISCORD_CLIENT_ID`, mirroring Google).
 
+5. **⬜ Should the LISTS show a film's date in your country?** (2026-10-10.) The calendar, Home and the item page follow the country setting. Discover, Wishlist, Library, the facet pages and Profile's "coming up" show the one worldwide date the device holds, and 136 of 200 pool films open on another day in Germany (mostly one to three days later, sometimes months). The cheap route is the calendar's: ask `POST /v1/catalog/release-dates` for the films on screen. The thorough one puts a per-country date map in the vector, which re-derives the pool and re-syncs every device. ⚠️ The calendar's own-title placement (same date, `lib/regionalDates.ts`) is deployed on the Worker but reaches the phone with the next APK and fandex.org with the next publish, and it was never seen signed in: the checks were the live API, unit tests and an anonymous load.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 

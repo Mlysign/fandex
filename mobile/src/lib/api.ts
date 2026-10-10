@@ -256,6 +256,10 @@ export const api = {
 
   calendar: (month: string, region?: string) => request<CalendarMonth>(`/v1/calendar/${month}${q({ region })}`),
 
+  /** Which of these films open on another day in `region` than the one date the device holds. At most 200 ids. */
+  releaseDates: (region: string, ids: string[]) =>
+    request<{ region: string; dates: Record<string, string> }>('/v1/catalog/release-dates', json('POST', { region, ids })),
+
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
 
   // ── Sign-in ──

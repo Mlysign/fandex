@@ -68,6 +68,33 @@ export interface SourceNormalized {
 
 // ── Shared formatting helpers ─────────────────────────────────────────────────
 
+// TMDB's release types: 1 premiere, 2 limited cinema run, 3 cinema, 4 digital,
+// 5 physical, 6 TV. The order a country's ONE date is looked for in.
+const REGIONAL_DATE_PREFERENCE: number[][] = [[2, 3], [4], [1]];
+
+/**
+ * The one date to show for a country, out of TMDB's list of that country's
+ * releases: the earliest cinema date, limited or wide. That is the date TMDB's
+ * own regional discover answers with (probed 2026-10-10: 19 of 19 films whose
+ * limited and wide dates differ), so the item page and the calendar agree.
+ * A film with no cinema date takes its digital one, then a premiere, then
+ * whatever is left.
+ *
+ * ⚠️ The types are a preference ORDER, not a set. Taking the earliest date of
+ * any of them put a festival screening ahead of the cinema release: a film
+ * shown at the Berlinale in February read as out in February when it opened in
+ * November.
+ */
+export function pickRegionalReleaseDate(dates: { release_date?: string | null; type?: number }[]): string | null {
+  const dated = dates.filter((x) => x?.release_date).sort((a, b) => (a.release_date! < b.release_date! ? -1 : 1));
+  if (!dated.length) return null;
+  for (const types of REGIONAL_DATE_PREFERENCE) {
+    const hit = dated.find((x) => types.includes(x.type as number));
+    if (hit) return String(hit.release_date).slice(0, 10);
+  }
+  return String(dated[0].release_date).slice(0, 10);
+}
+
 // IGDB images are referenced by image_id → build a sized CDN URL.
 function igdbImg(imageId: string | undefined | null, size: string): string | null {
   return imageId ? `https://images.igdb.com/igdb/image/upload/${size}/${imageId}.jpg` : null;
@@ -184,20 +211,16 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
     return m ? (m.DE ?? m.US ?? m[Object.keys(m)[0]]).providers : [];
   })();
 
-  // Per-region release dates (movies) — TMDB carries different theatrical/digital
-  // dates per country; merge picks the user's region (T22). Prefer a real
-  // theatrical/digital/premiere date, else the earliest of any type.
+  // Per-region release dates (movies). TMDB carries several dates per country;
+  // one is picked for each here, and merge picks the user's region (T22).
   out.releaseDatesByRegion = (() => {
     if (type !== "movie") return undefined;
     const results: any[] = d.release_dates?.results ?? [];
     const map: Record<string, string> = {};
     for (const r of results) {
       const iso = r.iso_3166_1;
-      const dates = (r.release_dates ?? []).filter((x: any) => x.release_date);
-      if (!iso || !dates.length) continue;
-      const ranked = [...dates].sort((a: any, b: any) => (a.release_date < b.release_date ? -1 : 1));
-      const preferred = ranked.find((x: any) => [3, 4, 2, 1].includes(x.type)) ?? ranked[0];
-      map[iso] = String(preferred.release_date).slice(0, 10);
+      const picked = iso ? pickRegionalReleaseDate(r.release_dates ?? []) : null;
+      if (picked) map[iso] = picked;
     }
     return Object.keys(map).length ? map : undefined;
   })();

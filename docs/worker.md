@@ -33,6 +33,7 @@ Public, no session:
 | `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. |
 | `GET /v1/calendar/{YYYY-MM}?region` | The month's popular releases, 40 cards. |
+| `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. |
 
 Sign-in: `POST /v1/auth/google {idToken}`, `POST /v1/auth/trakt {accessToken}`,
 `POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout`.
@@ -47,6 +48,17 @@ streaming services of one country, as names. Built once a day per country and ke
 A build is under a second and about 5,000 rows read; the same answer with the item page's last
 fallback step (any country TMDB lists) read 179,000, which is why that step is left out. A build
 meets the rate limiter and a cap of 40 a day; reading a built one meets neither.
+
+**A film has one date in the catalog and another per country.** The catalog's date (`media_items`,
+the vector, every list on a device) is TMDB's worldwide one. A country's date is picked by
+`pickRegionalReleaseDate` in `src/lib/sources/normalize.ts`: the earliest cinema date, limited or
+wide, then digital, then a premiere. That is the date TMDB's regional discover answers with, so the
+calendar's popular cards, the item page (`?region=`) and `release-dates` agree. Checked on the live
+Worker 2026-10-10: 12 of 12 held calendar films for Germany and 12 of 12 for the US. ⚠️ All three
+must go through that one function. Before it, the item page took the earliest date of any kind and
+showed a festival screening as the release (7 of 48 German calendar films). Of 200 pool films, 136
+have a German date that is not the catalog's, so the lists are a day or more off for most films;
+whether they should follow the country is an open question in TASKS.md.
 
 `POST /v1/t/pv` is the pageview beacon (`src/telemetry.ts`): `{path, ref}` from a page on fandex.org. It keeps a
 daily total per kind of page, signed in or not, and per class of referrer, and nothing that identifies anybody.
@@ -119,6 +131,7 @@ in `daily_budget` and are read at call time.
 | Request | CPU |
 |---|--:|
 | Item detail, lookup, state read, stored calendar month | 1 to 4 ms |
+| Release dates for 200 films | 0 to 2 ms |
 | Catalog delta, 150 rows | 3 ms |
 | Catalog delta, 200 rows | 5 to 8 ms |
 | Resolve that fetches from TMDB or IGDB | 4 to 7 ms warm, up to 19 ms on a fresh isolate |
@@ -163,6 +176,11 @@ Each of these is a way the Worker differs from the site, and each has a test.
   in the `kv` table. Three jobs: the nightly export to R2, the TMDB refresh (links older than 150
   days, inside TMDB's six-month cap), one calendar month. IGDB is not refreshed on a timer; its
   retention question is open.
+- **A changed merge rule is true on the next item read, and nothing re-derives on a timer.**
+  `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges a doc with
+  an older stamp from its blobs, whatever the region, and the next write of the item re-stamps it.
+  ⚠️ That heals `merged` only. A bump that changes the vector or the facets reaches a device as
+  rows are refreshed, which is 150 days for a TMDB link.
 - **`kv` holds the Twitch app token and is never exported.** The export skips tables by name and a
   test fails if `kv` reaches the bucket.
 - **Tests run inside workerd against a local D1.** That is the same SQLite build as production,
