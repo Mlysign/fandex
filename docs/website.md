@@ -50,7 +50,8 @@ From the repo root.
 | The www redirect (rarely) | `cd worker && npx wrangler deploy --config ../mobile/web/www/wrangler.jsonc` |
 
 A full build takes about a minute: 8 to 40 s for the Expo export, 30 s to fetch 4,561 titles the
-first time (one request each; a later build only asks for titles whose `updatedAt` moved), 13 s to
+first time (one request each; a later build only asks for titles whose `updatedAt` moved, or for
+all of them when the Worker's merge rule changed, which it reads as `deriveVersion` in the delta), 13 s to
 render. The first upload was 4,607 files in 77 s; later ones send only files that changed.
 ⚠️ A change to the app's bundle changes every item page, because each names the bundle's hashed
 file, so that deploy uploads all of them again.
