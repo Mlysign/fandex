@@ -45,11 +45,13 @@ interface Scores {
   scoresFor: (ids: string[]) => Promise<Map<string, number>>;
   /** Bumped when the profile is rebuilt, so a list can re-score. */
   revision: number;
+  /** Fetch the taxonomy again now. The Scoring admin calls it after a save, so its own edit shows at once. */
+  reloadTaxonomy: () => Promise<void>;
 }
 
 const Ctx = createContext<Scores | null>(null);
 
-function parseFacets(json: string): ScoreFacet[] {
+export function parseFacets(json: string): ScoreFacet[] {
   try {
     const v: unknown = JSON.parse(json);
     return Array.isArray(v) ? (v as ScoreFacet[]) : [];
@@ -84,7 +86,7 @@ async function refreshTaxonomy(db: SQLiteDatabase, force: boolean): Promise<bool
   }
 }
 
-async function ratedTitles(db: SQLiteDatabase): Promise<RatedTitle[]> {
+export async function ratedTitles(db: SQLiteDatabase): Promise<RatedTitle[]> {
   // Your rating for a title is the average of the per-provider scores above
   // zero, to one decimal: the rule the Library list and the site both use.
   const rows = await db.getAllAsync<{ id: string; rating: number; facets: string }>(
@@ -161,14 +163,20 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     return out;
   }, [db, profile, taxonomy]);
 
+  const reloadTaxonomy = useCallback(async () => {
+    await refreshTaxonomy(db, true);
+    const fresh = await storedTaxonomy(db);
+    if (fresh) setTaxonomy(fresh);
+  }, [db]);
+
   const value = useMemo<Scores>(() => {
     // The same rounding the score itself uses, so the two never disagree by a tenth.
     const center = profile && profile.w.size > 0 && profile.ratedItemCount >= 3 ? Math.round(profile.baseline * 100) / 10 : null;
     return {
-      ready, center, score, scoresFor, revision, taxonomy,
+      ready, center, score, scoresFor, revision, taxonomy, reloadTaxonomy,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
     };
-  }, [ready, profile, taxonomy, score, scoresFor, revision]);
+  }, [ready, profile, taxonomy, score, scoresFor, revision, reloadTaxonomy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

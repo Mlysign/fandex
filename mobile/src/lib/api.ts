@@ -1,6 +1,8 @@
 // The Worker's API, typed. One function per route the app uses; the route table
 // is worker/src/index.ts and the shapes are the ones its handlers build.
 
+import type { ScoringConfigValues } from '@/lib/scoringDefaults';
+import type { TaxonomyJson } from '~/lib/fandexScore';
 import { API_URL } from '~/lib/config';
 
 export class ApiError extends Error {
@@ -276,6 +278,10 @@ export const api = {
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
   catalogPlatforms: (region: string) =>
     request<{ region: string; games: Record<string, string[]>; streaming: Record<string, string[]> }>(`/v1/catalog/platforms${q({ region })}`),
+  taxonomy: () => request<TaxonomyJson>('/v1/taxonomy'),
+  adminSaveScoring: (config: ScoringConfigValues) => request<TaxonomyJson>('/v1/admin/scoring', json('PUT', config)),
+  adminSaveCategoryWeights: (updates: { id: string; weight: number; ignored: boolean }[]) =>
+    request<TaxonomyJson>('/v1/admin/categories', json('PUT', { updates })),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),

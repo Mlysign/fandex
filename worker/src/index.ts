@@ -31,6 +31,9 @@
 import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
+import {
+  deleteCategory, parseCategory, parseCategoryWeights, parseScoringConfig, saveCategory, saveCategoryWeights, saveScoringConfig,
+} from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
@@ -163,7 +166,7 @@ async function route(c: Ctx): Promise<Response> {
 
   if (a === "me") return me(c, method, b, d);
 
-  if (a === "admin") return admin(c, method, b);
+  if (a === "admin") return admin(c, method, b, d);
 
   return error(404, "not-found");
 }
@@ -311,12 +314,35 @@ function withAdminFlag(env: Env, userId: string, profile: string): string {
  * The admin pages' routes. A caller who is not an admin gets the same 404 as a
  * path that does not exist, signed in or not.
  */
-async function admin(c: Ctx, method: string, b?: string): Promise<Response> {
+async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Response> {
   const session = await readSession(c.env, c.request, c.defer);
   if (!session || !isAdmin(c.env, session.user.userId)) return error(404, "not-found");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   if (b === "users" && method === "GET") {
     return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+  }
+
+  // The Scoring page's writes. Each answers with the taxonomy as it now is, so
+  // the page redraws from what was stored and not from what it sent.
+  const db = c.env.DB;
+  const saved = async () => json((await taxonomyJson(db)).body, 200, PRIVATE);
+  if (b === "scoring" && method === "PUT" && !d) {
+    await saveScoringConfig(db, parseScoringConfig(await readJson(c.request, AUTH_BODY_MAX)));
+    return saved();
+  }
+  if (b === "categories") {
+    if (method === "PUT" && !d) {
+      await saveCategoryWeights(db, parseCategoryWeights(await readJson(c.request, AUTH_BODY_MAX)));
+      return saved();
+    }
+    if (method === "POST" && !d) {
+      await saveCategory(db, parseCategory(await readJson(c.request, AUTH_BODY_MAX)));
+      return saved();
+    }
+    if (method === "DELETE" && d) {
+      await deleteCategory(db, d);
+      return saved();
+    }
   }
   return error(404, "not-found");
 }
