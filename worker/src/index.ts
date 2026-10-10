@@ -30,6 +30,7 @@
 
 import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
+import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
@@ -161,6 +162,8 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   if (a === "me") return me(c, method, b, d);
+
+  if (a === "admin") return admin(c, method, b);
 
   return error(404, "not-found");
 }
@@ -299,6 +302,25 @@ async function logout(c: Ctx): Promise<Response> {
 
 // ── Your rows ────────────────────────────────────────────────────────────────
 
+/** The profile, with `admin: true` for an admin and nothing added for anybody else. */
+function withAdminFlag(env: Env, userId: string, profile: string): string {
+  return isAdmin(env, userId) ? `${profile.slice(0, -1)},"admin":true}` : profile;
+}
+
+/**
+ * The admin pages' routes. A caller who is not an admin gets the same 404 as a
+ * path that does not exist, signed in or not.
+ */
+async function admin(c: Ctx, method: string, b?: string): Promise<Response> {
+  const session = await readSession(c.env, c.request, c.defer);
+  if (!session || !isAdmin(c.env, session.user.userId)) return error(404, "not-found");
+  if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
+  if (b === "users" && method === "GET") {
+    return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
+  }
+  return error(404, "not-found");
+}
+
 async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Response> {
   const session = await readSession(c.env, c.request, c.defer);
   // An auth gate must ASK, never disappear: 401 with a code the client turns
@@ -311,7 +333,7 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
   if (!b) {
     if (method === "GET") {
       const body = await profileJson(db, userId);
-      return body ? json(body, 200, PRIVATE) : error(401, "unauthorized");
+      return body ? json(withAdminFlag(c.env, userId, body), 200, PRIVATE) : error(401, "unauthorized");
     }
     if (method === "DELETE") {
       const result = await deleteAccount(db, userId);
@@ -321,7 +343,8 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
 
   if (b === "prefs" && method === "PUT") {
     await writePrefs(db, userId, parsePrefs(await readJson(c.request, AUTH_BODY_MAX)));
-    return json(await profileJson(db, userId), 200, PRIVATE);
+    const body = await profileJson(db, userId);
+    return json(body ? withAdminFlag(c.env, userId, body) : body, 200, PRIVATE);
   }
 
   if (b === "state") {

@@ -197,6 +197,8 @@ export interface SignInResult { outcome: 'signed-in' | 'created' | 'linked' | 'm
 export interface Profile {
   user: { id: string; createdAt: number; country: string | null; platforms: string[] | null; mediaTypes: string[] | null };
   identities: { provider: string; displayName: string | null; avatarUrl: string | null }[];
+  /** Present and true for an admin only: the /dev pages are theirs to open. */
+  admin?: boolean;
 }
 
 export interface ItemStateRow {
@@ -274,6 +276,7 @@ export const api = {
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
   catalogPlatforms: (region: string) =>
     request<{ region: string; games: Record<string, string[]>; streaming: Record<string, string[]> }>(`/v1/catalog/platforms${q({ region })}`),
+  adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
   exportAccount: () => request<Record<string, unknown>>('/v1/me/export'),
@@ -326,3 +329,25 @@ export interface ShowEpisodes {
 
 /** A field left out is left alone; null clears it. */
 export interface PrefsPatch { country?: string | null; platforms?: string[] | null; mediaTypes?: string[] | null }
+
+/** /v1/admin/users. The Worker's src/admin.ts is where each number is defined. */
+export interface UsersSnapshot {
+  days: number;
+  totals: { users: number; library: number; wishlist: number; ignored: number; rated: number; meanRating: number | null };
+  perUserAverages: { library: number; wishlist: number; rated: number };
+  byType: { type: string; library: number; wishlist: number; rated: number }[];
+  byStatus: { status: string; count: number }[];
+  bySource: { source: string; count: number }[];
+  providers: { provider: string; users: number }[];
+  countries: { country: string; users: number }[];
+  engagement: {
+    active1: number; active7: number; active30: number; active90: number; activeInRange: number;
+    neverSeen: number; stickiness: number | null;
+  };
+  collectionSizes: { bucket: string; users: number }[];
+  signups: { day: string; count: number }[];
+  writeActivity: { day: string; count: number }[];
+  signedInPageviews: { day: string; count: number }[];
+  users: { id: string; createdAt: number; lastSeenAt: number | null; library: number; wishlist: number; rated: number; providers: string[] }[];
+  generatedAt: string;
+}

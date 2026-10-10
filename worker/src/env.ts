@@ -17,6 +17,8 @@ export interface Env {
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;
   DAILY_FETCH_CAP: string;
+  /** Fandex user ids that may call /v1/admin/*, comma separated. Unset means nobody. */
+  ADMIN_USER_IDS?: string;
   /** User-state row writes allowed per UTC day across everyone. Optional; me.ts has the default. */
   DAILY_USER_WRITE_CAP?: string;
   /** Calendar month builds allowed per UTC day. Optional; calendar.ts has the default. */

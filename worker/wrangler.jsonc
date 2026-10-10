@@ -43,7 +43,10 @@
     "ALLOWED_ORIGINS": "https://fandex.org,http://localhost:8081,http://localhost:19006",
     // New catalog rows the Worker may create per UTC day, across all callers.
     // One created item costs about 12 row writes, so 2,000 is ~24k of the 100k.
-    "DAILY_FETCH_CAP": "2000"
+    "DAILY_FETCH_CAP": "2000",
+    // Who may open the admin pages (/dev) and call /v1/admin/*. Fandex user ids,
+    // comma separated. An id is not a credential: the session still has to be theirs.
+    "ADMIN_USER_IDS": "38892bb2-eacb-4ba2-8e69-5075f5a6ab73"
   }
   // Secrets, set with `node scripts/push-secrets.mjs` (never committed):
   //   JWT_SECRET, TMDB_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET,

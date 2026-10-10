@@ -652,6 +652,22 @@ function Device() {
   );
 }
 
+/** The admin pages have no link anywhere else: on the site their addresses were typed. */
+function AdminLinks() {
+  const router = useRouter();
+  return (
+    <Section eyebrow="Admin" hint="Only your account sees this.">
+      <Card>
+        <View style={styles.actions}>
+          <Button label="Scoring" onPress={() => router.push('/dev/scoring' as never)} />
+          <Button label="Users" onPress={() => router.push('/dev/users' as never)} />
+          <Button label="Traffic" onPress={() => router.push('/dev/analytics' as never)} />
+        </View>
+      </Card>
+    </Section>
+  );
+}
+
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
@@ -714,6 +730,7 @@ export default function SettingsScreen() {
             </Section>
 
             <YourData onNotice={setNotice} counts={counts} />
+            {auth.profile?.admin ? <AdminLinks /> : null}
             <WidgetOffer />
           </>
         )}
