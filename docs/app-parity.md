@@ -44,7 +44,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
 | Facet pages (tag, person, studio) | partial | A person's photo and biography, "also known as", "you score X higher than the crowd", titles the catalog does not hold. No static page yet, so a crawler gets the app's shell. |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
-| Admin pages (`/dev`) | partial | Users and Scoring → Weights & Tuning are built. Scoring → Taxonomy (Review, Categories, Tags, Franchises) and Traffic are not. See "The admin pages" below. |
+| Admin pages (`/dev`) | partial | Users and Scoring are built, except Scoring → Taxonomy → Review. Traffic is not. See "The admin pages" below. |
 | Import | **no** | All of it. |
 | Sign-in | partial | Trakt only. A dialog from any gated control, returning to where you were (it sends you to You). Google, joining accounts, Steam. |
 
@@ -61,7 +61,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **The rest of the admin pages**: Scoring → Taxonomy, then Traffic. | Nils asked for all three on 2026-10-10. Two are live. |
+| 1 | **The rest of the admin pages**: the Review section, then Traffic. | Nils asked for all three on 2026-10-10. Users and Scoring are live. |
 | 2 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
 | 3 | **Settings' rest**: Import, a second login method, the download on a phone. | |
 | 4 | **Static facet pages**, a person's photo and biography, and Popular people on Home. | The screens and the links to them exist; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
@@ -78,7 +78,8 @@ offer the pages (a section at the foot of Settings; on the site the addresses we
 |---|---|---|
 | `/dev/users` | **yes** | Signed-in pageviews end on 2026-10-04: nothing counts one now. |
 | `/dev/scoring` → Weights & Tuning | **yes** | Save has not been pressed by anybody. The preview runs on the device, not on a server. |
-| `/dev/scoring` → Taxonomy | **no** | Four sections: Review, Categories, Tags, Franchises (`src/app/dev/scoring/*.tsx`, 1,700 lines). The Worker already has the category routes. Tags needs a vocabulary with counts (the device can count it from its catalog copy), and writes for `tag_category_override`, `tag_alias`, `facet_label_override`. Franchises needs `ip_alias` and `item_ip_override` writes. Review used Wikidata lookups from the server. |
+| `/dev/scoring` → Taxonomy → Categories, Tags, Franchises | **yes** | No write has been made from them by anybody. The tag table and the franchise list are counted on the device from its catalog copy (`lib/tagVocab.ts`, `lib/ipSurvey.ts`). A select is a button that opens a sheet. The franchise list shows the first 300 and asks you to filter. |
+| `/dev/scoring` → Taxonomy → Review | **no** | The sweep that proposes tag categories, franchise merges and missing members (`src/lib/taxonomySuggestions.ts`, 377 lines, and `ReviewPanel.tsx`, 393). It can run on the device over the same two surveys. ⚠️ What it needs that does not exist: `taxonomy_suggestion_dismissed` is not in D1, so the proposals he already said no to on the site are only in `rr-2026-10-04.db`. A table, a seed of those rows, and a dismiss route come first, or every old "no" comes back as a new proposal. |
 | `/dev/analytics` (Traffic) | **no** | `page_view_daily`, `referrer_daily` and `crawler_view_daily` hold history up to 2026-10-04 and nothing writes them: the Worker has no beacon. ⚠️ Counting again is a change to the privacy policy first. Its "Usage statistics" section says Fandex counts nothing and will say so before that changes. Until then the page can only show the old numbers. |
 
 **What an edit costs.** The device applies aliases, category moves, labels and the scoring config
@@ -120,9 +121,8 @@ Checked against `worker/src/index.ts`.
   it, so D1 holds them for those seasons only. The app asks TMDB for the rest, from the device.
 - A way to disconnect that also removes episode rows (the site left them too).
 
-Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, the
-`hidden` half of `PUT /v1/me/state`, and `POST` and `DELETE /v1/admin/categories` (for the
-Taxonomy tab).
+Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, and the
+`hidden` half of `PUT /v1/me/state`.
 
 ⚠️ Every new route is priced in D1 row writes and Worker CPU before it is built (docs/worker.md).
 
@@ -146,8 +146,10 @@ Parity must not cost any of these.
   un-ticking an episode sent Trakt the right requests. Nils has since rated a film for real, and
   it worked, and so have an episode tick from a title page and a change of default types.
   Later the same day, the same way: "Your platforms" with his 13 stored platforms selected,
-  `/dev/users`, and `/dev/scoring` with a preview. **Never run for real by anybody: Disconnect,
-  Download, Delete, a change of country or platforms, Save on the Scoring page.**
+  `/dev/users`, and `/dev/scoring`: a preview, the tag table, a franchise opened, and the requests
+  a category change and a franchise Remove would send. **Never run for real by anybody:
+  Disconnect, Download, Delete, a change of country or platforms, and every write on the Scoring
+  page (Save weights, a category, an alias, a name, an attach).**
 - **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
   have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.
