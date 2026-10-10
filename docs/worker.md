@@ -41,6 +41,17 @@ Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/me/state/{items|episodes|hidden|counts}`, `PUT /v1/me/state`, `GET /v1/me/export`,
 `DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`.
 
+`GET /v1/catalog/platforms?region=` lists, for every pool title, the game platforms or the
+streaming services of one country, as names. Built once a day per country and kept in `kv`
+(`platforms:games`, `platforms:streaming:{REGION}`), so a request after the first is two row reads.
+A build is under a second and about 5,000 rows read; the same answer with the item page's last
+fallback step (any country TMDB lists) read 179,000, which is why that step is left out. A build
+meets the rate limiter and a cap of 40 a day; reading a built one meets neither.
+
+Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/users`,
+`PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`. The writes answer
+with the taxonomy as stored. `/v1/me` carries `admin: true` for an admin.
+
 `DELETE /v1/me/identities/{provider}` removes one way of signing in and the wishlist and library
 rows that came from it (episode rows stay, as on the site). It refuses the last identity with
 `409 only-login`. It ends every session and answers with a new token, minted from an identity that

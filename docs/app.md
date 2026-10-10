@@ -19,7 +19,8 @@ code, in a browser.
 | You (`/profile`) | Who you are, three counts, rows to your pages, Sign out, recently added, coming up, a rail of recommendations. Signed out it is the sign-in card. | On-device SQLite, Worker `/v1/me` |
 | Insights (`/insights`) | Your taste in numbers, from the rows on the device: overview, how you rate, the spread per medium, taste by era, you against the crowd, how you rate tags, people and studios, who turns up most. | On-device SQLite |
 | Tag, person, studio (`/tag/{key}`, `/person/{key}`, `/studio/{key}`) | What it is, the crowd's average and yours, and every title in the catalog that carries it. Reached from the item page's tags, cast and facts. | On-device SQLite |
-| Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, the account, download and delete, the home-screen widget, what the device holds. Not there: "Your platforms", Import, joining accounts ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
+| Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, your platforms, the account, download and delete, the home-screen widget, what the device holds, and for an admin the links to `/dev`. Not there: Import, joining accounts ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
+| Admin (`/dev/users`, `/dev/scoring`) | Who is registered and what they hold; the scoring engine's weights with an on-device preview. An admin only: anybody else sees "Nothing here". | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
@@ -96,6 +97,12 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   been a second play on Trakt. `auth.rowsSyncing` is the flag; the tracker disables its ticks on
   it. Its sibling: after a failed write, read the device again. Putting back a snapshot taken
   before the request paints over rows that arrived while it was out.
+- **Where a title can be watched or played is its own table, filled per country** (`lib/platforms.ts`,
+  `item_platform`). The Worker's `/v1/catalog/platforms?region=` answers for the whole pool at once;
+  the device asks once a day and again when the account's country changes, because a streaming
+  line-up belongs to a country. Names become the site's platform keys (`@/lib/platformKeys`) on the
+  device. The filter sheet's "Available on" and the Settings picker both read `usePlatformIndex()`,
+  which is null until the copy is read: treat null as "not known yet", never as "on nothing".
 - **A show's episodes come from two places.** The Worker's `/v1/shows/{id}/episodes` holds the
   seasons, and episode lists only for seasons somebody opened on the old site. For the rest the
   item page asks TMDB from the device when a season is opened (`tmdbSeasonEpisodes`), which is

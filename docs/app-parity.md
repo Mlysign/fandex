@@ -35,16 +35,17 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Navigation | **yes** | The desktop bar's search box (`NavSearch.tsx`: suggestions for titles, people, tags). It is a link to Search for now. |
 | The kit | **yes** | See the kit table below. |
 | Home | partial | Popular people. "Popular right now" is recent releases by popularity until the Worker serves trending. Recommendations are ranked by genre only (a calendar card carries nothing finer). |
-| Wishlist / Library | partial | "Available on" in the Filters sheet. Grouping by your rating. |
+| Wishlist / Library | partial | Grouping by your rating. |
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
-| Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). "Available on" in the Filters sheet. People and tag results. Scroll and query restored on Back. |
+| Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). People and tag results. Scroll and query restored on Back. |
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
 | Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. The two related rails. |
 | Profile | partial | The Support Fandex row. |
-| Settings | partial | "Your platforms" (it narrows "Available on", and the device holds no platforms for either). The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. |
+| Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
 | Facet pages (tag, person, studio) | partial | A person's photo and biography, "also known as", "you score X higher than the crowd", titles the catalog does not hold. No static page yet, so a crawler gets the app's shell. |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
-| Import, admin pages | **no** | All of it. |
+| Admin pages (`/dev`) | partial | Users and Scoring → Weights & Tuning are built. Scoring → Taxonomy (Review, Categories, Tags, Franchises) and Traffic are not. See "The admin pages" below. |
+| Import | **no** | All of it. |
 | Sign-in | partial | Trakt only. A dialog from any gated control, returning to where you were (it sends you to You). Google, joining accounts, Steam. |
 
 ### What changed on 2026-10-10
@@ -60,32 +61,31 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **The admin pages** (`/dev/scoring`, `/dev/users`, `/dev/analytics`). | Nils asked for them on 2026-10-10. Nothing of them exists on the new stack: see "The admin pages" below. |
-| 2 | **"Available on"** in the Filters sheet, and with it **"Your platforms"** in Settings. | One feature in two places. The catalog copy on the device carries no platforms or streaming services, and streaming is per country: the Worker's stored page is the US one. Price the query before building it (see below). |
-| 3 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
+| 1 | **The rest of the admin pages**: Scoring → Taxonomy, then Traffic. | Nils asked for all three on 2026-10-10. Two are live. |
+| 2 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
+| 3 | **Settings' rest**: Import, a second login method, the download on a phone. | |
 | 4 | **Static facet pages**, a person's photo and biography, and Popular people on Home. | The screens and the links to them exist; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
 | 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 6 | **Import, sign-in beyond Trakt, admin, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
 ## The admin pages
 
-Not built, and not a port: the old pages were 3,000 lines of screens over thirteen routes that
-edited tables on the server the same process then scored from. On the new stack each piece needs a
-decision first.
+An admin is a user id in the Worker's `ADMIN_USER_IDS` (wrangler.jsonc). `/v1/admin/*` answers
+anybody else 404, and `/v1/me` carries `admin: true` for an admin, which is what makes the app
+offer the pages (a section at the foot of Settings; on the site the addresses were typed).
 
-- **Who is an admin.** The site read `SCORING_ADMIN_USER_IDS`. The Worker has no such variable and
-  no admin route.
-- **`/dev/users`.** Counts over `users`, `user_identities` and the state tables. One read route.
-- **`/dev/analytics`.** `page_view_daily`, `referrer_daily` and `crawler_view_daily` came across
-  with their history and nothing writes to them: the Worker has no beacon. The page would show
-  numbers that stop on 2026-10-04. Cloudflare's own analytics is the live source now.
-- **`/dev/scoring`.** Weights, categories, aliases, labels and franchises are tables in D1 and the
-  app reads them through `/v1/taxonomy`. Editing one is a few row writes. ⚠️ What an edit CHANGES
-  is the hard part: `item_doc.vector` and `facets` are written once per item, with the aliases of
-  that moment folded in. The site re-derived in memory on the next request. Here an alias or a
-  category move has to rewrite every item that carries the tag, and a row write is the budget
-  (docs/worker.md). Decide whether aliases are applied on the device instead before building any
-  of it.
+| Page | State | What is owed |
+|---|---|---|
+| `/dev/users` | **yes** | Signed-in pageviews end on 2026-10-04: nothing counts one now. |
+| `/dev/scoring` → Weights & Tuning | **yes** | Save has not been pressed by anybody. The preview runs on the device, not on a server. |
+| `/dev/scoring` → Taxonomy | **no** | Four sections: Review, Categories, Tags, Franchises (`src/app/dev/scoring/*.tsx`, 1,700 lines). The Worker already has the category routes. Tags needs a vocabulary with counts (the device can count it from its catalog copy), and writes for `tag_category_override`, `tag_alias`, `facet_label_override`. Franchises needs `ip_alias` and `item_ip_override` writes. Review used Wikidata lookups from the server. |
+| `/dev/analytics` (Traffic) | **no** | `page_view_daily`, `referrer_daily` and `crawler_view_daily` hold history up to 2026-10-04 and nothing writes them: the Worker has no beacon. ⚠️ Counting again is a change to the privacy policy first. Its "Usage statistics" section says Fandex counts nothing and will say so before that changes. Until then the page can only show the old numbers. |
+
+**What an edit costs.** The device applies aliases, category moves, labels and the scoring config
+when it scores, from `/v1/taxonomy`. Nothing stored per item is rewritten, so an edit is a few
+row writes and reaches a device the next time it fetches the taxonomy (every twelve hours, or at
+once for the admin who made it). I had this wrong on 2026-10-10 morning and wrote that an alias
+would have to rewrite every item carrying the tag.
 
 ## The kit
 
@@ -98,7 +98,7 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. Not carried: the rail's hover arrows, the month scrubber on a wide window, list view. |
 | Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Once opened on a phone it stays open; the site closed it on a tap outside. |
 | List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | partial. No hide while scrolling. |
-| Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | partial (`Filters.tsx`): must include and exclude, your lists, release year. No "Available on"; the year is two fields where the site had a slider. |
+| Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | partial (`Filters.tsx`): must include and exclude, available on, your lists, release year. The year is two fields where the site had a slider. |
 | Episode row, Up next rail | `EpisodeRow.tsx`, `ProgressRail.tsx` | **yes** (`UpNext.tsx`), with the tick's fill, hold and fade. |
 | Nav bars | `AppNav.tsx` | **yes** (`AppNav.tsx`). |
 | Button, Panel, Eyebrow, EmptyState, Avatar, StatStrip, Skeleton, Sheet, Toast | `ui/*` | **yes** (`kit.tsx`, `Toast.tsx`). The skeleton breathes where the site's shimmers. |
@@ -115,14 +115,14 @@ Checked against `worker/src/index.ts`.
 - Autocomplete over people, tags and studios.
 - Facet pages: the grid for a person, tag or studio, a person's bio, the crowd averages.
 - Franchise members (`franchise_members` is built and not applied, docs/worker.md).
-- The platform survey behind "Your platforms" and the "available on" counts.
 - Steam (sign-in and owned games), the import, telemetry, and every admin write.
 - Episodes for most seasons. The site stored a season's episodes the first time somebody opened
   it, so D1 holds them for those seasons only. The app asks TMDB for the rest, from the device.
 - A way to disconnect that also removes episode rows (the site left them too).
 
-Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, and
-the `hidden` half of `PUT /v1/me/state`.
+Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, the
+`hidden` half of `PUT /v1/me/state`, and `POST` and `DELETE /v1/admin/categories` (for the
+Taxonomy tab).
 
 ⚠️ Every new route is priced in D1 row writes and Worker CPU before it is built (docs/worker.md).
 
@@ -144,8 +144,10 @@ Parity must not cost any of these.
   Filters sheet, Settings with its three connected accounts, and a show's "Your progress" (19 of
   19 on a show he has finished, a season's episodes loading from TMDB). Clicking a rating and
   un-ticking an episode sent Trakt the right requests. Nils has since rated a film for real, and
-  it worked. **Never run for real by anybody: an episode tick from the item page, Disconnect,
-  Download, Delete, a change of country or default types.**
+  it worked, and so have an episode tick from a title page and a change of default types.
+  Later the same day, the same way: "Your platforms" with his 13 stored platforms selected,
+  `/dev/users`, and `/dev/scoring` with a preview. **Never run for real by anybody: Disconnect,
+  Download, Delete, a change of country or platforms, Save on the Scoring page.**
 - **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
   have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.
