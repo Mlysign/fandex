@@ -35,15 +35,15 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Navigation | **yes** | The desktop bar's search box (`NavSearch.tsx`: suggestions for titles, people, tags). It is a link to Search for now. |
 | The kit | **yes** | See the kit table below. |
 | Home | partial | Popular people. "Popular right now" is recent releases by popularity until the Worker serves trending. Recommendations are ranked by genre only (a calendar card carries nothing finer). |
-| Wishlist / Library | partial | The Filters sheet. Grouping by your rating. |
+| Wishlist / Library | partial | "Available on" in the Filters sheet. Grouping by your rating. |
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
-| Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). The Filters sheet. People and tag results. Scroll and query restored on Back. |
+| Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). "Available on" in the Filters sheet. People and tag results. Scroll and query restored on Back. |
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
-| Item page | partial | Desktop two-column layout. Score panel's band sentence, baseline and sum rows. Hide from suggestions. Episode tracker. The two related rails. Links from a tag, person or studio. |
-| Profile | partial | The Insights row and the Support Fandex row. |
+| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. Episode tracker. The two related rails. |
+| Profile | partial | The Support Fandex row. |
 | Settings | **no** | It is the old device panel under a new address. Connected accounts as panels, country, default types, your platforms, download and delete. |
-| Facet pages (tag, person, studio) | **no** | All of it. Also the second public page type. |
-| Insights | **no** | All of it. |
+| Facet pages (tag, person, studio) | partial | A person's photo and biography, "also known as", "you score X higher than the crowd", titles the catalog does not hold. No static page yet, so a crawler gets the app's shell. |
+| Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
 | Import, admin pages | **no** | All of it. |
 | Sign-in | partial | Trakt only. A dialog from any gated control, returning to where you were (it sends you to You). Google, joining accounts, Steam. |
 
@@ -61,7 +61,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | # | Stage | Why here |
 |--:|---|---|
 | 1 | **Settings**, with export and delete. | The privacy policy points at an email address until these two buttons exist. |
-| 2 | **The Filters sheet**, once, for Search, Wishlist and Library. | It is the largest thing missing from three screens at the same time. |
+| 2 | **"Available on"** in the Filters sheet. | The catalog copy on the device does not carry platforms or streaming services; the Worker's delta has to send them first. |
 | 3 | **The item page's rest**: score panel, episode tracker, "More like this", desktop layout. | The page every other screen leads to. |
 | 4 | **Facet pages** and the links to them, and Popular people on Home. | New Worker routes. Also what Google already holds addresses for. |
 | 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
@@ -77,7 +77,8 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Star picker | `ActionCells.tsx` | **yes**. Opens under the card's bar; the star that is your rating clears it. |
 | Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. Not carried: the rail's hover arrows, the month scrubber on a wide window, list view. |
 | Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Once opened on a phone it stays open; the site closed it on a tap outside. |
-| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | partial. No Filters button, no hide while scrolling. |
+| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | partial. No hide while scrolling. |
+| Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | partial (`Filters.tsx`): must include and exclude, your lists, release year. No "Available on"; the year is two fields where the site had a slider. |
 | Episode row, Up next rail | `EpisodeRow.tsx`, `ProgressRail.tsx` | **yes** (`UpNext.tsx`), with the tick's fill, hold and fade. |
 | Nav bars | `AppNav.tsx` | **yes** (`AppNav.tsx`). |
 | Button, Panel, Eyebrow, EmptyState, Avatar, StatStrip, Skeleton, Sheet, Toast | `ui/*` | **yes** (`kit.tsx`, `Toast.tsx`). The skeleton breathes where the site's shimmers. Sheet is built and nothing uses it yet. |
@@ -117,10 +118,12 @@ Parity must not cost any of these.
 
 ## Not checked
 
-- **Anything signed in, by me.** The rebuilt screens were looked at signed out, in a browser, at
-  375 px and 1280 px. Up next, the grids with your ratings and bookmarks, Recommended for you,
-  the profile, rating from a card: none of it has been seen running against a real account.
-  Nils's own tab held the database (the one-tab limit, docs/app.md), so mine could not start.
-- **The phone.** No APK was built from this pass. The item page showed one fault there the browser
-  could not; expect the same of these screens.
+- **Writes, signed in.** Seen on Nils's account in his Chrome on 2026-10-10, looking only: Home
+  with Up next and the recommendations, Search with his ratings on the cards, the item page in
+  two columns, a person page, Insights, the Filters sheet narrowing 4,561 titles to 496. A
+  rating was clicked with every save blocked in that tab, to see the request it would send
+  (the right one). Nothing was actually rated, saved or ticked.
+- **The phone, beyond its first screen.** An APK of this pass is on the Pixel 8 and opens on Home
+  with Up next and the recommendations. The first build crashed at launch on a web-only
+  accessibility role, which no browser check could have shown. No other screen was opened there.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.

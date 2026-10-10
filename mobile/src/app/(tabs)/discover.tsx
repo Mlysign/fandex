@@ -6,18 +6,20 @@
 // With nothing typed the grid is the catalog on this device. The site showed a
 // provider-fed feed of new and upcoming titles there, which needs a Worker
 // route that does not exist yet (docs/app-parity.md). Also not carried over:
-// the Filters sheet, and people and tag results.
+// people and tag results.
 
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { normalizeName } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
+import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { EmptyState } from '~/components/kit';
 import { SubBar } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
 import { api } from '~/lib/api';
-import { cardFromCatalog, type CardItem } from '~/lib/cards';
+import { useAuth } from '~/lib/AuthProvider';
+import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { tmdbConfigured } from '~/lib/config';
 import { currentMonth, monthLabel } from '~/lib/dates';
@@ -56,6 +58,9 @@ export default function DiscoverScreen() {
   const [screen, setScreen] = useState<Remote>(IDLE);
   const [games, setGames] = useState<Remote>(IDLE);
   const [shown, setShown] = useState(STEP);
+  const auth = useAuth();
+  const [filters, setFilters] = useState(noFilters);
+  const [sheet, setSheet] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -96,7 +101,11 @@ export default function DiscoverScreen() {
     return [...local, ...fresh];
   }, [pool, norm, screen.rows, games.rows]);
 
-  const visible = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
+  const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
+  // Your state for every title is only read while a "your lists" filter is on.
+  const listed = Object.values(filters.membership).some(Boolean);
+  const stateOf = useCardStates(useMemo(() => (listed ? typed.map((c) => c.id) : []), [listed, typed]));
+  const visible = useFiltered(typed, filters, stateOf);
   const allScores = useRowScores(useMemo(
     () => (sort === 'fandexScore' ? visible.map((c) => c.id).filter((id): id is string => !!id) : []), [sort, visible],
   ));
@@ -113,7 +122,7 @@ export default function DiscoverScreen() {
   }, [visible, sort, allScores]);
 
   // A new question starts at the top of its own answer.
-  useEffect(() => setShown(STEP), [norm, sort, types.shown.join(',')]);
+  useEffect(() => setShown(STEP), [norm, sort, types.shown.join(','), filters]);
   const page = useMemo(() => sorted.slice(0, shown), [sorted, shown]);
   const more = useCallback(() => setShown((n) => (n < sorted.length ? n + STEP : n)), [sorted.length]);
 
@@ -151,6 +160,7 @@ export default function DiscoverScreen() {
         search={{ value: query, onChange: setQuery, placeholder: 'Search games, movies, shows…' }}
         count={pool ? { noun: 'titles', n: sorted.length } : null}
         sort={{ value: sort, options: center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS, onChange: setSort }}
+        trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}
       />
       <PosterGrid
         items={sections ? undefined : page}
@@ -162,6 +172,10 @@ export default function DiscoverScreen() {
             {notes.map((n) => <Text key={n} style={[type.caption, { color: color.textSecondary }]}>{n}</Text>)}
           </View>
         ) : null}
+      />
+      <FilterSheet
+        open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters}
+        resultCount={sorted.length} noun="titles" signedIn={auth.status === 'signedIn'}
       />
     </Screen>
   );

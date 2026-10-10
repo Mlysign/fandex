@@ -389,7 +389,7 @@ fs.writeFileSync(path.join(STAGE, 'robots.txt'), [
   'Allow: /v1/calendar/',
   'Disallow: /v1/',
   // The old site's list (src/app/robots.ts): the screens that are yours, or that need the app to show anything.
-  ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/app-shell'].map((p) => `Disallow: ${p}`),
+  ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/insights', '/app-shell'].map((p) => `Disallow: ${p}`),
   '',
   `Sitemap: ${SITE}/sitemap.xml`,
   '',

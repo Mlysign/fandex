@@ -3,8 +3,7 @@
 // the tabs, a search within the list, the count and the sort; under it a grid
 // of poster cards, or the episode rows of the shows you are part way through.
 //
-// Everything here is on the device, so a search or a sort touches no network.
-// Not carried over yet: the Filters sheet.
+// Everything here is on the device, so a search, a sort or a filter touches no network.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -13,12 +12,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { normalizeName } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
+import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { Button, EmptyState } from '~/components/kit';
 import { SubBar, Tabs, type TabDef } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
 import { EPISODE_ROW_GAP, EpisodeRow, useUpNext } from '~/components/UpNext';
 import { useAuth } from '~/lib/AuthProvider';
-import { cardFromCatalog, type CardItem } from '~/lib/cards';
+import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel } from '~/lib/dates';
 import { shelf, shelfCounts, type ShelfRow } from '~/lib/db';
@@ -116,6 +116,8 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
   const [sort, setSort] = useState<Sort>('addedAt');
   const [rows, setRows] = useState<ShelfRow[] | null>(null);
   const [missing, setMissing] = useState(0);
+  const [filters, setFilters] = useState(noFilters);
+  const [sheet, setSheet] = useState(false);
 
   // The whole shelf, once. Every filter and sort below is over what is in memory,
   // because a filter over one page of a list only finds what you already scrolled past.
@@ -146,7 +148,10 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
     }
   }, [filtered, sort, scores]);
 
-  const cards = useMemo(() => sorted.map(cardFromCatalog), [sorted]);
+  const allCards = useMemo(() => sorted.map(cardFromCatalog), [sorted]);
+  const listed = Object.values(filters.membership).some(Boolean);
+  const stateOf = useCardStates(useMemo(() => (listed ? allCards.map((c) => c.id) : []), [listed, allCards]));
+  const cards = useFiltered(allCards, filters, stateOf);
   // A wishlist by date is a timeline, oldest first, so what is next is where you look.
   // A library by date is newest first.
   const sections = useMemo(() => (sort === 'releaseDate' ? byMonth(cards, relation === 'library') : undefined), [sort, cards, relation]);
@@ -170,7 +175,9 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
         count={rows ? { noun: NOUN[relation], n: cards.length } : null}
         sort={{ value: sort, options: LIBRARY_SORTS, onChange: setSort }}
         actions={<SyncButton />}
+        trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}
       />
+      <FilterSheet open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters} resultCount={cards.length} noun="titles" signedIn />
       <PosterGrid
         items={sections ? undefined : cards}
         sections={sections}

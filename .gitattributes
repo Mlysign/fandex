@@ -3,3 +3,5 @@
 *.sh text eol=lf
 docker-entrypoint.sh text eol=lf
 Dockerfile text eol=lf
+# patch-package reads these byte for byte.
+mobile/patches/*.patch text eol=lf

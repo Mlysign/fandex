@@ -23,7 +23,7 @@ const TYPES = new Set(['movie', 'show', 'game']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 /** The app's one-word screens, other than Home, which is `/` and a file. The site's own addresses. */
-const TABS = new Set(['discover', 'calendar', 'wishlist', 'library', 'profile', 'settings']);
+const TABS = new Set(['discover', 'calendar', 'wishlist', 'library', 'profile', 'settings', 'insights']);
 
 /** Is this an address only the app can answer? The route table is mobile/src/app. */
 function appRoute(parts: string[]): boolean {

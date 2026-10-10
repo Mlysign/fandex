@@ -2,12 +2,11 @@
 // are, three counts, the rows that lead to your pages, Sign out, what you added
 // lately, what is coming up, and a rail of recommendations.
 //
-// Signed out it is where you sign in. Not here yet: the Insights row (the page
-// does not exist) and the Support Fandex row.
+// Signed out it is where you sign in. Not here yet: the Support Fandex row.
 
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Bookmark, ChevronRight, Settings as SettingsIcon, Star } from 'lucide-react-native';
+import { Bookmark, ChevronRight, Settings as SettingsIcon, Star, TrendingUp } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardRail } from '~/components/cards';
@@ -120,6 +119,7 @@ export default function ProfileScreen() {
   const avatar = auth.profile?.identities.find((i) => i.avatarUrl)?.avatarUrl ?? null;
 
   const entries = [
+    { href: '/insights', label: 'Insights', hint: 'Your taste in numbers', Icon: TrendingUp },
     { href: '/wishlist', label: 'Wishlist', hint: stats ? `${stats.wishlist} saved` : '', Icon: Bookmark },
     { href: '/wishlist?tab=library', label: 'Your ratings', hint: stats ? `${stats.rated} titles` : '', Icon: Star },
     { href: '/settings', label: 'Settings', hint: 'Account, sync, privacy', Icon: SettingsIcon },

@@ -3,8 +3,8 @@
 // Ports of src/components/SubBar.tsx, ui/TypeFilter.tsx, ui/CollapsibleChips.tsx
 // and LibraryWishlistTabs.tsx.
 //
-// Not carried over yet: the Filters sheet (must include / exclude, available
-// on, your lists, year range), and hiding the bar while scrolling down.
+// The Filters sheet is components/Filters.tsx. Not carried over yet: hiding
+// the bar while scrolling down.
 
 import { Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
@@ -113,10 +113,12 @@ export function Tabs<K extends string>({ tabs, active, onChange }: { tabs: TabDe
 
 // ── The bar ──────────────────────────────────────────────────────────────────
 
-export function SubBar<S extends string>({ tabs, filters, search, count, sort, actions }: {
+export function SubBar<S extends string>({ tabs, filters, trailing, search, count, sort, actions }: {
   tabs?: ReactNode;
   /** Other chips on the type filter's row: the calendar's scopes. */
   filters?: ReactNode;
+  /** At the far end of the type filter's row: the Filters button. */
+  trailing?: ReactNode;
   search?: { value: string; onChange: (v: string) => void; placeholder: string };
   /** "TITLES · 1,945" */
   count?: { noun: string; n: number } | null;
@@ -126,9 +128,12 @@ export function SubBar<S extends string>({ tabs, filters, search, count, sort, a
   return (
     <View style={styles.bar}>
       <View style={styles.inner}>
-        <View style={styles.row}>
-          <TypeFilter />
-          {filters}
+        <View style={styles.top}>
+          <View style={styles.row}>
+            <TypeFilter />
+            {filters}
+          </View>
+          {trailing}
         </View>
         {tabs}
         {search ? <SearchBar value={search.value} onChange={search.onChange} placeholder={search.placeholder} /> : null}
@@ -151,7 +156,8 @@ export function SubBar<S extends string>({ tabs, filters, search, count, sort, a
 const styles = StyleSheet.create({
   bar: { backgroundColor: color.surface, borderBottomWidth: 1, borderBottomColor: color.border, paddingHorizontal: 24, paddingVertical: 12 },
   inner: { width: '100%', maxWidth: 1152, alignSelf: 'center', gap: 12 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 20 },
+  top: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  row: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 20 },
   circles: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   circle: {
     width: 40, height: 40, borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,

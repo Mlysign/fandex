@@ -18,6 +18,10 @@ const ITEMS = [
   { key: 'library', href: '/wishlist', label: 'Wishlist', Icon: Bookmark, match: (p: string) => p.startsWith('/library') || p.startsWith('/wishlist') },
 ] as const;
 
+// "navigation" is a role a browser knows and Android does not: handing it to a
+// native view crashed the app at launch (seen on the Pixel, 2026-10-10).
+const NAV_ROLE = Platform.OS === 'web' ? ('navigation' as never) : undefined;
+
 const youActive = (p: string) => p.startsWith('/profile') || p.startsWith('/settings');
 
 export interface AppNavProps {
@@ -72,7 +76,7 @@ export function AppNav({ variant, pathname, onNavigate, bottomInset = 0 }: AppNa
 
   if (variant === 'bottom') {
     return (
-      <View accessibilityRole={'navigation' as never} accessibilityLabel="Primary" style={[styles.bottom, { paddingBottom: bottomInset }]}>
+      <View accessibilityRole={NAV_ROLE} accessibilityLabel="Primary" style={[styles.bottom, { paddingBottom: bottomInset }]}>
         {ITEMS.map((it) => (
           <Slot key={it.key} href={it.href} label={it.label} Icon={it.Icon} active={it.match(pathname)} variant="bottom" onNavigate={onNavigate} />
         ))}
@@ -82,7 +86,7 @@ export function AppNav({ variant, pathname, onNavigate, bottomInset = 0 }: AppNa
   }
 
   return (
-    <View accessibilityRole={'navigation' as never} accessibilityLabel="Primary" style={styles.top}>
+    <View accessibilityRole={NAV_ROLE} accessibilityLabel="Primary" style={styles.top}>
       <Pressable {...home} accessibilityRole="link" accessibilityLabel="Fandex home" style={styles.brand}>
         <Logo size={24} />
         <Text style={styles.wordmark}>Fandex</Text>
