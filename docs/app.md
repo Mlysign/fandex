@@ -379,8 +379,14 @@ secret and gives Google its SHA-256 as the `nonce`; on return it sends the token
 Checked on this machine: the button leaves for Google with the right address; a return with a
 made-up token is refused by the local Worker and the screen says so; a return this tab did not
 start is refused without asking the Worker; the token is gone from the address bar either way.
-**Not checked: a real sign-in.** Google does not list this machine's address yet, and approving
-is a grant on a real Google account.
+
+**Live on fandex.org since 2026-10-11.** Both return addresses are on the OAuth client. Checked
+there the same day, in Nils's Chrome with his account: Google's account chooser named fandex.org,
+the token it sent back carried the nonce, the live API answered 200, the tab returned to Settings
+still signed in, and nothing was left in the address or the tab's storage. That run was started
+from the console, because his browser was signed in and an account with Google already connected
+is shown no button. **Not checked: the button pressed by a signed-out visitor on the live site,
+and a first-time Google account** (it would create a new Fandex account).
 
 ## Known problems
 
