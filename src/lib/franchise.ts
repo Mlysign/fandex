@@ -19,7 +19,24 @@
 
 import { ipDisplayLabel } from "@/lib/facets";
 import type { Facet } from "@/lib/facets";
-import type { DiscoveryVector } from "@/lib/discovery";
+
+/**
+ * What this module reads off a catalog title. The site's DiscoveryVector has
+ * all of it and so does the app's ItemVector, and everything below is generic
+ * over which one it is given.
+ *
+ * ⚠️ No import from discovery.ts, on purpose. The app's device imports this
+ * file (mobile/src/lib/related.ts), and even a type-only import from there
+ * drags db.ts, and with it better-sqlite3 and Node, into the app's typecheck:
+ * green on a machine with the site's node_modules beside it, red in CI.
+ */
+export interface FranchiseVector {
+  id: string;
+  title: string;
+  releaseDate: string | null;
+  communityVotes?: number | null;
+  sources?: { source: string; sourceId: string }[];
+}
 
 /**
  * Hard ceiling on rail length. Star Wars is the catalog's largest franchise at
@@ -44,11 +61,11 @@ export interface FranchiseOutsider {
 }
 
 /** One rail slot: either a catalog row or a provider-only title. */
-export type FranchiseEntry =
-  | { kind: "held"; vector: DiscoveryVector; attention: number; releaseDate: string | null; title: string }
+export type FranchiseEntry<V extends FranchiseVector = FranchiseVector> =
+  | { kind: "held"; vector: V; attention: number; releaseDate: string | null; title: string }
   | { kind: "absent"; outsider: FranchiseOutsider; attention: number; releaseDate: string | null; title: string };
 
-export interface FranchiseGroup {
+export interface FranchiseGroup<V extends FranchiseVector = FranchiseVector> {
   /** The canonical ip facet key, for logging/debugging. Not a URL: `ip` is
    *  deliberately not a linkable facet kind (see facetUrl.ts). */
   key: string;
@@ -57,10 +74,10 @@ export interface FranchiseGroup {
   label: string;
   /** CATALOG siblings only, newest first — never the item you're looking at.
    *  Kept for callers that can only render real rows. */
-  items: DiscoveryVector[];
+  items: V[];
   /** The full rail: catalog rows AND provider-only titles, ranked and capped
    *  together. This is what the item page renders. */
-  entries: FranchiseEntry[];
+  entries: FranchiseEntry<V>[];
 }
 
 /**
@@ -78,7 +95,7 @@ export interface FranchiseGroup {
  * looks at on the least current titles in the franchise. On a 24-member Star
  * Wars rail that meant the visible cards were all from the 1970s and 80s.
  */
-function byRecency(items: DiscoveryVector[]): DiscoveryVector[] {
+function byRecency<V extends FranchiseVector>(items: V[]): V[] {
   return [...items].sort((a, b) => {
     if (!a.releaseDate && !b.releaseDate) return a.title.localeCompare(b.title);
     if (!a.releaseDate) return 1;
@@ -103,7 +120,7 @@ function byRecency(items: DiscoveryVector[]): DiscoveryVector[] {
  * deterministic on the long tail of franchise entries with no votes at all,
  * which on IGDB is most of them.
  */
-function topByAttention(items: DiscoveryVector[], cap: number): DiscoveryVector[] {
+function topByAttention<V extends FranchiseVector>(items: V[], cap: number): V[] {
   if (items.length <= cap) return items;
   return [...items]
     .sort((a, b) =>
@@ -116,7 +133,7 @@ function topByAttention(items: DiscoveryVector[], cap: number): DiscoveryVector[
 
 /** topByAttention over mixed entries. Held rows and provider-only titles
  *  compete in ONE pool — see the warning at the merge site. */
-function topByAttentionEntries(entries: FranchiseEntry[], cap: number): FranchiseEntry[] {
+function topByAttentionEntries<V extends FranchiseVector>(entries: FranchiseEntry<V>[], cap: number): FranchiseEntry<V>[] {
   if (entries.length <= cap) return entries;
   return [...entries]
     .sort((a, b) =>
@@ -128,7 +145,7 @@ function topByAttentionEntries(entries: FranchiseEntry[], cap: number): Franchis
 }
 
 /** byRecency over mixed entries. */
-function byRecencyEntries(entries: FranchiseEntry[]): FranchiseEntry[] {
+function byRecencyEntries<V extends FranchiseVector>(entries: FranchiseEntry<V>[]): FranchiseEntry<V>[] {
   return [...entries].sort((a, b) => {
     if (!a.releaseDate && !b.releaseDate) return a.title.localeCompare(b.title);
     if (!a.releaseDate) return 1;
@@ -154,18 +171,18 @@ function byRecencyEntries(entries: FranchiseEntry[]): FranchiseEntry[] {
  * key in ipKey(), so two ip facets on one item are two genuinely different
  * franchises.
  */
-export function franchiseForItem(
+export function franchiseForItem<V extends FranchiseVector>(
   itemId: string,
   facets: Facet[],
-  candidatesForFacet: (f: Facet) => DiscoveryVector[],
+  candidatesForFacet: (f: Facet) => V[],
   cap: number = FRANCHISE_CAP,
   /** Titles the PROVIDER says are in this franchise but the catalog does not
    *  hold (2026-08-23). Injected, like `candidatesForFacet`, so this function
    *  stays pure and testable without the DB. Given the winning ip facet, the
    *  caller returns the stored `franchise_members` rows for it. */
   absentForFacet?: (f: Facet) => FranchiseOutsider[]
-): FranchiseGroup | null {
-  let best: { key: string; label: string; facet: Facet; items: DiscoveryVector[] } | null = null;
+): FranchiseGroup<V> | null {
+  let best: { key: string; label: string; facet: Facet; items: V[] } | null = null;
   for (const f of facets) {
     if (f.kind !== "ip") continue;
     const items = candidatesForFacet(f).filter((v) => v.id !== itemId);
@@ -211,7 +228,7 @@ export function franchiseForItem(
   // Score's top-N buckets made. `communityVotes` and a member's stored
   // `popularity` are both crowd-attention numbers, which is what makes them
   // comparable at all.
-  const merged: FranchiseEntry[] = [
+  const merged: FranchiseEntry<V>[] = [
     ...best.items.map((v) => ({ kind: "held" as const, vector: v, attention: v.communityVotes ?? 0, releaseDate: v.releaseDate, title: v.title })),
     ...outsiders.map((o) => ({ kind: "absent" as const, outsider: o, attention: o.popularity ?? 0, releaseDate: o.releaseDate, title: o.title })),
   ];
@@ -232,8 +249,8 @@ export function franchiseForItem(
 
 /** The viewing item's own provider ids, so it can't be re-offered as an
  *  "absent" member of its own franchise. */
-function selfSources(
-  candidatesForFacet: (f: Facet) => DiscoveryVector[],
+function selfSources<V extends FranchiseVector>(
+  candidatesForFacet: (f: Facet) => V[],
   facet: Facet,
   itemId: string
 ): string[] {

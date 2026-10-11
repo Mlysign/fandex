@@ -18,10 +18,14 @@
 
 import { facetId } from "@/lib/facets";
 import type { Facet } from "@/lib/facets";
-import type { DiscoveryVector } from "@/lib/discovery";
 
-export interface SimilarResult {
-  vector: DiscoveryVector;
+// Generic over what a candidate is, and no import from discovery.ts on purpose.
+// All this ranker reads off a candidate is its id. The app's device imports
+// this file (mobile/src/lib/related.ts), and a type imported from discovery.ts
+// drags db.ts, and with it better-sqlite3 and Node, into the app's typecheck:
+// green on a machine that has the site's node_modules beside it, red in CI.
+export interface SimilarResult<V extends { id: string }> {
+  vector: V;
   score: number;
 }
 
@@ -43,18 +47,18 @@ const RESULT_LIMIT = 12;
  * directly) so this stays a pure function over plain data — no DB, no module-
  * level cache — and is unit-testable with fake vectors.
  */
-export function rankSimilar(
+export function rankSimilar<V extends { id: string }>(
   targetId: string,
   targetFacets: Facet[],
   idf: Map<string, number>,
-  candidatesForFacet: (f: Facet) => DiscoveryVector[],
+  candidatesForFacet: (f: Facet) => V[],
   limit: number = RESULT_LIMIT
-): SimilarResult[] {
+): SimilarResult<V>[] {
   const ranked = [...targetFacets]
     .sort((a, b) => (idf.get(facetId(b)) ?? 0) - (idf.get(facetId(a)) ?? 0))
     .slice(0, TOP_N_FACETS);
 
-  const scores = new Map<string, SimilarResult>();
+  const scores = new Map<string, SimilarResult<V>>();
   for (const f of ranked) {
     // A facet present on every item (or absent from the vocab entirely) has
     // idf 0 or is unweighted — contributes nothing, so skip the scan outright.

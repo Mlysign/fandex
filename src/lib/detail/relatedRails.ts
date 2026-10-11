@@ -186,7 +186,7 @@ export function buildLocalRails(
   // which ingests it on click and forwards to the real page — see
   // app/r/[source]/[type]/[id]/page.tsx for why that is a doorway rather than a
   // pre-ingest. `linkable` stays TRUE: the card genuinely goes somewhere.
-  const entryToRow = (e: FranchiseEntry): RailItem =>
+  const entryToRow = (e: FranchiseEntry<DiscoveryVector>): RailItem =>
     e.kind === "held"
       ? toRow(e.vector)
       : {

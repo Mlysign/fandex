@@ -14,7 +14,6 @@
 // kept those in `franchise_members`, which is not in D1 (docs/worker.md).
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { DiscoveryVector } from '@/lib/discovery';
 import type { Facet } from '@/lib/facets';
 import { franchiseForItem } from '@/lib/franchise';
 import { rankSimilar } from '@/lib/similarItems';
@@ -83,7 +82,8 @@ export function pickRelated(input: { id: string; facets: ScoreFacet[]; index: Fa
   similar: string[];
 } {
   const { id, facets, index, vectors } = input;
-  const stub = (vid: string) => (vectors.get(vid) ?? { id: vid }) as unknown as DiscoveryVector;
+  // A title with no vector in hand still has its id, which is all the similarity ranker reads.
+  const stub = (vid: string): ItemVector => vectors.get(vid) ?? ({ id: vid, title: '', releaseDate: null, communityVotes: 0, sources: [] } as unknown as ItemVector);
   const candidates = (f: Facet) => idsFor(index, f).map(stub);
 
   const franchise = franchiseForItem(id, facets as unknown as Facet[], candidates);
