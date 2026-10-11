@@ -150,7 +150,7 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 
 ## ✅ Quality bar (tests, typecheck and lint re-run 2026-10-10; `npm run build` last run 2026-10-04)
 
-**The site: 1,531 tests pass** (147 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** (482 warnings, all `no-explicit-any` noise) · `npm run build` clean. **This is the standing bar. Don't land work below it.**
+**The site: 1,534 tests pass** (148 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** (482 warnings, all `no-explicit-any` noise) · `npm run build` clean. **This is the standing bar. Don't land work below it.**
 
 **Two more packages since 2026-10-04, each with its own bar, run from its own folder:** `worker/` **217 tests** (12 files, inside workerd against a local D1, re-run 2026-10-11) and `tsc` clean · `mobile/` **117 tests** (15 files, re-run 2026-10-11) and `tsc` clean. CI runs all three as separate jobs. Nothing deploys from CI since Railway was deleted; the Worker is deployed by hand.
 
