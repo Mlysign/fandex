@@ -12,6 +12,88 @@ evaluation** (section E below). The user still does their own Chrome pass for fi
 calls, but concrete UX findings (readability, touch targets, layout problems, inconsistent
 visual language) are in scope for the sweep.
 
+## ⚠️ The new stack (since 2026-10-10): run THIS, the rest of the file is the old site
+
+fandex.org is no longer the Next.js app. It is static files, the Expo app in a browser, and a
+Cloudflare Worker on D1 ([docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md),
+[docs/app.md](docs/app.md)). **Everything from "How to run" down describes the old site, which is
+hosted nowhere and runs only locally.** Sweep that only when something in `src/app` or
+`src/components` changed. First run on the new stack: 2026-10-11 (13th run, SM54 to SM70).
+
+### How to reach it
+
+| State | Tool | Notes |
+|---|---|---|
+| Static pages, API | `curl` | Send `-H "Sec-Fetch-Mode: navigate"` for a page, or an app-only address reads 404 where a browser gets the app. API: `https://fandex-api.fandex-worker.workers.dev`. |
+| The app, signed out | the in-app Browser pane on `https://fandex.org` | Genuinely anonymous. It cannot call Trakt. |
+| The app, signed in | Nils's Chrome (`claude-in-chrome`) | His real account, admin included. **Read only**: every write is a real write to Trakt. |
+| The phone | `adb` | It is his phone and he may be holding it. Check `dumpsys window | grep mCurrentFocus` first, read with `uiautomator dump`, open a screen with `am start -a android.intent.action.VIEW -d "fandex://movie/inception" org.fandex.app`, and leave it on the home screen. |
+
+There is **no test account** (SM70), so nothing destructive is in the plan. Do not rate, tick,
+hide, save a setting, disconnect, download, delete, or press Accept or Deny on Review.
+
+### What bites, read before the first probe
+
+- **The pane does not draw unless something makes it, and the app waits for a draw.** `rAF` and
+  `ResizeObserver` do not fire, so a grid stays on its spinner and a load "takes 12 seconds". Take
+  a small screenshot (`scale: 0.2`) straight after `navigate` and before any timing or list read.
+  Control from the 13th run: the same warm load read 12.4 s without a screenshot and 1.7 s with.
+  When screenshots time out (Claude's window is behind another), lists that are already mounted
+  can still be read and clicked; a fresh hard load of a list screen cannot be trusted.
+- **`#root`'s `innerText` includes every screen you have visited.** The tab screens stay mounted
+  with `aria-hidden="true"`. Read only what has no hidden ancestor:
+  ```js
+  const V = () => [...document.querySelectorAll('#root *')].filter((e) => { for (let x = e; x && x.id !== 'root'; x = x.parentElement) { if (x.getAttribute('aria-hidden') === 'true') return false; const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return true; });
+  const T = () => V().filter((e) => e.children.length === 0 && e.textContent.trim()).map((e) => e.textContent.trim());
+  ```
+- **Click with `element.click()`**, found by `aria-label` or text among `V()`. A click by ref does
+  nothing in a hidden Chrome window. Type into a field with the native value setter and an `input` event.
+- **In Chrome, navigate INSIDE the app** (click an `a[href]`). Each hard load there is a second
+  tab on an in-memory database: it downloads the catalog and every row again (about 30,000 D1
+  rows read) and runs a full Trakt sync. Six in ten minutes got Trakt answering 429 (SM55).
+- **Rows read are the budget.** Before and after a sweep: `npx wrangler d1 insights fandex
+  --timePeriod 1d --sort-type sum --sort-by reads --limit 6 --json` from `worker/`. It is a rolling
+  24 hours. Never loop an API probe.
+- To time a first visit, open a legal page (the app is not running there), delete the stored
+  database, then load `/`: `for await (const [n] of (await navigator.storage.getDirectory()).entries()) …removeEntry(n, {recursive: true})`.
+
+### Checklist
+
+**N-A. Static site (curl).**
+1. Every address kind in docs/website.md's table: status, size, `<title>`. Unknown path 404, unknown `/{type}/{slug}` the app shell (200, `noindex`), `/legal/fr/…` 404.
+2. Headers on a title page: HSTS, `frame-ancestors`, `nosniff`, `X-Frame-Options`, referrer and permissions policy. The bundle is `immutable`, `app-boot.js` is `no-cache`.
+3. `http://fandex.org/` must redirect to https (SM56: it answered 200).
+4. `robots.txt` as documented; `sitemap.xml` count = 1 + pool + 6 legal; 30 random entries all 200.
+5. A film, a show and a game page: canonical, Open Graph, JSON-LD, `/person/` and `/tag/` links, one `loading="eager"` image, no `<script src>`. The imprint is `noindex` in the meta tag AND the header.
+6. `/{type}/{uuid}` and `/{type}/{uuid}/{junk}` 308 to the stored slug; `www.` 301 with path and query.
+7. **What a signed-out visitor can DO on a title page** (SM57): grep the HTML for "Sign in", "Rate", "Fandex Score".
+
+**N-B. API (curl), no session.**
+8. `health`, an item by id and by `type/slug`, `?region=DE` and a junk region, an unknown slug (404), a bad type (400).
+9. Bad input: malformed JSON, wrong shape, 201 ids, a 300 KB body (413), a forged bearer (401), `PUT /v1/me/state` (401), `/v1/admin/*` (404, never 401 or 403).
+10. Wrong method on a real route (SM67: 404), a foreign `Origin` (no CORS headers, preflight 403), `If-None-Match` on `/v1/taxonomy` (304).
+11. Game search: `marvel's`, a double quote, a semicolon, an accent, 300 characters. `<script>` is refused by the provider (SM66); **never send five in a row**, that is the credential latch's threshold.
+
+**N-C. The app, signed out (pane).**
+12. Home: guest panel, Popular and Upcoming, 30 cards, each with "Sign in to rate this" and "Sign in to add this to your wishlist". No Up next, no Recommended.
+13. Discover: `titles · N` equals the pool; search a title (count = cards), a nonsense string ("Nothing found"), one character; each type chip and two together (the counts must add up); each sort; Filters: a streaming service (`Netflix N` → `Show N titles`), a person (the count must equal the cards), both together, Reset all.
+14. Open a result, press Back: the query and the results must still be there.
+15. Calendar: Next twice, Previous four times, Today; a busy day (the rail's cards = the day's label), an empty day ("Nothing releasing on this day."), the list view; `scrollHeight - innerHeight` is 0 throughout.
+16. Gates: `/wishlist`, `/library`, `/profile`, `/settings`, `/insights` stay on their address and ask; `/dev/scoring` says "Nothing here".
+17. `/person/ridley-scott`, `/tag/space`, `/studio/cd-projekt-red`, an unknown person; an unknown title; `/open/tmdb/movie/603`; `/open/tmdb/movie/abc`.
+18. At 375 px: a static title page, a legal page, the imprint: no sideways overflow, bottom nav shown, top nav hidden.
+19. `document.title` per route (SM60) and where a card leads (SM61).
+
+**N-D. Signed in (Chrome, reading only, client navigation only).**
+20. Profile's three numbers = the Lists tabs' counts = Settings' Account block.
+21. Insights: the three type tiles sum to "Rated items", and so does "How you rate". A bar with no number is a zero.
+22. Home: Up next's boxes all unchecked; **no "No connection" line while online** (SM55); compare the rail with the phone's.
+23. A title page: the panel's number, then "Why?": baseline + the counted rows = the number. Rows under "Not counted" show what they would be worth and are not part of the sum.
+24. Settings: connected accounts, region, default types, platforms; read the copy against what sign-in really offers (SM62).
+25. `/dev/scoring` → Taxonomy → Review: the card counts, and "N suggestions denied and hidden".
+
+**N-E. Cost.** One full catalog page reads 300 rows for 150 titles (2026-10-11). Re-measure after any change to the delta query, and re-do SM54's sum: pool × 2 per first-time visitor.
+
 ## How to run
 
 - Dev server: `preview_start {name: "dev"}` (.claude/launch.json → `npm run dev`, port 3000,

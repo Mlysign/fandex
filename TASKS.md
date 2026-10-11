@@ -48,6 +48,37 @@ two mechanisms. → [[monetization-h3]]
 
 ---
 
+## Smoke test, 2026-10-11 (13th run, the first on the new stack)
+
+Scope: fandex.org signed out (static pages by curl, the app in the browser pane), the API by curl, signed in on Nils's Chrome reading only, one look at the phone. **No write was made**: there is no test account on the new stack (SM70). Overall: everything renders, the counts agree across screens and no page errors; the findings are about scale, wrong wording and sort quality. Plan: [smoketest.md](smoketest.md), "The new stack".
+Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| SM54 | 🟠 | perf | First app load | **A first visit downloads the catalog through D1: 31 requests, 1.5 MB, 9,122 rows read** (a page of 150 reads 300, measured on live D1). About 550 first-time visitors to `/` or any app address in one UTC day spend D1's 5 million and stop the API for everybody. The build already holds every title; a file would cost nothing. Repro: clear site data, open `/`, count `/v1/catalog/delta`. |
+| SM55 | 🟠 | bug | Up next, website | **"No connection. Showing what this device already knows." while online.** Trakt answers the preflight for `/shows/{id}/progress/watched` with 429, the browser reports a network error, and the rail shows 7 episodes in another order where the phone shows 8. Repro: signed in, Home or Wishlist → Progress, network filter `trakt`. ⚠️ My tab was a second tab (a full Trakt sync per load) loaded about six times in ten minutes, which may be what hit the limit. The wrong sentence is certain either way. |
+| SM56 | 🟡 | security | Whole site | `http://fandex.org/` answers 200 over plain HTTP, no redirect. HSTS only covers a browser that has been here before. Cloudflare's "Always Use HTTPS" is off. |
+| SM57 | 🟡 | ux | Static title page | A signed-out visitor is offered nothing: no Fandex Score panel, no Rate, no Add to wishlist, no "Sign in" anywhere in the HTML. The same title opened inside the app shows all three. This is the page Google sends people to. |
+| SM58 | 🟡 | data | Discover, sort | "Rating" puts single-vote 10.0s first (Batman: Arkham Collection, GTA V: Story Mode, Mass Effect: Genesis 2). The old site damped by votes (SM3). |
+| SM59 | 🟡 | data | Discover, default | "Popularity" over all types is 35 games in the first 48: a game's count includes Steam reviews and is not comparable with a film's votes. Movies alone start Interstellar, Inception, Deadpool. |
+| SM60 | 🟡 | ux | Every app route | The tab title is "Fandex" everywhere: Discover, Calendar, Settings, a person's page, a title opened in the app. The old site had one per route (SM26). |
+| SM61 | 🟡 | nav | Title pages in the app | Every card links to `/item/{uuid}` (noindex, no canonical), and `/open/…` lands there too. The public `/{type}/{slug}` address is never linked from inside the app, so the address bar is not the one to share. Share on the page hands out the right one. |
+| SM62 | 🟡 | copy | Settings, Home | "Any connected account can be used to log in." Sign-in offers Trakt only. Home's guest panel says "Create account" and leads to a Trakt sign-in. |
+| SM63 | 🟡 | data | Wishlist | A rated title is on the wishlist (*The Fall*, rated 7), where rating is meant to take it off. Likely Trakt holds both and the sync mirrors it. Also seen: *Dune: Part Three* (Dec 2026) in the library, unrated, probably a test rating that was cleared. |
+| SM64 | 🟡 | ux | Filters sheet | For a second or two "Available on" reads "Nothing loaded here says where it streams" and "…which platforms it runs on", then fills (Disney Plus 333, Netflix 318). A loading state worded as an empty one. |
+| SM65 | 🟡 | data | Person page | Ridley Scott: "157 titles" under "Director · Writer". It counts every TMDB credit, producer and thanks included. |
+| SM70 | 🟡 | tooling | Testing | Nothing destructive can be tested: no test account, and every write on the one account is a real write to Trakt. Never run by anybody: Hide, Disconnect, Download, Delete, a country or platform change, Review's Accept and Deny. |
+| SM66 | 🔵 | error | Game search | A query containing `<script>` gets 502 `provider-unavailable` and "Game search is not answering." Three in a row did not shut game search for the next query. Five (the credential latch's threshold) was NOT tried. |
+| SM67 | 🔵 | api | Worker | A wrong method on a real route answers 404, not 405. `HEAD /v1/health` is 404. `/v1/shows/{a film's id}/episodes` is 200 and empty. `/v1/health` says nothing about a provider being down, which the old `/api/health` did. |
+| SM68 | 🔵 | a11y | Chips | The type chips expose no pressed state. Tag chips on a title page are 22 px tall: 29 targets under 24 px at 375 px. |
+| SM69 | 🔵 | copy | Assorted | `/library` signed out says "Sign in to see your wishlist"; that gate's button says "Sign in" where the others say "Continue with Trakt"; an unknown person's crowd average is an en dash; a title that does not exist offers only "Try again"; `/movie/Alien` (capital A) is a hard 404 while `/movie/any-unknown-slug` gets the app; the app shell's HTML carries `httpEquiv=` as an attribute; typing "nolan" lists Nolan Gerard Funk (1) above Christopher Nolan (11). |
+
+**Held up well:** every address kind answers what docs/website.md says (30 of 30 random sitemap URLs 200, 4,568 entries = 1 + 4,561 + 6); security headers, robots, canonical, Open Graph and JSON-LD on title pages; the legal pages in both languages and the imprint's noindex twice over; legacy uuid addresses 308 to the stored slug; the API refuses bad JSON, oversized bodies, forged tokens and a foreign origin with sane shapes; search (catalog first, then providers, count = cards), the type filter (1,373 + 291 = 1,664), a person filter (11 = 11) and "Netflix 318" → "Show 318 titles"; Back from a title restores the query and results; the calendar pages, opens a busy day and an empty one, and never scrolls; every signed-out gate asks. Signed in: Profile 1,953 / 1,683 / 97 = Lists = Settings; Insights' type tiles and its histogram both sum to 1,683; Up next's boxes are empty at rest; no console error beyond the one 502 above.
+
+**Not re-logged, still true:** calendar-month pages and `/dashboard` are 404; Rate signed out sends you to You and does not bring you back; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync.
+
+---
+
 ## Still open elsewhere
 
 ### Added 2026-09-02 (Nils)
