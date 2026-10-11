@@ -16,6 +16,9 @@ import { catalogCount, getMeta, setMeta, inTransaction } from '~/lib/db';
 
 const CURSOR_KEY = 'catalog_cursor';
 const LAST_SYNC_KEY = 'catalog_synced_at';
+/** When a start-over last fixed nothing. See the end of syncCatalog. */
+const FUTILE_RESET_KEY = 'catalog_reset_futile_at';
+const FUTILE_RESET_PAUSE_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 150;
 /** A runaway loop guard: no pool is this many pages. */
 const MAX_PAGES = 400;
@@ -61,6 +64,7 @@ export async function syncCatalog(
   db: SQLiteDatabase,
   onProgress?: (p: SyncProgress) => void,
   signal?: { cancelled: boolean },
+  afterReset = false,
 ): Promise<SyncResult> {
   let cursor = await readCursor(db);
   let written = 0;
@@ -115,9 +119,21 @@ export async function syncCatalog(
   // A delta cannot say "this title is gone". If the device holds MORE than the
   // Worker's pool once it is caught up, something was removed upstream, and the
   // only way to find out which is to start over. Rare, and one-time when it happens.
+  //
+  // One-time is enforced, not assumed. If the fresh download is STILL more than
+  // the count, the count is what is wrong (the Worker keeps it, and a kept count
+  // can be low), and starting over again downloads the same rows. So a start-over
+  // happens once per sync, and one that fixed nothing is not tried again for a
+  // day, which is how long the Worker keeps a count before counting again. The
+  // number itself is no use as the marker: a low count and a real removal a week
+  // later can be the same number.
   if (poolCount !== null && total > poolCount && !signal?.cancelled) {
-    await resetCatalog(db);
-    return syncCatalog(db, onProgress, signal);
+    if (afterReset) {
+      await setMeta(db, FUTILE_RESET_KEY, String(Date.now()));
+    } else if (Date.now() - Number((await getMeta(db, FUTILE_RESET_KEY)) ?? 0) >= FUTILE_RESET_PAUSE_MS) {
+      await resetCatalog(db);
+      return syncCatalog(db, onProgress, signal, true);
+    }
   }
   return { written, total, poolCount };
 }

@@ -222,6 +222,55 @@ describe('a title removed upstream', () => {
   });
 });
 
+// The Worker keeps its pool count instead of counting on every sync, and a kept
+// count can be wrong. Too low used to mean: throw the catalog away, download it,
+// find it is still "too many", and do that again without end.
+describe('a pool count that is too low', () => {
+  it('starts over once, keeps what it downloaded, and returns', async () => {
+    const rows = ['a', 'b', 'c'].map((id, i) => item(id, 100 + i));
+    serve(rows, 10, 2);
+    const f = fakeDb();
+    const result = await syncCatalog(f.db);
+    // The first pass, then one start-over. Not a third.
+    expect(pages.fetch).toHaveBeenCalledTimes(2);
+    expect(f.ids()).toEqual(['a', 'b', 'c']);
+    expect(result).toMatchObject({ total: 3, poolCount: 2 });
+  });
+
+  it('does not start over again on the next sync', async () => {
+    const rows = ['a', 'b', 'c'].map((id, i) => item(id, 100 + i));
+    serve(rows, 10, 2);
+    const f = fakeDb();
+    await syncCatalog(f.db);
+    pages.fetch.mockClear();
+    const again = await syncCatalog(f.db);
+    expect(pages.fetch).toHaveBeenCalledTimes(1);
+    expect(again.written).toBe(0);
+    expect(f.ids()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('tries again a day later, when the Worker has counted afresh', async () => {
+    const rows = ['a', 'b', 'c'].map((id, i) => item(id, 100 + i));
+    serve(rows, 10, 2);
+    const f = fakeDb();
+    await syncCatalog(f.db);
+
+    // "b" really has left the pool, and the count is the same 2 it wrongly was:
+    // the number alone cannot tell the two apart, the day can.
+    serve([rows[0], rows[2]], 10);
+    await syncCatalog(f.db);
+    expect(f.ids()).toEqual(['a', 'b', 'c']);
+
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000);
+    try {
+      await syncCatalog(f.db);
+    } finally {
+      now.mockRestore();
+    }
+    expect(f.ids()).toEqual(['a', 'c']);
+  });
+});
+
 describe('reset', () => {
   it('forgets the rows and the cursor together', async () => {
     serve([item('a', 100)], 10);
