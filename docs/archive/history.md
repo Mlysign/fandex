@@ -5895,3 +5895,14 @@ The last piece of the admin pages. The old site ran the sweep on its server (`sr
 
 - **The privacy policy was read by Nils on 2026-10-10, no objection.** It had been rewritten that day for Cloudflare, Trakt-only sign-in, what stays on the device, the YouTube embed, and export and deletion by email. Terms and Contact lost their references to the old Settings page.
 - **The 30-day expiry rule exists.** `expire-d1-exports` is on the R2 bucket `fandex-backups` for the `d1/` prefix only, set by me at his request on 2026-10-10: `npx wrangler r2 bucket lifecycle add fandex-backups expire-d1-exports d1/ --expire-days 30 --jurisdiction eu`. It is what makes the policy's "nightly copies are kept for 30 days" true. The `railway/` snapshots are not touched by it.
+
+## "Fandex impact" on tag, person and studio pages (2026-10-11)
+
+`b0be5f4`, published to fandex.org the same evening. Nils asked for it with a screenshot of the Steampunk page: the item page's breakdown showed him +4.3 for the tag, and the tag's own page said nothing about it.
+
+- The old site had the line for tags (`PublicFacetView.tsx`, fed by `/api/facet/mine`'s `tagImpact`), and the port had left it out. It is back under the three numbers: a pill with the points, and a sentence with how many of your rated titles carry the facet. Green above half a point, red below minus half, grey between: the site's threshold.
+- The number is `facetImpact` (now in `mobile/src/lib/fandexScore.ts`, the site's function of the same name), which `computeFandexScore` also calls for a reason's `impact`. One function, so the page and the breakdown cannot print different numbers.
+- **Beyond the site:** a person or a studio gets one line per role you have rated them in, because a director and a cast member are separate profile entries. For cast it is the lead-billed value. `mobile/src/lib/facetImpact.ts` finds the entries: by the key as the address spells it, and through `tagAliases` for a bundled tag's member spelling.
+- Nothing shows signed out, below three ratings, when no rated title carries the facet, or for a tag in an ignored category.
+- **Checked on the local stack with the test account** (four games rated, then removed again): Steampunk +8.8 on its page and +8.8 in BioShock's breakdown, Robots a red −3.2, Irrational Games +2.5 as developer matching the breakdown, no sideways scroll at 375 px, no line on an empty account. Not seen on Nils's own account.
+- ⚠️ `app-web-local` would not start: `EINVAL: readlink` on a different `web/dist/site` file each try. Metro's file list was from before the afternoon's site build. Deleting `metro-file-map-expo-*` in the temp folder cured it (docs/website.md).
