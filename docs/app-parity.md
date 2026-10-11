@@ -44,7 +44,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
 | Facet pages (tag, person, studio) | partial | Games from the providers (a studio's or a tag's page asks TMDB only; IGDB needs a Worker route). "Also known as", "you score X higher than the crowd". No static page yet, so a crawler gets the app's shell. |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
-| Admin pages (`/dev`) | partial | Users, Scoring and Traffic are built. Only Scoring → Taxonomy → Review is not. See "The admin pages" below. |
+| Admin pages (`/dev`) | **yes** | Users, Scoring and Traffic are built, Review included since 2026-10-11. See "The admin pages" below. |
 | Import | **no** | All of it. |
 | Sign-in | partial | Trakt only. A dialog from any gated control, returning to where you were (it sends you to You). Google, joining accounts, Steam. |
 
@@ -61,12 +61,11 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **The Review section** of `/dev/scoring`. | The last piece of the admin pages Nils asked for on 2026-10-10. |
-| 2 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
-| 3 | **Settings' rest**: Import, a second login method, the download on a phone. | |
-| 4 | **Static facet pages**, games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
-| 5 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
-| 6 | **Import, sign-in beyond Trakt, admin, and the rest of Insights.** | Insights is computed on the device and needs no route. |
+| 1 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
+| 2 | **Settings' rest**: Import, a second login method, the download on a phone. | |
+| 3 | **Static facet pages**, games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
+| 4 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
+| 5 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
 ## The admin pages
 
@@ -79,7 +78,7 @@ offer the pages (a section at the foot of Settings; on the site the addresses we
 | `/dev/users` | **yes** | Signed-in pageviews end on 2026-10-04: nothing counts one now. |
 | `/dev/scoring` → Weights & Tuning | **yes** | Save has not been pressed by anybody. The preview runs on the device, not on a server. |
 | `/dev/scoring` → Taxonomy → Categories, Tags, Franchises | **yes** | No write has been made from them by anybody. The tag table and the franchise list are counted on the device from its catalog copy (`lib/tagVocab.ts`, `lib/ipSurvey.ts`). A select is a button that opens a sheet. The franchise list shows the first 300 and asks you to filter. |
-| `/dev/scoring` → Taxonomy → Review | **no** | The sweep that proposes tag categories, franchise merges and missing members (`src/lib/taxonomySuggestions.ts`, 377 lines, and `ReviewPanel.tsx`, 393). It can run on the device over the same two surveys. ⚠️ What it needs that does not exist: `taxonomy_suggestion_dismissed` is not in D1, so the proposals he already said no to on the site are only in `rr-2026-10-04.db`. A table, a seed of those rows, and a dismiss route come first, or every old "no" comes back as a new proposal. |
+| `/dev/scoring` → Taxonomy → Review | **yes** (2026-10-11) | The sweep runs on the device (`lib/taxonomySweep.ts`) over the Tags table's and the Franchises list's own surveys, with the site's rules imported. A card goes when its write answers: the taxonomy that comes back is swept again on the spot. Accepting uses the routes the other three sections use; a "no" is a row in D1 (`taxonomy_suggestion_dismissed`, `/v1/admin/suggestions/dismissed`). The 34 he denied on the site were carried over from `rr-2026-10-05.db`. Seen on the live site in his Chrome: 7 cards (2 tag batches, 2 merges, 3 members, all from titles added since September), "34 suggestions denied and hidden", and the same 7 a run in Node over the live catalog gave. **No Accept, Deny or Add has been pressed by anybody.** A membership's franchise field offers the known names as chips while you type, where the site had a browser's datalist. |
 | `/dev/analytics` (Traffic) | **yes** | Counting again since 2026-10-10 evening, after the privacy policy said so (Nils's call). The website only: the Android app sends no beacon. 2026-10-05 through 2026-10-10 were never counted and the page says so. |
 
 **What an edit costs.** The device applies aliases, category moves, labels and the scoring config

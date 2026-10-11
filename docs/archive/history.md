@@ -5830,3 +5830,14 @@ D1 answered again after midnight UTC. Everything below was read on live D1 with 
 - **A platforms build: 5,800 rows for games and 13,853 for one country's streaming**, not the "about 5,000" docs/worker.md gave for both.
 - **The kept counts (`03d67c8`) are live**: migration `0002` applied, then `wrangler deploy` (version `22139436`). The pool count answered 4,561 from `kv` and a fresh COUNT said 4,561. After one signed-in load of fandex.org the user's row held `2484:…`, `12414:…` and `1:…`, the same three numbers a fresh count of the tables gave.
 - **`syncCatalog` starts over once.** It reset and downloaded again without limit when the Worker's count was lower than what the device held. Now one start-over per sync, and one that fixed nothing is not tried again for a day (`catalog_reset_futile_at`). The count itself was tried as the marker first and a test showed why not: a low count and a real removal can be the same number.
+
+## Scoring → Taxonomy → Review, on the new site (2026-10-11)
+
+The last piece of the admin pages. The old site ran the sweep on its server (`src/lib/taxonomySuggestions.ts`); the new one runs it on the device (`mobile/src/lib/taxonomySweep.ts`) over the surveys the Tags table and the Franchises list already make, with `@/lib/taxonomyRules` and `categorizeTag` imported as they are.
+
+- **Only a "no" is stored**: `taxonomy_suggestion_dismissed` (migration `0003`, `WITHOUT ROWID`, no `user_id`), behind `/v1/admin/suggestions/dismissed`. The 34 rows of the old database (all franchise merges, from `rr-2026-10-05.db`) were inserted with their original timestamps: 34 row writes.
+- **Checked against the live data before anything was looked at**: a run in Node over the live delta and taxonomy gave 34 merge proposals without the denials and 2 with them, 7 cards in all, in 91 ms. The live page in Nils's Chrome showed the same 7 and "34 suggestions denied and hidden". Other holds 4,865 of 6,746 tags (72%), where the 2026-09-03 sweep left it at 4,794 of 6,671.
+- **A card goes when its write answers.** Every taxonomy write returns the taxonomy as stored and the sweep is a `useMemo` over it, so there is no second request and no "settle" step as on the site.
+- **The panel shows nothing until the denials have loaded.** A sweep without them would present every old "no" as new.
+- `suggestFranchisesByTitle` split every franchise key into words once per title (seven million splits on the real catalog). The keys long enough to be a prefix are now picked once.
+- Not done: nobody has pressed Accept, Deny or Add. `Select` moved out of `TaxonomyPanel.tsx` into its own file because two panels use it.

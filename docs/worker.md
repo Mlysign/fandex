@@ -85,7 +85,10 @@ needs one pass over the table instead of four, or an answer kept in `kv`. Keep t
 Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/users`,
 `PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`, `POST` and `DELETE`
 on `/v1/admin/tag-overrides`, `/v1/admin/tag-aliases`, `/v1/admin/ip-aliases`, `/v1/admin/ip-overrides`
-and `/v1/admin/labels`. Every write answers with the taxonomy as stored. An alias is stored flat:
+and `/v1/admin/labels`, and `GET`, `POST` and `DELETE /v1/admin/suggestions/dismissed`: the Review section's
+proposals somebody said no to (`taxonomy_suggestion_dismissed`, migration 0003, one row write a denial), answered
+as the whole list of `[kind, ref]`. The proposals themselves are worked out on the device and stored nowhere.
+Every other write answers with the taxonomy as stored. An alias is stored flat:
 the target is resolved to its own canonical first and whatever pointed at the alias is re-pointed.
 A franchise attach by name goes through `ipKey` and then through the bundles. `/v1/me` carries `admin: true` for an admin.
 
