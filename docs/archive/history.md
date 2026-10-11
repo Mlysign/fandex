@@ -5890,3 +5890,8 @@ The last piece of the admin pages. The old site ran the sweep on its server (`sr
 - **SM61, the rest**: the rows on Insights, Profile and Up next, and where `/open` lands for a title the device holds, go through `itemHref` to `/{type}/{slug}`.
 - **SM63 narrowed, still open**: rating a wishlisted title on a test account took it off the wishlist, and `rateItem` removes it from Trakt's watchlist too. Clearing a rating keeps the title as watched by design. So the rated title on Nils's wishlist is Trakt holding both.
 - ⚠️ I wrote "Home's rails and Up next drop a hidden title" in the finding before checking Home's Popular rail. The code does filter it (`withoutHidden` in `useHomeRails`); the title simply was not popular that week.
+
+## Two items closed on 2026-10-10 that sat in TASKS.md item 0 until 2026-10-11
+
+- **The privacy policy was read by Nils on 2026-10-10, no objection.** It had been rewritten that day for Cloudflare, Trakt-only sign-in, what stays on the device, the YouTube embed, and export and deletion by email. Terms and Contact lost their references to the old Settings page.
+- **The 30-day expiry rule exists.** `expire-d1-exports` is on the R2 bucket `fandex-backups` for the `d1/` prefix only, set by me at his request on 2026-10-10: `npx wrangler r2 bucket lifecycle add fandex-backups expire-d1-exports d1/ --expire-days 30 --jurisdiction eu`. It is what makes the policy's "nightly copies are kept for 30 days" true. The `railway/` snapshots are not touched by it.

@@ -151,10 +151,11 @@ such name" since 2026-10-05 and resolvers remember that for 30 minutes. It does 
 
 - **The daily build.** The site changes when somebody runs `publish.mjs`. A scheduled GitHub
   Actions job needs a Cloudflare API token as a repository secret, which is Nils's to create.
-- **Export and delete buttons.** The Worker has both routes and no screen calls them, so the
-  privacy policy says to write to hello@fandex.org. They belong on the You tab (app-parity.md).
-- **The 30-day backup retention the privacy policy states** is a lifecycle rule on the R2 bucket
-  that does not exist yet (TASKS.md). No export is older than 30 days before 2026-11-04.
+- **The privacy policy still sends people to hello@fandex.org to export or delete**, while
+  Settings has had Download and Delete since 2026-10-10 (both run on a test account on
+  2026-10-11: the file holds one account's rows, and Delete empties every user table). The email
+  route is still true, so the text is behind and not wrong. Changing it is a legal text with
+  Nils's name on it (TASKS.md item 0).
 - **Static tag, person and studio pages, and calendar-month pages.** The first three exist in the
   app and their addresses load its shell, which is nothing a crawler can read. Calendar months
   answer 404.
