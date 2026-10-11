@@ -29,8 +29,27 @@ hosted nowhere and runs only locally.** Sweep that only when something in `src/a
 | The app, signed in | Nils's Chrome (`claude-in-chrome`) | His real account, admin included. **Read only**: every write is a real write to Trakt. |
 | The phone | `adb` | It is his phone and he may be holding it. Check `dumpsys window | grep mCurrentFocus` first, read with `uiautomator dump`, open a screen with `am start -a android.intent.action.VIEW -d "fandex://movie/inception" org.fandex.app`, and leave it on the home screen. |
 
-There is **no test account** (SM70), so nothing destructive is in the plan. Do not rate, tick,
-hide, save a setting, disconnect, download, delete, or press Accept or Deny on Review.
+| **Anything that WRITES** | the pane on `http://localhost:8081`, a Worker and database on this machine | Since 2026-10-11. See below. |
+
+**On the live site and the phone, write nothing.** Do not rate, tick, hide, save a setting,
+disconnect, download, delete, or press Accept or Deny on Review there.
+
+**Writes are tested on the local stack, with a test account** (built for SM70):
+
+1. `node worker/scripts/dev-stack.mjs` once. It writes `worker/.dev.vars`, migrates a local D1
+   and loads the catalog with nobody's library. `--reseed` throws the local database away.
+2. Start the launch configurations `worker-local` (:8787) and `app-web-local` (:8081).
+3. Open `http://localhost:8081/profile` and press **Test account**. "Second test account" is
+   the other one, for anything that needs two people.
+4. Check a write where it lands: `npx wrangler d1 execute fandex --local --json --command "SELECT …"`
+   from `worker/`.
+5. **Stop both servers before `node mobile/web/publish.mjs`**: Metro watches the build's folder.
+
+What to know about them: the first is an admin on this machine, so `/dev/*` opens. Their
+identity is `google` and they have no Trakt, so nothing reaches Trakt, no Trakt sync runs, and
+"Disconnect Trakt" has nothing to act on. They start EMPTY, so the score panel shows its
+cold-start face until a few titles are rated. The app there syncs its catalog through the local
+Worker, never from the live site's files.
 
 ### What bites, read before the first probe
 
@@ -62,17 +81,19 @@ hide, save a setting, disconnect, download, delete, or press Accept or Deny on R
 **N-A. Static site (curl).**
 1. Every address kind in docs/website.md's table: status, size, `<title>`. Unknown path 404, unknown `/{type}/{slug}` the app shell (200, `noindex`), `/legal/fr/…` 404.
 2. Headers on a title page: HSTS, `frame-ancestors`, `nosniff`, `X-Frame-Options`, referrer and permissions policy. The bundle is `immutable`, `app-boot.js` is `no-cache`.
-3. `http://fandex.org/` must redirect to https (SM56: it answered 200).
+3. `http://fandex.org/` must redirect to https (301 since 2026-10-11; a Cloudflare dashboard switch, so nothing in the repo holds it).
 4. `robots.txt` as documented; `sitemap.xml` count = 1 + pool + 6 legal; 30 random entries all 200.
 5. A film, a show and a game page: canonical, Open Graph, JSON-LD, `/person/` and `/tag/` links, one `loading="eager"` image, no `<script src>`. The imprint is `noindex` in the meta tag AND the header.
 6. `/{type}/{uuid}` and `/{type}/{uuid}/{junk}` 308 to the stored slug; `www.` 301 with path and query.
-7. **What a signed-out visitor can DO on a title page** (SM57): grep the HTML for "Sign in", "Rate", "Fandex Score".
+7. **What a signed-out visitor can DO on a title page** (SM57): the HTML has "Sign in" twice, "Rate" once, and five `href="/profile"`.
+7a. `/catalog/index.json` is 200 with `Access-Control-Allow-Origin: *` and `X-Robots-Tag: noindex`; its `pages` count is the pool ÷ 150 rounded up; `robots.txt` disallows `/catalog/`. `/movie/Alien` is a 308 to `/movie/alien`.
 
 **N-B. API (curl), no session.**
 8. `health`, an item by id and by `type/slug`, `?region=DE` and a junk region, an unknown slug (404), a bad type (400).
 9. Bad input: malformed JSON, wrong shape, 201 ids, a 300 KB body (413), a forged bearer (401), `PUT /v1/me/state` (401), `/v1/admin/*` (404, never 401 or 403).
-10. Wrong method on a real route (SM67: 404), a foreign `Origin` (no CORS headers, preflight 403), `If-None-Match` on `/v1/taxonomy` (304).
-11. Game search: `marvel's`, a double quote, a semicolon, an accent, 300 characters. `<script>` is refused by the provider (SM66); **never send five in a row**, that is the credential latch's threshold.
+10. Wrong method on a real route (405 with `Allow`), `HEAD /v1/health` (200), a film's id on `/v1/shows/{id}/episodes` (404), a foreign `Origin` (no CORS headers, preflight 403), `If-None-Match` on `/v1/taxonomy` (304).
+10a. **`POST /v1/dev/login` is 404 on BOTH live hosts**, `fandex.org/v1/…` and the workers.dev one, with and without a `Host: localhost` header. Anything else is an open door.
+11. Game search: `marvel's`, a double quote, a semicolon, an accent, 300 characters, `<script>` (200 since 2026-10-11). **Never send five failing ones in a row**, that is the credential latch's threshold.
 
 **N-C. The app, signed out (pane).**
 12. Home: guest panel, Popular and Upcoming, 30 cards, each with "Sign in to rate this" and "Sign in to add this to your wishlist". No Up next, no Recommended.
@@ -82,7 +103,9 @@ hide, save a setting, disconnect, download, delete, or press Accept or Deny on R
 16. Gates: `/wishlist`, `/library`, `/profile`, `/settings`, `/insights` stay on their address and ask; `/dev/scoring` says "Nothing here".
 17. `/person/ridley-scott`, `/tag/space`, `/studio/cd-projekt-red`, an unknown person; an unknown title; `/open/tmdb/movie/603`; `/open/tmdb/movie/abc`.
 18. At 375 px: a static title page, a legal page, the imprint: no sideways overflow, bottom nav shown, top nav hidden.
-19. `document.title` per route (SM60) and where a card leads (SM61).
+19. `document.title` per route ("Search · Fandex", a title's name and year) and where a card leads (`/{type}/{slug}`, no `/item/` among a grid's links).
+19a. **A first visit**: clear the stored database on a legal page (see above), load `/discover`, then count resources: 24 or so under `/catalog/`, and exactly ONE `/v1/catalog/delta`. More than one means the device did not start from the files.
+19b. Discover's default order mixes the three types in the first row; "Rating" does not open on single-vote 10.0s.
 
 **N-D. Signed in (Chrome, reading only, client navigation only).**
 20. Profile's three numbers = the Lists tabs' counts = Settings' Account block.
@@ -92,7 +115,15 @@ hide, save a setting, disconnect, download, delete, or press Accept or Deny on R
 24. Settings: connected accounts, region, default types, platforms; read the copy against what sign-in really offers (SM62).
 25. `/dev/scoring` → Taxonomy → Review: the card counts, and "N suggestions denied and hidden".
 
-**N-E. Cost.** One full catalog page reads 300 rows for 150 titles (2026-10-11). Re-measure after any change to the delta query, and re-do SM54's sum: pool × 2 per first-time visitor.
+**N-E. Cost.** One full catalog page reads 300 rows for 150 titles (2026-10-11). Re-measure after any change to the delta query. A first-time visitor no longer pays it (check 19a); a second browser tab and an app pointed at another Worker still do.
+
+**N-F. Writes (the local stack, a test account).** Tried on 2026-10-11: rate, add to wishlist, hide, unhide, remove from library. **Never tried by anybody, do these first:**
+26. Settings: change the country, the default types and "Your platforms"; reload; each must hold, and the lists must follow without a reload.
+27. Settings → Download: the file holds this account's rows and nobody else's. Then Delete: the account is gone from the local D1 (`users`, `user_item_state`, `user_hidden_items`), and signing in again starts empty.
+28. `/dev/scoring` → Taxonomy → Review: Accept one card and Deny one. The accepted one changes the taxonomy the app downloads; the denied one is in `taxonomy_suggestion_dismissed` and stays hidden after a reload.
+29. Rate a title that is on the wishlist: it leaves the wishlist (the rule SM63 is about). Rate, reload, the rating is there; clear it, reload, it is gone.
+30. Tick an episode on a show's page, reload. A test account has no Trakt, so this tests the local half only.
+31. Sign in as the second account in another browser profile: nothing of the first is visible.
 
 ## How to run
 

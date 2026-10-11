@@ -144,16 +144,20 @@ Parity must not cost any of these.
   it worked, and so have an episode tick from a title page and a change of default types.
   Later the same day, the same way: "Your platforms" with his 13 stored platforms selected,
   `/dev/users`, and `/dev/scoring`: a preview, the tag table, a franchise opened, and the requests
-  a category change and a franchise Remove would send. **Never run for real by anybody:
+  a category change and a franchise Remove would send. **Never run by anybody, on any account:
   Disconnect, Download, Delete, a change of country or platforms, and every write on the Scoring
-  page (Save weights, a category, an alias, a name, an attach).**
+  page (Save weights, a category, an alias, a name, an attach).** Since 2026-10-11 all but
+  Disconnect can be run on a test account on this machine ([worker.md](worker.md), "The test
+  accounts"; the list to work through is smoketest.md, N-F). Run there that day: a rating of 8,
+  Add to wishlist, Hide and un-hide, Remove from library, each read back from the local D1.
 - **The item page's new parts (2026-10-11).** Seen signed out in a local browser at 1280 px and
   375 px: the sign-in panel, both rails, thumbnails, hover arrows, an arrow moving the picture.
   Seen signed in on the live site, read as text: the scored panel, the whole breakdown and its sum,
   the quiet row with Remove and Hide, the rails with his scores. Not seen: the breakdown sheet as a
-  picture, the cold-start and no-match faces of the panel (his account has neither). On the phone,
-  read off the screen's text: the same film's panel (83), the breakdown sheet opening and closing,
-  and "More like this" with its cards. **Hide from suggestions has not been pressed.**
+  picture, the no-match face of the panel. The cold-start face was seen on an empty test account.
+  On the phone, read off the screen's text: the same film's panel (83), the breakdown sheet opening
+  and closing, and "More like this" with its cards. Hide from suggestions was pressed on a test
+  account: the row is written, and un-hiding removes it.
 - **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
   have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.

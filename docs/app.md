@@ -146,9 +146,25 @@ write nothing; that is how the sync was proven before it was allowed to delete.
 - **The device holds a copy of the scoring pool** in SQLite (`expo-sqlite`, also on the web).
   `catalogSync.ts` pulls the Worker's delta a page at a time and advances its cursor in the same
   transaction that writes the page, so a sync that dies half way resumes from the last page that
-  landed whole. A first sync is about thirty requests; a later one is one request that usually
-  returns nothing. If the device ends up holding more titles than the Worker's pool, a title was
-  removed upstream and the sync starts over.
+  landed whole. **A device with nothing starts from files on fandex.org** (`startFromFiles`, since
+  2026-10-11; [website.md](website.md), "The catalog as files") and then asks the Worker once for
+  what changed since the site was built. A later sync is one request that usually returns nothing.
+  ⚠️ An app built with `EXPO_PUBLIC_API_URL` set (the local test stack) never reads those files:
+  they are the production catalog. If the device ends up holding more titles than the Worker's
+  pool, a title was removed upstream and the sync starts over, once; a start-over that did not
+  help is not tried again for a day.
+- **Two sorts are the old site's, in `lib/sortCards.ts`.** "Rating" is the vote-damped average
+  (`bayesRating`), so a single 10.0 does not lead. "Popularity" across types ranks each title
+  WITHIN its own type and interleaves, because a game's count includes Steam reviews and is not on
+  a film's scale: unsorted, 35 of the first 48 were games. With one type chosen it is the plain count.
+- **A card's address is `/{type}/{slug}`** (`cardHref`), the public one, so the address bar is the
+  one to share. `/item/{id}` is the fallback for a title with no slug. Still on `/item/{id}`:
+  where `/open/…` lands, and the rows on Insights, Profile and Up next.
+- **Every screen names its browser tab** with `usePageTitle` (`lib/pageTitle.ts`). On focus and
+  not on mount: the tab screens all stay mounted, so on mount the last one to render would win.
+- **Trakt being busy is not "No connection".** A rate-limited preflight is a 429 that the browser
+  reports as a failed fetch. `traktGet` throws `TraktBusyError` for a 429, and for a failed fetch
+  while the browser says it is online; Up next stops asking for that run and says so.
 - **The device holds a copy of your rows**, replaced wholesale when the Worker says they changed
   (`stateSync.ts`). The replace deletes, so every page is fetched into memory first and the delete
   and the inserts are one transaction: a pull that fails leaves the library as it was. That is the
@@ -266,7 +282,8 @@ From `mobile/`:
 
 | Task | Command |
 |---|---|
-| Run in a browser | `npm run web` (or the `app-web` launch config, port 8081) |
+| Run in a browser | `npm run web` (or the `app-web` launch config, port 8081). ⚠️ It talks to the LIVE API. |
+| Run in a browser against a Worker on this machine, with test accounts | `npm run web:local` (or `app-web-local`), after `node worker/scripts/dev-stack.mjs` and with `worker-local` running → [worker.md](worker.md), "The test accounts" |
 | Build and publish the website | `node mobile/web/publish.mjs`, from the repo root → [website.md](website.md) |
 | Typecheck | `npx tsc --noEmit` |
 | Tests | `npm test` |

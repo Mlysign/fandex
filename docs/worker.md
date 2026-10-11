@@ -24,19 +24,49 @@ Public, no session:
 
 | Route | Does |
 |---|---|
-| `GET /v1/health` | D1 answers, plus today's two budget counters. |
-| `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is built from this. |
+| `GET /v1/health` | D1 answers, plus today's two budget counters and `openProviderCircuits`: which providers this isolate has stopped asking. ⚠️ Per isolate, so an empty list is no proof a provider is up. Answers `HEAD` too. |
+| `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is kept current with this. A device with nothing starts from the website's `/catalog/` files instead ([website.md](website.md)), so a first visit is one call here and not thirty-one. |
 | `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |
 | `GET /v1/resolve/{tmdb\|igdb}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. |
 | `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held. Never fetches. A library sync calls this, then `resolve` for the misses. |
-| `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. |
-| `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. |
+| `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. |
+| `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
 | `GET /v1/calendar/{YYYY-MM}?region` | The month's popular releases, 40 cards. |
 | `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. |
 
+A real route asked with the wrong method answers 405 with an `Allow` header (the `PUBLIC_ROUTES`
+table in `src/index.ts`); an address that is no route at all stays 404.
+
 Sign-in: `POST /v1/auth/google {idToken}`, `POST /v1/auth/trakt {accessToken}`,
 `POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout`.
+
+### The test accounts (a developer's machine only)
+
+`POST /v1/dev/login {account?}` signs in as one of two fixed accounts, `smoketest` (the default)
+or `plain`, creating it on first use (`src/devLogin.ts`). It exists so a rating, a hide, a changed
+setting, a download or a deleted account can be tried without touching a real one. Their identity
+is `google` with a made-up id, so they hold no Trakt and nothing they do leaves the machine.
+
+Two gates, and both must hold or the route is a 404:
+
+1. `DEV_LOGIN` is `"1"`. ⚠️ **It lives in `worker/.dev.vars` and nowhere else.** `wrangler dev`
+   reads that file and `wrangler deploy` never does. It must never be a `vars` entry in
+   `wrangler.jsonc` and never be pushed as a secret; `push-secrets.mjs` does not know the name.
+2. The request's host is `localhost`, `127.0.0.1` or `[::1]`. Checked on both live hosts on
+   2026-10-11, with and without a forged `Host` header: 404 and 403, never a session.
+
+`node worker/scripts/dev-stack.mjs` prepares everything: `.dev.vars` (the flag, the first test
+account as the only admin, a session secret of this machine's own, the provider keys copied from
+`.env` with names and lengths printed and never a value), the migrations on the LOCAL D1, and the
+catalog from `data/d1-seed` without the files that hold anybody's library. Then `npm run dev:local`
+here and `npm run web:local` in `mobile/`, or the launch configurations `worker-local` and
+`app-web-local`, and "Test account" on a sign-in card. The app shows that button only when its API
+address is a loopback one (`LOCAL_API` in `mobile/src/lib/config.ts`).
+
+⚠️ **The test pool reads `.dev.vars` too.** After `dev-stack.mjs` has run, every test's `env`
+carries `DEV_LOGIN=1`. A test of what a deployed Worker does must build its own environment
+(`{ ...env, DEV_LOGIN: undefined }`), or it passes in CI and fails here.
 
 Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/me/state/{items|episodes|hidden|counts}`, `PUT /v1/me/state`, `GET /v1/me/export`,
@@ -253,6 +283,8 @@ Run from `worker/` unless a path says otherwise.
 | Tests | `npm test` |
 | Typecheck | `npx wrangler types` once, then `npx tsc --noEmit` |
 | Deploy | `npx wrangler deploy` |
+| A Worker and database on this machine, with test accounts | `node worker/scripts/dev-stack.mjs` (from the repo root, `--reseed` to start over), then `npm run dev:local` |
+| Query the local database | `npx wrangler d1 execute fandex --local --json --command "…"` |
 | Apply a migration | `npx wrangler d1 migrations apply fandex --remote`, and BEFORE the deploy that needs it |
 | What read the most rows today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (answers while D1 refuses queries) |
 | Query D1 | `npx wrangler d1 execute fandex --remote --command "…"` |

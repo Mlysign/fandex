@@ -16,10 +16,12 @@ any code, so a visitor or a crawler costs no Worker request, no CPU and no datab
 | `/legal/{en,de}/{privacy,terms,support,imprint}` | static pages | Written from `src/lib/legal`. The imprint is `noindex, nofollow, noarchive, nosnippet` twice over (meta tag and header) and out of the sitemap; its address is decoded in the browser. |
 | `/discover`, `/calendar`, `/wishlist`, `/library`, `/profile`, `/settings`, `/insights`, `/tag/{key}`, `/person/{key}`, `/studio/{key}`, `/item/{id}`, `/open/…`, `/auth/trakt`, an unknown `/{type}/{slug}` | the Worker → `app-shell.html` | The app with nothing else. `noindex`. The one-word addresses are the old site's. |
 | `/{type}/{uuid}` and `/{type}/{uuid}/{slug}` | the Worker → 308 | The addresses items had before 2026-08-21. Redirects to the stored slug, never the one in the link. |
+| `/{type}/{Slug}` with a capital letter in it | the Worker → 308 to lowercase | Stored slugs are lowercase; before 2026-10-11 `/movie/Alien` was a hard 404. |
+| `/catalog/index.json`, `/catalog/pNNN.json` | files (23 pages of 150 on 2026-10-11, 1.35 MB over the wire) | The whole scoring pool, in the exact shape `/v1/catalog/delta` answers with. A device that holds nothing starts here and then asks the API for what changed since the build. `noindex`, `max-age=300`, readable from any origin (the Android app fetches it). |
 | `/v1/*` | the Worker → the API Worker (service binding) | Same origin for the app in a browser, so no preflight. |
 | anything else | the Worker → `404.html`, status 404 | |
 | `www.fandex.org/*` | Worker `fandex-www` | 301 to fandex.org, path and query kept. |
-| `robots.txt`, `sitemap.xml` | files | `/v1/` is disallowed except `/v1/calendar/`. The sitemap lists `/`, every item page and six legal pages. |
+| `robots.txt`, `sitemap.xml` | files | `/v1/` is disallowed except `/v1/calendar/`, and so is `/catalog/`. The sitemap lists `/`, every item page and six legal pages. |
 
 Three Workers exist: `fandex-api` (worker/, the API), `fandex-web` (the files and `mobile/web/worker.ts`),
 `fandex-www` (the redirect). `fandex-web` also answers on `fandex-web.fandex-worker.workers.dev`,
@@ -30,7 +32,38 @@ which is where to look at a build if the domain has a problem.
 The static page is complete without JavaScript: artwork, facts, cast, where to watch, tags, links,
 the trailer. **It starts the app only when the browser holds a Fandex session**
 (`localStorage["fandex.session"]`). Everybody else, crawlers included, would get nothing from the
-app but a 3.7 MB download and a catalog sync of about thirty API requests.
+app but a 3.7 MB download and a catalog sync.
+
+**What a signed-out visitor can do there is links** (`personal` in `mobile/web/render.tsx`): the
+score panel's signed-out face, Rate and Add to wishlist, all three leading to `/profile`, where the
+app asks them to sign in. Nothing on a static page has a handler. Before 2026-10-11 the page
+offered nothing at all, and it is the page a search engine sends people to.
+
+## The catalog as files
+
+The build already downloads every pool title, so it also writes them out the way the API would
+have answered: `catalog/index.json` (`{version, pages}`) and one `pNNN.json` per 150 titles, each
+`{items, next}` with the cursor to continue from. `startFromFiles` in
+`mobile/src/lib/catalogSync.ts` reads them when a device's cursor is at zero, stores each page the
+way a delta page is stored, and leaves the cursor at the last file's `next`. The ordinary sync then
+asks the API once for what changed since.
+
+- **Why:** a first visit was 31 API requests and 9,122 D1 rows read, so about 550 new visitors in
+  a day would have spent D1's 5 million and stopped the API for everybody. Seen on the live site
+  on 2026-10-11 with storage cleared: 24 files, then one `/v1/catalog/delta`.
+- ⚠️ **They are the PRODUCTION catalog.** `CATALOG_FILES_URL` (`mobile/src/lib/config.ts`) is `""`
+  on the website, `https://fandex.org` in an app built with no API address configured, and `null`
+  for an app pointed anywhere else, which then syncs through its own API. A local test stack that
+  started from these files would hold another database's ids and cursor.
+- ⚠️ **"Production" is spelled "no address was configured", never a comparison with the API's
+  address.** The build throws if the web bundle names any API address but `/`, and a comparison
+  put that address in the bundle: the first publish with this feature was refused.
+- **It never throws.** A missing index, a failed page or a wrong shape leaves the cursor where it
+  was, and the device carries on through the API from there.
+- **Not written by `--limit` builds**, which hold a fraction of the pool.
+- A title removed from the pool after a build is still in the files. A device that started from
+  them then holds more than the pool, starts over once through the API, and is right after that.
+  The next publish ends it.
 
 When it does start, the app renders underneath the static copy (`<div id="prerender">` lies over
 `#root`) and removes the copy once the same page is on screen, carrying the scroll position over
@@ -125,5 +158,6 @@ such name" since 2026-10-05 and resolvers remember that for 30 minutes. It does 
 - **Static tag, person and studio pages, and calendar-month pages.** The first three exist in the
   app and their addresses load its shell, which is nothing a crawler can read. Calendar months
   answer 404.
-- **Pageview counting, the KPI feed, `assetlinks.json`, a web manifest, a social card image for `/`.**
-- **The item page's browser title in the app** stays "Fandex" on `/item/{id}`.
+- **The KPI feed, `assetlinks.json`, a web manifest, a social card image for `/`.**
+- **Plain http redirects to https** because "Always Use HTTPS" is on in the Cloudflare dashboard
+  (SSL/TLS, Edge Certificates, since 2026-10-11). Nothing in the repo holds that switch.
