@@ -58,6 +58,12 @@ export default {
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
     }
 
+    // A title's address is lowercase. `/movie/Alien`, typed or mangled by a
+    // mail client, is sent to the one that exists and not to a hard 404.
+    if (parts.length === 2 && /[A-Z]/.test(url.pathname) && TYPES.has(parts[0].toLowerCase()) && SLUG.test(parts[1].toLowerCase())) {
+      return Response.redirect(`${url.origin}/${parts[0].toLowerCase()}/${parts[1].toLowerCase()}${url.search}`, 308);
+    }
+
     if (TYPES.has(parts[0]) && parts.length <= 3 && UUID.test(parts[1] ?? '')) {
       // The slug in an old link is not trusted: two titles can share a name, and
       // the newer one was given a year on the end. The stored slug is the address.

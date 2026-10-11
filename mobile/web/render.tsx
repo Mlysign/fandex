@@ -12,8 +12,11 @@ import type { ReactElement } from 'react';
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { AppRegistry, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Bookmark, Star } from 'lucide-react-native';
 import { AppNav } from '~/components/AppNav';
+import { FandexScorePanel } from '~/components/FandexScorePanel';
 import { ItemPage } from '~/components/ItemPage';
+import { Button } from '~/components/kit';
 import { ITEM_PAGE_CSS } from '~/components/itemLayout';
 import { LegalLinks } from '~/components/LegalLinks';
 import { Screen } from '~/components/ui';
@@ -40,7 +43,23 @@ function Page({ item, taxonomy }: { item: ItemDetail; taxonomy: Taxonomy | null 
         <View style={{ flex: 1 }}>
           <Screen headed wide>
             {/* No handlers: nothing runs on a static page. The back button is a link home. */}
-            <ItemPage item={item} taxonomy={taxonomy} backHref="/" footer={<LegalLinks />} />
+            <ItemPage
+              item={item} taxonomy={taxonomy} backHref="/" footer={<LegalLinks />}
+              // What a visitor can do, as links: the score panel and the two
+              // buttons the app shows somebody signed out. Without them the
+              // page offered nothing to do, and it is the page a search engine
+              // sends people to (SM57). For somebody signed in the app takes
+              // the page over and draws their own.
+              personal={(
+                <>
+                  <FandexScorePanel state="anon" fandex={null} categoryLabel={() => null} signInHref="/profile" />
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    <Button label="Rate" variant="secondary" size="md" href="/profile" icon={<Star size={14} color="#EDE7DC" />} />
+                    <Button label="Add to wishlist" variant="secondary" size="md" href="/profile" icon={<Bookmark size={14} color="#EDE7DC" />} />
+                  </View>
+                </>
+              )}
+            />
           </Screen>
         </View>
         <View {...({ dataSet: { nav: 'bottom' } } as object)}><AppNav variant="bottom" pathname={path} /></View>

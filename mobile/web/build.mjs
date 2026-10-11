@@ -71,7 +71,8 @@ if (!flag('skip-export')) {
     env: { ...process.env, EXPO_PUBLIC_API_URL: '/' },
   });
 }
-const shell = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
+// Expo's template writes React's prop name where the HTML attribute goes. A browser ignores the tag as written.
+const shell = fs.readFileSync(path.join(APP, 'index.html'), 'utf8').replace('httpEquiv="X-UA-Compatible"', 'http-equiv="X-UA-Compatible"');
 const bundle = shell.match(/<script src="(\/_expo\/static\/js\/web\/index-[0-9a-f]+\.js)" defer><\/script>/)?.[1];
 if (!bundle) throw new Error('The export has no app bundle in its index.html');
 const bundleText = fs.readFileSync(path.join(APP, bundle), 'utf8');
@@ -133,6 +134,8 @@ const taxonomy = await getJson(`${API}/v1/taxonomy`);
 if (!taxonomy) throw new Error('No taxonomy');
 /** @type {{ updatedAt: number, vector: any }[]} */
 const pool = [];
+/** Every page of the delta as the Worker sent it, for the catalog files written in step 4. */
+const deltaPages = [];
 let poolCount = null;
 /** The merge rule the Worker answers under. A cached title fetched under another one is fetched again. */
 let deriveVersion;
@@ -142,6 +145,7 @@ for (let cursor = { since: 0, after: '' }; ;) {
   poolCount ??= page.poolCount;
   deriveVersion ??= page.deriveVersion;
   for (const it of page.items) pool.push({ updatedAt: it.updatedAt, vector: it.vector });
+  if (page.items.length) deltaPages.push({ items: page.items, next: page.next });
   if (page.done) break;
   cursor = page.next;
 }
@@ -406,11 +410,36 @@ fs.writeFileSync(path.join(STAGE, 'robots.txt'), [
   'Allow: /v1/calendar/',
   'Disallow: /v1/',
   // The old site's list (src/app/robots.ts): the screens that are yours, or that need the app to show anything.
-  ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/insights', '/dev/', '/app-shell'].map((p) => `Disallow: ${p}`),
+  ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/insights', '/dev/', '/app-shell', '/catalog/'].map((p) => `Disallow: ${p}`),
   '',
   `Sitemap: ${SITE}/sitemap.xml`,
   '',
 ].join('\n'));
+
+// The catalog, as files. A device's first sync is the whole pool: 31 requests
+// to the Worker and two D1 rows read per title, 9,122 for one new visitor, so
+// about 550 new visitors in a day would have stopped the API for everybody
+// (SM54, 2026-10-11). The build has just read every one of those pages. Written
+// out, a first sync costs the Worker nothing: the app reads these, then asks the
+// Worker only for what changed since (mobile/src/lib/catalogSync.ts).
+//
+// Each file is one page of the delta exactly as the Worker answered it, so the
+// device stores it with the code that stores a page from the Worker, and the
+// last page's cursor is the one a walk of the Worker would have ended on.
+// ⚠️ Not when a limit is set: a short catalog under the real name would be a
+// device's whole pool.
+if (!limit) {
+  fs.mkdirSync(path.join(STAGE, 'catalog'), { recursive: true });
+  const names = deltaPages.map((page, i) => {
+    const name = `p${String(i).padStart(3, '0')}.json`;
+    fs.writeFileSync(path.join(STAGE, 'catalog', name), JSON.stringify(page));
+    return name;
+  });
+  fs.writeFileSync(path.join(STAGE, 'catalog', 'index.json'), JSON.stringify({
+    version: 1, builtAt: new Date().toISOString(), deriveVersion, titles: pool.length, pages: names,
+  }));
+  step(`${names.length} catalog files for ${pool.length} titles`);
+}
 
 urls.unshift({ loc: `${SITE}/`, lastmod: new Date().toISOString().slice(0, 10) });
 fs.writeFileSync(path.join(STAGE, 'sitemap.xml'),
@@ -438,6 +467,12 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
   '  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet',
   '/app-shell',
   '  X-Robots-Tag: noindex',
+  // Data for the app, not pages. Five minutes, so a second device in a household does not ask again.
+  // Readable from any origin: it is the public catalog, and an app served from a developer's machine reads it too.
+  '/catalog/*',
+  '  X-Robots-Tag: noindex',
+  '  Cache-Control: public, max-age=300',
+  '  Access-Control-Allow-Origin: *',
   '',
 ].join('\n'));
 
