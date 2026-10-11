@@ -5819,3 +5819,14 @@ Nils asked whether release dates switch when Germany is the country. They did in
 - **`765b006` The outage.** The `release-dates` join, left to the planner, started from `media_links` by primary key and read every TMDB link per call: 110,394 rows a call, 3,863,794 in 35 calls. D1 Free refused every query from about 18:22 UTC to midnight. It was estimated, never measured; CPU and wall time looked fine. Found on the phone (September still showed two films twice), then `wrangler tail`, then `wrangler d1 insights`. Fixed with a pinned join order and a test on the plan and `meta.rows_read`. The incident in full → memory `cloudflare-worker-d1`; the rule → AGENTS.md, the Worker section.
 
 Left open at the end of that day, in TASKS.md items 5 and 6: the corrected query unmeasured on live D1, whether the lists should follow the country, and the kept counts built by another session and not deployed.
+
+## The kept counts deployed, and the row-read measurements that were owed (2026-10-11)
+
+D1 answered again after midnight UTC. Everything below was read on live D1 with `wrangler d1 execute --remote --json --command`. ⚠️ `--file` is no use for this: it reports the upload ("Rows read: 5"), not the query.
+
+- **`release-dates`, corrected query: 438 rows for 50 films with DE, 975 with a country no film lists.** That is 9 to 20 a film (the local D1 said four), so 200 films is about 1,750 to 3,900. It was 110,394 whatever the number of ids.
+- **The upcoming refresh worked overnight.** *Jumanji: Open World* reads 2026-12-23 in `media_items`. Two films are on its skip list (`tmdb_upcoming_skip`, TMDB ids 1684860 and 374771): a fetch failed and they wait three days.
+- **`GET /v1/admin/users`: 30,597 rows a view** with one account of 2,484 state rows. The estimate in docs/worker.md was ten to fifteen thousand. Four of its nine queries group `user_item_state` and each costs two to four times the table.
+- **A platforms build: 5,800 rows for games and 13,853 for one country's streaming**, not the "about 5,000" docs/worker.md gave for both.
+- **The kept counts (`03d67c8`) are live**: migration `0002` applied, then `wrangler deploy` (version `22139436`). The pool count answered 4,561 from `kv` and a fresh COUNT said 4,561. After one signed-in load of fandex.org the user's row held `2484:…`, `12414:…` and `1:…`, the same three numbers a fresh count of the tables gave.
+- **`syncCatalog` starts over once.** It reset and downloaded again without limit when the Worker's count was lower than what the device held. Now one start-over per sync, and one that fixed nothing is not tried again for a day (`catalog_reset_futile_at`). The count itself was tried as the marker first and a test showed why not: a low count and a real removal can be the same number.

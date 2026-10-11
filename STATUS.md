@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
 
-_Last updated: **2026-10-10**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when. The session-by-session story lives in git log and [the archive](docs/archive/history.md)._
+_Last updated: **2026-10-11**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when. The session-by-session story lives in git log and [the archive](docs/archive/history.md)._
 
 > **Settled calls and standing constraints → [docs/decisions.md](docs/decisions.md).** Every line there is closed; re-opening one wastes Nils’s time. A decision is not a task, which is why they no longer live in TASKS.md.
 
@@ -25,8 +25,8 @@ _Last updated: **2026-10-10**. State only, per the doc conventions in AGENTS.md:
 
 **Railway is gone (deleted 2026-10-05). Since 2026-10-10 fandex.org is served by Cloudflare, on the free plan.** A push to `main` deploys nothing: the website goes out with `node mobile/web/publish.mjs` and the API with `npx wrangler deploy` from `worker/`.
 
-- ⚠️ **`main` is ahead of the deployed API, and the order of the next deploy matters.** The kept counts (`worker/src/keptCounts.ts`, migration `0002`) are committed and NOT deployed. Apply the migration before any `npx wrangler deploy`: deployed against the old schema, every state write fails. → [TASKS.md](TASKS.md) item 6
-- ⚠️ **D1's daily read allowance ran out on 2026-10-10** and the API answered nothing until midnight UTC. The query that did it is fixed and deployed, and NOT yet measured on live D1 ([TASKS.md](TASKS.md) item 5 has the check); the two next-largest readers are what the kept counts remove. → [docs/worker.md](docs/worker.md)
+- **The deployed API is `main`** (2026-10-11), the kept counts included: a device's "did anything change" asks read one row where they read 14,899 and 4,561.
+- ⚠️ **D1's daily read allowance ran out on 2026-10-10** and the API answered nothing until midnight UTC. The query that did it is fixed and measured on live D1 (438 rows for 50 films, was 110,394). What reads the most now is a catalog delta page and the admin users page (30,597 rows a view, which is fine for one account and not for a hundred). → [docs/worker.md](docs/worker.md)
 - **`fandex-web`** serves the site: files a build wrote, and a small Worker for what no file answers. **`fandex-api`** is the API and the cron, on D1. **`fandex-www`** redirects www to the apex. → [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md)
 - **The site is as fresh as its last build.** A title added since then has no static page; its address loads the app, which asks the API. Nothing rebuilds on a timer yet.
 - **D1 is the only live copy of the library, and its backup restores.** The drill passed 2026-10-05 → [docs/worker.md](docs/worker.md), "Backup and restore". ⚠️ **`rr-2026-10-04.db` must never be deleted**: it holds the only copy of the RAWG, Steam and Trakt blobs. `rr-2026-10-05.db` is the last state of the Railway database and holds what D1 does not (`franchise_members`, `sync_log`, the snapshots and facet caches, the dismissed taxonomy suggestions). Both are in R2 (`fandex-backups/railway/`) and under `data/prod-snapshots/`.
@@ -152,7 +152,7 @@ Both H3.8 gates are measurable now rather than theoretical. Full reasoning and t
 
 **The site: 1,531 tests pass** (147 files, 1 skipped) · `npx tsc --noEmit` clean · `npm run lint` **0 errors** (482 warnings, all `no-explicit-any` noise) · `npm run build` clean. **This is the standing bar. Don't land work below it.**
 
-**Two more packages since 2026-10-04, each with its own bar, run from its own folder:** `worker/` **213 tests** (12 files, inside workerd against a local D1, re-run 2026-10-10) and `tsc` clean · `mobile/` **85 tests** (12 files, re-run 2026-10-10) and `tsc` clean. CI runs all three as separate jobs. Nothing deploys from CI since Railway was deleted; the Worker is deployed by hand.
+**Two more packages since 2026-10-04, each with its own bar, run from its own folder:** `worker/` **213 tests** (12 files, inside workerd against a local D1, re-run 2026-10-10) and `tsc` clean · `mobile/` **88 tests** (12 files, re-run 2026-10-11) and `tsc` clean. CI runs all three as separate jobs. Nothing deploys from CI since Railway was deleted; the Worker is deployed by hand.
 
 ⚠️ **`npm audit` is RED again as of 2026-09-01, and CI is green, and both are correct.** Third instance of the pattern below: two new advisories against `browserslist <=4.28.6` (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) on a tree nobody changed. **It does NOT block the deploy**, verified rather than assumed by running CI's exact command: `npm audit --audit-level=high --omit=dev` answers `found 0 vulnerabilities`, because browserslist reaches this repo only as `eslint-config-next → eslint-plugin-react-hooks → @babel/core → browserslist`, which is entirely devDependency. **So check with CI's flags before reacting**: a bare `npm audit` includes dev and will read red while the deploy is perfectly fine.
 

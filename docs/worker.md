@@ -45,9 +45,11 @@ Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/catalog/platforms?region=` lists, for every pool title, the game platforms or the
 streaming services of one country, as names. Built once a day per country and kept in `kv`
 (`platforms:games`, `platforms:streaming:{REGION}`), so a request after the first is two row reads.
-A build is under a second and about 5,000 rows read; the same answer with the item page's last
-fallback step (any country TMDB lists) read 179,000, which is why that step is left out. A build
-meets the rate limiter and a cap of 40 a day; reading a built one meets neither.
+A build is under a second. **Measured on live D1 on 2026-10-11: 5,800 rows read for the games and
+13,853 for one country's streaming** (an earlier "about 5,000" here was the first version of the
+query). The same answer with the item page's last fallback step (any country TMDB lists) read
+179,000, which is why that step is left out. A build meets the rate limiter and a cap of 40 a day,
+so the most a day of builds can read is about 560,000 rows; reading a built one meets neither.
 
 **A film has one date in the catalog and another per country.** The catalog's date (`media_items`,
 the vector, every list on a device) is TMDB's worldwide one. A country's date is picked by
@@ -63,10 +65,10 @@ whether they should follow the country is an open question in TASKS.md.
 ⚠️ **`release-dates` took the API down on its first day (2026-10-10).** Its join, left to the
 planner, read every TMDB link in the catalog on each call: 110,394 rows a call and 3.86 million in
 35 calls, which with the day's other traffic passed D1's 5 million. Every query then failed until
-midnight UTC. The query now names its join order and its index (`RELEASE_DATES_SQL`), which is four
-rows a film on the local D1, and a test holds the plan and the count. **Not yet measured on live
-D1**, which refused all queries for the rest of that day: run one request and read `rows_read`
-before relying on it.
+midnight UTC. The query now names its join order and its index (`RELEASE_DATES_SQL`), and a test
+holds the plan and the count. **Measured on live D1 on 2026-10-11: 438 rows for 50 films with DE,
+975 with a country none of them lists**, so 9 to 20 rows a film (the country's place in TMDB's list
+is what varies; the local D1 said four) and at most about 3,900 for a full call of 200.
 
 `POST /v1/t/pv` is the pageview beacon (`src/telemetry.ts`): `{path, ref}` from a page on fandex.org. It keeps a
 daily total per kind of page, signed in or not, and per class of referrer, and nothing that identifies anybody.
@@ -75,9 +77,10 @@ only as a crawler turned away. A counted view is three row writes, capped at 5,0
 (`DAILY_PAGEVIEW_CAP`), and it answers 200 whatever it decided. ⚠️ The privacy policy's "Usage statistics" section
 describes exactly this. Change one and the other is wrong.
 
-⚠️ `GET /v1/admin/users` groups every row of `user_item_state` several times over. With one account of 2,500 rows that is an
-estimated ten to fifteen thousand rows read per view, NOT measured, and it grows with every account. Measure it before
-there are more accounts, and keep the page off any timer.
+⚠️ `GET /v1/admin/users` groups every row of `user_item_state` several times over. **Measured on live D1 on 2026-10-11:
+30,597 rows read per view** with one account of 2,484 state rows, so about twelve rows read per state row, and it grows
+with every account. 160 views would spend the day. Fine for one admin and one account; before there are more accounts it
+needs one pass over the table instead of four, or an answer kept in `kv`. Keep the page off any timer.
 
 Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/users`,
 `PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`, `POST` and `DELETE`
@@ -250,6 +253,7 @@ Run from `worker/` unless a path says otherwise.
 | Apply a migration | `npx wrangler d1 migrations apply fandex --remote`, and BEFORE the deploy that needs it |
 | What read the most rows today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (answers while D1 refuses queries) |
 | Query D1 | `npx wrangler d1 execute fandex --remote --command "…"` |
+| Rows a query reads | the same with `--json`: `meta.rows_read`. ⚠️ Not with `--file`, which reports the upload and not the query. |
 | Logs with CPU time | `npx wrangler tail fandex-api --format json` |
 | Set secrets from `.env` | `node worker/scripts/push-secrets.mjs` (from the repo root) |
 | Snapshot Railway to R2 | `node scripts/snapshot-prod-to-r2.mjs` (from the repo root) |
