@@ -29,6 +29,7 @@
 //     GET    /v1/me/export
 //     DELETE /v1/me
 
+import { providerBreakerSnapshot } from "@/lib/http";
 import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
@@ -50,6 +51,7 @@ import {
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
 import { nowSeconds } from "./d1";
+import { DEV_ACCOUNTS, devLogin, devLoginAllowed } from "./devLogin";
 import type { Env } from "./env";
 import { allow, BodyError, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
@@ -103,7 +105,11 @@ async function route(c: Ctx): Promise<Response> {
   const method = request.method;
   const [, a, b, d, e] = parts;
 
-  if (a === "health" && method === "GET") return health(c);
+  // HEAD too: it is what an uptime check sends.
+  if (a === "health" && !b && (method === "GET" || method === "HEAD")) {
+    const res = await health(c);
+    return method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
+  }
 
   if (a === "catalog" && b === "delta" && method === "GET") {
     const body = await catalogDeltaJson(
@@ -198,7 +204,44 @@ async function route(c: Ctx): Promise<Response> {
 
   if (a === "admin") return admin(c, method, b, d);
 
+  // A test account, on a developer's machine only (src/devLogin.ts). Anywhere
+  // else this is a path that does not exist.
+  if (a === "dev" && b === "login" && method === "POST" && !d && devLoginAllowed(c.env, url)) {
+    const body = (await readJson(request, AUTH_BODY_MAX).catch(() => null)) as { account?: unknown } | null;
+    const out = await devLogin(c.env, typeof body?.account === "string" ? body.account : "smoketest");
+    if (!out) return error(400, "bad-request", `account must be one of: ${Object.keys(DEV_ACCOUNTS).join(", ")}`);
+    return signInResponse(c, { kind: "signed-in", ...out });
+  }
+
+  // A real route asked with the wrong verb: say which verbs it takes.
+  const allowed = methodsFor(parts.slice(1).join("/"));
+  if (allowed) return json({ error: "method-not-allowed" }, 405, { Allow: allowed, "Cache-Control": "no-store" });
+
   return error(404, "not-found");
+}
+
+/**
+ * The public routes and the verbs each takes, for the 405 above. `/v1/me` and
+ * `/v1/admin` answer for themselves, and must: an admin route says 404 to
+ * anybody who is not an admin, whatever the verb.
+ */
+const PUBLIC_ROUTES: [RegExp, string][] = [
+  [/^health$/, "GET, HEAD"],
+  [/^catalog\/(delta|platforms)$/, "GET"],
+  [/^catalog\/release-dates$/, "POST"],
+  [/^taxonomy$/, "GET"],
+  [/^items\/[^/]+(\/[^/]+)?$/, "GET"],
+  [/^resolve\/[^/]+\/[^/]+\/[^/]+$/, "GET"],
+  [/^lookup$/, "POST"],
+  [/^shows\/[^/]+\/episodes$/, "GET"],
+  [/^search\/games$/, "GET"],
+  [/^calendar\/[^/]+$/, "GET"],
+  [/^auth\/(google|trakt|merge|logout)$/, "POST"],
+  [/^t\/pv$/, "POST"],
+];
+
+function methodsFor(path: string): string | null {
+  return PUBLIC_ROUTES.find(([shape]) => shape.test(path))?.[1] ?? null;
 }
 
 // ── Public ───────────────────────────────────────────────────────────────────
@@ -207,7 +250,11 @@ async function health(c: Ctx): Promise<Response> {
   // Is D1 answering, and how much of today's two budgets is gone.
   const fetches = await spent(c.env.DB, "fetch");
   const userWrites = await spent(c.env.DB, "user_writes");
-  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites } }, 200, { "Cache-Control": "no-store" });
+  // Providers this isolate has stopped calling, as the old site's health had.
+  // ⚠️ One isolate's view: `{}` here says this isolate has seen no trouble, not
+  // that TMDB and IGDB are up. A host listed here IS being refused, though.
+  const openProviderCircuits = providerBreakerSnapshot();
+  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites }, openProviderCircuits }, 200, { "Cache-Control": "no-store" });
 }
 
 async function resolve(c: Ctx, source: string, type: string, id: string): Promise<Response> {
@@ -226,7 +273,11 @@ async function resolve(c: Ctx, source: string, type: string, id: string): Promis
 }
 
 async function searchGames(c: Ctx): Promise<Response> {
-  const q = (c.url.searchParams.get("q") ?? "").trim().slice(0, 100);
+  // Angle brackets are dropped before anything else sees the term. No title
+  // needs one, and IGDB's edge refuses a request carrying a tag: "<script>"
+  // came back as an error from the provider, which reads as IGDB being down
+  // and counts towards shutting it off for everybody (SM66, 2026-10-11).
+  const q = (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
   if (q.length < 2) return error(400, "bad-request", "q must be at least two characters");
 
   // The edge cache answers a repeat of the same search without spending an IGDB

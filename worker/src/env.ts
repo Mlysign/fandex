@@ -31,6 +31,11 @@ export interface Env {
   RL_RESOLVE?: RateLimit;
   RL_AUTH?: RateLimit;
   RL_WRITE?: RateLimit;
+  /**
+   * "1" lets a Worker on a loopback host sign in as a test account (src/devLogin.ts).
+   * ⚠️ Only ever in `.dev.vars`. Never in wrangler.jsonc, never pushed as a secret.
+   */
+  DEV_LOGIN?: string;
   /** "0" or "false" turns IGDB off everywhere. Default on. Read by src/lib/sources/igdb.ts. */
   IGDB_ENABLED?: string;
 }

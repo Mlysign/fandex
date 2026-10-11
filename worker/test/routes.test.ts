@@ -402,4 +402,108 @@ describe("game search", () => {
     expect((await call("/v1/search/games?q=a")).status).toBe(400);
     expect((await call("/v1/search/games")).status).toBe(400);
   });
+
+  it("never sends the provider an angle bracket", async () => {
+    // IGDB's edge refuses a request carrying a tag, and a refusal reads as an outage.
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("oauth2/token")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      bodies.push(String(init?.body ?? ""));
+      return Response.json([]);
+    });
+    expect((await call("/v1/search/games?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E%20zelda")).status).toBe(200);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toMatch(/[<>]/);
+    expect(bodies[0]).toContain("zelda");
+    // What is left after the brackets go still has to be a search term.
+    expect((await call("/v1/search/games?q=%3C%3E%3Ca")).status).toBe(400);
+  });
+});
+
+describe("the small print of the API", () => {
+  it("says which verbs a real route takes, and still 404s a path that is not one", async () => {
+    const res = await call("/v1/taxonomy", { method: "POST" });
+    expect(res.status).toBe(405);
+    expect(res.headers.get("Allow")).toBe("GET");
+    expect((await call("/v1/lookup")).headers.get("Allow")).toBe("POST");
+    expect((await call("/v1/nope", { method: "POST" })).status).toBe(404);
+  });
+
+  it("answers an admin route 404 whatever the verb, to anybody who is not an admin", async () => {
+    for (const method of ["GET", "POST", "PUT", "DELETE"]) expect((await call("/v1/admin/users", { method })).status).toBe(404);
+  });
+
+  it("answers HEAD on health with the headers and no body", async () => {
+    const res = await call("/v1/health", { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("");
+  });
+
+  it("lists in health the providers this isolate has stopped calling", async () => {
+    expect(((await (await call("/v1/health")).json()) as any).openProviderCircuits).toEqual({});
+  });
+
+  it("has episodes for a show only: a film's id is not a show with none", async () => {
+    const film = await upsertMediaItem(db, movieItem());
+    const show = await upsertMediaItem(db, showItem());
+    expect((await call(`/v1/shows/${film.id}/episodes`)).status).toBe(404);
+    expect((await call(`/v1/shows/${show.id}/episodes`)).status).toBe(200);
+  });
+});
+
+describe("the test accounts", () => {
+  // Both spelled out. The test pool reads `.dev.vars` like `wrangler dev` does,
+  // so on a machine that has prepared the local stack `env` arrives with the
+  // switch already on, and "off" has to be said, not assumed.
+  const local: typeof env = { ...env, DEV_LOGIN: "1" };
+  const deployed: typeof env = { ...env, DEV_LOGIN: undefined };
+  const post = (host: string, e: typeof env = local, body: unknown = {}) => {
+    const ctx = createExecutionContext();
+    return worker.fetch(new Request(`http://${host}/v1/dev/login`, { method: "POST", ...jsonBody(body) }), e, ctx);
+  };
+
+  it("do not exist on a Worker that was not told it is a developer's", async () => {
+    expect((await post("localhost:8787", deployed)).status).toBe(404);
+    expect((await post("localhost:8787", { ...env, DEV_LOGIN: "true" })).status).toBe(404);
+    expect((await post("localhost:8787", { ...env, DEV_LOGIN: "0" })).status).toBe(404);
+    expect(await count("users")).toBe(0);
+  });
+
+  it("do not exist at any address but this machine's, whatever the Worker was told", async () => {
+    for (const host of ["fandex.org", "fandex-api.fandex-worker.workers.dev", "localhost.evil.example", "127.0.0.1.evil.example"]) {
+      expect((await post(host)).status).toBe(404);
+    }
+    expect(await count("users")).toBe(0);
+  });
+
+  it("sign in on localhost with a token that works, and the account is made once", async () => {
+    const first = await post("localhost:8787");
+    expect(first.status).toBe(200);
+    const { token, user } = (await first.json()) as any;
+    expect(user).toMatchObject({ userId: "d0d0d0d0-0000-4000-8000-000000000001", provider: "google" });
+    await post("127.0.0.1:8787");
+    expect(await count("users")).toBe(1);
+    expect(await count("user_identities")).toBe(1);
+    const me = await call("/v1/me", { headers: auth(token) });
+    expect(((await me.json()) as any).identities).toEqual([expect.objectContaining({ provider: "google", displayName: "Smoke Test" })]);
+  });
+
+  it("has a second account, and refuses a name it does not know", async () => {
+    const plain = (await (await post("localhost:8787", local, { account: "plain" })).json()) as any;
+    expect(plain.user.userId).toBe("d0d0d0d0-0000-4000-8000-000000000002");
+    expect((await post("localhost:8787", local, { account: "nils" })).status).toBe(400);
+  });
+
+  it("comes back empty after its account is deleted", async () => {
+    const { token } = (await (await post("localhost:8787")).json()) as any;
+    const item = await upsertMediaItem(db, movieItem());
+    await call("/v1/me/state", { method: "PUT", headers: { ...auth(token), "Content-Type": "application/json" }, body: JSON.stringify({ hidden: { add: [item.id] } }) });
+    expect(await count("user_hidden_items")).toBe(1);
+    expect((await call("/v1/me", { method: "DELETE", headers: auth(token) })).status).toBe(200);
+    expect(await count("users")).toBe(0);
+    const again = (await (await post("localhost:8787")).json()) as any;
+    expect(await count("user_hidden_items")).toBe(0);
+    expect((await call("/v1/me", { headers: auth(again.token) })).status).toBe(200);
+  });
 });

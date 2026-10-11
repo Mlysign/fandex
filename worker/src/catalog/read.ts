@@ -355,7 +355,8 @@ export async function weakEtag(body: string): Promise<string> {
 /** The stored seasons and episodes of a show, as a JSON string. Null for an unknown item. */
 export async function showEpisodesJson(db: D1Database, mediaItemId: string): Promise<string | null> {
   const [item, seasons, episodes] = await db.batch<{ j: string | null }>([
-    db.prepare("SELECT json_object('id', id, 'type', type) j FROM media_items WHERE id = ?").bind(mediaItemId),
+    // A show, or nothing: a film's id here is an address that does not exist, not a show with no episodes.
+    db.prepare("SELECT json_object('id', id, 'type', type) j FROM media_items WHERE id = ? AND type = 'show'").bind(mediaItemId),
     db.prepare(
       `SELECT json_group_array(json_object('season', season_number, 'name', name, 'episodeCount', episode_count,
               'airDate', air_date, 'posterUrl', poster_url)) j
