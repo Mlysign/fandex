@@ -5841,3 +5841,15 @@ The last piece of the admin pages. The old site ran the sweep on its server (`sr
 - **The panel shows nothing until the denials have loaded.** A sweep without them would present every old "no" as new.
 - `suggestFranchisesByTitle` split every franchise key into words once per title (seven million splits on the real catalog). The keys long enough to be a prefix are now picked once.
 - Not done: nobody has pressed Accept, Deny or Add. `Select` moved out of `TaxonomyPanel.tsx` into its own file because two panels use it.
+
+## The item page's score panel, hide, related rails and gallery (2026-10-11)
+
+`2dfc5a9` and `0863215`. Four ports from `src/components/item/`: `FandexScoreSection.tsx`, the advanced row of `PersonalSection.tsx`, `RelatedRails.tsx` with `src/lib/detail/relatedRails.ts`, and `MediaGallery.tsx`.
+
+- **The score panel** (`mobile/src/components/FandexScorePanel.tsx`, rules in `lib/scoreReasons.ts`). The breakdown is a sheet where the site floated it under the panel. Seen signed in on the live site: Inception, baseline 67, twelve counted rows summing to 16.4, total 83, the left-out rows under their one line, 26 reason links.
+- **The score moved while a tab was still loading**: 79, then 85, then 83 for one film. A second tab runs on an in-memory copy and downloads rows and catalog again, and the profile is rebuilt as they land. The panel now holds its box until both have settled.
+- **Hide from suggestions** is the first caller of the `hidden` half of `PUT /v1/me/state`. Never pressed by anybody.
+- **The rails are picked on the device** (`lib/related.ts`): one pass over the catalog copy builds facet → titles (204 ms in Node for 4,561 titles and 20,504 facets), then `franchiseForItem` and `rankSimilar`, imported from the site, take 0.3 ms a title.
+- **`rankSimilar` returned nothing for 1,074 of 4,561 titles.** It scores the eight rarest facets, and 12,140 of the catalog's 20,504 facets belong to a single title, so for those titles all eight places went to facets that can match nothing. The site had this too. The caller now offers only facets some other title carries: 4,432 titles get a rail. Found by looking at Alien in a browser, then measured over the whole live catalog.
+- **The gallery**: thumbnails and hover arrows from 1024 px, in a browser only and only once the pager has measured itself, so a phone downloads no thumbnails and a static page carries no dead control. The sticky box moved from the artwork to its column (`data-item="art"`), which changed every static page: 4,566 files uploaded in 123 s.
+- ⚠️ The browser pane does not fire `ResizeObserver` until something makes it draw. The pager measured itself only after a screenshot, so "no thumbnails" was the pane and not the page.

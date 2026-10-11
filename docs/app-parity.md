@@ -39,7 +39,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
 | Search (Discover) | partial | The provider-fed feed when nothing is typed (it shows the catalog on the device). People and tag results. Scroll and query restored on Back. |
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
-| Item page | partial | On a wide window the artwork has no thumbnails or arrows. Score panel's band sentence, baseline and sum rows. Hide from suggestions. The two related rails. (More than the site had: each episode shows its date and opens a sheet with its still and synopsis.) |
+| Item page | partial | Built 2026-10-11: the score panel (four states, "Why?" with baseline, linked reasons, left-out rows and the sum), Hide from suggestions, both related rails, thumbnails and hover arrows on a wide window. Still owed: franchise members the catalog does not hold (`franchise_members` is not in D1), the rails on a STATIC page (a visitor and a crawler get none), "Rate it" as a button that opens the stars (the app shows the ten stars in place), your rating per provider and your review (`RatingsSection.tsx`), and returning to the title after signing in from it. (More than the site had: each episode shows its date and opens a sheet with its still and synopsis.) |
 | Profile | partial | The Support Fandex row. |
 | Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
 | Facet pages (tag, person, studio) | partial | Games from the providers (a studio's or a tag's page asks TMDB only; IGDB needs a Worker route). "Also known as", "you score X higher than the crowd". No static page yet, so a crawler gets the app's shell. |
@@ -61,11 +61,10 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **The item page's rest**: score panel, "More like this", artwork thumbnails on a wide window. | The page every other screen leads to. |
-| 2 | **Settings' rest**: Import, a second login method, the download on a phone. | |
-| 3 | **Static facet pages**, games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. |
-| 4 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
-| 5 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |
+| 1 | **Settings' rest**: Import, a second login method, the download on a phone. | |
+| 2 | **Static facet pages**, the related rails on static item pages, games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. The rails are the site's own internal links, which is the one lever on crawl priority that is ours ([seo.md](seo.md)); the build holds every title and can pick them with `lib/related.ts`. |
+| 3 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
+| 4 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
 ## The admin pages
 
@@ -120,8 +119,7 @@ Checked against `worker/src/index.ts`.
   it, so D1 holds them for those seasons only. The app asks TMDB for the rest, from the device.
 - A way to disconnect that also removes episode rows (the site left them too).
 
-Routes that exist and the app does not call: `POST /v1/auth/google`, `POST /v1/auth/merge`, and the
-`hidden` half of `PUT /v1/me/state`.
+Routes that exist and the app does not call: `POST /v1/auth/google` and `POST /v1/auth/merge`.
 
 ⚠️ Every new route is priced in D1 row writes and Worker CPU before it is built (docs/worker.md).
 
@@ -149,6 +147,12 @@ Parity must not cost any of these.
   a category change and a franchise Remove would send. **Never run for real by anybody:
   Disconnect, Download, Delete, a change of country or platforms, and every write on the Scoring
   page (Save weights, a category, an alias, a name, an attach).**
+- **The item page's new parts (2026-10-11).** Seen signed out in a local browser at 1280 px and
+  375 px: the sign-in panel, both rails, thumbnails, hover arrows, an arrow moving the picture.
+  Seen signed in on the live site, read as text: the scored panel, the whole breakdown and its sum,
+  the quiet row with Remove and Hide, the rails with his scores. Not seen: the breakdown sheet as a
+  picture, the cold-start and no-match faces of the panel (his account has neither), anything on
+  the phone. **Hide from suggestions has not been pressed.**
 - **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
   have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.

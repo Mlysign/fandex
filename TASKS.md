@@ -19,7 +19,7 @@ Six items. Everything else in this file is work I can do without him, and every 
    - **(c) ✅ Done 2026-10-10, by me at his request:** the 30-day expiry rule `expire-d1-exports` is on `fandex-backups` for the `d1/` prefix only. Was: **(c) One command, before 2026-11-03**, which makes the policy's "nightly copies are kept for 30 days" true. Today the nightly exports are never deleted, so a deleted account would stay in them. It only touches `d1/`; the `railway/` snapshots are not affected: `cd worker && npx wrangler r2 bucket lifecycle add fandex-backups expire-d1-exports d1/ --expire-days 30 --jurisdiction eu`. The syntax was checked against Wrangler's help; the command itself was not run, because a standing rule that deletes his backups is his to switch on.
    - **(d) The IGDB licence email** to partner@igdb.com. A draft is in his Gmail drafts.
    - **Optional:** a Cloudflare API token as the repository secret `CLOUDFLARE_API_TOKEN`, which is what a daily rebuild in GitHub Actions needs (the workflow is not written). Until then the site changes when `node mobile/web/publish.mjs` is run. Also optional: resubmit `sitemap.xml` in Search Console, and delete the two dead `_railway-verify` TXT records and the empty R2 bucket `fandex-litestream`.
-   - **Next, mine, in order** ([docs/app-parity.md](docs/app-parity.md), "The order from here"): the rest of the item page (score panel, "More like this", artwork thumbnails on a wide window); Settings' rest; a studio's and a tag's games on facet pages (needs a Worker route). The Review section of `/dev/scoring` is live since 2026-10-11 and shows 7 cards; nobody has pressed Accept, Deny or Add on it yet.
+   - **Next, mine, in order** ([docs/app-parity.md](docs/app-parity.md), "The order from here"): Settings' rest; static facet pages and the related rails on static item pages; a studio's and a tag's games on facet pages (needs a Worker route). Live since 2026-10-11 and never pressed by anybody: Accept, Deny and Add on the Review section of `/dev/scoring` (7 cards), and "Hide from suggestions" on a title's page.
    - **(e) Install the 2026-10-11 build on the phone**, unlocked and plugged in: `adb install -r mobile/dist/fandex-0.2.1.apk`, and answer "Nicht senden" if Play Protect asks. My install timed out against a locked screen. Until then the phone runs the 2026-10-10 build, without the catalog start-over fix.
    - **Still owed, mine, after 2026-10-12:** run the insights command from docs/worker.md's table. It reads a rolling 24 hours, so the two count queries only leave the top of it a day after the 2026-10-11 deploy.
    - **Waiting on him:** the widget's look and feel, which he wants to go through together; do not redesign it unasked. Google sign-in and joining two accounts are at the bottom of docs/app.md.
@@ -88,6 +88,18 @@ two mechanisms. → [[monetization-h3]]
   4. **A smaller sitemap.** 4,341 URLs at a uniform 0.7 priority tells Google nothing about which
      matter. Speculative, cheap, reversible.
 
+
+### Added 2026-10-11
+
+- **⬜ "More like this" picks odd titles, and it always did.** The rail is the old site's ranking,
+  ported as it was: it scores the eight RAREST facets two titles share, and the rarest facets a film
+  has are bit-part actors and one-off keywords. On the live catalog Alien gets *Saving Private
+  Ryan*, *Top Gun* and *Freddy's Dead*; Inception gets *The Dark Knight Rises*, *The Blue Lagoon*
+  and *Platoon*. One thing was changed in the port, because it left the rail empty for 1,074 of
+  4,561 titles: facets no other title carries are no longer offered to the ranker
+  (`mobile/src/lib/related.ts`). Whether the ranking itself should change (count every shared
+  facet, weight genre and director above cast) is Nils's call: it changes what the app recommends.
+  ⚠️ `src/lib/similarItems.ts` is shared with the old site's tests; change the caller, or both.
 
 ### Added 2026-09-03
 
