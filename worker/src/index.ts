@@ -36,7 +36,7 @@ import { analyticsSnapshot, countPageView } from "./telemetry";
 import {
   clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
   parseIpOverride, parseLabel, parseScoringConfig, setIpOverride, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
-  setTagOverrides, type AliasTable,
+  setTagOverrides, dismissSuggestion, dismissedJson, parseDismissal, undismissSuggestion, type AliasTable,
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
@@ -427,6 +427,22 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
       await clearLabel(db, q.get("kind"), q.get("key"));
       return saved();
     }
+  }
+  // The Review section's own route: the proposals somebody said no to. The
+  // proposals are worked out on the device; accepting one uses the routes above.
+  // Each call answers with the whole list, which is short.
+  if (b === "suggestions" && d === "dismissed") {
+    if (method === "POST") {
+      const body = (await readJson(c.request, AUTH_BODY_MAX)) as { kind?: unknown; ref?: unknown } | null;
+      const no = parseDismissal(body?.kind, body?.ref);
+      await dismissSuggestion(db, no.kind, no.ref);
+    } else if (method === "DELETE") {
+      const no = parseDismissal(q.get("kind"), q.get("ref"));
+      await undismissSuggestion(db, no.kind, no.ref);
+    } else if (method !== "GET") {
+      return error(404, "not-found");
+    }
+    return json(await dismissedJson(db), 200, PRIVATE);
   }
   return error(404, "not-found");
 }

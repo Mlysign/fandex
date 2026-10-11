@@ -130,6 +130,11 @@ export function suggestFranchisesByTitle(titles: CatalogTitle[], tax: TaxonomyJs
   for (const f of survey) for (const m of f.members) placed.add(m.mediaItemId);
   for (const o of tax.itemIpOverrides) placed.add(o.mediaItemId);
 
+  // The keys long enough to be a prefix, picked once. Asking each key for its
+  // word count inside the loop below was a split per title per franchise,
+  // seven million of them on the real catalog.
+  const prefixKeys = [...known.keys()].filter((key) => key.split(' ').length >= MIN_PREFIX_WORDS);
+
   const out: FranchiseSuggestion[] = [];
   for (const t of titles) {
     if (placed.has(t.id) || !t.title) continue;
@@ -139,8 +144,7 @@ export function suggestFranchisesByTitle(titles: CatalogTitle[], tax: TaxonomyJs
     if (known.has(name) && name.length >= MIN_EXACT_CHARS) hit = { key: name, match: 'exact' };
     else {
       let best: string | null = null;
-      for (const key of known.keys()) {
-        if (key.split(' ').length < MIN_PREFIX_WORDS) continue;
+      for (const key of prefixKeys) {
         if ((name === key || name.startsWith(`${key} `)) && (!best || key.length > best.length)) best = key;
       }
       if (best) hit = { key: best, match: 'prefix' };

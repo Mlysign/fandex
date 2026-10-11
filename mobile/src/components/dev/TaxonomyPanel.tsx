@@ -6,54 +6,33 @@
 // to the Worker and comes back as the whole taxonomy, which the rows are then
 // rebuilt from, so the table never shows what it sent in place of what was stored.
 //
-// Franchises is its own file (FranchisePanel.tsx). Not here yet: the Review section.
+// Franchises and Review are their own files (FranchisePanel.tsx, ReviewPanel.tsx).
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { tagCategoryHex } from '@/lib/facetPalette';
 import { slugify } from '@/lib/slug';
-import { Button, Sheet } from '~/components/kit';
+import { Button } from '~/components/kit';
 import { api, ApiError } from '~/lib/api';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { TaxonomyJson } from '~/lib/fandexScore';
 import { buildTagRows, filterTagRows, rawTagCounts, type TagRow } from '~/lib/tagVocab';
 import { breakpoint, color, font, radius } from '~/theme';
 import { FranchisePanel } from './FranchisePanel';
+import { ReviewPanel } from './ReviewPanel';
+import { Select } from './Select';
 import type { Category } from './WeightsPanel';
 
-type Section = 'categories' | 'tags' | 'franchises';
-const SECTIONS: [Section, string][] = [['categories', 'Categories'], ['tags', 'Tags'], ['franchises', 'Franchises']];
+// Review is first and is where the tab opens, as on the site: the other three
+// are where you go to do by hand what a card did not get right.
+type Section = 'review' | 'categories' | 'tags' | 'franchises';
+const SECTIONS: [Section, string][] = [['review', 'Review'], ['categories', 'Categories'], ['tags', 'Tags'], ['franchises', 'Franchises']];
 const PAGE_SIZE = 100;
 
 /** A write to the Worker: the taxonomy it answers with, or the reason it did not happen. */
 type Write = (run: () => Promise<TaxonomyJson>) => Promise<boolean>;
 
 const reason = (e: unknown) => (e instanceof ApiError && e.message ? e.message : e instanceof Error ? e.message : 'That did not save.');
-
-/** A native select has no equal in React Native. This is a button that opens the options in a sheet. */
-function Select({ value, options, onChange, placeholder, disabled, width, label }: {
-  value: string; options: [string, string][]; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; width?: number; label: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const current = options.find(([k]) => k === value)?.[1] ?? placeholder ?? '';
-  return (
-    <>
-      <Pressable onPress={() => setOpen(true)} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${label}: ${current}`} style={[styles.input, styles.select, { width }, disabled && { opacity: 0.5 }]}>
-        <Text numberOfLines={1} style={[styles.text, { flex: 1, color: color.textPrimary }]}>{current}</Text>
-        <Text style={styles.tiny}>▾</Text>
-      </Pressable>
-      <Sheet open={open} onClose={() => setOpen(false)} title={label}>
-        <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ paddingVertical: 8 }}>
-          {options.map(([k, text]) => (
-            <Pressable key={k} onPress={() => { setOpen(false); onChange(k); }} accessibilityRole="button" style={styles.option}>
-              <Text style={[styles.text, { flex: 1, color: k === value ? color.accent : color.textPrimary }]}>{text}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </Sheet>
-    </>
-  );
-}
 
 function Check({ on, mixed, onPress, label }: { on: boolean; mixed?: boolean; onPress: () => void; label: string }) {
   return (
@@ -328,7 +307,7 @@ export function TaxonomyPanel({ json, onChanged }: {
   /** Take the taxonomy a write answered with: the page and the app's own scores both switch to it. */
   onChanged: (next: TaxonomyJson) => Promise<void>;
 }) {
-  const [section, setSection] = useState<Section>('tags');
+  const [section, setSection] = useState<Section>('review');
   const [error, setError] = useState<string | null>(null);
 
   const write: Write = async (run) => {
@@ -352,6 +331,7 @@ export function TaxonomyPanel({ json, onChanged }: {
         ))}
       </View>
       {error ? <Text style={[styles.tiny, { color: color.danger }]}>{error}</Text> : null}
+      {section === 'review' ? <ReviewPanel json={json} write={write} /> : null}
       {section === 'categories' ? <CategoryList categories={json.tagCategories} write={write} /> : null}
       {section === 'tags' ? <TagTable categories={json.tagCategories} json={json} write={write} /> : null}
       {section === 'franchises' ? <FranchisePanel json={json} write={write} /> : null}
@@ -373,8 +353,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: color.borderStrong,
     backgroundColor: color.surfaceInset, color: color.textPrimary, fontFamily: font.sans, fontSize: 14,
   },
-  select: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 30 },
-  option: { minHeight: 44, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 },
   box: { width: 16, height: 16, borderRadius: 3, borderWidth: 1, borderColor: color.borderStrong, alignItems: 'center', justifyContent: 'center' },
   boxOn: { backgroundColor: color.neutral400, borderColor: color.neutral400 },
   boxDash: { width: 8, height: 2, backgroundColor: color.surface },

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights, parseLabel,
   parseIpOverride, parseScoringConfig, parseTagOverrides, setIpOverride, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel, setTagOverrides,
+  dismissSuggestion, dismissedJson, parseDismissal, undismissSuggestion,
 } from "../src/adminScoring";
 import { taxonomyJson } from "../src/catalog/read";
 import { count, db, wipe } from "./helpers";
@@ -150,5 +151,39 @@ describe("franchises", () => {
     expect(() => parseIpOverride({ mediaItemId: "x", mode: "add", label: "Alien" })).toThrow("item id");
     expect(() => parseIpOverride({ mediaItemId: ITEM, mode: "replace", label: "Alien" })).toThrow("add or remove");
     await expect(setIpOverride(db, parseIpOverride({ mediaItemId: ITEM, mode: "add", label: "!!!" }))).rejects.toThrow("Empty franchise key");
+  });
+});
+
+describe("a proposal somebody said no to", () => {
+  const list = async () => JSON.parse(await dismissedJson(db)).dismissed;
+
+  it("is remembered once, however often it is said", async () => {
+    expect(await list()).toEqual([]);
+    await dismissSuggestion(db, "franchise-merge", "planet of the apes>planet");
+    await dismissSuggestion(db, "franchise-merge", "planet of the apes>planet");
+    expect(await list()).toEqual([["franchise-merge", "planet of the apes>planet"]]);
+    expect(await count("taxonomy_suggestion_dismissed")).toBe(1);
+  });
+
+  it("keeps a merge and its opposite direction apart", async () => {
+    await dismissSuggestion(db, "franchise-merge", "a>b");
+    await dismissSuggestion(db, "franchise-merge", "b>a");
+    await dismissSuggestion(db, "tag-category", "a>b");
+    expect(await count("taxonomy_suggestion_dismissed")).toBe(3);
+    await undismissSuggestion(db, "franchise-merge", "a>b");
+    expect((await list()).map((d: string[]) => d.join("|")).sort()).toEqual(["franchise-merge|b>a", "tag-category|a>b"]);
+  });
+
+  it("refuses a kind the sweep does not make, and an empty ref", () => {
+    expect(parseDismissal("tag-category", "moods")).toEqual({ kind: "tag-category", ref: "moods" });
+    expect(() => parseDismissal("user", "x")).toThrow("kind must be");
+    expect(() => parseDismissal("franchise-member", "")).toThrow("ref is required");
+    expect(() => parseDismissal("franchise-member", null)).toThrow("ref is required");
+  });
+
+  it("is catalog curation: the table has no user_id, so erasure leaves it alone", async () => {
+    const row = await db.prepare("SELECT sql FROM sqlite_master WHERE name = 'taxonomy_suggestion_dismissed'").first<{ sql: string }>();
+    expect(row?.sql).toBeTruthy();
+    expect(row!.sql).not.toMatch(/user_id/);
   });
 });

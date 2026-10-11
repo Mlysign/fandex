@@ -305,6 +305,12 @@ export const api = {
     request<TaxonomyJson>('/v1/admin/ip-overrides', json('POST', o)),
   adminClearIpOverride: (mediaItemId: string, ipKey: string) =>
     request<TaxonomyJson>(`/v1/admin/ip-overrides${q({ mediaItemId, ipKey })}`, { method: 'DELETE' }),
+  /** The Review section's proposals somebody said no to, as `[kind, ref]`. Each call answers with the whole list. */
+  adminDismissed: () => request<{ dismissed: [string, string][] }>('/v1/admin/suggestions/dismissed'),
+  adminDismiss: (kind: string, ref: string) =>
+    request<{ dismissed: [string, string][] }>('/v1/admin/suggestions/dismissed', json('POST', { kind, ref })),
+  adminUndismiss: (kind: string, ref: string) =>
+    request<{ dismissed: [string, string][] }>(`/v1/admin/suggestions/dismissed${q({ kind, ref })}`, { method: 'DELETE' }),
   pageview: (path: string, ref: string) => request<{ ok: boolean }>('/v1/t/pv', { ...json('POST', { path, ref }), keepalive: true }),
   adminAnalytics: (days: number) => request<AnalyticsSnapshot>(`/v1/admin/analytics${q({ days })}`),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),

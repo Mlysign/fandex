@@ -276,3 +276,37 @@ export async function clearIpOverride(db: D1Database, mediaItemId: string | null
   if (!mediaItemId || !UUID.test(mediaItemId)) throw new BadRequest("mediaItemId must be an item id");
   await run(db, "DELETE FROM item_ip_override WHERE media_item_id = ? AND ip_key = ?", [mediaItemId.toLowerCase(), await canonicalIp(db, key(raw, "ipKey"))]);
 }
+
+// ── Review: the proposals somebody said no to ────────────────────────────────
+
+const SUGGESTION_KINDS = new Set(["tag-category", "franchise-merge", "franchise-member"]);
+
+/**
+ * One denied proposal. `ref` is whatever the sweep called it (a rule id,
+ * `alias>canonical`, `mediaItemId>ipKey`); it is only ever compared, never
+ * looked up, so any short string is acceptable.
+ */
+export function parseDismissal(kind: unknown, ref: unknown): { kind: string; ref: string } {
+  if (typeof kind !== "string" || !SUGGESTION_KINDS.has(kind)) throw new BadRequest("kind must be tag-category, franchise-merge or franchise-member");
+  return { kind, ref: key(ref, "ref") };
+}
+
+/** Remember a no. Saying it twice is one row. */
+export async function dismissSuggestion(db: D1Database, kind: string, ref: string): Promise<void> {
+  await run(db, "INSERT INTO taxonomy_suggestion_dismissed (kind, ref) VALUES (?, ?) ON CONFLICT(kind, ref) DO NOTHING", [kind, ref]);
+}
+
+/** Take a no back: the proposal shows again on the next sweep, if the catalog still makes it. */
+export async function undismissSuggestion(db: D1Database, kind: string, ref: string): Promise<void> {
+  await run(db, "DELETE FROM taxonomy_suggestion_dismissed WHERE kind = ? AND ref = ?", [kind, ref]);
+}
+
+/** Every no, newest first, as `{"dismissed":[[kind, ref], ...]}`. Built in SQL: nothing is parsed on a read. */
+export async function dismissedJson(db: D1Database): Promise<string> {
+  const row = await first<{ j: string | null }>(
+    db,
+    `SELECT json_group_array(json_array(kind, ref)) j
+       FROM (SELECT kind, ref FROM taxonomy_suggestion_dismissed ORDER BY created_at DESC, kind, ref)`,
+  );
+  return `{"dismissed":${row?.j ?? "[]"}}`;
+}
