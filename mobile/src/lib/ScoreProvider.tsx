@@ -17,6 +17,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { getMeta, setMeta } from '~/lib/db';
+import { pageImpacts, type PageImpact } from '~/lib/facetImpact';
 import {
   buildProfile, computeFandexScore, prepareTaxonomy,
   type FandexScore, type Profile, type RatedTitle, type ScoreFacet, type Taxonomy, type TaxonomyJson,
@@ -43,6 +44,8 @@ interface Scores {
   score: (id: string, facets: ScoreFacet[]) => FandexScore | null;
   /** Scores for catalog titles by id, read off the device. Titles with no score are absent. */
   scoresFor: (ids: string[]) => Promise<Map<string, number>>;
+  /** What a tag, person or studio does to your score, for its page. `key` as the address spells it. Empty when it does nothing. */
+  impactsFor: (kind: 'tag' | 'person' | 'company', key: string) => PageImpact[];
   /** Bumped when the profile is rebuilt, so a list can re-score. */
   revision: number;
   /** Fetch the taxonomy again now. The Scoring admin calls it after a save, so its own edit shows at once. */
@@ -165,6 +168,9 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     return out;
   }, [db, profile, taxonomy]);
 
+  const impactsFor = useCallback((kind: 'tag' | 'person' | 'company', key: string) =>
+    (profile && taxonomy ? pageImpacts(kind, key, profile, taxonomy) : []), [profile, taxonomy]);
+
   const reloadTaxonomy = useCallback(async () => {
     await refreshTaxonomy(db, true);
     const fresh = await storedTaxonomy(db);
@@ -183,10 +189,10 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     // The same rounding the score itself uses, so the two never disagree by a tenth.
     const center = profile && profile.w.size > 0 && profile.ratedItemCount >= 3 ? Math.round(profile.baseline * 100) / 10 : null;
     return {
-      ready, center, score, scoresFor, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
+      ready, center, score, scoresFor, impactsFor, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
     };
-  }, [ready, profile, taxonomy, score, scoresFor, revision, reloadTaxonomy, adoptTaxonomy]);
+  }, [ready, profile, taxonomy, score, scoresFor, impactsFor, revision, reloadTaxonomy, adoptTaxonomy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

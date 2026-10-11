@@ -20,6 +20,7 @@ import { Avatar, EmptyState, SortMenu, StatStrip } from '~/components/kit';
 import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
+import { spokenKey, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { usePageTitle } from '~/lib/pageTitle';
@@ -27,7 +28,8 @@ import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
-import { color, radius, type } from '~/theme';
+import { signed } from '~/lib/scoreReasons';
+import { color, font, radius, type } from '~/theme';
 
 export type FacetKind = 'tag' | 'person' | 'studio';
 
@@ -42,12 +44,26 @@ const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', '
 
 interface StoredFacet { kind: string; key: string; label: string; role?: string }
 
-/** A stored key as an address spells it: hyphens and runs of spaces are one space (src/lib/facetUrl.ts, slugToKey). */
-const spoken = (key: string) => key.toLowerCase().replace(/-+/g, ' ').replace(/\s+/g, ' ').trim();
-
 /** Does a stored facet belong on this page? */
 const matches = (f: StoredFacet, kind: FacetKind, key: string) =>
-  spoken(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
+  spokenKey(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
+
+const IMPACT_TONE = {
+  up: { backgroundColor: color.successSubtle, color: color.success },
+  down: { backgroundColor: color.dangerSubtle, color: color.danger },
+  neutral: { backgroundColor: color.surfaceElevated, color: color.textSecondary },
+} as const;
+
+/** The site's sentence for a tag. A person or a studio is scored per role, so theirs names the role. */
+function impactLine(kind: FacetKind, im: PageImpact): string {
+  const who = kind === 'tag' ? 'titles with this tag'
+    : im.role === 'cast' ? 'titles with them in the cast'
+    : `titles with them as ${(ROLE_LABEL[im.role ?? ''] ?? KIND_LABEL[kind]).toLowerCase()}`;
+  const how = im.direction === 'up' ? 'typically score above your average'
+    : im.direction === 'down' ? 'typically score below your average'
+    : 'score about the same as your average';
+  return `${who} ${how} · ${im.ratedCount} rated`;
+}
 
 export function FacetScreen({ kind }: { kind: FacetKind }) {
   const params = useLocalSearchParams<{ key: string }>();
@@ -57,7 +73,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const db = useSQLiteContext();
   const auth = useAuth();
   const sync = useCatalogSync();
-  const { center } = useScores();
+  const { center, impactsFor } = useScores();
+  const impacts = useMemo(() => impactsFor(kind === 'studio' ? 'company' : kind, key), [impactsFor, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
   const [found, setFound] = useState<{ label: string; roles: string[]; cards: CardItem[] } | null>(null);
@@ -171,6 +188,12 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         </Pressable>
       ) : null}
       <View style={{ marginTop: 16 }}><StatStrip cells={tiles} /></View>
+      {impacts.map((im) => (
+        <View key={im.role ?? 'tag'} style={styles.impact}>
+          <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Fandex impact {signed(im.points)}</Text>
+          <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
+        </View>
+      ))}
       <View style={styles.sortRow}>
         <Text style={[type.micro, { color: color.accent, letterSpacing: 0.8 }]}>titles · {(cards ?? []).length}{asking ? ' · asking TMDB for more…' : ''}</Text>
         <SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />
@@ -196,6 +219,11 @@ const styles = StyleSheet.create({
   back: {
     width: 36, height: 36, marginBottom: 16, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
     backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
+  },
+  impact: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  impactPill: {
+    fontFamily: font.sansBold, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'],
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: 'hidden',
   },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, minHeight: 30 },
 });

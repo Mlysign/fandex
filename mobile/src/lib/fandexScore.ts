@@ -213,6 +213,18 @@ export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
   return { w, meta, baseline, ratedItemCount: rated.length };
 }
 
+/**
+ * What a facet is worth on any title that carries it, whatever else the title
+ * has: the site's facetImpact (discovery.ts). For cast this is the lead-billed
+ * value, since billing belongs to a title and not to the person.
+ */
+export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number | null {
+  const w = profile.w.get(id);
+  if (w == null) return null;
+  const gain = w >= 0 ? tax.config.mappingConstantUp : tax.config.mappingConstantDown;
+  return Math.round(gain * w * 10) / 10;
+}
+
 // ── Scoring one title ────────────────────────────────────────────────────────
 
 export interface ScoreReason {
@@ -293,10 +305,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   const gain = rawSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
-  const impactOf = (c: Contrib) => {
-    const w = profile.w.get(facetId(c.f)) ?? 0;
-    return round1((w >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown) * w);
-  };
+  const impactOf = (c: Contrib) => facetImpact(facetId(c.f), profile, tax) ?? 0;
   const reason = (c: Contrib, counted: boolean): ScoreReason => ({
     kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.meta.category ?? c.f.category,
     contribution: counted ? round1(gain * weighted(c)) : 0,
