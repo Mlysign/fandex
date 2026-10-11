@@ -16,7 +16,7 @@
 //     POST /v1/catalog/release-dates {region, ids}     films whose date in that country differs
 //
 //   Sign-in
-//     POST /v1/auth/google   {idToken}
+//     POST /v1/auth/google   {idToken, nonce}
 //     POST /v1/auth/trakt    {accessToken}
 //     POST /v1/auth/merge    {mergeToken, resolution}
 //     POST /v1/auth/logout
@@ -339,11 +339,15 @@ async function authenticate(c: Ctx, provider: "google" | "trakt"): Promise<Respo
   const body = (await readJson(c.request, AUTH_BODY_MAX)) as Record<string, unknown> | null;
   const credential = provider === "google" ? body?.idToken : body?.accessToken;
   if (typeof credential !== "string" || !credential) return error(400, "bad-request", "Missing credential");
+  // The secret behind the token's nonce (auth/verify.ts). Required: a Google
+  // token on its own is never enough.
+  const nonce = provider === "google" ? body?.nonce : "";
+  if (typeof nonce !== "string" || (provider === "google" && !nonce)) return error(400, "bad-request", "Missing nonce");
 
   let identity: VerifiedIdentity;
   try {
     identity = provider === "google"
-      ? await verifyGoogleIdToken(c.env, credential)
+      ? await verifyGoogleIdToken(c.env, credential, nonce)
       : await verifyTraktToken(c.env, credential);
   } catch (e) {
     if (e instanceof IdentityRejected) return error(401, "identity-rejected", e.message);

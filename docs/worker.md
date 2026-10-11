@@ -38,7 +38,7 @@ Public, no session:
 A real route asked with the wrong method answers 405 with an `Allow` header (the `PUBLIC_ROUTES`
 table in `src/index.ts`); an address that is no route at all stays 404.
 
-Sign-in: `POST /v1/auth/google {idToken}`, `POST /v1/auth/trakt {accessToken}`,
+Sign-in: `POST /v1/auth/google {idToken, nonce}`, `POST /v1/auth/trakt {accessToken}`,
 `POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout`.
 
 ### The test accounts (a developer's machine only)
@@ -210,6 +210,12 @@ Each of these is a way the Worker differs from the site, and each has a test.
   sends to sign in is used for one request to Trakt and dropped.
 - **The Google ID token's audience is pinned to our client id.** Without that, a token a user gave
   any other site would sign that site's operator into their Fandex account.
+- **A Google ID token is accepted only with the secret behind its nonce** (2026-10-11). The token
+  comes back from Google in the browser's address and is good for an hour, so on its own it proves
+  too little. The client makes a secret, has Google write its SHA-256 into the token, and sends
+  both; `verifyGoogleIdToken` refuses a token without a matching one, and the route answers 400
+  when no nonce is sent at all. Do not make the argument optional: `publish.mjs` reads that 400 as
+  "this API checks the nonce" before it publishes a Google button.
 - **The prune invariant lives on the client.** `PUT /v1/me/state` takes explicit upserts and
   explicit deletes and never infers one from the other. There is no "replace everything from
   source X" call, on purpose.

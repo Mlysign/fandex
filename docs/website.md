@@ -78,6 +78,7 @@ From the repo root.
 |---|---|
 | Build and publish | `node mobile/web/publish.mjs` |
 | Publish the last build again (a `worker.ts` change) | `node mobile/web/publish.mjs --skip-build` |
+| Build and run every check, and stop before deploying | `node mobile/web/publish.mjs --check` |
 | Build only | `node mobile/web/build.mjs` |
 | A quick try-out, never deployed | `node mobile/web/build.mjs --limit=40` |
 | The www redirect (rarely) | `cd worker && npx wrangler deploy --config ../mobile/web/www/wrangler.jsonc` |
@@ -119,6 +120,13 @@ Output is `mobile/web/dist/` (ignored by git): `app/` the Expo export, `site/` w
 - **A font URL in a static page is written `%40expo-google-fonts`.** Cloudflare answers a raw `@`
   in a path with a 307 to the encoded form.
 
+- **A build with a Google button is published only where the button works** (2026-10-11).
+  `publish.mjs` looks for a Google client id in the bundle. If there is one it asks Google whether
+  `https://fandex.org/auth/google` is a return address the client lists, and asks the live API
+  whether it checks the nonce, and refuses on either "no". Both are settings outside this folder
+  whose absence nothing else shows: the first is a line in Google's console, the second is the
+  API Worker's deploy. To publish without the button, take `EXPO_PUBLIC_GOOGLE_CLIENT_ID` out of
+  `mobile/.env`. → [app.md](app.md) ("Google sign-in, in a browser")
 - **Stop the app's dev server before publishing.** Metro watches `mobile/`, the build's output folder included, and on Windows a watched folder cannot be renamed: the build's last step failed with `EPERM` for as long as `app-web` was running, retries and all. The moved route files also came back as OneDrive placeholders that Metro could not read (`EINVAL: readlink`) until they were rewritten.
 - **A build started straight after another can wait up to a minute at "exporting the app".** The checkout is in OneDrive, which holds a file open while it uploads it; `build.mjs` retries the delete of the last export instead of failing with `EPERM`.
 - **An upload can fail with `fetch failed` and be retried as is**: `node mobile/web/publish.mjs --skip-build`. It failed five times in a row once, on 250 MB.

@@ -12,6 +12,8 @@ import { StateBlock } from '~/components/ui';
 import { AuthProvider } from '~/lib/AuthProvider';
 import { CatalogSyncProvider } from '~/lib/CatalogSyncProvider';
 import { DATABASE_NAME, migrate } from '~/lib/db';
+// Loaded here, before the router starts, for what it reads at load: the address a Google sign-in came back on.
+import '~/lib/google';
 import { dropPlaceholder } from '~/lib/prerender';
 import { ScoreProvider } from '~/lib/ScoreProvider';
 import { TypeFilterProvider } from '~/lib/typeFilter';
@@ -153,6 +155,7 @@ export default function RootLayout() {
           {/* Every screen is inside the tabs layout, which draws the navigation around it. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="auth/trakt" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/google" options={{ headerShown: false }} />
         </Stack>
       </ToastProvider>
       </TypeFilterProvider>

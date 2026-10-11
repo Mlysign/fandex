@@ -9,7 +9,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // heute aktives Merkmal. Keine Rechtsberatung.
 const terms: LegalDocument = {
   title: "Nutzungsbedingungen",
-  updated: "2026-10-10",
+  updated: "2026-10-11",
   intro: [
     "Fandex ist ein kostenloses Hobbyprojekt einer Einzelperson. Diese Bedingungen sind bewusst einfach und ehrlich formuliert, kein Vorlagentext. Sie stellen keine Rechtsberatung dar und befinden sich in Überarbeitung, bis eine fachliche Rechtsberatung vorliegt.",
   ],
@@ -23,7 +23,7 @@ const terms: LegalDocument = {
     {
       heading: "Ihr Konto",
       body: [
-        "Sie legen kein Fandex-eigenes Passwort an. Sie melden sich mit einem Anbieterkonto an (derzeit Trakt); Fandex identifiziert Sie über diese Verknüpfung. Für die Sicherheit Ihres Anbieterkontos sind Sie selbst verantwortlich. Fandex verwaltet keine eigenen Zugangsdaten dazu.",
+        "Sie legen kein Fandex-eigenes Passwort an. Sie melden sich mit einem Anbieterkonto an (Trakt oder Google); Fandex identifiziert Sie über diese Verknüpfung. Für die Sicherheit Ihres Anbieterkontos sind Sie selbst verantwortlich. Fandex verwaltet keine eigenen Zugangsdaten dazu.",
         // H4.10 (2026-08-02) — deutsche Entsprechung des EN-Absatzes; siehe dort
         // für die Begründung und die geprüfte Code-Grundlage.
         "Ihr Passwort geben Sie auf der Seite des Anbieters ein, Fandex bekommt es nie zu sehen.",

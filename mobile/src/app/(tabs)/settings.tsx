@@ -9,14 +9,14 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { COUNTRIES } from '@/lib/countries';
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from '@/lib/mediaTypes';
 import { platformMarkName, type PlatformOption } from '@/lib/platformKeys';
 import { BrandGlyph } from '~/components/BrandGlyph';
+import { GoogleMark } from '~/components/GoogleMark';
 import { Button, Sheet } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
-import { SignIn } from '~/components/SignIn';
+import { SignIn, TraktCodeCard, useGoogleSignIn } from '~/components/SignIn';
 import { useToast } from '~/components/Toast';
 import { Screen, T } from '~/components/ui';
 import { toggled } from '~/lib/a11y';
@@ -26,6 +26,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
+import { googleAvailable } from '~/lib/google';
 import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
 import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -173,7 +174,11 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
         </T>
       ) : null}
       {meta.identityOnly ? (
-        <T variant="bodySm">Signed you in on the old site. It holds no library, and signing in with it here is not built yet.</T>
+        <T variant="bodySm">
+          {Platform.OS === 'web'
+            ? 'A way to sign in. It holds no library.'
+            : 'A way to sign in on fandex.org. It holds no library, and signing in with it in this app is not built yet.'}
+        </T>
       ) : null}
 
       <Sheet open={asking} onClose={() => setAsking(false)} title={`Disconnect ${meta.label}?`}>
@@ -195,17 +200,42 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
 }
 
 /**
- * Google's mark, in its four colours. The one exception to "no brand colour":
- * Google's guidelines forbid a monochrome G (src/components/auth/GoogleMark.tsx).
+ * A way in that this account does not have yet. Signing in with it while signed
+ * in adds it to the account (the Worker links it to whoever the session is).
+ * This is what lets an account made with Google get its Trakt library, without
+ * signing out and ending up with two accounts.
  */
-function GoogleMark({ size = 18 }: { size?: number }) {
+function AddProvider({ provider }: { provider: 'trakt' | 'google' }) {
+  const auth = useAuth();
+  const google = useGoogleSignIn();
+  const meta = PROVIDERS[provider];
+  const flow = auth.trakt;
+  const traktBusy = provider === 'trakt' && (flow.phase === 'starting' || flow.phase === 'finishing');
+  const busy = traktBusy || (provider === 'google' && google.leaving);
+  const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : google.error;
+
+  if (provider === 'trakt' && flow.phase === 'waiting') return <TraktCodeCard />;
   return (
-    <Svg width={size} height={size} viewBox="0 0 48 48">
-      <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-      <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-      <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-      <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-    </Svg>
+    <Card>
+      <View style={styles.provider}>
+        <View style={styles.providerWho}>
+          <View style={styles.glyph}>
+            {provider === 'google' ? <GoogleMark size={18} /> : <BrandGlyph source={provider} size={18} />}
+          </View>
+          <View style={styles.rowText}>
+            <T variant="body" style={styles.rowTitle} numberOfLines={1}>{meta.label}</T>
+            <T variant="bodySm" numberOfLines={1}>{meta.description}</T>
+          </View>
+        </View>
+        <View style={styles.providerActions}>
+          <Button
+            label={busy ? '...' : 'Connect'} disabled={busy}
+            onPress={provider === 'trakt' ? auth.startTraktSignIn : google.start}
+          />
+        </View>
+      </View>
+      {error ? <T variant="bodySm" style={{ color: color.danger }}>{error}</T> : null}
+    </Card>
   );
 }
 
@@ -717,8 +747,13 @@ export default function SettingsScreen() {
           />
         ) : (
           <>
-            <Section eyebrow="Connected accounts" hint="Trakt is the way to sign in today.">
+            <Section eyebrow="Connected accounts" hint="How you sign in, and where your library comes from.">
               {identities.map((i) => <ProviderPanel key={i.provider} provider={i.provider} onNotice={setNotice} />)}
+              {/* "Sign in again" on the Trakt row, in a browser: the code to confirm has to be shown somewhere. */}
+              {identities.some((i) => i.provider === 'trakt') ? <TraktCodeCard /> : null}
+              {/* Only once the profile has loaded: offline, "not connected" would be a guess. */}
+              {auth.profile && !identities.some((i) => i.provider === 'trakt') ? <AddProvider provider="trakt" /> : null}
+              {auth.profile && googleAvailable() && !identities.some((i) => i.provider === 'google') ? <AddProvider provider="google" /> : null}
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
             </Section>
 

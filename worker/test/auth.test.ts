@@ -4,7 +4,7 @@ import {
   bumpSessionEpoch, createSession, readSession, signPendingMerge, verifyPendingMerge,
 } from "../src/auth/session";
 import { completeMerge, signIn } from "../src/auth/signin";
-import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "../src/auth/verify";
+import { IdentityRejected, nonceHash, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "../src/auth/verify";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import { count, db, env, gameItem, movieItem, wipe } from "./helpers";
 
@@ -105,13 +105,17 @@ describe("sessions", () => {
 describe("Google ID tokens", () => {
   let keys: JWTVerifyGetKey;
   let sign: (claims: Record<string, unknown>, opts?: { iss?: string; aud?: string; exp?: string }) => Promise<string>;
+  // What this browser made before it left for Google, and what Google wrote into the token for it.
+  const SECRET = "s".repeat(64);
+  let nonce: string;
 
   beforeAll(async () => {
+    nonce = await nonceHash(SECRET);
     const { publicKey, privateKey } = await generateKeyPair("RS256", { extractable: true });
     const jwk = { ...(await exportJWK(publicKey)), kid: "test-key", alg: "RS256", use: "sig" };
     keys = createLocalJWKSet({ keys: [jwk] });
     sign = (claims, opts = {}) =>
-      new SignJWT(claims)
+      new SignJWT({ nonce, ...claims })
         .setProtectedHeader({ alg: "RS256", kid: "test-key" })
         .setIssuer(opts.iss ?? "https://accounts.google.com")
         .setAudience(opts.aud ?? "test-google-client.apps.googleusercontent.com")
@@ -121,7 +125,7 @@ describe("Google ID tokens", () => {
   });
 
   it("accepts a token issued to this app", async () => {
-    const id = await verifyGoogleIdToken(env, await sign({ sub: "1234567890", name: "Nils M", picture: "https://x/y.png" }), keys);
+    const id = await verifyGoogleIdToken(env, await sign({ sub: "1234567890", name: "Nils M", picture: "https://x/y.png" }), SECRET, keys);
     expect(id).toEqual({ provider: "google", providerUserId: "1234567890", displayName: "Nils M", avatarUrl: "https://x/y.png" });
   });
 
@@ -129,30 +133,45 @@ describe("Google ID tokens", () => {
     // Google-signed, unexpired, a real user: and minted for somebody else's
     // site. Accepting it would let that site's operator sign in as the user.
     const token = await sign({ sub: "1234567890" }, { aud: "someone-else.apps.googleusercontent.com" });
-    await expect(verifyGoogleIdToken(env, token, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, token, SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
   });
 
   it("rejects everything when no client id is configured, rather than accepting anything", async () => {
     const token = await sign({ sub: "1234567890" });
-    await expect(verifyGoogleIdToken({ ...env, GOOGLE_CLIENT_ID: "" }, token, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken({ ...env, GOOGLE_CLIENT_ID: "" }, token, SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
   });
 
   it("rejects a wrong issuer, an expired token, a missing subject and a bad signature", async () => {
-    await expect(verifyGoogleIdToken(env, await sign({ sub: "1" }, { iss: "https://evil.example" }), keys)).rejects.toBeInstanceOf(IdentityRejected);
-    await expect(verifyGoogleIdToken(env, await sign({ sub: "1" }, { exp: "-1h" }), keys)).rejects.toBeInstanceOf(IdentityRejected);
-    await expect(verifyGoogleIdToken(env, await sign({ name: "no subject" }), keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, await sign({ sub: "1" }, { iss: "https://evil.example" }), SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, await sign({ sub: "1" }, { exp: "-1h" }), SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, await sign({ name: "no subject" }), SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
 
     const other = await generateKeyPair("RS256");
-    const forged = await new SignJWT({ sub: "1" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+    const forged = await new SignJWT({ sub: "1", nonce }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
       .setIssuer("https://accounts.google.com").setAudience("test-google-client.apps.googleusercontent.com")
       .setExpirationTime("1h").sign(other.privateKey);
-    await expect(verifyGoogleIdToken(env, forged, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, forged, SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
+  });
+
+  it("rejects a token that does not come with the secret it was issued for", async () => {
+    // Everything else about these tokens is right: Google signed them, for this
+    // app, for a real user, minutes ago. What is missing is proof that the
+    // caller is the browser that asked for them.
+    const token = await sign({ sub: "1234567890" });
+    await expect(verifyGoogleIdToken(env, token, "t".repeat(64), keys)).rejects.toBeInstanceOf(IdentityRejected);
+    // The hash is in the token for anyone to read. Sending it back is not the secret.
+    await expect(verifyGoogleIdToken(env, token, nonce, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, token, "", keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, token, "short", keys)).rejects.toBeInstanceOf(IdentityRejected);
+    // A token asked for with no nonce at all, which is what any other Google button on the web produces.
+    await expect(verifyGoogleIdToken(env, await sign({ sub: "1234567890", nonce: undefined }), SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyGoogleIdToken(env, await sign({ sub: "1234567890", nonce: "" }), SECRET, keys)).rejects.toBeInstanceOf(IdentityRejected);
   });
 
   it("accepts any of several configured client ids", async () => {
     const multi = { ...env, GOOGLE_CLIENT_ID: "web.apps.googleusercontent.com, android.apps.googleusercontent.com" };
     const token = await sign({ sub: "7" }, { aud: "android.apps.googleusercontent.com" });
-    expect((await verifyGoogleIdToken(multi, token, keys)).providerUserId).toBe("7");
+    expect((await verifyGoogleIdToken(multi, token, SECRET, keys)).providerUserId).toBe("7");
   });
 });
 

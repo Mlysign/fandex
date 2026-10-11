@@ -196,11 +196,13 @@ describe("your rows", () => {
 
 describe("signing in over HTTP", () => {
   it("rejects a credential the provider does not vouch for", async () => {
-    const google = jsonBody({ idToken: "not-a-real-token" });
+    const google = jsonBody({ idToken: "not-a-real-token", nonce: "n".repeat(64) });
     const res = await call("/v1/auth/google", { method: "POST", ...google });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: "identity-rejected" });
     expect((await call("/v1/auth/google", { method: "POST", ...jsonBody({}) })).status).toBe(400);
+    // A Google token with no nonce beside it is not looked at.
+    expect((await call("/v1/auth/google", { method: "POST", ...jsonBody({ idToken: "not-a-real-token" }) })).status).toBe(400);
     expect(await count("users")).toBe(0);
   });
 

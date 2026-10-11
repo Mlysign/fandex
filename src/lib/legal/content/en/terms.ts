@@ -8,7 +8,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // triggered, not something live today. Not legal advice.
 const terms: LegalDocument = {
   title: "Terms of Service",
-  updated: "2026-10-10",
+  updated: "2026-10-11",
   intro: [
     "Fandex is a free, one-person hobby project. These terms are written to be plain and honest about what that means, not a template. They are not legal advice and are under review pending professional legal advice.",
   ],
@@ -22,7 +22,7 @@ const terms: LegalDocument = {
     {
       heading: "Your account",
       body: [
-        "You don't create a Fandex-specific password. You sign in with a provider account (today that is Trakt), and Fandex identifies you by that connection. You're responsible for keeping your provider account secure. Fandex has no separate credential to protect on its side.",
+        "You don't create a Fandex-specific password. You sign in with a provider account (Trakt or Google), and Fandex identifies you by that connection. You're responsible for keeping your provider account secure. Fandex has no separate credential to protect on its side.",
         // 2026-10-10: the RAWG paragraph that stood here is gone with the RAWG
         // sign-in itself. Trakt's sign-in is on Trakt's own page, and the
         // Worker stores no provider token at all (docs/worker.md).

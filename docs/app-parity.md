@@ -46,7 +46,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
 | Admin pages (`/dev`) | **yes** | Users, Scoring and Traffic are built, Review included since 2026-10-11. See "The admin pages" below. |
 | Import | **no** | All of it. |
-| Sign-in | partial | Trakt only. A dialog from any gated control, returning to where you were (it sends you to You). Google, joining accounts, Steam. |
+| Sign-in | partial | Trakt, and Google in a browser since 2026-10-11 (not on Android, [app.md](app.md)). A dialog from any gated control, returning to where you were (it sends you to You). Google on the phone, joining accounts, Steam. |
 
 ### What changed on 2026-10-10
 
@@ -119,7 +119,7 @@ Checked against `worker/src/index.ts`.
   it, so D1 holds them for those seasons only. The app asks TMDB for the rest, from the device.
 - A way to disconnect that also removes episode rows (the site left them too).
 
-Routes that exist and the app does not call: `POST /v1/auth/google` and `POST /v1/auth/merge`.
+A route that exists and the app does not call: `POST /v1/auth/merge`.
 
 ⚠️ Every new route is priced in D1 row writes and Worker CPU before it is built (docs/worker.md).
 

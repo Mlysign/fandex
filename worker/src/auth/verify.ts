@@ -8,7 +8,9 @@
 //
 //   Google  the client sends an ID token. It is a JWT signed by Google, so it is
 //           verified against Google's published keys, with the audience pinned
-//           to OUR client id. No call to Google beyond fetching the keys.
+//           to OUR client id. No call to Google beyond fetching the keys. The
+//           client also sends the secret whose hash it had Google write into
+//           the token, which is what ties the token to the browser that asked.
 //   Trakt   the client sends its access token. It is opaque, so the only way to
 //           learn whose it is is to ask Trakt. The token is used for that one
 //           request and is never stored: Trakt tokens live on the device
@@ -48,6 +50,17 @@ export function googleClientIds(env: Env): string[] {
   return (env.GOOGLE_CLIENT_ID ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+/** What a client may send as its secret: long enough to be unguessable, and nothing that needs escaping. */
+const NONCE_SHAPE = /^[A-Za-z0-9_-]{43,128}$/;
+
+/** base64url(SHA-256(secret)): what the client asked Google to write into the token. */
+export async function nonceHash(secret: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret)));
+  let bin = "";
+  for (const b of digest) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 /**
  * Verify a Google ID token.
  *
@@ -58,16 +71,27 @@ export function googleClientIds(env: Env): string[] {
  * account. An empty configured list therefore rejects everything rather than
  * accepting anything.
  *
+ * ⚠️ The NONCE check is the second one, and it is not optional. The token comes
+ * back from Google in the address the browser is sent to, so it can be read by
+ * whatever else sees that address, and a token is good for an hour. The client
+ * therefore makes a secret before it leaves, has Google put the secret's
+ * SHA-256 in the token (`nonce`), and sends the secret itself here. A token
+ * without its secret is refused, which also covers a token planted in
+ * somebody's browser to sign them in to the wrong account: that browser holds
+ * no secret for it.
+ *
  * `keys` is injectable so the tests can sign with a local key instead of
  * needing Google.
  */
 export async function verifyGoogleIdToken(
   env: Env,
   idToken: string,
+  nonce: string,
   keys: JWTVerifyGetKey = googleKeySet(),
 ): Promise<VerifiedIdentity> {
   const audience = googleClientIds(env);
   if (!audience.length) throw new IdentityRejected("Google sign-in is not configured");
+  if (!NONCE_SHAPE.test(nonce)) throw new IdentityRejected("Google sign-in carries no usable nonce");
   let payload: Record<string, unknown>;
   try {
     ({ payload } = await jwtVerify(idToken, keys, {
@@ -77,6 +101,9 @@ export async function verifyGoogleIdToken(
     }));
   } catch (e) {
     throw new IdentityRejected(`Google ID token rejected: ${e instanceof Error ? e.message : "invalid"}`);
+  }
+  if (typeof payload.nonce !== "string" || payload.nonce !== (await nonceHash(nonce))) {
+    throw new IdentityRejected("Google ID token was not issued for this sign-in");
   }
   // `sub` is the whole identity. A blank one would collide with every other
   // blank one under the identity table's primary key and hand the first such

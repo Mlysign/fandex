@@ -265,6 +265,8 @@ export const api = {
   // ── Sign-in ──
   /** The Trakt token is sent once so the Worker can ask Trakt whose it is. It is not stored there. */
   signInWithTrakt: (accessToken: string) => request<SignInResult>('/v1/auth/trakt', json('POST', { accessToken })),
+  /** Google's ID token, and the secret whose hash Google wrote into it (lib/google.ts). Neither is stored there. */
+  signInWithGoogle: (idToken: string, nonce: string) => request<SignInResult>('/v1/auth/google', json('POST', { idToken, nonce })),
   /** A test account. Only a Worker on a developer's machine has this route (worker/src/devLogin.ts). */
   devSignIn: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account })),
   /** Signs out EVERY device: the Worker revokes all of the account's sessions. */

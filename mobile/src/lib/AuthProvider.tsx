@@ -52,6 +52,12 @@ interface Auth {
   /** The code flow, for when the browser one does not come back. */
   startTraktCodeSignIn: () => void;
   cancelTraktSignIn: () => void;
+  /**
+   * Trade what Google sent back for a Fandex session (lib/google.ts). For an
+   * account that is already signed in it adds Google as a way in. Throws with
+   * the reason, in words, when it did not work.
+   */
+  finishGoogleSignIn: (idToken: string, secret: string) => Promise<void>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -93,21 +99,23 @@ const TRAKT_SYNC_DRY_RUN = process.env.EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN === '1';
 
 const Ctx = createContext<Auth | null>(null);
 
-function signInMessage(e: unknown): string {
+function signInMessage(e: unknown, provider: 'Trakt' | 'Google' = 'Trakt'): string {
   if (e instanceof ApiError) {
     switch (e.code) {
       case 'offline': return 'No connection. Try again when you are online.';
-      case 'identity-rejected': return 'Trakt did not confirm the sign-in. Try again.';
-      case 'provider-unavailable': return 'Trakt is not answering right now. Try again in a minute.';
+      case 'identity-rejected': return `${provider} did not confirm the sign-in. Try again.`;
+      case 'provider-unavailable': return `${provider} is not answering right now. Try again in a minute.`;
       case 'rate-limited': return 'Too many attempts. Give it a minute.';
-      // The Worker found that this Trakt account already belongs to a different
-      // Fandex account. Joining two accounts is a decision the person has to
-      // make, and the form for it is not in the app yet. Say so; never guess.
+      // The Worker found that this provider account already belongs to a
+      // different Fandex account. Joining two accounts is a decision the person
+      // has to make, and the form for it is not in the app yet. Say so; never guess.
       case 'merge-required':
       case 'provider-taken':
-        return 'This Trakt account already belongs to another Fandex account. Joining two accounts is not in the app yet.';
+        return `This ${provider} account already belongs to another Fandex account. Joining two accounts is not in the app yet.`;
     }
   }
+  // A request that never got an answer. The browser's own words for it ("Failed to fetch") help nobody.
+  if (e instanceof TypeError) return `Could not reach ${provider}. Check your connection and try again.`;
   return e instanceof Error ? e.message : 'The sign-in did not finish.';
 }
 
@@ -232,9 +240,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** Trakt said yes: keep its tokens here, trade the access token for a Fandex session, pull the rows. */
   const finish = useCallback(async (tokens: TraktTokens, alive: () => boolean) => {
     setTrakt({ phase: 'finishing' });
-    await saveTraktTokens(tokens);
+    // The Worker first, the tokens second. Since an account can add Trakt while
+    // signed in, the Worker can now say "that Trakt belongs to another account".
+    // Tokens kept from a refused sign-in would sync that other person's Trakt
+    // into this account on the next start.
     const result = await api.signInWithTrakt(tokens.accessToken);
     if (!alive()) return;
+    await saveTraktTokens(tokens);
     await secretSet(SESSION_KEY, result.token);
     setSessionToken(result.token);
     setProfile(await api.me().catch(() => null));
@@ -313,6 +325,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // A browser tab has no app address for Trakt to send the person back to, so
   // the web build signs in with a code.
   const startTraktSignIn = Platform.OS === 'web' ? startTraktCodeSignIn : startTraktBrowserSignIn;
+
+  // Google has no flow to track here: the page left for Google and this is a
+  // fresh page that came back (app/auth/google.tsx), holding what Google sent.
+  const finishGoogleSignIn = useCallback(async (idToken: string, secret: string) => {
+    let result;
+    try {
+      result = await api.signInWithGoogle(idToken, secret);
+    } catch (e) {
+      throw new Error(signInMessage(e, 'Google'));
+    }
+    await secretSet(SESSION_KEY, result.token);
+    setSessionToken(result.token);
+    setProfile(await api.me().catch(() => null));
+    setStatus('signedIn');
+    // An account that also has Trakt on this device keeps syncing it; one that does not has nothing to sync.
+    void pullRows(true).then(() => runTraktSync(true));
+  }, [pullRows, runTraktSync]);
 
   /**
    * Sign in as a test account, on a developer's Worker (worker/src/devLogin.ts).
@@ -401,7 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, devSignIn, signOut,
+      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn, devSignIn, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
       region, savePrefs, disconnect, deleteAccount,
     }}>

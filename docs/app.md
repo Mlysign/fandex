@@ -341,10 +341,46 @@ sideloading and is not a Play upload key.
 
 ## Not built yet, in the order it should be built
 
-1. **Google sign-in.** On Android it needs an OAuth client in the Google Cloud console, keyed to
-   the package name (`org.fandex.app`) and the signing certificate's SHA-1.
+1. **Google sign-in on ANDROID.** It is built for a browser since 2026-10-11 (below). The phone
+   needs an OAuth client of type Android in the Google Cloud console, keyed to the package name
+   (`org.fandex.app`) and the signing certificate's SHA-1, and a native module to ask it. Google
+   does not send a "Web" client back to an app's own address, so the browser's flow cannot be
+   reused. Until then a person who made their account with Google cannot sign in to it on the
+   phone, and Settings there says so on the Google row. The Worker side is ready for it: the
+   native call takes a nonce, and `GOOGLE_CLIENT_ID` takes a comma-separated list.
 2. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
    so and stops. The form that lets the person choose is not built.
+
+## Google sign-in, in a browser (2026-10-11)
+
+`src/lib/google.ts`, `src/app/auth/google.tsx`, the button in `components/SignIn.tsx`.
+
+The whole page goes to Google and comes back to `/auth/google` with an ID token after the `#`.
+No script of Google's runs on fandex.org and nothing reaches Google before the button is pressed,
+which is why the privacy policy needs no consent step for it. Before leaving, the tab makes a
+secret and gives Google its SHA-256 as the `nonce`; on return it sends the token and the secret to
+`POST /v1/auth/google`, and the Worker refuses a token whose nonce is not that secret's hash.
+
+- **The button shows only in a browser, and only in a build given `EXPO_PUBLIC_GOOGLE_CLIENT_ID`**
+  (`npm run env` in `mobile/` copies it from the repo's `.env`).
+- **The address Google returns to must be on the OAuth client**, per origin:
+  `https://fandex.org/auth/google`, and `http://localhost:8081/auth/google` for this machine.
+  Without it the button leads to Google's "redirect_uri_mismatch" page. `publish.mjs` asks Google
+  and refuses to publish a build with the button while the live address is missing.
+- **Scope is `openid profile`, never `email`** (docs/decisions.md). The name and picture are kept
+  as the display name and avatar; the privacy policy says so.
+- **Settings has a Connect row for each way in the account lacks.** Signing in with a provider
+  while signed in adds it to the account. This is how an account made with Google gets its Trakt
+  library; signing out and in with Trakt would make a second account, and joining two is not built.
+- **`finish()` asks the Worker before it keeps Trakt's tokens.** A Trakt account the Worker
+  refuses (it belongs to another Fandex account) must leave no tokens behind, or the next start
+  syncs that person's Trakt into this account.
+
+Checked on this machine: the button leaves for Google with the right address; a return with a
+made-up token is refused by the local Worker and the screen says so; a return this tab did not
+start is refused without asking the Worker; the token is gone from the address bar either way.
+**Not checked: a real sign-in.** Google does not list this machine's address yet, and approving
+is a grant on a real Google account.
 
 ## Known problems
 

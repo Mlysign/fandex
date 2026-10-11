@@ -52,3 +52,10 @@ export const TRAKT_CLIENT_ID = process.env.EXPO_PUBLIC_TRAKT_CLIENT_ID ?? '';
 export function traktConfigured(): boolean {
   return TRAKT_CLIENT_ID.length > 0;
 }
+
+/**
+ * The Google OAuth client's id. Public for the same reason: it is in the
+ * address of Google's sign-in page. There is no secret on this side at all.
+ * The Worker holds the same id and refuses a token issued to any other.
+ */
+export const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';

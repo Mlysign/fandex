@@ -2,11 +2,11 @@
 //
 //   node mobile/scripts/sync-env.mjs
 //
-// The app needs two values from there, and both are allowed in a client
+// The app needs three values from there, and all are allowed in a client
 // (docs/app-plan.md): the TMDB key, which TMDB's terms have no secrecy clause
-// for, and the Trakt CLIENT ID, which is public by construction (it is in the
-// address of every Trakt consent page). They get the EXPO_PUBLIC_ prefix, which
-// is what Expo inlines into the bundle.
+// for, and the Trakt and Google CLIENT IDs, which are public by construction
+// (each is in the address of its provider's consent page). They get the
+// EXPO_PUBLIC_ prefix, which is what Expo inlines into the bundle.
 //
 // ⚠️ EXPO_PUBLIC_* is PUBLIC. Anything written here ends up readable in the
 // app and in the web bundle. TRAKT_CLIENT_SECRET, the Twitch secret and the
@@ -27,6 +27,11 @@ const appEnv = path.join(here, '..', '.env');
 const PUBLISHABLE = {
   TMDB_API_KEY: 'EXPO_PUBLIC_TMDB_API_KEY',
   TRAKT_CLIENT_ID: 'EXPO_PUBLIC_TRAKT_CLIENT_ID',
+  // The Google OAuth client's id, under the name the old site gave it. Public
+  // like Trakt's: it is in the address of Google's sign-in page. The Worker is
+  // pushed the same value (worker/scripts/push-secrets.mjs), and the two have
+  // to agree or every Google sign-in is refused.
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'EXPO_PUBLIC_GOOGLE_CLIENT_ID',
 };
 
 if (!fs.existsSync(rootEnv)) {
