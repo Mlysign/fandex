@@ -52,6 +52,15 @@ identity is `google` and they have no Trakt, so nothing reaches Trakt, no Trakt 
 cold-start face until a few titles are rated. The app there syncs its catalog through the local
 Worker, never from the live site's files.
 
+⚠️ **Since 2026-10-11 Settings shows a test account a "Connect" row for Trakt. Do not finish it.**
+Confirming the code links a real Trakt account to the test account, and from then on its ratings
+are real writes to Trakt. Pressing Connect only asks Trakt for a code and is harmless.
+
+**Google sign-in, what a session can run here:** the button on a signed-out card leaves for
+Google (Google lists `http://localhost:8081/auth/google`), and `/auth/google#state=x&id_token=y`
+opened by hand is refused on the screen. Approving at Google is a grant on a real account and is
+Nils's, here and on fandex.org.
+
 ### What bites, read before the first probe
 
 - **The pane does not draw unless something makes it, and the app waits for a draw.** `rAF` and

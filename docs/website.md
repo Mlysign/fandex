@@ -145,8 +145,10 @@ reads as a CORS error and is not one).
 
 **Not checked:**
 
-- **Signing in on the website.** It is Trakt's code flow in a browser, and approving a code is a
-  grant on Nils's Trakt account, so it is his to run.
+- **Signing in with Trakt on the website.** It is Trakt's code flow in a browser, and approving a
+  code is a grant on Nils's Trakt account, so it is his to run. Google's sign-in was run on the
+  live site on 2026-10-11 ([app.md](app.md), "Google sign-in, in a browser"), though not from the
+  button and not signed out.
 - **What Google's renderer makes of `/`.** The links in the placeholder are in the HTML Google
   fetches. What it indexes for the page is whatever the app shows after it boots there.
 - Anything signed in, in a browser: the Library, the score, rating and saving, and the handoff
