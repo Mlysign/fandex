@@ -22,6 +22,7 @@ import { SubBar } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
 import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
+import { usePageTitle } from '~/lib/pageTitle';
 import { cardFromCatalog, cardHref, type CardItem, type CardState } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
@@ -177,6 +178,7 @@ function Cell({ day, date, items, stateOf, today, selected, desktop, onOpen }: {
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
+  usePageTitle('Calendar');
   const router = useRouter();
   const db = useSQLiteContext();
   const auth = useAuth();

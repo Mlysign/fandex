@@ -57,7 +57,20 @@ const unique = (cards: CardItem[]) => {
 
 /** A talk-show appearance or a narration is not part of somebody's body of work. */
 const CAST_SELF_RE = /^(self|himself|herself|narrator)\b/i;
-const LOW_SIGNAL_CREW_JOBS = new Set(['Thanks', 'Special Thanks', 'Characters']);
+/**
+ * The crew jobs that make a title somebody's, the same ones the catalog files a
+ * person under (src/lib/facets.ts: director, writer, creator). The site took
+ * every crew credit, and so did this until 2026-10-11: Ridley Scott's page read
+ * "157 titles" under "Director · Writer", most of them films he produced, none
+ * of which link back to him from their own page (SM65).
+ */
+const AUTHOR_JOBS = new Set([
+  'Director', 'Creator',
+  'Writer', 'Screenplay', 'Story', 'Novel', 'Author', 'Comic Book', 'Teleplay', 'Co-Writer', 'Original Story',
+]);
+
+/** Whether a crew credit is one of those jobs. Exported for the test. */
+export const isAuthorCredit = (c: { job?: string | null }) => AUTHOR_JOBS.has(c.job || '');
 
 /** The person a key names: the exact name with the most popularity, else the most popular result. */
 async function personId(key: string, signal?: AbortSignal): Promise<number | null> {
@@ -80,7 +93,7 @@ async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet>
     cards.push(card(c));
   };
   for (const c of credits?.cast ?? []) if (!CAST_SELF_RE.test(String(c.character ?? ''))) take(c);
-  for (const c of credits?.crew ?? []) if (!LOW_SIGNAL_CREW_JOBS.has(c.job || '')) take(c);
+  for (const c of credits?.crew ?? []) if (isAuthorCredit(c)) take(c);
   return {
     cards: unique(cards),
     person: {

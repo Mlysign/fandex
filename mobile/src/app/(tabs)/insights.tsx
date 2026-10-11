@@ -21,6 +21,7 @@ import { CardRail } from '~/components/cards';
 import { Button, EmptyState, Eyebrow, Panel } from '~/components/kit';
 import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
+import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
@@ -116,6 +117,7 @@ function FacetColumn({ title, facets, baseline, tone }: { title: string; facets:
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export default function InsightsScreen() {
+  usePageTitle('Insights');
   const router = useRouter();
   const db = useSQLiteContext();
   const auth = useAuth();

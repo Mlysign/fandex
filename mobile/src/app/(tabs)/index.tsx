@@ -13,6 +13,7 @@ import { Button, EmptyState, Eyebrow, Panel, Skeleton } from '~/components/kit';
 import { SubBar } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
 import { UpNextRail } from '~/components/UpNext';
+import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { useHomeRails } from '~/lib/useHomeRails';
@@ -38,6 +39,7 @@ function RailSkeleton({ title }: { title: string }) {
 }
 
 export default function HomeScreen() {
+  usePageTitle(null);
   const router = useRouter();
   const auth = useAuth();
   const types = useTypeFilter();
@@ -74,7 +76,7 @@ export default function HomeScreen() {
             <Eyebrow>Guest mode</Eyebrow>
             <Text style={[type.serifLg, { marginTop: 6, marginBottom: 12 }]}>Sign in to unlock your Fandex Score</Text>
             <View style={styles.guestActions}>
-              <Button label="Create account" variant="primary" pill onPress={() => router.push('/profile')} />
+              <Button label="Sign in with Trakt" variant="primary" pill onPress={() => router.push('/profile')} />
               <Text accessibilityRole="link" onPress={() => router.push('/discover')} style={[type.label, { color: color.textSecondary }]}>
                 Browse without an account →
               </Text>

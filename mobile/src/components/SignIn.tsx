@@ -10,6 +10,7 @@ import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View
 import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button, Panel } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
+import { LOCAL_API } from '~/lib/config';
 import { activationUrl } from '~/lib/trakt';
 import { color, font, radius, space, type } from '~/theme';
 
@@ -75,6 +76,13 @@ export function SignIn({ title = 'Sign in', hint }: { title?: string; hint?: str
           {Platform.OS !== 'web' ? <Button label="Use a code instead" variant="ghost" size="lg" onPress={auth.startTraktCodeSignIn} /> : null}
         </View>
       )}
+      {/* Only when the app talks to a Worker on this machine (lib/config.ts). The accounts are made for wrecking. */}
+      {LOCAL_API && !busy ? (
+        <View style={styles.actions}>
+          <Button label="Test account" variant="outline" size="md" onPress={() => void auth.devSignIn('smoketest')} />
+          <Button label="Second test account" variant="ghost" size="md" onPress={() => void auth.devSignIn('plain')} />
+        </View>
+      ) : null}
     </Panel>
   );
 }

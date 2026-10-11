@@ -22,6 +22,8 @@ import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
+import { usePageTitle } from '~/lib/pageTitle';
+import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
@@ -93,6 +95,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null } | null>(null);
   const [asking, setAsking] = useState(false);
   const label = found?.label ?? '';
+  usePageTitle(label || null);
   const ready = found != null;
   useEffect(() => {
     setMore(null);
@@ -121,10 +124,10 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 
   const sorted = useMemo(() => {
     const list = [...(cards ?? [])];
-    const votes = (c: CardItem) => c.communityVotes ?? 0;
+    const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
     switch (sort) {
-      case 'popularity': return list.sort((a, b) => votes(b) - votes(a));
-      case 'rating': return list.sort((a, b) => (b.communityScore ?? -1) - (a.communityScore ?? -1) || votes(b) - votes(a));
+      case 'popularity': return byPopularity(list, crowdOf, true);
+      case 'rating': return byRating(list, crowdOf);
       case 'fandexScore': return list.sort((a, b) => ((b.id ? scores.get(b.id) : null) ?? -1) - ((a.id ? scores.get(a.id) : null) ?? -1));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
@@ -137,8 +140,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     return [
       { label: 'titles', value: String(all.length) },
-      { label: 'crowd average', value: crowd.length ? (avg(crowd.map((c) => c.communityScore as number)) / 10).toFixed(1) : '–' },
-      ...(auth.status === 'signedIn' ? [{ label: mine.length ? `your average · ${mine.length} rated` : 'your average', value: mine.length ? avg(mine).toFixed(1) : '–' }] : []),
+      { label: 'crowd average', value: crowd.length ? (avg(crowd.map((c) => c.communityScore as number)) / 10).toFixed(1) : '-' },
+      ...(auth.status === 'signedIn' ? [{ label: mine.length ? `your average · ${mine.length} rated` : 'your average', value: mine.length ? avg(mine).toFixed(1) : '-' }] : []),
     ];
   }, [cards, stateOf, auth.status]);
 

@@ -8,6 +8,7 @@ import { TaxonomyPanel } from '~/components/dev/TaxonomyPanel';
 import { WeightsPanel } from '~/components/dev/WeightsPanel';
 import { Screen } from '~/components/ui';
 import { api } from '~/lib/api';
+import { usePageTitle } from '~/lib/pageTitle';
 import { prepareTaxonomy, type TaxonomyJson } from '~/lib/fandexScore';
 import { useScores } from '~/lib/ScoreProvider';
 import { color, font } from '~/theme';
@@ -78,6 +79,7 @@ function Admin() {
 }
 
 export default function DevScoringScreen() {
+  usePageTitle('Scoring');
   return <AdminOnly><Admin /></AdminOnly>;
 }
 

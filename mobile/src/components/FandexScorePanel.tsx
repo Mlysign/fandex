@@ -15,7 +15,7 @@
 // Here it is a sheet, which cannot be clipped by a scroll view or sit under the
 // navigation bar.
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FACET_HEX, facetClassOf } from '@/lib/facetPalette';
 import { Sheet } from '~/components/kit';
 import type { FandexScore, ScoreReason } from '~/lib/fandexScore';
@@ -49,7 +49,9 @@ function Shell({ number, tone, eyebrow, line, muted, action }: {
 /** `settling`: signed in, and your library is still arriving on this device. Not one of the site's four: its server always had the whole library. */
 export type ScorePanelState = 'anon' | 'settling' | 'cold' | 'none' | 'scored';
 
-export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, onOpenFacet }: {
+export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, signInHref, onOpenFacet }: {
+  /** Where signing in happens, for a page that cannot run `onSignIn`. */
+  signInHref?: string;
   state: ScorePanelState;
   /** The score, when `state` is `scored`. */
   fandex: FandexScore | null;
@@ -63,8 +65,10 @@ export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, onOpe
 
   if (state === 'anon') {
     // The whole panel is the instruction, so the whole panel is the button. Named outright, not by its text run.
+    // On a page with no script (the website's static title page) it is a link instead: `signInHref`.
+    const anchor = signInHref && Platform.OS === 'web' ? ({ href: signInHref } as object) : null;
     return (
-      <Pressable onPress={onSignIn} disabled={!onSignIn} accessibilityRole="button" accessibilityLabel="Sign in to see your Fandex Score" style={({ pressed }) => [styles.panel, pressed && { opacity: 0.7 }]}>
+      <Pressable {...anchor} onPress={onSignIn} disabled={!onSignIn && !anchor} accessibilityRole={anchor ? 'link' : 'button'} accessibilityLabel="Sign in to see your Fandex Score" style={({ pressed }) => [styles.panel, pressed && { opacity: 0.7 }]}>
         <Shell number="-" tone={color.textMuted} eyebrow="Fandex Score" line="Sign in to see your taste-match Score." muted />
       </Pressable>
     );

@@ -20,6 +20,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { itemStateFor } from '~/lib/db';
 import type { ScoreFacet } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
+import { usePageTitle } from '~/lib/pageTitle';
 import { dropItemPrerender } from '~/lib/prerender';
 import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
@@ -74,7 +75,7 @@ export default function ItemScreen() {
   // buttons, so the hero's buttons and the last line each have to clear one.
   const { top } = useSafeAreaInsets();
   const [item, setItem] = useState<ItemDetail | null>(null);
-  const [error, setError] = useState<{ title: string; detail: string } | null>(null);
+  const [error, setError] = useState<{ title: string; detail: string; gone?: boolean } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -83,7 +84,7 @@ export default function ItemScreen() {
     // An address that is not a title's shape (a mistyped link, a probe) is
     // answered here, without asking the Worker.
     if (!known) {
-      setError({ title: 'Nothing here', detail: 'Fandex has no page at this address.' });
+      setError({ title: 'Nothing here', detail: 'Fandex has no page at this address.', gone: true });
       return;
     }
     try {
@@ -94,7 +95,7 @@ export default function ItemScreen() {
         code === 'offline'
           ? { title: 'No connection', detail: 'This page needs a connection to load.' }
           : code === 'not-found'
-            ? { title: 'Not in the catalog', detail: 'Fandex does not hold a title at this address.' }
+            ? { title: 'Not in the catalog', detail: 'Fandex does not hold a title at this address.', gone: true }
             : { title: 'Could not load this title', detail: 'Something went wrong.' },
       );
     }
@@ -109,6 +110,8 @@ export default function ItemScreen() {
   // An effect runs after the page is in the document, so the next frame the
   // browser paints already has it. Not requestAnimationFrame: that never fires
   // in a tab nobody is looking at, and the copy would sit there until they did.
+  // The static page's own title: the name and the year. The site's title while it loads.
+  usePageTitle(item ? `${item.merged.title}${item.merged.releaseDate ? ` (${item.merged.releaseDate.slice(0, 4)})` : ''}` : null);
   const loaded = item != null;
   useEffect(() => {
     if (loaded) dropItemPrerender();
@@ -159,7 +162,11 @@ export default function ItemScreen() {
   if (error) {
     return (
       <Screen headed>
-        <StateBlock title={error.title} detail={error.detail} action={{ label: 'Try again', onPress: () => void load() }} />
+        {/* Trying again cannot bring back a title that is not there. Search can find the one that was meant. */}
+        <StateBlock
+          title={error.title} detail={error.detail}
+          action={error.gone ? { label: 'Search the catalog', onPress: () => router.replace('/discover' as never) } : { label: 'Try again', onPress: () => void load() }}
+        />
       </Screen>
     );
   }

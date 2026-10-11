@@ -112,17 +112,26 @@ export function usePlatformIndex(enabled = true): PlatformIndex | null {
     return () => { listeners.delete(bump); };
   }, []);
 
+  // True while the country's answer is being fetched. With it, an index that
+  // holds nothing yet is "not known yet" and not "none": on a device that never
+  // had a copy, the filter sheet said "Nothing loaded here says where it
+  // streams" for the second or two the first fetch took (SM64, 2026-10-11).
+  const [fetching, setFetching] = useState(false);
+
   useEffect(() => {
     if (!enabled) return;
     let live = true;
     void loadIndex(db).then((v) => { if (live) setIndex(v); });
-    void syncPlatforms(db, region).catch((e: unknown) => {
-      console.warn('platforms_sync_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-    });
+    setFetching(true);
+    void syncPlatforms(db, region)
+      .catch((e: unknown) => {
+        console.warn('platforms_sync_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      })
+      .finally(() => { if (live) setFetching(false); });
     return () => { live = false; };
   }, [db, region, enabled, tick]);
 
-  return index;
+  return index && index.size === 0 && fetching ? null : index;
 }
 
 /** The ids of everything on your library and wishlist: what "Your platforms" surveys. */

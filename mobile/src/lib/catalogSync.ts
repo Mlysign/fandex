@@ -6,12 +6,16 @@
 // killed half way resumes from the last page that fully landed and never from
 // one that half did.
 //
-// A first sync is the whole pool, about thirty requests. After that a sync is
-// one request that usually returns nothing.
+// A first sync is the whole pool. It is read from files the website's build
+// wrote (mobile/web/build.mjs, `/catalog/`), which cost the Worker nothing, and
+// then the Worker is asked only for what changed since those were written.
+// Without the files it is about thirty requests to the Worker. After that a
+// sync is one request that usually returns nothing.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { normalizeName } from '@/lib/normalize';
-import { api, type DeltaCursor } from '~/lib/api';
+import { api, type DeltaCursor, type DeltaPage } from '~/lib/api';
+import { CATALOG_FILES_URL } from '~/lib/config';
 import { catalogCount, getMeta, setMeta, inTransaction } from '~/lib/db';
 
 const CURSOR_KEY = 'catalog_cursor';
@@ -60,6 +64,75 @@ export async function resetCatalog(db: SQLiteDatabase): Promise<void> {
   });
 }
 
+/** One page's rows and the cursor after them, in ONE transaction: a page that half wrote must not move the cursor. */
+async function storePage(db: SQLiteDatabase, items: DeltaPage['items'], next: DeltaCursor): Promise<void> {
+  if (!items.length) {
+    await setMeta(db, CURSOR_KEY, JSON.stringify(next));
+    return;
+  }
+  await inTransaction(db, async () => {
+    const insert = await db.prepareAsync(
+      `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, year,
+                            community_score, community_votes, updated_at, vector, facets)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         type = excluded.type, title = excluded.title, norm_title = excluded.norm_title, slug = excluded.slug,
+         poster_url = excluded.poster_url, release_date = excluded.release_date, year = excluded.year,
+         community_score = excluded.community_score, community_votes = excluded.community_votes,
+         updated_at = excluded.updated_at, vector = excluded.vector, facets = excluded.facets`,
+    );
+    try {
+      for (const item of items) {
+        const v = item.vector;
+        await insert.executeAsync([
+          v.id, v.type, v.title, normalizeName(v.title), v.slug, v.posterUrl, v.releaseDate, v.year,
+          v.communityScore, v.communityVotes ?? 0, item.updatedAt, JSON.stringify(v), JSON.stringify(item.facets),
+        ]);
+      }
+    } finally {
+      await insert.finalizeAsync();
+    }
+    await setMeta(db, CURSOR_KEY, JSON.stringify(next));
+  });
+}
+
+const isCursor = (c: unknown): c is DeltaCursor =>
+  !!c && typeof (c as DeltaCursor).since === 'number' && typeof (c as DeltaCursor).after === 'string';
+
+/**
+ * Start an empty device from the catalog files. Returns how many rows it wrote.
+ * The cursor is stored page by page, so whatever happens next the Worker is
+ * asked from exactly where the files stopped.
+ *
+ * It never throws. No files, a file that will not load, a shape that is not a
+ * page: each ends the attempt, and the Worker's delta carries on from the last
+ * page that did land. The files are a shortcut, never the only way.
+ */
+async function startFromFiles(
+  db: SQLiteDatabase, base: string, onProgress?: (p: SyncProgress) => void, signal?: { cancelled: boolean },
+): Promise<number> {
+  let written = 0;
+  try {
+    const index = (await (await fetch(`${base}/catalog/index.json`)).json()) as { version?: number; pages?: unknown };
+    if (index?.version !== 1 || !Array.isArray(index.pages)) return 0;
+    let n = 0;
+    for (const name of index.pages) {
+      if (signal?.cancelled) break;
+      if (typeof name !== 'string' || !/^[a-z0-9]+\.json$/.test(name)) break;
+      const res = await fetch(`${base}/catalog/${name}`);
+      if (!res.ok) break;
+      const page = (await res.json()) as { items?: DeltaPage['items']; next?: unknown };
+      if (!Array.isArray(page?.items) || !isCursor(page.next)) break;
+      await storePage(db, page.items, page.next);
+      written += page.items.length;
+      onProgress?.({ pages: ++n, written, total: await catalogCount(db) });
+    }
+  } catch (e) {
+    console.warn('catalog_files_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+  }
+  return written;
+}
+
 export async function syncCatalog(
   db: SQLiteDatabase,
   onProgress?: (p: SyncProgress) => void,
@@ -70,40 +143,21 @@ export async function syncCatalog(
   let written = 0;
   let poolCount: number | null = null;
 
+  // An empty device starts from the files. ⚠️ Not after a start-over: that one
+  // happened because the device held a title the pool no longer has, and the
+  // files, written before it left, would bring it straight back.
+  if (!afterReset && CATALOG_FILES_URL !== null && cursor.since === 0 && cursor.after === '') {
+    written += await startFromFiles(db, CATALOG_FILES_URL, onProgress, signal);
+    cursor = await readCursor(db);
+  }
+
   for (let page = 1; page <= MAX_PAGES; page++) {
     if (signal?.cancelled) break;
     // A network failure throws out of here with every earlier page committed.
     const res = await api.catalogDelta(cursor, PAGE_SIZE, true);
 
-    if (res.items.length) {
-      await inTransaction(db, async () => {
-        const insert = await db.prepareAsync(
-          `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, year,
-                                community_score, community_votes, updated_at, vector, facets)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             type = excluded.type, title = excluded.title, norm_title = excluded.norm_title, slug = excluded.slug,
-             poster_url = excluded.poster_url, release_date = excluded.release_date, year = excluded.year,
-             community_score = excluded.community_score, community_votes = excluded.community_votes,
-             updated_at = excluded.updated_at, vector = excluded.vector, facets = excluded.facets`,
-        );
-        try {
-          for (const item of res.items) {
-            const v = item.vector;
-            await insert.executeAsync([
-              v.id, v.type, v.title, normalizeName(v.title), v.slug, v.posterUrl, v.releaseDate, v.year,
-              v.communityScore, v.communityVotes ?? 0, item.updatedAt, JSON.stringify(v), JSON.stringify(item.facets),
-            ]);
-          }
-        } finally {
-          await insert.finalizeAsync();
-        }
-        await setMeta(db, CURSOR_KEY, JSON.stringify(res.next));
-      });
-      written += res.items.length;
-    } else {
-      await setMeta(db, CURSOR_KEY, JSON.stringify(res.next));
-    }
+    await storePage(db, res.items, res.next);
+    written += res.items.length;
 
     cursor = res.next;
     onProgress?.({ pages: page, written, total: await catalogCount(db) });

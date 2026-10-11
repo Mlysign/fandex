@@ -175,13 +175,15 @@ function FacetPicker({ picked, tint, onAdd, onRemove }: { picked: FacetPill[]; t
     if (term.length < 2) return [];
     const taken = new Set(picked.map(pillId));
     const out: Vocab['options'] = [];
-    // Names that start with what was typed, before names that merely contain it.
+    // A name with a WORD that starts with what was typed, before names that merely
+    // contain it. A word, not the whole name: "nolan" is Christopher Nolan before
+    // it is Nolan Gerard Funk, and the list is already most-carried first.
     for (const pass of [0, 1]) {
       for (const o of options) {
         if (out.length >= 8) break;
         const l = o.label.toLowerCase();
         if (taken.has(pillId(o)) || out.includes(o)) continue;
-        if (pass === 0 ? l.startsWith(term) : l.includes(term)) out.push(o);
+        if (pass === 0 ? l.startsWith(term) || l.includes(` ${term}`) : l.includes(term)) out.push(o);
       }
     }
     return out;

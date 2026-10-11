@@ -20,7 +20,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api } from '~/lib/api';
 import { applyLocalWrite } from '~/lib/stateSync';
-import { traktAccessToken, traktGet, traktPost } from '~/lib/trakt';
+import { TraktBusyError, traktAccessToken, traktGet, traktPost } from '~/lib/trakt';
 import { publishWidget } from '~/lib/widget';
 
 /** Shows asked about per run. Each is one request to Trakt. */
@@ -179,10 +179,21 @@ export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: numb
   const token = await traktAccessToken();
   let checked = 0;
   let firstError: unknown = null;
-  for (let i = 0; i < batch.length; i += CONCURRENCY) {
+  let busy: TraktBusyError | null = null;
+  for (let i = 0; i < batch.length && !busy; i += CONCURRENCY) {
     await Promise.all(batch.slice(i, i + CONCURRENCY).map(async (show) => {
-      try { await checkShow(db, token, show, now); checked++; } catch (e) { firstError ??= e; }
+      try { await checkShow(db, token, show, now); checked++; } catch (e) {
+        firstError ??= e;
+        if (e instanceof TraktBusyError) busy = e;
+      }
     }));
+  }
+  // Trakt said "not now". Asking about the rest of the shows would only extend
+  // the wait, so the run ends here and says why, even if some shows did answer:
+  // what is on screen is then partly old.
+  if (busy) {
+    if (checked) await publishWidget(db);
+    throw busy;
   }
   if (checked === 0 && firstError) throw firstError;
   if (checked) await publishWidget(db);

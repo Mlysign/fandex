@@ -14,6 +14,7 @@ import { normalizeName } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { Button, EmptyState } from '~/components/kit';
+import { SignIn } from '~/components/SignIn';
 import { SubBar, Tabs, type TabDef } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
 import { EPISODE_ROW_GAP, EpisodeRow, useUpNext } from '~/components/UpNext';
@@ -22,6 +23,8 @@ import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel } from '~/lib/dates';
 import { shelf, shelfCounts, type ShelfRow } from '~/lib/db';
+import { usePageTitle } from '~/lib/pageTitle';
+import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores } from '~/lib/ScoreProvider';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { color, type } from '~/theme';
@@ -67,10 +70,15 @@ function byMonth(rows: (CardItem & { releaseDate: string | null })[], newestFirs
   return sections;
 }
 
+const GATE_TITLE: Record<Tab, string> = {
+  wishlist: 'Sign in to see your wishlist', progress: 'Sign in to see your progress', library: 'Sign in to see your library',
+};
+
 export default function MyStuffScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const tab: Tab = isTab(params.tab) ? params.tab : 'wishlist';
+  usePageTitle(TABS.find((t) => t.key === tab)?.label ?? 'Wishlist');
   const auth = useAuth();
   const [query, setQuery] = useState('');
   // A search belongs to the list it was typed over.
@@ -81,11 +89,10 @@ export default function MyStuffScreen() {
       <Screen wide>
         <SubBar />
         <View style={styles.gate}>
-          <EmptyState
-            icon={<Bookmark size={18} color={color.accent} />}
-            title="Sign in to see your wishlist"
+          {/* The same card every other gate shows, named after the tab the address asked for. */}
+          <SignIn
+            title={GATE_TITLE[tab]}
             hint="Your wishlist, your library and the shows you are part way through live in your Fandex account."
-            actions={<Button label="Sign in" variant="primary" size="md" pill onPress={() => router.push('/profile')} />}
           />
         </View>
       </Screen>
@@ -137,11 +144,11 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
 
   const sorted = useMemo(() => {
     const list = [...filtered];
-    const votes = (r: ShelfRow) => r.community_votes ?? 0;
+    const crowdOfRow = (r: ShelfRow) => ({ type: r.type, score: r.community_score, votes: r.community_votes ?? 0 });
     switch (sort) {
       case 'addedAt': return list.sort((a, b) => b.added_at - a.added_at);
-      case 'popularity': return list.sort((a, b) => votes(b) - votes(a));
-      case 'rating': return list.sort((a, b) => (b.community_score ?? -1) - (a.community_score ?? -1) || votes(b) - votes(a));
+      case 'popularity': return byPopularity(list, crowdOfRow, true);
+      case 'rating': return byRating(list, crowdOfRow);
       case 'fandexScore': return list.sort((a, b) => (scores.get(b.id) ?? -1) - (scores.get(a.id) ?? -1));
       // Dated first, in order. What "order" means is decided where the months are cut.
       case 'releaseDate': return list.sort((a, b) => ((a.release_date ?? '9999') < (b.release_date ?? '9999') ? -1 : 1));

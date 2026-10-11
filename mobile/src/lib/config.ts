@@ -12,6 +12,24 @@
 // itself (mobile/web/worker.ts). Same origin, so no preflight per request.
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://fandex-api.fandex-worker.workers.dev').replace(/\/+$/, '');
 
+/**
+ * Where the catalog is kept as files, or null where it is not: the website the
+ * app is served from (""), fandex.org for the Android app, and nowhere for an
+ * app pointed at any other API. ⚠️ The files are the PRODUCTION catalog. An app
+ * talking to a developer's Worker must not start from them: its ids and cursor
+ * would be another database's.
+ */
+const PRODUCTION_API = 'https://fandex-api.fandex-worker.workers.dev';
+export const CATALOG_FILES_URL: string | null = API_URL === '' ? '' : API_URL === PRODUCTION_API ? 'https://fandex.org' : null;
+
+/**
+ * True when the app talks to a Worker on this machine. It is what shows the
+ * test accounts on the sign-in card. The Worker decides for itself whether
+ * they exist (two gates of its own); this only keeps the buttons out of
+ * everybody else's sight.
+ */
+export const LOCAL_API = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(API_URL);
+
 export const TMDB_API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '';
 
 export function tmdbConfigured(): boolean {

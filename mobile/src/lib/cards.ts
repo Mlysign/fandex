@@ -43,7 +43,11 @@ export function cardFromCatalog(r: CatalogRow): CardItem {
 
 /** Where a card leads. A provider title goes through /open, which asks the Worker to find or fetch it. */
 export function cardHref(item: CardItem): string {
-  return item.id ? `/item/${item.id}` : `/open/${item.source}/${item.type}/${item.sourceId}`;
+  // A title the catalog holds goes to its public address, the one the website
+  // serves and Share hands out, so the address bar is the one to pass on. A
+  // card without a slug (an old row) falls back to the id.
+  if (item.id) return item.slug ? `/${item.type}/${item.slug}` : `/item/${item.id}`;
+  return `/open/${item.source}/${item.type}/${item.sourceId}`;
 }
 
 export interface CardState { rating: number | null; wishlisted: boolean; inLibrary: boolean }

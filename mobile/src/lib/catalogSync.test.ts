@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DeltaCursor, DeltaPage } from './api';
 
 // The sync's whole job is to never lose its place. These tests drive it against
@@ -8,6 +8,10 @@ import type { DeltaCursor, DeltaPage } from './api';
 
 const pages = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('~/lib/api', () => ({ api: { catalogDelta: pages.fetch } }));
+// Where the catalog files are. Null (no files) unless a test says otherwise, so
+// no test here ever asks the real website for them.
+const files = vi.hoisted(() => ({ CATALOG_FILES_URL: null as string | null }));
+vi.mock('~/lib/config', () => files);
 
 const { syncCatalog, resetCatalog, lastSyncedAt } = await import('./catalogSync');
 
@@ -268,6 +272,101 @@ describe('a pool count that is too low', () => {
       now.mockRestore();
     }
     expect(f.ids()).toEqual(['a', 'c']);
+  });
+});
+
+// A first sync through the Worker is two D1 rows read per title, for every new
+// visitor. The website's build writes the same pages as files, and an empty
+// device starts from those.
+describe('starting from the catalog files', () => {
+  const rows = ['a', 'b', 'c', 'd', 'e'].map((id, i) => item(id, 100 + i));
+  const page = (slice: typeof rows) => ({ items: slice, next: { since: slice[slice.length - 1].updatedAt, after: slice[slice.length - 1].vector.id } });
+
+  /** A website holding these files. Anything not listed is a 404. */
+  function site(served: Record<string, unknown>) {
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      asked.push(url);
+      const body = served[url.replace('https://site.test', '')];
+      return body === undefined
+        ? { ok: false, status: 404, json: async () => { throw new Error('not json'); } }
+        : { ok: true, status: 200, json: async () => body };
+    }));
+    return asked;
+  }
+
+  beforeEach(() => { files.CATALOG_FILES_URL = 'https://site.test'; });
+  afterEach(() => { files.CATALOG_FILES_URL = null; vi.unstubAllGlobals(); });
+
+  it('fills an empty device from the files and asks the Worker only for what came after', async () => {
+    site({
+      '/catalog/index.json': { version: 1, pages: ['p000.json', 'p001.json'] },
+      '/catalog/p000.json': page(rows.slice(0, 2)),
+      '/catalog/p001.json': page(rows.slice(2, 4)),
+    });
+    serve(rows, 10); // "e" was added after the files were written.
+    const f = fakeDb();
+    const result = await syncCatalog(f.db);
+    expect(f.ids()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    // One request to the Worker, from where the files stopped.
+    expect(pages.fetch).toHaveBeenCalledTimes(1);
+    expect(pages.fetch.mock.calls[0][0]).toEqual({ since: 103, after: 'd' });
+    expect(result).toMatchObject({ written: 5, total: 5 });
+  });
+
+  it('is not asked for by a device that already has a catalog', async () => {
+    const asked = site({});
+    serve(rows, 10);
+    const f = fakeDb();
+    files.CATALOG_FILES_URL = null;
+    await syncCatalog(f.db);
+    files.CATALOG_FILES_URL = 'https://site.test';
+    await syncCatalog(f.db);
+    expect(asked).toEqual([]);
+  });
+
+  it('falls back to the Worker when there are no files, or they are not what they should be', async () => {
+    for (const served of [
+      {},
+      { '/catalog/index.json': { version: 2, pages: ['p000.json'] } },
+      { '/catalog/index.json': { version: 1, pages: ['../secret.json'] } },
+      { '/catalog/index.json': { version: 1, pages: ['p000.json'] }, '/catalog/p000.json': { items: 'nope' } },
+    ]) {
+      site(served);
+      serve(rows, 10);
+      pages.fetch.mockClear();
+      const f = fakeDb();
+      await syncCatalog(f.db);
+      expect(f.ids()).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(pages.fetch.mock.calls[0][0]).toEqual({ since: 0, after: '' });
+    }
+  });
+
+  it('carries on from the last file that landed when a later one is missing', async () => {
+    site({
+      '/catalog/index.json': { version: 1, pages: ['p000.json', 'p001.json'] },
+      '/catalog/p000.json': page(rows.slice(0, 2)),
+    });
+    serve(rows, 10);
+    const f = fakeDb();
+    await syncCatalog(f.db);
+    expect(pages.fetch.mock.calls[0][0]).toEqual({ since: 101, after: 'b' });
+    expect(f.ids()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('does not start a start-over from the files, which still hold the title that left', async () => {
+    // The files hold a, b, c. "b" has left the pool since they were written.
+    const asked = site({
+      '/catalog/index.json': { version: 1, pages: ['p000.json'] },
+      '/catalog/p000.json': page(rows.slice(0, 3)),
+    });
+    serve([rows[0], rows[2]], 10);
+    const f = fakeDb();
+    const result = await syncCatalog(f.db);
+    expect(f.ids()).toEqual(['a', 'c']);
+    expect(result.total).toBe(2);
+    // The files were read once, for the first attempt only.
+    expect(asked.filter((u) => u.endsWith('index.json'))).toHaveLength(1);
   });
 });
 

@@ -52,6 +52,8 @@ interface Auth {
   /** The code flow, for when the browser one does not come back. */
   startTraktCodeSignIn: () => void;
   cancelTraktSignIn: () => void;
+  /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
+  devSignIn: (account: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Pulling your rows from the Worker. */
   rowsSyncing: boolean;
@@ -312,6 +314,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the web build signs in with a code.
   const startTraktSignIn = Platform.OS === 'web' ? startTraktCodeSignIn : startTraktBrowserSignIn;
 
+  /**
+   * Sign in as a test account, on a developer's Worker (worker/src/devLogin.ts).
+   * No Trakt tokens are kept, on purpose: with none, a rating has nowhere to go
+   * but the local database, which is the point of the account.
+   */
+  const devSignIn = useCallback(async (account: string) => {
+    setTrakt({ phase: 'finishing' });
+    try {
+      await clearTraktTokens();
+      const result = await api.devSignIn(account);
+      await secretSet(SESSION_KEY, result.token);
+      setSessionToken(result.token);
+      setProfile(await api.me().catch(() => null));
+      setStatus('signedIn');
+      setTrakt({ phase: 'idle' });
+      void pullRows(true);
+    } catch (e) {
+      setTrakt({ phase: 'error', message: e instanceof ApiError && e.status === 404 ? 'This Worker has no test accounts. Start it with DEV_LOGIN=1 in .dev.vars.' : 'The test sign-in did not work.' });
+    }
+  }, [pullRows]);
+
   const signOut = useCallback(async () => {
     flow.current++;
     // Tell the Worker first, while the token still works. If that fails (no
@@ -378,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, signOut,
+      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, devSignIn, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
       region, savePrefs, disconnect, deleteAccount,
     }}>

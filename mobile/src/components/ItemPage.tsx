@@ -710,7 +710,8 @@ const styles = StyleSheet.create({
   tagGroups: { gap: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.xs },
   groupLabel: { fontFamily: font.sans, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textSecondary, marginRight: space.xxs },
-  chip: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.full },
+  // 24 tall with its 16 px line: the smallest a tap target may be (it was 22).
+  chip: { paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: radius.full },
   chipText: { fontFamily: font.sans, fontSize: 12, lineHeight: 16 },
 
   linksSection: { paddingTop: space.sm, borderTopWidth: 1, borderTopColor: color.border },

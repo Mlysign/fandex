@@ -19,6 +19,7 @@ import { LegalLinks } from '~/components/LegalLinks';
 import { SignIn } from '~/components/SignIn';
 import { Screen, T } from '~/components/ui';
 import { api, ApiError } from '~/lib/api';
+import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
@@ -170,7 +171,7 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
         </T>
       ) : null}
       {meta.identityOnly ? (
-        <T variant="bodySm">Used to sign you in. It holds no library.</T>
+        <T variant="bodySm">Signed you in on the old site. It holds no library, and signing in with it here is not built yet.</T>
       ) : null}
 
       <Sheet open={asking} onClose={() => setAsking(false)} title={`Disconnect ${meta.label}?`}>
@@ -671,6 +672,7 @@ function AdminLinks() {
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
+  usePageTitle('Settings');
   const db = useSQLiteContext();
   const auth = useAuth();
   const catalog = useCatalogSync();
@@ -705,7 +707,7 @@ export default function SettingsScreen() {
           />
         ) : (
           <>
-            <Section eyebrow="Connected accounts" hint="Any connected account can be used to log in.">
+            <Section eyebrow="Connected accounts" hint="Trakt is the way to sign in today.">
               {identities.map((i) => <ProviderPanel key={i.provider} provider={i.provider} onNotice={setNotice} />)}
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
             </Section>

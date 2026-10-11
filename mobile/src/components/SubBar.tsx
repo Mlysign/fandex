@@ -8,7 +8,7 @@
 
 import { Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import { SearchBar, SortMenu } from '~/components/kit';
 import { LogoOutline } from '~/components/Logo';
@@ -27,6 +27,8 @@ function Circle({ active, fill, label, onPress, children, count }: {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
+      // A browser has no "selected" for a button; pressed is what a toggle is there.
+      {...(Platform.OS === 'web' ? ({ 'aria-pressed': active } as object) : null)}
       accessibilityLabel={label}
       hitSlop={2}
       style={({ pressed }) => [styles.circle, active && fill ? { backgroundColor: fill, borderColor: fill } : null, pressed && { opacity: 0.7 }]}>

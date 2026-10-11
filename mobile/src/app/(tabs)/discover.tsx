@@ -24,7 +24,9 @@ import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { tmdbConfigured } from '~/lib/config';
 import { currentMonth, monthLabel } from '~/lib/dates';
+import { usePageTitle } from '~/lib/pageTitle';
 import { catalogCards } from '~/lib/db';
+import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { searchTmdb, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -45,10 +47,12 @@ const fromProvider = (r: ProviderCard): CardItem => ({
   key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type, title: r.title,
   releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: null, communityVotes: r.votes,
 });
+const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
 /** Two cards are the same title when type, name and year agree. The year matters: a remake shares the name. */
 const identity = (c: CardItem) => `${c.type}|${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
 
 export default function DiscoverScreen() {
+  usePageTitle('Search');
   const db = useSQLiteContext();
   const sync = useCatalogSync();
   const types = useTypeFilter();
@@ -114,14 +118,14 @@ export default function DiscoverScreen() {
 
   const sorted = useMemo(() => {
     const list = [...visible];
-    const votes = (c: CardItem) => c.communityVotes ?? 0;
     switch (sort) {
-      case 'popularity': return list.sort((a, b) => votes(b) - votes(a));
-      case 'rating': return list.sort((a, b) => (b.communityScore ?? -1) - (a.communityScore ?? -1) || votes(b) - votes(a));
+      // Browsing mixes the types by each title's rank among its own; a search keeps the raw count (lib/sortCards.ts).
+      case 'popularity': return byPopularity(list, crowdOf, !norm);
+      case 'rating': return byRating(list, crowdOf);
       case 'fandexScore': return list.sort((a, b) => ((b.id ? allScores.get(b.id) : null) ?? -1) - ((a.id ? allScores.get(a.id) : null) ?? -1));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
-  }, [visible, sort, allScores]);
+  }, [visible, sort, allScores, norm]);
 
   // A new question starts at the top of its own answer.
   useEffect(() => setShown(STEP), [norm, sort, types.shown.join(','), filters]);

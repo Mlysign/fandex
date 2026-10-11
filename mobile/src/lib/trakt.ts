@@ -203,6 +203,14 @@ export class TraktAuthError extends Error {
   }
 }
 
+/** Trakt is reachable and will not answer right now: it limits how often an account may ask. Ask again later. */
+export class TraktBusyError extends Error {
+  constructor(message = 'Trakt is limiting how often it can be asked.') {
+    super(message);
+    this.name = 'TraktBusyError';
+  }
+}
+
 /** Refresh when the token has less than this left. A sync is several requests long. */
 const REFRESH_MARGIN_SECONDS = 300;
 
@@ -283,7 +291,21 @@ export async function traktList(endpoint: string, accessToken: string, limit = 2
 
 /** One Trakt answer that is not a list. Throws on any failure, as traktList does. */
 export async function traktGet(endpoint: string, accessToken: string): Promise<unknown> {
-  const res = await fetch(`${BASE}${endpoint}`, { headers: apiHeaders(accessToken) });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${endpoint}`, { headers: apiHeaders(accessToken) });
+  } catch (e) {
+    // In a browser a request Trakt refuses before it starts looks exactly like
+    // no network: Trakt rate-limits the preflight too (429), and the browser
+    // reports that as a failed fetch. If the browser says it is online, the
+    // refusal is Trakt's. Seen on fandex.org, 2026-10-11 (SM55).
+    // Only a browser has `navigator.onLine`. On a phone there is no preflight
+    // to refuse, so a failed fetch there really is the network.
+    const online = (globalThis as { navigator?: { onLine?: boolean } }).navigator?.onLine;
+    if (online === true) throw new TraktBusyError();
+    throw e;
+  }
+  if (res.status === 429) throw new TraktBusyError();
   if (res.status === 401 || res.status === 403) throw new TraktAuthError();
   if (!res.ok) throw new Error(`Trakt answered ${res.status} for ${endpoint}.`);
   return res.json();

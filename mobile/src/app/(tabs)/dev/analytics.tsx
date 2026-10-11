@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminOnly, DashHeader, DaySeriesChart, devStyles, HintMark, num, Panel, RangeTabs, RankedBars, Stat } from '~/components/dev/parts';
 import { Screen } from '~/components/ui';
 import { api, type AnalyticsSnapshot } from '~/lib/api';
+import { usePageTitle } from '~/lib/pageTitle';
 import { color, font, radius, type } from '~/theme';
 
 const RANGES = [7, 30, 90] as const;
@@ -174,6 +175,7 @@ function Dashboard() {
 }
 
 export default function DevAnalyticsScreen() {
+  usePageTitle('Traffic');
   return <AdminOnly><Dashboard /></AdminOnly>;
 }
 

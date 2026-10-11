@@ -14,6 +14,7 @@ import { Avatar, Button } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
 import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
+import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { shortDate, todayIso } from '~/lib/dates';
@@ -51,6 +52,7 @@ function TitleLines({ title, seeAll, lines }: { title: string; seeAll: string; l
 }
 
 export default function ProfileScreen() {
+  usePageTitle('Profile');
   const router = useRouter();
   const db = useSQLiteContext();
   const auth = useAuth();
