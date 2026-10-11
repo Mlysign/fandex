@@ -151,8 +151,9 @@ Parity must not cost any of these.
   375 px: the sign-in panel, both rails, thumbnails, hover arrows, an arrow moving the picture.
   Seen signed in on the live site, read as text: the scored panel, the whole breakdown and its sum,
   the quiet row with Remove and Hide, the rails with his scores. Not seen: the breakdown sheet as a
-  picture, the cold-start and no-match faces of the panel (his account has neither), anything on
-  the phone. **Hide from suggestions has not been pressed.**
+  picture, the cold-start and no-match faces of the panel (his account has neither). On the phone,
+  read off the screen's text: the same film's panel (83), the breakdown sheet opening and closing,
+  and "More like this" with its cards. **Hide from suggestions has not been pressed.**
 - **The phone.** An APK of each pass is on the Pixel 8 and opens. Nils has tapped through it; I
   have seen its first screen only.
 - The mockups in `docs/design/fandex-handoff/04-pages/`. The live site was the reference.

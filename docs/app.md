@@ -64,6 +64,8 @@ they do. Every tap is found by its text in a `uiautomator dump` and is made only
 `dumpsys window` says `org.fandex.app` has focus: a blind coordinate tap once landed three taps on
 the home screen and in the Google app. `adb install` hangs without output while Play Protect asks
 "App zum Sicherheitsscan senden?"; the install script answers "Nicht senden", found the same way.
+⚠️ With the phone LOCKED the same hang has no dialog to answer: it times out and nothing is installed
+(2026-10-11). Check `dumpsys window` for the launcher or an app in front before starting an install.
 The bundle task does not see an environment variable as an input, so a build that changes one
 re-runs it by name: `gradlew :app:createBundleReleaseJsAndAssets --rerun assembleRelease`.
 `EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN=1` at build time makes the Trakt sync log what it would change and
