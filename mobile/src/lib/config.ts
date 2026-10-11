@@ -19,8 +19,13 @@ export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://fandex-api.f
  * talking to a developer's Worker must not start from them: its ids and cursor
  * would be another database's.
  */
-const PRODUCTION_API = 'https://fandex-api.fandex-worker.workers.dev';
-export const CATALOG_FILES_URL: string | null = API_URL === '' ? '' : API_URL === PRODUCTION_API ? 'https://fandex.org' : null;
+//
+// ⚠️ "Production" is spelled "no address was configured", not by comparing with
+// the API's address. The website's build refuses a bundle that contains that
+// address (web/build.mjs: it means the bundle was not built for the website),
+// and a comparison here put it in every bundle.
+export const CATALOG_FILES_URL: string | null =
+  API_URL === '' ? '' : process.env.EXPO_PUBLIC_API_URL == null ? 'https://fandex.org' : null;
 
 /**
  * True when the app talks to a Worker on this machine. It is what shows the
