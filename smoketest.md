@@ -18,7 +18,8 @@ fandex.org is no longer the Next.js app. It is static files, the Expo app in a b
 Cloudflare Worker on D1 ([docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md),
 [docs/app.md](docs/app.md)). **Everything from "How to run" down describes the old site, which is
 hosted nowhere and runs only locally.** Sweep that only when something in `src/app` or
-`src/components` changed. First run on the new stack: 2026-10-11 (13th run, SM54 to SM70).
+`src/components` changed. First run on the new stack: 2026-10-11 (13th run, SM54 to SM70). The
+same day, the writes on a test account (14th run, SM71 to SM75).
 
 ### How to reach it
 
@@ -117,13 +118,19 @@ Worker, never from the live site's files.
 
 **N-E. Cost.** One full catalog page reads 300 rows for 150 titles (2026-10-11). Re-measure after any change to the delta query. A first-time visitor no longer pays it (check 19a); a second browser tab and an app pointed at another Worker still do.
 
-**N-F. Writes (the local stack, a test account).** Tried on 2026-10-11: rate, add to wishlist, hide, unhide, remove from library. **Never tried by anybody, do these first:**
-26. Settings: change the country, the default types and "Your platforms"; reload; each must hold, and the lists must follow without a reload.
-27. Settings → Download: the file holds this account's rows and nobody else's. Then Delete: the account is gone from the local D1 (`users`, `user_item_state`, `user_hidden_items`), and signing in again starts empty.
-28. `/dev/scoring` → Taxonomy → Review: Accept one card and Deny one. The accepted one changes the taxonomy the app downloads; the denied one is in `taxonomy_suggestion_dismissed` and stays hidden after a reload.
-29. Rate a title that is on the wishlist: it leaves the wishlist (the rule SM63 is about). Rate, reload, the rating is there; clear it, reload, it is gone.
-30. Tick an episode on a show's page, reload. A test account has no Trakt, so this tests the local half only.
-31. Sign in as the second account in another browser profile: nothing of the first is visible.
+**N-F. Writes (the local stack, a test account).** All of it ran on 2026-10-11 (14th run, SM71 to SM75) and every write worked. Read each one back from the local D1; the screen alone proves nothing.
+26. Settings: change the country (`users.country`), switch a default type off (`media_types`), pick a platform (`platforms`). Reload: each holds. Search must follow WITHOUT a reload: the type chips, the count (movies + shows = 1,663 with Games off), and Filters → "Available on" offering only the picked platform. ⚠️ "Your platforms" lists what your OWN library is on, so add a title first; with an empty library it says so and offers nothing.
+27. Settings → Download. Do not let a file land: before pressing, replace `HTMLAnchorElement.prototype.click` for anchors with a `download` attribute and wrap `URL.createObjectURL` to keep the blob, then read `await blob.text()`. Expect `itemState`, `hidden`, `identities`, `episodes`, `user` with this account's rows only, and the readme lines.
+28. Settings → Disconnect on the only sign-in: a dialog, then "… is the only way you sign in to this account, so it cannot be disconnected", and `user_identities` unchanged.
+29. `/dev/scoring` → Taxonomy → Review. Locally there are 38 cards, not 7: the 34 old denials exist on the live database only. Accept a tag batch (`tag_category_override`), Deny a merge (`taxonomy_suggestion_dismissed`), Bundle a merge (`ip_alias`); the four counters drop by one each time. **Then reload** (SM71: the two accepted cards came back for five minutes, the denial held). Never pressed: Add on a missing member, and everything on the other three tabs.
+30. Rate a title that is on the wishlist: one `library` row with the rating, no `wishlist` row. Reload: "You rated it N". "Remove your rating": the row stays as `watched` with no rating, by design.
+31. Hide a title: `user_hidden_items` has it, the page says "Hidden, unhide", Home's rails drop it, Search by name finds it. SM72: Search's default list still showed it.
+32. Two accounts on one device: sign out, "Second test account", check Profile is 0 / 0 / 0, the first account's rated title reads "Not rated" and its hidden title offers "Hide"; add something; sign out and back in as the first: its rows are back and the second's are not there.
+33. Delete, last: the dialog counts your library and wishlist, wants `DELETE` typed (lowercase leaves the button disabled; set the field with the native value setter and an `input` event). After: the account is in none of `users`, `user_identities`, `user_item_state`, `user_episode_state`, `user_hidden_items`, the other account is untouched, and "Test account" again starts at 0 with the United Kingdom and all three types.
+
+What the test accounts cannot reach: **an episode tick** (it goes to Trakt first, so every box answers with a Trakt sign-in message, SM74), the Trakt half of a rating or a wishlist change, Up next, and disconnecting one of two sign-ins.
+
+How this section is driven, since screenshots usually time out: the session survives a restart of both servers (it is in `localStorage`), so "Test account" may not be on screen; define the `V()` / `T()` helpers again after every hard load; press things with `element.click()` found by `aria-label` (the stars are "Rate N out of 10", the episode boxes "Mark {title} watched"); and catch a toast by polling the body's text for a few seconds straight after the click, because it is gone in three.
 
 ## How to run
 

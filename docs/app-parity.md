@@ -144,12 +144,14 @@ Parity must not cost any of these.
   it worked, and so have an episode tick from a title page and a change of default types.
   Later the same day, the same way: "Your platforms" with his 13 stored platforms selected,
   `/dev/users`, and `/dev/scoring`: a preview, the tag table, a franchise opened, and the requests
-  a category change and a franchise Remove would send. **Never run by anybody, on any account:
-  Disconnect, Download, Delete, a change of country or platforms, and every write on the Scoring
-  page (Save weights, a category, an alias, a name, an attach).** Since 2026-10-11 all but
-  Disconnect can be run on a test account on this machine ([worker.md](worker.md), "The test
-  accounts"; the list to work through is smoketest.md, N-F). Run there that day: a rating of 8,
-  Add to wishlist, Hide and un-hide, Remove from library, each read back from the local D1.
+  a category change and a franchise Remove would send. **Run on a test account on this machine on
+  2026-10-11, each read back from the local D1** ([worker.md](worker.md), "The test accounts";
+  smoketest.md, N-F): rating and clearing a rating, wishlist, hide and un-hide, remove from library,
+  country, default types and platforms, Download, Delete, the refusal to disconnect the only
+  sign-in, Review's Accept, Deny and Bundle, and two accounts on one device. What it found is
+  SM71 to SM75 in TASKS.md. **Still never run by anybody:** disconnecting one of two sign-ins,
+  anything through Trakt on an account that is not Nils's, and Save weights, a category, an alias,
+  a name or an attach on the Scoring page.
 - **The item page's new parts (2026-10-11).** Seen signed out in a local browser at 1280 px and
   375 px: the sign-in panel, both rails, thumbnails, hover arrows, an arrow moving the picture.
   Seen signed in on the live site, read as text: the scored panel, the whole breakdown and its sum,
