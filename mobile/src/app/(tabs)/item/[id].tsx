@@ -134,6 +134,7 @@ export default function ItemScreen() {
   }, [db, itemId, auth.status, auth.rowsRevision]);
 
   const scores = useScores();
+  const catalog = useCatalogSync();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
@@ -176,9 +177,15 @@ export default function ItemScreen() {
   // Which of its four faces the score panel shows. Null while the session or
   // the taste profile is still being read: the panel's box is held open so the
   // synopsis under it does not jump when the answer arrives.
+  //
+  // ⚠️ Also held while your rows or the catalog copy are still arriving. The
+  // profile is rebuilt as they land, so a score read in the middle is made from
+  // part of your library: on the live site a second tab, which downloads both
+  // again, showed 79, then 85, then 83 for one film (2026-10-11).
+  const settling = auth.rowsSyncing || catalog.state === 'syncing';
   const panel: ScorePanelState | null =
     auth.status === 'signedOut' ? 'anon'
-    : auth.status !== 'signedIn' || !scores.ready ? null
+    : auth.status !== 'signedIn' || !scores.ready || settling ? null
     : fandex ? 'scored'
     : scores.center == null ? 'cold' : 'none';
   const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
