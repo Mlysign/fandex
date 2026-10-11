@@ -46,7 +46,8 @@ function Shell({ number, tone, eyebrow, line, muted, action }: {
   );
 }
 
-export type ScorePanelState = 'anon' | 'cold' | 'none' | 'scored';
+/** `settling`: signed in, and your library is still arriving on this device. Not one of the site's four: its server always had the whole library. */
+export type ScorePanelState = 'anon' | 'settling' | 'cold' | 'none' | 'scored';
 
 export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, onOpenFacet }: {
   state: ScorePanelState;
@@ -66,6 +67,14 @@ export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, onOpe
       <Pressable onPress={onSignIn} disabled={!onSignIn} accessibilityRole="button" accessibilityLabel="Sign in to see your Fandex Score" style={({ pressed }) => [styles.panel, pressed && { opacity: 0.7 }]}>
         <Shell number="-" tone={color.textMuted} eyebrow="Fandex Score" line="Sign in to see your taste-match Score." muted />
       </Pressable>
+    );
+  }
+  if (state === 'settling') {
+    // Said in words. A held box with nothing in it reads as a panel that broke.
+    return (
+      <View style={styles.panel}>
+        <Shell number="-" tone={color.textMuted} eyebrow="Fandex Score" line="Reading your library. Your score shows when it is all here." muted />
+      </View>
     );
   }
   if (state === 'cold') {
