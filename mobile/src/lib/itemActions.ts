@@ -189,3 +189,15 @@ export async function removeFromLibrary(db: SQLiteDatabase, target: ActionTarget
     },
   });
 }
+
+/**
+ * Stop a title showing up in recommendations and in Up next, or let it again.
+ * A display preference and nothing else: it touches neither the library nor the
+ * wishlist nor any provider, and the title stays findable by name. The Worker
+ * first, then the device, like every other action here.
+ */
+export async function setHidden(db: SQLiteDatabase, mediaItemId: string, hidden: boolean): Promise<void> {
+  const write: StateWrite = { hidden: hidden ? { add: [mediaItemId] } : { remove: [mediaItemId] } };
+  await api.writeState(write);
+  await applyLocalWrite(db, write);
+}

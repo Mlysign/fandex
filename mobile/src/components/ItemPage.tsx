@@ -10,13 +10,12 @@
 // website"), so this file must stay free of anything only a device has: no
 // database, no session, no router.
 //
-// Not carried over yet, and listed in docs/app-parity.md: the two related
-// rails, the episode tracker, and the links from a tag, a person or a studio
-// to its own page (the app has no such pages yet).
+// The two related rails are worked out on a device from its catalog copy and
+// come in as `related`, like `personal`. A static page has none.
 
-import { ArrowLeft, Globe, Share2 } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Globe, Share2 } from 'lucide-react-native';
 import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { companyKey, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -102,6 +101,15 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
   const [failed, setFailed] = useState<ReadonlySet<number>>(new Set());
   const pager = useRef<ScrollView>(null);
   const paged = images.length > 1 && box.w > 0;
+  // The site's desktop gallery (MediaGallery.tsx): arrows over the artwork while
+  // the pointer is on it, and a strip of thumbnails under it. Only in a browser
+  // window wide enough for the two columns, and only once the pager exists, so
+  // a phone never downloads sixteen thumbnails it will not show and a static
+  // page never carries a control with no script behind it.
+  const { width: windowWidth } = useWindowDimensions();
+  const gallery = paged && Platform.OS === 'web' && windowWidth >= 1024;
+  const [hovered, setHovered] = useState(false);
+  const show = (i: number) => pager.current?.scrollTo({ x: ((i + images.length) % images.length) * box.w, animated: true });
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     // Rounded, so the dot flips half way through a swipe and feels attached to the finger.
@@ -122,6 +130,8 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
     );
 
   return (
+    // The artwork's column on a wide window: the picture and its thumbnails stay in view together (itemLayout.ts).
+    <View {...part('art')} onPointerEnter={gallery ? () => setHovered(true) : undefined} onPointerLeave={gallery ? () => setHovered(false) : undefined}>
     <View
       {...part('hero')}
       style={styles.hero}
@@ -198,6 +208,30 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
           {metaParts.length ? <T variant="meta" style={styles.heroMeta}>{metaParts.join(' · ')}</T> : null}
         </View>
       </View>
+
+      {gallery && hovered ? (
+        <>
+          <Pressable onPress={() => show(active - 1)} accessibilityRole="button" accessibilityLabel="Previous image" style={[styles.arrow, { left: 8 }]}>
+            <ArrowLeft size={16} color="#fff" />
+          </Pressable>
+          <Pressable onPress={() => show(active + 1)} accessibilityRole="button" accessibilityLabel="Next image" style={[styles.arrow, { right: 8 }]}>
+            <ArrowRight size={16} color="#fff" />
+          </Pressable>
+        </>
+      ) : null}
+    </View>
+
+    {gallery ? (
+      <View style={styles.thumbs}>
+        {images.map((uri, i) => (failed.has(i) ? null : (
+          <Pressable
+            key={`${uri}-${i}`} onPress={() => show(i)} accessibilityRole="button" accessibilityLabel={`Show image ${i + 1}`}
+            accessibilityState={{ selected: i === active }} style={[styles.thumb, i === active && { borderColor: color.accent }]}>
+            <Img uri={uri} width={64} alt="" style={styles.fill} />
+          </Pressable>
+        )))}
+      </View>
+    ) : null}
     </View>
   );
 }
@@ -279,12 +313,14 @@ function ScorePill({ label, value, href, hint }: { label: string; value: string;
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export function ItemPage({ item, personal, progress, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
+export function ItemPage({ item, personal, progress, related, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
   item: ItemDetail;
   /** Rendered between the score pills and the synopsis. */
   personal?: ReactNode;
   /** A show's episode tracker. Full width, above the sections, where the site had it. */
   progress?: ReactNode;
+  /** "More from" and "More like this": the last sections of the page, where the site had them. */
+  related?: ReactNode;
   /** Rendered after the last line of the page. The website's legal links. */
   footer?: ReactNode;
   /** Follow a link to a tag, person or studio page without a page load. Left out on a static page, where the links are anchors. */
@@ -566,6 +602,8 @@ export function ItemPage({ item, personal, progress, footer, taxonomy = null, to
           </View>
         ) : null}
 
+        {related}
+
         <T variant="meta" style={{ color: color.textMuted }}>
           Data from {(sources.length ? sources : item.vector.sources.map((s) => s.source)).map((s) => SOURCE_LABEL[s] ?? s.toUpperCase()).join(', ')}
         </T>
@@ -603,6 +641,12 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.md },
   dot: { width: 6, height: 6, borderRadius: radius.full, backgroundColor: 'rgba(237,231,220,0.4)' },
   dotOn: { width: 20, backgroundColor: color.textPrimary },
+  arrow: {
+    position: 'absolute', top: '50%', marginTop: -16, width: 32, height: 32, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  thumb: { width: 64, height: 40, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: color.borderStrong, backgroundColor: color.surfaceElevated },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: 10, pointerEvents: 'none' },
   typeDot: { width: 6, height: 6, borderRadius: radius.full },
   title: { fontFamily: font.serif, fontSize: 34, lineHeight: 35, color: color.textPrimary, pointerEvents: 'none' },

@@ -13,7 +13,7 @@ const worker = vi.hoisted(() => ({
 }));
 vi.mock('~/lib/api', () => ({ api: worker }));
 
-const { syncState, clearState } = await import('./stateSync');
+const { syncState, clearState, applyLocalWrite } = await import('./stateSync');
 
 function fakeDb() {
   let tables: Record<string, Map<string, unknown[]>> = {
@@ -29,7 +29,9 @@ function fakeDb() {
     if (failWrites && sql.startsWith('INSERT')) throw new Error('disk full');
     const table = tableIn(sql);
     if (sql.startsWith('DELETE FROM meta WHERE')) tables.meta.delete(String(params[0]));
+    else if (sql.startsWith('DELETE FROM hidden_item WHERE')) tables.hidden_item.delete(String(params[0]));
     else if (sql.startsWith('DELETE')) tables[table].clear();
+    else if (sql.startsWith('INSERT OR IGNORE') && tables[table].has(keyFor(table, params))) return;
     else tables[table].set(keyFor(table, params), params);
   };
 
@@ -175,6 +177,26 @@ describe('a pull that fails', () => {
     worker.stateCounts.mockRejectedValue(new Error('offline'));
     await expect(syncState(f.db)).rejects.toThrow('offline');
     expect(f.count('item_state')).toBe(1);
+  });
+});
+
+describe('hiding a title, mirrored on the device', () => {
+  it('adds one row and takes one row away, and leaves the others', async () => {
+    serve([], [], ['h1']);
+    const f = fakeDb();
+    await syncState(f.db);
+    await applyLocalWrite(f.db, { hidden: { add: ['h2'] } });
+    expect(f.keys('hidden_item')).toEqual(['h1', 'h2']);
+    await applyLocalWrite(f.db, { hidden: { remove: ['h1'] } });
+    expect(f.keys('hidden_item')).toEqual(['h2']);
+  });
+
+  it('does not move when a title was hidden if it is hidden again', async () => {
+    serve([], [], ['h1']);
+    const f = fakeDb();
+    await syncState(f.db);
+    await applyLocalWrite(f.db, { hidden: { add: ['h1'] } });
+    expect(f.count('hidden_item')).toBe(1);
   });
 });
 

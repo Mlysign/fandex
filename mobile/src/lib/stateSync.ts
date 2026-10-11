@@ -148,6 +148,13 @@ export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Pr
         [e.mediaItemId, e.season, e.episode, e.watchedAt, JSON.stringify(e.sources)],
       );
     }
+    for (const id of write.hidden?.remove ?? []) {
+      await db.runAsync('DELETE FROM hidden_item WHERE media_item_id = ?', [id]);
+    }
+    for (const id of write.hidden?.add ?? []) {
+      // Not REPLACE: hiding a hidden title again must not move when it was hidden.
+      await db.runAsync('INSERT OR IGNORE INTO hidden_item (media_item_id, hidden_at) VALUES (?, ?)', [id, now]);
+    }
   });
 }
 

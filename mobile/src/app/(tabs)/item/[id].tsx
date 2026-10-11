@@ -2,41 +2,62 @@
 // yours slotted in: your state, your Fandex Score, the rating row.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Bookmark, Star } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, Share, StyleSheet, View } from 'react-native';
-import { StarPicker } from '~/components/cards';
+import { Bookmark, Eye, EyeOff, Star } from 'lucide-react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { CardRail, StarPicker } from '~/components/cards';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
+import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScorePanel';
 import { ItemPage } from '~/components/ItemPage';
 import { Button } from '~/components/kit';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
-import { FandexBadge, Screen, StateBlock, T } from '~/components/ui';
+import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
+import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { itemStateFor } from '~/lib/db';
-import type { ScoreReason } from '~/lib/fandexScore';
-import { rateItem, removeFromLibrary, setWishlist, type ActionTarget } from '~/lib/itemActions';
+import type { ScoreFacet } from '~/lib/fandexScore';
+import { rateItem, removeFromLibrary, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { dropItemPrerender } from '~/lib/prerender';
+import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
 import { TraktAuthError } from '~/lib/trakt';
-import { color, radius, space } from '~/theme';
-
-const RATINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-
-const ROLE_LABEL: Record<string, string> = {
-  director: 'Director', creator: 'Creator', writer: 'Writer', cast: 'Cast',
-  developer: 'Developer', publisher: 'Publisher', studio: 'Studio', network: 'Network', ip: 'Franchise',
-};
-
-/** What kind of thing a reason is, in a word: its role for a person or company, its category for a tag. */
-function reasonKind(r: ScoreReason, categoryLabel: (id: string | undefined) => string | null): string {
-  if (r.kind === 'tag') return categoryLabel(r.category) ?? 'Tag';
-  return ROLE_LABEL[r.role ?? ''] ?? (r.kind === 'ip' ? 'Franchise' : r.kind === 'person' ? 'Person' : 'Company');
-}
+import { color, font, radius, space } from '~/theme';
 
 const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
+
+/**
+ * "More from {franchise}" and "More like this", picked on the device from its
+ * catalog copy (lib/related.ts). Nothing until they are ready, and nothing at
+ * all for a title with no franchise and too few titles like it: an empty shelf
+ * reads as a broken one.
+ */
+function Related({ itemId, facets }: { itemId: string; facets: ScoreFacet[] }) {
+  const db = useSQLiteContext();
+  const catalog = useCatalogSync();
+  const { taxonomy } = useScores();
+  const [rails, setRails] = useState<RelatedRails | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setRails(null);
+    if (!taxonomy) return;
+    relatedRails(db, catalog.revision, taxonomy, itemId, facets)
+      .then((r) => { if (live) setRails(r); })
+      .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
+    return () => { live = false; };
+  }, [db, catalog.revision, taxonomy, itemId, facets]);
+
+  if (!rails || (!rails.franchise?.items.length && !rails.similar.length)) return null;
+  return (
+    <View style={{ gap: 40 }}>
+      {rails.franchise?.items.length ? <CardRail title={`More from ${rails.franchise.label}`} items={rails.franchise.items} /> : null}
+      {rails.similar.length ? <CardRail title="More like this" items={rails.similar} /> : null}
+    </View>
+  );
+}
 
 export default function ItemScreen() {
   // Two addresses lead here. `/item/{id}` is the app's own. `/{type}/{slug}` is
@@ -98,18 +119,21 @@ export default function ItemScreen() {
   const itemId = item?.id ?? null;
   const db = useSQLiteContext();
   const [mine, setMine] = useState<Awaited<ReturnType<typeof itemStateFor>> | null>(null);
+  const [hidden, setHiddenHere] = useState(false);
   useEffect(() => {
     let live = true;
     if (auth.status !== 'signedIn' || !itemId) {
       setMine(null);
+      setHiddenHere(false);
       return;
     }
     void itemStateFor(db, itemId).then((s) => { if (live) setMine(s); });
+    void db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM hidden_item WHERE media_item_id = ?', [itemId])
+      .then((row) => { if (live) setHiddenHere((row?.n ?? 0) > 0); });
     return () => { live = false; };
   }, [db, itemId, auth.status, auth.rowsRevision]);
 
   const scores = useScores();
-  const [whyOpen, setWhyOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
@@ -149,8 +173,14 @@ export default function ItemScreen() {
   // Scored from the facets the Worker sent with the page, so a title that is
   // not in the device's catalog copy (one just opened from search) scores too.
   const fandex = scores.score(item.id, item.facets);
-  const counted = fandex ? fandex.reasons.filter((r) => !r.capped) : [];
-  const uncounted = fandex ? fandex.reasons.length - counted.length : 0;
+  // Which of its four faces the score panel shows. Null while the session or
+  // the taste profile is still being read: the panel's box is held open so the
+  // synopsis under it does not jump when the answer arrives.
+  const panel: ScorePanelState | null =
+    auth.status === 'signedOut' ? 'anon'
+    : auth.status !== 'signedIn' || !scores.ready ? null
+    : fandex ? 'scored'
+    : scores.center == null ? 'cold' : 'none';
   const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
 
   const personal = (
@@ -167,42 +197,12 @@ export default function ItemScreen() {
         </View>
       ) : null}
 
-      {fandex ? (
-        <View style={styles.fandex}>
-          <View style={styles.fandexHead}>
-            <FandexBadge score={fandex.score} center={fandex.center} large />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <T variant="title">Fandex Score</T>
-              <T variant="caption">
-                How well this matches your taste. A title you have no opinion about scores {Math.round(fandex.center)}, your own average.
-              </T>
-            </View>
-          </View>
-          {counted.slice(0, whyOpen ? counted.length : 4).map((r) => (
-            <View key={`${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T variant="body" numberOfLines={1}>{r.label}</T>
-                <T variant="meta" numberOfLines={1}>
-                  {reasonKind(r, scores.categoryLabel)} · you rate these {r.BA.toFixed(1)} over {r.n} {r.n === 1 ? 'title' : 'titles'}
-                </T>
-              </View>
-              <T variant="title" style={{ color: r.contribution >= 0 ? color.success : color.danger }}>
-                {r.contribution >= 0 ? '+' : '−'}{Math.abs(r.contribution).toFixed(1)}
-              </T>
-            </View>
-          ))}
-          {counted.length > 4 || uncounted > 0 ? (
-            <Pressable onPress={() => setWhyOpen((v) => !v)} accessibilityRole="button" style={styles.whyToggle}>
-              <T variant="label" style={{ color: color.accent }}>
-                {whyOpen ? 'Show less' : `Show all ${counted.length} that count`}
-              </T>
-              {whyOpen && uncounted > 0 ? (
-                <T variant="meta">{uncounted} more matched and were left out: only the strongest few count.</T>
-              ) : null}
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      {panel ? (
+        <FandexScorePanel
+          state={panel} fandex={fandex} categoryLabel={scores.categoryLabel}
+          onSignIn={() => router.push('/profile' as never)} onOpenFacet={(href) => router.push(href as never)}
+        />
+      ) : <View style={styles.panelHold} />}
 
       {auth.status === 'signedIn' && mine ? (
         <View style={styles.actionsBlock}>
@@ -218,9 +218,27 @@ export default function ItemScreen() {
               icon={<Bookmark size={14} color={mine.inWishlist ? color.accent : color.textPrimary} fill={mine.inWishlist ? color.accent : 'none'} />}
               onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
             />
+          </View>
+          {/* The two advanced options, as on the site: one quiet line under the pair, never
+              buttons that compete with it. "Remove from library" only when there is a
+              library entry, because un-rating deliberately does not remove one. Hidden reads
+              as a state when it is on: the tinted pill with the crossed eye. */}
+          <View style={styles.advanced}>
             {mine.inLibrary ? (
-              <Button label="Remove from library" variant="outline" size="md" disabled={busy} onPress={() => act(() => removeFromLibrary(db, target))} />
+              <Pressable onPress={() => act(() => removeFromLibrary(db, target))} disabled={busy} hitSlop={12} accessibilityRole="button" style={busy && { opacity: 0.4 }}>
+                <Text style={styles.quiet}>Remove from library</Text>
+              </Pressable>
             ) : null}
+            <Pressable
+              onPress={() => act(() => setHidden(db, item.id, !hidden))} disabled={busy} hitSlop={12}
+              accessibilityRole="button" accessibilityState={{ selected: hidden }}
+              accessibilityLabel={hidden
+                ? 'Hidden from your recommendations and progress. Press to unhide.'
+                : 'Stop showing this in recommendations and progress. It stays searchable.'}
+              style={[styles.hide, hidden && styles.hideOn, busy && { opacity: 0.4 }]}>
+              {hidden ? <EyeOff size={14} color={color.accent} /> : <Eye size={14} color={color.textSecondary} />}
+              <Text style={[styles.quiet, hidden && { color: color.accent }]}>{hidden ? 'Hidden, unhide' : 'Hide from suggestions'}</Text>
+            </Pressable>
           </View>
           {actionError ? <T variant="caption" style={{ color: color.warning }}>{actionError}</T> : null}
         </View>
@@ -246,6 +264,7 @@ export default function ItemScreen() {
         item={item}
         personal={personal}
         progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
+        related={<Related itemId={item.id} facets={item.facets} />}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}
@@ -266,13 +285,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: space.sm,
     padding: space.md, borderRadius: radius.md, backgroundColor: color.accentSubtle,
   },
-  fandex: {
-    padding: space.md, gap: space.sm,
-    borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
-  },
-  fandexHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  reason: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  whyToggle: { minHeight: 44, justifyContent: 'center', gap: space.xxs },
+  // The score panel's box while the session or the profile is still loading: 12 + 30 + 12 and the border.
+  panelHold: { height: 56, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surfaceElevated },
+  advanced: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.md, paddingTop: 4 },
+  quiet: { fontFamily: font.sans, fontSize: 12, lineHeight: 16, color: color.textSecondary },
+  hide: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hideOn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1, borderColor: color.accentSubtle, backgroundColor: color.accentSubtle },
   actionsBlock: { gap: space.sm },
   // Ten across a 360 px screen: flex shares the row, the height is the tap target.
   stars: { flexDirection: 'row', gap: space.xs },

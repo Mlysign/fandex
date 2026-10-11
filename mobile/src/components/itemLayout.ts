@@ -29,7 +29,8 @@ export const ITEM_PAGE_CSS = `
 @media (min-width:1024px){
 [data-item="grid"]{width:100%;max-width:1152px;margin:0 auto;padding:24px;box-sizing:border-box}
 [data-item="columns"]{display:grid!important;grid-template-columns:minmax(0,380px) minmax(0,1fr);column-gap:40px;align-items:start}
-[data-item="hero"]{position:sticky!important;top:24px;border-radius:20px;border:1px solid rgba(237,231,220,0.09);max-height:520px!important}
+[data-item="art"]{position:sticky!important;top:24px}
+[data-item="hero"]{border-radius:20px;border:1px solid rgba(237,231,220,0.09);max-height:520px!important}
 [data-item="hero-scrim"],[data-item="hero-title"]{display:none!important}
 [data-item="hero-text"]{padding:0 0 12px!important;align-items:center}
 [data-item="title-wide"]{display:flex!important}
