@@ -19,7 +19,7 @@ Six items. Everything else in this file is work I can do without him, and every 
    - **(c) ✅ Done 2026-10-10, by me at his request:** the 30-day expiry rule `expire-d1-exports` is on `fandex-backups` for the `d1/` prefix only. Was: **(c) One command, before 2026-11-03**, which makes the policy's "nightly copies are kept for 30 days" true. Today the nightly exports are never deleted, so a deleted account would stay in them. It only touches `d1/`; the `railway/` snapshots are not affected: `cd worker && npx wrangler r2 bucket lifecycle add fandex-backups expire-d1-exports d1/ --expire-days 30 --jurisdiction eu`. The syntax was checked against Wrangler's help; the command itself was not run, because a standing rule that deletes his backups is his to switch on.
    - **(d) The IGDB licence email** to partner@igdb.com. A draft is in his Gmail drafts.
    - **Optional:** a Cloudflare API token as the repository secret `CLOUDFLARE_API_TOKEN`, which is what a daily rebuild in GitHub Actions needs (the workflow is not written). Until then the site changes when `node mobile/web/publish.mjs` is run. Also optional: resubmit `sitemap.xml` in Search Console, and delete the two dead `_railway-verify` TXT records and the empty R2 bucket `fandex-litestream`.
-   - **Next, mine, in order** ([docs/app-parity.md](docs/app-parity.md), "The order from here"): Settings' rest; static facet pages and the related rails on static item pages; a studio's and a tag's games on facet pages (needs a Worker route). On the Review section of `/dev/scoring` (7 cards on the live site), Accept, Deny and Bundle were pressed on a test account and work; Add (a missing member) was not. ⚠️ Before pressing Accept on the live site, know SM71: a reload inside five minutes shows the card again although it is saved.
+   - **Next, mine, in order** ([docs/app-parity.md](docs/app-parity.md), "The order from here"): Settings' rest; static facet pages and the related rails on static item pages; a studio's and a tag's games on facet pages (needs a Worker route). On the Review section of `/dev/scoring` (7 cards on the live site), Accept, Deny and Bundle were pressed on a test account and work; Add (a missing member) was not.
    - **Still owed, mine, after 2026-10-12:** run the insights command from docs/worker.md's table. It reads a rolling 24 hours, so the two count queries only leave the top of it a day after the 2026-10-11 deploy.
    - **Waiting on him:** the widget's look and feel, which he wants to go through together; do not redesign it unasked. Google sign-in and joining two accounts are at the bottom of docs/app.md.
 
@@ -48,27 +48,16 @@ two mechanisms. → [[monetization-h3]]
 
 ---
 
-## Smoke test, 2026-10-11 (13th run, the first on the new stack)
+## Smoke tests, 2026-10-11 (13th and 14th run, the first two on the new stack)
 
-Sixteen of seventeen findings were fixed the same day and are in the archive (grep "13th smoke test"). Plan: [smoketest.md](smoketest.md), "The new stack". What is left:
+The 13th run swept the live site, the 14th every write on a test account. Twenty-one of twenty-two findings were fixed the same day and are in the archive (grep "13th smoke test", "14th smoke test"). Plan: [smoketest.md](smoketest.md), "The new stack". What is left:
 
 | ID | Sev | Type | Area | Finding (with repro) |
 |----|:--:|:--:|------|----------------------|
 | SM63 | 🟡 | data | Wishlist | **Left open at Nils's word.** A rated title is on the wishlist (*The Fall*, rated 7), where rating is meant to take it off. Also seen: *Dune: Part Three* (Dec 2026) in the library, unrated. **Narrowed by the 14th run:** the app's own rule works (a wishlisted title rated on a test account left the wishlist, and `rateItem` also removes it from Trakt's watchlist), and clearing a rating keeps the title as watched by design. So both are Trakt's own state mirrored: rated somewhere else while on Trakt's watchlist. The open question is whether the sync should tidy that up. |
-| SM61 | 🔵 | nav | Title pages in the app | The rest of it: cards link `/{type}/{slug}` now, but `/open/…` still lands on `/item/{id}`, and the rows on Insights, Profile and Up next still link there. |
 | SM66 | 🔵 | error | Game search | Fixed for `<` and `>`. Never tried: five failed game searches in a row, which is the credential latch's threshold and would shut game search for 15 minutes. |
 
-### 14th run, the same day: every write, on a test account (local Worker and database)
-
-Scope: section N-F of the plan, all of it, each write read back from the local D1. **Everything that writes works:** rate, clear a rating, wishlist, rating a wishlisted title, hide, country, default types, platforms (each held over a reload and Search followed without one), Download (this account's 3 titles, 1 hidden title, 1 identity, nobody else's), Disconnect of the only sign-in (refused with a clear sentence, nothing changed), Review's Accept, Deny and Bundle, switching between two accounts on one device (neither saw the other's rows), and Delete (gone from all four user tables, the other account untouched, a new sign-in starts empty with default settings). Not coverable there: anything through Trakt, so an episode tick, the Trakt half of a rating, and disconnecting one of two sign-ins.
-
-| ID | Sev | Type | Area | Finding (with repro) |
-|----|:--:|:--:|------|----------------------|
-| SM71 | 🟡 | data | `/dev/scoring` | **An accepted change comes back after a reload.** Accept a tag batch and Bundle a merge (38 cards → 35), reload within five minutes: 37, both cards are back and "732 franchises" again. The rows are saved (`tag_category_override`, `ip_alias`); `/v1/taxonomy` is `max-age=300` and the browser serves its old copy (`fetch` default vs `cache: 'no-store'` differ). A denial holds, it has its own route. Every other admin write on that page reads the same copy. |
-| SM72 | 🟡 | parity | Search | **A hidden title stays in Search's default list**: *Game of Thrones* hidden, still the second card, count unchanged. Home's rails and Up next drop it. The old site dropped it from the browse feed and kept it findable by name. |
-| SM73 | 🟡 | copy | Settings | "Nothing selected. The filter offers all 3." The 3 is how many services your own library is on. The filter then offers 119 (8 and "+111 more"). |
-| SM74 | 🔵 | ux | Episodes, no Trakt | An account with no Trakt gets every tick box, and each press answers "Trakt needs you to sign in again. You can do that in Settings." It never was signed in, and Settings offers no way. Only a test account can be in that state today; Google sign-in makes it real. |
-| SM75 | 🔵 | assorted | Settings, item page | Settings' type and platform toggles expose no pressed state (SM68 fixed the list chips only). After Delete the app lands on Home as a guest and no sentence says the account is gone (none seen in six seconds). A show's header reads "2022 · 1h 20m" with no "/ep" (*Severance*). An unaired season is listed "0/0" with a "Mark season 3 watched" button. |
+**Never run by anybody**, and a test account cannot reach the first two: an episode tick or a rating's Trakt half on an account that is not Nils's; disconnecting one of two sign-ins; Add on a Review card; Save weights, a category, an alias, a name or an attach on `/dev/scoring`.
 
 **Not re-logged, still true:** calendar-month pages and `/dashboard` are 404; Rate signed out sends you to You and does not bring you back; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync; a title removed from the pool between two site builds sends new visitors back to the API for their first sync until the next publish.
 

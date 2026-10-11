@@ -157,9 +157,21 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   (`bayesRating`), so a single 10.0 does not lead. "Popularity" across types ranks each title
   WITHIN its own type and interleaves, because a game's count includes Steam reviews and is not on
   a film's scale: unsorted, 35 of the first 48 were games. With one type chosen it is the plain count.
-- **A card's address is `/{type}/{slug}`** (`cardHref`), the public one, so the address bar is the
-  one to share. `/item/{id}` is the fallback for a title with no slug. Still on `/item/{id}`:
-  where `/open/…` lands, and the rows on Insights, Profile and Up next.
+- **A title's address is `/{type}/{slug}`** (`itemHref` in `lib/cards.ts`, which `cardHref` uses),
+  the public one, so the address bar is the one to share. `/item/{id}` is the fallback for a title
+  with no slug, and for one `/open/…` just had the Worker fetch. A new link to a title goes
+  through `itemHref`; four places did not and stayed on the old address after the cards moved.
+- **What you hid is left out of every list that chooses for you, and a name still finds it**
+  (`lib/hidden.ts`): Home's rails, Up next, the widget, and Search while nothing is typed. A new
+  list that picks titles for the viewer owes the same filter.
+- **A button that stays on or off spreads `toggled(on)`, a checkbox `checked(on)`** (`lib/a11y.ts`).
+  react-native-web writes nothing for `accessibilityState.selected` on a button, so in a browser
+  the state was not in the page at all.
+- **Episodes are tracked through Trakt.** A tick goes to Trakt before anything is saved, so the
+  tracker gives an account with no Trakt the episode list without boxes and says why.
+- **The Scoring admin reads the taxonomy past the browser's cache** (`api.taxonomy`, `no-store`).
+  The route is `max-age=300`, and a reload inside those five minutes showed the page from before
+  its own save.
 - **Every screen names its browser tab** with `usePageTitle` (`lib/pageTitle.ts`). On focus and
   not on mount: the tab screens all stay mounted, so on mount the last one to render would win.
 - **Trakt being busy is not "No connection".** A rate-limited preflight is a 429 that the browser

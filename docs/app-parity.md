@@ -148,8 +148,8 @@ Parity must not cost any of these.
   2026-10-11, each read back from the local D1** ([worker.md](worker.md), "The test accounts";
   smoketest.md, N-F): rating and clearing a rating, wishlist, hide and un-hide, remove from library,
   country, default types and platforms, Download, Delete, the refusal to disconnect the only
-  sign-in, Review's Accept, Deny and Bundle, and two accounts on one device. What it found is
-  SM71 to SM75 in TASKS.md. **Still never run by anybody:** disconnecting one of two sign-ins,
+  sign-in, Review's Accept, Deny and Bundle, and two accounts on one device. What it found (SM71
+  to SM75) was fixed the same day and is in the archive. **Still never run by anybody:** disconnecting one of two sign-ins,
   anything through Trakt on an account that is not Nils's, and Save weights, a category, an alias,
   a name or an attach on the Scoring page.
 - **The item page's new parts (2026-10-11).** Seen signed out in a local browser at 1280 px and
