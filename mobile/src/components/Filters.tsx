@@ -17,6 +17,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { groupOfKey, narrowToOwned, platformMarkName, withKnownPlatforms, type PlatformGroup, type PlatformOption } from '@/lib/platformKeys';
 import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button, Sheet } from '~/components/kit';
+import { toggled } from '~/lib/a11y';
 import { useAuth } from '~/lib/AuthProvider';
 import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -233,7 +234,7 @@ function Tri({ label, value, onChange }: { label: string; value: Membership; onC
         {opts.map(([word, v]) => {
           const on = value === v;
           return (
-            <Pressable key={word} onPress={() => onChange(v)} accessibilityRole="button" accessibilityState={{ selected: on }} style={[styles.triCell, on && { backgroundColor: color.accentSubtle }]}>
+            <Pressable key={word} onPress={() => onChange(v)} accessibilityRole="button" {...toggled(on)} style={[styles.triCell, on && { backgroundColor: color.accentSubtle }]}>
               <Text style={[type.label, { color: on ? color.accent : color.textSecondary }]}>{word}</Text>
             </Pressable>
           );
@@ -261,7 +262,7 @@ function PlatformChip({ option, active, onToggle }: { option: PlatformOption; ac
     <Pressable
       onPress={onToggle}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
+      {...toggled(active)}
       style={[styles.platformChip, active ? styles.platformChipOn : empty && { borderColor: color.border }]}
     >
       <BrandGlyph source={platformMarkName(option.label)} size={16} tint={ink} />

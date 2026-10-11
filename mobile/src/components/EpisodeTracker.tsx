@@ -18,6 +18,7 @@ import { Img } from '~/components/Img';
 import { Button, Sheet, Skeleton } from '~/components/kit';
 import { useToast } from '~/components/Toast';
 import { T } from '~/components/ui';
+import { checked, toggled } from '~/lib/a11y';
 import { api, ApiError, type ShowEpisodes } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { shortDate } from '~/lib/dates';
@@ -148,6 +149,11 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
   // the device is not yet what you have watched, and a tick made from it would
   // be a second play on Trakt.
   const settling = auth.rowsSyncing;
+  // A tick goes to Trakt before anything is saved (lib/upNext.ts), so an
+  // account with no Trakt cannot make one. It is told so, once, in place of the
+  // boxes: before this every box was there and each press answered "Trakt needs
+  // you to sign in again" to somebody who had never signed in to it (SM74).
+  const noTrakt = auth.profile != null && !auth.profile.identities.some((i) => i.provider === 'trakt');
   const total = seasons.reduce((n, s) => n + s.episodeCount, 0);
   const totalSeen = seasons.reduce((n, s) => n + Math.min(seen(s.season), s.episodeCount), 0);
 
@@ -181,7 +187,10 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
   return (
     <View>
       <T variant="eyebrow" style={styles.heading}>Your progress</T>
-      <T variant="caption" style={styles.summary}>{settling ? 'Fetching what you have watched…' : `${totalSeen} of ${total} watched`}</T>
+      <T variant="caption" style={styles.summary}>
+        {noTrakt ? 'Episodes are tracked through Trakt, and this account is not connected to it.'
+          : settling ? 'Fetching what you have watched…' : `${totalSeen} of ${total} watched`}
+      </T>
       <View style={styles.list}>
         {seasons.map((s, i) => {
           const isOpen = open.has(s.season);
@@ -212,7 +221,8 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
                   <View style={styles.seasonText}>
                     <T variant="bodySm" style={styles.primary} numberOfLines={1}>{s.name || `Season ${s.season}`}</T>
                     <T variant="micro" style={styles.seasonMeta}>
-                      {done}/{s.episodeCount}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
+                      {/* A season nobody has listed episodes for yet: "0/0" read as a count. */}
+                      {s.episodeCount ? `${noTrakt ? '' : `${done}/`}${s.episodeCount}${noTrakt ? ' episodes' : ''}` : 'No episodes yet'}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
                     </T>
                   </View>
                   {roomy ? (
@@ -221,7 +231,8 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
                     </View>
                   ) : null}
                 </Pressable>
-                <Pressable
+                {/* Nothing to mark in a season with no episodes, and nobody to mark it for without Trakt. */}
+                {noTrakt || s.episodeCount === 0 ? null : <Pressable
                   onPress={() => {
                     setBusy(seasonKey);
                     ensureSeason(s.season)
@@ -232,14 +243,14 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
                       })
                       .catch(() => { setBusy(null); toast('Could not load that season.', 'error'); });
                   }}
-                  disabled={busy != null || settling || s.episodeCount === 0}
+                  disabled={busy != null || settling}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: complete }}
+                  {...toggled(complete)}
                   accessibilityLabel={complete ? `Mark season ${s.season} unwatched` : `Mark season ${s.season} watched`}
-                  style={[styles.seasonTick, (busy === seasonKey || settling || s.episodeCount === 0) && styles.dim]}
+                  style={[styles.seasonTick, (busy === seasonKey || settling) && styles.dim]}
                 >
                   {busy === seasonKey ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={complete} />}
-                </Pressable>
+                </Pressable>}
               </View>
               {isOpen ? (
                 <View style={styles.divided}>
@@ -264,16 +275,16 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
                             <T variant="micro" style={styles.episodeDate}>{airLabel(e.airDate)}</T>
                           </View>
                         </Pressable>
-                        <Pressable
+                        {noTrakt ? null : <Pressable
                           onPress={() => push(key, [{ season: e.season, episode: e.episode }], !on)}
                           disabled={busy != null || settling}
                           accessibilityRole="checkbox"
-                          accessibilityState={{ checked: on }}
+                          {...checked(on)}
                           accessibilityLabel={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
                           style={styles.episodeTick}
                         >
                           {busy === key ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={on} />}
-                        </Pressable>
+                        </Pressable>}
                       </View>
                     );
                   })}
@@ -288,6 +299,7 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
         tmdbId={tmdbId}
         watched={detail ? watched.has(`${detail.season}:${detail.episode}`) : false}
         busy={busy != null || settling}
+        trackable={!noTrakt}
         onClose={() => setDetail(null)}
         onToggle={(e, next) => push(`e${e.season}-${e.episode}`, [{ season: e.season, episode: e.episode }], next)}
       />
@@ -307,8 +319,10 @@ function airLabel(airDate: string | null): string {
  * in it. The list knows the title and the date; the rest is asked of TMDB when
  * the sheet opens, and the sheet shows what it has until that answers.
  */
-function EpisodeSheet({ episode, tmdbId, watched, busy, onClose, onToggle }: {
+function EpisodeSheet({ episode, tmdbId, watched, busy, trackable, onClose, onToggle }: {
   episode: Episode | null; tmdbId: string | null; watched: boolean; busy: boolean;
+  /** False for an account with no Trakt: the sheet then only describes the episode. */
+  trackable: boolean;
   onClose: () => void; onToggle: (e: Episode, next: boolean) => void;
 }) {
   const [more, setMore] = useState<EpisodeDetail | null>(null);
@@ -351,13 +365,15 @@ function EpisodeSheet({ episode, tmdbId, watched, busy, onClose, onToggle }: {
           : state === 'loading' ? <ActivityIndicator color={color.accent} />
           : <T variant="bodySm">{state === 'failed' ? 'Could not load more about this episode. It needs a connection.' : 'No synopsis for this episode yet.'}</T>}
         <View style={styles.sheetActions}>
-          <Button
-            label={watched ? 'Mark unwatched' : 'Mark watched'} variant={watched ? 'outline' : 'primary'} size="md" style={{ flex: 1 }}
-            disabled={busy || (unaired && !watched)} onPress={() => { onToggle(episode, !watched); onClose(); }}
-          />
-          <Button label="Close" variant="outline" size="md" onPress={onClose} />
+          {trackable ? (
+            <Button
+              label={watched ? 'Mark unwatched' : 'Mark watched'} variant={watched ? 'outline' : 'primary'} size="md" style={{ flex: 1 }}
+              disabled={busy || (unaired && !watched)} onPress={() => { onToggle(episode, !watched); onClose(); }}
+            />
+          ) : null}
+          <Button label="Close" variant="outline" size="md" style={trackable ? undefined : { flex: 1 }} onPress={onClose} />
         </View>
-        {unaired && !watched ? <T variant="caption">It has not aired, so it cannot be marked watched yet.</T> : null}
+        {trackable && unaired && !watched ? <T variant="caption">It has not aired, so it cannot be marked watched yet.</T> : null}
       </ScrollView>
     </Sheet>
   );

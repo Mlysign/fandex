@@ -14,6 +14,7 @@ import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { toggled } from '~/lib/a11y';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
@@ -247,7 +248,7 @@ export default function ItemScreen() {
             ) : null}
             <Pressable
               onPress={() => act(() => setHidden(db, item.id, !hidden))} disabled={busy} hitSlop={12}
-              accessibilityRole="button" accessibilityState={{ selected: hidden }}
+              accessibilityRole="button" {...toggled(hidden)}
               accessibilityLabel={hidden
                 ? 'Hidden from your recommendations and progress. Press to unhide.'
                 : 'Stop showing this in recommendations and progress. It stays searchable.'}

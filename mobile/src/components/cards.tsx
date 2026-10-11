@@ -16,6 +16,7 @@ import { CommunityScore, FandexScore, Popover, useAnchor } from '~/components/ki
 import { TypeIcon } from '~/components/Logo';
 import { useToast } from '~/components/Toast';
 import { cardHref, useCardActions, useCardStates, type CardItem, type CardState } from '~/lib/cards';
+import { toggled } from '~/lib/a11y';
 import { monthYear } from '~/lib/dates';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
@@ -98,7 +99,7 @@ export function ActionBar({ item, state, actions, compact }: { item: CardItem; s
         onPress={() => actions.toggleWishlist(item, !onList)}
         disabled={busy}
         accessibilityRole="button"
-        accessibilityState={{ selected: onList }}
+        {...toggled(onList)}
         accessibilityLabel={!actions.signedIn ? 'Sign in to add this to your wishlist' : onList ? 'On your wishlist, remove' : 'Add to wishlist'}
         hitSlop={{ top: 6, bottom: 6, left: 3, right: 6 }}
         style={({ pressed }) => [styles.barBtn, { width: 32 }, onList ? styles.barBtnOn : styles.barBtnIdle, (pressed || busy) && { opacity: 0.6 }]}>

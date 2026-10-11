@@ -344,7 +344,9 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
   const credit = m.director ? `${item.type === 'show' ? 'by' : 'dir.'} ${m.director}` : null;
   const metaParts = [
     m.releaseDate ? m.releaseDate.slice(0, 4) : 'TBA',
-    m.runtimeMinutes ? runtime(m.runtimeMinutes) : null,
+    // "/ep" as in the Runtime fact below: without it a show's header read as
+    // the length of the whole show.
+    m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null,
     credit,
   ].filter((p): p is string => !!p);
 

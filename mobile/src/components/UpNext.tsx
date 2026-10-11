@@ -15,6 +15,7 @@ import { Img } from '~/components/Img';
 import { Panel, Skeleton } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
 import { useAuth } from '~/lib/AuthProvider';
+import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { TraktAuthError, TraktBusyError } from '~/lib/trakt';
 import { markEpisodeWatched, refreshUpNext, upNextList, upNextPending, type UpNextEntry } from '~/lib/upNext';
@@ -59,7 +60,7 @@ export function EpisodeRow({ entry, ticked, exiting, onTick }: {
           : <View style={[styles.fill, styles.center]}><TypeIcon type="show" size={16} /></View>}
       </View>
       <Pressable
-        onPress={() => router.push(`/item/${entry.mediaItemId}`)}
+        onPress={() => router.push(itemHref({ id: entry.mediaItemId, type: 'show', slug: entry.slug }) as never)}
         accessibilityRole="link"
         accessibilityLabel={`${entry.title}, ${epLabel(entry.season, entry.episode)}`}
         style={styles.body}>

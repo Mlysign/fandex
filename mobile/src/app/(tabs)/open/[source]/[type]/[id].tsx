@@ -7,9 +7,11 @@
 // and not to a spinner.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
 import { Screen, StateBlock } from '~/components/ui';
 import { api, ApiError } from '~/lib/api';
+import { itemHref } from '~/lib/cards';
 
 function describe(e: unknown): { title: string; detail: string; retry: boolean } {
   if (e instanceof ApiError) {
@@ -32,17 +34,22 @@ function describe(e: unknown): { title: string; detail: string; retry: boolean }
 export default function OpenScreen() {
   const { source, type, id } = useLocalSearchParams<{ source: string; type: string; id: string }>();
   const router = useRouter();
+  const db = useSQLiteContext();
   const [failure, setFailure] = useState<ReturnType<typeof describe> | null>(null);
 
   const open = useCallback(async () => {
     setFailure(null);
     try {
       const res = await api.resolve(source, type, id);
-      router.replace(`/item/${res.id}`);
+      // A title the device already holds has a public address, and that is the
+      // one to land on. One the Worker just fetched is not in the catalog copy
+      // yet, so it opens by id.
+      const held = await db.getFirstAsync<{ type: string; slug: string | null }>('SELECT type, slug FROM catalog WHERE id = ?', [res.id]).catch(() => null);
+      router.replace(itemHref({ id: res.id, type: held?.type ?? type, slug: held?.slug ?? null }) as never);
     } catch (e) {
       setFailure(describe(e));
     }
-  }, [source, type, id, router]);
+  }, [source, type, id, router, db]);
 
   useEffect(() => {
     void open();

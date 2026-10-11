@@ -26,6 +26,7 @@ import { tmdbConfigured } from '~/lib/config';
 import { currentMonth, monthLabel } from '~/lib/dates';
 import { usePageTitle } from '~/lib/pageTitle';
 import { catalogCards } from '~/lib/db';
+import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { searchTmdb, type ProviderCard } from '~/lib/tmdb';
@@ -98,14 +99,17 @@ export default function DiscoverScreen() {
   }, [term]);
 
   const norm = normalizeName(term);
+  const hidden = useHiddenIds();
   const matches = useMemo(() => {
     const local = (pool ?? []).filter((c) => !norm || normalizeName(c.title).includes(norm));
-    if (!norm) return local;
+    // With nothing typed this list chooses for you, so it leaves out what you
+    // hid. A name still finds it: "It stays searchable" is what Hide promises.
+    if (!norm) return withoutHidden(local, hidden);
     // What the catalog holds wins over the same title from a provider: it has your state and score.
     const held = new Set(local.map(identity));
     const fresh = [...screen.rows, ...games.rows].filter((c) => !held.has(identity(c)));
     return [...local, ...fresh];
-  }, [pool, norm, screen.rows, games.rows]);
+  }, [pool, norm, hidden, screen.rows, games.rows]);
 
   const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
   // Your state for every title is only read while a "your lists" filter is on.

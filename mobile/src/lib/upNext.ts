@@ -34,6 +34,8 @@ const TTL_DORMANT = 7 * DAY;
 
 export interface UpNextEntry {
   mediaItemId: string;
+  /** The show's public address is /show/{slug}. Null for an old row. */
+  slug: string | null;
   title: string;
   posterUrl: string | null;
   season: number;
@@ -202,11 +204,11 @@ export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: numb
 
 export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNextEntry[]> {
   const rows = await db.getAllAsync<{
-    media_item_id: string; title: string; poster_url: string | null;
+    media_item_id: string; slug: string | null; title: string; poster_url: string | null;
     season: number; episode: number; episode_title: string | null; event_at: number | null;
     release_date: string | null; community_votes: number; community_score: number | null;
   }>(
-    `SELECT u.media_item_id, c.title, c.poster_url, c.release_date, c.community_votes, c.community_score,
+    `SELECT u.media_item_id, c.slug, c.title, c.poster_url, c.release_date, c.community_votes, c.community_score,
             u.season, u.episode, u.title AS episode_title,
             MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) AS event_at
        FROM up_next u JOIN catalog c ON c.id = u.media_item_id
@@ -217,7 +219,7 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
     [limit],
   );
   return rows.map((r) => ({
-    mediaItemId: r.media_item_id, title: r.title, posterUrl: r.poster_url,
+    mediaItemId: r.media_item_id, slug: r.slug, title: r.title, posterUrl: r.poster_url,
     season: r.season, episode: r.episode, episodeTitle: r.episode_title, eventAt: r.event_at || null,
     releaseDate: r.release_date, votes: r.community_votes ?? 0, communityScore: r.community_score,
   }));

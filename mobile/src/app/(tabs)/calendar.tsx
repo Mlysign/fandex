@@ -20,6 +20,7 @@ import { EmptyState } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
 import { SubBar } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
+import { toggled } from '~/lib/a11y';
 import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { usePageTitle } from '~/lib/pageTitle';
@@ -85,7 +86,7 @@ function ScopeFilter({ active, onToggle, signedIn, onSignIn }: { active: Scope[]
             key={key}
             onPress={() => (locked ? onSignIn() : onToggle(key))}
             accessibilityRole="button"
-            accessibilityState={{ selected: on }}
+            {...toggled(on)}
             accessibilityLabel={locked ? `${label}, sign in to use` : label}
             hitSlop={2}
             style={[styles.circle, on && { backgroundColor: color.accent, borderColor: color.accent }, locked && { opacity: 0.45 }]}>

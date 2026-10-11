@@ -1,15 +1,14 @@
 // Home's rails as a hook, because the profile page shows one of them too.
 // What the rails are made from is lib/homeFeed.ts.
 
-import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCardStates, type CardItem } from '~/lib/cards';
+import { useHiddenIds } from '~/lib/hidden';
 import { genreFacets, loadHomeFeed, recommend, type HomeFeed } from '~/lib/homeFeed';
 import { useScores } from '~/lib/ScoreProvider';
 
 export function useHomeRails() {
-  const db = useSQLiteContext();
   const auth = useAuth();
   const scores = useScores();
   const { region } = useAuth();
@@ -22,13 +21,7 @@ export function useHomeRails() {
   }, [region]);
   useEffect(load, [load]);
 
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  useEffect(() => {
-    let live = true;
-    void db.getAllAsync<{ media_item_id: string }>('SELECT media_item_id FROM hidden_item')
-      .then((rows) => { if (live) setHidden(new Set(rows.map((r) => r.media_item_id))); });
-    return () => { live = false; };
-  }, [db, auth.rowsRevision]);
+  const hidden = useHiddenIds();
 
   const candidates = feed?.candidates;
   const stateOf = useCardStates(useMemo(() => (candidates ?? []).map((c) => c.id), [candidates]));

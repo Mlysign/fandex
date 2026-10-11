@@ -16,13 +16,14 @@ import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
+import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { shortDate, todayIso } from '~/lib/dates';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { color, radius, type } from '~/theme';
 
-interface Line { id: string; type: string; title: string; when: string | null }
+interface Line { id: string; type: string; slug: string | null; title: string; when: string | null }
 interface Stats { tracked: number; rated: number; wishlist: number; recent: Line[]; coming: Line[] }
 
 function TitleLines({ title, seeAll, lines }: { title: string; seeAll: string; lines: Line[] }) {
@@ -38,7 +39,7 @@ function TitleLines({ title, seeAll, lines }: { title: string; seeAll: string; l
         {lines.map((l) => (
           <Pressable
             key={l.id}
-            onPress={() => router.push(`/item/${l.id}`)}
+            onPress={() => router.push(itemHref(l) as never)}
             accessibilityRole="link"
             style={({ pressed }) => [styles.line, pressed && { opacity: 0.7 }]}>
             <View style={[styles.dot, { backgroundColor: color.media[l.type] ?? '#888' }]} />
@@ -75,13 +76,13 @@ export default function ProfileScreen() {
                 COUNT(DISTINCT CASE WHEN s.relation = 'wishlist' THEN s.media_item_id END) AS wishlist
            FROM item_state s JOIN catalog c ON c.id = s.media_item_id`,
       );
-      const recent = await db.getAllAsync<{ id: string; type: string; title: string; added_at: number }>(
-        `SELECT c.id, c.type, c.title, MIN(s.added_at) AS added_at
+      const recent = await db.getAllAsync<{ id: string; type: string; slug: string | null; title: string; added_at: number }>(
+        `SELECT c.id, c.type, c.slug, c.title, MIN(s.added_at) AS added_at
            FROM item_state s JOIN catalog c ON c.id = s.media_item_id
           WHERE s.relation = 'library' GROUP BY c.id ORDER BY added_at DESC LIMIT 5`,
       );
-      const coming = await db.getAllAsync<{ id: string; type: string; title: string; release_date: string }>(
-        `SELECT DISTINCT c.id, c.type, c.title, c.release_date
+      const coming = await db.getAllAsync<{ id: string; type: string; slug: string | null; title: string; release_date: string }>(
+        `SELECT DISTINCT c.id, c.type, c.slug, c.title, c.release_date
            FROM item_state s JOIN catalog c ON c.id = s.media_item_id
           WHERE c.release_date >= ? ORDER BY c.release_date, c.title LIMIT 5`,
         [todayIso()],
@@ -89,8 +90,8 @@ export default function ProfileScreen() {
       if (!live) return;
       setStats({
         tracked: counts?.tracked ?? 0, rated: counts?.rated ?? 0, wishlist: counts?.wishlist ?? 0,
-        recent: recent.map((r) => ({ id: r.id, type: r.type, title: r.title, when: shortDate(r.added_at) })),
-        coming: coming.map((r) => ({ id: r.id, type: r.type, title: r.title, when: shortDate(r.release_date) })),
+        recent: recent.map((r) => ({ id: r.id, type: r.type, slug: r.slug, title: r.title, when: shortDate(r.added_at) })),
+        coming: coming.map((r) => ({ id: r.id, type: r.type, slug: r.slug, title: r.title, when: shortDate(r.release_date) })),
       });
     })();
     return () => { live = false; };

@@ -284,7 +284,10 @@ export const api = {
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
   catalogPlatforms: (region: string) =>
     request<{ region: string; games: Record<string, string[]>; streaming: Record<string, string[]> }>(`/v1/catalog/platforms${q({ region })}`),
-  taxonomy: () => request<TaxonomyJson>('/v1/taxonomy'),
+  // The admin page's read. Past the browser's cache on purpose: the route is
+  // `max-age=300`, and a page that reloads inside those five minutes showed the
+  // taxonomy from before its own save, so an accepted change looked lost (SM71).
+  taxonomy: () => request<TaxonomyJson>('/v1/taxonomy', { cache: 'no-store' }),
   adminSaveScoring: (config: ScoringConfigValues) => request<TaxonomyJson>('/v1/admin/scoring', json('PUT', config)),
   adminSaveCategoryWeights: (updates: { id: string; weight: number; ignored: boolean }[]) =>
     request<TaxonomyJson>('/v1/admin/categories', json('PUT', { updates })),

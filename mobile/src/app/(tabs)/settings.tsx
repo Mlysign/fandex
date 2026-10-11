@@ -17,7 +17,9 @@ import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button, Sheet } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
 import { SignIn } from '~/components/SignIn';
+import { useToast } from '~/components/Toast';
 import { Screen, T } from '~/components/ui';
+import { toggled } from '~/lib/a11y';
 import { api, ApiError } from '~/lib/api';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
@@ -317,7 +319,7 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
                 onPress={() => toggle(t)}
                 disabled={saving}
                 accessibilityRole="button"
-                accessibilityState={{ selected: on }}
+                {...toggled(on)}
                 style={[styles.chip, on && styles.chipOn]}
               >
                 <Icon size={16} color={on ? color.textPrimary : color.textMuted} />
@@ -366,7 +368,7 @@ function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
           const on = selected.includes(o.key);
           return (
             <Pressable
-              key={o.key} onPress={() => onToggle(o.key)} accessibilityRole="button" accessibilityState={{ selected: on }}
+              key={o.key} onPress={() => onToggle(o.key)} accessibilityRole="button" {...toggled(on)}
               style={[styles.platformChip, on && styles.chipOn]}
             >
               <BrandGlyph source={platformMarkName(o.label)} size={16} tint={on ? color.textPrimary : color.textSecondary} />
@@ -450,7 +452,9 @@ function YourPlatforms({ onNotice }: { onNotice: (n: Notice) => void }) {
           <>
             <View style={styles.platformHead}>
               <T variant="bodySm" style={{ flex: 1 }}>
-                {selected.length === 0 ? `Nothing selected. The filter offers all ${options.length}.` : `${selected.length} of ${options.length} selected.`}
+                {/* No number for "everything": these are the services YOUR titles are on, and
+                    the filter with nothing picked offers every service in the catalog (SM73). */}
+                {selected.length === 0 ? 'Nothing selected, so the filter offers every service.' : `${selected.length} of ${options.length} selected.`}
                 {saving ? ' Saving…' : ''}
               </T>
               {selected.length > 0 ? (
@@ -483,6 +487,7 @@ function YourPlatforms({ onNotice }: { onNotice: (n: Notice) => void }) {
 function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts: { library: number; wishlist: number } }) {
   const auth = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [confirm, setConfirm] = useState('');
@@ -507,7 +512,12 @@ function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts:
   const deleteAccount = () => {
     setDeleting(true);
     auth.deleteAccount()
-      .then(() => router.replace('/' as never))
+      .then(() => {
+        // This screen is gone a moment later, so its own notice line would
+        // never be read. The toast lives above every screen (SM75).
+        toast('Your account and everything in it have been deleted.', 'success');
+        router.replace('/' as never);
+      })
       .catch((e: unknown) => {
         setShowDelete(false);
         onNotice({ msg: failure(e, 'Could not delete your account. Nothing was changed.'), ok: false });

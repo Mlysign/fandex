@@ -23,7 +23,7 @@ import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
-import type { CardItem } from '~/lib/cards';
+import { cardHref, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -341,7 +341,7 @@ export default function InsightsScreen() {
                 <Panel style={styles.column}>
                   <Text style={[styles.columnTitle, { color: side.tone }]}>{side.title}</Text>
                   {side.list.map(({ r, delta }) => (
-                    <Pressable key={r.key} onPress={() => router.push(`/item/${r.id}` as never)} accessibilityRole="link" style={({ pressed }) => [styles.statBar, pressed && { opacity: 0.6 }]}>
+                    <Pressable key={r.key} onPress={() => router.push(cardHref(r) as never)} accessibilityRole="link" style={({ pressed }) => [styles.statBar, pressed && { opacity: 0.6 }]}>
                       <Text numberOfLines={1} style={[type.bodySm, { flex: 1, color: color.textPrimary }]}>{r.title}</Text>
                       <Text style={styles.statBarCount}>you {r.rating.toFixed(1)} · crowd {((r.communityScore as number) / 10).toFixed(1)}</Text>
                       <Text style={[styles.statBarValue, { width: 40, color: delta >= 0 ? color.success : color.danger }]}>{delta >= 0 ? '+' : ''}{delta.toFixed(1)}</Text>
