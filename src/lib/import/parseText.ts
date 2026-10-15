@@ -141,11 +141,24 @@ export const WANTED = [
 ];
 
 /**
+ * A CSV chosen on its own rather than out of the ZIP: its name may not be the
+ * export's. Phones save a second download as "ratings (1).csv", and people
+ * rename files. Found on a Pixel 8 on 2026-10-15, where a file called
+ * "fandex-test-ratings.csv" was refused with its columns plainly right. Inside
+ * the ZIP the names stay strict: the archive holds other folders whose files
+ * this import must not read.
+ */
+const LOOSE = [
+  { match: /ratings[^/]*\.csv$/i,   relation: "library"  as const },
+  { match: /watchlist[^/]*\.csv$/i, relation: "wishlist" as const },
+];
+
+/**
  * Parse the CSV files of an upload, already out of any ZIP and decoded. The
  * app calls this on the device (mobile/src/lib/listImport.ts), which is why
  * this module imports nothing that needs Node: parse.ts adds the ZIP half.
  */
-export function parseImportTexts(flat: { name: string; text: string }[]): ParsedImport {
+export function parseImportTexts(flat: { name: string; text: string; loose?: boolean }[]): ParsedImport {
   const rows: ImportRow[] = [];
   const filesRead: string[] = [];
   const filesSkipped: string[] = [];
@@ -168,7 +181,8 @@ export function parseImportTexts(flat: { name: string; text: string }[]): Parsed
       continue;
     }
 
-    const wanted = WANTED.find((w) => w.match.test(f.name));
+    const wanted = WANTED.find((w) => w.match.test(f.name))
+      ?? (f.loose ? LOOSE.find((w) => w.match.test(f.name.split("/").pop() ?? "")) : undefined);
     if (!wanted) { filesSkipped.push(f.name); continue; }
     if (!hasColumn(table, "Name", "Title", "Film")) { filesSkipped.push(f.name); continue; }
     source ??= "letterboxd";

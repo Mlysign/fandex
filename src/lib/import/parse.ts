@@ -14,7 +14,7 @@ export type { ImportRelation, ImportRow, ParsedImport } from "./parseText";
  * itself which is expanded here.
  */
 export function parseImport(files: { name: string; data: Buffer }[]): ParsedImport {
-  const flat: { name: string; data: Buffer }[] = [];
+  const flat: { name: string; data: Buffer; loose?: boolean }[] = [];
   for (const f of files) {
     if (looksLikeZip(f.data)) {
       try {
@@ -26,8 +26,8 @@ export function parseImport(files: { name: string; data: Buffer }[]): ParsedImpo
         throw e instanceof ZipError ? new ImportParseError(e.message) : e;
       }
     } else {
-      flat.push(f);
+      flat.push({ ...f, loose: true });
     }
   }
-  return parseImportTexts(flat.map((f) => ({ name: f.name, text: f.data.toString("utf8") })));
+  return parseImportTexts(flat.map((f) => ({ name: f.name, text: f.data.toString("utf8"), loose: f.loose })));
 }

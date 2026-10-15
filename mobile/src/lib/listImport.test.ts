@@ -25,6 +25,18 @@ describe('reading an export on the device', () => {
     ]);
   });
 
+  it("reads a loose CSV whose name is not quite the export's, as a phone saves a second download", () => {
+    for (const name of ['ratings (1).csv', 'fandex-test-ratings.csv']) {
+      expect(readImportFiles([{ name, bytes: strToU8(RATINGS) }]).rows, name).toHaveLength(2);
+    }
+    expect(readImportFiles([{ name: 'watchlist(2).csv', bytes: strToU8(WATCHLIST) }]).rows[0].relation).toBe('wishlist');
+  });
+
+  it('keeps the names strict inside the ZIP', () => {
+    const zip = zipSync({ 'ratings.csv': strToU8(RATINGS), 'deleted/old-ratings.csv': strToU8(RATINGS.replace('Alien', 'Deleted Film')) });
+    expect(readImportFiles([{ name: 'export.zip', bytes: zip }]).rows.map((r) => r.title)).not.toContain('Deleted Film');
+  });
+
   it('reads a loose CSV too', () => {
     const parsed = readImportFiles([{ name: 'ratings.csv', bytes: strToU8(RATINGS) }]);
     expect(parsed.rows).toHaveLength(2);

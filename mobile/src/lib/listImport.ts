@@ -44,7 +44,7 @@ const isZip = (b: Uint8Array) => b.length > 3 && b[0] === 0x50 && b[1] === 0x4b 
 
 /** The files a person chose: the ZIP as downloaded, or the CSVs out of it. Throws ImportParseError with a sentence to show. */
 export function readImportFiles(files: { name: string; bytes: Uint8Array }[]): ParsedImport {
-  const flat: { name: string; text: string }[] = [];
+  const flat: { name: string; text: string; loose?: boolean }[] = [];
   for (const f of files) {
     if (f.bytes.length > MAX_FILE_BYTES) throw new ImportParseError(`${f.name} is too big to be an export.`);
     if (isZip(f.bytes)) {
@@ -58,7 +58,7 @@ export function readImportFiles(files: { name: string; bytes: Uint8Array }[]): P
       }
       for (const [name, data] of Object.entries(entries)) flat.push({ name, text: strFromU8(data) });
     } else {
-      flat.push({ name: f.name, text: strFromU8(f.bytes) });
+      flat.push({ name: f.name, text: strFromU8(f.bytes), loose: true });
     }
   }
   return parseImportTexts(flat);
