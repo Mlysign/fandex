@@ -299,6 +299,8 @@ export interface TraktSyncResult {
   unmatched: number;
   /** Rated titles taken off Trakt's watchlist this run (SM63). */
   watchlistTidied: number;
+  /** Rated titles' wishlist rows from other sources removed this run. */
+  wishlistTidied?: number;
 }
 
 async function pullTrakt(accessToken: string): Promise<TraktPull> {
@@ -455,8 +457,31 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
     await writePlan(plan);
     await syncState(db, true);
   }
+  // A rated title on the wishlist from another source: an old TMDB row from the
+  // site, or one made here before rating it elsewhere. Same rule (SM63).
+  const leftovers = ratedWishlistLeftovers(await db.getAllAsync<HeldRow>('SELECT media_item_id, source, relation, rating FROM item_state'));
+  if (leftovers.length) {
+    await api.writeState({ items: { delete: leftovers } });
+    await syncState(db, true);
+    result.wishlistTidied = leftovers.length;
+  }
   await setMeta(db, SYNCED_AT_KEY, String(Date.now()));
   return result;
+}
+
+interface HeldRow { media_item_id: string; source: string; relation: string; rating: number | null }
+
+/**
+ * Wishlist rows of rated titles that are neither Trakt's (the plan handles
+ * those) nor Steam's (Steam's wishlist is edited on Steam, and this app never
+ * writes a Steam row). Rating a title takes it off the wishlist (itemActions.ts);
+ * this keeps that true for rows the rating did not see.
+ */
+export function ratedWishlistLeftovers(rows: HeldRow[]): ItemStateKey[] {
+  const rated = new Set(rows.filter((r) => r.relation === 'library' && r.rating != null).map((r) => r.media_item_id));
+  return rows
+    .filter((r) => r.relation === 'wishlist' && rated.has(r.media_item_id) && r.source !== 'steam' && r.source !== 'trakt')
+    .map((r) => ({ mediaItemId: r.media_item_id, source: r.source, relation: 'wishlist' as const }));
 }
 
 /** Unix ms of the last Trakt sync that finished, or null. */

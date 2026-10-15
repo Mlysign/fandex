@@ -4,7 +4,7 @@ vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 
 import {
-  foldTraktPull, planTraktSync, ratedButWishlisted, TraktSyncRefused,
+  foldTraktPull, planTraktSync, ratedButWishlisted, ratedWishlistLeftovers, TraktSyncRefused,
   type LocalEpisodeRow, type LocalItemRow, type RawTraktPull, type TraktPull,
 } from './traktSync';
 
@@ -180,5 +180,19 @@ describe('a title rated on Trakt and still on its watchlist (SM63)', () => {
     });
     expect(plan.itemUpserts.filter((u) => u.relation === 'wishlist').map((u) => u.mediaItemId)).toEqual([B, C]);
     expect(plan.itemDeletes).toEqual([{ mediaItemId: A, source: 'trakt', relation: 'wishlist' }]);
+  });
+});
+
+describe('wishlist rows of rated titles from other sources', () => {
+  it('removes an old TMDB or local row, never a Steam one, and leaves Trakt to the plan', () => {
+    const row = (media_item_id: string, source: string, relation: string, rating: number | null = null) => ({ media_item_id, source, relation, rating });
+    expect(ratedWishlistLeftovers([
+      row(A, 'trakt', 'library', 5), row(A, 'tmdb', 'wishlist'), row(A, 'steam', 'wishlist'), row(A, 'trakt', 'wishlist'),
+      row(B, 'local', 'library', null), row(B, 'local', 'wishlist'),
+      row(C, 'local', 'library', 8), row(C, 'local', 'wishlist'),
+    ])).toEqual([
+      { mediaItemId: A, source: 'tmdb', relation: 'wishlist' },
+      { mediaItemId: C, source: 'local', relation: 'wishlist' },
+    ]);
   });
 });
