@@ -23,7 +23,7 @@ import { api, ApiError, type ShowEpisodes } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { shortDate } from '~/lib/dates';
 import { tmdbEpisode, tmdbSeasonEpisodes, type EpisodeDetail } from '~/lib/tmdb';
-import { TraktAuthError } from '~/lib/trakt';
+import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { setEpisodesWatched } from '~/lib/upNext';
 import { breakpoint, color, radius, space } from '~/theme';
 
@@ -31,7 +31,7 @@ type Episode = ShowEpisodes['episodes'][number];
 
 /** Why a tick did not save, in words. */
 function failure(e: unknown): string {
-  if (e instanceof TraktAuthError) return 'Trakt needs you to sign in again. You can do that in Settings.';
+  if (e instanceof TraktAuthError) return traktSignInMessage(e, 'You can do that in Settings.');
   if (e instanceof ApiError && e.code === 'offline') return 'No connection. Nothing was changed.';
   if (e instanceof ApiError && e.code === 'budget-exhausted') return 'Fandex cannot save more changes until tomorrow.';
   if (e instanceof ApiError) return 'Fandex could not save that. Nothing was changed.';

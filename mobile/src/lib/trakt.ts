@@ -195,12 +195,28 @@ export async function clearTraktTokens(): Promise<void> {
 
 // ── Talking to Trakt as the person ───────────────────────────────────────────
 
-/** Trakt no longer accepts what this device holds. The person has to sign in to Trakt again. */
+/** Trakt no longer accepts what this device holds, or it holds nothing. The person has to sign in to Trakt. */
 export class TraktAuthError extends Error {
-  constructor(message = 'Trakt needs you to sign in again.') {
+  /**
+   * False when this device holds no Trakt sign-in at all: the account signed
+   * in with Google, or the device signed out since. Trakt's tokens never leave
+   * the device that got them, so that is not something "again" describes.
+   */
+  readonly hadSignIn: boolean;
+  constructor(message = 'Trakt needs you to sign in again.', hadSignIn = true) {
     super(message);
     this.name = 'TraktAuthError';
+    this.hadSignIn = hadSignIn;
   }
+}
+
+/** What to tell the person about a TraktAuthError, followed by where to fix it. */
+export function traktSignInMessage(e: TraktAuthError, where: string): string {
+  if (e.hadSignIn) return `Trakt needs you to sign in again. ${where}`.trim();
+  // A browser has a document and the Android app does not. Not Platform.OS:
+  // react-native cannot load under the tests that import this file.
+  const here = typeof document === 'undefined' ? 'This device' : 'This browser';
+  return `${here} is not signed in to Trakt yet. ${where}`.trim();
 }
 
 /** Trakt is reachable and will not answer right now: it limits how often an account may ask. Ask again later. */
@@ -247,7 +263,7 @@ async function refreshTokens(refreshToken: string): Promise<TraktTokens> {
  */
 export async function traktAccessToken(now = Math.floor(Date.now() / 1000)): Promise<string> {
   const tokens = await loadTraktTokens();
-  if (!tokens) throw new TraktAuthError('This device is not signed in to Trakt.');
+  if (!tokens) throw new TraktAuthError('This device is not signed in to Trakt.', false);
   if (tokens.expiresAt - now > REFRESH_MARGIN_SECONDS) return tokens.accessToken;
   if (!tokens.refreshToken) throw new TraktAuthError();
   const fresh = await refreshTokens(tokens.refreshToken);

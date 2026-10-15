@@ -388,6 +388,17 @@ from the console, because his browser was signed in and an account with Google a
 is shown no button. **Not checked: the button pressed by a signed-out visitor on the live site,
 and a first-time Google account** (it would create a new Fandex account).
 
+**Google signs you in to Fandex, never to Trakt.** Trakt's tokens stay on the device that got
+them (docs/decisions.md, 2026-10-04), and a sign-out anywhere signs out every device and deletes
+them there. So a browser signed in with Google holds no Trakt sign-in until one is made in it, and
+Up next, ratings and episode ticks, which go to Trakt from the device, answer `TraktAuthError`.
+Until 2026-10-15 that read "Trakt needs you to sign in again. You can do that under You", while
+Settings showed Trakt as Connected with a Sync button that did nothing: no way to act on it. Now
+`TraktAuthError.hadSignIn` separates "never signed in here" from "Trakt dropped it", the message
+says "This browser is not signed in to Trakt yet", and Settings shows **Sign in to Trakt** with
+a line saying why (`traktSync.onDevice`). Seen on the local stack with a test account given a
+Trakt identity row; published to fandex.org the same day. Not in an APK yet.
+
 ## Known problems
 
 - **The widget's look and feel is not right yet** (Nils, 2026-10-04: "the ux not feeling and

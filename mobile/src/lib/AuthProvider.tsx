@@ -26,7 +26,7 @@ import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
 import { publishWidget } from '~/lib/widget';
 import {
   clearTraktTokens, codeFromRedirect, exchangeCode, loadTraktTokens, pollDeviceToken, requestDeviceCode, saveTraktTokens,
-  startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, type TraktTokens,
+  startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, traktSignInMessage, type TraktTokens,
 } from '~/lib/trakt';
 import { clearUpNext } from '~/lib/upNext';
 import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktSyncResult } from '~/lib/traktSync';
@@ -87,6 +87,12 @@ export interface TraktSyncState {
   error: string | null;
   /** Trakt dropped this device's sign-in. Only signing in to Trakt again fixes it. */
   needsSignIn: boolean;
+  /**
+   * Whether this device holds a Trakt sign-in; null until it has looked. An
+   * account signed in with Google can have Trakt connected and still hold no
+   * Trakt tokens here, because they never leave the device that got them.
+   */
+  onDevice: boolean | null;
   last: TraktSyncResult | null;
   /** Unix ms of the last run that finished. */
   syncedAt: number | null;
@@ -153,29 +159,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   // ── Trakt, synced from this device ──
-  const [traktSync, setTraktSync] = useState<TraktSyncState>({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
+  const [traktSync, setTraktSync] = useState<TraktSyncState>({ running: false, error: null, needsSignIn: false, onDevice: null, last: null, syncedAt: null });
   const syncingTrakt = useRef(false);
 
   const runTraktSync = useCallback(async (onlyIfStale: boolean) => {
     if (syncingTrakt.current) return;
-    if (!(await loadTraktTokens())) return; // Signed in some other way: there is no Trakt to sync.
+    if (!(await loadTraktTokens())) {
+      // Signed in some other way: there is no Trakt to sync from here.
+      setTraktSync((s) => ({ ...s, onDevice: false }));
+      return;
+    }
     const syncedAt = await traktSyncedAt(db);
     if (onlyIfStale && syncedAt && Date.now() - syncedAt < TRAKT_STALE_MS) {
-      setTraktSync((s) => ({ ...s, syncedAt }));
+      setTraktSync((s) => ({ ...s, syncedAt, onDevice: true }));
       return;
     }
     syncingTrakt.current = true;
-    setTraktSync((s) => ({ ...s, running: true, error: null, needsSignIn: false }));
+    setTraktSync((s) => ({ ...s, running: true, error: null, needsSignIn: false, onDevice: true }));
     try {
       const last = await syncTrakt(db, { dryRun: TRAKT_SYNC_DRY_RUN });
-      setTraktSync({ running: false, error: null, needsSignIn: false, last, syncedAt: await traktSyncedAt(db) });
+      setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: true, last, syncedAt: await traktSyncedAt(db) });
       // The rows on the device changed, and a title new to the catalog is now in the pool.
       if (last.itemsChanged + last.itemsRemoved + last.episodesChanged + last.episodesRemoved > 0) setRowsRevision((r) => r + 1);
     } catch (e) {
       // Whatever went wrong, nothing was deleted: see traktSync.ts.
       const needsSignIn = e instanceof TraktAuthError;
       const error =
-        needsSignIn ? 'Trakt needs you to sign in again.'
+        needsSignIn ? traktSignInMessage(e, '')
         : e instanceof TraktSyncRefused ? e.message
         : e instanceof ApiError && e.code === 'offline' ? 'No connection. Your library is unchanged.'
         : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot save more changes until tomorrow.'
@@ -190,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const forget = useCallback(async () => {
     setSessionToken(null);
     await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearUpNext(db)]);
-    setTraktSync({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
+    setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
     setProfile(null);
     setRowsRevision((r) => r + 1);
     setStatus('signedOut');
@@ -358,6 +368,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(await api.me().catch(() => null));
       setStatus('signedIn');
       setTrakt({ phase: 'idle' });
+      // Its Trakt tokens were cleared above, so Settings can say so at once.
+      setTraktSync((s) => ({ ...s, onDevice: false }));
       void pullRows(true);
     } catch (e) {
       setTrakt({ phase: 'error', message: e instanceof ApiError && e.status === 404 ? 'This Worker has no test accounts. Start it with DEV_LOGIN=1 in .dev.vars.' : 'The test sign-in did not work.' });
@@ -388,7 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionToken(out.token);
     if (provider === 'trakt') {
       await Promise.all([clearTraktTokens(), clearTraktSync(db), clearUpNext(db)]);
-      setTraktSync({ running: false, error: null, needsSignIn: false, last: null, syncedAt: null });
+      setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
     }
     setProfile(await api.me().catch(() => null));
     await pullRows(true);

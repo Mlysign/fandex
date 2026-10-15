@@ -150,13 +150,21 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
         </View>
         <View style={styles.providerActions}>
           <View style={styles.connected}><T variant="caption" style={{ color: color.success }}>Connected</T></View>
-          {provider !== 'trakt' ? null : traktSync.needsSignIn
+          {provider !== 'trakt' ? null : traktSync.onDevice === false
+            ? <Button label="Sign in to Trakt" onPress={auth.startTraktSignIn} />
+            : traktSync.needsSignIn
             ? <Button label="Sign in again" onPress={auth.startTraktSignIn} />
             : <Button label={traktSync.running ? 'Syncing...' : 'Sync'} onPress={auth.syncTraktNow} disabled={traktSync.running} />}
           <Button label={disconnecting ? '...' : 'Disconnect'} variant="danger" onPress={() => setAsking(true)} disabled={disconnecting} />
         </View>
       </View>
-      {provider === 'trakt' ? (
+      {provider === 'trakt' && traktSync.onDevice === false ? (
+        <T variant="bodySm">
+          Your account is connected to Trakt, but {Platform.OS === 'web' ? 'this browser' : 'this device'} is
+          not signed in to it yet. Sign in once and it stays signed in here until you sign out. Trakt keeps
+          that sign-in on each device, never on Fandex's server, so every browser and phone needs its own.
+        </T>
+      ) : provider === 'trakt' ? (
         <>
           <T variant="bodySm">
             Last synced {traktSync.running ? 'now' : ago(traktSync.syncedAt)}

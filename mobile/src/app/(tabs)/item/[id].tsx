@@ -25,7 +25,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { dropItemPrerender } from '~/lib/prerender';
 import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
-import { TraktAuthError } from '~/lib/trakt';
+import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
 
 const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
@@ -150,7 +150,7 @@ export default function ItemScreen() {
       .catch((e: unknown) => {
         console.warn('item_action_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
         setActionError(
-          e instanceof TraktAuthError ? 'Trakt needs you to sign in again. You can do that on the You tab.'
+          e instanceof TraktAuthError ? traktSignInMessage(e, 'You can do that on the You tab.')
           : e instanceof ApiError && e.code === 'offline' ? 'No connection. Nothing was changed.'
           : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot save more changes until tomorrow.'
           : e instanceof ApiError ? 'Fandex could not save that. Nothing was changed.'

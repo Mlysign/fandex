@@ -17,7 +17,7 @@ import { TypeIcon } from '~/components/Logo';
 import { useAuth } from '~/lib/AuthProvider';
 import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { TraktAuthError, TraktBusyError } from '~/lib/trakt';
+import { TraktAuthError, TraktBusyError, traktSignInMessage } from '~/lib/trakt';
 import { markEpisodeWatched, refreshUpNext, upNextList, upNextPending, type UpNextEntry } from '~/lib/upNext';
 import { color, font, radius, type } from '~/theme';
 
@@ -32,7 +32,7 @@ export const epLabel = (season: number, episode: number) => `S.${String(season).
 const entryKey = (e: UpNextEntry) => `${e.mediaItemId}:${e.season}:${e.episode}`;
 
 function describeTrakt(e: unknown): string {
-  if (e instanceof TraktAuthError) return 'Trakt needs you to sign in again. You can do that under You.';
+  if (e instanceof TraktAuthError) return traktSignInMessage(e, 'You can do that under You.');
   // Not "No connection": the device is online and Trakt is the one saying no.
   if (e instanceof TraktBusyError) return 'Trakt is not answering right now: it limits how often it can be asked. Showing what this device already knows.';
   if (e instanceof Error && /Network request failed|Failed to fetch/i.test(e.message)) return 'No connection. Showing what this device already knows.';

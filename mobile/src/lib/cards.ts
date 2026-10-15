@@ -13,7 +13,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { rateItem, setWishlist, type ActionTarget } from '~/lib/itemActions';
-import { TraktAuthError } from '~/lib/trakt';
+import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 
 /** One title on a card. Either a catalog row (`id`) or a provider's title nobody holds yet (`source` + `sourceId`). */
 export interface CardItem {
@@ -122,7 +122,7 @@ async function targetFor(db: SQLiteDatabase, item: CardItem): Promise<ActionTarg
 }
 
 export function describeActionError(e: unknown): string {
-  return e instanceof TraktAuthError ? 'Trakt needs you to sign in again. You can do that under You.'
+  return e instanceof TraktAuthError ? traktSignInMessage(e, 'You can do that under You.')
     : e instanceof ApiError && e.code === 'offline' ? 'No connection. Nothing was changed.'
     : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot save more changes until tomorrow.'
     : e instanceof ApiError ? 'Fandex could not save that. Nothing was changed.'
