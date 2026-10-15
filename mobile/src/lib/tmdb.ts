@@ -180,3 +180,34 @@ export async function tmdbTrending(type: 'movie' | 'show', page: number, signal?
       score: typeof r.vote_average === 'number' && r.vote_average > 0 ? Math.round(r.vote_average * 10) : null,
     }));
 }
+
+const collectionCache = new Map<string, Promise<{ name: string; parts: ProviderCard[] } | null>>();
+
+/**
+ * The other films in a film's TMDB collection: what a franchise holds that the
+ * catalog may not (the site kept these in franchise_members, which is not in
+ * D1). Two calls, made once per film per session. Null when it is in none.
+ */
+export function tmdbCollectionFor(tmdbMovieId: string): Promise<{ name: string; parts: ProviderCard[] } | null> {
+  if (!tmdbConfigured()) return Promise.resolve(null);
+  let hit = collectionCache.get(tmdbMovieId);
+  if (!hit) {
+    hit = (async () => {
+      const movie = await fetch(`${BASE}/movie/${encodeURIComponent(tmdbMovieId)}?api_key=${TMDB_API_KEY}`).then((r) => (r.ok ? r.json() : null));
+      const id = movie?.belongs_to_collection?.id;
+      if (typeof id !== 'number') return null;
+      const c = await fetch(`${BASE}/collection/${id}?api_key=${TMDB_API_KEY}`).then((r) => (r.ok ? r.json() : null));
+      if (!c) return null;
+      const parts = ((c.parts ?? []) as any[])
+        .filter((p) => p?.id && String(p.id) !== tmdbMovieId && p.poster_path)
+        .map((p): ProviderCard => ({
+          source: 'tmdb', sourceId: String(p.id), type: 'movie', title: p.title ?? 'Untitled',
+          releaseDate: p.release_date || null, posterUrl: `https://image.tmdb.org/t/p/w342${p.poster_path}`,
+          votes: typeof p.vote_count === 'number' ? p.vote_count : 0,
+        }));
+      return { name: String(c.name ?? movie.belongs_to_collection.name ?? ''), parts };
+    })().catch(() => null);
+    collectionCache.set(tmdbMovieId, hit);
+  }
+  return hit;
+}

@@ -82,10 +82,11 @@ function Page({ item, taxonomy, rails }: { item: ItemDetail; taxonomy: Taxonomy 
               // the page over and draws their own.
               personal={(
                 <>
-                  <FandexScorePanel state="anon" fandex={null} categoryLabel={() => null} signInHref="/profile" />
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    <Button label="Rate" variant="secondary" size="md" href="/profile" icon={<Star size={14} color="#EDE7DC" />} />
-                    <Button label="Add to wishlist" variant="secondary" size="md" href="/profile" icon={<Bookmark size={14} color="#EDE7DC" />} />
+                  <FandexScorePanel state="anon" fandex={null} categoryLabel={() => null} signInHref={`/profile?return=${encodeURIComponent(path)}`} />
+                  {/* The app's signed-out pair. ?return= brings the visitor back here once signed in (lib/returnTo.ts). */}
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Button label="Sign in to rate" variant="secondary" size="md" href={`/profile?return=${encodeURIComponent(path)}`} icon={<Star size={14} color="#EDE7DC" />} style={{ flex: 1 }} />
+                    <Button label="Save" variant="secondary" size="md" href={`/profile?return=${encodeURIComponent(path)}`} icon={<Bookmark size={14} color="#EDE7DC" />} />
                   </View>
                 </>
               )}

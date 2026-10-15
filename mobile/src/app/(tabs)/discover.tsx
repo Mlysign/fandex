@@ -42,6 +42,7 @@ type Sort = 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
 const SORTS: [Sort, string][] = [['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
 
 const DEBOUNCE_MS = 300;
+const QUERY_KEY = 'fandex.search.q';
 /** How many cards are drawn at first, and how many more each time the end is reached. */
 const STEP = 60;
 
@@ -93,7 +94,16 @@ export default function DiscoverScreen() {
   const sync = useCatalogSync();
   const types = useTypeFilter();
   const { center } = useScores();
-  const [query, setQuery] = useState('');
+  // Kept for the browser tab, as the site kept it (rr_discover_q): Back already
+  // returns to the mounted screen with its query and scroll, and this covers a
+  // reload.
+  const [query, setQuery] = useState(() => {
+    try { return Platform.OS === 'web' ? globalThis.sessionStorage?.getItem(QUERY_KEY) ?? '' : ''; } catch { return ''; }
+  });
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try { globalThis.sessionStorage?.setItem(QUERY_KEY, query); } catch { /* storage refused: nothing kept */ }
+  }, [query]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [pool, setPool] = useState<CardItem[] | null>(null);
   const [screen, setScreen] = useState<Remote>(IDLE);

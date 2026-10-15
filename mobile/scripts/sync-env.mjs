@@ -32,6 +32,8 @@ const PUBLISHABLE = {
   // pushed the same value (worker/scripts/push-secrets.mjs), and the two have
   // to agree or every Google sign-in is refused.
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'EXPO_PUBLIC_GOOGLE_CLIENT_ID',
+  // The donations page (Profile's "Support Fandex"). A public address by design.
+  NEXT_PUBLIC_SUPPORT_URL: 'EXPO_PUBLIC_SUPPORT_URL',
 };
 
 if (!fs.existsSync(rootEnv)) {

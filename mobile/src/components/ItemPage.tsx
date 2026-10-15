@@ -35,7 +35,7 @@ import { color, font, radius, space, TYPE_LABEL } from '~/theme';
 /** The page gutter. The handoff's 20 px, wider than a list screen's 16. */
 const GUTTER = space.xl;
 
-const SOURCE_LABEL: Record<string, string> = {
+export const SOURCE_LABEL: Record<string, string> = {
   trakt: 'Trakt', tmdb: 'TMDB', igdb: 'IGDB', steam: 'Steam', rawg: 'RAWG', letterboxd: 'Letterboxd',
 };
 

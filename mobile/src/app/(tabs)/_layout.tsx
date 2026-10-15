@@ -12,7 +12,9 @@ import { useCallback, useEffect } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
+import { useAuth } from '~/lib/AuthProvider';
 import { sendPageview } from '~/lib/pageview';
+import { takeReturnTo } from '~/lib/returnTo';
 import { breakpoint, color } from '~/theme';
 
 export default function TabsLayout() {
@@ -23,6 +25,14 @@ export default function TabsLayout() {
   useEffect(() => { sendPageview(pathname); }, [pathname]);
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
+  // Back to the title somebody signed in from (lib/returnTo.ts), wherever the
+  // sign-in finished: You for Trakt, Settings for Google in a browser.
+  const auth = useAuth();
+  useEffect(() => {
+    if (auth.status !== 'signedIn') return;
+    const to = takeReturnTo();
+    if (to) router.replace(to as never);
+  }, [auth.status, router]);
   const go = useCallback((href: string) => router.navigate(href as never), [router]);
 
   return (

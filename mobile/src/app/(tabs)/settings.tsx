@@ -52,12 +52,13 @@ function ago(ms: number | null): string {
 function traktSummary(r: TraktSyncResult): string {
   const changed = r.itemsChanged + r.episodesChanged;
   const removed = r.itemsRemoved + r.episodesRemoved;
+  const titles = (n: number, what: string) => `${n.toLocaleString('en')} ${what}${n === 1 ? '' : 's'}`;
   const parts = [
     changed ? `${changed.toLocaleString('en')} updated` : null,
     removed ? `${removed.toLocaleString('en')} removed` : null,
-    r.deferred ? `${r.deferred.toLocaleString('en')} new titles waiting for the next sync` : null,
-    r.watchlistTidied ? `${r.watchlistTidied.toLocaleString('en')} rated titles taken off your Trakt watchlist` : null,
-    r.wishlistTidied ? `${r.wishlistTidied.toLocaleString('en')} rated titles taken off your wishlist` : null,
+    r.deferred ? `${titles(r.deferred, 'new title')} waiting for the next sync` : null,
+    r.watchlistTidied ? `${titles(r.watchlistTidied, 'rated title')} taken off your Trakt watchlist` : null,
+    r.wishlistTidied ? `${titles(r.wishlistTidied, 'rated title')} taken off your wishlist` : null,
   ].filter(Boolean);
   const what = parts.length ? parts.join(', ') : 'Nothing had changed';
   return r.dryRun ? `Test run, nothing written. Would be: ${what.toLowerCase()}.` : `${what}.`;

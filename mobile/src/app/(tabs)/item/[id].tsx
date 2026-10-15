@@ -8,23 +8,29 @@ import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native
 import { CardRail, StarPicker } from '~/components/cards';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
 import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScorePanel';
-import { ItemPage } from '~/components/ItemPage';
+import { ItemPage, SOURCE_LABEL } from '~/components/ItemPage';
+import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button } from '~/components/kit';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
+import { normalizeName } from '@/lib/normalize';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toggled } from '~/lib/a11y';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
+import type { CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { itemStateFor } from '~/lib/db';
+import { shortDate } from '~/lib/dates';
+import { setReturnTo } from '~/lib/returnTo';
 import type { ScoreFacet } from '~/lib/fandexScore';
 import { rateItem, removeFromLibrary, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropItemPrerender } from '~/lib/prerender';
 import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
+import { tmdbCollectionFor } from '~/lib/tmdb';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
 
@@ -36,7 +42,7 @@ const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
  * all for a title with no franchise and too few titles like it: an empty shelf
  * reads as a broken one.
  */
-function Related({ itemId, facets }: { itemId: string; facets: ScoreFacet[] }) {
+function Related({ itemId, facets, tmdbMovieId }: { itemId: string; facets: ScoreFacet[]; tmdbMovieId: string | null }) {
   const db = useSQLiteContext();
   const catalog = useCatalogSync();
   const { taxonomy } = useScores();
@@ -47,10 +53,32 @@ function Related({ itemId, facets }: { itemId: string; facets: ScoreFacet[] }) {
     setRails(null);
     if (!taxonomy) return;
     relatedRails(db, catalog.revision, taxonomy, itemId, facets)
-      .then((r) => { if (live) setRails(r); })
+      .then(async (r) => {
+        if (live) setRails(r);
+        // The films of its TMDB collection the catalog does not hold, after the
+        // ones it does: the site's franchise_members, which D1 does not have.
+        const collection = tmdbMovieId ? await tmdbCollectionFor(tmdbMovieId) : null;
+        if (!live || !collection?.parts.length) return;
+        const ident = (c: { title: string; releaseDate: string | null }) => `${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
+        const have = new Set((r.franchise?.items ?? []).map(ident));
+        const extra: CardItem[] = collection.parts.filter((p) => !have.has(ident(p))).map((p) => ({
+          key: `tmdb:movie:${p.sourceId}`, id: null, source: 'tmdb', sourceId: p.sourceId, type: 'movie', title: p.title,
+          releaseDate: p.releaseDate, posterUrl: p.posterUrl, communityScore: null, communityVotes: p.votes,
+        }));
+        if (!extra.length) return;
+        try {
+          const res = await api.lookup(extra.map((c) => ({ source: 'tmdb', type: 'movie', id: c.sourceId as string })));
+          const held = new Map(res.found.map((f) => [f.id, f.mediaItemId]));
+          for (const c of extra) c.id = held.get(c.sourceId as string) ?? null;
+        } catch { /* they open through /open all the same */ }
+        if (!live) return;
+        const items = [...(r.franchise?.items ?? []), ...extra]
+          .sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1)); // newest first, as the rail is
+        setRails({ ...r, franchise: { label: r.franchise?.label ?? collection.name, items } });
+      })
       .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
-  }, [db, catalog.revision, taxonomy, itemId, facets]);
+  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId]);
 
   if (!rails || (!rails.franchise?.items.length && !rails.similar.length)) return null;
   return (
@@ -140,6 +168,7 @@ export default function ItemScreen() {
   const scores = useScores();
   const catalog = useCatalogSync();
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
   const act = useCallback((run: () => Promise<void>) => {
@@ -200,6 +229,12 @@ export default function ItemScreen() {
     : scores.center == null ? 'cold' : 'none';
   const target: ActionTarget = { id: item.id, type: item.type, sources: item.vector.sources };
 
+  // A signed-out Rate or Save goes to You to sign in, and comes back here after (lib/returnTo.ts).
+  const signInFirst = () => {
+    setReturnTo(`/${item.type}/${item.slug ?? item.id}`);
+    router.push('/profile' as never);
+  };
+
   const personal = (
     <>
       {mine && (mine.inLibrary || mine.inWishlist) ? (
@@ -210,7 +245,14 @@ export default function ItemScreen() {
               mine.inWishlist ? 'On your wishlist' : null,
             ].filter(Boolean).join(' · ')}
           </T>
-          {mine.rating != null ? <T variant="label">You rated it {mine.rating}</T> : null}
+          {/* The site's RatingsSection: the status names the accounts that report it, and when. */}
+          {mine.status ? (
+            <T variant="label">
+              ✓ {mine.status}
+              {mine.statusSources.length ? ` on ${mine.statusSources.map((s) => SOURCE_LABEL[s] ?? s).join(' · ')}` : ''}
+              {mine.reviewedAt ? ` · ${shortDate(mine.reviewedAt)}` : ''}
+            </T>
+          ) : null}
         </View>
       ) : null}
 
@@ -223,19 +265,39 @@ export default function ItemScreen() {
 
       {auth.status === 'signedIn' && mine ? (
         <View style={styles.actionsBlock}>
-          <T variant="eyebrow">Your rating</T>
-          {/* The site's ten stars. The one that is already your rating takes it away. */}
-          <View style={[styles.starsPanel, busy && { opacity: 0.6 }]} pointerEvents={busy ? 'none' : 'auto'}>
-            <StarPicker rating={mine.rating} onPick={(n) => act(() => rateItem(db, target, n))} />
-            <T variant="meta">{mine.rating != null ? `${mine.rating}/10` : 'Not rated'}</T>
-          </View>
-          <View style={styles.actionRow}>
+          {/* The site's pair (PersonalSection.tsx): Rate it, which opens the ten stars, and Save.
+              The rating shows on the button itself, once. */}
+          <View style={styles.pair}>
             <Button
-              label={mine.inWishlist ? 'On your wishlist' : 'Add to wishlist'} variant={mine.inWishlist ? 'outline' : 'secondary'} size="md" disabled={busy}
+              label={mine.rating != null ? `${mine.rating}/10` : 'Rate it'} variant={mine.rating != null ? 'outline' : 'secondary'} size="md" disabled={busy}
+              icon={<Star size={14} color={mine.rating != null ? color.accent : color.textPrimary} fill={mine.rating != null ? color.accent : 'none'} />}
+              onPress={() => setPicking((v) => !v)} style={{ flex: 1 }}
+            />
+            <Button
+              label="Save" variant={mine.inWishlist ? 'outline' : 'secondary'} size="md" disabled={busy}
               icon={<Bookmark size={14} color={mine.inWishlist ? color.accent : color.textPrimary} fill={mine.inWishlist ? color.accent : 'none'} />}
               onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
             />
           </View>
+          {picking ? (
+            // The star that is already your rating takes it away.
+            <View style={[styles.starsPanel, busy && { opacity: 0.6 }]} pointerEvents={busy ? 'none' : 'auto'}>
+              <StarPicker rating={mine.rating} onPick={(n) => { setPicking(false); act(() => rateItem(db, target, n)); }} />
+            </View>
+          ) : null}
+          {mine.review ? <T variant="bodySm" style={{ fontStyle: 'italic' }}>&quot;{mine.review}&quot;</T> : null}
+          {/* Each account's own number, when more than one holds a rating: the one above is their average. */}
+          {mine.ratings.length > 1 ? (
+            <View style={styles.breakdown}>
+              {mine.ratings.map((r) => (
+                <View key={r.source} style={styles.breakdownItem}>
+                  <BrandGlyph source={r.source} size={11} />
+                  <T variant="caption">{SOURCE_LABEL[r.source] ?? r.source}</T>
+                  <T variant="caption" style={{ color: color.textPrimary }}>{r.rating % 1 === 0 ? r.rating : r.rating.toFixed(1)}</T>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {/* The two advanced options, as on the site: one quiet line under the pair, never
               buttons that compete with it. "Remove from library" only when there is a
               library entry, because un-rating deliberately does not remove one. Hidden reads
@@ -261,9 +323,9 @@ export default function ItemScreen() {
         </View>
       ) : auth.status === 'signedOut' ? (
         // Shown to everybody, as on the site: a control that is missing reads as a feature that is missing.
-        <View style={styles.actionRow}>
-          <Button label="Rate" variant="secondary" size="md" icon={<Star size={14} color={color.textPrimary} />} onPress={() => router.push('/profile' as never)} />
-          <Button label="Add to wishlist" variant="secondary" size="md" icon={<Bookmark size={14} color={color.textPrimary} />} onPress={() => router.push('/profile' as never)} />
+        <View style={styles.pair}>
+          <Button label="Sign in to rate" variant="secondary" size="md" icon={<Star size={14} color={color.textPrimary} />} onPress={signInFirst} style={{ flex: 1 }} />
+          <Button label="Save" variant="secondary" size="md" icon={<Bookmark size={14} color={color.textPrimary} />} onPress={signInFirst} />
         </View>
       ) : null}
     </>
@@ -281,7 +343,7 @@ export default function ItemScreen() {
         item={item}
         personal={personal}
         progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
-        related={<Related itemId={item.id} facets={item.facets} />}
+        related={<Related itemId={item.id} facets={item.facets} tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null} />}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}
@@ -317,6 +379,9 @@ const styles = StyleSheet.create({
   },
   starOn: { backgroundColor: color.accent, borderColor: color.accent },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  pair: { flexDirection: 'row', gap: space.sm },
+  breakdown: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
+  breakdownItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   starsPanel: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, paddingRight: space.md,
     borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,

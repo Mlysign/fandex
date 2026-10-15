@@ -53,6 +53,20 @@ const PLACEHOLDER: Record<Tab, string> = {
 const NOUN: Record<Tab, string> = { wishlist: 'saved', progress: 'episodes', library: 'titles' };
 
 /** Cut a date-sorted list into months. Titles with no date go last, under their own heading. */
+/** The crowd's rating in whole-star bands, high to low, as the list is already sorted; titles without one last. */
+function byRatingBand(rows: CardItem[]): CardSection[] {
+  const bands = new Map<number, CardItem[]>();
+  const unrated: CardItem[] = [];
+  for (const r of rows) {
+    if (r.communityScore == null) { unrated.push(r); continue; }
+    const b = Math.min(10, Math.max(0, Math.floor(r.communityScore / 10)));
+    bands.set(b, [...(bands.get(b) ?? []), r]);
+  }
+  const sections: CardSection[] = [...bands.entries()].sort((a, b) => b[0] - a[0]).map(([b, items]) => ({ key: `r${b}`, label: `${b}★`, items }));
+  if (unrated.length) sections.push({ key: 'unrated', label: 'Unrated', items: unrated });
+  return sections;
+}
+
 function byMonth(rows: (CardItem & { releaseDate: string | null })[], newestFirst: boolean): CardSection[] {
   const months = new Map<string, CardItem[]>();
   const undated: CardItem[] = [];
@@ -161,7 +175,11 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
   const cards = useFiltered(allCards, filters, stateOf);
   // A wishlist by date is a timeline, oldest first, so what is next is where you look.
   // A library by date is newest first.
-  const sections = useMemo(() => (sort === 'releaseDate' ? byMonth(cards, relation === 'library') : undefined), [sort, cards, relation]);
+  // By rating, the site cut the list into bands (GroupedView.tsx, groupByRating): 10★ down to 0★, then Unrated.
+  const sections = useMemo(
+    () => (sort === 'releaseDate' ? byMonth(cards, relation === 'library') : sort === 'rating' ? byRatingBand(cards) : undefined),
+    [sort, cards, relation],
+  );
 
   const total = rows?.length ?? 0;
   const empty = rows === null ? <StateBlock loading />

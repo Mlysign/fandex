@@ -37,6 +37,9 @@ export const LOCAL_API = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(API
 
 export const TMDB_API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY ?? '';
 
+/** The donations page behind Profile's "Support Fandex". Empty: no row. */
+export const SUPPORT_URL = (process.env.EXPO_PUBLIC_SUPPORT_URL ?? '').trim();
+
 export function tmdbConfigured(): boolean {
   return TMDB_API_KEY.length > 0;
 }

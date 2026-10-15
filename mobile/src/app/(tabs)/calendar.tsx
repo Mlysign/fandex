@@ -6,7 +6,7 @@
 //
 // The month never changes size while you use it: the cells are given their
 // height from the space measured, and the rail takes its room from the weeks
-// that fold away. Not carried over: the slide between months.
+// that fold away. A new month slides in from the side it was asked from, as on the site.
 
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -17,6 +17,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { ActionBar, PosterCard, Rail, useCardKit } from '~/components/cards';
 import { Img } from '~/components/Img';
 import { EmptyState } from '~/components/kit';
+import { SlideIn } from '~/components/SlideIn';
 import { TypeIcon } from '~/components/Logo';
 import { SubBar } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
@@ -294,7 +295,10 @@ export default function CalendarScreen() {
   const gridH = weeksShown * rowH + (weeksShown - 1) * gap;
   const railH = selected ? Math.max(0, boxH - gridH - RAIL_GAP_PX) : 0;
 
+  // Which way the last month change went, so the next month slides in from that side.
+  const [slide, setSlide] = useState<-1 | 0 | 1>(0);
   const go = useCallback((dir: -1 | 1) => {
+    setSlide(dir);
     setMonth((cur) => {
       const [cy, cm] = cur.split('-').map(Number);
       const off = (cy - Number(here.slice(0, 4))) * 12 + (cm - Number(here.slice(5))) + dir;
@@ -353,7 +357,7 @@ export default function CalendarScreen() {
               <Pressable onPress={() => go(-1)} disabled={away <= -MAX_MONTHS_AWAY} accessibilityRole="button" accessibilityLabel="Previous month" hitSlop={7} style={styles.arrow}>
                 <ChevronLeft size={14} color={color.textSecondary} />
               </Pressable>
-              <Text accessibilityRole="header" style={type.serifMd}>{monthLabel(month)}</Text>
+              <SlideIn key={month} from={slide}><Text accessibilityRole="header" style={type.serifMd}>{monthLabel(month)}</Text></SlideIn>
               <Pressable onPress={() => go(1)} disabled={away >= MAX_MONTHS_AWAY} accessibilityRole="button" accessibilityLabel="Next month" hitSlop={7} style={styles.arrow}>
                 <ChevronRight size={14} color={color.textSecondary} />
               </Pressable>
@@ -363,7 +367,7 @@ export default function CalendarScreen() {
               {loading ? <Text style={type.meta}>Loading releases…</Text>
                 : monthItemCount > 0 ? <Text style={type.meta}>{monthItemCount} release{monthItemCount !== 1 ? 's' : ''}</Text> : null}
               {month !== here ? (
-                <Pressable onPress={() => setMonth(here)} accessibilityRole="button" hitSlop={12} style={styles.todayChip}>
+                <Pressable onPress={() => { setSlide(0); setMonth(here); }} accessibilityRole="button" hitSlop={12} style={styles.todayChip}>
                   <Text style={[type.meta, { color: color.accent }]}>Today</Text>
                 </Pressable>
               ) : null}
@@ -382,6 +386,7 @@ export default function CalendarScreen() {
               ) : (
                 <>
                   <View style={{ height: gridH, overflow: 'hidden' }}>
+                    <SlideIn key={month} from={slide}>
                     <View style={{ transform: [{ translateY: -firstWeek * (rowH + gap) }], gap }}>
                       {Array.from({ length: weekCount }, (_, w) => (
                         <View key={w} style={{ flexDirection: 'row', height: rowH, gap }}>
@@ -400,6 +405,7 @@ export default function CalendarScreen() {
                         </View>
                       ))}
                     </View>
+                    </SlideIn>
                   </View>
                   <View style={{ height: railH, marginTop: railH > 0 ? RAIL_GAP_PX : 0, overflow: 'hidden' }} onTouchStart={() => { swipe.current = null; }}>
                     {selected && railDay ? (

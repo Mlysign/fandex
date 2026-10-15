@@ -38,7 +38,7 @@ export type { FacetKind } from '~/components/FacetHeader';
 type Sort = 'popularity' | 'releaseDate' | 'rating' | 'fandexScore';
 const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', 'Release date'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
 
-interface StoredFacet { kind: string; key: string; label: string; role?: string }
+interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string }
 
 /** Does a stored facet belong on this page? */
 const matches = (f: StoredFacet, kind: FacetKind, key: string) =>
@@ -69,11 +69,11 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const db = useSQLiteContext();
   const auth = useAuth();
   const sync = useCatalogSync();
-  const { center, impactsFor } = useScores();
+  const { center, impactsFor, taxonomy } = useScores();
   const impacts = useMemo(() => impactsFor(kind === 'studio' ? 'company' : kind, key), [impactsFor, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
-  const [found, setFound] = useState<{ label: string; roles: string[]; cards: CardItem[] } | null>(null);
+  const [found, setFound] = useState<{ label: string; category: string | null; roles: string[]; cards: CardItem[] } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -89,6 +89,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         [`%"key":"${escaped}%`],
       );
       let label = '';
+      let category: string | null = null;
       const roles = new Map<string, number>();
       const cards: CardItem[] = [];
       for (const r of rows) {
@@ -96,10 +97,11 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         try { hit = (JSON.parse(r.facets) as StoredFacet[]).filter((f) => matches(f, kind, key)); } catch { /* an unreadable row is not a match */ }
         if (!hit.length) continue;
         label ||= hit[0].label;
+        category ??= hit.find((f) => f.category)?.category ?? null;
         for (const f of hit) if (f.role) roles.set(f.role, (roles.get(f.role) ?? 0) + 1);
         cards.push(cardFromCatalog(r));
       }
-      if (live) setFound({ label, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards });
+      if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards });
     })();
     return () => { live = false; };
   }, [db, kind, key, sync.revision]);
@@ -160,6 +162,26 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     ];
   }, [cards, stateOf, auth.status]);
 
+  // The site's like-for-like line (PublicFacetView, SM22): over the titles you
+  // rated, your average against the crowd's average for those same titles.
+  const delta = useMemo(() => {
+    const pairs = (cards ?? [])
+      .map((c) => ({ mine: stateOf(c.id).rating, crowd: c.communityScore }))
+      .filter((p): p is { mine: number; crowd: number } => p.mine != null && p.mine > 0 && p.crowd != null);
+    if (!pairs.length) return null;
+    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    return { n: pairs.length, d: avg(pairs.map((p) => p.mine)) - avg(pairs.map((p) => p.crowd / 10)) };
+  }, [cards, stateOf]);
+
+  // A tag's place in the taxonomy (the site's Q18): its category, and the
+  // spellings bundled into it ("Also known as").
+  const tagCategory = kind === 'tag' && taxonomy
+    ? taxonomy.categories.get(taxonomy.tagCategoryOverrides.get(key) ?? found?.category ?? 'other')?.label ?? null
+    : null;
+  const akas = kind === 'tag' && taxonomy
+    ? [...taxonomy.tagAliases.entries()].filter(([alias, canon]) => spokenKey(canon) === key && spokenKey(alias) !== key).map(([alias]) => alias)
+    : [];
+
   if (!found) return <Screen wide><StateBlock loading /></Screen>;
 
   const person = more?.person ?? null;
@@ -182,12 +204,28 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         </Pressable>
       ) : null}
       tiles={tiles}
-      extra={impacts.map((im) => (
-        <View key={im.role ?? 'tag'} style={styles.impact}>
-          <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Fandex impact {signed(im.points)}</Text>
-          <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
-        </View>
-      ))}
+      extra={(
+        <>
+          {tagCategory || akas.length ? (
+            <View style={styles.tagMeta}>
+              {tagCategory ? <Text style={[type.caption, styles.categoryChip]}>{tagCategory}</Text> : null}
+              {akas.length ? <Text style={[type.caption, { flexShrink: 1 }]}>Also known as: {akas.join(', ')}</Text> : null}
+            </View>
+          ) : null}
+          {delta ? (
+            <Text style={[type.bodySm, { marginTop: 12 }]}>
+              Across the {delta.n} you&apos;ve rated, you score {name}{' '}
+              {Math.abs(delta.d) < 0.05 ? 'the same as the crowd' : `${Math.abs(delta.d).toFixed(1)} ${delta.d > 0 ? 'higher' : 'lower'} than the crowd`}
+            </Text>
+          ) : null}
+          {impacts.map((im) => (
+            <View key={im.role ?? 'tag'} style={styles.impact}>
+              <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Fandex impact {signed(im.points)}</Text>
+              <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
+            </View>
+          ))}
+        </>
+      )}
       count={`titles · ${(cards ?? []).length}${asking ? ' · asking TMDB for more…' : ''}`}
       sort={<SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />}
     />
@@ -207,6 +245,11 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 const styles = StyleSheet.create({
   bio: { marginTop: 12, maxWidth: 720 },
   impact: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  tagMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
+  categoryChip: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden',
+    backgroundColor: `${color.facet.tag}21`, color: color.textPrimary,
+  },
   impactPill: {
     fontFamily: font.sansBold, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'],
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: 'hidden',

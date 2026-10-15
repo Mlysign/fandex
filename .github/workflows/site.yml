@@ -81,11 +81,13 @@ jobs:
           TMDB: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
           TRAKT: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_ID }}
           GOOGLE: ${{ secrets.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}
+          SUPPORT: ${{ secrets.EXPO_PUBLIC_SUPPORT_URL }}
         run: |
           {
             echo "EXPO_PUBLIC_TMDB_API_KEY=$TMDB"
             echo "EXPO_PUBLIC_TRAKT_CLIENT_ID=$TRAKT"
             if [ -n "$GOOGLE" ]; then echo "EXPO_PUBLIC_GOOGLE_CLIENT_ID=$GOOGLE"; fi
+            if [ -n "$SUPPORT" ]; then echo "EXPO_PUBLIC_SUPPORT_URL=$SUPPORT"; fi
           } > mobile/.env
 
       # Each title the build fetched, kept between runs: a build asks the API

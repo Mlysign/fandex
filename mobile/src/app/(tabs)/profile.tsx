@@ -4,11 +4,11 @@
 //
 // Signed out it is where you sign in. Not here yet: the Support Fandex row.
 
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Bookmark, ChevronRight, Settings as SettingsIcon, Star, TrendingUp } from 'lucide-react-native';
+import { Bookmark, ChevronRight, Heart, Settings as SettingsIcon, Star, TrendingUp } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardRail } from '~/components/cards';
 import { Avatar, Button } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
@@ -18,7 +18,9 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
+import { SUPPORT_URL } from '~/lib/config';
 import { shortDate, todayIso } from '~/lib/dates';
+import { setReturnTo } from '~/lib/returnTo';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { color, radius, type } from '~/theme';
@@ -63,6 +65,12 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   const signedIn = auth.status === 'signedIn';
+  // A static title page's "Sign in to rate" arrives as /profile?return=/movie/x:
+  // once signed in, the layout takes the visitor back there (lib/returnTo.ts).
+  const { return: returnPath } = useLocalSearchParams<{ return?: string }>();
+  useEffect(() => {
+    if (returnPath && !signedIn) setReturnTo(returnPath);
+  }, [returnPath, signedIn]);
   useEffect(() => {
     let live = true;
     if (!signedIn) {
@@ -121,12 +129,14 @@ export default function ProfileScreen() {
   const joined = auth.profile?.user.createdAt ? new Date(auth.profile.user.createdAt * 1000).getFullYear() : null;
   const avatar = auth.profile?.identities.find((i) => i.avatarUrl)?.avatarUrl ?? null;
 
-  const entries = [
+  const entries: { href: string; label: string; hint: string; Icon: typeof TrendingUp; external?: boolean }[] = [
     { href: '/insights', label: 'Insights', hint: 'Your taste in numbers', Icon: TrendingUp },
     { href: '/wishlist', label: 'Wishlist', hint: stats ? `${stats.wishlist} saved` : '', Icon: Bookmark },
     { href: '/wishlist?tab=library', label: 'Your ratings', hint: stats ? `${stats.rated} titles` : '', Icon: Star },
     { href: '/settings', label: 'Settings', hint: 'Account, sync, privacy', Icon: SettingsIcon },
   ];
+  // The site's donations row (H3.3): last, after what people came here to do, and only when a page is configured.
+  if (SUPPORT_URL) entries.push({ href: SUPPORT_URL, label: 'Support Fandex', hint: 'Help cover the running costs', Icon: Heart, external: true });
   const recommended = rails.recommendation ? rails.withoutHidden(rails.recommendation).filter((c) => types.isVisible(c.type)).slice(0, 8) : [];
 
   return (
@@ -155,10 +165,10 @@ export default function ProfileScreen() {
         ) : null}
 
         <View accessibilityLabel="Your pages" style={styles.entries}>
-          {entries.map(({ href, label, hint, Icon }, i) => (
+          {entries.map(({ href, label, hint, Icon, external }, i) => (
             <Pressable
               key={href}
-              onPress={() => router.push(href as never)}
+              onPress={() => (external ? void Linking.openURL(href) : router.push(href as never))}
               accessibilityRole="link"
               style={({ pressed }) => [styles.entry, i > 0 && { borderTopWidth: 1, borderTopColor: color.border }, pressed && { backgroundColor: color.surfaceElevated }]}>
               <View style={styles.entryIcon}><Icon size={16} color={color.textSecondary} /></View>

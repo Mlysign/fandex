@@ -294,17 +294,30 @@ export function inTransaction(db: SQLiteDatabase, task: () => Promise<void>): Pr
 
 export async function itemStateFor(db: SQLiteDatabase, id: string): Promise<{
   inLibrary: boolean; inWishlist: boolean; rating: number | null; status: string | null;
+  /** Which accounts report the status ("watched on Trakt"). */
+  statusSources: string[];
+  /** Each account's own rating, for the breakdown under the stars. */
+  ratings: { source: string; rating: number }[];
+  /** Unix seconds: when it was rated, else watched. */
+  reviewedAt: number | null;
+  review: string | null;
 }> {
-  const rows = await db.getAllAsync<{ relation: string; rating: number | null; status: string | null }>(
-    'SELECT relation, rating, status FROM item_state WHERE media_item_id = ?',
+  const rows = await db.getAllAsync<{ source: string; relation: string; rating: number | null; status: string | null; review: string | null; reviewed_at: number | null }>(
+    'SELECT source, relation, rating, status, review, reviewed_at FROM item_state WHERE media_item_id = ?',
     [id],
   );
-  const rated = rows.filter((r) => r.relation === 'library' && r.rating != null && r.rating > 0).map((r) => r.rating as number);
+  const library = rows.filter((r) => r.relation === 'library');
+  const ratings = library.filter((r) => r.rating != null && r.rating > 0).map((r) => ({ source: r.source, rating: r.rating as number }));
+  const status = library.find((r) => r.status)?.status ?? null;
   return {
-    inLibrary: rows.some((r) => r.relation === 'library'),
+    inLibrary: library.length > 0,
     inWishlist: rows.some((r) => r.relation === 'wishlist'),
-    rating: rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : null,
-    status: rows.find((r) => r.relation === 'library' && r.status)?.status ?? null,
+    rating: ratings.length ? Math.round((ratings.reduce((a, r) => a + r.rating, 0) / ratings.length) * 10) / 10 : null,
+    status,
+    statusSources: status ? library.filter((r) => r.status === status).map((r) => r.source) : [],
+    ratings,
+    reviewedAt: library.reduce<number | null>((max, r) => (r.reviewed_at != null && (max == null || r.reviewed_at > max) ? r.reviewed_at : max), null),
+    review: library.find((r) => r.review)?.review ?? null,
   };
 }
 
