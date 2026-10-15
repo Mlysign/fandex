@@ -562,6 +562,18 @@ fs.writeFileSync(path.join(STAGE, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
     urls.map((u) => `<url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`).join('\n')}\n</urlset>\n`);
 
+// A title folded into another (worker/scripts/fold-items.mjs) keeps its old
+// address as a 301 to the one it was folded into: 40 of the 66 game ports of
+// 2026-10-15 held the plain address (`/game/tony-hawks-pro-skater-3`) while
+// the main game had the one with a year. Cloudflare applies _redirects before
+// any file, so an address a title holds again today is left out: a redirect
+// there would hide that title's page.
+const liveSlugs = new Set([...details.values()].map((d) => `${d.type}/${d.slug}`));
+const folded = JSON.parse(fs.readFileSync(path.join(here, 'folded.json'), 'utf8')).redirects
+  .filter((r) => TYPES.includes(r.type) && SLUG.test(r.from) && SLUG.test(r.to) && !liveSlugs.has(`${r.type}/${r.from}`));
+fs.writeFileSync(path.join(STAGE, '_redirects'), folded.map((r) => `/${r.type}/${r.from} /${r.type}/${r.to} 301`).join('\n') + '\n');
+step(`${folded.length} folded addresses redirected`);
+
 // The security headers the old site sent (next.config.ts), on every file.
 fs.writeFileSync(path.join(STAGE, '_headers'), [
   '/*',

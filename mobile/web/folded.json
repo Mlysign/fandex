@@ -1,0 +1,335 @@
+{
+ "note": "Addresses of titles folded into another (worker/scripts/fold-items.mjs). build.mjs writes them to _redirects as 301s.",
+ "redirects": [
+  {
+   "type": "game",
+   "from": "beyond-castle-wolfenstein-1984",
+   "to": "beyond-castle-wolfenstein-1984-3"
+  },
+  {
+   "type": "game",
+   "from": "beyond-castle-wolfenstein-1984-2",
+   "to": "beyond-castle-wolfenstein-1984-3"
+  },
+  {
+   "type": "game",
+   "from": "call-of-duty-black-ops-ii",
+   "to": "call-of-duty-black-ops-ii-2012"
+  },
+  {
+   "type": "game",
+   "from": "call-of-duty-black-ops-iii",
+   "to": "call-of-duty-black-ops-iii-2015"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-dirt-2-2009",
+   "to": "colin-mcrae-dirt-2"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-dirt-2-2009-2",
+   "to": "colin-mcrae-dirt-2"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-rally-2005",
+   "to": "colin-mcrae-rally-2005-2004"
+  },
+  {
+   "type": "game",
+   "from": "doom-1994",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-1994-2",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-1995-2",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-chamber-of-secrets",
+   "to": "harry-potter-and-the-chamber-of-secrets-2002"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-chamber-of-secrets-2002-2",
+   "to": "harry-potter-and-the-chamber-of-secrets-2002"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-chamber-of-secrets-2002-3",
+   "to": "harry-potter-and-the-chamber-of-secrets-2002"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-chamber-of-secrets-2002-4",
+   "to": "harry-potter-and-the-chamber-of-secrets-2002"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-goblet-of-fire",
+   "to": "harry-potter-and-the-goblet-of-fire-2005"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-prisoner-of-azkaban-2004",
+   "to": "harry-potter-and-the-prisoner-of-azkaban"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-prisoner-of-azkaban-2004-2",
+   "to": "harry-potter-and-the-prisoner-of-azkaban"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-sorcerers-stone",
+   "to": "harry-potter-and-the-sorcerers-stone-2001"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-sorcerers-stone-2001-2",
+   "to": "harry-potter-and-the-sorcerers-stone-2001"
+  },
+  {
+   "type": "game",
+   "from": "harry-potter-and-the-sorcerers-stone-2001-3",
+   "to": "harry-potter-and-the-sorcerers-stone-2001"
+  },
+  {
+   "type": "game",
+   "from": "injustice-gods-among-us",
+   "to": "injustice-gods-among-us-2013"
+  },
+  {
+   "type": "game",
+   "from": "james-bond-007-nightfire",
+   "to": "james-bond-007-nightfire-2002"
+  },
+  {
+   "type": "game",
+   "from": "james-bond-007-the-world-is-not-enough-2000-2",
+   "to": "james-bond-007-the-world-is-not-enough-2000"
+  },
+  {
+   "type": "game",
+   "from": "jurassic-park",
+   "to": "jurassic-park-1993-4"
+  },
+  {
+   "type": "game",
+   "from": "lego-indiana-jones-2-the-adventure-continues",
+   "to": "lego-indiana-jones-2-the-adventure-continues-2009"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-carbon-2006",
+   "to": "need-for-speed-carbon"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-high-stakes-1999",
+   "to": "need-for-speed-high-stakes"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-most-wanted",
+   "to": "need-for-speed-most-wanted-2005"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-most-wanted-2005-2",
+   "to": "need-for-speed-most-wanted-2005"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-most-wanted-2012-2",
+   "to": "need-for-speed-most-wanted-2012"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-prostreet-2007",
+   "to": "need-for-speed-prostreet-2007-2"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-the-run",
+   "to": "need-for-speed-the-run-2011"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-undercover-2008",
+   "to": "need-for-speed-undercover"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-underground",
+   "to": "need-for-speed-underground-2003"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-rival-swords-2007",
+   "to": "prince-of-persia-rival-swords"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-the-forgotten-sands",
+   "to": "prince-of-persia-the-forgotten-sands-2010"
+  },
+  {
+   "type": "game",
+   "from": "rayman",
+   "to": "rayman-1995"
+  },
+  {
+   "type": "game",
+   "from": "rayman-2-the-great-escape-1999",
+   "to": "rayman-2-the-great-escape-1999-2"
+  },
+  {
+   "type": "game",
+   "from": "rayman-2-the-great-escape-2000",
+   "to": "rayman-2-the-great-escape-1999-2"
+  },
+  {
+   "type": "game",
+   "from": "rayman-legends-2013",
+   "to": "rayman-legends"
+  },
+  {
+   "type": "game",
+   "from": "rayman-raving-rabbids",
+   "to": "rayman-raving-rabbids-2006"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-civilization-revolution-2008",
+   "to": "sid-meiers-civilization-revolution"
+  },
+  {
+   "type": "game",
+   "from": "teenage-mutant-ninja-turtles",
+   "to": "teenage-mutant-ninja-turtles-1989"
+  },
+  {
+   "type": "game",
+   "from": "teenage-mutant-ninja-turtles-tournament-fighters-1993",
+   "to": "teenage-mutant-ninja-turtles-tournament-fighters-1993-2"
+  },
+  {
+   "type": "game",
+   "from": "tekken-6-2009-2",
+   "to": "tekken-6"
+  },
+  {
+   "type": "game",
+   "from": "the-legend-of-zelda-twilight-princess",
+   "to": "the-legend-of-zelda-twilight-princess-2006"
+  },
+  {
+   "type": "game",
+   "from": "tmnt",
+   "to": "tmnt-2007"
+  },
+  {
+   "type": "game",
+   "from": "tom-clancys-splinter-cell-chaos-theory",
+   "to": "tom-clancys-splinter-cell-chaos-theory-2005"
+  },
+  {
+   "type": "game",
+   "from": "tom-clancys-splinter-cell-double-agent-2006",
+   "to": "tom-clancys-splinter-cell-double-agent"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-american-sk8land-2005",
+   "to": "tony-hawks-american-sk8land"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-american-wasteland-2005",
+   "to": "tony-hawks-american-wasteland"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-downhill-jam-2006",
+   "to": "tony-hawks-downhill-jam"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-2",
+   "to": "tony-hawks-pro-skater-2-2000"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-2-2000-2",
+   "to": "tony-hawks-pro-skater-2-2000"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-2-2001",
+   "to": "tony-hawks-pro-skater-2-2000"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-3",
+   "to": "tony-hawks-pro-skater-3-2001"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-3-2002",
+   "to": "tony-hawks-pro-skater-3-2001"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-3-2002-2",
+   "to": "tony-hawks-pro-skater-3-2001"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-proving-ground",
+   "to": "tony-hawks-proving-ground-2007-2"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-proving-ground-2007",
+   "to": "tony-hawks-proving-ground-2007-2"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-underground",
+   "to": "tony-hawks-underground-2003"
+  },
+  {
+   "type": "game",
+   "from": "van-helsing-2004",
+   "to": "van-helsing"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-1994",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-1994-2",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "worms-1995",
+   "to": "worms"
+  },
+  {
+   "type": "game",
+   "from": "worms-blast-2002",
+   "to": "worms-blast"
+  }
+ ]
+}

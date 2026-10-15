@@ -185,10 +185,13 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
   if (!igdbConfigured()) return [];
   const safe = sanitizeApicalypseSearch(title);
   if (!safe) return []; // nothing meaningful to search → don't run a malformed query
-  // Main entries only, like every browse query: IGDB keeps each console port
-  // and edition as a game of its own, with the same name and year. Opening one
-  // from search made it a second title (77 pool rows on 2026-10-15, docs/catalog-growth.md).
-  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & parent_game = null; limit ${safeInt(limit, 10)};`);
+  // No ports (game_type 11) and no editions (version_parent): IGDB keeps each
+  // console port and each "Gold Edition" as a game of its own, often with the
+  // same name and year, and opening one from search made it a second title
+  // (69 pool rows on 2026-10-15). ⚠️ NOT `parent_game = null`, which the browse
+  // queries use: that also drops every DLC, expansion, remaster and remake
+  // (Oblivion Remastered, Metal Gear Solid Delta), which are works of their own.
+  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & game_type != 11; limit ${safeInt(limit, 10)};`);
 }
 
 // Upcoming games whose first release falls in a unix-second window, most

@@ -104,6 +104,22 @@ export async function resolveItem(
   }
   if (!item) return { ok: false, reason: "not-found" };
 
+  // An IGDB port or edition opens its main game: IGDB keeps each console port
+  // and each "Gold Edition" as a game of its own, often with the same name and
+  // year, and holding both made one game two titles (66 folded on 2026-10-15).
+  // Search already leaves them out; this covers a link that names one.
+  const main = item.source === "igdb" ? mainGameId(item.rawData) : null;
+  if (main) {
+    const heldMain = await findByProviderId(env.DB, "igdb", "game", main);
+    if (heldMain) return { ok: true, id: heldMain, created: false };
+    try {
+      item = (await fetchFromProvider(env, "igdb", "game", main)) ?? item;
+    } catch (e) {
+      // The port itself was fetched fine. Better the port than nothing.
+      console.warn("resolve_main_game_failed", { id, main, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // browsed = 1: a title somebody opened is not yet a title somebody acted on,
   // and only acted-on rows belong in the scoring pool every device shares.
   const res = await upsertMediaItem(env.DB, item, { browsed: 1 });
@@ -162,6 +178,16 @@ export async function lookupRefsJson(db: D1Database, refs: ProviderRef[]): Promi
     [JSON.stringify(refs)],
   );
   return `{"found":${row?.found ?? "[]"},"missing":${row?.missing ?? "[]"}}`;
+}
+
+/**
+ * The game an IGDB port (game_type 11) or edition (version_parent) belongs to,
+ * or null. Only those two: a DLC, an expansion, a remaster or a remake also
+ * has a parent_game, and each of those is a work of its own.
+ */
+export function mainGameId(g: any): string | null {
+  const id = g?.version_parent ?? (g?.game_type === 11 ? g?.parent_game : null);
+  return Number.isInteger(id) && id > 0 && id !== g.id ? String(id) : null;
 }
 
 /** One provider detail call. Null means the provider answered and has no such title. */

@@ -275,6 +275,40 @@ describe("resolving a provider title", () => {
     expect(stored!.expires_at).toBeGreaterThan(Date.now() / 1000);
   });
 
+  it("opens a port's or an edition's main game, and keeps a remake as itself", async () => {
+    const games: Record<string, any> = {
+      "914": igdbGame({ id: 914, name: "Tony Hawk's Pro Skater 3", game_type: 0 }),
+      "234861": igdbGame({ id: 234861, name: "Tony Hawk's Pro Skater 3", game_type: 11, parent_game: 914 }),
+      "500": igdbGame({ id: 500, name: "Gothic II: Gold Edition", game_type: 3, version_parent: 2262 }),
+      "2262": igdbGame({ id: 2262, name: "Gothic II", game_type: 0 }),
+      "1877": igdbGame({ id: 1877, name: "Dead Space", game_type: 8, parent_game: 19 }),
+    };
+    const asked: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("oauth2/token")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      if (url.includes("game_time_to_beats")) return Response.json([]);
+      const id = /where id = (\d+)/.exec(String(init?.body ?? ""))?.[1] ?? "";
+      asked.push(id);
+      return Response.json(games[id] ? [games[id]] : []);
+    });
+    const open = async (id: string) => (await (await call(`/v1/resolve/igdb/game/${id}`)).json()) as any;
+    const titleOf = async (itemId: string) => (await db.prepare("SELECT l.source_id FROM media_links l WHERE l.media_item_id = ?").bind(itemId).first<{ source_id: string }>())!.source_id;
+
+    // Neither held: the port is fetched, then its main game, and only the main game is stored.
+    const port = await open("234861");
+    expect(await titleOf(port.id)).toBe("914");
+    expect(await count("media_links", "source_id = ?", ["234861"])).toBe(0);
+    // The main game already held: the port answers with it, and nothing is created.
+    expect(await open("234861")).toMatchObject({ id: port.id, created: false });
+    expect(await open("914")).toMatchObject({ id: port.id, created: false });
+    // An edition goes to its version_parent.
+    expect(await titleOf((await open("500")).id)).toBe("2262");
+    // A remake has a parent_game too, and is a game of its own.
+    expect(await titleOf((await open("1877")).id)).toBe("1877");
+    expect(asked).not.toContain("19");
+  });
+
   it("writes nothing when the provider fails or has no such title", async () => {
     providers({
       "api.themoviedb.org/3/movie/1": () => new Response("{}", { status: 404 }),
@@ -422,9 +456,10 @@ describe("game search", () => {
     expect((await call("/v1/search/games?q=%3C%3E%3Ca")).status).toBe(400);
   });
 
-  it("asks IGDB for main entries only, never a port or an edition", async () => {
+  it("asks IGDB for no ports and no editions, and keeps remakes and expansions", async () => {
     // Every port is a game of its own there, with the same name and year; opening
-    // one from search made it a second title (77 pool rows on 2026-10-15).
+    // one from search made it a second title (69 pool rows on 2026-10-15). `parent_game = null`
+    // would also drop every DLC, remaster and remake, which are works of their own.
     const bodies: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -433,7 +468,8 @@ describe("game search", () => {
       return Response.json([]);
     });
     await call("/v1/search/games?q=tony%20hawk");
-    expect(bodies[0]).toContain("where version_parent = null & parent_game = null;");
+    expect(bodies[0]).toContain("where version_parent = null & game_type != 11;");
+    expect(bodies[0]).not.toContain("parent_game = null");
   });
 
   it("stops asking IGDB after five rejected credentials, and tries again later", async () => {

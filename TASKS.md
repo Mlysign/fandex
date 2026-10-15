@@ -112,20 +112,12 @@ The 13th run swept the live site, the 14th every write on a test account. All tw
 
 ### Added 2026-09-03
 
-- **⬜ 77 game ports sit in the catalog as titles of their own. Needs Nils's yes to fold them.**
-  Measured 2026-10-15 over the 4,562 pool titles: no film or show is doubled (*Andor* is one row
-  on D1; its *Star Wars: Andor* twin was on the old Railway database). What is doubled is games:
-  62 groups of the same name and year, and in them 77 rows that IGDB itself marks as a port or
-  edition of another game (`parent_game`, e.g. four *Tony Hawk's Pro Skater 3* console versions).
-  69 of the 77 have their parent in the pool; one user row (a library entry) sits on one. Game
-  search let them in, since it was the one IGDB query without the `parent_game = null` filter;
-  fixed and deployed 2026-10-15, so no new ones arrive. ⚠️ Five groups are genuinely different
-  games with one name (*Jurassic Park* on SNES vs Mega Drive, *Overwatch* 1 vs 2) and must stay.
-  **The proposal:** for each of the 77, move its user rows to the parent (refusing on a clash, as
-  `accountMerge` does), then delete the port row; its page and sitemap entry go with the next
-  publish. The 8 whose parent is not in the pool: resolve the parent through the Worker first.
-  To re-measure: group the build's `mobile/web/dist/cache/items` by type, title and year, then
-  ask IGDB `games` for `parent_game,version_parent` on the ids (one call).
+- **⬜ A few games are doubled by an old RAWG-only or Steam-only row.** Left over from the fold of 66 IGDB
+  ports on 2026-10-15 (archive, grep "game ports"): same-name-same-year groups that pair
+  an IGDB row with a RAWG-only or Steam-only one (8 on 2026-10-15), e.g. *Gothic II: Gold Edition*, where the IGDB row holds
+  Nils's Steam library entry. The row without IGDB is the one to fold, with
+  `node worker/scripts/fold-items.mjs` (it refuses if a user row sits on the row it deletes).
+  Not done because nobody has looked at each pair yet.
 
 - **⬜ The tag tail: ~9,000 tags in Other appearing three times or fewer.** The Review tab's rules
   deliberately stop at the head (91% of everything appearing 20+ times). The tail is not worth a

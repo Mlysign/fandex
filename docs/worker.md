@@ -303,6 +303,7 @@ Run from `worker/` unless a path says otherwise.
 | Apply a migration | `npx wrangler d1 migrations apply fandex --remote`, and BEFORE the deploy that needs it |
 | What read the most rows today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (answers while D1 refuses queries) |
 | Query D1 | `npx wrangler d1 execute fandex --remote --command "…"` |
+| Fold duplicate titles into the one they duplicate | `node worker/scripts/fold-items.mjs <pairs.json> --local\|--remote [--apply]`. Refuses if a user row sits on a duplicate, backs every deleted row up to `data/backups/`, drops the kept counts. Rehearse with `--local` first. Then add each old address to `mobile/web/folded.json` and publish the site, or the old address opens "not found". |
 | Rows a query reads | the same with `--json`: `meta.rows_read`. ⚠️ Not with `--file`, which reports the upload and not the query. |
 | Logs with CPU time | `npx wrangler tail fandex-api --format json` |
 | Set secrets from `.env` | `node worker/scripts/push-secrets.mjs` (from the repo root) |

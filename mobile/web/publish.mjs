@@ -49,7 +49,7 @@ function count(dir) {
 }
 const files = fs.existsSync(OUT) ? count(OUT) : 0;
 if (files !== build.files) fail(`dist/site holds ${files} files and the build wrote ${build.files}.`);
-for (const must of ['index.html', 'app-shell.html', '404.html', 'robots.txt', 'sitemap.xml', '_headers', 'legal/de/imprint.html', 'legal/en/privacy.html']) {
+for (const must of ['index.html', 'app-shell.html', '404.html', 'robots.txt', 'sitemap.xml', '_headers', '_redirects', 'legal/de/imprint.html', 'legal/en/privacy.html']) {
   if (!fs.existsSync(path.join(OUT, must))) fail(`dist/site has no ${must}.`);
 }
 
