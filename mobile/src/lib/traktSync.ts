@@ -27,7 +27,7 @@ import {
 } from '~/lib/api';
 import { getMeta, setMeta } from '~/lib/db';
 import { syncState } from '~/lib/stateSync';
-import { traktAccessToken, traktList } from '~/lib/trakt';
+import { traktAccessToken, traktList, traktPost } from '~/lib/trakt';
 
 const SYNCED_AT_KEY = 'trakt_synced_at';
 /** Rows per write. The Worker takes 2,000; this leaves room. */
@@ -143,6 +143,18 @@ export function foldTraktPull(raw: RawTraktPull): TraktPull {
   return { library, wishlist, episodesByShow };
 }
 
+/**
+ * Titles Trakt holds both as rated and on the watchlist. Fandex's rule is that
+ * rating a title takes it off the wishlist (itemActions.ts), and Trakt does not
+ * apply it to a rating made on its own site. Nils, 2026-10-15: "always keep
+ * Trakt and Fandex in sync", so the sync takes these off Trakt's watchlist and
+ * never puts them on the Fandex wishlist (SM63).
+ */
+export function ratedButWishlisted(pull: TraktPull): PulledTitle[] {
+  const rated = new Set(pull.library.filter((t) => t.rating != null).map(titleKey));
+  return pull.wishlist.filter((t) => rated.has(titleKey(t)));
+}
+
 // ── The comparison ───────────────────────────────────────────────────────────
 
 export interface LocalItemRow {
@@ -203,7 +215,8 @@ export function planTraktSync(input: {
     wanted.set(key, { mediaItemId, source: 'trakt', relation, review: null, ...fields });
   };
   for (const t of pull.library) want(t, 'library', { status: 'watched', rating: t.rating, reviewedAt: t.reviewedAt });
-  for (const t of pull.wishlist) want(t, 'wishlist', { status: null, rating: null, reviewedAt: null });
+  const leaving = new Set(ratedButWishlisted(pull).map(titleKey));
+  for (const t of pull.wishlist) if (!leaving.has(titleKey(t))) want(t, 'wishlist', { status: null, rating: null, reviewedAt: null });
 
   const local = new Map(localItems.map((r) => [`${r.mediaItemId}|${r.relation}`, r]));
   const itemUpserts: ItemStateUpsert[] = [];
@@ -284,6 +297,8 @@ export interface TraktSyncResult {
   /** Titles waiting for the next run because the Worker would not fetch more this minute. */
   deferred: number;
   unmatched: number;
+  /** Rated titles taken off Trakt's watchlist this run (SM63). */
+  watchlistTidied: number;
 }
 
 async function pullTrakt(accessToken: string): Promise<TraktPull> {
@@ -399,6 +414,7 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
   const { ids, newTitles, deferred } = await matchTitles([...pull.library, ...pull.wishlist]);
   const local = await localTraktRows(db);
   const plan = planTraktSync({ pull, ids, deferred, localItems: local.items, localEpisodes: local.episodes });
+  const tidy = ratedButWishlisted(pull);
 
   const result: TraktSyncResult = {
     dryRun: !!opts.dryRun,
@@ -412,10 +428,27 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
     newTitles,
     deferred,
     unmatched: plan.unmatched,
+    watchlistTidied: 0,
   };
+  if (opts.dryRun) {
+    console.log('trakt_sync', JSON.stringify({ ...result, wouldTidy: tidy.length, localItems: local.items.length, localEpisodes: local.episodes.length }));
+    return result;
+  }
+
+  // Take rated titles off Trakt's watchlist. A failure here is left for the next
+  // run: the plan already keeps them off the Fandex wishlist either way.
+  if (tidy.length) {
+    const body: Record<string, { ids: { trakt: number } }[]> = {};
+    for (const t of tidy) (body[`${t.type}s`] ??= []).push({ ids: { trakt: t.traktId } });
+    try {
+      await traktPost('/sync/watchlist/remove', accessToken, body);
+      result.watchlistTidied = tidy.length;
+    } catch (e) {
+      console.warn('trakt_watchlist_tidy_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    }
+  }
   // Counts only. What a person watched does not belong in a device log.
   console.log('trakt_sync', JSON.stringify({ ...result, localItems: local.items.length, localEpisodes: local.episodes.length }));
-  if (opts.dryRun) return result;
 
   const changes = result.itemsChanged + result.itemsRemoved + result.episodesChanged + result.episodesRemoved;
   if (changes > 0) {

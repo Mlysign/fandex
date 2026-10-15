@@ -156,6 +156,13 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   out at a median 4 ms and a worst 35 ms against the free Worker's 10 ms, so the plan's own rule
   picked the build. Workers Paid at $5 stays the upgrade.
 
+### Added 2026-10-15
+
+- **Trakt and Fandex are kept in sync, and the sync may write to Trakt to do it** (Nils: "always
+  keep trakt and fandex accounts in sync"). First case, SM63: a title rated on Trakt while on its
+  watchlist is taken off Trakt's watchlist by the next sync (`ratedButWishlisted`,
+  `mobile/src/lib/traktSync.ts`). A watched, unrated title stays on it.
+
 ---
 
 ## Decided 2026-09-02

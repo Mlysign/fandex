@@ -4,7 +4,7 @@ vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 
 import {
-  foldTraktPull, planTraktSync, TraktSyncRefused,
+  foldTraktPull, planTraktSync, ratedButWishlisted, TraktSyncRefused,
   type LocalEpisodeRow, type LocalItemRow, type RawTraktPull, type TraktPull,
 } from './traktSync';
 
@@ -157,5 +157,28 @@ describe('working out what to send', () => {
       localItems: [localItem(A), localItem(B, { relation: 'ignored' })], localEpisodes: [],
     });
     expect(plan.itemDeletes).toEqual([]);
+  });
+});
+
+describe('a title rated on Trakt and still on its watchlist (SM63)', () => {
+  const pull = pullOf({
+    library: [lib(1, 'movie', 7), lib(2, 'movie', null)],
+    wishlist: [{ type: 'movie', traktId: 1, tmdbId: null }, { type: 'movie', traktId: 2, tmdbId: null }, { type: 'movie', traktId: 3, tmdbId: null }],
+  });
+
+  it('is found only when rated: watched and unrated stays on the watchlist', () => {
+    expect(ratedButWishlisted(pull).map((t) => t.traktId)).toEqual([1]);
+  });
+
+  it('is never put on the Fandex wishlist, and leaves it if it was there', () => {
+    const plan = planTraktSync({
+      pull,
+      ids: new Map([['movie:1', A], ['movie:2', B], ['movie:3', C]]),
+      deferred: 0,
+      localItems: [localItem(A), localItem(A, { relation: 'wishlist', status: null, rating: null, reviewedAt: null })],
+      localEpisodes: [],
+    });
+    expect(plan.itemUpserts.filter((u) => u.relation === 'wishlist').map((u) => u.mediaItemId)).toEqual([B, C]);
+    expect(plan.itemDeletes).toEqual([{ mediaItemId: A, source: 'trakt', relation: 'wishlist' }]);
   });
 });

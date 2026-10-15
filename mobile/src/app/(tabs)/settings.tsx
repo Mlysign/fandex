@@ -55,6 +55,7 @@ function traktSummary(r: TraktSyncResult): string {
     changed ? `${changed.toLocaleString('en')} updated` : null,
     removed ? `${removed.toLocaleString('en')} removed` : null,
     r.deferred ? `${r.deferred.toLocaleString('en')} new titles waiting for the next sync` : null,
+    r.watchlistTidied ? `${r.watchlistTidied.toLocaleString('en')} rated titles taken off your Trakt watchlist` : null,
   ].filter(Boolean);
   const what = parts.length ? parts.join(', ') : 'Nothing had changed';
   return r.dryRun ? `Test run, nothing written. Would be: ${what.toLowerCase()}.` : `${what}.`;
