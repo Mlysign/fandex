@@ -106,10 +106,65 @@ describe("the nightly export", () => {
     }
     await exportAll();
     const parts = (await keys()).filter((k) => k.includes("/page_view_daily-"));
-    expect(parts).toHaveLength(3);
+    // Named by the rows before them, which is how the restore drill walks them.
+    expect(parts.map((k) => k.split("-").pop())).toEqual(["00000000.json", "00001000.json", "00002000.json"]);
     const seen = new Set<string>();
-    for (const p of parts) for (const r of await readJson(p)) seen.add(r.path_key);
+    let total = 0;
+    for (const p of parts) for (const r of await readJson(p)) { seen.add(r.path_key); total++; }
     expect(seen.size).toBe(2350);
+    expect(total).toBe(2350);
+  });
+
+  it("pages by key, so a table costs its own size in rows read and not its square", async () => {
+    // A rowid table and a WITHOUT ROWID one with a three-column key, both
+    // three chunks long. Paged by OFFSET they read 1,000 + 2,000 + 2,350 each.
+    await db.prepare("CREATE TABLE user_notes (user_id TEXT NOT NULL, note TEXT)").run();
+    try {
+      const notes = Array.from({ length: 2350 }, (_, i) => `('u${i % 7}', 'note ${i}')`);
+      const views = Array.from({ length: 2350 }, (_, i) => `('2026-01-0${i % 3 + 1}', 'path-${i % 800}', ${i % 2}, ${i})`);
+      for (let i = 0; i < 2350; i += 500) {
+        await db.prepare(`INSERT INTO user_notes VALUES ${notes.slice(i, i + 500).join(",")}`).run();
+        await db.prepare(`INSERT OR IGNORE INTO page_view_daily (day, path_key, authed, count) VALUES ${views.slice(i, i + 500).join(",")}`).run();
+      }
+      const viewRows = (await db.prepare("SELECT COUNT(*) n FROM page_view_daily").first<{ n: number }>())!.n;
+
+      let rowsRead = 0;
+      for (let i = 0; i < 40; i++) {
+        const step = await runExportStep(env, DAY);
+        rowsRead += step.rowsRead;
+        if (step.done) break;
+      }
+
+      for (const [table, rows, field] of [["user_notes", 2350, "note"], ["page_view_daily", viewRows, "count"]] as const) {
+        const parts = (await keys()).filter((k) => k.includes(`/${table}-`));
+        const got: unknown[] = [];
+        for (const p of parts) got.push(...(await readJson(p)).map((r: any) => r[field]));
+        expect(got.length, table).toBe(rows);
+        expect(new Set(got).size, table).toBe(rows);
+      }
+      // Every other table here is a few rows, so 4,700 is the floor. Measured 4,720;
+      // by OFFSET the same two tables read 10,700.
+      expect(rowsRead).toBeLessThan(2350 + viewRows + 100);
+    } finally {
+      await db.prepare("DROP TABLE user_notes").run();
+    }
+  });
+
+  it("starts a table again when the saved cursor is the old offset kind", async () => {
+    const rows = Array.from({ length: 1500 }, (_, i) => `('2026-01-01', 'p-${String(i).padStart(5, "0")}', 0, ${i})`);
+    for (let i = 0; i < rows.length; i += 500) {
+      await db.prepare(`INSERT INTO page_view_daily (day, path_key, authed, count) VALUES ${rows.slice(i, i + 500).join(",")}`).run();
+    }
+    const tables = await exportTables(db);
+    await kvSet(db, "export_cursor", JSON.stringify({
+      day: "2026-10-04", tables, table: tables.indexOf("page_view_daily"), offset: 1000, done: false, rows: 0,
+    }));
+    await exportAll();
+    const seen = new Set<string>();
+    for (const p of (await keys()).filter((k) => k.includes("/page_view_daily-"))) {
+      for (const r of await readJson(p)) seen.add(r.path_key);
+    }
+    expect(seen.size).toBe(1500);
   });
 
   it("covers a table added after this code was written", async () => {

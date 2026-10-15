@@ -276,6 +276,14 @@ Each of these is a way the Worker differs from the site, and each has a test.
   rows are refreshed, which is 150 days for a TMDB link.
 - **`kv` holds the Twitch app token and is never exported.** The export skips tables by name and a
   test fails if `kv` reaches the bucket.
+- **The export pages by key, and must never page by `OFFSET`.** An offset is read past, so chunk
+  k cost k chunks and a table cost the square of its size. On 2026-10-15 it was the biggest reader
+  of the day: about 230,000 of 290,000 rows, 109,000 of them to export 12,414 episode rows. At ten
+  accounts with that history it would have spent the whole 5 million on its own. Measured on live
+  D1 after the change: a chunk 9,000 rows in reads 1,001. ⚠️ How the chunk's last key is taken
+  matters as much: a window function over the chunk read 3,002 and an `ORDER BY` inside the
+  aggregate 2,001, because D1 counts every row through a temporary table. `cron.test.ts` asserts
+  the total.
 - **Tests run inside workerd against a local D1.** That is the same SQLite build as production,
   which matters because the SQL leans on row values, `json_each` and `WITHOUT ROWID`. The
   compatibility date must not be newer than the workerd the test pool bundles.
@@ -342,9 +350,10 @@ What it showed a real restore still needs:
   number grows with every title somebody resolves.
 - **A day of row writes.** Applying the emitted files to a new D1 is about what the seed cost
   (80,000), so on the free plan a restore is a day on which nothing else may write.
-- ⚠️ The export pages by `OFFSET` across cron runs ten minutes apart, so a write in between can
-  export a row twice or skip one. The drill counts duplicates (none so far) and compares the total
-  with the manifest; a skipped row would only show against live.
+- The export pages by KEY since 2026-10-15 (it was `OFFSET`), so a write between two cron runs
+  can no longer export a row twice or skip one: a chunk starts after the last key written,
+  whatever was inserted or deleted before it. A row added behind the cursor is simply not in that
+  day's export. The drill still counts duplicates and compares the total with the manifest.
 - ⚠️ `wrangler r2 object list` returned nothing useful, so the drill walks each table's chunks by
   key until one is missing. A failed download throws; it is never read as the end of a table.
 

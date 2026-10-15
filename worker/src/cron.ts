@@ -62,9 +62,29 @@ interface ExportCursor {
   day: string;
   tables: string[];
   table: number;
+  /** Rows of this table written so far. It names the next part, and the restore walks the parts by it. */
   offset: number;
+  /** The last key written, so the next chunk starts after it. Null at a table's start. */
+  after?: KeyValue[] | null;
   done: boolean;
   rows: number;
+}
+
+type KeyValue = string | number;
+
+/**
+ * The columns a table is paged by: its primary key for a WITHOUT ROWID table
+ * (NOT NULL by construction there), its rowid otherwise.
+ *
+ * A chunk starts AFTER the last key written, never at an OFFSET. An offset is
+ * read past, not jumped to, so chunk k of a table cost k chunks of rows and the
+ * whole table cost the square of its size: 109,000 rows read on 2026-10-15 to
+ * export 12,000 episode rows, and D1 Free stops every query past 5 million a day.
+ */
+async function exportKey(db: D1Database, table: string, info: { name: string; pk: number }[]): Promise<string[]> {
+  const row = await db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").bind(table).first<{ sql: string }>();
+  if (!/WITHOUT\s+ROWID/i.test(row?.sql ?? "")) return ["rowid"];
+  return info.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name);
 }
 
 export async function exportTables(db: D1Database): Promise<string[]> {
@@ -78,7 +98,7 @@ export async function exportTables(db: D1Database): Promise<string[]> {
 }
 
 /** One step of the export. Returns what it did, for the log and the tests. */
-export async function runExportStep(env: Env, now = Date.now()): Promise<{ wrote: number; done: boolean; day: string }> {
+export async function runExportStep(env: Env, now = Date.now()): Promise<{ wrote: number; done: boolean; day: string; rowsRead: number }> {
   const day = utcDay(now);
   const raw = await kvGet(env.DB, EXPORT_CURSOR_KEY);
   let cursor: ExportCursor | null = null;
@@ -87,47 +107,71 @@ export async function runExportStep(env: Env, now = Date.now()): Promise<{ wrote
   if (!cursor || cursor.day !== day) {
     cursor = { day, tables: await exportTables(env.DB), table: 0, offset: 0, done: false, rows: 0 };
   }
-  if (cursor.done) return { wrote: 0, done: true, day };
+  if (cursor.done) return { wrote: 0, done: true, day, rowsRead: 0 };
+  // A cursor saved by the offset version, part-way into a table: start that
+  // table again. Its parts are overwritten under the same names.
+  if (cursor.offset > 0 && !cursor.after) cursor.offset = 0;
 
   let wrote = 0;
+  let rowsRead = 0;
+  const next = (c: ExportCursor) => { c.table++; c.offset = 0; c.after = null; };
   for (let i = 0; i < EXPORT_CHUNKS_PER_RUN && cursor.table < cursor.tables.length; i++) {
     const table = cursor.tables[cursor.table];
-    const cols = (await all<{ name: string }>(env.DB, `PRAGMA table_info("${table}")`))
+    const info = await all<{ name: string; pk: number }>(env.DB, `PRAGMA table_info("${table}")`);
+    const cols = info
       .map((c) => c.name)
       .filter((c) => IDENTIFIER.test(c) && !EXPORT_SKIP_COLUMNS[table]?.has(c));
-    if (!cols.length) { cursor.table++; cursor.offset = 0; continue; }
+    const key = cols.length ? await exportKey(env.DB, table, info) : [];
+    if (!cols.length || !key.length || !key.every((k) => IDENTIFIER.test(k))) { next(cursor); continue; }
 
     const fields = cols.map((c) => `'${c}', "${c}"`).join(", ");
+    const keyCols = key.map((k) => `"${k}"`).join(", ");
+    const keyOut = key.map((k, j) => `"${k}" AS _rr_k${j}`).join(", ");
+    const after = cursor.after?.length === key.length ? cursor.after : null;
+    const where = after
+      ? key.length === 1 ? `WHERE ${keyCols} > ?2` : `WHERE (${keyCols}) > (${key.map((_, j) => `?${j + 2}`).join(", ")})`
+      : "";
+    // `k` is the chunk's last key: the subquery hands rows over in key order
+    // and the aggregate keeps them in that order. Measured on D1 (2026-10-15),
+    // a chunk of 1,000 reads 1,001 rows this way. Numbering the rows with a
+    // window read 3,002, and an ORDER BY inside the aggregate 2,001: D1 counts
+    // every row that passes through a temporary table.
+    const sql =
+      `SELECT json_group_array(json_object(${fields})) j, COUNT(*) n,
+              json_group_array(json_array(${key.map((_, j) => `_rr_k${j}`).join(", ")})) ->> '$[#-1]' k
+         FROM (SELECT *, ${keyOut} FROM "${table}" ${where} ORDER BY ${keyCols} LIMIT ?1)`;
     // A chunk is ONE aggregated string and D1 caps a value at 2 MB. A table of
     // short rows fits a thousand; one holding long reviews may not, and a chunk
-    // that cannot be read would stall the export on the same offset forever. So
+    // that cannot be read would stall the export on the same key forever. So
     // a failed read is retried smaller rather than skipped.
-    let chunk: { j: string | null; n: number } | null = null;
+    let chunk: Record<string, unknown> | null = null;
     let size = EXPORT_CHUNK_ROWS;
     for (;;) {
       try {
-        chunk = await env.DB.prepare(
-          `SELECT json_group_array(json_object(${fields})) j, COUNT(*) n
-             FROM (SELECT * FROM "${table}" LIMIT ?1 OFFSET ?2)`,
-        ).bind(size, cursor.offset).first<{ j: string | null; n: number }>();
+        const res = await env.DB.prepare(sql).bind(size, ...(after ?? [])).all<Record<string, unknown>>();
+        rowsRead += res.meta.rows_read ?? 0;
+        chunk = res.results[0] ?? null;
         break;
       } catch (e) {
         if (size <= 1) throw e;
         size = Math.max(1, Math.floor(size / 10));
       }
     }
-    const n = chunk?.n ?? 0;
+    const n = Number(chunk?.n ?? 0);
 
     if (n > 0 || cursor.offset === 0) {
       const part = String(cursor.offset).padStart(8, "0");
-      await env.BACKUPS.put(`d1/${day}/${table}-${part}.json`, chunk?.j ?? "[]", {
+      await env.BACKUPS.put(`d1/${day}/${table}-${part}.json`, typeof chunk?.j === "string" ? chunk.j : "[]", {
         httpMetadata: { contentType: "application/json" },
       });
       wrote++;
       cursor.rows += n;
     }
-    if (n < size) { cursor.table++; cursor.offset = 0; }
-    else cursor.offset += size;
+    if (n < size) next(cursor);
+    else {
+      cursor.offset += n;
+      cursor.after = JSON.parse(String(chunk!.k)) as KeyValue[];
+    }
   }
 
   if (cursor.table >= cursor.tables.length) {
@@ -142,7 +186,7 @@ export async function runExportStep(env: Env, now = Date.now()): Promise<{ wrote
     wrote++;
   }
   await kvSet(env.DB, EXPORT_CURSOR_KEY, JSON.stringify(cursor));
-  return { wrote, done: cursor.done, day };
+  return { wrote, done: cursor.done, day, rowsRead };
 }
 
 // ── 2. The TMDB refresh ─────────────────────────────────────────────────────
