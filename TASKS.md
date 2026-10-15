@@ -50,15 +50,11 @@ two mechanisms. → [[monetization-h3]]
 
 ## Smoke tests, 2026-10-11 (13th and 14th run, the first two on the new stack)
 
-The 13th run swept the live site, the 14th every write on a test account. Twenty-one of twenty-two findings were fixed the same day and are in the archive (grep "13th smoke test", "14th smoke test"). Plan: [smoketest.md](smoketest.md), "The new stack". What is left:
-
-| ID | Sev | Type | Area | Finding (with repro) |
-|----|:--:|:--:|------|----------------------|
-| SM66 | 🔵 | error | Game search | Fixed for `<` and `>`. Never tried: five failed game searches in a row, which is the credential latch's threshold and would shut game search for 15 minutes. |
+The 13th run swept the live site, the 14th every write on a test account. All twenty-two findings are fixed and in the archive (grep "13th smoke test", "14th smoke test", "SM66"). Plan: [smoketest.md](smoketest.md), "The new stack".
 
 **Never run by anybody**, and a test account cannot reach the first two: an episode tick or a rating's Trakt half on an account that is not Nils's; disconnecting one of two sign-ins; Add on a Review card; Save weights, a category, an alias, a name or an attach on `/dev/scoring`.
 
-**Not re-logged, still true:** calendar-month pages and `/dashboard` are 404; Rate signed out sends you to You and does not bring you back; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync; a title removed from the pool between two site builds sends new visitors back to the API for their first sync until the next publish.
+**Not re-logged, still true:** `/dashboard` is 404; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync; a title removed from the pool between two site builds sends new visitors back to the API for their first sync until the next publish.
 
 ---
 
@@ -116,14 +112,20 @@ The 13th run swept the live site, the 14th every write on a test account. Twenty
 
 ### Added 2026-09-03
 
-- **⬜ The catalog holds duplicate items across sources.** Found while verifying the franchise
-  sweep: `Andor` and `Star Wars: Andor` are two separate `media_items` rows, the first already in
-  the Star Wars franchise via Wikidata, the second offered by the membership suggester as if it
-  were missing. So a franchise can gain a member it visibly already has. ⚠️ **This is an identity
-  problem, not a taxonomy one** — `findMatchingItem` never folded them, presumably because the
-  titles differ by a franchise prefix that `norm_title` keeps. Worth measuring how many such pairs
-  exist before deciding whether to fix it; a title-prefix merge is exactly the shape that
-  [[cross-type-identity-merge]] warns about.
+- **⬜ 77 game ports sit in the catalog as titles of their own. Needs Nils's yes to fold them.**
+  Measured 2026-10-15 over the 4,562 pool titles: no film or show is doubled (*Andor* is one row
+  on D1; its *Star Wars: Andor* twin was on the old Railway database). What is doubled is games:
+  62 groups of the same name and year, and in them 77 rows that IGDB itself marks as a port or
+  edition of another game (`parent_game`, e.g. four *Tony Hawk's Pro Skater 3* console versions).
+  69 of the 77 have their parent in the pool; one user row (a library entry) sits on one. Game
+  search let them in, since it was the one IGDB query without the `parent_game = null` filter;
+  fixed and deployed 2026-10-15, so no new ones arrive. ⚠️ Five groups are genuinely different
+  games with one name (*Jurassic Park* on SNES vs Mega Drive, *Overwatch* 1 vs 2) and must stay.
+  **The proposal:** for each of the 77, move its user rows to the parent (refusing on a clash, as
+  `accountMerge` does), then delete the port row; its page and sitemap entry go with the next
+  publish. The 8 whose parent is not in the pool: resolve the parent through the Worker first.
+  To re-measure: group the build's `mobile/web/dist/cache/items` by type, title and year, then
+  ask IGDB `games` for `parent_game,version_parent` on the ids (one call).
 
 - **⬜ The tag tail: ~9,000 tags in Other appearing three times or fewer.** The Review tab's rules
   deliberately stop at the head (91% of everything appearing 20+ times). The tail is not worth a

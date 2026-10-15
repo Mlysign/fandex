@@ -421,6 +421,52 @@ describe("game search", () => {
     // What is left after the brackets go still has to be a search term.
     expect((await call("/v1/search/games?q=%3C%3E%3Ca")).status).toBe(400);
   });
+
+  it("asks IGDB for main entries only, never a port or an edition", async () => {
+    // Every port is a game of its own there, with the same name and year; opening
+    // one from search made it a second title (77 pool rows on 2026-10-15).
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("oauth2/token")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      bodies.push(String(init?.body ?? ""));
+      return Response.json([]);
+    });
+    await call("/v1/search/games?q=tony%20hawk");
+    expect(bodies[0]).toContain("where version_parent = null & parent_game = null;");
+  });
+
+  it("stops asking IGDB after five rejected credentials, and tries again later", async () => {
+    // The auth latch (src/lib/http.ts): five 401s in a row mean our own key is
+    // dead, and every further call would spend a request on a known answer.
+    // Nobody had run it through the Worker before.
+    let status = 401;
+    const calls = providers({
+      "id.twitch.tv/oauth2/token": () => Response.json({ access_token: "t", expires_in: 5_000_000 }),
+      "api.igdb.com/v4/games": () => (status === 200 ? Response.json([igdbGame()]) : new Response("", { status })),
+    });
+    const igdbCalls = () => calls.filter((u) => u.includes("api.igdb.com")).length;
+
+    for (let i = 0; i < 5; i++) expect((await call(`/v1/search/games?q=latch%20${i}`)).status).toBe(502);
+    expect(igdbCalls()).toBe(5);
+
+    // Latched: the sixth search answers 502 without a request, and browse, which
+    // is best-effort, an empty page it does not cache. Neither reaches IGDB.
+    expect((await call("/v1/search/games?q=latch%20six")).status).toBe(502);
+    const browse = await call("/v1/browse/games?page=1");
+    expect(browse.status).toBe(200);
+    expect(((await browse.json()) as any).results).toEqual([]);
+    expect(igdbCalls()).toBe(5);
+
+    // Fifteen minutes on, one probe goes out. The key works again, so it closes.
+    status = 200;
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 15 * 60_000 + 1_000);
+    const res = await call("/v1/search/games?q=latch%20later");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).results).toHaveLength(1);
+    expect(igdbCalls()).toBe(6);
+  });
 });
 
 describe("game browse and facet games", () => {

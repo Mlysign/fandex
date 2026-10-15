@@ -111,7 +111,7 @@ await esbuild.build({
   }],
   logLevel: 'warning',
 });
-const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs, popularPeople } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
+const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs, popularPeople, renderCalendarMonth, calendarHead } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
 
 // ── 3. The data ──────────────────────────────────────────────────────────────
 
@@ -334,6 +334,51 @@ for (const facet of facets) {
 const facetCount = (k) => facets.filter((f) => f.kind === k).length;
 step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios), the largest ${(facetLargest / 1024).toFixed(0)} KB`);
 
+// ── Calendar months ──────────────────────────────────────────────────────────
+
+// The old site's /calendar/{month} pages, which Google still holds addresses
+// for: last month and the next six (src/lib/calendarMonths.ts), in the US's
+// dates as before, from the Worker's calendar (cached there for six hours).
+// No app on these: it has no address for one month, and would show "not found".
+// Fewer than three releases is the old thin-page line: written, but noindex.
+const CALENDAR_REGION = 'US';
+const monthsShown = (() => {
+  const now = new Date();
+  return Array.from({ length: 8 }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1 + i, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
+})();
+const bySource = new Map();
+for (const { vector } of poolTitles) for (const s of vector.sources ?? []) bySource.set(`${s.source}:${vector.type}:${s.sourceId}`, vector);
+let monthPages = 0;
+for (const month of monthsShown) {
+  const answer = await getJson(`${API}/v1/calendar/${month}?region=${CALENDAR_REGION}`);
+  const items = answer?.data?.items ?? [];
+  const cards = items.map((c) => {
+    const held = bySource.get(`${c.source}:${c.type}:${c.sourceId}`);
+    return {
+      key: `${c.source}:${c.type}:${c.sourceId}`, id: held?.id ?? null, slug: held?.slug ?? null, source: c.source, sourceId: c.sourceId,
+      type: c.type, title: c.title, releaseDate: c.releaseDate, posterUrl: c.posterUrl,
+      communityScore: c.voteAverage != null && c.voteCount > 0 ? Math.round(c.voteAverage * 10) : null, communityVotes: c.voteCount ?? 0,
+    };
+  });
+  const page = { month, months: monthsShown, cards };
+  const head = calendarHead(page);
+  const { body, css } = renderCalendarMonth(page);
+  if (!body.includes('role="heading"')) throw new Error(`calendar/${month} rendered without a heading`);
+  const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
+    + `<link rel="canonical" href="${esc(head.canonical)}">${cards.length < 3 ? '<meta name="robots" content="noindex, follow">' : ''}`
+    + `${social({ title: head.title, description: head.description, url: head.canonical })}`
+    + `<style>${fontCss}${FRAME_CSS}${STATIC_GRID_CSS}</style>${css}<script type="application/ld+json">${head.jsonLd}</script></head>`
+    + `<body><div id="prerender" data-page="calendar">${body}</div><script>${PV_SCRIPT}</script></body></html>`;
+  fs.mkdirSync(path.join(STAGE, 'calendar'), { recursive: true });
+  fs.writeFileSync(path.join(STAGE, 'calendar', `${month}.html`), html);
+  if (cards.length >= 3) urls.push({ loc: head.canonical, lastmod: new Date().toISOString().slice(0, 10) });
+  monthPages++;
+}
+step(`${monthPages} calendar month pages written`);
+
 // ── The app's two shells ─────────────────────────────────────────────────────
 
 // Every address that is the app's alone (/search, /library, /item/…) is served
@@ -444,6 +489,8 @@ fs.writeFileSync(path.join(STAGE, 'robots.txt'), [
   'User-agent: *',
   'Allow: /',
   'Allow: /v1/calendar/',
+  // The month pages are crawlable and the calendar app is not: the longer match wins (the old site's robots.ts).
+  'Allow: /calendar/',
   'Disallow: /v1/',
   // The old site's list (src/app/robots.ts): the screens that are yours, or that need the app to show anything.
   ...['/item/', '/open/', '/auth/', '/discover', '/calendar', '/wishlist', '/library', '/profile', '/settings', '/insights', '/import', '/dev/', '/app-shell', '/catalog/'].map((p) => `Disallow: ${p}`),

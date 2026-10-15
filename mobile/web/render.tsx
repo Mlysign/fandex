@@ -10,7 +10,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
-import { AppRegistry, Pressable, Text, View } from 'react-native';
+import { AppRegistry, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ArrowLeft, Bookmark, Star } from 'lucide-react-native';
 import { AppNav } from '~/components/AppNav';
@@ -234,6 +234,83 @@ export function tagCrumbs(pages: FacetPageData[]): (facets: ScoreFacet[]) => { n
     return null;
   };
 }
+
+// ── Calendar months ──────────────────────────────────────────────────────────
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export const monthName = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+const dayOf = (date: string | null) => (date ? `${Number(date.slice(8, 10))} ${MONTHS[Number(date.slice(5, 7)) - 1].slice(0, 3)}` : 'TBA');
+
+export interface CalendarPageData { month: string; months: string[]; cards: CardItem[] }
+
+/**
+ * The old site's /calendar/{month} (src/app/calendar/[month]/page.tsx): the
+ * month's biggest releases across games, movies and shows, ranked by the
+ * attention each gets, with the other months as links. Same words, the app's
+ * cards. A release the catalog holds links to its page; one it does not opens
+ * through /open, which a crawler is kept out of.
+ */
+function CalendarMonthPage({ page }: { page: CalendarPageData }) {
+  const label = monthName(page.month);
+  return (
+    <Frame path={`/calendar/${page.month}`}>
+      <Screen wide>
+        <StaticGrid
+          items={page.cards}
+          dateOf={(c) => dayOf(c.releaseDate)}
+          header={(
+            <View style={{ paddingBottom: 16 }}>
+              <Text accessibilityRole="header" style={[type.serifXl, { marginTop: 6 }]}>Releases in {label}</Text>
+              <Text style={[type.bodySm, { marginTop: 8 }]}>
+                {page.cards.length
+                  ? `The ${page.cards.length} biggest game, movie and show releases this month, ranked by how much attention each is getting. `
+                  : `No releases are confirmed for ${label} yet. The providers usually fill a month in about eight weeks ahead of it. `}
+                Open the calendar to filter by type or track what you are waiting for.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
+                {page.months.map((m) => (
+                  <Pressable
+                    key={m} {...({ href: `/calendar/${m}` } as object)} accessibilityRole="link"
+                    style={[styles.monthChip, m === page.month && styles.monthChipOn]}>
+                    <Text style={[type.label, { color: m === page.month ? '#EDE7DC' : '#9A8F80' }]}>{monthName(m)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+          footer={<View style={{ marginTop: 24 }}><LegalLinks /></View>}
+        />
+      </Screen>
+    </Frame>
+  );
+}
+AppRegistry.registerComponent('CalendarMonth', () => CalendarMonthPage);
+
+export function renderCalendarMonth(page: CalendarPageData): { body: string; css: string } {
+  const { element, getStyleElement } = webRegistry.getApplication('CalendarMonth', { initialProps: { page } });
+  return { body: renderToString(element), css: renderToStaticMarkup(getStyleElement()) };
+}
+
+/** The old site's words and its ItemList, the honest shape for a ranked list of releases. */
+export function calendarHead(page: CalendarPageData): { title: string; description: string; canonical: string; jsonLd: string } {
+  const label = monthName(page.month);
+  const canonical = `${SITE}/calendar/${page.month}`;
+  return {
+    title: `Game, movie and TV releases in ${label}`,
+    description: `Everything coming out in ${label} across games, movies and shows, ranked by how much attention each release is getting. Free to browse on Fandex.`,
+    canonical,
+    jsonLd: jsonLdScript([{
+      '@context': 'https://schema.org', '@type': 'ItemList', name: `Releases in ${label}`,
+      itemListOrder: 'https://schema.org/ItemListOrderDescending', numberOfItems: page.cards.length,
+      itemListElement: page.cards.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.title, ...(c.slug ? { url: `${SITE}/${c.type}/${c.slug}` } : {}) })),
+    }]),
+  };
+}
+
+const styles = StyleSheet.create({
+  monthChip: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(237,231,220,0.09)' },
+  monthChipOn: { borderColor: 'rgba(237,231,220,0.18)', backgroundColor: '#0B0A09' },
+});
 
 // ── Popular people ───────────────────────────────────────────────────────────
 

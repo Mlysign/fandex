@@ -185,7 +185,10 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
   if (!igdbConfigured()) return [];
   const safe = sanitizeApicalypseSearch(title);
   if (!safe) return []; // nothing meaningful to search → don't run a malformed query
-  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} limit ${safeInt(limit, 10)};`);
+  // Main entries only, like every browse query: IGDB keeps each console port
+  // and edition as a game of its own, with the same name and year. Opening one
+  // from search made it a second title (77 pool rows on 2026-10-15, docs/catalog-growth.md).
+  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & parent_game = null; limit ${safeInt(limit, 10)};`);
 }
 
 // Upcoming games whose first release falls in a unix-second window, most

@@ -19,8 +19,10 @@ import { monthYear } from '~/lib/dates';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
-export function CardFace({ item, score, center, link, bar, style }: {
+export function CardFace({ item, score, center, link, bar, style, dateText }: {
   item: CardItem;
+  /** In place of the month and year: a calendar page names the day. */
+  dateText?: string;
   score: number | null;
   center: number | null;
   link: { anchor: object | null; onPress?: (e?: GestureResponderEvent) => void };
@@ -56,7 +58,7 @@ export function CardFace({ item, score, center, link, bar, style }: {
         <View style={cardStyles.body}>
           <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text>
           <View style={cardStyles.metaRow}>
-            <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{monthYear(item.releaseDate)}</Text>
+            <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
             {score != null ? <FandexScore score={score} center={center} />
               : item.communityScore != null ? <CommunityScore score={item.communityScore} /> : null}
           </View>
@@ -97,7 +99,7 @@ export function RailFrame({ title, forYou, action, children }: { title: string; 
  * a server renders and nothing runs on. The same face, a plain link, and the
  * bar a signed-out visitor sees, whose two buttons lead to sign-in (/profile).
  */
-export function StaticPosterCard({ item, style }: { item: CardItem; style?: StyleProp<ViewStyle> }) {
+export function StaticPosterCard({ item, style, dateText }: { item: CardItem; style?: StyleProp<ViewStyle>; dateText?: string }) {
   const bar = (
     <View style={cardStyles.bar}>
       <Pressable {...({ href: '/profile' } as object)} accessibilityRole="link" accessibilityLabel="Sign in to rate this"
@@ -111,7 +113,7 @@ export function StaticPosterCard({ item, style }: { item: CardItem; style?: Styl
       </Pressable>
     </View>
   );
-  return <CardFace item={item} score={null} center={null} link={{ anchor: { href: cardHref(item) } }} style={style} bar={bar} />;
+  return <CardFace item={item} score={null} center={null} link={{ anchor: { href: cardHref(item) } }} style={style} bar={bar} dateText={dateText} />;
 }
 
 /** A rail of static cards, 150 px each: the item page's two rails on the website's static pages. */
@@ -128,12 +130,12 @@ export function StaticRail({ title, items }: { title: string; items: CardItem[] 
  * same content box PosterGrid uses. A server cannot measure the window, so the
  * column count comes from STATIC_GRID_CSS, which the page must carry.
  */
-export function StaticGrid({ items, header, footer }: { items: CardItem[]; header?: ReactNode; footer?: ReactNode }) {
+export function StaticGrid({ items, header, footer, dateOf }: { items: CardItem[]; header?: ReactNode; footer?: ReactNode; dateOf?: (item: CardItem) => string }) {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={cardStyles.gridContent}>
       {header}
       <View {...({ dataSet: { grid: 'static' } } as object)} style={cardStyles.staticGrid}>
-        {items.map((item) => <StaticPosterCard key={item.key} item={item} />)}
+        {items.map((item) => <StaticPosterCard key={item.key} item={item} dateText={dateOf?.(item)} />)}
       </View>
       {footer}
     </ScrollView>
