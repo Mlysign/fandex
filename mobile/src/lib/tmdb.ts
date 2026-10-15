@@ -156,3 +156,27 @@ export async function tmdbUpcoming(type: 'movie' | 'show', page: number, region:
       votes: typeof r.vote_count === 'number' ? r.vote_count : 0,
     }));
 }
+
+/**
+ * This week's trending films or shows at TMDB, in TMDB's order: the old site's
+ * "Popular right now" (src/lib/homeRails.ts, trendingPool). `score` is the
+ * crowd's, 0 to 100.
+ */
+export async function tmdbTrending(type: 'movie' | 'show', page: number, signal?: AbortSignal): Promise<(ProviderCard & { score: number | null })[]> {
+  if (!tmdbConfigured()) return [];
+  const res = await fetch(`${BASE}/trending/${type === 'movie' ? 'movie' : 'tv'}/week?api_key=${TMDB_API_KEY}&page=${page}`, { signal });
+  if (!res.ok) throw new Error(`TMDB trending answered ${res.status}`);
+  const data = (await res.json()) as { results?: any[] };
+  return (data.results ?? [])
+    .filter((r) => r?.id && r.poster_path)
+    .map((r) => ({
+      source: 'tmdb' as const,
+      sourceId: String(r.id),
+      type,
+      title: r.title ?? r.name ?? 'Untitled',
+      releaseDate: r.release_date || r.first_air_date || null,
+      posterUrl: `https://image.tmdb.org/t/p/w342${r.poster_path}`,
+      votes: typeof r.vote_count === 'number' ? r.vote_count : 0,
+      score: typeof r.vote_average === 'number' && r.vote_average > 0 ? Math.round(r.vote_average * 10) : null,
+    }));
+}

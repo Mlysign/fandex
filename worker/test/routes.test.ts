@@ -449,6 +449,12 @@ describe("game browse and facet games", () => {
     expect(bodies[0]).not.toContain("involved_companies");
   });
 
+  it("pages the last sixty days' games, most rated first, for Home's trending rail", async () => {
+    const bodies = igdb(() => Response.json([igdbGame()]));
+    expect((await call("/v1/browse/games?page=1&window=recent")).status).toBe(200);
+    expect(bodies[0]).toContain("sort total_rating_count desc");
+  });
+
   it("refuses a page out of range", async () => {
     expect((await call("/v1/browse/games?page=0")).status).toBe(400);
     expect((await call("/v1/browse/games?page=11")).status).toBe(400);

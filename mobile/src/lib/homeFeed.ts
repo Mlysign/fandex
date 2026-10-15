@@ -3,15 +3,16 @@
 // The site built them on the server once a day (src/lib/homeSnapshot.ts): real
 // trending endpoints for "Popular right now", the calendar's ranked month
 // candidates for "Upcoming", and the taste model over those candidates for
-// "Recommended for you". The Worker has no home route yet, so this uses the one
-// ranked feed it does serve, the calendar's months:
+// "Recommended for you". Here:
 //
-//   Popular right now   what came out in the last weeks, in the month's own rank order
+//   Popular right now   TMDB's trending films and shows this week, asked from
+//                       the device, and the games out in the last sixty days,
+//                       most rated first (/v1/browse/games?window=recent), as
+//                       the site's trendingPool. Since 2026-10-15; before, it
+//                       was recent releases, which is still the fallback when
+//                       none of those answers.
 //   Upcoming            what is still to come over three months, soonest first
 //   Recommended         the upcoming titles, ordered by your taste
-//
-// ⚠️ "Popular right now" is therefore recent releases by popularity, not watch
-// activity. It becomes the site's rail when the Worker serves trending.
 //
 // The rotation is the site's own (src/lib/dailyRotation.ts): a rail is the
 // same all day and different tomorrow, with its top three kept.
@@ -21,6 +22,7 @@ import { tagKey } from '@/lib/facets';
 import { api, type CalendarCard } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
+import { tmdbTrending } from '~/lib/tmdb';
 import type { ScoreFacet } from '~/lib/fandexScore';
 
 export const RAIL_SIZE = 15;
@@ -67,6 +69,45 @@ export async function lookupHeld(cards: CalendarCard[]): Promise<Map<string, str
   return held;
 }
 
+/**
+ * The trending pool: each source in its own order, taken in turn (a film, a
+ * show, a game) so no one source fills the rail. The site ranked across
+ * sources by each one's median (popularMonth.ts); taking turns is the same
+ * idea without a number the three do not share. Null when nothing answered.
+ */
+async function trendingPool(): Promise<FeedCard[] | null> {
+  const settle = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[]);
+  const [films1, films2, shows, games] = await Promise.all([
+    settle(tmdbTrending('movie', 1)), settle(tmdbTrending('movie', 2)), settle(tmdbTrending('show', 1)),
+    settle(api.browseGames(1, 'recent').then((r) => r.results.filter((g) => g.posterUrl))),
+  ]);
+  const lists: { source: string; sourceId: string; type: CardItem['type']; title: string; releaseDate: string | null; posterUrl: string | null; votes: number; score?: number | null; rating?: number | null }[][] =
+    [[...films1, ...films2], shows, games];
+  if (lists.every((l) => !l.length)) return null;
+  const out: FeedCard[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; lists.some((l) => i < l.length); i++) {
+    for (const list of lists) {
+      const c = list[i];
+      if (!c) continue;
+      const key = `${c.source}:${c.type}:${c.sourceId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        key, id: null, source: c.source, sourceId: c.sourceId, type: c.type, title: c.title,
+        releaseDate: c.releaseDate, posterUrl: c.posterUrl, genres: [],
+        communityScore: c.score ?? c.rating ?? null, communityVotes: c.votes,
+      });
+    }
+  }
+  try {
+    const res = await api.lookup(out.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
+    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f.mediaItemId]));
+    for (const c of out) c.id = held.get(c.key) ?? null;
+  } catch { /* the cards still open; they just do not know your state */ }
+  return out;
+}
+
 let cached: { at: number; region: string; feed: HomeFeed } | null = null;
 const TTL_MS = 10 * 60 * 1000;
 
@@ -76,6 +117,7 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   const now = currentMonth();
   const months = [shiftMonth(now, -1), now, shiftMonth(now, 1), shiftMonth(now, 2)];
   // A month that fails is a shorter rail, not an empty home page.
+  const trendingAsked = trendingPool();
   const answers = await Promise.all(months.map((m) => api.calendar(m, region).catch(() => null)));
   if (answers.every((a) => a === null)) throw new Error('The calendar did not answer');
 
@@ -95,7 +137,7 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   const candidates = future.map((c) => toCard(c, held));
   const upcoming = rotateRail(candidates, RAIL_SIZE, seedFor('upcoming', day))
     .sort((a, b) => ((a.releaseDate as string) < (b.releaseDate as string) ? -1 : 1));
-  const trending = rotateRail(released.map((c) => toCard(c, held)), RAIL_SIZE, seedFor('trending', day));
+  const trending = rotateRail((await trendingAsked) ?? released.map((c) => toCard(c, held)), RAIL_SIZE, seedFor('trending', day));
 
   const feed = { trending, upcoming, candidates };
   cached = { at: Date.now(), region, feed };

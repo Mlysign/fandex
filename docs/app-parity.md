@@ -34,7 +34,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 |---|---|---|
 | Navigation | **yes** | The desktop bar's search box (`NavSearch.tsx`: suggestions for titles, people, tags). It is a link to Search for now. |
 | The kit | **yes** | See the kit table below. |
-| Home | partial | Popular people. "Popular right now" is recent releases by popularity until the Worker serves trending. Recommendations are ranked by genre only (a calendar card carries nothing finer). |
+| Home | partial | Popular people. "Popular right now" is real trending since 2026-10-15: TMDB's week for films and shows, and the last sixty days' most rated games (`/v1/browse/games?window=recent`), taken in turn. Recommendations are ranked by genre only (a calendar card carries nothing finer). |
 | Wishlist / Library | partial | Grouping by your rating. |
 | Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
 | Search (Discover) | partial | Since 2026-10-15 the provider-fed feed is under the catalog when nothing is typed: upcoming films (your country) and shows from TMDB, asked from the device, and upcoming games from `/v1/browse/games`, five pages each as the list reaches its end. Still owed: people and tag results. Scroll and query restored on Back. |
@@ -63,7 +63,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 |--:|---|---|
 | 1 | ~~Settings' rest~~ (2026-10-15): Import and the download on a phone. A second login method on Android waits on Nils (app.md). | |
 | 2 | ~~Static facet pages, the related rails on static item pages, games on a studio's or tag's page~~ (done 2026-10-15). Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. The rails are the site's own internal links, which is the one lever on crawl priority that is ours ([seo.md](seo.md)); the build holds every title and can pick them with `lib/related.ts`. |
-| 3 | ~~The provider-fed Discover feed~~ (done 2026-10-15). Trending on Home. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
+| 3 | ~~The provider-fed Discover feed, trending on Home~~ (done 2026-10-15). | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 4 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 
 ## The admin pages

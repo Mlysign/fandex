@@ -31,7 +31,7 @@ Public, no session:
 | `GET /v1/resolve/{tmdb\|igdb}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. |
 | `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held. Never fetches. A library sync calls this, then `resolve` for the misses. |
 | `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. |
-| `GET /v1/browse/games?page` | Upcoming games, most anticipated first, 40 a page, pages 1 to 10: the Search feed. Card fields only. Edge-cached six hours per page and day; an empty page is never cached. Measured 2026-10-15: 4 ms CPU on a miss. Reads and writes no D1 row. |
+| `GET /v1/browse/games?page[&window=recent]` | Upcoming games, most anticipated first, 40 a page, pages 1 to 10: the Search feed. With `window=recent`, the last sixty days' games, most rated first: Home's trending. Card fields only. Edge-cached six hours per page and day; an empty page is never cached. Measured 2026-10-15: 4 ms CPU on a miss. Reads and writes no D1 row. |
 | `GET /v1/facet/games?kind=tag|studio&q` | A tag's games (theme, keyword or genre containing it) or a studio's (company name containing it), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
 | `GET /v1/calendar/{YYYY-MM}?region` | The month's popular releases, 40 cards. |

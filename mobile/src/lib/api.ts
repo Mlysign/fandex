@@ -262,7 +262,7 @@ export const api = {
 
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
   /** Upcoming games, most anticipated first, forty a page (1 to 10). */
-  browseGames: (page: number) => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page) })}`),
+  browseGames: (page: number, window?: 'recent') => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page), window })}`),
   /** A tag's or a studio's games at IGDB, most rated first. */
   facetGames: (kind: 'tag' | 'studio', label: string) => request<{ results: GameSearchResult[] }>(`/v1/facet/games${q({ kind, q: label })}`),
 

@@ -337,9 +337,14 @@ const BROWSE_GAME_PAGES = 10;
 /** The old site's browse window: about eighteen months ahead (src/lib/discoverFeed.ts, DAYS_WINDOW). */
 const BROWSE_WINDOW_DAYS = 550;
 
+/** "Recent" is the old site's trending games: out in the last sixty days (discoverFeed.ts, fetchTrendingGames). */
+const RECENT_GAME_DAYS = 60;
+
 /**
  * Upcoming games, most anticipated first, forty a page: the Search screen's
- * feed when nothing is typed, beyond what the catalog holds. The old site's
+ * feed when nothing is typed, beyond what the catalog holds. With
+ * `window=recent`, the games out in the last sixty days, most rated first:
+ * Home's "Popular right now". The old site's
  * IGDB page (discoverFeed.ts, igdbGamePage), card fields only. Films and shows
  * the device asks TMDB for itself. Nothing is stored and no D1 row is read:
  * the edge cache answers a repeat for six hours, which is what makes a
@@ -350,14 +355,17 @@ async function browseGames(c: Ctx): Promise<Response> {
   if (!Number.isInteger(page) || page < 1 || page > BROWSE_GAME_PAGES) return error(400, "bad-request", `page must be 1 to ${BROWSE_GAME_PAGES}`);
   // Keyed by the day, so the window moves with it.
   const day = new Date().toISOString().slice(0, 10);
-  const cacheKey = new Request(`https://cache.fandex.internal/browse/games?day=${day}&page=${page}`);
+  const recent = c.url.searchParams.get("window") === "recent";
+  const cacheKey = new Request(`https://cache.fandex.internal/browse/games?day=${day}&page=${page}&recent=${recent ? 1 : 0}`);
   const hit = await caches.default.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
   if (!(await allow(c.env.RL_RESOLVE, `browse:${clientIp(c.request)}`))) return error(429, "rate-limited");
 
   useSharedIgdbToken(c.env);
   const now = Math.floor(Date.now() / 1000);
-  const rows = await discoverIgdbUpcoming(now, now + BROWSE_WINDOW_DAYS * 86_400, 40, (page - 1) * 40, "hypes", "card");
+  const rows = recent
+    ? await discoverIgdbUpcoming(now - RECENT_GAME_DAYS * 86_400, now, 40, (page - 1) * 40, "total_rating_count", "card")
+    : await discoverIgdbUpcoming(now, now + BROWSE_WINDOW_DAYS * 86_400, 40, (page - 1) * 40, "hypes", "card");
   const results = rows.filter((g) => g?.id && g?.name).map(gameCard);
   const response = json({ results, page, more: results.length === 40 && page < BROWSE_GAME_PAGES }, 200, { "Cache-Control": "public, max-age=3600" });
   // discoverIgdbUpcoming answers [] for a failure too: never keep an empty page.
