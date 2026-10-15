@@ -16,7 +16,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { slugToKey } from '@/lib/facetUrl';
 import { PosterGrid } from '~/components/cards';
-import { Avatar, EmptyState, SortMenu, StatStrip } from '~/components/kit';
+import { Avatar, EmptyState, SortMenu } from '~/components/kit';
+import { backButtonStyle, FacetHeader, facetEyebrow, KIND_LABEL, ROLE_LABEL, type FacetKind } from '~/components/FacetHeader';
 import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
@@ -24,6 +25,7 @@ import { spokenKey, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { usePageTitle } from '~/lib/pageTitle';
+import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
@@ -31,13 +33,7 @@ import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
 import { color, font, radius, type } from '~/theme';
 
-export type FacetKind = 'tag' | 'person' | 'studio';
-
-const KIND_LABEL: Record<FacetKind, string> = { tag: 'Tag', person: 'Person', studio: 'Studio' };
-const ROLE_LABEL: Record<string, string> = {
-  director: 'Director', creator: 'Creator', writer: 'Writer', cast: 'Cast',
-  developer: 'Developer', publisher: 'Publisher', studio: 'Studio', network: 'Network',
-};
+export type { FacetKind } from '~/components/FacetHeader';
 
 type Sort = 'popularity' | 'releaseDate' | 'rating' | 'fandexScore';
 const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', 'Release date'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
@@ -112,6 +108,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null } | null>(null);
   const [asking, setAsking] = useState(false);
   const label = found?.label ?? '';
+  // The website's static copy of this page lies over the app until the app has the titles.
+  useEffect(() => { if (found) dropFacetPrerender(); }, [found]);
   usePageTitle(label || null);
   const ready = found != null;
   useEffect(() => {
@@ -168,37 +166,31 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const name = found.label || person?.name || key.replace(/-/g, ' ');
   const life = person ? [person.birthday ? `Born ${longDate(person.birthday) ?? person.birthday}` : null, person.deathday ? `died ${longDate(person.deathday) ?? person.deathday}` : null, person.placeOfBirth].filter(Boolean).join(' · ') : '';
   const header = (
-    <View style={styles.header}>
-      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/discover' as never))} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.back}>
-        <ArrowLeft size={16} color={color.textSecondary} />
-      </Pressable>
-      <Text style={[type.eyebrow, { color: color.accent }]}>
-        {kind === 'tag' ? KIND_LABEL.tag : found.roles.length ? found.roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ') : KIND_LABEL[kind]}
-      </Text>
-      <View style={styles.who}>
-        {person?.profileUrl ? <Avatar src={person.profileUrl} name={name} size={84} /> : null}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text accessibilityRole="header" style={[type.serifXl, { marginTop: 6 }]}>{name}</Text>
-          {life ? <Text style={[type.meta, { marginTop: 4 }]}>{life}</Text> : null}
-        </View>
-      </View>
-      {person?.biography ? (
+    <FacetHeader
+      back={(
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/discover' as never))} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={backButtonStyle}>
+          <ArrowLeft size={16} color={color.textSecondary} />
+        </Pressable>
+      )}
+      eyebrow={facetEyebrow(kind, found.roles)}
+      name={name}
+      avatar={person?.profileUrl ? <Avatar src={person.profileUrl} name={name} size={84} /> : null}
+      life={life}
+      bio={person?.biography ? (
         <Pressable onPress={() => setBioOpen((v) => !v)} accessibilityRole="button" accessibilityLabel={bioOpen ? 'Show less of the biography' : 'Show the whole biography'}>
           <Text numberOfLines={bioOpen ? undefined : 4} style={[type.bodySm, styles.bio]}>{person.biography}</Text>
         </Pressable>
       ) : null}
-      <View style={{ marginTop: 16 }}><StatStrip cells={tiles} /></View>
-      {impacts.map((im) => (
+      tiles={tiles}
+      extra={impacts.map((im) => (
         <View key={im.role ?? 'tag'} style={styles.impact}>
           <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Fandex impact {signed(im.points)}</Text>
           <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
         </View>
       ))}
-      <View style={styles.sortRow}>
-        <Text style={[type.micro, { color: color.accent, letterSpacing: 0.8 }]}>titles · {(cards ?? []).length}{asking ? ' · asking TMDB for more…' : ''}</Text>
-        <SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />
-      </View>
-    </View>
+      count={`titles · ${(cards ?? []).length}${asking ? ' · asking TMDB for more…' : ''}`}
+      sort={<SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />}
+    />
   );
 
   return (
@@ -213,17 +205,10 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingBottom: 16 },
-  who: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   bio: { marginTop: 12, maxWidth: 720 },
-  back: {
-    width: 36, height: 36, marginBottom: 16, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
-  },
   impact: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   impactPill: {
     fontFamily: font.sansBold, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'],
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: 'hidden',
   },
-  sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, minHeight: 30 },
 });

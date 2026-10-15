@@ -8,16 +8,14 @@ import { useRouter } from 'expo-router';
 import { ArrowRight, Bookmark, Star } from 'lucide-react-native';
 import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  ActivityIndicator, FlatList, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions,
   type GestureResponderEvent, type StyleProp, type ViewStyle,
 } from 'react-native';
-import { Img } from '~/components/Img';
-import { CommunityScore, FandexScore, Popover, useAnchor } from '~/components/kit';
-import { TypeIcon } from '~/components/Logo';
+import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFace';
+import { Popover, useAnchor } from '~/components/kit';
 import { useToast } from '~/components/Toast';
 import { cardHref, useCardActions, useCardStates, type CardItem, type CardState } from '~/lib/cards';
 import { toggled } from '~/lib/a11y';
-import { monthYear } from '~/lib/dates';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -124,46 +122,7 @@ export const PosterCard = memo(function PosterCard({ item, state, score, center,
   style?: StyleProp<ViewStyle>;
 }) {
   const link = useLink(cardHref(item));
-  const [imgFailed, setImgFailed] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  return (
-    <View style={[styles.card, hovered && { borderColor: color.borderStrong }, style]}>
-      <Pressable
-        {...link.anchor}
-        onPress={link.onPress}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
-        accessibilityRole="link"
-        accessibilityLabel={`${item.title}, view details`}
-        style={({ pressed }) => pressed && { opacity: 0.8 }}>
-        <View style={styles.poster}>
-          {item.posterUrl && !imgFailed ? (
-            <Img uri={item.posterUrl} width={200} alt={item.title} style={styles.fill} onError={() => setImgFailed(true)} />
-          ) : (
-            <View style={[styles.fill, styles.posterEmpty]}>
-              <TypeIcon type={item.type} size={28} tint={color.textMuted} />
-              <Text style={{ fontFamily: font.sansBold, fontSize: 24, color: color.textMuted }}>{item.title[0]}</Text>
-            </View>
-          )}
-          <View style={styles.typeChip}>
-            <View style={[styles.typeDot, { backgroundColor: color.media[item.type] ?? '#888' }]} />
-            <Text style={[type.micro, { color: color.textPrimary }]}>{item.type}</Text>
-          </View>
-        </View>
-        <View style={styles.body}>
-          <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text>
-          <View style={styles.metaRow}>
-            <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{monthYear(item.releaseDate)}</Text>
-            {score != null ? <FandexScore score={score} center={center} />
-              : item.communityScore != null ? <CommunityScore score={item.communityScore} /> : null}
-          </View>
-        </View>
-      </Pressable>
-      <View style={styles.barWrap}>
-        <ActionBar item={item} state={state} actions={actions} />
-      </View>
-    </View>
-  );
+  return <CardFace item={item} score={score} center={center} link={link} style={style} bar={<ActionBar item={item} state={state} actions={actions} />} />;
 });
 
 /** What a list of cards needs alongside the cards: your state, your scores, and the two actions. */
@@ -189,26 +148,11 @@ export function Rail({ title, forYou, seeAllHref, action, children }: {
   action?: ReactNode;
   children: ReactNode;
 }) {
-  return (
-    <View>
-      <RailHeader title={title} forYou={forYou} seeAllHref={seeAllHref} action={action} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.railRow}>
-        {children}
-      </ScrollView>
-    </View>
-  );
+  return <RailFrame title={title} forYou={forYou} action={action ?? (seeAllHref ? <SeeAll href={seeAllHref} /> : null)}>{children}</RailFrame>;
 }
 
 export function RailHeader({ title, forYou, seeAllHref, action }: { title: string; forYou?: boolean; seeAllHref?: string; action?: ReactNode }) {
-  return (
-    <View style={styles.railHead}>
-      <View style={styles.railTitle}>
-        <Text accessibilityRole="header" style={type.serifMd}>{title}</Text>
-        {forYou ? <View style={styles.forYou}><Text style={[type.micro, { color: color.accent }]}>For you</Text></View> : null}
-      </View>
-      {action ?? (seeAllHref ? <SeeAll href={seeAllHref} /> : null)}
-    </View>
-  );
+  return <RailTitle title={title} forYou={forYou} action={action ?? (seeAllHref ? <SeeAll href={seeAllHref} /> : null)} />;
 }
 
 function SeeAll({ href }: { href: string }) {
@@ -322,38 +266,15 @@ export function MonthDivider({ label, past, current }: { label: string; past?: b
   );
 }
 
-const styles = StyleSheet.create({
-  fill: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  card: { backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border, borderRadius: radius.md },
-  poster: {
-    width: '100%', aspectRatio: 2 / 3, overflow: 'hidden', backgroundColor: color.neutral800,
-    borderTopLeftRadius: radius.md - 1, borderTopRightRadius: radius.md - 1,
-  },
-  posterEmpty: { alignItems: 'center', justifyContent: 'center', gap: 4 },
-  typeChip: {
-    position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingLeft: 6, paddingRight: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.scrimChip,
-  },
-  typeDot: { width: 6, height: 6, borderRadius: radius.full },
-  body: { paddingHorizontal: 10, paddingTop: 10, gap: 7 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 21 },
-  barWrap: { paddingHorizontal: 10, paddingTop: 7, paddingBottom: 10 },
-  bar: { flexDirection: 'row', gap: 6 },
-  barBtn: { height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radius.sm, borderWidth: 1 },
-  barBtnIdle: { backgroundColor: color.fillIdle, borderColor: color.fillIdleBorder },
+const styles = { ...cardStyles, ...StyleSheet.create({
   barBtnOn: { backgroundColor: color.accentSubtle, borderColor: color.accentSubtle },
   stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 8, paddingVertical: 6 },
   star: { paddingHorizontal: 2 },
-  railHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, paddingHorizontal: 4 },
-  railTitle: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  forYou: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.accentSubtle },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  railRow: { gap: 12, paddingBottom: 4 },
-  gridContent: { width: '100%', maxWidth: 1152, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 44 },
   gridRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   gridCell: { flex: 1, minWidth: 0 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 8, marginTop: 8, marginBottom: 8 },
   dividerText: { fontFamily: font.sansBold, fontSize: 12, lineHeight: 16, letterSpacing: 1.2, textTransform: 'uppercase' },
   dividerNow: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.accent },
   dividerRule: { flex: 1, height: 1 },
-});
+}) };

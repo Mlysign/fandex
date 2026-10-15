@@ -12,16 +12,17 @@ any code, so a visitor or a crawler costs no Worker request, no CPU and no datab
 | Address | What answers | Notes |
 |---|---|---|
 | `/` | `index.html` | The app (it opens on the calendar), plus a placeholder a crawler can read: the name, the tagline, the 30 most-voted titles of each type as links, the legal links. The app removes it once it is up. |
-| `/{type}/{slug}` | `{type}/{slug}.html`, one per pool title (4,561 on 2026-10-10) | The app's own `ItemPage` rendered to HTML, with title, description, canonical, Open Graph, and JSON-LD (`Movie` / `TVSeries` / `VideoGame` + a two-step breadcrumb). 46 to 60 KB. |
+| `/{type}/{slug}` | `{type}/{slug}.html`, one per pool title (4,561 on 2026-10-10) | The app's own `ItemPage` rendered to HTML, with title, description, canonical, Open Graph, and JSON-LD (`Movie` / `TVSeries` / `VideoGame` + a breadcrumb through the title's first tag that has a page). Since 2026-10-15 with both related rails, picked by the build with the app's `lib/related.ts` over the whole pool (4,526 of 4,561 pages have one). About 135 KB on average, up from 55: a card is about 4 KB of HTML. |
+| `/{tag,person,studio}/{slug}` | `{kind}/{slug}.html`, one per facet three or more pool titles carry (4,869 on 2026-10-15: 2,554 tags, 1,487 people, 828 studios) | The app's FacetScreen as a visitor sees it: `FacetHeader`, the numbers over every title, and the 36 most popular as static cards (`cardFace.tsx`; drawing all of them made "Action" 10 MB). The old site's title and description. In the sitemap. Fewer than three titles, or a key with punctuation, stays app-only. |
 | `/legal/{en,de}/{privacy,terms,support,imprint}` | static pages | Written from `src/lib/legal`. The imprint is `noindex, nofollow, noarchive, nosnippet` twice over (meta tag and header) and out of the sitemap; its address is decoded in the browser. |
-| `/discover`, `/calendar`, `/wishlist`, `/library`, `/profile`, `/settings`, `/insights`, `/tag/{key}`, `/person/{key}`, `/studio/{key}`, `/item/{id}`, `/open/…`, `/auth/trakt`, an unknown `/{type}/{slug}` | the Worker → `app-shell.html` | The app with nothing else. `noindex`. The one-word addresses are the old site's. |
+| `/discover`, `/calendar`, `/wishlist`, `/library`, `/profile`, `/settings`, `/insights`, a `/tag/`, `/person/` or `/studio/` address with no file, `/item/{id}`, `/open/…`, `/auth/trakt`, an unknown `/{type}/{slug}` | the Worker → `app-shell.html` | The app with nothing else. `noindex`. The one-word addresses are the old site's. |
 | `/{type}/{uuid}` and `/{type}/{uuid}/{slug}` | the Worker → 308 | The addresses items had before 2026-08-21. Redirects to the stored slug, never the one in the link. |
 | `/{type}/{Slug}` with a capital letter in it | the Worker → 308 to lowercase | Stored slugs are lowercase; before 2026-10-11 `/movie/Alien` was a hard 404. |
 | `/catalog/index.json`, `/catalog/pNNN.json` | files (23 pages of 150 on 2026-10-11, 1.35 MB over the wire) | The whole scoring pool, in the exact shape `/v1/catalog/delta` answers with. A device that holds nothing starts here and then asks the API for what changed since the build. `noindex`, `max-age=300`, readable from any origin (the Android app fetches it). |
 | `/v1/*` | the Worker → the API Worker (service binding) | Same origin for the app in a browser, so no preflight. |
 | anything else | the Worker → `404.html`, status 404 | |
 | `www.fandex.org/*` | Worker `fandex-www` | 301 to fandex.org, path and query kept. |
-| `robots.txt`, `sitemap.xml` | files | `/v1/` is disallowed except `/v1/calendar/`, and so is `/catalog/`. The sitemap lists `/`, every item page and six legal pages. |
+| `robots.txt`, `sitemap.xml` | files | `/v1/` is disallowed except `/v1/calendar/`, and so is `/catalog/`. The sitemap lists `/`, every item page, every facet page and six legal pages (9,437 on 2026-10-15). |
 
 Three Workers exist: `fandex-api` (worker/, the API), `fandex-web` (the files and `mobile/web/worker.ts`),
 `fandex-www` (the redirect). `fandex-web` also answers on `fandex-web.fandex-worker.workers.dev`,

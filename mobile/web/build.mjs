@@ -111,7 +111,7 @@ await esbuild.build({
   }],
   logLevel: 'warning',
 });
-const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
+const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
 
 // ── 3. The data ──────────────────────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ async function getJson(url, tries = 4) {
 step(`reading the pool from ${API}`);
 const taxonomy = await getJson(`${API}/v1/taxonomy`);
 if (!taxonomy) throw new Error('No taxonomy');
-/** @type {{ updatedAt: number, vector: any }[]} */
+/** @type {{ updatedAt: number, vector: any, facets: any[] }[]} */
 const pool = [];
 /** Every page of the delta as the Worker sent it, for the catalog files written in step 4. */
 const deltaPages = [];
@@ -144,7 +144,7 @@ for (let cursor = { since: 0, after: '' }; ;) {
   if (!page) throw new Error('The catalog delta answered 404');
   poolCount ??= page.poolCount;
   deriveVersion ??= page.deriveVersion;
-  for (const it of page.items) pool.push({ updatedAt: it.updatedAt, vector: it.vector });
+  for (const it of page.items) pool.push({ updatedAt: it.updatedAt, vector: it.vector, facets: it.facets ?? [] });
   if (page.items.length) deltaPages.push({ items: page.items, next: page.next });
   if (page.done) break;
   cursor = page.next;
@@ -276,13 +276,24 @@ const ITEM_SCRIPT = `(function(){var b=document.querySelector('#prerender a[aria
 const APP_BOOT = `(function(){var s=document.createElement("script");s.src=${JSON.stringify(bundle)};document.body.appendChild(s)})()`;
 fs.writeFileSync(path.join(STAGE, 'app-boot.js'), APP_BOOT);
 
+// Every pool title with its stored facets: what the rails and the facet pages are picked from.
+const poolTitles = [...byId.values()].map((p) => ({ vector: p.vector, facets: p.facets }));
+const facetsOf = new Map(poolTitles.map((p) => [p.vector.id, p.facets]));
+const relatedFor = relatedPicker(poolTitles, taxonomy);
+// Worked out before the item pages, whose breadcrumb names a tag only when its page exists.
+const allFacets = facetPages(poolTitles);
+const crumbFor = tagCrumbs(allFacets);
+
 step(`rendering ${details.size} item pages`);
 const urls = [];
 let largest = 0;
+let withRails = 0;
 for (const item of details.values()) {
   if (!item.slug || !SLUG.test(item.slug) || !TYPES.includes(item.type)) continue;
-  const head = itemHead(item);
-  const { body, css } = renderItem(item, taxonomy);
+  const head = itemHead(item, crumbFor(facetsOf.get(item.id) ?? []));
+  const rails = relatedFor(item.id, facetsOf.get(item.id) ?? []);
+  if (rails.similar.length || rails.franchise?.items.length) withRails++;
+  const { body, css } = renderItem(item, taxonomy, rails);
   // What check-html.mjs guards: a page with no heading or no image in its HTML
   // is the react-native-web default coming back, and a crawler gets nothing.
   if (!body.includes('role="heading"')) throw new Error(`${item.type}/${item.slug} rendered without a heading`);
@@ -296,7 +307,32 @@ for (const item of details.values()) {
   largest = Math.max(largest, html.length);
   urls.push({ loc: head.canonical, lastmod: new Date(item.updatedAt * 1000).toISOString().slice(0, 10) });
 }
-step(`${urls.length} item pages written, the largest ${(largest / 1024).toFixed(0)} KB`);
+step(`${urls.length} item pages written, ${withRails} with related rails, the largest ${(largest / 1024).toFixed(0)} KB`);
+
+// ── Tag, person and studio pages ─────────────────────────────────────────────
+
+// The app's FacetScreen for every facet three or more pool titles carry, as a
+// visitor sees it. Before 2026-10-15 these addresses loaded the app, so a
+// crawler got an empty shell for the pages Google already held from the old
+// site. Fewer than three titles stays app-only: the old site's thin-page line.
+const facets = allFacets.slice(0, limit || undefined);
+let facetLargest = 0;
+for (const facet of facets) {
+  const head = facetHead(facet);
+  const { body, css } = renderFacet(facet);
+  if (!body.includes('role="heading"')) throw new Error(`${facet.kind}/${facet.slug} rendered without a heading`);
+  const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
+    + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical })}`
+    + `<style>${fontCss}${FRAME_CSS}${STATIC_GRID_CSS}</style>${css}</head>`
+    + `<body><div id="prerender" data-page="facet">${body}</div><div id="root"></div><script>${PV_SCRIPT}${ITEM_SCRIPT}</script></body></html>`;
+  const dir = path.join(STAGE, facet.kind);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${facet.slug}.html`), html);
+  facetLargest = Math.max(facetLargest, html.length);
+  urls.push({ loc: head.canonical, lastmod: new Date().toISOString().slice(0, 10) });
+}
+const facetCount = (k) => facets.filter((f) => f.kind === k).length;
+step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios), the largest ${(facetLargest / 1024).toFixed(0)} KB`);
 
 // ── The app's two shells ─────────────────────────────────────────────────────
 

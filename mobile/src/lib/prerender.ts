@@ -10,6 +10,8 @@
 // Two kinds of static copy:
 //   data-page="item"   an item page. Only the item screen may remove it, once
 //                      it has the item on screen.
+//   data-page="facet"  a tag, person or studio page. Only FacetScreen removes it,
+//                      once it has the titles.
 //   anything else      a placeholder (the home page's). Removed as soon as the
 //                      app is up.
 
@@ -23,10 +25,16 @@ function staticCopy(): HTMLElement | null {
   return globalThis.document?.getElementById('prerender') ?? null;
 }
 
-/** Remove a placeholder. An item page's static copy is left for the item screen. */
+/** Remove a placeholder. An item or facet page's static copy is left for its screen. */
 export function dropPlaceholder(): void {
   const el = staticCopy();
-  if (el && el.dataset.page !== 'item') el.remove();
+  if (el && el.dataset.page !== 'item' && el.dataset.page !== 'facet') el.remove();
+}
+
+/** Remove a facet page's static copy: FacetScreen has its titles on screen. */
+export function dropFacetPrerender(): void {
+  const el = staticCopy();
+  if (el?.dataset.page === 'facet') el.remove();
 }
 
 /**
