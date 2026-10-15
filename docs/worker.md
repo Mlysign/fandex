@@ -11,7 +11,6 @@ are in app-plan.md; the settled calls are in [decisions.md](decisions.md)._
 | Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev`, and `https://fandex.org/v1/*` | Free plan. The Android app uses the first address. The website's Worker hands `/v1/*` to this one through a service binding ([website.md](website.md)), so a browser on fandex.org calls its own origin. |
 | D1 database `fandex` | id `6daba7e4-ea55-4c72-b297-eb92ada8c581`, EU jurisdiction | 110 MB of a 500 MB cap after the seed. |
 | R2 `fandex-backups` (EU) | bound as `BACKUPS` | `railway/` holds snapshots of the old database, `d1/{day}/` the nightly export. |
-| R2 `fandex-litestream` (EU) | not bound | Empty and no longer needed: Railway was stopped on 2026-10-05 before the replica was switched on. Safe to delete. |
 | Cloudflare access | Wrangler, by OAuth | Logged in from Nils's machine through his browser. No API token exists, and none should be minted for a session. |
 
 Everything is created with `--jurisdiction eu`. An EU bucket has its own S3 endpoint
