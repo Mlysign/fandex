@@ -3,14 +3,15 @@
 // once and the film, show and game databases a moment later, and both land in
 // the same grid under the chosen sort.
 //
-// With nothing typed the grid is the catalog on this device. The site showed a
-// provider-fed feed of new and upcoming titles there, which needs a Worker
-// route that does not exist yet (docs/app-parity.md). Also not carried over:
-// people and tag results.
+// With nothing typed the grid is the catalog on this device, and below it the
+// site's provider-fed feed of upcoming titles: films and shows from TMDB, asked
+// from the device, and games from the Worker (/v1/browse/games), a page of each
+// at a time as the list reaches its end. Not carried over: people and tag
+// results.
 
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { normalizeName } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
@@ -29,7 +30,7 @@ import { catalogCards } from '~/lib/db';
 import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
-import { searchTmdb, type ProviderCard } from '~/lib/tmdb';
+import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { color, type } from '~/theme';
 
@@ -42,6 +43,11 @@ const DEBOUNCE_MS = 300;
 const STEP = 60;
 
 type Remote = { state: 'idle' | 'loading' | 'done' | 'error'; rows: CardItem[] };
+/** The upcoming feed: pages loaded so far, and whether there is more. */
+type Feed = { rows: CardItem[]; page: number; done: boolean; loading: boolean; failed: boolean };
+const FEED_START: Feed = { rows: [], page: 0, done: false, loading: false, failed: false };
+/** Pages of each source the feed goes to. The Worker serves ten of games. */
+const FEED_PAGES = 5;
 const IDLE: Remote = { state: 'idle', rows: [] };
 
 const fromProvider = (r: ProviderCard): CardItem => ({
@@ -68,6 +74,31 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const [filters, setFilters] = useState(noFilters);
   const [sheet, setSheet] = useState(false);
+  const [feed, setFeed] = useState<Feed>(FEED_START);
+  const feedBusy = useRef(false);
+
+  // One page of upcoming titles from each source. A source that fails is a
+  // shorter page, never an empty feed: each answers on its own.
+  const loadFeed = useCallback((page: number) => {
+    if (feedBusy.current) return;
+    feedBusy.current = true;
+    setFeed((f) => ({ ...f, loading: true }));
+    const settle = <T,>(p: Promise<T[]>) => p.then((v) => ({ ok: true, v }), () => ({ ok: false, v: [] as T[] }));
+    void Promise.all([
+      settle(tmdbUpcoming('movie', page, auth.region)),
+      settle(tmdbUpcoming('show', page, auth.region)),
+      settle(api.browseGames(page).then((r) => r.results)),
+    ]).then((parts) => {
+      const rows = parts.flatMap((part) => (part.v as ProviderCard[]).map(fromProvider));
+      setFeed((f) => ({
+        rows: [...f.rows, ...rows], page, loading: false,
+        done: page >= FEED_PAGES || rows.length === 0,
+        failed: parts.every((part) => !part.ok),
+      }));
+    }).finally(() => { feedBusy.current = false; });
+  }, [auth.region]);
+  // Another country has other dates: start the feed again.
+  useEffect(() => setFeed(FEED_START), [auth.region]);
 
   useEffect(() => {
     let live = true;
@@ -100,16 +131,22 @@ export default function DiscoverScreen() {
 
   const norm = normalizeName(term);
   const hidden = useHiddenIds();
+  useEffect(() => { if (!norm && pool !== null && feed.page === 0 && !feed.loading) loadFeed(1); }, [norm, pool, feed.page, feed.loading, loadFeed]);
   const matches = useMemo(() => {
     const local = (pool ?? []).filter((c) => !norm || normalizeName(c.title).includes(norm));
     // With nothing typed this list chooses for you, so it leaves out what you
     // hid. A name still finds it: "It stays searchable" is what Hide promises.
-    if (!norm) return withoutHidden(local, hidden);
+    if (!norm) {
+      // The catalog's copy of a title wins over the feed's: it has your state and score.
+      const held = new Set(local.map(identity));
+      const upcoming = feed.rows.filter((c) => (held.has(identity(c)) ? false : (held.add(identity(c)), true)));
+      return withoutHidden([...local, ...upcoming], hidden);
+    }
     // What the catalog holds wins over the same title from a provider: it has your state and score.
     const held = new Set(local.map(identity));
     const fresh = [...screen.rows, ...games.rows].filter((c) => !held.has(identity(c)));
     return [...local, ...fresh];
-  }, [pool, norm, hidden, screen.rows, games.rows]);
+  }, [pool, norm, hidden, screen.rows, games.rows, feed.rows]);
 
   const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
   // Your state for every title is only read while a "your lists" filter is on.
@@ -134,7 +171,10 @@ export default function DiscoverScreen() {
   // A new question starts at the top of its own answer.
   useEffect(() => setShown(STEP), [norm, sort, types.shown.join(','), filters]);
   const page = useMemo(() => sorted.slice(0, shown), [sorted, shown]);
-  const more = useCallback(() => setShown((n) => (n < sorted.length ? n + STEP : n)), [sorted.length]);
+  const more = useCallback(() => {
+    if (shown < sorted.length) setShown((n) => n + STEP);
+    else if (!norm && !feed.done && !feed.loading) loadFeed(feed.page + 1);
+  }, [shown, sorted.length, norm, feed.done, feed.loading, feed.page, loadFeed]);
 
   const sections = useMemo<CardSection[] | undefined>(() => {
     if (sort !== 'releaseDate') return undefined;
@@ -154,6 +194,8 @@ export default function DiscoverScreen() {
     norm && !tmdbConfigured() ? 'Film and show search is not set up in this build.' : null,
     screen.state === 'error' ? 'Film and show search is not answering.' : null,
     games.state === 'error' ? 'Game search is not answering.' : null,
+    !norm && feed.loading && feed.page > 0 ? 'Asking for more upcoming titles…' : null,
+    !norm && feed.failed ? 'Upcoming titles from TMDB and IGDB are not answering. Showing the catalog on this device.' : null,
     !norm && sync.state === 'syncing' && sync.written > 0 ? `Downloading the catalog… ${sync.total.toLocaleString('en')} so far` : null,
   ].filter(Boolean);
 

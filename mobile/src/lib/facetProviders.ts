@@ -5,11 +5,13 @@
 // key the app may carry (docs/app-plan.md). A port of the TMDB half of the
 // site's src/lib/detail/publicFacetDetail.ts.
 //
-// Films and shows only. Games come from IGDB, whose credentials may not ship,
-// and the Worker has no route for a studio's or a tag's games yet.
+// Games come from IGDB, whose credentials may not ship, so a tag's or a
+// studio's games are asked of the Worker (/v1/facet/games, since 2026-10-15),
+// which keeps each answer a week. A person's page has none: IGDB files people
+// by company, not by name.
 
 import { personKey } from '@/lib/facets';
-import { api } from '~/lib/api';
+import { api, type GameSearchResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 
@@ -45,6 +47,15 @@ function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
     posterUrl: c.poster_path ? `https://image.tmdb.org/t/p/w342${c.poster_path}` : null,
     communityScore: typeof c.vote_average === 'number' && c.vote_average > 0 ? Math.round(c.vote_average * 10) : null,
     communityVotes: c.vote_count ?? 0,
+  };
+}
+
+/** A game the Worker found at IGDB, as a card. */
+function gameCard(g: GameSearchResult): CardItem {
+  return {
+    key: `igdb:game:${g.sourceId}`, id: null, source: 'igdb', sourceId: g.sourceId, type: 'game',
+    title: g.title, releaseDate: g.releaseDate, posterUrl: g.posterUrl,
+    communityScore: g.rating, communityVotes: g.votes,
   };
 }
 
@@ -164,6 +175,9 @@ async function tagFilter(label: string, signal?: AbortSignal): Promise<string | 
 export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
   if (!tmdbConfigured()) return { cards: [], person: null };
   let found: ProviderFacet;
+  // The games run alongside TMDB and never fail the page: no games is a shorter list.
+  const games = kind === 'person' ? Promise.resolve([] as CardItem[])
+    : api.facetGames(kind, label).then((r) => r.results.map(gameCard), () => [] as CardItem[]);
   if (kind === 'person') found = await person(key, signal);
   else if (kind === 'studio') {
     const id = await companyId(label, signal);
@@ -172,9 +186,10 @@ export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: stri
     const filter = await tagFilter(label, signal);
     found = { cards: filter ? await discover(filter, signal) : [], person: null };
   }
+  found.cards = unique([...found.cards, ...(await games)]);
   if (!found.cards.length) return found;
   try {
-    const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: 'tmdb', type: c.type, id: c.sourceId as string })));
+    const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
     const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f.mediaItemId]));
     found.cards = found.cards.map((c) => (held.has(c.key) ? { ...c, id: held.get(c.key) as string } : c));
   } catch { /* the cards still open; they just do not know your state */ }

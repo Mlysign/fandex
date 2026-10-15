@@ -261,6 +261,10 @@ export const api = {
     request<{ region: string; dates: Record<string, string> }>('/v1/catalog/release-dates', json('POST', { region, ids })),
 
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
+  /** Upcoming games, most anticipated first, forty a page (1 to 10). */
+  browseGames: (page: number) => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page) })}`),
+  /** A tag's or a studio's games at IGDB, most rated first. */
+  facetGames: (kind: 'tag' | 'studio', label: string) => request<{ results: GameSearchResult[] }>(`/v1/facet/games${q({ kind, q: label })}`),
 
   // ── Sign-in ──
   /** The Trakt token is sent once so the Worker can ask Trakt whose it is. It is not stored there. */

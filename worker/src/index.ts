@@ -30,7 +30,7 @@
 //     DELETE /v1/me
 
 import { providerBreakerSnapshot } from "@/lib/http";
-import { igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
+import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { analyticsSnapshot, countPageView } from "./telemetry";
@@ -170,6 +170,8 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   if (a === "search" && b === "games" && method === "GET") return searchGames(c);
+  if (a === "browse" && b === "games" && !d && method === "GET") return browseGames(c);
+  if (a === "facet" && b === "games" && !d && method === "GET") return facetGames(c);
 
   if (a === "calendar" && b && !d && method === "GET") {
     const out = await calendarMonth(c.env, b, url.searchParams.get("region"),
@@ -313,6 +315,84 @@ async function searchGames(c: Ctx): Promise<Response> {
   // Never cache an empty answer for long: an empty result during an IGDB hiccup
   // would pin "no such game" in place for the whole TTL.
   if (results.length) c.defer(cache.put(cacheKey, response.clone()));
+  return response;
+}
+
+/** An IGDB game as the app's provider card, the shape /v1/search/games answers with. */
+function gameCard(g: any) {
+  return {
+    source: "igdb",
+    sourceId: String(g.id),
+    type: "game",
+    title: String(g.name),
+    releaseDate: igdbReleaseDate(g),
+    posterUrl: igdbImageUrl(g.cover?.image_id) ?? igdbImageUrl(g.artworks?.[0]?.image_id, "t_720p") ?? igdbImageUrl(g.screenshots?.[0]?.image_id, "t_720p"),
+    votes: typeof g.total_rating_count === "number" ? g.total_rating_count : 0,
+    rating: typeof g.total_rating === "number" ? Math.round(g.total_rating) : null,
+  };
+}
+
+/** Pages of upcoming games a browse asks for. The old site's feed went ten pages deep at most. */
+const BROWSE_GAME_PAGES = 10;
+/** The old site's browse window: about eighteen months ahead (src/lib/discoverFeed.ts, DAYS_WINDOW). */
+const BROWSE_WINDOW_DAYS = 550;
+
+/**
+ * Upcoming games, most anticipated first, forty a page: the Search screen's
+ * feed when nothing is typed, beyond what the catalog holds. The old site's
+ * IGDB page (discoverFeed.ts, igdbGamePage), card fields only. Films and shows
+ * the device asks TMDB for itself. Nothing is stored and no D1 row is read:
+ * the edge cache answers a repeat for six hours, which is what makes a
+ * crawler or a busy day cost one IGDB call per page.
+ */
+async function browseGames(c: Ctx): Promise<Response> {
+  const page = Number(c.url.searchParams.get("page") ?? "1");
+  if (!Number.isInteger(page) || page < 1 || page > BROWSE_GAME_PAGES) return error(400, "bad-request", `page must be 1 to ${BROWSE_GAME_PAGES}`);
+  // Keyed by the day, so the window moves with it.
+  const day = new Date().toISOString().slice(0, 10);
+  const cacheKey = new Request(`https://cache.fandex.internal/browse/games?day=${day}&page=${page}`);
+  const hit = await caches.default.match(cacheKey);
+  if (hit) return new Response(hit.body, hit);
+  if (!(await allow(c.env.RL_RESOLVE, `browse:${clientIp(c.request)}`))) return error(429, "rate-limited");
+
+  useSharedIgdbToken(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  const rows = await discoverIgdbUpcoming(now, now + BROWSE_WINDOW_DAYS * 86_400, 40, (page - 1) * 40, "hypes", "card");
+  const results = rows.filter((g) => g?.id && g?.name).map(gameCard);
+  const response = json({ results, page, more: results.length === 40 && page < BROWSE_GAME_PAGES }, 200, { "Cache-Control": "public, max-age=3600" });
+  // discoverIgdbUpcoming answers [] for a failure too: never keep an empty page.
+  if (results.length) c.defer(caches.default.put(cacheKey, new Response(response.clone().body, { headers: { ...Object.fromEntries(response.headers), "Cache-Control": "public, max-age=21600" } })));
+  return response;
+}
+
+/**
+ * A tag's or a studio's games, most rated first: what a facet page adds from
+ * IGDB beyond the catalog. The old site did this for tags and cached it for a
+ * week, because IGDB's contains-match over themes, keywords and genres took
+ * 4.3 to 4.7 s (src/lib/detail/publicFacetDetail.ts). Same week here, at the
+ * edge. A failed call is answered 502 and not cached; a tag IGDB knows no games
+ * for is cached as empty, so it is not asked again on every visit.
+ */
+async function facetGames(c: Ctx): Promise<Response> {
+  const kind = c.url.searchParams.get("kind");
+  const label = (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  if ((kind !== "tag" && kind !== "studio") || label.length < 2) return error(400, "bad-request", "kind must be tag or studio, q at least two characters");
+  const cacheKey = new Request(`https://cache.fandex.internal/facet/games?kind=${kind}&q=${encodeURIComponent(label.toLowerCase())}`);
+  const hit = await caches.default.match(cacheKey);
+  if (hit) return new Response(hit.body, hit);
+  if (!(await allow(c.env.RL_RESOLVE, `facet:${clientIp(c.request)}`))) return error(429, "rate-limited");
+
+  useSharedIgdbToken(c.env);
+  let rows: any[];
+  try {
+    rows = await discoverIgdbFacetCards(kind, label, 40);
+  } catch (e) {
+    console.warn("igdb_facet_failed", { error: e instanceof Error ? e.message : String(e) });
+    return error(502, "provider-unavailable");
+  }
+  const results = rows.filter((g) => g?.id && g?.name).map(gameCard);
+  const response = json({ results }, 200, { "Cache-Control": "public, max-age=3600" });
+  c.defer(caches.default.put(cacheKey, new Response(response.clone().body, { headers: { ...Object.fromEntries(response.headers), "Cache-Control": "public, max-age=604800" } })));
   return response;
 }
 

@@ -124,3 +124,35 @@ export async function tmdbFindImdb(imdbId: string, signal?: AbortSignal): Promis
   const show = data.tv_results?.[0]?.id;
   return typeof show === 'number' ? { type: 'show', id: show } : null;
 }
+
+/** The old site's browse window: about eighteen months ahead (src/lib/discoverFeed.ts, DAYS_WINDOW). */
+const UPCOMING_DAYS = 550;
+
+/**
+ * Upcoming films or shows, most popular first: the old site's Discover feed
+ * (discoverFeed.ts, fetchMoviePage and tmdbShowPage), same parameters. A film
+ * is asked for in your country, with its theatrical and limited releases, so the
+ * date on the card is the one that applies to you.
+ */
+export async function tmdbUpcoming(type: 'movie' | 'show', page: number, region: string, signal?: AbortSignal): Promise<ProviderCard[]> {
+  if (!tmdbConfigured()) return [];
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const url = type === 'movie'
+    ? `${BASE}/discover/movie?api_key=${TMDB_API_KEY}&sort_by=popularity.desc&include_adult=false&with_release_type=2|3&region=${encodeURIComponent(region)}`
+      + `&release_date.gte=${day(0)}&release_date.lte=${day(UPCOMING_DAYS)}&page=${page}`
+    : `${BASE}/discover/tv?api_key=${TMDB_API_KEY}&sort_by=popularity.desc&first_air_date.gte=${day(0)}&first_air_date.lte=${day(UPCOMING_DAYS)}&page=${page}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`TMDB discover answered ${res.status}`);
+  const data = (await res.json()) as { results?: any[] };
+  return (data.results ?? [])
+    .filter((r) => r?.id)
+    .map((r): ProviderCard => ({
+      source: 'tmdb',
+      sourceId: String(r.id),
+      type,
+      title: r.title ?? r.name ?? 'Untitled',
+      releaseDate: r.release_date || r.first_air_date || null,
+      posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w342${r.poster_path}` : null,
+      votes: typeof r.vote_count === 'number' ? r.vote_count : 0,
+    }));
+}

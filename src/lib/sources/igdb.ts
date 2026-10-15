@@ -214,6 +214,31 @@ const GAME_CARD_FIELDS =
   "cover.image_id,artworks.image_id,screenshots.image_id,genres.name,themes.name,platforms.name;";
 export type IgdbDiscoverShape = "full" | "card";
 
+/**
+ * A tag's or a studio's games as cards, most rated first: the facet pages'
+ * games on the new stack (worker/src/browse.ts). A tag is matched the way
+ * discoverIgdbByTags matches one (a theme, keyword or genre containing it), a
+ * studio by a company name containing it.
+ *
+ * Unlike its siblings it does NOT swallow a failure: the Worker caches the
+ * answer for a week, and caching a failed call as "no games" would hide a
+ * studio's games for that long. An unconfigured IGDB still answers [].
+ */
+export async function discoverIgdbFacetCards(kind: "tag" | "studio", label: string, limit = 40): Promise<any[]> {
+  if (!igdbConfigured()) return [];
+  const safe = sanitizeApicalypseSearch(label);
+  if (!safe) return [];
+  const where = kind === "tag"
+    ? `(themes.name ~ *"${safe}"* | keywords.name ~ *"${safe}"* | genres.name ~ *"${safe}"*)`
+    : `involved_companies.company.name ~ *"${safe}"*`;
+  return igdbQuery(
+    "games",
+    `${GAME_CARD_FIELDS} where ${where} & version_parent = null & parent_game = null; ` +
+      `sort total_rating_count desc; limit ${safeInt(limit, 40)};`,
+    BROWSE_BUDGET_MS,
+  );
+}
+
 export async function discoverIgdbUpcoming(
   gte: number, lte: number, limit = 40, offset = 0, sort: IgdbDiscoverSort = "hypes",
   shape: IgdbDiscoverShape = "full"

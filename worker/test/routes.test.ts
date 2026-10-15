@@ -423,6 +423,57 @@ describe("game search", () => {
   });
 });
 
+describe("game browse and facet games", () => {
+  /** Every IGDB query body, for asserting what was asked. */
+  function igdb(answer: () => Response): string[] {
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("oauth2/token")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      bodies.push(String(init?.body ?? ""));
+      return answer();
+    });
+    return bodies;
+  }
+
+  it("pages upcoming games as cards, most anticipated first, card fields only", async () => {
+    const bodies = igdb(() => Response.json([igdbGame()]));
+    const res = await call("/v1/browse/games?page=2");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.results[0]).toMatchObject({ source: "igdb", sourceId: "1942", type: "game", title: "The Witcher 3: Wild Hunt" });
+    expect(body.more).toBe(false);
+    expect(bodies[0]).toContain("sort hypes desc");
+    expect(bodies[0]).toContain("offset 40");
+    // The card shape: no keywords or companies, which are most of a full payload's bytes.
+    expect(bodies[0]).not.toContain("involved_companies");
+  });
+
+  it("refuses a page out of range", async () => {
+    expect((await call("/v1/browse/games?page=0")).status).toBe(400);
+    expect((await call("/v1/browse/games?page=11")).status).toBe(400);
+    expect((await call("/v1/browse/games?page=x")).status).toBe(400);
+  });
+
+  it("finds a tag's games by theme, keyword or genre, and a studio's by company", async () => {
+    const bodies = igdb(() => Response.json([igdbGame()]));
+    expect((await call("/v1/facet/games?kind=tag&q=cyberpunk%20facet%20test")).status).toBe(200);
+    expect(bodies[0]).toMatch(/themes\.name ~ \*"cyberpunk facet test"\*/);
+    expect((await call("/v1/facet/games?kind=studio&q=cd%20projekt%20facet%20test")).status).toBe(200);
+    expect(bodies[1]).toMatch(/involved_companies\.company\.name ~ \*"cd projekt facet test"\*/);
+  });
+
+  it("answers a failed IGDB call with 502, so it is never cached as no games", async () => {
+    igdb(() => new Response("down", { status: 500 }));
+    expect((await call("/v1/facet/games?kind=tag&q=failing%20facet%20test")).status).toBe(502);
+  });
+
+  it("wants a kind and a term", async () => {
+    expect((await call("/v1/facet/games?kind=person&q=nolan")).status).toBe(400);
+    expect((await call("/v1/facet/games?kind=tag&q=a")).status).toBe(400);
+  });
+});
+
 describe("the small print of the API", () => {
   it("says which verbs a real route takes, and still 404s a path that is not one", async () => {
     const res = await call("/v1/taxonomy", { method: "POST" });
