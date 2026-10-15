@@ -6,13 +6,14 @@
 // With nothing typed the grid is the catalog on this device, and below it the
 // site's provider-fed feed of upcoming titles: films and shows from TMDB, asked
 // from the device, and games from the Worker (/v1/browse/games), a page of each
-// at a time as the list reaches its end. Not carried over: people and tag
-// results.
+// at a time as the list reaches its end. Typing also shows the people and
+// tags in the catalog whose names match, above the titles, as the site did.
 
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { keyToSlug } from '@/lib/facetUrl';
 import { normalizeName } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
@@ -32,7 +33,9 @@ import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
-import { color, type } from '~/theme';
+import { facetVocab, matchVocab, type VocabEntry } from '~/lib/facetVocab';
+import { spokenKey } from '~/lib/facetImpact';
+import { color, radius, type } from '~/theme';
 
 // src/components/discovery/types.ts, SORTS.
 type Sort = 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
@@ -54,6 +57,32 @@ const fromProvider = (r: ProviderCard): CardItem => ({
   key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type, title: r.title,
   releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: null, communityVotes: r.votes,
 });
+/** The site's FacetMatchGroup: an eyebrow and a row of chips, each a link to its page. */
+function MatchGroup({ title, matches }: { title: string; matches: VocabEntry[] }) {
+  const router = useRouter();
+  if (!matches.length) return null;
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={[type.eyebrow, { color: color.textSecondary, marginBottom: 8 }]}>{title}</Text>
+      <View style={styles.chips}>
+        {matches.map((m) => {
+          const href = m.kind === 'person' ? `/person/${keyToSlug(m.key)}` : `/tag/${keyToSlug(spokenKey(m.key))}`;
+          return (
+            <Pressable
+              key={`${m.kind}|${m.key}`}
+              {...(Platform.OS === 'web' ? ({ href } as object) : null)}
+              onPress={(e) => { (e as unknown as { preventDefault?: () => void })?.preventDefault?.(); router.push(href as never); }}
+              accessibilityRole="link"
+              style={({ hovered }: { hovered?: boolean }) => [styles.chip, hovered && { borderColor: color.borderStrong }]}>
+              <Text style={[type.label, { color: color.textPrimary }]}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
 /** Two cards are the same title when type, name and year agree. The year matters: a remake shares the name. */
 const identity = (c: CardItem) => `${c.type}|${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
@@ -131,6 +160,15 @@ export default function DiscoverScreen() {
 
   const norm = normalizeName(term);
   const hidden = useHiddenIds();
+  // The catalog's people and tags, read once the first time somebody types.
+  const [vocab, setVocab] = useState<VocabEntry[] | null>(null);
+  useEffect(() => {
+    if (norm.length < 2) return;
+    let live = true;
+    void facetVocab(db, sync.revision).then((v) => { if (live) setVocab(v); }, () => undefined);
+    return () => { live = false; };
+  }, [db, sync.revision, norm.length >= 2]);
+  const vocabMatches = useMemo(() => (vocab ? matchVocab(vocab, norm) : { people: [], tags: [] }), [vocab, norm]);
   useEffect(() => { if (!norm && pool !== null && feed.page === 0 && !feed.loading) loadFeed(1); }, [norm, pool, feed.page, feed.loading, loadFeed]);
   const matches = useMemo(() => {
     const local = (pool ?? []).filter((c) => !norm || normalizeName(c.title).includes(norm));
@@ -219,9 +257,21 @@ export default function DiscoverScreen() {
         sections={sections}
         empty={empty}
         onEndReached={more}
-        header={notes.length ? (
-          <View style={{ gap: 4, marginBottom: 12 }}>
-            {notes.map((n) => <Text key={n} style={[type.caption, { color: color.textSecondary }]}>{n}</Text>)}
+        header={notes.length || (norm && (vocabMatches.people.length || vocabMatches.tags.length)) ? (
+          <View>
+            {norm ? (
+              <>
+                <MatchGroup title="People" matches={vocabMatches.people} />
+                <MatchGroup title="Tags" matches={vocabMatches.tags} />
+                {vocabMatches.people.length || vocabMatches.tags.length
+                  ? <Text style={[type.eyebrow, { color: color.textSecondary, marginBottom: 8 }]}>Titles</Text> : null}
+              </>
+            ) : null}
+            {notes.length ? (
+              <View style={{ gap: 4, marginBottom: 12 }}>
+                {notes.map((n) => <Text key={n} style={[type.caption, { color: color.textSecondary }]}>{n}</Text>)}
+              </View>
+            ) : null}
           </View>
         ) : null}
       />
@@ -233,3 +283,11 @@ export default function DiscoverScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1,
+    borderColor: color.border, backgroundColor: color.surfaceElevated,
+  },
+});

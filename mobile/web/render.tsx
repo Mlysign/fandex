@@ -29,6 +29,7 @@ import { prepareTaxonomy, resolveFacets, type ScoreFacet, type Taxonomy, type Ta
 import { indexFacets, pickRelated } from '~/lib/related';
 import { byPopularity } from '~/lib/sortCards';
 import { type } from '~/theme';
+import { personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import { buildEntityJsonLd, jsonLdScript } from '@/lib/jsonLd';
 import { everyLegalRoute, getLegalDocument } from '@/lib/legal/registry';
@@ -231,6 +232,63 @@ export function tagCrumbs(pages: FacetPageData[]): (facets: ScoreFacet[]) => { n
     }
     return null;
   };
+}
+
+// ── Popular people ───────────────────────────────────────────────────────────
+
+/** The old site's role weights (src/lib/discovery.ts, ROLE_WEIGHT). */
+const PERSON_ROLE_WEIGHT: Record<string, number> = { director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6 };
+/** The old site's index threshold: a person on fewer titles has no static page to link to. */
+const PEOPLE_MIN_TITLES = 3;
+/** Ranked this deep; the app rotates a shorter rail out of it. */
+const PEOPLE_POOL = 60;
+
+export interface PopularPersonOut {
+  key: string; name: string; href: string; portraitUrl: string | null; titleCount: number; topRole: string; score: number;
+}
+
+/**
+ * Home's "Popular people", as the old site ranked it (src/lib/popularPeople.ts):
+ * the sum over pool titles of the role's weight times a gentle recency factor,
+ * three titles or more. The portraits come from the titles' cast lists, which
+ * the build already holds, so neither the build nor the app asks TMDB per face.
+ */
+export function popularPeople(pool: PoolTitle[], details: Iterable<ItemDetail>, now = new Date()): PopularPersonOut[] {
+  const thisYear = now.getUTCFullYear();
+  const recency = (date: string | null) => {
+    const age = thisYear - Number(date?.slice(0, 4));
+    if (!Number.isFinite(age)) return 1;
+    return age <= 1 ? 1.6 : age <= 3 ? 1.35 : age <= 8 ? 1.15 : age <= 20 ? 1 : 0.85;
+  };
+  const acc = new Map<string, { name: string; score: number; items: Set<string>; roles: Map<string, number> }>();
+  for (const { vector, facets } of pool) {
+    const boost = recency(vector.releaseDate);
+    for (const f of facets as (ScoreFacet & { role?: string; prominence?: number })[]) {
+      if (f.kind !== 'person' || !f.role || !f.key) continue;
+      const weight = (PERSON_ROLE_WEIGHT[f.role] ?? 1) * (f.prominence ?? 1);
+      const cur = acc.get(f.key) ?? { name: f.label || f.key, score: 0, items: new Set<string>(), roles: new Map<string, number>() };
+      cur.score += weight * boost;
+      cur.items.add(vector.id);
+      cur.roles.set(f.role, (cur.roles.get(f.role) ?? 0) + weight);
+      if (f.label && f.label.length > cur.name.length) cur.name = f.label;
+      acc.set(f.key, cur);
+    }
+  }
+  const portraits = new Map<string, string>();
+  for (const item of details) {
+    for (const c of item.merged.cast ?? []) {
+      if (c.profileUrl && !portraits.has(personKey(c.name))) portraits.set(personKey(c.name), c.profileUrl);
+    }
+  }
+  const out: PopularPersonOut[] = [];
+  for (const [key, a] of acc) {
+    if (a.items.size < PEOPLE_MIN_TITLES) continue;
+    const slug = keyToSlug(key);
+    if (!SAFE_SLUG.test(slug)) continue;
+    const topRole = [...a.roles.entries()].sort((x, y) => y[1] - x[1])[0][0];
+    out.push({ key, name: a.name, href: `/person/${slug}`, portraitUrl: portraits.get(key) ?? null, titleCount: a.items.size, topRole, score: a.score });
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, PEOPLE_POOL);
 }
 
 /** Both rails for every pool title, picked as the app picks them (lib/related.ts). Build once, ask per title. */

@@ -8,14 +8,15 @@
 // studio is the site's shrunk average (a facet seen twice does not outrank one
 // seen forty times on the strength of two tens).
 //
-// Not carried over: the search and the minimum-count control in the three
-// rating sections, and the per-category tag panels.
+// The three rating sections are the site's FacetSection: a search, a minimum
+// count, Highest or Lowest, and a panel per tag category (the live list, so a
+// category added on /dev/scoring shows up) or per role.
 
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ChartColumn } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { keyToSlug } from '@/lib/facetUrl';
 import { CardRail } from '~/components/cards';
 import { Button, EmptyState, Eyebrow, Panel } from '~/components/kit';
@@ -25,11 +26,13 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardHref, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
+import type { Taxonomy } from '~/lib/fandexScore';
+import { useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
 interface Rated extends CardItem { rating: number; facets: StoredFacet[] }
 interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string }
-interface FacetStat { kind: string; role?: string; key: string; label: string; count: number; avg: number; ba: number }
+interface FacetStat { kind: string; role?: string; key: string; label: string; category?: string; count: number; avg: number; ba: number }
 
 /** How strongly a facet's average is pulled toward your own until it has been seen often (the site's C). */
 const PRIOR_STRENGTH = 5;
@@ -114,6 +117,97 @@ function FacetColumn({ title, facets, baseline, tone }: { title: string; facets:
   );
 }
 
+// ── The rating sections (the site's FacetSection) ─────────────────────────────
+
+const PERSON_ROLES: [string, string][] = [['director', 'Director'], ['writer', 'Writer'], ['creator', 'Creator'], ['cast', 'Cast']];
+const COMPANY_ROLES: [string, string][] = [['developer', 'Developer'], ['publisher', 'Publisher'], ['studio', 'Studio'], ['network', 'Network']];
+/** Rows a panel shows before "+N more". */
+const PER_GROUP = 12;
+
+function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
+  kind: 'tag' | 'person' | 'company'; title: string; hint: string; facets: FacetStat[]; baseline: number; taxonomy: Taxonomy | null; cols: number;
+}) {
+  const [query, setQuery] = useState('');
+  const [minCount, setMinCount] = useState(MIN_COUNT);
+  const [order, setOrder] = useState<'top' | 'bottom'>('top');
+  const noun = kind === 'company' ? 'studios' : kind === 'person' ? 'people' : 'tags';
+  const ofKind = useMemo(() => facets.filter((f) => f.kind === kind), [facets, kind]);
+  const q = query.trim().toLowerCase();
+  const found = useMemo(() => (q
+    ? ofKind.filter((f) => f.label.toLowerCase().includes(q)).sort((a, b) => b.count - a.count || b.ba - a.ba).slice(0, 50)
+    : []), [ofKind, q]);
+  const groups = useMemo(() => {
+    const list: { id: string; label: string; facets: FacetStat[] }[] = kind === 'tag'
+      // The live category list, in its own order. An ignored category (noise, platforms) is left out, as the score leaves it out.
+      ? [...(taxonomy?.categories ?? new Map<string, { label: string; weight: number; ignored: boolean }>()).entries()]
+          .filter(([, c]) => !c.ignored && c.weight !== 0)
+          .map(([id, c]) => ({ id, label: c.label, facets: ofKind.filter((f) => (f.category ?? 'other') === id) }))
+      : (kind === 'person' ? PERSON_ROLES : COMPANY_ROLES).map(([id, label]) => ({ id, label, facets: ofKind.filter((f) => f.role === id) }));
+    return list.map((g) => {
+      const eligible = g.facets.filter((f) => f.count >= minCount);
+      return { ...g, eligible: eligible.length, sorted: eligible.sort((a, b) => (order === 'top' ? b.ba - a.ba : a.ba - b.ba) || b.count - a.count) };
+    }).filter((g) => g.sorted.length);
+  }, [ofKind, kind, taxonomy, minCount, order]);
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.facetHead}>
+        <Eyebrow>{title}</Eyebrow>
+        <View style={styles.facetControls}>
+          <TextInput
+            value={query} onChangeText={setQuery} placeholder={`Search ${noun}…`} placeholderTextColor={color.textSecondary}
+            accessibilityLabel={`Search ${noun}`} style={styles.facetSearch}
+          />
+          {!q ? (
+            <>
+              <View style={styles.stepper}>
+                <Text style={[type.caption, { color: color.textSecondary }]}>min</Text>
+                <Pressable onPress={() => setMinCount((c) => Math.max(1, c - 1))} accessibilityRole="button" accessibilityLabel="Fewer titles" style={styles.stepBtn}>
+                  <Text style={type.caption}>-</Text>
+                </Pressable>
+                <Text style={[type.caption, { color: color.textPrimary, width: 20, textAlign: 'center' }]}>{minCount}</Text>
+                <Pressable onPress={() => setMinCount((c) => c + 1)} accessibilityRole="button" accessibilityLabel="More titles" style={styles.stepBtn}>
+                  <Text style={type.caption}>+</Text>
+                </Pressable>
+              </View>
+              <View style={styles.toggle}>
+                {(['top', 'bottom'] as const).map((o) => (
+                  <Pressable key={o} onPress={() => setOrder(o)} accessibilityRole="button" accessibilityState={{ selected: order === o }}
+                    style={[styles.toggleBtn, order === o && { backgroundColor: color.accentSubtle }]}>
+                    <Text style={[type.caption, { color: order === o ? color.accent : color.textSecondary }]}>{o === 'top' ? 'Highest' : 'Lowest'}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+        </View>
+      </View>
+      <Text style={[type.caption, { marginTop: 4, marginBottom: 12 }]}>{hint}</Text>
+      {q ? (
+        found.length
+          ? <Panel style={styles.column}>{found.map((f) => <StatBar key={`${f.role ?? ''}|${f.key}`} f={f} baseline={baseline} />)}</Panel>
+          : <Text style={[type.bodySm, { textAlign: 'center', paddingVertical: 24 }]}>No matches for “{query}”.</Text>
+      ) : (
+        <View style={styles.wrap}>
+          {groups.map((g) => (
+            <View key={g.id} style={[styles.cell, { width: `${100 / cols}%` as const }]}>
+              <Panel style={styles.column}>
+                <View style={styles.groupHead}>
+                  <View style={[styles.dot, { backgroundColor: tintOf({ kind } as FacetStat) }]} />
+                  <Text style={[type.bodySm, { color: color.textPrimary }]}>{g.label}</Text>
+                  <Text style={type.caption}>{g.eligible}</Text>
+                </View>
+                {g.sorted.slice(0, PER_GROUP).map((f) => <StatBar key={`${f.role ?? ''}|${f.key}`} f={f} baseline={baseline} />)}
+                {g.sorted.length > PER_GROUP ? <Text style={[type.caption, { paddingTop: 4 }]}>+{g.sorted.length - PER_GROUP} more, search to find them</Text> : null}
+              </Panel>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export default function InsightsScreen() {
@@ -128,6 +222,7 @@ export default function InsightsScreen() {
   const [libraryTotal, setLibraryTotal] = useState(0);
   const [bucket, setBucket] = useState<number | null>(null);
   const [decade, setDecade] = useState<number | null>(null);
+  const { taxonomy } = useScores();
 
   const signedIn = auth.status === 'signedIn';
   useEffect(() => {
@@ -199,6 +294,7 @@ export default function InsightsScreen() {
     }
     const facets: FacetStat[] = [...stats.values()].map(({ f, n, sum }) => ({
       kind: f.kind, role: f.role, key: f.key, label: f.label, count: n, avg: sum / n,
+      category: f.kind === 'tag' ? (taxonomy?.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other') : undefined,
       ba: (PRIOR_STRENGTH * baseline + sum) / (PRIOR_STRENGTH + n),
     }));
     const ranked = (kind: string) => facets.filter((f) => f.kind === kind && f.count >= MIN_COUNT);
@@ -217,6 +313,7 @@ export default function InsightsScreen() {
         { title: 'People ratings', hint: 'How you rate the directors, writers, creators and cast behind what you have watched.', kind: 'person' },
         { title: 'Studio ratings', hint: 'Developers, publishers, film studios and TV networks, ranked by how you rate their work.', kind: 'company' },
       ].map((s) => ({ ...s, top: top(s.kind), bottom: bottom(s.kind) })),
+      facets,
       mostWatched: [
         { title: 'Actors', facets: most('person', 'cast') },
         { title: 'Directors', facets: most('person', 'director') },
@@ -224,7 +321,7 @@ export default function InsightsScreen() {
         { title: 'Game studios', facets: most('company', 'developer', 'publisher') },
       ],
     };
-  }, [rated]);
+  }, [rated, taxonomy]);
 
   const picked = useMemo(() => {
     if (!rated) return [];
@@ -354,13 +451,10 @@ export default function InsightsScreen() {
         </View>
 
         {data.sections.map((s) => (
-          <View key={s.kind} style={styles.section}>
-            <PanelHeader eyebrow={s.title} hint={s.hint} />
-            <View style={styles.wrap}>
-              <View style={[styles.cell, grid(width >= breakpoint.sm ? 2 : 1)]}><FacetColumn title="Highest" tone={color.success} facets={s.top} baseline={data.baseline} /></View>
-              <View style={[styles.cell, grid(width >= breakpoint.sm ? 2 : 1)]}><FacetColumn title="Lowest" tone={color.danger} facets={s.bottom} baseline={data.baseline} /></View>
-            </View>
-          </View>
+          <FacetRatings
+            key={s.kind} kind={s.kind as 'tag' | 'person' | 'company'} title={s.title} hint={s.hint}
+            facets={data.facets} baseline={data.baseline} taxonomy={taxonomy} cols={width >= breakpoint.sm ? 2 : 1}
+          />
         ))}
 
         <View style={styles.section}>
@@ -393,6 +487,17 @@ const styles = StyleSheet.create({
   // max-w-6xl, px-6, py-6
   main: { width: '100%', maxWidth: 1152, alignSelf: 'center', paddingHorizontal: 24, paddingVertical: 24 },
   section: { marginBottom: 40 },
+  facetHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  facetControls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  facetSearch: {
+    width: 176, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.md, borderWidth: 1, borderColor: color.border,
+    backgroundColor: color.surfaceElevated, color: color.textPrimary, fontFamily: font.sans, fontSize: 12,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  stepBtn: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.xs, borderWidth: 1, borderColor: color.border, backgroundColor: color.surfaceElevated },
+  toggle: { flexDirection: 'row', borderRadius: radius.md, borderWidth: 1, borderColor: color.border, overflow: 'hidden' },
+  toggleBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   // A wrapping grid with a 12 px gutter: each cell pads half of it.
   wrap: { flexDirection: 'row', flexWrap: 'wrap', margin: -6 },

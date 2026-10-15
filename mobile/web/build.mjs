@@ -111,7 +111,7 @@ await esbuild.build({
   }],
   logLevel: 'warning',
 });
-const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
+const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs, popularPeople } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
 
 // ── 3. The data ──────────────────────────────────────────────────────────────
 
@@ -475,6 +475,39 @@ if (!limit) {
     version: 1, builtAt: new Date().toISOString(), deriveVersion, titles: pool.length, pages: names,
   }));
   step(`${names.length} catalog files for ${pool.length} titles`);
+
+  // Home's "Popular people", ranked here because the build holds every title's
+  // cast with its portrait; the app would otherwise ask TMDB for each face.
+  const people = popularPeople(poolTitles, details.values());
+  // Directors and writers are not in a title's cast list, so most of the rail
+  // had no face. They are looked up at TMDB here, once, and the answer kept in
+  // dist/cache (a "none" too, for a week): about forty calls on the first
+  // build and almost none after. The key is the app's own public one.
+  const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY
+    ?? fs.readFileSync(path.join(mobile, '.env'), 'utf8').match(/^EXPO_PUBLIC_TMDB_API_KEY=(.+)$/m)?.[1]?.trim();
+  const portraitFile = path.join(DIST, 'cache', 'portraits.json');
+  let portraits = {};
+  try { portraits = JSON.parse(fs.readFileSync(portraitFile, 'utf8')); } catch { /* first build */ }
+  const WEEK = 7 * 86_400_000;
+  let asked = 0;
+  for (const p of people) {
+    if (p.portraitUrl || !tmdbKey) continue;
+    const kept = portraits[p.key];
+    if (kept && (kept.url || Date.now() - kept.at < WEEK)) { p.portraitUrl = kept.url; continue; }
+    try {
+      const found = await getJson(`https://api.themoviedb.org/3/search/person?api_key=${tmdbKey}&query=${encodeURIComponent(p.name)}`);
+      const exact = (found?.results ?? []).filter((r) => r.profile_path && r.name?.toLowerCase() === p.name.toLowerCase())
+        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))[0];
+      const url = exact ? `https://image.tmdb.org/t/p/w185${exact.profile_path}` : null;
+      portraits[p.key] = { url, at: Date.now() };
+      p.portraitUrl = url;
+      asked++;
+    } catch { /* no face is a card with initials */ }
+  }
+  fs.mkdirSync(path.dirname(portraitFile), { recursive: true });
+  fs.writeFileSync(portraitFile, JSON.stringify(portraits));
+  fs.writeFileSync(path.join(STAGE, 'catalog', 'people.json'), JSON.stringify({ version: 1, builtAt: new Date().toISOString(), people }));
+  step(`${people.length} popular people, ${people.filter((p) => p.portraitUrl).length} with a portrait (${asked} asked of TMDB)`);
 }
 
 urls.unshift({ loc: `${SITE}/`, lastmod: new Date().toISOString().slice(0, 10) });

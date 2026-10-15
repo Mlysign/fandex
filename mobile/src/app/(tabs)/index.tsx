@@ -1,14 +1,14 @@
 // Home. The site's landing page (src/app/HomePageClient.tsx): the type filter,
 // then rails. Signed in: Up next, Recommended for you, Popular right now,
-// Upcoming. Signed out: a panel that says what signing in unlocks, and the two
-// public rails.
+// Upcoming, Popular people. Signed out: a panel that says what signing in
+// unlocks, and the public rails.
 //
-// Where the rails come from is lib/homeFeed.ts. Not here yet: Popular people,
-// which needs person pages to lead to.
+// Where the rails come from is lib/homeFeed.ts and lib/popularPeople.ts.
 
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CardRail, Rail } from '~/components/cards';
+import { PersonCard } from '~/components/PersonCard';
 import { Button, EmptyState, Eyebrow, Panel, Skeleton } from '~/components/kit';
 import { SubBar } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
@@ -17,6 +17,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { useHomeRails } from '~/lib/useHomeRails';
+import { usePopularPeople } from '~/lib/popularPeople';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { breakpoint, color, radius, type } from '~/theme';
 
@@ -46,6 +47,7 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const roomy = width >= breakpoint.md;
   const { feed, failed, load, recommendation, withoutHidden, signedIn, personalPending } = useHomeRails();
+  const people = usePopularPeople();
 
   const rail = (title: string, items: CardItem[] | null | undefined, seeAllHref: string, forYou = false) => {
     if (!items?.length) return null;
@@ -104,6 +106,13 @@ export default function HomeScreen() {
             {personalPending ? <RailSkeleton title="Recommended for you" /> : rail('Recommended for you', recommendation, '/discover', true)}
             {rail('Popular right now', feed.trending, '/discover')}
             {rail('Upcoming', feed.upcoming, '/calendar')}
+            {/* Not filtered by media type, as on the site: a director is not a movie,
+                and hiding the rail because somebody ticked Games would be a dead control. */}
+            {people.length ? (
+              <Rail title="Popular people" seeAllHref="/discover">
+                {people.map((person) => <PersonCard key={person.key} person={person} />)}
+              </Rail>
+            ) : null}
           </>
         )}
       </ScrollView>
