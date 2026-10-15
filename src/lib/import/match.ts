@@ -1,7 +1,10 @@
 import { query } from "@/lib/db";
 import { searchTmdbMovie } from "@/lib/sources/tmdb";
-import { normalizeName } from "@/lib/normalize";
 import type { ImportRow } from "./parse";
+import { lookupQueue, matchAgainst, PROVIDER_LOOKUP_BUDGET, type MatchedRow, type MatchSummary } from "./matchCore";
+
+export { lookupQueue, matchAgainst, PROVIDER_LOOKUP_BUDGET };
+export type { MatchedRow, MatchSummary };
 
 // PL4 — resolve imported rows against the catalog, LOCAL FIRST.
 //
@@ -16,24 +19,6 @@ import type { ImportRow } from "./parse";
 // the catalog 2026-08-23: 1,112 movies, and exactly ONE norm_title+year
 // collision across the whole movie table, so title+year is very close to a
 // unique key here rather than a fuzzy guess.
-
-export interface MatchedRow extends ImportRow {
-  /** media_items.id when resolved locally, else null. */
-  mediaItemId: string | null;
-  /** Resolved at TMDB when the local catalog had nothing. Persisted at apply time. */
-  tmdbId?: number | null;
-  how: "imdb-id" | "title-year" | "title-only" | "provider" | "unmatched";
-}
-
-export interface MatchSummary {
-  rows: MatchedRow[];
-  matchedLocally: number;
-  /** Resolved at TMDB after the catalog came up empty. Zero until the fallback runs. */
-  matchedAtProvider?: number;
-  unmatched: number;
-  /** Rows we did not even attempt a provider lookup for, because the budget ran out. */
-  overBudget: number;
-}
 
 /**
  * Resolve against the LOCAL catalog only. No provider calls at all.
@@ -68,59 +53,7 @@ export function matchLocally(rows: ImportRow[]): MatchSummary {
     else byTitle.set(key, [{ id: r.id, year: Number.isFinite(year!) ? year : null }]);
   }
 
-  let matchedLocally = 0;
-  for (const row of rows) {
-    let id: string | null = null;
-    let how: MatchedRow["how"] = "unmatched";
-
-    if (row.imdbId) {
-      const hit = byImdb.get(row.imdbId);
-      if (hit) { id = hit; how = "imdb-id"; }
-    }
-
-    if (!id) {
-      const candidates = byTitle.get(normalizeName(row.title)) ?? [];
-      if (row.year != null) {
-        const near = candidates.filter((c) => c.year != null && Math.abs(c.year - row.year!) <= 1);
-        if (near.length === 1) { id = near[0].id; how = "title-year"; }
-      }
-      // Unambiguous title with no year to check, or a year the catalog lacks.
-      if (!id && candidates.length === 1 && row.year == null) {
-        id = candidates[0].id; how = "title-only";
-      }
-    }
-
-    if (id) matchedLocally++;
-    out.push({ ...row, mediaItemId: id, how });
-  }
-
-  return {
-    rows: out,
-    matchedLocally,
-    unmatched: out.length - matchedLocally,
-    overBudget: 0,
-  };
-}
-
-/**
- * How many provider lookups an import is allowed, total.
- *
- * A ceiling on the IMPORT, not on the row. Per-row is how you turn one upload
- * into thousands of provider calls; per-import is what makes the worst case
- * knowable before it happens. 400 at TMDB's rate is on the order of a minute.
- */
-export const PROVIDER_LOOKUP_BUDGET = 400;
-
-/** Rows worth spending a provider lookup on, in the order worth spending it. */
-export function lookupQueue(summary: MatchSummary, budget = PROVIDER_LOOKUP_BUDGET): MatchedRow[] {
-  const unmatched = summary.rows.filter((r) => r.mediaItemId == null && r.tmdbId == null);
-  // Rated titles first: a rating is the higher-value signal (it feeds the taste
-  // profile) and the person is more likely to notice one missing.
-  unmatched.sort((a, b) => {
-    if ((a.rating != null) !== (b.rating != null)) return a.rating != null ? -1 : 1;
-    return (b.year ?? 0) - (a.year ?? 0);   // then newest, which people check first
-  });
-  return unmatched.slice(0, budget);
+  return matchAgainst(rows, byImdb, byTitle);
 }
 
 /** How many provider searches run at once. TMDB allows ~50/s; this is nowhere near. */

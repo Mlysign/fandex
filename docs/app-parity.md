@@ -41,11 +41,11 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | Calendar | partial | The slide between months. The region comes from the device, not a setting. |
 | Item page | partial | Built 2026-10-11: the score panel (four states, "Why?" with baseline, linked reasons, left-out rows and the sum), Hide from suggestions, both related rails, thumbnails and hover arrows on a wide window. Still owed: franchise members the catalog does not hold (`franchise_members` is not in D1), "Rate it" as a button that opens the stars (the app shows the ten stars in place), your rating per provider and your review (`RatingsSection.tsx`), and returning to the title after signing in from it. (More than the site had: each episode shows its date and opens a sheet with its still and synopsis.) |
 | Profile | partial | The Support Fandex row. |
-| Settings | partial | The Import row, "Add login method", joining two accounts. The download works in a browser only. The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
+| Settings | partial | Joining two accounts, and Google as a login method on Android (both in app.md, "Waiting on him"). The Import row and the download on a phone since 2026-10-15 (the phone part needs the next APK). The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
 | Facet pages (tag, person, studio) | partial | Games from the providers (a studio's or a tag's page asks TMDB only; IGDB needs a Worker route). "Also known as", "you score X higher than the crowd". Static pages since 2026-10-15 for every facet with three or more titles (the 36 most popular as cards). |
 | Insights | partial | Search and the minimum-count control in the three rating sections, and the per-category tag panels. |
 | Admin pages (`/dev`) | **yes** | Users, Scoring and Traffic are built, Review included since 2026-10-11. See "The admin pages" below. |
-| Import | **no** | All of it. |
+| Import | **yes** (2026-10-15) | Letterboxd and IMDb, read on the device (`lib/listImport.ts` over the site's own `parseText.ts` and `matchCore.ts`). Seen end to end on the local stack with a test account. Two differences from the site, on purpose: an import never overwrites a rating the account already has, and with Trakt signed in on the device the new ratings and watchlist go to Trakt too. Choosing a file on Android needs the next APK. |
 | Sign-in | partial | Trakt, and Google in a browser since 2026-10-11 (not on Android, [app.md](app.md)). A dialog from any gated control, returning to where you were (it sends you to You). Google on the phone, joining accounts, Steam. |
 
 ### What changed on 2026-10-10
@@ -61,7 +61,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 
 | # | Stage | Why here |
 |--:|---|---|
-| 1 | **Settings' rest**: Import, a second login method, the download on a phone. | |
+| 1 | ~~Settings' rest~~ (2026-10-15): Import and the download on a phone. A second login method on Android waits on Nils (app.md). | |
 | 2 | ~~Static facet pages, the related rails on static item pages~~ (done 2026-10-15). Games on a studio's or tag's page, and Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. The rails are the site's own internal links, which is the one lever on crawl priority that is ours ([seo.md](seo.md)); the build holds every title and can pick them with `lib/related.ts`. |
 | 3 | **The Worker's home and browse routes**: trending, and the provider-fed Discover feed. | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 4 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |

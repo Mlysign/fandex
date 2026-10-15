@@ -1,5 +1,7 @@
 # The list import: Letterboxd first, IMDb alongside
 
+**On the new stack since 2026-10-15** (`/import` in the app and on fandex.org): read and matched on the device by `mobile/src/lib/listImport.ts`, with the site's CSV rules (`src/lib/import/parseText.ts`) and matching passes (`matchCore.ts`) shared rather than copied. It adds and never overwrites a rating the account already holds, and sends the new ratings and watchlist to Trakt when the device is signed in to it (Nils, 2026-10-15: keep Trakt and Fandex in sync). A title new to the catalog is added by the Worker at 30 a minute. Everything below describes the old site, and every rule in it still holds.
+
 **Status: BUILT 2026-08-23** (`1ea3619` engine + migration 20, `f875b70` the page). Verified end to end against the running app and the real database, not just by tests. ⚠️ **The one thing still owed: confirm the CSV column headers against a REAL export** (§6). The parser is header-driven and fails loudly rather than silently, so a rename is survivable, but the names themselves are still unverified. This is PL4's design doc. `TASKS.md` carries the one-line pointer; everything below is the detail, and every factual claim here was verified against Letterboxd's own pages, their app association files, a real Pixel 8, or the live database. **Nothing here is quoted from documentation alone**, because the last three platform surprises in this repo all came from trusting a doc over a measurement.
 
 Visual version of the flow: `https://claude.ai/code/artifact/d641d234-4f2d-41e0-8a4f-54b7188c7d79`

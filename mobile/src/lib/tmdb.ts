@@ -99,3 +99,28 @@ export async function tmdbEpisode(tmdbId: string, season: number, episode: numbe
     voteCount: typeof e.vote_count === 'number' ? e.vote_count : 0,
   };
 }
+
+/**
+ * The film TMDB ranks first for a title and year, as the site's list import
+ * asked it (src/lib/sources/tmdb.ts, searchTmdbMovie). Null when TMDB has none.
+ */
+export async function searchTmdbMovieId(title: string, year: number | null, signal?: AbortSignal): Promise<number | null> {
+  if (!tmdbConfigured()) return null;
+  const url = `${BASE}/search/movie?api_key=${TMDB_API_KEY}&include_adult=false&query=${encodeURIComponent(title)}${year ? `&year=${year}` : ''}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`TMDB search answered ${res.status}`);
+  const id = ((await res.json()) as { results?: { id?: unknown }[] }).results?.[0]?.id;
+  return typeof id === 'number' ? id : null;
+}
+
+/** The film or show an IMDb id (tt…) is on TMDB. Exact, unlike a title search. */
+export async function tmdbFindImdb(imdbId: string, signal?: AbortSignal): Promise<{ type: 'movie' | 'show'; id: number } | null> {
+  if (!tmdbConfigured()) return null;
+  const res = await fetch(`${BASE}/find/${encodeURIComponent(imdbId)}?api_key=${TMDB_API_KEY}&external_source=imdb_id`, { signal });
+  if (!res.ok) throw new Error(`TMDB find answered ${res.status}`);
+  const data = (await res.json()) as { movie_results?: { id?: unknown }[]; tv_results?: { id?: unknown }[] };
+  const movie = data.movie_results?.[0]?.id;
+  if (typeof movie === 'number') return { type: 'movie', id: movie };
+  const show = data.tv_results?.[0]?.id;
+  return typeof show === 'number' ? { type: 'show', id: show } : null;
+}

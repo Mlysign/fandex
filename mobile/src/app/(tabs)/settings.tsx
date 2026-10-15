@@ -2,7 +2,7 @@
 // pickers (src/components/settings/), section for section: connected accounts,
 // region, default types, account, your data.
 //
-// Not carried yet: the Import row and joining two accounts. Kept from the app: the widget offer and what this device
+// Not carried yet: joining two accounts. Kept from the app: the widget offer and what this device
 // holds, which the site had no use for.
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -26,6 +26,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
+import { saveJsonFile } from '~/lib/files';
 import { googleAvailable } from '~/lib/google';
 import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
 import type { TraktSyncResult } from '~/lib/traktSync';
@@ -535,15 +536,9 @@ function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts:
   const exportData = () => {
     setExporting(true);
     api.exportAccount()
-      .then((data) => {
-        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `fandex-export-${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        onNotice({ msg: 'Your data export has been downloaded.', ok: true });
-      })
+      // In a browser a download; on a phone the share sheet, where it saves to Files or Drive.
+      .then((data) => saveJsonFile(`fandex-export-${new Date().toISOString().slice(0, 10)}.json`, data))
+      .then(() => onNotice({ msg: Platform.OS === 'web' ? 'Your data export has been downloaded.' : 'Your data export is ready.', ok: true }))
       .catch((e: unknown) => onNotice({ msg: failure(e, 'Could not prepare your export. Please try again.'), ok: false }))
       .finally(() => setExporting(false));
   };
@@ -573,13 +568,9 @@ function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts:
       <Card row>
         <RowText
           title="Download your data"
-          text={Platform.OS === 'web'
-            ? 'Everything Fandex stores about you, as a JSON file: library, wishlist, ratings and connected accounts.'
-            : 'Everything Fandex stores about you, as a JSON file. The download is on fandex.org, in Settings.'}
+          text="Everything Fandex stores about you, as a JSON file: library, wishlist, ratings and connected accounts."
         />
-        {Platform.OS === 'web'
-          ? <Button label={exporting ? 'Preparing...' : 'Download'} onPress={exportData} disabled={exporting} />
-          : null}
+        <Button label={exporting ? 'Preparing...' : 'Download'} onPress={exportData} disabled={exporting} />
       </Card>
       <Card row danger>
         <RowText danger title="Delete your account" text="Permanently removes your account and everything in it. This cannot be undone." />
@@ -626,6 +617,24 @@ function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts:
           </View>
         </View>
       </Sheet>
+    </Section>
+  );
+}
+
+// The site's Import section (SettingsPageClient.tsx). Before it, the import page
+// existed and nothing linked to it: "i would have expected an import button in
+// my user settings" (Nils, 2026-09-02).
+function ImportRow() {
+  const router = useRouter();
+  return (
+    <Section eyebrow="Import" hint="Bring ratings and watchlists across from another tracker.">
+      <Card row>
+        <RowText
+          title="Import from Letterboxd or IMDb"
+          text="Both let you download your own data for free. Choose the file and Fandex reads your ratings and watchlist from it."
+        />
+        <Button label="Import" onPress={() => router.push('/import' as never)} />
+      </Card>
     </Section>
   );
 }
@@ -766,6 +775,7 @@ export default function SettingsScreen() {
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
             </Section>
 
+            <ImportRow />
             <Region onNotice={setNotice} />
             <DefaultTypes onNotice={setNotice} />
             <YourPlatforms onNotice={setNotice} />
