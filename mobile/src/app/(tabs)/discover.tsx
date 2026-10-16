@@ -74,7 +74,7 @@ function MatchGroup({ title, matches }: { title: string; matches: VocabEntry[] }
               {...(Platform.OS === 'web' ? ({ href } as object) : null)}
               onPress={(e) => { (e as unknown as { preventDefault?: () => void })?.preventDefault?.(); router.push(href as never); }}
               accessibilityRole="link"
-              style={({ hovered }: { hovered?: boolean }) => [styles.chip, hovered && { borderColor: color.borderStrong }]}>
+              style={(state: { pressed: boolean; hovered?: boolean }) => [styles.chip, state.hovered && { borderColor: color.borderStrong }]}>
               <Text style={[type.label, { color: color.textPrimary }]}>{m.label}</Text>
             </Pressable>
           );
