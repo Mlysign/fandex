@@ -59,13 +59,10 @@ The 13th run swept the live site, the 14th every write on a test account. All tw
 
 ## Smoke test, 2026-10-16 (15th run, randomised, web and the native app)
 
-Scope: the local stack on two test accounts, the web app in the pane and a side-by-side native build on the phone (smoketest.md, "N-G"). Order shuffled from seed 170535259, plus 140 random taps/clicks over three runs. No crash, no JS error, every write landed in D1. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+Scope: the local stack on two test accounts, the web app in the pane and a side-by-side native build on the phone (smoketest.md, "N-G"). Order shuffled from seed 170535259, plus 140 random taps/clicks over three runs. No crash, no JS error, every write landed in D1. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have. **SM76, SM77 and SM78 (the three 🟠) are fixed and in the archive** (grep "15th smoke test"). Not yet on fandex.org or in a phone build.
 
 | ID | Sev | Type | Area | Finding (with repro) |
 |----|:--:|:--:|------|----------------------|
-| SM76 | 🟠 | nav | App, `/open` | Phone: Home → any provider card → Android Back lands on "Opening…" and stays there (8 s+, twice). Back again from Home goes there too. The on-screen arrow is fine. `open/[source]/[type]/[id].tsx` replaces itself, but inside the tabs navigator the route stays in history and its effect never re-runs. Web did a one-off cousin with a long history: Back from a title jumped to an older title, then to an `/item/` address by itself. |
-| SM77 | 🟠 | data | App, your rows | Rows changed on another device do not reach a running app. Sync on an account with Trakt linked runs the Trakt sync (`wishlist.tsx:126`), which returns at once when the device holds no Trakt tokens (`AuthProvider.tsx:167`), so nothing is pulled and nothing is said. Nothing pulls on foreground either. Phone Library said 7 with 8 on the server while the same phone's Inception page showed the fresh 5/10. "Signs out every device" also only lands on the next launch (then `/v1/me` 401, correct). |
-| SM78 | 🟠 | search | Search, both | Accents are dropped, not folded: `normalizeName` (`src/lib/normalize.ts:14`) turns é into a space. `pokemon` misses every Pokémon game (36 results vs 67 for `pokémon`); a lone `ß` or `ü` is an empty query and lists the whole catalog. ⚠️ `normalizeName` is also the matcher's identity key, so fold in the search path, not by editing it in place. |
 | SM79 | 🟡 | bug | Insights | "You vs the crowd" puts the same titles in both columns: "You rate higher" lists Hades at −5.8. `insights.tsx:279-280` sorts one list both ways with no sign filter. |
 | SM80 | 🟡 | links | Home | Popular/Upcoming cards for titles the catalog holds link `/item/{uuid}`: `homeFeed.ts:45` sets the id and never the slug. Sibling of SM61. |
 | SM81 | 🟡 | data | Settings, platforms | "Xbox Series S/X" and "Xbox Series X\|S" both listed. `platformKeys.ts:111-114` folds `x/s`, not `s/x`. |

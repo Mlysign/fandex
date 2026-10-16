@@ -10,7 +10,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Bookmark, CirclePlay, Library } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { normalizeName } from '@/lib/normalize';
+import { searchKey } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { Button, EmptyState } from '~/components/kit';
@@ -152,8 +152,8 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
     return () => { live = false; };
   }, [db, relation, auth.rowsRevision, catalog.revision]);
 
-  const term = normalizeName(query.trim());
-  const filtered = useMemo(() => (rows ?? []).filter((r) => types.isVisible(r.type) && (!term || normalizeName(r.title).includes(term))), [rows, types, term]);
+  const term = searchKey(query.trim());
+  const filtered = useMemo(() => (rows ?? []).filter((r) => types.isVisible(r.type) && (!term || searchKey(r.title).includes(term))), [rows, types, term]);
   const scores = useRowScores(useMemo(() => (sort === 'fandexScore' ? filtered.map((r) => r.id) : []), [sort, filtered]));
 
   const sorted = useMemo(() => {
@@ -228,9 +228,9 @@ function Progress({ tabs, query, setQuery }: { tabs: React.ReactNode; query: str
   const up = useUpNext(10_000);
   const [sort, setSort] = useState<ProgressSort>('upNext');
 
-  const term = normalizeName(query.trim());
+  const term = searchKey(query.trim());
   const shown = useMemo(() => {
-    const list = (up.entries ?? []).filter((e) => !term || normalizeName(e.title).includes(term));
+    const list = (up.entries ?? []).filter((e) => !term || searchKey(e.title).includes(term));
     switch (sort) {
       case 'upNext': return list;
       case 'popularity': return [...list].sort((a, b) => b.votes - a.votes);

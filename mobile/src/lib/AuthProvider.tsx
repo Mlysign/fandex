@@ -100,6 +100,8 @@ export interface TraktSyncState {
 
 /** A sync on opening the app runs when the last one is older than this. */
 const TRAKT_STALE_MS = 6 * 60 * 60 * 1000;
+/** Coming back to the app asks for your rows again only when the last ask is older than this. */
+const FOREGROUND_PULL_MS = 60 * 1000;
 /** A build made with this set works out what a sync would change, logs the counts, and writes nothing. */
 const TRAKT_SYNC_DRY_RUN = process.env.EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN === '1';
 
@@ -137,16 +139,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** Bumped to abandon a sign-in in progress: a poll that wakes up later sees it and stops. */
   const flow = useRef(0);
   const pulling = useRef(false);
+  /** When the last pull started, so coming back to the app does not ask every few seconds. */
+  const lastPull = useRef(0);
+  // Set once `forget` exists, below. A pull the Worker answers 401 means this
+  // session was signed out on another device: "Sign out" there signs out every
+  // device, and until this a running app only found out on its next start (SM77).
+  const onRevoked = useRef<() => void>(() => undefined);
 
   const pullRows = useCallback(async (force = false) => {
     if (pulling.current) return;
     pulling.current = true;
+    lastPull.current = Date.now();
     setRowsSyncing(true);
     setRowsError(null);
     try {
       const res = await syncState(db, force);
       if (res.changed) setRowsRevision((r) => r + 1);
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        onRevoked.current();
+        return;
+      }
       // The old rows are still there: a failed pull writes nothing.
       console.warn('rows_pull_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
       setRowsError(e instanceof ApiError && e.code === 'offline'
@@ -162,26 +175,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [traktSync, setTraktSync] = useState<TraktSyncState>({ running: false, error: null, needsSignIn: false, onDevice: null, last: null, syncedAt: null });
   const syncingTrakt = useRef(false);
 
-  const runTraktSync = useCallback(async (onlyIfStale: boolean) => {
-    if (syncingTrakt.current) return;
+  /** False when there is no Trakt on this device to sync from, so nothing ran. */
+  const runTraktSync = useCallback(async (onlyIfStale: boolean): Promise<boolean> => {
+    if (syncingTrakt.current) return true;
     if (!(await loadTraktTokens())) {
-      // Signed in some other way: there is no Trakt to sync from here.
+      // Signed in some other way, or this device has not signed in to Trakt yet:
+      // there is no Trakt to sync from here.
       setTraktSync((s) => ({ ...s, onDevice: false }));
-      return;
+      return false;
     }
     const syncedAt = await traktSyncedAt(db);
     if (onlyIfStale && syncedAt && Date.now() - syncedAt < TRAKT_STALE_MS) {
       setTraktSync((s) => ({ ...s, syncedAt, onDevice: true }));
-      return;
+      return true;
     }
     syncingTrakt.current = true;
     setTraktSync((s) => ({ ...s, running: true, error: null, needsSignIn: false, onDevice: true }));
     try {
       const last = await syncTrakt(db, { dryRun: TRAKT_SYNC_DRY_RUN });
       setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: true, last, syncedAt: await traktSyncedAt(db) });
-      // The rows on the device changed, and a title new to the catalog is now in the pool.
-      if (last.itemsChanged + last.itemsRemoved + last.episodesChanged + last.episodesRemoved > 0) setRowsRevision((r) => r + 1);
+      // The rows on the device changed, and a title new to the catalog is now in
+      // the pool. Rows pulled from the Worker first count too: a rating made on
+      // another device, when Trakt itself had nothing new.
+      if (last.rowsPulled || last.itemsChanged + last.itemsRemoved + last.episodesChanged + last.episodesRemoved > 0) setRowsRevision((r) => r + 1);
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setTraktSync((s) => ({ ...s, running: false }));
+        onRevoked.current();
+        return true;
+      }
       // Whatever went wrong, nothing was deleted: see traktSync.ts.
       const needsSignIn = e instanceof TraktAuthError;
       const error =
@@ -195,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       syncingTrakt.current = false;
     }
+    return true;
   }, [db]);
 
   const forget = useCallback(async () => {
@@ -205,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRowsRevision((r) => r + 1);
     setStatus('signedOut');
   }, [db]);
+  useEffect(() => { onRevoked.current = () => void forget(); }, [forget]);
 
   // On start: is there a session, and is it still good?
   useEffect(() => {
@@ -414,12 +438,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [forget]);
 
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
-  const syncTraktNow = useCallback(() => void runTraktSync(false), [runTraktSync]);
+  // The Sync button on an account with Trakt. On a device that has not signed in
+  // to Trakt there is nothing to sync from here, and the button used to do
+  // nothing at all, not even fetch what other devices had saved (SM77).
+  const syncTraktNow = useCallback(() => {
+    void runTraktSync(false).then((ran) => { if (!ran) void pullRows(true); });
+  }, [runTraktSync, pullRows]);
   const rowsChanged = useCallback(() => setRowsRevision((r) => r + 1), []);
 
   // The widget's tick writes your rows with no screen mounted. When the app is
   // open behind it, this is how the lists find out.
   useEffect(() => onRowsChangedElsewhere(rowsChanged), [rowsChanged]);
+
+  // Back on screen: ask whether another device changed your rows. The first
+  // question is one small request and fetches nothing when the answer is no,
+  // and it runs at most once a minute, because in a browser this fires on every
+  // switch back to the tab. Before this, a running app saw another device's
+  // ratings only after a restart (SM77).
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || Date.now() - lastPull.current < FOREGROUND_PULL_MS) return;
+      void pullRows().then(() => runTraktSync(true));
+    });
+    return () => sub.remove();
+  }, [status, pullRows, runTraktSync]);
 
   // Hand the widget its rows again once the app has left the screen.
   //

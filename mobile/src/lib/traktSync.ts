@@ -301,6 +301,12 @@ export interface TraktSyncResult {
   watchlistTidied: number;
   /** Rated titles' wishlist rows from other sources removed this run. */
   wishlistTidied?: number;
+  /**
+   * True when the Worker held rows this device did not (a rating made on
+   * another device), pulled before the comparison. The lists need re-reading
+   * then even if Trakt itself changed nothing (SM77).
+   */
+  rowsPulled?: boolean;
 }
 
 async function pullTrakt(accessToken: string): Promise<TraktPull> {
@@ -410,7 +416,7 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
   const accessToken = await traktAccessToken();
   // The comparison is against the Worker's rows, so the device's copy of them
   // has to be current first.
-  await syncState(db);
+  const rowsPulled = (await syncState(db)).changed;
 
   const pull = await pullTrakt(accessToken);
   const { ids, newTitles, deferred } = await matchTitles([...pull.library, ...pull.wishlist]);
@@ -431,6 +437,7 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
     deferred,
     unmatched: plan.unmatched,
     watchlistTidied: 0,
+    rowsPulled,
   };
   if (opts.dryRun) {
     console.log('trakt_sync', JSON.stringify({ ...result, wouldTidy: tidy.length, localItems: local.items.length, localEpisodes: local.episodes.length }));

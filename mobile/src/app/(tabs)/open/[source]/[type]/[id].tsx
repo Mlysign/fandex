@@ -5,8 +5,16 @@
 // the Worker which item that is (fetching it from the provider if nobody holds
 // it yet), then replaces itself with the item page, so Back returns to the list
 // and not to a spinner.
+//
+// ⚠️ "Replaces itself" takes more than router.replace. Every screen is a tab of
+// one navigator (backBehavior "history"), and there a replace only jumps: this
+// screen stayed in the Back history, so Android's Back came back to it, where
+// nothing ran again and "Opening…" stayed forever (SM76). So it takes itself
+// out of that history whenever it loses focus, and resolves on every focus,
+// because a tab that is jumped to with the same title again is not remounted.
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { CommonActions } from 'expo-router/react-navigation';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
 import { Screen, StateBlock } from '~/components/ui';
@@ -34,6 +42,7 @@ function describe(e: unknown): { title: string; detail: string; retry: boolean }
 export default function OpenScreen() {
   const { source, type, id } = useLocalSearchParams<{ source: string; type: string; id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const db = useSQLiteContext();
   const [failure, setFailure] = useState<ReturnType<typeof describe> | null>(null);
 
@@ -41,6 +50,9 @@ export default function OpenScreen() {
     setFailure(null);
     try {
       const res = await api.resolve(source, type, id);
+      // Somebody who left while this was asking has gone somewhere else on
+      // purpose. A late answer must not pull them to the title.
+      if (!navigation.isFocused()) return;
       // A title the device already holds has a public address, and that is the
       // one to land on. One the Worker just fetched is not in the catalog copy
       // yet, so it opens by id.
@@ -49,11 +61,21 @@ export default function OpenScreen() {
     } catch (e) {
       setFailure(describe(e));
     }
-  }, [source, type, id, router, db]);
+  }, [source, type, id, router, db, navigation]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void open();
-  }, [open]);
+  }, [open]));
+
+  // Out of the Back history once something else is in front (see the header).
+  useEffect(() => navigation.addListener('blur', (e) => {
+    const key = e.target;
+    if (!key) return;
+    navigation.dispatch((state) => {
+      const history = (state as { history?: { key: string }[] }).history;
+      return CommonActions.reset({ ...state, history: history?.filter((h) => h.key !== key) } as never);
+    });
+  }), [navigation]);
 
   return (
     <Screen headed>

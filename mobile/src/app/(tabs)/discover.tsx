@@ -14,7 +14,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { keyToSlug } from '@/lib/facetUrl';
-import { normalizeName } from '@/lib/normalize';
+import { normalizeName, searchKey } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { EmptyState } from '~/components/kit';
@@ -168,7 +168,8 @@ export default function DiscoverScreen() {
     return () => { live = false; clearTimeout(timer); abort.abort(); };
   }, [term]);
 
-  const norm = normalizeName(term);
+  // searchKey, not normalizeName: an accent must not stop "pokemon" finding Pokémon (SM78).
+  const norm = searchKey(term);
   const hidden = useHiddenIds();
   // The catalog's people and tags, read once the first time somebody types.
   const [vocab, setVocab] = useState<VocabEntry[] | null>(null);
@@ -180,8 +181,10 @@ export default function DiscoverScreen() {
   }, [db, sync.revision, norm.length >= 2]);
   const vocabMatches = useMemo(() => (vocab ? matchVocab(vocab, norm) : { people: [], tags: [] }), [vocab, norm]);
   useEffect(() => { if (!norm && pool !== null && feed.page === 0 && !feed.loading) loadFeed(1); }, [norm, pool, feed.page, feed.loading, loadFeed]);
+  // Each title's key once per pool, not once per keystroke.
+  const keyed = useMemo(() => (pool ?? []).map((c) => ({ c, key: searchKey(c.title) })), [pool]);
   const matches = useMemo(() => {
-    const local = (pool ?? []).filter((c) => !norm || normalizeName(c.title).includes(norm));
+    const local = norm ? keyed.filter((k) => k.key.includes(norm)).map((k) => k.c) : (pool ?? []);
     // With nothing typed this list chooses for you, so it leaves out what you
     // hid. A name still finds it: "It stays searchable" is what Hide promises.
     if (!norm) {
@@ -194,7 +197,7 @@ export default function DiscoverScreen() {
     const held = new Set(local.map(identity));
     const fresh = [...screen.rows, ...games.rows].filter((c) => !held.has(identity(c)));
     return [...local, ...fresh];
-  }, [pool, norm, hidden, screen.rows, games.rows, feed.rows]);
+  }, [pool, keyed, norm, hidden, screen.rows, games.rows, feed.rows]);
 
   const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
   // Your state for every title is only read while a "your lists" filter is on.

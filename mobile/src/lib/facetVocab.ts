@@ -7,7 +7,7 @@
 // was typed, each ordered by how many titles carry it.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { normalizeName } from '@/lib/normalize';
+import { searchKey } from '@/lib/normalize';
 
 export interface VocabEntry { kind: 'person' | 'tag'; key: string; label: string; count: number; norm: string }
 
@@ -27,7 +27,7 @@ async function build(db: SQLiteDatabase): Promise<VocabEntry[]> {
       seen.add(id);
       const cur = byKey.get(id);
       if (cur) cur.count++;
-      else byKey.set(id, { kind: f.kind, key: f.key, label: f.label || f.key, count: 1, norm: normalizeName(f.label || f.key) });
+      else byKey.set(id, { kind: f.kind, key: f.key, label: f.label || f.key, count: 1, norm: searchKey(f.label || f.key) });
     }
     // Hand the thread back now and then: this runs while somebody types.
     if (i % 500 === 499) await new Promise<void>((r) => setTimeout(r, 0));
@@ -45,7 +45,7 @@ export function facetVocab(db: SQLiteDatabase, revision: number): Promise<VocabE
   return cached.entries;
 }
 
-/** The best matches of each kind for a typed, normalised query: 8 people and 8 tags, as the site showed. */
+/** The best matches of each kind for a typed query put through searchKey: 8 people and 8 tags, as the site showed. */
 export function matchVocab(entries: VocabEntry[], norm: string, limit = 8): { people: VocabEntry[]; tags: VocabEntry[] } {
   if (norm.length < 2) return { people: [], tags: [] };
   // The whole name, then a word starting with it anywhere (so "nolan" ranks
