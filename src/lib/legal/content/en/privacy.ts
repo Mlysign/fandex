@@ -17,13 +17,14 @@ import type { LegalDocument } from "@/lib/legal/types";
 //                         tab's one-time value), worker/src/auth/verify.ts (name
 //                         and picture kept, keys fetched, nothing sent to Google)
 //   backups               worker/src/cron.ts (nightly, to R2, EU), D1 Time Travel
-//   export and deletion   the Worker has both routes; no screen calls them yet,
-//                         which is why this says "write to us"
+//   export and deletion   Settings → Your data, Download and Delete
+//                         (mobile/src/app/(tabs)/settings.tsx) on GET /v1/me/export
+//                         and DELETE /v1/me; email only for a lost sign-in
 // ⚠️ The 30-day backup figure is a lifecycle rule on the R2 bucket, not code.
 // If the rule is ever removed, that sentence is false.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-10-11",
+  updated: "2026-10-16",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why, rather than assembled from a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
     "It covers the website at fandex.org and the Fandex app for Android. Both are the same app and work the same way.",
@@ -123,11 +124,11 @@ const privacy: LegalDocument = {
         "Under the GDPR you have the right to access the data held about you, correct it if it's wrong, have it erased, restrict or object to its processing, and receive it in a portable format.",
         {
           list: [
-            "Export your data: write to hello@fandex.org. You will be asked to show that the account is yours before anything is sent. You then get a JSON file of everything the app holds about you, readable on its own without any knowledge of the app's internals.",
-            "Delete your account: write to hello@fandex.org, with the same check. Every table holding anything about you is erased. This is irreversible; there is no undo.",
+            "Export your data: in Settings, under \"Your data\", press Download. You get a JSON file of everything the app holds about you, readable on its own without any knowledge of the app's internals. On the website it is saved as a file; in the Android app you choose where it goes.",
+            "Delete your account: in Settings, press Delete and type DELETE to confirm. Every table holding anything about you is erased at once. This is irreversible; there is no undo.",
           ],
         },
-        "Both will be buttons in the app's settings again. Until they are, the email route is the way, and it is answered by a person.",
+        "If you can no longer sign in, write to hello@fandex.org for either one instead. You will be asked to show that the account is yours before anything is sent or erased, and a person answers.",
         "For anything else, such as correction, restriction or objection, contact hello@fandex.org.",
         "You also have the right to lodge a complaint with a data protection supervisory authority. Under Art. 77 GDPR you can do that with the authority in the EU or EEA country where you live, where you work, or where you believe the problem occurred. It does not have to be a German one, even though Fandex's controller is based in Germany.",
       ],

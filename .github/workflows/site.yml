@@ -1,11 +1,14 @@
-# The website, rebuilt and published once a day: fandex.org is files a build
-# writes (docs/website.md), so a title added to the catalog has no static page,
-# and the catalog files are as old as the last publish, until something runs
-# `node mobile/web/publish.mjs`. This runs it.
+# The website, rebuilt and published: fandex.org is files a build writes
+# (docs/website.md), so a title added to the catalog has no static page, and
+# the catalog files are as old as the last publish, until something runs
+# `node mobile/web/publish.mjs`. This runs it, by hand only (Actions → Website
+# → Run workflow).
 #
-# 04:30 UTC: after the nightly D1 export (about 01:20), so a publish never
-# competes with it for the day's reads. Also runs by hand (Actions → Website →
-# Run workflow).
+# ⚠️ Since 2026-10-16 the NIGHTLY rebuild runs on Nils's PC instead
+# (mobile/web/nightly.mjs, the Windows task "Fandex nightly site"), with
+# Wrangler's browser login, so it needs no token. The timer that was here
+# never published: the token below was never made. Putting a schedule back
+# without retiring the PC task would publish twice a day.
 #
 # Needs, as repository secrets:
 #   CLOUDFLARE_API_TOKEN    a token with "Workers Scripts: Edit" on the account.
@@ -26,8 +29,6 @@
 name: Website
 
 on:
-  schedule:
-    - cron: "30 4 * * *"
   workflow_dispatch:
 
 # Two publishes at once would race on the same Worker.

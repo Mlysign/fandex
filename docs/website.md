@@ -96,6 +96,23 @@ file, so that deploy uploads all of them again.
 Output is `mobile/web/dist/` (ignored by git): `app/` the Expo export, `site/` what is published,
 `cache/items/` the fetched titles, `build.json` what the last build counted.
 
+### The nightly rebuild (since 2026-10-16)
+
+The Windows task **"Fandex nightly site"** on Nils's PC runs `node mobile/web/nightly.mjs` daily at
+06:30 local time, after the D1 export, or as soon as the PC is on if it was off then. It builds a
+worktree of `origin/main` of its own at `C:\fx\site`, never this checkout (other sessions'
+half-finished edits live here), runs `npm ci` only when a lockfile changed, copies `mobile/.env`
+in, and runs `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`. Wrangler's
+browser login does the deploy, so no Cloudflare token exists; when that login lapses, the log says
+so and `npx wrangler login` in `worker/` fixes it.
+
+- Run it now: `node mobile/web/nightly.mjs` (or `--check` to stop before the deploy), or start the
+  task: `Start-ScheduledTask "Fandex nightly site"` in PowerShell.
+- ⚠️ It publishes only what is on `origin/main`. A fix that is committed and not pushed is not on
+  the next night's site.
+- `.github/workflows/site.yml` is the same job for GitHub, by hand only now. Giving it a timer
+  again without removing the task would publish twice a day.
+
 ## Rules specific to the website
 
 - **Publish with `publish.mjs`, never with `wrangler deploy` by hand.** A deploy replaces every
@@ -162,13 +179,6 @@ such name" since 2026-10-05 and resolvers remember that for 30 minutes. It does 
 
 ## Not built yet
 
-- **The daily build.** The site changes when somebody runs `publish.mjs`. A scheduled GitHub
-  Actions job needs a Cloudflare API token as a repository secret, which is Nils's to create.
-- **The privacy policy still sends people to hello@fandex.org to export or delete**, while
-  Settings has had Download and Delete since 2026-10-10 (both run on a test account on
-  2026-10-11: the file holds one account's rows, and Delete empties every user table). The email
-  route is still true, so the text is behind and not wrong. Changing it is a legal text with
-  Nils's name on it (TASKS.md item 0).
 - **The KPI feed, `assetlinks.json`, a web manifest, a social card image for `/`.**
 - **Plain http redirects to https** because "Always Use HTTPS" is on in the Cloudflare dashboard
   (SSL/TLS, Edge Certificates, since 2026-10-11). Nothing in the repo holds that switch.

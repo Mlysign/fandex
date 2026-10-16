@@ -10,7 +10,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // Code. Entfällt die Regel, ist der Satz falsch.
 const privacy: LegalDocument = {
   title: "Datenschutzerklärung",
-  updated: "2026-10-11",
+  updated: "2026-10-16",
   intro: [
     "Fandex ist ein Hobbyprojekt einer Einzelperson, kein Unternehmen. Diese Erklärung ist bewusst einfach und exakt formuliert: Sie beschreibt genau, was die App speichert und warum, und ist kein Vorlagentext. Sie stellt keine Rechtsberatung dar und befindet sich in Überarbeitung, bis eine fachliche Rechtsberatung vorliegt (siehe Hinweis zur Anschrift des Verantwortlichen unten).",
     "Sie gilt für die Website fandex.org und für die Fandex-App für Android. Beide sind dieselbe App und funktionieren gleich.",
@@ -110,11 +110,11 @@ const privacy: LegalDocument = {
         "Nach der DSGVO haben Sie das Recht auf Auskunft über die zu Ihnen gespeicherten Daten, auf Berichtigung, Löschung, Einschränkung oder Widerspruch gegen die Verarbeitung sowie auf Datenübertragbarkeit.",
         {
           list: [
-            "Ihre Daten exportieren: Schreiben Sie an hello@fandex.org. Sie werden gebeten nachzuweisen, dass das Konto Ihres ist, bevor etwas versendet wird. Sie erhalten dann eine JSON-Datei mit allem, was die App über Sie speichert, eigenständig lesbar ohne Kenntnis der internen Struktur der App.",
-            "Ihr Konto löschen: Schreiben Sie an hello@fandex.org, mit derselben Prüfung. Jede Tabelle mit Bezug zu Ihnen wird gelöscht. Dies ist unwiderruflich; es gibt kein Rückgängigmachen.",
+            "Ihre Daten exportieren: Drücken Sie in den Einstellungen unter „Your data“ auf „Download“. Sie erhalten eine JSON-Datei mit allem, was die App über Sie speichert, eigenständig lesbar ohne Kenntnis der internen Struktur der App. Auf der Website wird sie als Datei gespeichert; in der Android-App wählen Sie selbst, wohin sie geht.",
+            "Ihr Konto löschen: Drücken Sie in den Einstellungen auf „Delete“ und bestätigen Sie mit der Eingabe DELETE. Jede Tabelle mit Bezug zu Ihnen wird auf einmal gelöscht. Dies ist unwiderruflich; es gibt kein Rückgängigmachen.",
           ],
         },
-        "Beides wird wieder als Schaltfläche in den Einstellungen der App verfügbar sein. Bis dahin ist der Weg die E-Mail, und es antwortet ein Mensch.",
+        "Wenn Sie sich nicht mehr anmelden können, schreiben Sie für beides stattdessen an hello@fandex.org. Sie werden gebeten nachzuweisen, dass das Konto Ihres ist, bevor etwas versendet oder gelöscht wird, und es antwortet ein Mensch.",
         "Für alles Weitere, etwa Berichtigung, Einschränkung oder Widerspruch, kontaktieren Sie hello@fandex.org.",
         "Sie haben zudem das Recht, sich bei einer Datenschutzaufsichtsbehörde zu beschweren. Nach Art. 77 DSGVO können Sie sich an die Behörde des EU- oder EWR-Staates wenden, in dem Sie wohnen, in dem Sie arbeiten oder in dem der mutmaßliche Verstoß stattgefunden hat. Es muss keine deutsche Behörde sein, auch wenn der Verantwortliche von Fandex in Deutschland ansässig ist.",
       ],
