@@ -59,7 +59,7 @@ The 13th run swept the live site, the 14th every write on a test account. All tw
 
 ## Smoke test, 2026-10-16 (15th run, randomised, web and the native app)
 
-Scope: the local stack on two test accounts, the web app in the pane and a side-by-side native build on the phone (smoketest.md, "N-G"). Order shuffled from seed 170535259, plus 140 random taps/clicks over three runs. No crash, no JS error, every write landed in D1. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have. **SM76, SM77 and SM78 (the three 🟠) are fixed and in the archive** (grep "15th smoke test"). Not yet on fandex.org or in a phone build.
+Scope: the local stack on two test accounts, the web app in the pane and a side-by-side native build on the phone (smoketest.md, "N-G"). Order shuffled from seed 170535259, plus 140 random taps/clicks over three runs. No crash, no JS error, every write landed in D1. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have. **SM76, SM77 and SM78 (the three 🟠) are fixed and in the archive** (grep "15th smoke test"), live on fandex.org and in build 0.2.8 on the phone.
 
 | ID | Sev | Type | Area | Finding (with repro) |
 |----|:--:|:--:|------|----------------------|
