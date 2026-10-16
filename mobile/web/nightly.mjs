@@ -35,8 +35,12 @@ const log = (line) => {
   fs.appendFileSync(logFile, text);
   process.stdout.write(text);
 };
+// The task's own result reads 0 whatever happens (the hidden console it runs
+// in does not pass the exit code on), so a failure leaves a file that does.
+const FAILED = path.join(LOGS, 'LAST-RUN-FAILED.txt');
 const fail = (line) => {
   log(`NOT PUBLISHED: ${line}`);
+  fs.writeFileSync(FAILED, `${new Date().toISOString()} ${line}\nThe whole run: ${logFile}\n`);
   process.exit(1);
 };
 
@@ -49,9 +53,9 @@ if (fs.existsSync(lock) && Date.now() - fs.statSync(lock).mtimeMs < 2 * 3_600_00
 fs.writeFileSync(lock, String(process.pid));
 process.on('exit', () => fs.rmSync(lock, { force: true }));
 
-function run(cmd, args, cwd) {
+function run(cmd, args, cwd, env = process.env) {
   log(`$ ${cmd} ${args.join(' ')}  (in ${cwd})`);
-  const out = spawnSync(cmd, args, { cwd, shell: process.platform === 'win32', encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  const out = spawnSync(cmd, args, { cwd, env, shell: process.platform === 'win32', encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   fs.appendFileSync(logFile, `${out.stdout ?? ''}${out.stderr ?? ''}`);
   return out.status === 0;
 }
@@ -85,12 +89,34 @@ const env = path.join(repo, 'mobile', '.env');
 if (!fs.existsSync(env)) fail('mobile/.env is missing in the main checkout.');
 fs.copyFileSync(env, path.join(SITE, 'mobile', '.env'));
 
-// 4. Build and publish. publish.mjs refuses a short or half-built site itself.
-const ok = run(`"${process.execPath}"`, [path.join('mobile', 'web', 'publish.mjs'), ...(check ? ['--check'] : [])], SITE);
+// 4. Where Wrangler's login is. ⚠️ A `wrangler login` run inside the Claude
+//    desktop app is not where it looks: that app is a packaged Windows app,
+//    and what it writes under AppData lands in its own folder
+//    (%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming). A task outside it
+//    sees the real AppData, finds no login, and Wrangler asks for an API token
+//    (the first scheduled run, 2026-10-16). So a login in the real AppData
+//    wins, and otherwise the packaged app's copy is used, through the variable
+//    Wrangler reads for its config folder. One copy, never two: a refresh
+//    replaces the refresh token, and a second copy would stop working.
+const wranglerToml = (configHome) => path.join(configHome, '.wrangler', 'config', 'default.toml');
+let configHome = process.env.XDG_CONFIG_HOME;
+if (!configHome && !fs.existsSync(wranglerToml(path.join(process.env.APPDATA ?? '', 'xdg.config')))) {
+  const packages = path.join(process.env.LOCALAPPDATA ?? '', 'Packages');
+  configHome = (fs.existsSync(packages) ? fs.readdirSync(packages) : [])
+    .map((dir) => path.join(packages, dir, 'LocalCache', 'Roaming', 'xdg.config'))
+    .find((dir) => fs.existsSync(wranglerToml(dir)));
+  if (!configHome) fail('Wrangler is not logged in. Run `npx wrangler login` in worker/, in a normal terminal.');
+}
+log(`wrangler login from ${configHome ?? 'AppData (the usual place)'}`);
+const publishEnv = configHome ? { ...process.env, XDG_CONFIG_HOME: configHome } : process.env;
+
+// 5. Build and publish. publish.mjs refuses a short or half-built site itself.
+const ok = run(`"${process.execPath}"`, [path.join('mobile', 'web', 'publish.mjs'), ...(check ? ['--check'] : [])], SITE, publishEnv);
 
 // Old logs go; the newest KEEP_LOGS stay.
 for (const old of fs.readdirSync(LOGS).filter((f) => /^\d{4}-\d{2}-\d{2}\.log$/.test(f)).sort().slice(0, -KEEP_LOGS)) {
   fs.rmSync(path.join(LOGS, old), { force: true });
 }
 if (!ok) fail('publish.mjs stopped. The site is what it was before; the reason is above in this log.');
+fs.rmSync(FAILED, { force: true });
 log(check ? 'checked, not deployed (--check)' : 'published');

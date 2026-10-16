@@ -102,9 +102,18 @@ The Windows task **"Fandex nightly site"** on Nils's PC runs `node mobile/web/ni
 06:30 local time, after the D1 export, or as soon as the PC is on if it was off then. It builds a
 worktree of `origin/main` of its own at `C:\fx\site`, never this checkout (other sessions'
 half-finished edits live here), runs `npm ci` only when a lockfile changed, copies `mobile/.env`
-in, and runs `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`. Wrangler's
+in, and runs `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`; a failed run
+also leaves `LAST-RUN-FAILED.txt` there, because the task's own result reads 0 either way. Wrangler's
 browser login does the deploy, so no Cloudflare token exists; when that login lapses, the log says
 so and `npx wrangler login` in `worker/` fixes it.
+
+⚠️ **Where that login lives.** The Claude desktop app is a packaged Windows app, and what runs inside
+it writes AppData into its own folder: a `wrangler login` from a Claude session is at
+`%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\xdg.config\.wrangler`, invisible to the task.
+The first scheduled run failed on exactly that ("In a non-interactive environment, it's necessary to
+set a CLOUDFLARE_API_TOKEN"). `nightly.mjs` uses a login in the real AppData when there is one and
+otherwise points Wrangler at the packaged copy through `XDG_CONFIG_HOME`. Never copy the file: a
+refresh replaces the refresh token, so two copies means one stops working.
 
 - Run it now: `node mobile/web/nightly.mjs` (or `--check` to stop before the deploy), or start the
   task: `Start-ScheduledTask "Fandex nightly site"` in PowerShell.
