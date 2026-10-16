@@ -19,7 +19,7 @@ Cloudflare Worker on D1 ([docs/website.md](docs/website.md), [docs/worker.md](do
 [docs/app.md](docs/app.md)). **Everything from "How to run" down describes the old site, which is
 hosted nowhere and runs only locally.** Sweep that only when something in `src/app` or
 `src/components` changed. First run on the new stack: 2026-10-11 (13th run, SM54 to SM70). The
-same day, the writes on a test account (14th run, SM71 to SM75).
+same day, the writes on a test account (14th run, SM71 to SM75). 15th run, 2026-10-16: randomised, web plus the native app on a test account (SM76 to SM84).
 
 ### How to reach it
 
@@ -107,7 +107,7 @@ Nils's, here and on fandex.org.
 
 **N-C. The app, signed out (pane).**
 12. Home: guest panel, Popular and Upcoming, 30 cards, each with "Sign in to rate this" and "Sign in to add this to your wishlist". No Up next, no Recommended.
-13. Discover: `titles · N` equals the pool; search a title (count = cards), a nonsense string ("Nothing found"), one character; each type chip and two together (the counts must add up); each sort; Filters: a streaming service (`Netflix N` → `Show N titles`), a person (the count must equal the cards), both together, Reset all.
+13. Discover: with nothing typed, `titles · N` is the pool PLUS the upcoming titles from the providers that the catalog does not hold (about 65 on 2026-10-16), so it is larger than Settings' "Titles" on purpose; the type chips must still sum to it; search a title (count = cards), a nonsense string ("Nothing found"), one character; each type chip and two together (the counts must add up); each sort; Filters: a streaming service (`Netflix N` → `Show N titles`), a person (the count must equal the cards), both together, Reset all.
 14. Open a result, press Back: the query and the results must still be there.
 15. Calendar: Next twice, Previous four times, Today; a busy day (the rail's cards = the day's label), an empty day ("Nothing releasing on this day."), the list view; `scrollHeight - innerHeight` is 0 throughout.
 16. Gates: `/wishlist`, `/library`, `/profile`, `/settings`, `/insights` stay on their address and ask; `/dev/scoring` says "Nothing here".
@@ -138,9 +138,27 @@ Nils's, here and on fandex.org.
 33. Delete, last: the dialog counts your library and wishlist, wants `DELETE` typed (lowercase leaves the button disabled; set the field with the native value setter and an `input` event). After: the account is in none of `users`, `user_identities`, `user_item_state`, `user_episode_state`, `user_hidden_items`, the other account is untouched, and "Test account" again starts at 0 with the United Kingdom and all three types. A toast says the account was deleted; poll for it, it is gone in three seconds.
 34. Small ones the 14th run found, each one line to re-check: Settings with nothing picked says "the filter offers every service" and names no number (SM73); a show's page says "Episodes are tracked through Trakt, and this account is not connected to it." and has no `Mark …` label at all (SM74); the type toggles in Settings and the bookmark on a card carry `aria-pressed`; a show's header runtime ends "/ep"; a season with no episodes reads "No episodes yet"; a row under "Recently added" on Profile leads to `/{type}/{slug}`.
 
+⚠️ **Since about 2026-10-14 the first test account also carries a `trakt` identity** (`dev:smoketest-trakt`, no tokens). That changes what its Sync button does (SM77) and Settings shows "Sign in to Trakt" for it. Never press that.
+
 What the test accounts cannot reach: **an episode tick** (it goes to Trakt first, so the tracker shows them the list without boxes), the Trakt half of a rating or a wishlist change, Up next, and disconnecting one of two sign-ins.
 
 How this section is driven, since screenshots usually time out: the session survives a restart of both servers (it is in `localStorage`), so "Test account" may not be on screen; define the `V()` / `T()` helpers again after every hard load; press things with `element.click()` found by `aria-label` (the stars are "Rate N out of 10", the episode boxes "Mark {title} watched"); and catch a toast by polling the body's text for a few seconds straight after the click, because it is gone in three.
+
+⚠️ **`element.click()` does not press a Pressable inside a sheet** (Filters' "Show N titles", Reset all): the sheet stays open and reads as a bug. Send `pointerdown`, `mousedown`, `pointerup`, `mouseup` at the element's centre, then `click()`. The Country picker opens only to a real click (`computer` at the element's centre, scaled from `innerWidth` to the 800-wide frame).
+
+**N-G. The native app on a test account** (15th run, 2026-10-16). "Mobile" means the native app, not Chrome on the phone. The installed app talks to the live Worker, where no test account exists, so build a second copy pointed at this machine and install it NEXT TO the real one:
+
+1. Refresh the short-path copy as in docs/app.md ("Building the APK"): `robocopy mobile\src C:\fx\mobile\src /MIR`, the same for the site's `src`, and `mobile/app.json`.
+2. In the COPY only, back up and edit three files: `android/app/build.gradle` `applicationId 'org.fandex.app.smoketest'` (keep `namespace`), `src/main/AndroidManifest.xml` add `android:usesCleartextTraffic="true"` to `<application>` (a release build refuses `http://localhost`), `res/values/strings.xml` `app_name` "Fandex Test".
+3. Build with `EXPO_PUBLIC_API_URL=http://localhost:8787` and `:app:createBundleReleaseJsAndAssets --rerun assembleRelease -PreactNativeArchitectures=arm64-v8a` (2 min warm).
+4. `adb reverse tcp:8787 tcp:8787`, then install. Play Protect asks "App zum Sicherheitsscan senden?": answer "Nicht senden". "Test account" is on the You tab.
+5. **After**: `adb uninstall org.fandex.app.smoketest`, restore the three files, and DELETE `app/build/generated/assets/react/release`, `intermediates/assets/release/mergeReleaseAssets` and `outputs/apk/release`. The bundle task does not see the env var, so the next real build would otherwise ship the localhost bundle.
+
+In Git Bash every adb path needs `MSYS_NO_PATHCONV=1`: without it `/sdcard/ui.xml` becomes `/Files/Git/sdcard/ui.xml`, the dump fails silently and you read the previous file. Drive the app with `uiautomator dump` + `input tap` by text or content-desc, and only when `dumpsys window` says the test package has focus. `fandex://…` with the test package opens any screen. `adb logcat -s ReactNativeJS:E AndroidRuntime:E` after a run.
+
+Targeted checks from that run, each one line: Home → a card → **Android** Back must return to Home, never "Opening…" (SM76); rate on the web while the app is open, then the app's Sync must bring it into Library (SM77); `pokemon` must find the Pokémon games (SM78); Insights' two crowd columns must not share a title (SM79).
+
+**N-H. Randomised runs** (asked for 2026-10-16). Shuffle the checklist from a printed seed so a run can be replayed, draw the search strings, ratings, viewports and pick indexes from the same generator, and add monkey runs: a seeded loop of ~45 steps that taps a random visible control (12% Back, some scrolls), skips anything destructive or external (delete, sign out, connect, Google, download, support, Accept/Deny/Bundle, legal, store links), and logs the screen and any error text. Persist the web log in `sessionStorage`, because a hard load ends the script. Match `NaN` case-sensitively or "Resonance" trips it. The monkey's writes are real: read the account back from D1 afterwards and check every screen agrees.
 
 ## How to run
 
