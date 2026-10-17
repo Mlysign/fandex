@@ -34,10 +34,12 @@ export function useBggToken(env: Env): void {
 }
 
 const HOUR = 3600;
+/** Bumped when what a shelf answers changes (a filter, a field), so a day-old cached answer is not served under the new rules. */
+const CACHE_VERSION = 1;
 
 /** Answer from the edge cache, or run `load`, cache a non-empty answer for `ttl` seconds and answer. */
 async function cached(c: ShelfCtx, key: string, ttl: number, limiter: string, load: () => Promise<unknown[]>): Promise<Response> {
-  const cacheKey = new Request(`https://cache.fandex.internal/${key}`);
+  const cacheKey = new Request(`https://cache.fandex.internal/v${CACHE_VERSION}/${key}`);
   const hit = await caches.default.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
   if (!(await allow(c.env.RL_RESOLVE, `${limiter}:${clientIp(c.request)}`))) return error(429, "rate-limited");
