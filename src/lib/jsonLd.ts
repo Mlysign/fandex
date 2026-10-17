@@ -1,4 +1,6 @@
-import type { PublicEnrichedItem } from "@/lib/detail/enrich";
+// From the types module, not from detail/enrich: that module imports the
+// database, and the website's build (mobile/web/render.tsx) imports this one.
+import type { PublicEnrichedItem } from "@/types";
 import { tagKey } from "@/lib/facets";
 import { publicFacetHref } from "@/lib/facetUrl";
 import { BASE_URL } from "@/lib/baseUrl";

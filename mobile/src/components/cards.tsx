@@ -333,7 +333,7 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
           const t = d * d * (3 - 2 * d);
           return (
             <Pressable key={s.key} onPress={() => jump(s.key)} accessibilityRole="button" accessibilityLabel={`Jump to ${s.label}`}
-              style={(state: { hovered?: boolean }) => [styles.sectionNavItem, state.hovered && { backgroundColor: color.neutral800 }]}>
+              style={(state) => [styles.sectionNavItem, (state as { hovered?: boolean }).hovered && { backgroundColor: color.neutral800 }]}>
               <Text style={[type.caption, { textAlign: 'right', color: color.textPrimary, opacity: active || s.current ? 1 : 1 - t * 0.65, transform: [{ scale: 1 - t * 0.22 }], fontFamily: s.current ? font.sansBold : undefined }]} numberOfLines={1}>
                 {shortSection(s.label)}
               </Text>

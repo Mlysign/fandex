@@ -168,7 +168,7 @@ export function NavSearch() {
           {noMatches ? (
             <View>
               <Text style={[type.caption, styles.none]}>No matches in the catalog</Text>
-              <Pressable onPress={() => searchAll(q.trim())} style={(s: { hovered?: boolean }) => [styles.row, s.hovered && styles.rowOn]}>
+              <Pressable onPress={() => searchAll(q.trim())} style={(s) => [styles.row, (s as { hovered?: boolean }).hovered && styles.rowOn]}>
                 <Text style={[type.bodySm, { color: color.textSecondary }]} numberOfLines={1}>
                   Search all of Fandex for <Text style={{ color: color.textPrimary }}>{q.trim()}</Text> →
                 </Text>

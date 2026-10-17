@@ -110,6 +110,17 @@ export interface BuyLink {
 }
 
 // Enriched item returned to the client
+/**
+ * EnrichedItem minus EVERY per-user field: what the public item page and the
+ * website's build render (src/lib/detail/enrich.ts, which re-exports it).
+ * `platformSources` is per-user too (which of the viewer's accounts hold it).
+ */
+export type PublicEnrichedItem = Omit<
+  EnrichedItem,
+  | "rating" | "ratings" | "review" | "reviewedAt"
+  | "libraryStatus" | "libraryStatusSources" | "platformSources"
+>;
+
 export interface EnrichedItem {
   id: string;
   /** The public url address segment (media_items.slug). Optional because not

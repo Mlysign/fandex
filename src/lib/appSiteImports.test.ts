@@ -17,6 +17,13 @@ import { describe, expect, it } from 'vitest';
 
 const SITE_SRC = path.resolve(__dirname, '..');
 const APP_SRC = path.resolve(__dirname, '../../mobile/src');
+// The website's build (render.tsx) is typechecked with the app and imports site
+// modules of its own; on 2026-10-17 its `jsonLd` import reached db.ts through a
+// type, and this test, walking mobile/src alone, said nothing while CI was red.
+const APP_WEB = path.resolve(__dirname, '../../mobile/web');
+const APP_ROOTS = [APP_SRC, APP_WEB];
+/** Build output and installed packages under those roots: never the app's own code. */
+const SKIP_DIRS = new Set(['dist', 'node_modules', 'www']);
 
 /** What the app's build has no business near. Everything else that is server-only imports one of these. */
 const FORBIDDEN_FILES = new Set(['lib/db.ts']);
@@ -32,9 +39,10 @@ function specifiers(file: string): string[] {
 }
 
 function walk(dir: string, into: string[] = []): string[] {
+  if (!existsSync(dir)) return into;
   for (const name of readdirSync(dir)) {
     const full = path.join(dir, name);
-    if (statSync(full).isDirectory()) walk(full, into);
+    if (statSync(full).isDirectory()) { if (!SKIP_DIRS.has(name)) walk(full, into); }
     else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) into.push(full);
   }
   return into;
@@ -55,13 +63,15 @@ describe("the app's imports from the old site", () => {
   // Every site module the app reaches, with the chain that led there.
   const reached = new Map<string, string[]>();
   const queue: string[] = [];
-  for (const file of walk(APP_SRC)) {
-    for (const spec of specifiers(file)) {
-      if (!spec.startsWith('@/')) continue;
-      const target = resolveSite(spec, file);
-      if (target && !reached.has(target)) {
-        reached.set(target, [path.relative(APP_SRC, file).replace(/\\/g, '/'), rel(target)]);
-        queue.push(target);
+  for (const root of APP_ROOTS) {
+    for (const file of walk(root)) {
+      for (const spec of specifiers(file)) {
+        if (!spec.startsWith('@/')) continue;
+        const target = resolveSite(spec, file);
+        if (target && !reached.has(target)) {
+          reached.set(target, [path.relative(path.dirname(root), file).replace(/\\/g, '/'), rel(target)]);
+          queue.push(target);
+        }
       }
     }
   }

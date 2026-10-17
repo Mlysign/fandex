@@ -218,7 +218,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         // The portrait opens every photo TMDB holds of them (Nils, 2026-10-17).
         person.photos.length ? (
           <Pressable onPress={() => setPhotoAt(0)} accessibilityRole="button" accessibilityLabel={`${count(person.photos.length, 'photo')} of ${name}`}
-            style={(s: { hovered?: boolean }) => [{ borderRadius: 999 }, s.hovered && { opacity: 0.85 }]}>
+            style={(s) => [{ borderRadius: 999 }, (s as { hovered?: boolean }).hovered && { opacity: 0.85 }]}>
             <Avatar src={person.profileUrl} name={name} size={84} />
             {person.photos.length > 1 ? <View style={styles.photoCount}><Text style={styles.photoCountText}>{person.photos.length}</Text></View> : null}
           </Pressable>

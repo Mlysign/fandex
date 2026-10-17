@@ -32,11 +32,11 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // `platformSources` (which of the viewer's accounts hold the item) is per-user
 // too, so it's omitted as well — the display components never read it; the view
 // supplies `platformSources: []` at the boundary where it hands off to them.
-export type PublicEnrichedItem = Omit<
-  EnrichedItem,
-  | "rating" | "ratings" | "review" | "reviewedAt"
-  | "libraryStatus" | "libraryStatusSources" | "platformSources"
->;
+//
+// Defined in src/types (type-only) and re-exported here, so a module that wants
+// the SHAPE (jsonLd.ts, which the website's build imports) does not pull this
+// one and its database behind it: the app's typecheck fails in CI on that.
+export type { PublicEnrichedItem } from "@/types";
 
 export interface SourceIds {
   rawg: string | null;
