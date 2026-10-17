@@ -273,6 +273,13 @@ Each of these is a way the Worker differs from the site, and each has a test.
   in the `kv` table. Four jobs: the nightly export to R2, the TMDB refresh (links older than 150
   days, inside TMDB's six-month cap), the upcoming refresh, one calendar month. IGDB is not
   refreshed on a timer; its retention question is open.
+- **A one-off that rides the same slots: the books stored before their series was read**
+  (`runOpenLibraryRefetchStep`, 2026-10-17). Every Open Library link last synced before the series
+  fix (`OPENLIBRARY_REFETCH_BEFORE`) is fetched again once, through the same upsert a resolve
+  uses, so its facets and doc gain the franchise. Two a run at most, before the upcoming refresh,
+  so 181 books take most of a day. A failure keeps the stored row and moves the link past the
+  cutoff; when none is due the step parks for six hours and costs one kv read a run. Delete
+  `ol_refetch_idle` from `kv` to make it look again.
 - **A pool title that is not out yet is refetched daily when near and weekly when far**
   (`runUpcomingRefreshStep`). Near is from 30 days after its date to 90 days before it; far is
   later than that or undated. Measured 2026-10-10: 63 such titles of 1,674 TMDB links, 11 of them
