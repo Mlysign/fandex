@@ -274,14 +274,18 @@ function methodsFor(path: string): string | null {
 // ── Public ───────────────────────────────────────────────────────────────────
 
 async function health(c: Ctx): Promise<Response> {
-  // Is D1 answering, and how much of today's two budgets is gone.
+  // Is D1 answering, and how much of today's budgets is gone. `hardcover` is
+  // requests against Hardcover's 5,000 a day (capped at 4,000 here), `covers`
+  // the covers copied from it today.
   const fetches = await spent(c.env.DB, "fetch");
   const userWrites = await spent(c.env.DB, "user_writes");
+  const hardcover = await spent(c.env.DB, "hardcover");
+  const covers = await spent(c.env.DB, "cover");
   // Providers this isolate has stopped calling, as the old site's health had.
   // ⚠️ One isolate's view: `{}` here says this isolate has seen no trouble, not
   // that TMDB and IGDB are up. A host listed here IS being refused, though.
   const openProviderCircuits = providerBreakerSnapshot();
-  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites }, openProviderCircuits }, 200, { "Cache-Control": "no-store" });
+  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites, hardcover, covers }, openProviderCircuits }, 200, { "Cache-Control": "no-store" });
 }
 
 async function resolve(c: Ctx, source: string, type: string, id: string): Promise<Response> {

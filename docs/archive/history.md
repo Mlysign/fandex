@@ -5979,3 +5979,48 @@ His second list that day: a person's photos, books, board games, both new types 
 - **Dates that name only a year or a month** print as "1965" or "Apr 1965" everywhere (`mobile/src/lib/dates.ts`), never as the 1st of January.
 - **Space Marine II folded (2026-10-17, later).** Nils: "space marine is a 6". The RAWG-only twin's 8 was backed up (`data/backups/space-marine-8-rating-*.json`) and deleted, then the twin folded into the kept IGDB title with `fold-items.mjs` (backup `fold-items-remote-2026-10-17T11-23-50-145Z.*`); its old address is in `mobile/web/folded.json`. The 0.3.1 APK is on the phone.
 - **Joining two accounts in the app (2026-10-17, later).** Nils picked it as the next piece. The Worker had the merge since 2026-10-04; what was missing was the app's form. Settings now shows a port of the old site's `MergePanel` when a way in you add belongs to another account and both hold the same titles; the 409 carries both accounts' summaries for it. A third local test account ("with Discord") and a connect mode on the test route make a join triable on this machine through the real `signIn()`; walked through in the browser pane (keep-theirs kept the 9 over the 6). In 0.3.3 on the phone and on fandex.org. Also that afternoon: Discord sign-in switched on (its three redirect addresses added through Nils's Chrome), and the website build now passes `--clear` because a new `EXPO_PUBLIC_*` value had not reached the first publish.
+
+## 2026-10-17 evening, Hardcover as the second book source
+
+Nils asked for a provider with better data on announced books, because Patrick Rothfuss's next
+book could not be wishlisted: Open Library holds it only as "Untitled Rothfuss 3 Of 3" with no
+cover. Hardcover's API Rules had changed since it was parked on 2026-08-03 (a professional project
+may use facts about books, editions and series; never other users' ratings, reviews, lists or
+counts; covers must be self-hosted; no attribution asked). Nils said yes the same day ("yes i want
+it, 4000 limit is ok, covers only if the other provider has none") and had the session make the key
+itself once his Chrome was signed in ("the session should do the handle tokens itself and do the
+legal page").
+
+Built and live the same evening, commits 7fdde3e, bd653df, d2830ee:
+
+- `src/lib/sources/hardcover.ts` + `hardcoverPure.ts`: one GraphQL POST per call with
+  `appScopedAuth`, behind `HARDCOVER_TOKEN` and the `HARDCOVER_ENABLED` kill switch; a record holds
+  only the fields `HardcoverBook` names, and a test proves `rating`, `users_count` and `lists_count`
+  never survive parsing. `worker/src/hardcover.ts` spends a 4,000-a-day `hardcover` budget before
+  each call and answers nothing rather than a 502. `/v1/search/books` and the series facet merge
+  Hardcover's cards behind Open Library's by ISBN-13 or title plus author (`mergeBookCards`); the
+  calendar does the same. A Hardcover cover shows only where Open Library has none.
+- Covers: `/v1/cover/hardcover/{path}` copies a cover once into R2 `fandex-covers` (EU, made with
+  `wrangler r2 bucket create --jurisdiction eu`) and serves it a year immutable. Measured live:
+  20 KB for Doors of Stone, via fandex.org and the Worker's own address.
+- Identity: `GET /v1/resolve/hardcover/book/{id}` asks Open Library by ISBN first and attaches
+  the Hardcover link to the work; only a book Open Library has no edition of becomes a `hardcover`
+  item. A stub at Open Library (no cover, no rating) cannot claim one: its ISBN lookup answers
+  "Untitled Rothfuss 3 Of 3" for Hardcover's placeholder editions of Doors of Stone.
+- What the live data taught (d2830ee): cover addresses come under `edition/` and `editions/`,
+  with hashes, uuids or sized names; a series answer files translations, limited editions and box
+  sets at the original's position (one per position is kept, by edition count, 108 against 1);
+  every list card needs a cover; `unreleased` is not a GraphQL field, so Doors of Stone reads
+  2013-04-01, Hardcover's own placeholder date.
+- The key: made in Nils's Chrome through Claude in Chrome (the browser pane had been refused the
+  account page as a "real-world transaction"), named "Fandex (api worker, read catalog)", scope
+  `read:catalog`, **expires 2027-10-17**. Read off the page by a script into the clipboard and
+  written to `.env` and `worker/.dev.vars` by PowerShell without ever being printed; pushed with
+  `push-secrets.mjs` (51 chars). Deployed as Worker version 4d6f35ba.
+- Verified end to end on the live API: searching "doors of stone" answers F. T. Prince's book of
+  that title from Open Library and Rothfuss's from Hardcover with a Fandex cover; resolving
+  427839 created item 98ba3eb9 titled "The Doors of Stone" with its author, series and tag facets,
+  no ratings, and a Hardcover store link; the Kingkiller rail lists all six books.
+- Docs: PLATFORMS.md row, docs/worker.md (routes, R2, budgets, health), docs/app.md,
+  docs/decisions.md (identity, facts-only, the cover rule), AGENTS.md, README env rows, and the
+  support page's takedown sentence in both languages (Hardcover's docs ask for one; Nils approved).

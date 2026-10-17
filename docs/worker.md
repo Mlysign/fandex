@@ -24,7 +24,7 @@ Public, no session:
 
 | Route | Does |
 |---|---|
-| `GET /v1/health` | D1 answers, plus today's two budget counters and `openProviderCircuits`: which providers this isolate has stopped asking. ⚠️ Per isolate, so an empty list is no proof a provider is up. Answers `HEAD` too. |
+| `GET /v1/health` | D1 answers, plus today's budget counters (`fetches`, `userWrites`, `hardcover` against Hardcover's 5,000 a day, `covers` copied today) and `openProviderCircuits`: which providers this isolate has stopped asking. ⚠️ Per isolate, so an empty list is no proof a provider is up. Answers `HEAD` too. |
 | `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is kept current with this. A device with nothing starts from the website's `/catalog/` files instead ([website.md](website.md)), so a first visit is one call here and not thirty-one. |
 | `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |

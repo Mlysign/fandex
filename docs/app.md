@@ -32,7 +32,7 @@ and Home from asking. A rating of either is stored as source `local` with status
 `played` (`itemActions.ts`, `onTrakt`, `statusFor`): neither provider has a write-back. Every
 book page credits Open Library and every board-game page BoardGameGeek, which their terms ask
 for. **Hardcover is a second book source since 2026-10-17** (`src/lib/sources/hardcover.ts`,
-`docs/worker.md`), on the Worker only and off until it has `HARDCOVER_TOKEN`: its cards come
+`docs/worker.md`), on the Worker only, live the same evening (`HARDCOVER_TOKEN`, a key that expires 2027-10-17): its cards come
 behind Open Library's in Search and in a book page's "More from" rail, and in the calendar's
 months, with a cover the Worker serves (`/v1/cover/hardcover/…`), no votes and no rating. A
 card's `source` is `hardcover` then, and the app opens it through `/open/hardcover/book/{id}`
