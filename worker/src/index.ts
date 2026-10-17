@@ -53,7 +53,7 @@ import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken 
 import { runScheduled } from "./cron";
 import { shelves } from "./shelves";
 import { nowSeconds } from "./d1";
-import { DEV_ACCOUNTS, devLogin, devLoginAllowed } from "./devLogin";
+import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin";
 import type { Env } from "./env";
 import { allow, BodyError, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
@@ -215,8 +215,18 @@ async function route(c: Ctx): Promise<Response> {
   // A test account, on a developer's machine only (src/devLogin.ts). Anywhere
   // else this is a path that does not exist.
   if (a === "dev" && b === "login" && method === "POST" && !d && devLoginAllowed(c.env, url)) {
-    const body = (await readJson(request, AUTH_BODY_MAX).catch(() => null)) as { account?: unknown } | null;
-    const out = await devLogin(c.env, typeof body?.account === "string" ? body.account : "smoketest");
+    const body = (await readJson(request, AUTH_BODY_MAX).catch(() => null)) as { account?: unknown; connect?: unknown } | null;
+    const name = typeof body?.account === "string" ? body.account : "smoketest";
+    // Connect: add that test account's way in to the signed-in one, through
+    // the real signIn(), which is how joining two accounts is tested locally.
+    if (body?.connect === true) {
+      const session = await readSession(c.env, c.request, c.defer);
+      if (!session) return error(401, "unauthorized");
+      const joined = await devConnect(c.env, name, session.user);
+      if (!joined) return error(400, "bad-request", `account must be one of: ${Object.keys(DEV_ACCOUNTS).join(", ")}`);
+      return signInResponse(c, joined);
+    }
+    const out = await devLogin(c.env, name);
     if (!out) return error(400, "bad-request", `account must be one of: ${Object.keys(DEV_ACCOUNTS).join(", ")}`);
     return signInResponse(c, { kind: "signed-in", ...out });
   }
@@ -420,7 +430,7 @@ function signInResponse(c: Ctx, out: SignInOutcome | { kind: "merged"; token: st
     case "provider-taken":
       return error(409, "provider-taken", undefined, { provider: out.provider, conflict: out.conflict });
     case "merge-required":
-      return error(409, "merge-required", undefined, { mergeToken: out.mergeToken, conflicts: out.conflicts });
+      return error(409, "merge-required", undefined, { mergeToken: out.mergeToken, conflicts: out.conflicts, mine: out.mine, theirs: out.theirs, provider: out.provider });
     default: {
       const headers: Record<string, string> = { ...PRIVATE };
       // A browser client on an origin we serve also gets the cookie. The app has

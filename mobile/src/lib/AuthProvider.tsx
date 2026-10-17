@@ -17,7 +17,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform } from 'react-native';
-import { api, ApiError, setSessionToken, type PrefsPatch, type Profile } from '~/lib/api';
+import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution, type PendingMerge, type PrefsPatch, type Profile } from '~/lib/api';
 import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, traktConfigured } from '~/lib/config';
 import { DISCORD_APP_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
@@ -68,6 +68,8 @@ interface Auth {
   finishDiscordSignIn: (accessToken: string) => Promise<void>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
+  /** Connect a test account to the signed-in one (a local Worker only), as connecting Discord would. Throws with the reason. */
+  devConnect: (account: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Pulling your rows from the Worker. */
   rowsSyncing: boolean;
@@ -87,6 +89,16 @@ interface Auth {
   disconnect: (provider: string) => Promise<void>;
   /** Delete the account and everything Fandex holds for it, then forget it on this device. */
   deleteAccount: () => Promise<void>;
+  /**
+   * A way in the person just added belongs to ANOTHER Fandex account, and both
+   * hold some of the same titles. Settings shows the form; nothing has changed
+   * until they choose. Null when there is nothing to decide.
+   */
+  pendingMerge: PendingMerge | null;
+  /** Join the two accounts, keeping one side's copy where both hold a title. Throws with the reason in words. */
+  completeMerge: (resolution: MergeResolution) => Promise<void>;
+  /** Leave both accounts as they are. */
+  cancelMerge: () => void;
 }
 
 export interface TraktSyncState {
@@ -115,6 +127,9 @@ const TRAKT_SYNC_DRY_RUN = process.env.EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN === '1';
 
 const Ctx = createContext<Auth | null>(null);
 
+const PROVIDER_NAMES: Record<string, string> = { trakt: 'Trakt', google: 'Google', discord: 'Discord', steam: 'Steam' };
+const providerName = (p: string) => PROVIDER_NAMES[p] ?? p;
+
 function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' = 'Trakt'): string {
   if (e instanceof ApiError) {
     switch (e.code) {
@@ -122,12 +137,16 @@ function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' = 'T
       case 'identity-rejected': return `${provider} did not confirm the sign-in. Try again.`;
       case 'provider-unavailable': return `${provider} is not answering right now. Try again in a minute.`;
       case 'rate-limited': return 'Too many attempts. Give it a minute.';
-      // The Worker found that this provider account already belongs to a
-      // different Fandex account. Joining two accounts is a decision the person
-      // has to make, and the form for it is not in the app yet. Say so; never guess.
+      // Reached only from an older Worker that sends no account sides: a
+      // merge the form can show never throws (see adoptMerge).
       case 'merge-required':
-      case 'provider-taken':
-        return `This ${provider} account already belongs to another Fandex account. Joining two accounts is not in the app yet.`;
+        return `This ${provider} account already belongs to another Fandex account. Sign in with it to use that account.`;
+      // Both accounts already sign in with the same provider, so the one being
+      // joined has nowhere to land. The person has to choose which keeps it.
+      case 'provider-taken': {
+        const both = typeof e.body.conflict === 'string' ? providerName(e.body.conflict) : provider;
+        return `This ${provider} account belongs to another Fandex account, and both accounts sign in with ${both}. Disconnect ${both} on one of them first, then try again.`;
+      }
     }
   }
   // A request that never got an answer. The browser's own words for it ("Failed to fetch") help nobody.
@@ -143,6 +162,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rowsSyncing, setRowsSyncing] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [rowsRevision, setRowsRevision] = useState(0);
+  // In memory only: the proof inside lasts minutes, and a reload simply asks
+  // the person to connect again. When Trakt was the way being added, its tokens
+  // wait here too, so a joined account keeps syncing Trakt on this device.
+  const [pendingMerge, setPendingMerge] = useState<(PendingMerge & { traktTokens?: TraktTokens }) | null>(null);
+
+  /** A sign-in answered "these two accounts are one person's": keep it for the form, and say whether it was that. */
+  const adoptMerge = useCallback((e: unknown, traktTokens?: TraktTokens): boolean => {
+    if (!(e instanceof ApiError) || e.code !== 'merge-required') return false;
+    const pending = pendingMergeFrom(e.body);
+    if (!pending) return false;
+    setPendingMerge({ ...pending, traktTokens });
+    return true;
+  }, []);
 
   /** Bumped to abandon a sign-in in progress: a poll that wakes up later sees it and stops. */
   const flow = useRef(0);
@@ -233,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearUpNext(db)]);
     setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
     setProfile(null);
+    setPendingMerge(null);
     setRowsRevision((r) => r + 1);
     setStatus('signedOut');
   }, [db]);
@@ -286,7 +319,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // signed in, the Worker can now say "that Trakt belongs to another account".
     // Tokens kept from a refused sign-in would sync that other person's Trakt
     // into this account on the next start.
-    const result = await api.signInWithTrakt(tokens.accessToken);
+    let result;
+    try {
+      result = await api.signInWithTrakt(tokens.accessToken);
+    } catch (e) {
+      // Not an error to show: Settings now asks which copy to keep.
+      if (alive() && adoptMerge(e, tokens)) { setTrakt({ phase: 'idle' }); return; }
+      throw e;
+    }
     if (!alive()) return;
     await saveTraktTokens(tokens);
     await secretSet(SESSION_KEY, result.token);
@@ -295,7 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signedIn');
     setTrakt({ phase: 'idle' });
     void pullRows(true).then(() => runTraktSync(false));
-  }, [pullRows, runTraktSync]);
+  }, [adoptMerge, pullRows, runTraktSync]);
 
   const startTraktBrowserSignIn = useCallback(() => {
     if (!traktConfigured()) {
@@ -375,6 +415,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       result = await api.signInWithGoogle(idToken, secret);
     } catch (e) {
+      // The page goes on to Settings, which shows the form.
+      if (adoptMerge(e)) return;
       throw new Error(signInMessage(e, 'Google'));
     }
     await secretSet(SESSION_KEY, result.token);
@@ -383,13 +425,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signedIn');
     // An account that also has Trakt on this device keeps syncing it; one that does not has nothing to sync.
     void pullRows(true).then(() => runTraktSync(true));
-  }, [pullRows, runTraktSync]);
+  }, [adoptMerge, pullRows, runTraktSync]);
 
   const finishDiscordSignIn = useCallback(async (accessToken: string) => {
     let result;
     try {
       result = await api.signInWithDiscord(accessToken);
     } catch (e) {
+      if (adoptMerge(e)) return;
       throw new Error(signInMessage(e, 'Discord'));
     }
     await secretSet(SESSION_KEY, result.token);
@@ -398,7 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signedIn');
     // Discord brings no library. An account that has Trakt on this device keeps syncing it.
     void pullRows(true).then(() => runTraktSync(true));
-  }, [pullRows, runTraktSync]);
+  }, [adoptMerge, pullRows, runTraktSync]);
 
   const startDiscordSignIn = useCallback(async (returnTo: string) => {
     if (Platform.OS === 'web') {
@@ -442,6 +485,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [pullRows]);
 
+  const devConnect = useCallback(async (account: string) => {
+    let result;
+    try {
+      result = await api.devConnect(account);
+    } catch (e) {
+      if (adoptMerge(e)) return;
+      throw new Error(signInMessage(e, 'Discord'));
+    }
+    await secretSet(SESSION_KEY, result.token);
+    setSessionToken(result.token);
+    setProfile(await api.me().catch(() => null));
+    void pullRows(true);
+  }, [adoptMerge, pullRows]);
+
   const signOut = useCallback(async () => {
     flow.current++;
     // Tell the Worker first, while the token still works. If that fails (no
@@ -478,6 +535,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await forget();
     setTrakt({ phase: 'idle' });
   }, [forget]);
+
+  const completeMerge = useCallback(async (resolution: MergeResolution) => {
+    const pending = pendingMerge;
+    if (!pending) return;
+    let result;
+    try {
+      result = await api.merge(pending.mergeToken, resolution);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'merge-invalid') {
+        setPendingMerge(null);
+        throw new Error(`The request to join the accounts expired. Connect ${providerName(pending.provider)} again to start over.`);
+      }
+      throw new Error(signInMessage(e, providerName(pending.provider) as 'Trakt' | 'Google' | 'Discord'));
+    }
+    // The session is now for the SURVIVING account; the old token named one
+    // that no longer exists. Then this device's copy of the rows is replaced
+    // whole by the joined account's (a forced pull replaces, never mixes).
+    await secretSet(SESSION_KEY, result.token);
+    setSessionToken(result.token);
+    if (pending.traktTokens) {
+      await saveTraktTokens(pending.traktTokens);
+      setTraktSync((t) => ({ ...t, onDevice: true }));
+    }
+    await clearUpNext(db);
+    setPendingMerge(null);
+    setProfile(await api.me().catch(() => null));
+    setStatus('signedIn');
+    void pullRows(true).then(() => runTraktSync(!pending.traktTokens));
+  }, [db, pendingMerge, pullRows, runTraktSync]);
+
+  const cancelMerge = useCallback(() => setPendingMerge(null), []);
 
   const syncRows = useCallback(() => void pullRows(true), [pullRows]);
   // The Sync button on an account with Trakt. On a device that has not signed in
@@ -528,9 +616,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn,
-      startDiscordSignIn, finishDiscordSignIn, devSignIn, signOut,
+      startDiscordSignIn, finishDiscordSignIn, devSignIn, devConnect, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
-      region, savePrefs, disconnect, deleteAccount,
+      region, savePrefs, disconnect, deleteAccount, pendingMerge, completeMerge, cancelMerge,
     }}>
       {children}
     </Ctx.Provider>

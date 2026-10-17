@@ -17,7 +17,7 @@
 // sends in the body. Trusting a client-supplied user id is how an identity gets
 // attached to somebody else's account.
 
-import { canMerge, mergeAccounts, mergeConflicts, type MergeConflicts, type MergeResolution } from "../account";
+import { canMerge, mergeAccounts, mergeConflicts, mergeSide, type MergeConflicts, type MergeResolution, type MergeSide } from "../account";
 import { first, isConstraintError, run } from "../d1";
 import type { Env } from "../env";
 import { createSession, signPendingMerge, verifyPendingMerge, type SessionUser } from "./session";
@@ -28,7 +28,7 @@ export type SignInOutcome =
   /** Both accounts already sign in with `conflict`. The person has to pick one side by hand. */
   | { kind: "provider-taken"; provider: string; conflict: string }
   /** The accounts overlap. `mergeToken` carries the proof to POST /v1/auth/merge. */
-  | { kind: "merge-required"; mergeToken: string; conflicts: MergeConflicts };
+  | { kind: "merge-required"; mergeToken: string; conflicts: MergeConflicts; mine: MergeSide; theirs: MergeSide; provider: string };
 
 interface IdentityRow {
   user_id: string;
@@ -84,7 +84,13 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
       const mergeToken = await signPendingMerge(env, {
         from: current.userId, into: existing.user_id, provider: identity.provider,
       });
-      return { kind: "merge-required", mergeToken, conflicts };
+      // Both accounts as the form shows them: who you are signed in as, and the
+      // account the provider you just used belongs to.
+      const [mine, theirs] = await Promise.all([
+        mergeSide(db, current.userId, current.provider),
+        mergeSide(db, existing.user_id, identity.provider),
+      ]);
+      return { kind: "merge-required", mergeToken, conflicts, mine, theirs, provider: identity.provider };
     }
 
     // No overlap, so there is no decision to make and the resolution is moot.

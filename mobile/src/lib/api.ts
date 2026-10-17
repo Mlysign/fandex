@@ -220,6 +220,36 @@ export interface Health { ok: boolean; time: number; today: { fetches: number; u
 export interface SessionUser { userId: string; provider: string; displayName: string | null }
 export interface SignInResult { outcome: 'signed-in' | 'created' | 'linked' | 'merged'; token: string; user: SessionUser }
 
+/** One of two accounts a sign-in found to be one person's (worker/src/account.ts, MergeSide). */
+export interface MergeSide {
+  displayName: string | null;
+  provider: string;
+  providers: string[];
+  titles: number;
+  episodes: number;
+}
+
+/**
+ * What a 409 `merge-required` carries: the proof for POST /v1/auth/merge, the
+ * overlap, and both accounts as the form shows them.
+ */
+export interface PendingMerge {
+  mergeToken: string;
+  provider: string;
+  conflicts: { itemState: number; episodeState: number; cleanRows: number; sampleTitles: string[] };
+  mine: MergeSide;
+  theirs: MergeSide;
+}
+
+/** Read a merge out of an error body; null when the body is not one (an older Worker sends no sides). */
+export function pendingMergeFrom(body: Record<string, unknown>): PendingMerge | null {
+  const { mergeToken, provider, conflicts, mine, theirs } = body as Partial<PendingMerge>;
+  if (typeof mergeToken !== 'string' || typeof provider !== 'string' || !conflicts || !mine || !theirs) return null;
+  return { mergeToken, provider, conflicts, mine, theirs };
+}
+
+export type MergeResolution = 'keep-mine' | 'keep-theirs';
+
 export interface Profile {
   user: { id: string; createdAt: number; country: string | null; platforms: string[] | null; mediaTypes: string[] | null };
   identities: { provider: string; displayName: string | null; avatarUrl: string | null }[];
@@ -308,6 +338,14 @@ export const api = {
   signInWithDiscord: (accessToken: string) => request<SignInResult>('/v1/auth/discord', json('POST', { accessToken })),
   /** A test account. Only a Worker on a developer's machine has this route (worker/src/devLogin.ts). */
   devSignIn: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account })),
+  /** Add a test account's way in to the signed-in account, through the real sign-in: how joining accounts is tried locally. */
+  devConnect: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account, connect: true })),
+  /**
+   * Join the signed-in account into the one a sign-in found (PendingMerge). Which
+   * side's copy wins where both hold a title is the person's call, never a default.
+   * The answer is a session for the SURVIVING account.
+   */
+  merge: (mergeToken: string, resolution: MergeResolution) => request<SignInResult>('/v1/auth/merge', json('POST', { mergeToken, resolution })),
   /** Signs out EVERY device: the Worker revokes all of the account's sessions. */
   logout: () => request<{ ok: boolean }>('/v1/auth/logout', { method: 'POST' }),
 

@@ -2,7 +2,7 @@
 // pickers (src/components/settings/), section for section: connected accounts,
 // region, default types, account, your data.
 //
-// Not carried yet: joining two accounts. Kept from the app: the widget offer and what this device
+// Joining two accounts (MergePanel) since 2026-10-17. Kept from the app: the widget offer and what this device
 // holds, which the site had no use for.
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -23,11 +23,11 @@ import { toggled } from '~/lib/a11y';
 import { foldAt } from '~/lib/foldAt';
 import { TYPE_ICONS } from '~/lib/typeIcons';
 import { useOfferedTypes } from '~/lib/features';
-import { api, ApiError } from '~/lib/api';
+import { api, ApiError, type MergeResolution, type MergeSide } from '~/lib/api';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { API_URL } from '~/lib/config';
+import { API_URL, LOCAL_API } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { saveJsonFile } from '~/lib/files';
 import { discordAvailable } from '~/lib/discord';
@@ -214,6 +214,99 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
         </View>
       </Sheet>
     </Card>
+  );
+}
+
+// ── Joining two accounts ─────────────────────────────────────────────────────
+
+/**
+ * A port of the site's src/components/settings/MergePanel.tsx (2026-09-02, Nils:
+ * "it should give me a merge form for me to decide and then execute the merge
+ * right after"). It shows when a way in the person just added belongs to another
+ * Fandex account and both hold some of the same titles. Everything that does not
+ * overlap moves either way; the form is only about the titles both hold.
+ *
+ * ⚠️ NO OPTION IS PRESELECTED, and that is the point. A default would be the
+ * silent winner-picking the whole flow exists to replace.
+ */
+function SideCard({ side, label }: { side: MergeSide; label: string }) {
+  const name = PROVIDER_NAME[side.provider] ?? side.provider;
+  return (
+    <View style={styles.side}>
+      <T variant="eyebrow" style={{ color: color.textSecondary }}>{label}</T>
+      <View style={styles.sideWho}>
+        {side.provider === 'google' ? <GoogleMark size={15} /> : <BrandGlyph source={side.provider} size={15} />}
+        <T variant="body" style={styles.rowTitle} numberOfLines={1}>{side.displayName ?? name}</T>
+      </View>
+      <T variant="bodySm">
+        {count(side.titles, 'title')}{side.episodes > 0 ? `, ${count(side.episodes, 'episode')}` : ''}
+      </T>
+      {side.providers.length > 0 ? (
+        <T variant="meta" style={{ color: color.textMuted }} numberOfLines={1}>
+          {side.providers.map((p) => PROVIDER_NAME[p] ?? p).join(', ')}
+        </T>
+      ) : null}
+    </View>
+  );
+}
+
+function MergePanel({ onNotice }: { onNotice: (n: Notice) => void }) {
+  const auth = useAuth();
+  const pending = auth.pendingMerge;
+  const [busy, setBusy] = useState<MergeResolution | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!pending) return null;
+
+  const { conflicts, mine, theirs } = pending;
+  const provider = PROVIDER_NAME[pending.provider] ?? pending.provider;
+  const overlap = conflicts.itemState + conflicts.episodeState;
+
+  const choose = (resolution: MergeResolution) => {
+    setBusy(resolution);
+    setError(null);
+    auth.completeMerge(resolution)
+      .then(() => onNotice({ msg: 'The accounts are now one, and everything from both is here.', ok: true }))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'The accounts were not joined. Nothing was changed.'))
+      .finally(() => setBusy(null));
+  };
+
+  return (
+    <Section
+      eyebrow="Join these accounts"
+      hint={`The ${provider} account you just connected belongs to another Fandex account. Both have titles saved, so you decide what wins.`}
+    >
+      <View style={[styles.card, styles.cardWarning]}>
+        <View style={styles.sides}>
+          <SideCard side={mine} label="Signed in as" />
+          <SideCard side={theirs} label="The other account" />
+        </View>
+        <T variant="bodySm">
+          <T variant="bodySm" style={styles.strong}>{conflicts.cleanRows.toLocaleString('en')}</T>
+          {conflicts.cleanRows === 1 ? ' entry moves' : ' entries move'} across with nothing to decide.
+        </T>
+        <T variant="bodySm">
+          <T variant="bodySm" style={styles.strong}>{overlap.toLocaleString('en')}</T>
+          {overlap === 1 ? ' entry exists' : ' entries exist'} on both accounts. Pick which copy to keep for those.
+        </T>
+        {conflicts.sampleTitles.length > 0 ? (
+          <T variant="meta" style={{ color: color.textMuted }}>
+            For example: {conflicts.sampleTitles.join(', ')}{conflicts.itemState > conflicts.sampleTitles.length ? ', and others' : ''}.
+          </T>
+        ) : null}
+        {error ? <T variant="bodySm" style={{ color: color.danger }}>{error}</T> : null}
+        <View style={styles.actions}>
+          <Button label="Keep this account's copies" size="md" onPress={() => choose('keep-mine')} loading={busy === 'keep-mine'} disabled={!!busy} />
+          <Button label="Keep the other account's copies" size="md" onPress={() => choose('keep-theirs')} loading={busy === 'keep-theirs'} disabled={!!busy} />
+        </View>
+        <T variant="meta" style={{ color: color.textMuted }}>
+          Either way both accounts become one and nothing else is lost. Only the overlapping entries above are affected.
+        </T>
+        {/* Not in the site's panel, whose decision lived in a cookie that ran out on its own. Here it is held in memory. */}
+        <Pressable onPress={auth.cancelMerge} disabled={!!busy} accessibilityRole="button" style={styles.textButton}>
+          <T variant="bodySm" style={{ color: color.textSecondary }}>Not now, keep them separate</T>
+        </Pressable>
+      </View>
+    </Section>
   );
 }
 
@@ -787,6 +880,8 @@ export default function SettingsScreen() {
           />
         ) : (
           <>
+            {/* Above the account list, as on the site: it is the one thing on the page waiting for an answer. */}
+            <MergePanel onNotice={setNotice} />
             <Section eyebrow="Connected accounts" hint="How you sign in, and where your library comes from.">
               {identities.map((i) => <ProviderPanel key={i.provider} provider={i.provider} onNotice={setNotice} />)}
               {/* "Sign in again" on the Trakt row, in a browser: the code to confirm has to be shown somewhere. */}
@@ -796,6 +891,15 @@ export default function SettingsScreen() {
               {auth.profile && googleAvailable() && !identities.some((i) => i.provider === 'google') ? <AddProvider provider="google" /> : null}
               {auth.profile && discordAvailable() && !identities.some((i) => i.provider === 'discord') ? <AddProvider provider="discord" /> : null}
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
+              {/* A local Worker only, as on the sign-in card: joining two accounts, tried without a real provider. */}
+              {LOCAL_API && auth.profile && !identities.some((i) => i.provider === 'discord') ? (
+                <Button
+                  label="Connect the third test account"
+                  variant="outline"
+                  onPress={() => void auth.devConnect('third').catch((e: unknown) => setNotice({ ok: false, msg: e instanceof Error ? e.message : 'Did not connect.' }))}
+                  style={{ alignSelf: 'flex-start' }}
+                />
+              ) : null}
             </Section>
 
             <ImportRow />
@@ -847,6 +951,14 @@ const styles = StyleSheet.create({
   },
   cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.lg },
   cardDanger: { borderColor: 'rgba(229,103,76,0.4)' },
+  cardWarning: { borderColor: 'rgba(240,160,75,0.4)', gap: space.md },
+  sides: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  side: {
+    flexGrow: 1, flexBasis: 220, minWidth: 0, padding: space.lg, gap: 4, borderRadius: radius.md,
+    backgroundColor: color.surfaceInset, borderWidth: 1, borderColor: color.border,
+  },
+  sideWho: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
+  strong: { fontFamily: font.sansBold, color: color.textPrimary },
   rowText: { flex: 1, minWidth: 0 },
   rowTitle: { fontFamily: font.sansBold },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.lg },

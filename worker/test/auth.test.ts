@@ -301,6 +301,11 @@ describe("signing in", () => {
     expect(out.kind).toBe("merge-required");
     if (out.kind !== "merge-required") return;
     expect(out.conflicts).toMatchObject({ itemState: 1, episodeState: 0, cleanRows: 1, sampleTitles: ["The Matrix"] });
+    // Both accounts as the form shows them: the signed-in one (Google, two
+    // titles) and the one the Trakt sign-in belongs to (one title).
+    expect(out.provider).toBe("trakt");
+    expect(out.mine).toMatchObject({ provider: "google", providers: ["google"], titles: 2, episodes: 0 });
+    expect(out.theirs).toMatchObject({ provider: "trakt", providers: ["trakt"], titles: 1, episodes: 0 });
     // Nothing was written: both accounts are exactly as they were.
     expect(await count("users")).toBe(2);
     expect(await count("user_item_state")).toBe(3);

@@ -315,6 +315,35 @@ export async function mergeConflicts(db: D1Database, fromUserId: string, intoUse
   };
 }
 
+/** One of the two accounts, as the merge form shows it (the old site's MergePanel side cards). */
+export interface MergeSide {
+  displayName: string | null;
+  /** The way in this side is shown by: the session's provider, or the one just connected. */
+  provider: string;
+  /** Every way into this account. */
+  providers: string[];
+  /** Titles with any row, counted once each. */
+  titles: number;
+  episodes: number;
+}
+
+export async function mergeSide(db: D1Database, userId: string, provider: string): Promise<MergeSide> {
+  const [identities, titles, episodes] = await db.batch<Record<string, unknown>>([
+    db.prepare("SELECT provider, display_name FROM user_identities WHERE user_id = ? ORDER BY created_at").bind(userId),
+    db.prepare("SELECT COUNT(DISTINCT media_item_id) n FROM user_item_state WHERE user_id = ?").bind(userId),
+    db.prepare("SELECT COUNT(*) n FROM user_episode_state WHERE user_id = ?").bind(userId),
+  ]);
+  const rows = (identities.results ?? []) as { provider: string; display_name: string | null }[];
+  const named = rows.find((r) => r.provider === provider && r.display_name) ?? rows.find((r) => r.display_name);
+  return {
+    displayName: named?.display_name ?? null,
+    provider,
+    providers: rows.map((r) => r.provider),
+    titles: Number(titles.results?.[0]?.n ?? 0),
+    episodes: Number(episodes.results?.[0]?.n ?? 0),
+  };
+}
+
 /** Which side wins where the two accounts disagree. No default, deliberately. */
 export type MergeResolution =
   /** Keep the rows on the account you are signed in as (the one being merged away). */

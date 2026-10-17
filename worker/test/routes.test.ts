@@ -637,6 +637,55 @@ describe("the test accounts", () => {
     expect((await post("localhost:8787", local, { account: "nils" })).status).toBe(400);
   });
 
+  it("joins two accounts end to end: connect, the form's answer, then the merge", async () => {
+    const login = async (account: string) => (await (await post("localhost:8787", local, { account })).json()) as any;
+    const connect = (token: string, account: string) => worker.fetch(
+      new Request("http://localhost:8787/v1/dev/login", { method: "POST", headers: { ...auth(token), "Content-Type": "application/json" }, body: JSON.stringify({ account, connect: true }) }),
+      local, createExecutionContext(),
+    );
+    const film = await upsertMediaItem(db, movieItem());
+    const rate = (token: string, rating: number) => call("/v1/me/state", {
+      method: "PUT", headers: { ...auth(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ items: { upsert: [{ mediaItemId: film.id, source: "local", relation: "library", status: "watched", rating }] } }),
+    });
+
+    const third = await login("third");
+    expect(third.user).toMatchObject({ userId: "d0d0d0d0-0000-4000-8000-000000000003", provider: "discord" });
+    expect((await rate(third.token, 9)).status).toBe(200);
+    const plain = await login("plain");
+    expect((await rate(plain.token, 4)).status).toBe(200);
+
+    // Without a session there is nobody to connect to.
+    expect((await worker.fetch(new Request("http://localhost:8787/v1/dev/login", { method: "POST", ...jsonBody({ account: "third", connect: true }) }), local, createExecutionContext())).status).toBe(401);
+
+    // Signed in as "plain", connecting "third" finds another account holding the same film.
+    const asked = await connect(plain.token, "third");
+    expect(asked.status).toBe(409);
+    const body = (await asked.json()) as any;
+    expect(body).toMatchObject({
+      error: "merge-required", provider: "discord",
+      conflicts: { itemState: 1, cleanRows: 0 },
+      mine: { provider: "google", displayName: "Plain Test", titles: 1 },
+      theirs: { provider: "discord", displayName: "Third Test", titles: 1 },
+    });
+    expect(await count("users")).toBe(2);
+
+    // No default: a merge with no resolution is refused.
+    const merge = (resolution?: string) => call("/v1/auth/merge", {
+      method: "POST", headers: { ...auth(plain.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ mergeToken: body.mergeToken, ...(resolution ? { resolution } : {}) }),
+    });
+    expect((await merge()).status).toBe(400);
+    const done = await merge("keep-mine");
+    expect(done.status).toBe(200);
+    const joined = (await done.json()) as any;
+    // The session is for the account the connected way in belongs to, holding "plain"'s 4.
+    expect(joined.user.userId).toBe("d0d0d0d0-0000-4000-8000-000000000003");
+    expect(await count("users")).toBe(1);
+    const rows = await db.prepare("SELECT user_id, rating FROM user_item_state").all<{ user_id: string; rating: number }>();
+    expect(rows.results).toEqual([{ user_id: "d0d0d0d0-0000-4000-8000-000000000003", rating: 4 }]);
+  });
+
   it("comes back empty after its account is deleted", async () => {
     const { token } = (await (await post("localhost:8787")).json()) as any;
     const item = await upsertMediaItem(db, movieItem());
