@@ -34,6 +34,10 @@ const PUBLISHABLE = {
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'EXPO_PUBLIC_GOOGLE_CLIENT_ID',
   // The donations page (Profile's "Support Fandex"). A public address by design.
   NEXT_PUBLIC_SUPPORT_URL: 'EXPO_PUBLIC_SUPPORT_URL',
+  // The Discord application's id: public, it is in the address of Discord's
+  // sign-in page. Its presence is what shows the Discord button (2026-10-17,
+  // switched on once the three redirect addresses were on the application).
+  DISCORD_CLIENT_ID: 'EXPO_PUBLIC_DISCORD_CLIENT_ID',
 };
 
 if (!fs.existsSync(rootEnv)) {
