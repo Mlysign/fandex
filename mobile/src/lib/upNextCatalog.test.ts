@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // A show the catalog copy does not hold yet must not be stored as caught up.
 // A catalog start-over refills the copy page by page, and Up next ran on every
@@ -94,15 +94,42 @@ describe('Up next while the catalog copy is still filling', () => {
   });
 });
 
+describe('a weekly show checked the day before its new episode', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('is asked about again once the episode airs, not a day later', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'zdf', 169246);
+    watch(raw, 'zdf', 2);
+    const airs = NOW + 3600;
+    trakt.traktGet.mockReset();
+    trakt.traktGet.mockResolvedValueOnce({ next_episode: { season: 13, number: 3, first_aired: new Date(airs * 1000).toISOString() } });
+    await refreshUpNext(db);
+    expect(await upNextList(db)).toEqual([]);
+
+    vi.useFakeTimers({ now: (NOW + 1800) * 1000, toFake: ['Date'] });
+    expect((await refreshUpNext(db)).checked).toBe(0);
+
+    vi.setSystemTime((airs + 60) * 1000);
+    trakt.traktGet.mockResolvedValueOnce({ next_episode: { season: 13, number: 3, first_aired: new Date(airs * 1000).toISOString() } });
+    await refreshUpNext(db);
+    expect(trakt.traktGet).toHaveBeenCalledTimes(2);
+    expect((await upNextList(db)).map((e) => `${e.mediaItemId} ${e.season}x${e.episode}`)).toEqual(['zdf 13x3']);
+  });
+});
+
 describe('the schema step that heals a stored "caught up"', () => {
   it('asks every caught-up show again and keeps the real answers', async () => {
     const { db, raw } = open();
     await migrate(db);
+    // Back to how a version 4 database looked.
+    raw.exec('ALTER TABLE up_next DROP COLUMN next_air_at');
     raw.exec('PRAGMA user_version = 4');
     raw.exec(`INSERT INTO up_next (media_item_id, season, episode, watched_count, checked_at) VALUES
               ('wrongly-caught-up', NULL, NULL, 6, ${NOW}), ('real', 1, 7, 6, ${NOW})`);
     await migrate(db);
     expect(raw.prepare('SELECT media_item_id FROM up_next').all()).toEqual([{ media_item_id: 'real' }]);
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 5 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 });
   });
 });

@@ -8,10 +8,11 @@
 //
 // One call per show is why the answers are kept. A row says what Trakt answered
 // and how many of the show's episodes were ticked at the time, and it is asked
-// again only when that count moves (you watched something) or the answer is old
-// enough that a new episode may have aired. A run asks about a few shows, the
-// most recently watched first, so the top of the list is right after one run
-// and a long history fills in over several.
+// again when that count moves (you watched something), when the episode Trakt
+// said was coming next has aired, or when the answer is old enough that a new
+// episode may have aired unannounced. A run asks about a few shows, the most
+// recently watched first, so the top of the list is right after one run and a
+// long history fills in over several.
 //
 // The ORDER is the site's rule (src/lib/upNext.ts): a watch and a release are
 // both dated events, and an entry sits at its latest one. Ticking an episode
@@ -29,7 +30,12 @@ const CONCURRENCY = 3;
 const DAY = 86_400;
 /** A show watched in the last four months may get a new episode any day. */
 const ACTIVE_WINDOW = 120 * DAY;
-const TTL_ACTIVE = DAY;
+/**
+ * For a new episode Trakt had not dated when it was last asked. One it HAD dated
+ * is asked about as soon as it airs (`next_air_at`), whatever these say: a
+ * weekly show sat a day behind its new episode on the phone (2026-10-17).
+ */
+const TTL_ACTIVE = 6 * 3600;
 const TTL_DORMANT = 7 * DAY;
 
 export interface UpNextEntry {
@@ -59,6 +65,8 @@ interface StoredRow {
   media_item_id: string;
   watched_count: number;
   checked_at: number;
+  /** When the episode Trakt named as next airs, if that is still to come. */
+  next_air_at?: number | null;
 }
 
 /** Trakt's answer for one show, reduced to what the list needs. */
@@ -68,6 +76,8 @@ export interface Progress {
   title: string | null;
   airedAt: number | null;
   lastWatchedAt: number | null;
+  /** The next episode has a date and it is still to come: ask again once it passes. */
+  upcomingAt: number | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
@@ -98,9 +108,10 @@ export function readProgress(answer: unknown, now: number): Progress {
   const airedAt = unix(next.first_aired);
   const lastWatchedAt = unix(a.last_watched_at);
   if (season == null || episode == null || season === 0 || airedAt == null || airedAt > now) {
-    return { season: null, episode: null, title: null, airedAt: null, lastWatchedAt };
+    const upcomingAt = season != null && season !== 0 && episode != null && airedAt != null && airedAt > now ? airedAt : null;
+    return { season: null, episode: null, title: null, airedAt: null, lastWatchedAt, upcomingAt };
   }
-  return { season, episode, title: typeof next.title === 'string' ? next.title : null, airedAt, lastWatchedAt };
+  return { season, episode, title: typeof next.title === 'string' ? next.title : null, airedAt, lastWatchedAt, upcomingAt: null };
 }
 
 /** Which shows to ask Trakt about now, most recently watched first. Pure, so the staleness rule has a test. */
@@ -110,6 +121,7 @@ export function showsToCheck(shows: ShowWatch[], stored: StoredRow[], now: numbe
     const row = have.get(s.mediaItemId);
     if (!row) return true;
     if (row.watched_count !== s.watchedCount) return true;
+    if (row.next_air_at != null && row.next_air_at <= now) return true;
     const active = s.lastWatchedAt != null && now - s.lastWatchedAt < ACTIVE_WINDOW;
     return now - row.checked_at > (active ? TTL_ACTIVE : TTL_DORMANT);
   });
@@ -157,13 +169,13 @@ async function traktIdOf(db: SQLiteDatabase, mediaItemId: string): Promise<numbe
 
 async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: number): Promise<void> {
   await db.runAsync(
-    `INSERT OR REPLACE INTO up_next (media_item_id, season, episode, title, aired_at, last_watched_at, watched_count, checked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO up_next (media_item_id, season, episode, title, aired_at, last_watched_at, watched_count, checked_at, next_air_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     // The later of what Trakt says and what this device recorded. Trakt's
     // `last_watched_at` lagged behind a tick made seconds earlier, and a show
     // ticked again and again stayed below one ticked before it.
     [show.mediaItemId, p.season, p.episode, p.title, p.airedAt,
-     Math.max(p.lastWatchedAt ?? 0, show.lastWatchedAt ?? 0) || null, show.watchedCount, now],
+     Math.max(p.lastWatchedAt ?? 0, show.lastWatchedAt ?? 0) || null, show.watchedCount, now, p.upcomingAt],
   );
 }
 
@@ -174,7 +186,7 @@ async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now
   // No Trakt link: there is nobody to ask. Stored as caught up so it is not
   // asked about on every run.
   if (traktId === null) {
-    await store(db, show, { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt }, now);
+    await store(db, show, { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt, upcomingAt: null }, now);
     return;
   }
   const answer = await traktGet(`/shows/${traktId}/progress/watched?hidden=false&specials=false&count_specials=false&extended=full`, token);
@@ -190,7 +202,7 @@ async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now
 export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: number; waiting: number }> {
   const now = Math.floor(Date.now() / 1000);
   const shows = await watchedShows(db);
-  const stored = await db.getAllAsync<StoredRow>('SELECT media_item_id, watched_count, checked_at FROM up_next');
+  const stored = await db.getAllAsync<StoredRow>('SELECT media_item_id, watched_count, checked_at, next_air_at FROM up_next');
   const due = showsToCheck(shows, stored, now, Number.MAX_SAFE_INTEGER);
   const batch = due.slice(0, RUN_BUDGET);
   if (!batch.length) return { checked: 0, waiting: 0 };

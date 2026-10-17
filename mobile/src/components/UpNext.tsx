@@ -5,11 +5,11 @@
 // The data is the device's own (lib/upNext.ts): Trakt is asked show by show,
 // and a tick is written to Trakt, the Worker and the device, in that order.
 
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RailHeader } from '~/components/cards';
 import { Img } from '~/components/Img';
 import { Panel, Skeleton } from '~/components/kit';
@@ -24,6 +24,8 @@ import { color, font, radius, type } from '~/theme';
 export const EPISODE_ROW_H = 76;
 export const EPISODE_ROW_GAP = 8;
 const MAX_REFRESH_PASSES = 6;
+/** Coming back to the screen or the app asks Trakt again at most this often. */
+const WAKE_GAP_MS = 60 * 1000;
 /** How long a ticked row holds its filled box before it fades, and the fade itself. */
 const HOLD_MS = 450;
 const FADE_MS = 320;
@@ -109,6 +111,25 @@ export function useUpNext(limit: number) {
     setPending(waiting);
   }, [db, limit]);
 
+  // Ask again when the screen comes back into view or the app comes back to the
+  // front. Every tab stays mounted, so without this the list was asked about
+  // once per app start, and a phone left running sat a day behind a new episode
+  // the website already showed (2026-10-17). A run with nothing due makes no
+  // request to Trakt, so this is cheap; the minute apart is for a browser,
+  // which reports every switch back to the tab.
+  const [wake, setWake] = useState(0);
+  const lastWake = useRef(Date.now());
+  const wakeUp = useCallback(() => {
+    if (Date.now() - lastWake.current < WAKE_GAP_MS) return;
+    lastWake.current = Date.now();
+    setWake((w) => w + 1);
+  }, []);
+  useFocusEffect(wakeUp);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => { if (next === 'active') wakeUp(); });
+    return () => sub.remove();
+  }, [wakeUp]);
+
   const signedIn = auth.status === 'signedIn';
   useEffect(() => {
     let live = true;
@@ -138,7 +159,7 @@ export function useUpNext(limit: number) {
       }
     })();
     return () => { live = false; };
-  }, [db, show, signedIn, auth.rowsRevision, catalog.revision]);
+  }, [db, show, signedIn, auth.rowsRevision, catalog.revision, wake]);
 
   const tick = useCallback(async (entry: UpNextEntry) => {
     const k = entryKey(entry);

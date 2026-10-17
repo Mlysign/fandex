@@ -17,7 +17,7 @@ export const DATABASE_NAME = 'fandex.db';
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
@@ -140,6 +140,13 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
     // caught-up row is asked about once more.
     await db.execAsync('DELETE FROM up_next WHERE season IS NULL');
     await stamp(db, (version = 5));
+  }
+
+  if (version < 6) {
+    // When the episode Trakt named as next airs, while that is still to come.
+    // Up next asks about the show again once it passes (upNext.ts).
+    await db.execAsync('ALTER TABLE up_next ADD COLUMN next_air_at INTEGER');
+    await stamp(db, (version = 6));
   }
 }
 
