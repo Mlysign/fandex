@@ -31,7 +31,7 @@ export function utcDay(now: Date = new Date()): string {
 }
 const dayNDaysAgo = (days: number, now: Date = new Date()) => utcDay(new Date(now.getTime() - days * 86_400_000));
 
-const MEDIA_TYPES = new Set(["game", "movie", "show"]);
+const MEDIA_TYPES = new Set(["game", "movie", "show", "book", "boardgame"]);
 const STATIC_PATHS = new Set(["/", "/calendar", "/discover", "/insights", "/library", "/wishlist", "/profile", "/settings"]);
 
 /**

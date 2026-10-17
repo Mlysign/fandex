@@ -32,7 +32,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
   const candidates = await buildExternalSets(session.userId, facets, body.membership);
   const seen = new Set<string>();
   const out = candidates.filter((it) => {
-    if (types.length && !types.includes(it.type)) return false;
+    if (types.length && !(types as string[]).includes(it.type)) return false;
     if (seen.has(it.id)) return false;
     seen.add(it.id);
     return true;

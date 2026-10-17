@@ -42,6 +42,8 @@ export function extractCrossIds(source: Source, rawData: any): Record<string, st
     case "rawg":  if (rawData.id != null) ids.rawg = String(rawData.id); break;
     case "steam": if (rawData.appid != null) ids.steam = String(rawData.appid); break;
     case "igdb":  if (rawData.id != null) ids.igdb = String(rawData.id); break;
+    case "openlibrary": if (typeof rawData.id === "string") ids.openlibrary = rawData.id; break;
+    case "bgg": if (rawData.id != null) ids.bgg = String(rawData.id); break;
   }
   return ids;
 }

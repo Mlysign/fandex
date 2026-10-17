@@ -28,6 +28,7 @@ import { capFrom, kvGet, kvSet, spend } from "./budget";
 import { all, first, run } from "./d1";
 import type { Env } from "./env";
 import { useSharedIgdbToken } from "./catalog/resolve";
+import { upcomingOpenLibrary, type BookCard } from "@/lib/sources/openlibrary";
 
 /** How deep a stored month goes. The calendar shows 15; the rest is room to filter. */
 export const MONTH_POOL_DEPTH = 40;
@@ -97,10 +98,20 @@ function ttlFor(month: string, partial: boolean, now: Date): number {
   return monthWindow(month).lte < now.toISOString().slice(0, 10) ? TTL_PAST : TTL_OPEN;
 }
 
+/** An Open Library card as a calendar candidate. Its reach (readers who shelved it) is what ranks it among the month's books. */
+function bookCandidate(b: BookCard): FeedCandidate {
+  return {
+    id: `openlibrary:${b.sourceId}`, rawId: 0, sourceId: b.sourceId, source: "openlibrary", type: "book",
+    title: b.title, releaseDate: b.releaseDate, posterUrl: b.posterUrl, ids: {},
+    genreNames: b.genres, originalLanguage: null, voteCount: b.votes,
+    voteAverage: b.rating != null ? b.rating / 10 : null, popularity: b.popularity,
+  } as FeedCandidate;
+}
+
 function toCard(c: FeedCandidate): CalendarCard {
   return {
     source: c.source,
-    sourceId: String(c.rawId),
+    sourceId: c.sourceId ?? String(c.rawId),
     type: c.type,
     title: c.title,
     releaseDate: c.releaseDate,
@@ -136,15 +147,19 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
   // Page 1 of each source is enough: each is already sorted by its own
   // popularity, so page 2 holds titles that could never place. Each fetcher
   // degrades to [] on its own, so one provider being down costs its own titles.
-  const [games, movies, shows] = await Promise.all([
+  const [games, movies, shows, books] = await Promise.all([
     // "card": card fields only. Forty full IGDB payloads are ~200 KB to parse,
     // which was most of a build's CPU, and nothing here stores them.
     fetchIgdbGamePage(1, "future", win, "card").catch(() => [] as FeedCandidate[]),
     fetchMoviePage(1, "future", region, win).catch(() => [] as FeedCandidate[]),
     fetchShowPage(1, "future", win).catch(() => [] as FeedCandidate[]),
+    // Books (2026-10-17): the month's most wanted first publications. Board
+    // games have only a year from BGG, so none is placed on a day.
+    upcomingOpenLibrary(month).then((cards) => cards.map(bookCandidate)).catch(() => [] as FeedCandidate[]),
   ]);
-  const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows], win), MONTH_POOL_DEPTH);
+  const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows, ...books], win), MONTH_POOL_DEPTH);
   if (!ranked.length) return null;
+  // Books are not in `partial`: a month a year out often has none, and that is an answer.
   return { partial: !games.length || !movies.length || !shows.length, items: ranked.map(toCard) };
 }
 

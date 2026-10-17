@@ -20,6 +20,8 @@ export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
   game: "Games",
   movie: "Movies",
   show: "Shows",
+  book: "Books",
+  boardgame: "Board games",
 };
 
 /** Every type Fandex supports, in display order. */

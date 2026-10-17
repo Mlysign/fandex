@@ -10,6 +10,7 @@
 import type { MediaLink, MediaType, Source } from "@/types";
 import { categorizeTag } from "@/lib/tags";
 import { transliterate } from "@/lib/translit";
+import { bggFranchises } from "@/lib/sources/bggPure";
 
 export type FacetKind = "tag" | "person" | "company" | "ip";
 export type PersonRole = "director" | "writer" | "creator" | "cast";
@@ -198,6 +199,15 @@ export function extractFacets(
   const lb = bySource.get("letterboxd");
   if (lb) for (const d of lb.directors ?? []) addPerson(d?.name, "director");
 
+  // Books and board games (2026-10-17). An author or a designer is the CREATOR:
+  // the role a show's creator and a game's maker share, weighted the same in
+  // the score. A board game's artist is left out, as a film's crew below the
+  // writer is.
+  const ol = bySource.get("openlibrary");
+  if (ol) for (const a of (ol.author_name ?? []).slice(0, 4)) addPerson(a, "creator");
+  const bgg = bySource.get("bgg");
+  if (bgg) for (const d of (bgg.designers ?? []).slice(0, 4)) addPerson(d, "creator");
+
   // ── Companies ──
   // Games: developers / publishers (rawg + steam + igdb — all, not just first).
   const rawg = bySource.get("rawg");
@@ -224,6 +234,10 @@ export function extractFacets(
   }
   const trakt = bySource.get("trakt");
   if (trakt && type === "show" && typeof trakt.network === "string") addCompany(trakt.network, "network");
+  // A book's publishers come from all its editions, translations included, so
+  // only the first two count; a board game names its first publisher first.
+  if (ol) for (const p of (ol.publisher ?? []).slice(0, 2)) addCompany(p, "publisher");
+  if (bgg) for (const p of (bgg.publishers ?? []).slice(0, 2)) addCompany(p, "publisher");
 
   // ── Franchise / IP ──
   // TMDB `belongs_to_collection` (movies only — TMDB has no collection concept
@@ -242,6 +256,10 @@ export function extractFacets(
   };
   if (tmdb) addIp(tmdb.belongs_to_collection?.name);
   if (igdb) for (const f of igdb.franchises ?? []) addIp(f?.name);
+  // A book series (Open Library) and a board game's series or franchise family
+  // (BGG): what lets the score count your average for the rest of the series.
+  if (ol) for (const s of (ol.series_name ?? []).slice(0, 2)) addIp(s);
+  if (bgg) for (const f of bggFranchises(Array.isArray(bgg.families) ? bgg.families : []).slice(0, 3)) addIp(f);
 
   return out;
 }

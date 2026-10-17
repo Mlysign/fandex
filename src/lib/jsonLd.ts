@@ -139,6 +139,32 @@ export function buildEntityJsonLd(item: PublicEnrichedItem, canonical: string): 
     });
   }
 
+  if (item.type === "book") {
+    return compact({
+      ...base,
+      "@type": "Book",
+      author: (item.authors ?? []).slice(0, 4).map(person),
+      publisher: item.publisher ? organization(item.publisher) : undefined,
+      numberOfPages: item.pageCount ?? undefined,
+      isbn: item.isbn ?? undefined,
+    });
+  }
+
+  if (item.type === "boardgame") {
+    return compact({
+      ...base,
+      // schema.org's Game, with the player count it defines.
+      "@type": "Game",
+      author: (item.designers ?? []).slice(0, 4).map(person),
+      publisher: item.publisher ? organization(item.publisher) : undefined,
+      numberOfPlayers: item.players && (item.players.min != null || item.players.max != null)
+        ? { "@type": "QuantitativeValue", minValue: item.players.min ?? undefined, maxValue: item.players.max ?? undefined }
+        : undefined,
+      timeRequired: isoDuration(item.playTimeMinutes ?? null),
+      typicalAgeRange: item.minAge ? `${item.minAge}-` : undefined,
+    });
+  }
+
   if (item.type === "show") {
     return compact({
       ...base,

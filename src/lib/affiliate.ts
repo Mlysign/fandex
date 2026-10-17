@@ -1,4 +1,4 @@
-import type { AffiliateProgramId, BuyLink, Source } from "@/types";
+import type { AffiliateProgramId, BuyLink, MediaType, Source } from "@/types";
 
 // H3.4 — the affiliate layer. SERVER-ONLY (reads non-public env vars); the client
 // only ever receives the already-built urls plus a boolean `affiliate` flag.
@@ -423,7 +423,7 @@ export function buildBuyLinks(
 export function decorateItemLinks(
   storeLinks: DisplayStoreLink[],
   title: string,
-  type: "game" | "movie" | "show"
+  type: MediaType
 ): { storeLinks: DisplayStoreLink[]; buyLinks: BuyLink[] } {
   // Read the program ids off the ORIGINAL urls: after decoration a deeplinked
   // row points at the network's host, which no program claims, so deriving the
@@ -434,6 +434,7 @@ export function decorateItemLinks(
 
   return {
     storeLinks: decorateStoreLinks(storeLinks),
-    buyLinks: buildBuyLinks(title, type, alreadyLinked),
+    // No buy-link program covers books or board games (2026-10-17): none.
+    buyLinks: type === "book" || type === "boardgame" ? [] : buildBuyLinks(title, type, alreadyLinked),
   };
 }

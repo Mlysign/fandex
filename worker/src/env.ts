@@ -15,6 +15,8 @@ export interface Env {
   TRAKT_CLIENT_ID: string;
   /** Discord application id. Public: it is in every Discord sign-in address. Unset turns Discord sign-in off. */
   DISCORD_CLIENT_ID?: string;
+  /** BoardGameGeek application token (boardgamegeek.com/applications). Unset switches board games off. */
+  BGG_TOKEN?: string;
 
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;

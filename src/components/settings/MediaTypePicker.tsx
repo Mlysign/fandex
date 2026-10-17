@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Gamepad2, Clapperboard, Tv, Layers } from "lucide-react";
+import { Gamepad2, Clapperboard, Tv, Layers, BookOpen, Dices } from "lucide-react";
 import PanelHeader from "@/components/insights/PanelHeader";
 import type { MediaType } from "@/types";
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from "@/lib/mediaTypes";
@@ -36,6 +36,8 @@ const ICONS: Record<MediaType, typeof Gamepad2> = {
   game: Gamepad2,
   movie: Clapperboard,
   show: Tv,
+  book: BookOpen,
+  boardgame: Dices,
 };
 
 export default function MediaTypePicker({

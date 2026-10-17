@@ -8,32 +8,32 @@ import { DEFAULT_COUNTRY } from "./countries";
 // source touches only that registry, never this file.
 
 // ── Priority orders (single-value fields) ─────────────────────────
-const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd"];
-const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb"];
-const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd"];
+const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "bgg"];
+const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
+const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd", "openlibrary", "bgg"];
 // Poster = PORTRAIT box-art (card view). Prefer sources with true portrait art
 // (TMDB poster, IGDB cover, Steam library_capsule) over RAWG's landscape image.
-const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd"];
+const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "bgg"];
 // Backdrop = LANDSCAPE art (list-row thumbnail). TMDB backdrop for film/TV; for
 // games the Steam header / RAWG background / IGDB artwork.
 const BACKDROP_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb"];
 const TAGLINE_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const RUNTIME_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const STATUS_PRIORITY: Source[] = ["tmdb", "trakt", "igdb"];
-const COLLECTION_PRIORITY: Source[] = ["tmdb", "igdb"];
+const COLLECTION_PRIORITY: Source[] = ["tmdb", "igdb", "openlibrary", "bgg"];
 const LANGUAGE_PRIORITY: Source[] = ["tmdb", "trakt"];
 const COUNTRY_PRIORITY: Source[] = ["tmdb", "trakt"];
 const NETWORK_PRIORITY: Source[] = ["tmdb", "trakt"];
-const DEVELOPER_PRIORITY: Source[] = ["rawg", "steam", "igdb"];
+const DEVELOPER_PRIORITY: Source[] = ["rawg", "steam", "igdb", "openlibrary", "bgg"];
 
 // Union-field source lists — shared by mergeLinks and explainMerge so the
 // debug matrix can never drift from the real merge.
-const IMAGE_SOURCES: Source[] = ["steam", "tmdb", "rawg", "igdb", "letterboxd"];
-const TAG_SOURCES: Source[] = ["rawg", "steam", "tmdb", "trakt", "letterboxd", "igdb"];
+const IMAGE_SOURCES: Source[] = ["steam", "tmdb", "rawg", "igdb", "letterboxd", "openlibrary", "bgg"];
+const TAG_SOURCES: Source[] = ["rawg", "steam", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
 const PLATFORM_SOURCES: Source[] = ["steam", "rawg", "igdb"];
-const STORE_LINK_SOURCES: Source[] = ["steam", "rawg", "tmdb", "trakt", "letterboxd", "igdb"];
+const STORE_LINK_SOURCES: Source[] = ["steam", "rawg", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
 const TRAILER_SOURCES: Source[] = ["tmdb", "trakt", "igdb", "steam"];
-const RATING_SOURCES: Source[] = ["tmdb", "trakt", "letterboxd", "igdb", "rawg", "steam"];
+const RATING_SOURCES: Source[] = ["tmdb", "trakt", "letterboxd", "igdb", "rawg", "steam", "openlibrary", "bgg"];
 const DLC_SOURCES: Source[] = ["igdb", "steam"];
 const GAME_MODE_SOURCES: Source[] = ["igdb"];
 // Each source reports its own regional rating system (FSK / PG / USK / ESRB) —
@@ -84,6 +84,9 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   const network = type === "show" ? pickField(NETWORK_PRIORITY, norm, "network") : null;
   const playtimeHours = pickField(["rawg"], norm, "playtimeHours");
   const timeToBeat = pickField(["igdb"], norm, "timeToBeat");
+  // Books and board games (2026-10-17).
+  const book = norm.get("openlibrary");
+  const boardgame = norm.get("bgg");
 
   // TMDB-only facts.
   const tmdb = norm.get("tmdb");
@@ -181,6 +184,11 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
     playtimeHours,
     timeToBeat,
     dlc,
+    ...(book ? { authors: book.authors ?? [], pageCount: book.pageCount ?? null, isbn: book.isbn ?? null } : {}),
+    ...(boardgame ? {
+      designers: boardgame.designers ?? [], players: boardgame.players ?? null,
+      playTimeMinutes: boardgame.playTimeMinutes ?? null, minAge: boardgame.minAge ?? null, weight: boardgame.weight ?? null,
+    } : {}),
     developer,
     publisher,
     director,

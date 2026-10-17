@@ -243,7 +243,7 @@ describe("profile and preferences", () => {
 
   it("rejects an unknown country or media type", () => {
     expect(() => parsePrefs({ country: "Atlantis" })).toThrow(BadRequest);
-    expect(() => parsePrefs({ mediaTypes: ["book"] })).toThrow(BadRequest);
+    expect(() => parsePrefs({ mediaTypes: ["comic"] })).toThrow(BadRequest);
     expect(() => parsePrefs({ platforms: "netflix" })).toThrow(BadRequest);
     expect(() => parsePrefs([])).toThrow(BadRequest);
   });

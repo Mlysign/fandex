@@ -16,7 +16,7 @@ describe("the type list is derived, so a new type cannot be half-added", () => {
     // Record<MediaType, string> moves that failure to compile time. This test
     // is the runtime half of the same guarantee.
     expect(MEDIA_TYPES).toEqual(Object.keys(MEDIA_TYPE_LABELS));
-    expect(MEDIA_TYPES).toEqual(["game", "movie", "show"]);
+    expect(MEDIA_TYPES).toEqual(["game", "movie", "show", "book", "boardgame"]);
   });
 
   it("gives every type a label", () => {
@@ -29,7 +29,7 @@ describe("the type list is derived, so a new type cannot be half-added", () => {
 describe("isMediaType / sanitizeMediaTypes", () => {
   it("accepts the known types and nothing else", () => {
     expect(isMediaType("game")).toBe(true);
-    expect(isMediaType("book")).toBe(false);
+    expect(isMediaType("comic")).toBe(false);
     expect(isMediaType("")).toBe(false);
     expect(isMediaType(null)).toBe(false);
     // Inherited Object properties must not pass as types.
@@ -38,7 +38,7 @@ describe("isMediaType / sanitizeMediaTypes", () => {
   });
 
   it("drops unknown and duplicate entries and keeps order", () => {
-    expect(sanitizeMediaTypes(["show", "book", "show", "game"])).toEqual(["show", "game"]);
+    expect(sanitizeMediaTypes(["show", "comic", "show", "game"])).toEqual(["show", "game"]);
     expect(sanitizeMediaTypes("game")).toEqual([]);
     expect(sanitizeMediaTypes(null)).toEqual([]);
   });
@@ -56,7 +56,7 @@ describe("an empty list means NOT CONFIGURED, never 'uses nothing'", () => {
   it("yields every type when the stored value is entirely junk", () => {
     // A half-migrated or hand-edited row degrades to "not configured" rather
     // than to "nothing works".
-    expect(enabledMediaTypes(["book", "boardgame"])).toEqual(MEDIA_TYPES);
+    expect(enabledMediaTypes(["comic", "podcast"])).toEqual(MEDIA_TYPES);
   });
 
   it("yields exactly the configured subset otherwise", () => {
@@ -114,6 +114,6 @@ describe("the setting is a DEFAULT, not a scope", () => {
   it("treats a selection of only junk as no selection", () => {
     // A hand-edited or half-migrated sessionStorage value degrades to the
     // default rather than to an empty page.
-    expect(visibleTypes(["book"], ["movie", "show"])).toEqual(["movie", "show"]);
+    expect(visibleTypes(["comic"], ["movie", "show"])).toEqual(["movie", "show"]);
   });
 });

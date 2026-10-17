@@ -1,4 +1,6 @@
 import type { Source, MediaType, CommunityRating, EnrichedItem } from "@/types";
+import { bookDate, bookSubjects, coverUrl } from "@/lib/sources/bookPure";
+import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
 
 // ── A1: per-source normalizers ────────────────────────────────────────────────
 // Each source maps its raw_data → a SourceNormalized partial (one place per
@@ -32,6 +34,15 @@ export interface SourceNormalized {
   imdbId?: string | null;
   trailerYoutubeKey?: string | null;
   steamTrailerUrl?: string | null;
+  // books and board games (2026-10-17)
+  authors?: string[];
+  pageCount?: number | null;
+  isbn?: string | null;
+  designers?: string[];
+  players?: { min: number | null; max: number | null } | null;
+  playTimeMinutes?: number | null;
+  minAge?: number | null;
+  weight?: number | null;
   // multi-value (union)
   images?: string[];
   tags?: string[];
@@ -495,6 +506,54 @@ function normalizeIgdb(d: any): SourceNormalized {
   return out;
 }
 
+// ── Open Library (books) ──────────────────────────────────────────────────────
+// The record is the work's search row plus its description (sources/openlibrary.ts).
+function normalizeOpenLibrary(d: any): SourceNormalized {
+  const out: SourceNormalized = {};
+  out.title = typeof d.title === "string" ? d.title : null;
+  out.description = typeof d.description === "string" ? d.description : null;
+  out.releaseDate = bookDate(d);
+  out.poster = coverUrl(d.cover_i);
+  out.images = out.poster ? [out.poster] : [];
+  out.tags = bookSubjects(d);
+  out.collection = Array.isArray(d.series_name) && typeof d.series_name[0] === "string" ? d.series_name[0] : null;
+  out.publisher = Array.isArray(d.publisher) && typeof d.publisher[0] === "string" ? d.publisher[0] : null;
+  out.authors = Array.isArray(d.author_name) ? d.author_name.filter((a: unknown) => typeof a === "string").slice(0, 6) : [];
+  out.pageCount = typeof d.number_of_pages_median === "number" ? d.number_of_pages_median : null;
+  out.isbn = Array.isArray(d.isbn) && typeof d.isbn[0] === "string" ? d.isbn[0] : null;
+  out.communityRatings = typeof d.ratings_average === "number" && d.ratings_average > 0
+    ? [{ source: "openlibrary", label: "Open Library", score: Math.round(d.ratings_average * 10) / 10, outOf: 5, votes: d.ratings_count ?? null }]
+    : [];
+  const id = typeof d.id === "string" ? d.id : /\/works\/(OL\d+W)$/.exec(String(d.key ?? ""))?.[1];
+  out.storeLinks = id ? [{ name: "Open Library", url: `https://openlibrary.org/works/${id}`, source: "openlibrary" }] : [];
+  return out;
+}
+
+// ── BoardGameGeek (board games) ──────────────────────────────────────────────
+// The record is a parsed BGG `thing` (sources/bgg.ts, BggThing).
+function normalizeBgg(d: any): SourceNormalized {
+  const out: SourceNormalized = {};
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  out.title = typeof d.name === "string" ? d.name : null;
+  out.description = typeof d.description === "string" ? d.description : null;
+  out.releaseDate = typeof d.year === "number" && d.year > 0 ? String(d.year) : null;
+  out.poster = d.image ?? d.thumbnail ?? null;
+  out.images = out.poster ? [out.poster] : [];
+  out.tags = [...list(d.categories), ...list(d.mechanics), ...bggThemes(list(d.families))];
+  out.collection = bggFranchises(list(d.families))[0] ?? null;
+  out.publisher = list(d.publishers)[0] ?? null;
+  out.designers = list(d.designers);
+  out.players = d.minPlayers != null || d.maxPlayers != null ? { min: d.minPlayers ?? null, max: d.maxPlayers ?? null } : null;
+  out.playTimeMinutes = typeof d.playingTime === "number" && d.playingTime > 0 ? d.playingTime : null;
+  out.minAge = typeof d.minAge === "number" && d.minAge > 0 ? d.minAge : null;
+  out.weight = typeof d.weight === "number" && d.weight > 0 ? Math.round(d.weight * 100) / 100 : null;
+  out.communityRatings = typeof d.average === "number" && d.average > 0
+    ? [{ source: "bgg", label: "BGG", score: Math.round(d.average * 10) / 10, outOf: 10, votes: d.usersRated ?? null }]
+    : [];
+  out.storeLinks = d.id ? [{ name: "BoardGameGeek", url: `https://boardgamegeek.com/boardgame/${d.id}`, source: "bgg" }] : [];
+  return out;
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 // New source = add one entry here. merge.ts never changes.
 const NORMALIZERS: Partial<Record<Source, (data: any, type: MediaType) => SourceNormalized>> = {
@@ -504,6 +563,8 @@ const NORMALIZERS: Partial<Record<Source, (data: any, type: MediaType) => Source
   steam: (d) => normalizeSteam(d),
   rawg: (d) => normalizeRawg(d),
   igdb: (d) => normalizeIgdb(d),
+  openlibrary: (d) => normalizeOpenLibrary(d),
+  bgg: (d) => normalizeBgg(d),
 };
 
 export function normalizeSource(source: Source, data: any, type: MediaType): SourceNormalized {

@@ -60,7 +60,7 @@ describe("routing", () => {
     expect(((await (await call(`/v1/items/${id}`)).json()) as any).vector.title).toBe("The Matrix");
     expect(((await (await call("/v1/items/movie/the-matrix?region=DE")).json()) as any).id).toBe(id);
     expect((await call("/v1/items/movie/nope")).status).toBe(404);
-    expect((await call("/v1/items/book/the-matrix")).status).toBe(400);
+    expect((await call("/v1/items/comic/the-matrix")).status).toBe(400);
     expect((await call("/v1/items/not-a-uuid")).status).toBe(400);
   });
 
@@ -415,7 +415,7 @@ describe("looking up many provider ids at once", () => {
   it("rejects a body that is not a list of refs", async () => {
     expect((await lookup([])).status).toBe(400);
     expect((await lookup("nope")).status).toBe(400);
-    expect((await lookup([{ source: "tmdb", type: "book", id: "1" }])).status).toBe(400);
+    expect((await lookup([{ source: "tmdb", type: "comic", id: "1" }])).status).toBe(400);
     expect((await lookup([{ source: "tmdb", type: "movie", id: "1'; DROP TABLE users; --" }])).status).toBe(400);
     expect((await lookup(Array.from({ length: 2001 }, (_, i) => ({ source: "tmdb", type: "movie", id: String(i) })))).status).toBe(400);
   });

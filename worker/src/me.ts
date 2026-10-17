@@ -29,8 +29,8 @@ export const STATE_PAGE_MAX = 4000;
 export const DEFAULT_DAILY_USER_WRITE_CAP = 40_000;
 
 const RELATIONS = new Set(["wishlist", "library", "ignored"]);
-const SOURCES = new Set(["trakt", "tmdb", "steam", "rawg", "igdb", "letterboxd", "local"]);
-const MEDIA_TYPES = new Set(["game", "movie", "show"]);
+const SOURCES = new Set(["trakt", "tmdb", "steam", "rawg", "igdb", "letterboxd", "local", "openlibrary", "bgg"]);
+const MEDIA_TYPES = new Set(["game", "movie", "show", "book", "boardgame"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class BadRequest extends Error {

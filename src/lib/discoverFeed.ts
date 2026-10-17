@@ -166,6 +166,8 @@ export interface RawPayload {
 export interface FeedCandidate {
   id: string;
   rawId: number;
+  /** The provider id when it is not a number (an Open Library work, OL893414W). */
+  sourceId?: string;
   source: string;
   type: MediaType;
   title: string;

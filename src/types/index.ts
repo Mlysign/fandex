@@ -1,5 +1,5 @@
-export type MediaType = "game" | "movie" | "show";
-export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd";
+export type MediaType = "game" | "movie" | "show" | "book" | "boardgame";
+export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd" | "openlibrary" | "bgg";
 
 // An identity provider a user_identities row (and therefore a session) can be
 // minted from.
@@ -155,6 +155,17 @@ export interface EnrichedItem {
   playtimeHours: number | null;      // RAWG average playtime
   timeToBeat: { hastily: number | null; normally: number | null; completely: number | null } | null; // hours (IGDB)
   dlc: string[];                     // IGDB dlcs/expansions + Steam included apps
+  // Books (Open Library, 2026-10-17)
+  authors?: string[];
+  pageCount?: number | null;
+  isbn?: string | null;
+  // Board games (BGG, 2026-10-17)
+  designers?: string[];
+  players?: { min: number | null; max: number | null } | null;
+  playTimeMinutes?: number | null;
+  minAge?: number | null;
+  /** BGG weight: 1 (light) to 5 (heavy). */
+  weight?: number | null;
   // Library (watched / played / owned) — present on /api/library items
   rating?: number | null;        // personal score, 0-10 scale — AVERAGE across platforms
   ratings?: { source: Source; rating: number }[]; // per-platform breakdown

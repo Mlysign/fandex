@@ -51,6 +51,7 @@ import {
 } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
+import { shelves } from "./shelves";
 import { nowSeconds } from "./d1";
 import { DEV_ACCOUNTS, devLogin, devLoginAllowed } from "./devLogin";
 import type { Env } from "./env";
@@ -63,7 +64,7 @@ import { stateCounts } from "./keptCounts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
-const TYPES = new Set(["movie", "show", "game"]);
+const TYPES = new Set(["movie", "show", "game", "book", "boardgame"]);
 
 const AUTH_BODY_MAX = 16 * 1024;
 const LOOKUP_BODY_MAX = 256 * 1024;
@@ -170,6 +171,10 @@ async function route(c: Ctx): Promise<Response> {
     return body ? json(body, 200, CATALOG_CACHE) : error(404, "not-found");
   }
 
+  // Books and board games: worker/src/shelves.ts.
+  const shelf = await shelves(c, method, a, b, d);
+  if (shelf) return shelf;
+
   if (a === "search" && b === "games" && method === "GET") return searchGames(c);
   if (a === "browse" && b === "games" && !d && method === "GET") return browseGames(c);
   if (a === "facet" && b === "games" && !d && method === "GET") return facetGames(c);
@@ -237,7 +242,10 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^resolve\/[^/]+\/[^/]+\/[^/]+$/, "GET"],
   [/^lookup$/, "POST"],
   [/^shows\/[^/]+\/episodes$/, "GET"],
-  [/^search\/games$/, "GET"],
+  [/^search\/(games|books|boardgames)$/, "GET"],
+  [/^browse\/(games|books|boardgames)$/, "GET"],
+  [/^facet\/(games|books)$/, "GET"],
+  [/^features$/, "GET"],
   [/^calendar\/[^/]+$/, "GET"],
   [/^auth\/(google|trakt|discord|merge|logout)$/, "POST"],
   [/^t\/pv$/, "POST"],

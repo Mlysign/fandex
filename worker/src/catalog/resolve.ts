@@ -17,15 +17,28 @@ import { capFrom, kvGet, kvSet, spend } from "../budget";
 import { first } from "../d1";
 import type { Env } from "../env";
 import { upsertMediaItem, type SourceItem } from "./ingest";
+import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
+import { getBggThing } from "@/lib/sources/bgg";
+import { useBggToken } from "../shelves";
 
-export type ResolveSource = "tmdb" | "igdb";
+export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "bgg";
 
 export type ResolveOutcome =
   | { ok: true; id: string; created: boolean }
   | { ok: false; reason: "bad-request" | "not-found" | "budget" | "provider" | "rate-limited" };
 
-const SOURCES = new Set<string>(["tmdb", "igdb"]);
-const TYPES = new Set<string>(["movie", "show", "game"]);
+/**
+ * Which types each provider holds, and what its ids look like. Explicit per
+ * source: the rule used to be "TMDB is anything but a game", which a new type
+ * would have slipped through (2026-10-17).
+ */
+const TARGETS: Record<ResolveSource, { types: Set<string>; id: RegExp }> = {
+  tmdb: { types: new Set(["movie", "show"]), id: /^\d{1,12}$/ },
+  igdb: { types: new Set(["game"]), id: /^\d{1,12}$/ },
+  openlibrary: { types: new Set(["book"]), id: /^OL\d{1,12}W$/ },
+  bgg: { types: new Set(["boardgame"]), id: /^\d{1,9}$/ },
+};
+const TYPES = new Set<string>(["movie", "show", "game", "book", "boardgame"]);
 const DEFAULT_DAILY_FETCH_CAP = 2000;
 const TWITCH_TOKEN_KEY = "twitch_app_token";
 
@@ -54,9 +67,8 @@ export function useSharedIgdbToken(env: Env): void {
 }
 
 export function validResolveTarget(source: string, type: string, id: string): boolean {
-  if (!SOURCES.has(source) || !TYPES.has(type) || !/^\d{1,12}$/.test(id)) return false;
-  // TMDB holds films and shows, IGDB holds games. Nothing else is askable.
-  return source === "tmdb" ? type !== "game" : type === "game";
+  const target = Object.prototype.hasOwnProperty.call(TARGETS, source) ? TARGETS[source as ResolveSource] : null;
+  return !!target && target.types.has(type) && target.id.test(id);
 }
 
 /** The item a provider id already maps to, or null. One indexed read. */
@@ -211,6 +223,20 @@ async function fetchFromProvider(env: Env, source: ResolveSource, type: MediaTyp
       if (e instanceof Error && /TMDB error: 404/.test(e.message)) return null;
       throw e;
     }
+  }
+
+  if (source === "openlibrary") {
+    const w = await getOpenLibraryWork(id);
+    if (!w?.title) return null;
+    // A merged work answers under its new id: that one is stored, so the next lookup finds it.
+    return { source: "openlibrary", sourceId: w.id, type: "book", title: w.title, releaseDate: bookDate(w), rawData: w };
+  }
+
+  if (source === "bgg") {
+    useBggToken(env);
+    const t = await getBggThing(id);
+    if (!t) return null;
+    return { source: "bgg", sourceId: t.id, type: "boardgame", title: t.name, releaseDate: t.year ? String(t.year) : null, rawData: t };
   }
 
   useSharedIgdbToken(env);

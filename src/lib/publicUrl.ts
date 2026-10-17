@@ -28,7 +28,7 @@ import { transliterate } from "@/lib/translit";
 // the tag and could leave URL-only entries indexed from external links).
 export const PUBLIC_ITEMS_INDEXABLE = true;
 
-export const PUBLIC_TYPES: MediaType[] = ["movie", "show", "game"];
+export const PUBLIC_TYPES: MediaType[] = ["movie", "show", "game", "book", "boardgame"];
 
 export function isPublicType(t: string): t is MediaType {
   return (PUBLIC_TYPES as string[]).includes(t);

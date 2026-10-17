@@ -17,6 +17,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "rawg",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -38,6 +40,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "longest",
     "winners": [
@@ -59,6 +63,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "tmdb",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -80,6 +86,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "rawg",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -98,6 +106,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "rawg",
       "steam",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -116,6 +126,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "rawg",
       "steam",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -207,6 +219,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
     "priority": [
       "tmdb",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -291,6 +305,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "tmdb",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -333,6 +349,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "rawg",
       "igdb",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -373,6 +391,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -502,6 +522,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "igdb",
       "rawg",
       "steam",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -673,6 +695,8 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -771,6 +795,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "rawg",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -792,6 +818,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "longest",
     "winners": [
@@ -813,6 +841,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "tmdb",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -834,6 +864,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "rawg",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -848,6 +880,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "rawg",
       "steam",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [],
@@ -860,6 +894,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "rawg",
       "steam",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [],
@@ -960,6 +996,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
     "priority": [
       "tmdb",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "first-by-priority",
     "winners": [
@@ -1046,6 +1084,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "tmdb",
       "trakt",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -1076,6 +1116,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "rawg",
       "igdb",
       "letterboxd",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -1110,6 +1152,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -1189,6 +1233,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "igdb",
       "rawg",
       "steam",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [
@@ -1339,6 +1385,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "trakt",
       "letterboxd",
       "igdb",
+      "openlibrary",
+      "bgg",
     ],
     "strategy": "union",
     "winners": [

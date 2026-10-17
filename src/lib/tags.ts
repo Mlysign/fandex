@@ -71,7 +71,18 @@ const GENRE = set(
   "space opera", "survival horror", "psychological thriller", "psychological horror",
   "supernatural horror", "dark fantasy", "mockumentary", "found footage", "swashbuckler",
   "period drama", "historical fiction", "slice of life", "romantic comedy", "action comedy",
-  "buddy comedy", "crime drama", "teen drama", "heist film", "war film", "epic"
+  "buddy comedy", "crime drama", "teen drama", "heist film", "war film", "epic",
+  // books (Open Library subjects that name a genre, 2026-10-17)
+  "literary fiction", "young adult fiction", "young adult", "children's fiction", "graphic novels", "comics",
+  "poetry", "essays", "short stories", "memoir", "autobiography", "self help", "true crime", "dystopian",
+  "historical romance", "contemporary romance", "paranormal romance", "epic fantasy", "high fantasy",
+  "cozy mystery", "detective and mystery stories", "suspense", "gothic fiction", "classics", "psychology",
+  "religion", "politics", "science",
+  // board games (BGG categories, 2026-10-17). Words the taxonomy's suggestion
+  // rules already file (dice, wargame, party game, exploration…) stay theirs.
+  "abstract strategy", "bluffing", "deduction", "economic", "miniatures", "negotiation", "trivia",
+  "word game", "city building", "civilization", "territory building", "fantasy board game",
+  "cooperative game", "children's game", "real time"
 );
 
 // ── Source / adaptation ───────────────────────────────────────────
