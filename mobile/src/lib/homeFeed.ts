@@ -161,19 +161,47 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   return feed;
 }
 
+/** A title the rail may recommend: a calendar card, or a row of the catalog copy. */
+export type Candidate = CardItem & { genres?: string[] };
+
 /**
  * The candidates your taste scores a strong match, best first, as today's rail.
  * Strong is the badge's green band (`scoreBand`, the same margin over your own
  * average that colours a score on every card): a rail called "Recommended"
- * must not carry a title it would paint orange (Nils, 2026-10-17). `center`
- * is your average; null means there is no taste profile, and nothing is recommended.
+ * must not carry a title it would paint orange (Nils, 2026-10-17).
+ *
+ * `tiers` come in the order they should fill the rail: what is still to come
+ * first, then what is recent, then the rest of the catalog. The next three
+ * months of the calendar alone left one green card (Nils, same day: "it should
+ * find the right items to show"), so the catalog copy on the device is a
+ * candidate too, scored with its full facets. A title in two tiers counts in
+ * the first. `center` is your average; null means there is no taste profile,
+ * and nothing is recommended.
  */
-export function recommend(candidates: FeedCard[], scoreOf: (c: FeedCard) => number | null, skip: (c: FeedCard) => boolean, center: number | null): (FeedCard & { fandexScore: number })[] {
+export function recommend<T extends Candidate>(tiers: T[][], scoreOf: (c: T) => number | null, skip: (c: T) => boolean, center: number | null): (T & { fandexScore: number })[] {
   if (center == null) return [];
-  const ranked = candidates
-    .filter((c) => !skip(c))
-    .map((c) => ({ ...c, fandexScore: scoreOf(c) }))
-    .filter((c): c is FeedCard & { fandexScore: number } => c.fandexScore != null && scoreBand(c.fandexScore, center) === 'high')
-    .sort((a, b) => b.fandexScore - a.fandexScore);
+  const seen = new Set<string>();
+  const ranked: (T & { fandexScore: number })[] = [];
+  for (const tier of tiers) {
+    const strong = tier
+      .filter((c) => {
+        const key = c.id ?? c.key;
+        if (seen.has(key) || skip(c)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((c) => ({ ...c, fandexScore: scoreOf(c) }))
+      .filter((c): c is T & { fandexScore: number } => c.fandexScore != null && scoreBand(c.fandexScore, center) === 'high')
+      .sort((a, b) => b.fandexScore - a.fandexScore);
+    ranked.push(...strong);
+  }
   return rotateRail(ranked, RAIL_SIZE, seedFor('recommendation', dayISO()));
+}
+
+/** Which tier a catalog title falls in, by its date: 0 still to come, 1 out in the last year, 2 the rest. A title with no date is the rest. */
+export function tierOf(releaseDate: string | null, today: string): 0 | 1 | 2 {
+  if (!releaseDate) return 2;
+  if (releaseDate > today) return 0;
+  const yearAgo = `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`;
+  return releaseDate >= yearAgo ? 1 : 2;
 }

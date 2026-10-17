@@ -382,3 +382,16 @@ export async function searchCatalog(db: SQLiteDatabase, normTerm: string, limit 
 export async function catalogCards(db: SQLiteDatabase): Promise<CatalogRow[]> {
   return db.getAllAsync<CatalogRow>(`SELECT ${CARD_COLUMNS} FROM catalog`);
 }
+
+/**
+ * What "Recommended for you" may choose from: every title the catalog copy
+ * holds that is not in your library (watched, played or read). A wishlisted
+ * title stays: being recommended what you already want is confirmation, not
+ * noise. What you hid is taken out by the caller (lib/hidden.ts).
+ */
+export async function catalogCandidates(db: SQLiteDatabase): Promise<CatalogRow[]> {
+  return db.getAllAsync<CatalogRow>(
+    `SELECT ${CARD_COLUMNS} FROM catalog c
+      WHERE NOT EXISTS (SELECT 1 FROM item_state s WHERE s.media_item_id = c.id AND s.relation = 'library')`,
+  );
+}

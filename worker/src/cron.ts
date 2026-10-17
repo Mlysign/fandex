@@ -20,6 +20,7 @@
 //      TMDB titles are refetched daily when near and weekly when far, with
 //      whatever the refresh above leaves of a run.
 
+import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
 import { kvGet, kvSet } from "./budget";
 import { runCalendarStep } from "./calendar";
@@ -358,6 +359,66 @@ export async function runUpcomingRefreshStep(
   return { refreshed, failed };
 }
 
+// ── 2b. Books stored before their series was read ───────────────────────────
+//
+// A book's series is read off its Open Library editions since 2026-10-17
+// (src/lib/sources/openlibrary.ts), and only when the book is fetched. The 181
+// books fetched before that carry no series, so their pages show none and the
+// score has no franchise for them (Nils, same day: "i still dont see the
+// franchise on the books pages"). Every Open Library link last synced before
+// the fix is fetched again once, a couple per run, sharing the run's fetch
+// slots. Self-terminating: a refetch moves the link past the cutoff.
+
+/** The moment the series fix was deployed. A link synced after it already carries what this gives. */
+export const OPENLIBRARY_REFETCH_BEFORE = 1792241100;
+const OL_REFETCH_IDLE_KEY = "ol_refetch_idle";
+
+/** Fetch one book again and store it. Throws when Open Library has nothing usable, with the stored row untouched. */
+async function refetchOpenLibraryLink(db: Env["DB"], sourceId: string, now: number): Promise<void> {
+  const w = await getOpenLibraryWork(sourceId);
+  if (!w?.title) throw new Error("empty payload");
+  await upsertMediaItem(db, { source: "openlibrary", sourceId: w.id, type: "book", title: w.title, releaseDate: bookDate(w), rawData: w });
+  // A work Open Library merged into another answers under the new id, and the
+  // upsert stored that one. The old link must still move past the cutoff, or
+  // it is due again every run.
+  if (w.id !== sourceId) {
+    await db.prepare("UPDATE media_links SET last_synced = ? WHERE source = 'openlibrary' AND source_id = ?").bind(now, sourceId).run();
+  }
+}
+
+export async function runOpenLibraryRefetchStep(env: Env, slots: number, now = nowSeconds()): Promise<{ refreshed: number; failed: number }> {
+  if (slots <= 0) return { refreshed: 0, failed: 0 };
+  if (await kvGet(env.DB, OL_REFETCH_IDLE_KEY)) return { refreshed: 0, failed: 0 };
+
+  const due = await all<{ source_id: string }>(
+    env.DB,
+    "SELECT source_id FROM media_links WHERE source = 'openlibrary' AND last_synced < ? ORDER BY last_synced LIMIT ?",
+    [OPENLIBRARY_REFETCH_BEFORE, slots],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, OL_REFETCH_IDLE_KEY, "1", REFRESH_IDLE_SECONDS);
+    return { refreshed: 0, failed: 0 };
+  }
+
+  let refreshed = 0;
+  let failed = 0;
+  for (const link of due) {
+    try {
+      await refetchOpenLibraryLink(env.DB, link.source_id, now);
+      refreshed++;
+    } catch (e) {
+      // The stored row keeps its data (the TMDB step's rule), and the link is
+      // moved past the cutoff so a book Open Library deleted cannot block the
+      // ones behind it. Its series stays unknown, as it was.
+      failed++;
+      await env.DB.prepare("UPDATE media_links SET last_synced = ? WHERE source = 'openlibrary' AND source_id = ?")
+        .bind(OPENLIBRARY_REFETCH_BEFORE, link.source_id).run();
+      console.warn("ol_refetch_failed", { id: link.source_id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { refreshed, failed };
+}
+
 // ── The trigger ─────────────────────────────────────────────────────────────
 
 export async function runScheduled(env: Env): Promise<void> {
@@ -377,6 +438,15 @@ export async function runScheduled(env: Env): Promise<void> {
   } catch (e) {
     slots = 0;
     console.error("tmdb_refresh_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The books stored before their series was read, until none are left; then
+  // this costs one kv read a run.
+  try {
+    const ol = await runOpenLibraryRefetchStep(env, slots);
+    slots -= ol.refreshed + ol.failed;
+    if (ol.refreshed || ol.failed) console.log("ol_refetch_step", ol);
+  } catch (e) {
+    console.error("ol_refetch_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
   try {
     const up = await runUpcomingRefreshStep(env, slots);

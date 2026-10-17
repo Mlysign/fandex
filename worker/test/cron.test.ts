@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetBreakers } from "@/lib/http";
 import { kvSet } from "../src/budget";
 import { upsertMediaItem } from "../src/catalog/ingest";
-import { exportTables, runExportStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS } from "../src/cron";
+import {
+  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
+} from "../src/cron";
 import { db, env, gameItem, movieItem, tmdbMovie, wipe } from "./helpers";
 
 const DAY = Date.parse("2026-10-04T03:17:00Z");
@@ -358,5 +360,78 @@ describe("the TMDB refresh", () => {
       expect((await runUpcomingRefreshStep(env, 1, later)).refreshed).toBe(1);
       expect(retry[0]).toContain("/3/movie/1?");
     });
+  });
+});
+
+describe("the books stored before their series was read", () => {
+  const NOW = OPENLIBRARY_REFETCH_BEFORE + 3600;
+  const BEFORE = OPENLIBRARY_REFETCH_BEFORE - 86_400;
+  const WORK = "OL15358691W";
+  const book = (over: Record<string, unknown> = {}) => ({
+    source: "openlibrary" as const, sourceId: WORK, type: "book" as const, title: "The Way of Kings", releaseDate: "2010-07-09",
+    rawData: { id: WORK, key: `/works/${WORK}`, title: "The Way of Kings", author_name: ["Brandon Sanderson"], first_publish_year: 2010, language: ["eng"], ...over },
+  });
+  const age = (sourceId: string, at: number) =>
+    db.prepare("UPDATE media_links SET last_synced = ? WHERE source = 'openlibrary' AND source_id = ?").bind(at, sourceId).run();
+  const stored = () => db.prepare("SELECT raw_data, last_synced FROM media_links WHERE source = 'openlibrary' AND source_id = ?").bind(WORK)
+    .first<{ raw_data: string; last_synced: number }>();
+
+  function openLibrary(routes: Record<string, () => Response>): string[] {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      for (const [needle, respond] of Object.entries(routes)) if (url.includes(needle)) return respond();
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+    return calls;
+  }
+  /** Open Library as it answers for The Way of Kings: no series on the search row, the series on the editions. */
+  const answers = () => ({
+    [`/works/${WORK}/editions.json`]: () => Response.json({ size: 2, entries: [
+      { series: ["The Stormlight Archive #1"], languages: [{ key: "/languages/eng" }] },
+      { series: ["O Arquivo das Tempestades, I"], languages: [{ key: "/languages/por" }] },
+    ] }),
+    [`/works/${WORK}.json`]: () => Response.json({ key: `/works/${WORK}`, title: "The Way of Kings", subjects: ["Fantasy"] }),
+    "/search.json": () => Response.json({ docs: [book().rawData] }),
+  });
+
+  it("fetches a book stored before the fix again, and its series arrives", async () => {
+    const { id } = await upsertMediaItem(db, book());
+    await age(WORK, BEFORE);
+    const calls = openLibrary(answers());
+
+    expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 1, failed: 0 });
+    expect(calls).toHaveLength(3);
+    const after = await stored();
+    expect(JSON.parse(after!.raw_data).series_name).toEqual(["The Stormlight Archive"]);
+    expect(after!.last_synced).toBeGreaterThanOrEqual(OPENLIBRARY_REFETCH_BEFORE);
+    // What the score reads: the franchise facet, derived at write time.
+    const doc = await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>();
+    expect(doc!.facets).toContain("The Stormlight Archive");
+  });
+
+  it("leaves a book fetched after the fix alone, takes no slot it is not given, and parks itself when none is due", async () => {
+    await upsertMediaItem(db, book());
+    const calls = openLibrary(answers());
+    expect(await runOpenLibraryRefetchStep(env, 0, NOW)).toEqual({ refreshed: 0, failed: 0 });
+    expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 0, failed: 0 });
+    expect(calls).toEqual([]);
+    expect(await db.prepare("SELECT 1 x FROM kv WHERE key = 'ol_refetch_idle'").first()).not.toBeNull();
+  });
+
+  it("keeps the stored data when Open Library has nothing, and does not ask about that book again", async () => {
+    await upsertMediaItem(db, book());
+    await age(WORK, BEFORE);
+    const before = await stored();
+    openLibrary({ [`/works/${WORK}.json`]: () => new Response("", { status: 404 }) });
+
+    expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 0, failed: 1 });
+    const after = await stored();
+    expect(after!.raw_data).toBe(before!.raw_data);
+    expect(after!.last_synced).toBe(OPENLIBRARY_REFETCH_BEFORE);
+    const again = openLibrary(answers());
+    expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 0, failed: 0 });
+    expect(again).toEqual([]);
   });
 });
