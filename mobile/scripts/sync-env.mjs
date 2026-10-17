@@ -45,7 +45,8 @@ const source = {};
 for (const line of fs.readFileSync(rootEnv, 'utf8').split(/\r?\n/)) {
   const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
   if (!m) continue;
-  let v = m[2];
+  // Trimmed: a trailing space in .env (DISCORD_CLIENT_ID had one) is not part of the value.
+  let v = m[2].trim();
   if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
   source[m[1]] = v;
 }

@@ -422,8 +422,8 @@ so no publish check can catch it (Google's can). To switch it on:
    `https://fandex.org/auth/discord`, `http://localhost:8081/auth/discord` and
    `fandex://auth/discord`.
 2. Add `EXPO_PUBLIC_DISCORD_CLIENT_ID=<the DISCORD_CLIENT_ID in .env>` to `mobile/.env`.
-3. `node worker/scripts/push-secrets.mjs` (pushes `DISCORD_CLIENT_ID` among the rest), then
-   publish. `publish.mjs` refuses a build with the button while the API lacks the route.
+3. Publish. The Worker already has `DISCORD_CLIENT_ID` (pushed 2026-10-17, and checked: a made-up
+   token is answered `identity-rejected`). `publish.mjs` refuses a build with the button while the API lacks the route.
 4. Build an APK for the phone.
 
 ## Known problems
