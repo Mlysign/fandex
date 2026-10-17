@@ -390,9 +390,12 @@ export async function runOpenLibraryRefetchStep(env: Env, slots: number, now = n
   if (slots <= 0) return { refreshed: 0, failed: 0 };
   if (await kvGet(env.DB, OL_REFETCH_IDLE_KEY)) return { refreshed: 0, failed: 0 };
 
+  // A book whose search row already named its series (54 of 235 on 2026-10-17) has nothing to gain.
   const due = await all<{ source_id: string }>(
     env.DB,
-    "SELECT source_id FROM media_links WHERE source = 'openlibrary' AND last_synced < ? ORDER BY last_synced LIMIT ?",
+    `SELECT source_id FROM media_links
+      WHERE source = 'openlibrary' AND last_synced < ? AND raw_data NOT LIKE '%"series_name":[%'
+      ORDER BY last_synced LIMIT ?`,
     [OPENLIBRARY_REFETCH_BEFORE, slots],
   );
   if (!due.length) {

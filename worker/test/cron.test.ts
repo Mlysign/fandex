@@ -411,8 +411,10 @@ describe("the books stored before their series was read", () => {
     expect(doc!.facets).toContain("The Stormlight Archive");
   });
 
-  it("leaves a book fetched after the fix alone, takes no slot it is not given, and parks itself when none is due", async () => {
+  it("leaves a book fetched after the fix alone, or one that already names its series, takes no slot it is not given, and parks itself when none is due", async () => {
     await upsertMediaItem(db, book());
+    await upsertMediaItem(db, { ...book(), sourceId: "OL8479867W", title: "The Name of the Wind", rawData: { ...book().rawData, id: "OL8479867W", key: "/works/OL8479867W", title: "The Name of the Wind", series_name: ["The Kingkiller Chronicle"] } });
+    await age("OL8479867W", BEFORE);
     const calls = openLibrary(answers());
     expect(await runOpenLibraryRefetchStep(env, 0, NOW)).toEqual({ refreshed: 0, failed: 0 });
     expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 0, failed: 0 });
