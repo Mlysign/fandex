@@ -415,7 +415,7 @@ says "This browser is not signed in to Trakt yet", and Settings shows **Sign in 
 a line saying why (`traktSync.onDevice`). Seen on the local stack with a test account given a
 Trakt identity row; published to fandex.org the same day. Not in an APK yet.
 
-## Discord sign-in (2026-10-17, built, switched off)
+## Discord sign-in (2026-10-17, switched on the same day)
 
 `src/lib/discord.ts`, `src/app/auth/discord.tsx`, `AuthProvider.startDiscordSignIn`, the button in
 `components/SignIn.tsx` and Settings' Connect row. The Worker's half is `POST /v1/auth/discord`
@@ -429,18 +429,17 @@ secret is used anywhere**, which is why the leaked `DISCORD_CLIENT_SECRET` can b
 touching the Worker. A `state` made before leaving and checked on return stops a planted token.
 The privacy policy says so in both languages since 2026-10-17.
 
-**Switched off until the return addresses exist on the Discord application.** The button shows
-only in a build with `EXPO_PUBLIC_DISCORD_CLIENT_ID` in `mobile/.env`, and that line is not there
-yet. Discord answers an unlisted address with an error page only after the person has logged in,
-so no publish check can catch it (Google's can). To switch it on:
-
-1. In the Discord developer portal, application Fandex → OAuth2 → Redirects: add
-   `https://fandex.org/auth/discord`, `http://localhost:8081/auth/discord` and
-   `fandex://auth/discord`.
-2. Add `EXPO_PUBLIC_DISCORD_CLIENT_ID=<the DISCORD_CLIENT_ID in .env>` to `mobile/.env`.
-3. Publish. The Worker already has `DISCORD_CLIENT_ID` (pushed 2026-10-17, and checked: a made-up
-   token is answered `identity-rejected`). `publish.mjs` refuses a build with the button while the API lacks the route.
-4. Build an APK for the phone.
+**Switched on 2026-10-17.** The application Fandex lists the three return addresses
+(`https://fandex.org/auth/discord`, `http://localhost:8081/auth/discord`,
+`fandex://auth/discord`), beside the old site's two. The button shows only in a build with
+`EXPO_PUBLIC_DISCORD_CLIENT_ID` in `mobile/.env`, which `npm run env` (`scripts/sync-env.mjs`)
+copies from `DISCORD_CLIENT_ID`. Discord answers an unlisted address with an error page only after
+the person has logged in, so no publish check can catch a missing one (Google's can).
+⚠️ **A new `EXPO_PUBLIC_*` value needs a cleared bundler cache to reach a build.** Metro inlines it
+when it transforms a file and keeps the result: the first publish after adding this one went out
+with no button. `build.mjs` passes `--clear` since; for an APK run
+`gradlew :app:createBundleReleaseJsAndAssets --rerun assembleRelease`. Check the value is in the
+bundle, not that the build passed.
 
 ## Known problems
 
