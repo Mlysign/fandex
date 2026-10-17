@@ -12,7 +12,8 @@
 //                       was recent releases, which is still the fallback when
 //                       none of those answers.
 //   Upcoming            what is still to come over three months, soonest first
-//   Recommended         the upcoming titles, ordered by your taste
+//   Recommended         the upcoming titles your taste scores a strong match
+//                       (the green band, the one the badge colours), best first
 //
 // The rotation is the site's own (src/lib/dailyRotation.ts): a rail is the
 // same all day and different tomorrow, with its top three kept.
@@ -25,6 +26,7 @@ import type { CardItem } from '~/lib/cards';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
 import { tmdbTrending } from '~/lib/tmdb';
 import type { ScoreFacet } from '~/lib/fandexScore';
+import { scoreBand } from '~/lib/scoreReasons';
 
 export const RAIL_SIZE = 15;
 
@@ -159,12 +161,19 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   return feed;
 }
 
-/** Order the candidates by a score, best first, and take today's rail from them. */
-export function recommend(candidates: FeedCard[], scoreOf: (c: FeedCard) => number | null, skip: (c: FeedCard) => boolean): (FeedCard & { fandexScore: number })[] {
+/**
+ * The candidates your taste scores a strong match, best first, as today's rail.
+ * Strong is the badge's green band (`scoreBand`, the same margin over your own
+ * average that colours a score on every card): a rail called "Recommended"
+ * must not carry a title it would paint orange (Nils, 2026-10-17). `center`
+ * is your average; null means there is no taste profile, and nothing is recommended.
+ */
+export function recommend(candidates: FeedCard[], scoreOf: (c: FeedCard) => number | null, skip: (c: FeedCard) => boolean, center: number | null): (FeedCard & { fandexScore: number })[] {
+  if (center == null) return [];
   const ranked = candidates
     .filter((c) => !skip(c))
     .map((c) => ({ ...c, fandexScore: scoreOf(c) }))
-    .filter((c): c is FeedCard & { fandexScore: number } => c.fandexScore != null)
+    .filter((c): c is FeedCard & { fandexScore: number } => c.fandexScore != null && scoreBand(c.fandexScore, center) === 'high')
     .sort((a, b) => b.fandexScore - a.fandexScore);
   return rotateRail(ranked, RAIL_SIZE, seedFor('recommendation', dayISO()));
 }

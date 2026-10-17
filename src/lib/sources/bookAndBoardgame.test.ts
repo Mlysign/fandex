@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { items, parseThing, thingCard } from "@/lib/sources/bgg";
 import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
-import { bookDate, bookSubjects, parseDay } from "@/lib/sources/bookPure";
+import { bookDate, bookSubjects, isWholeBook, parseDay, seriesFromEditions, seriesFromSubjects } from "@/lib/sources/bookPure";
 import { extractFacets } from "@/lib/facets";
 import { mergeLinks } from "@/lib/merge";
 import type { MediaLink } from "@/types";
@@ -119,6 +119,62 @@ describe("Open Library's placeholders", () => {
     expect(bookDate({ first_publish_year: 1965, publish_date: ["January 1, 1965", "1965"] })).toBe("1965");
     expect(bookSubjects({ subject: ["Science fiction", "Science-fiction", "New York Times bestseller", "Long Now Manual for Civilization"] }))
       .toEqual(["Science fiction"]);
+  });
+});
+
+describe("one book per language, and the book itself", () => {
+  // Open Library's rows for Brandon Sanderson and the Stormlight Archive, 2026-10-17.
+  it("keeps a work with an English edition or no language, and drops a translation filed as its own work", () => {
+    expect(isWholeBook({ title: "The Way of Kings", language: ["heb", "por", "eng", "ger"] })).toBe(true);
+    expect(isWholeBook({ title: "Rhythm Of War" })).toBe(true);
+    expect(isWholeBook({ title: "Rhythm Of War", language: [] })).toBe(true);
+    expect(isWholeBook({ title: "Curso de escritura creativa", language: ["spa"] })).toBe(false);
+    expect(isWholeBook({ title: "Die Königsmörder-Chronik", language: ["ger", "fre"] })).toBe(false);
+  });
+
+  it("drops a split edition and a box set catalogued as works of their own", () => {
+    for (const title of [
+      "Words of Radiance, Part Two", "Words of Radiance Part One", "Oathbringer part 1", "The Wise Man’s Fear [1/2]", "Words of Radiance (1 of 5)",
+      "Stormlight Archive MM Boxed Set I, Books 1-3", "Stormlight Archives HC Boxed Set 1-4", "Stormlight Archive, Books 1-4",
+      "The Stormlight Archive Series 6 Books Collection Set by Brandon Sanderson", "Kingkiller Chronicle Patrick Rothfuss Collection 3 Books Set",
+      "Stormlight Archive Series Brandon Sanderson Collection 4 Books Bundles Set",
+    ]) expect(isWholeBook({ title, language: ["eng"] }), title).toBe(false);
+    for (const title of ["Words of Radiance", "The Complete Alcatraz", "Brandon Sanderson's White Sand Omnibus", "The Book of Dust", "Part of the Furniture"]) {
+      expect(isWholeBook({ title, language: ["eng"] }), title).toBe(true);
+    }
+  });
+});
+
+describe("a book's series, read off its editions", () => {
+  const edition = (series: string, lang?: string) => ({ series: [series], languages: lang ? [{ key: `/languages/${lang}` }] : [] });
+
+  it("takes the name most English editions share once the numbering is off", () => {
+    // The Way of Kings and Mistborn, as their editions name the series (2026-10-17).
+    expect(seriesFromEditions([
+      edition("O Arquivo das Tempestades, I", "por"), edition("The Stormlight Archive #1", "eng"), edition("The Stormlight Archive #1", "eng"),
+      edition("The Stormlight Archive, 1", "eng"), edition("The Stormlight Archive"),
+    ])).toBe("The Stormlight Archive");
+    expect(seriesFromEditions([
+      edition("Mistborn", "eng"), edition("Mistborn", "eng"), edition("The Mistborn Saga", "eng"), edition("The Mistborn Saga #1", "eng"),
+      edition("Mistborn -- [bk. 1]", "eng"), edition("Nacidos de la bruma (MISTBORN) 1", "spa"), edition("Die Nebelgeborenen", "ger"),
+    ])).toBe("Mistborn");
+  });
+
+  it("never lets a translation's name win on count, and reads every numbering seen", () => {
+    expect(seriesFromEditions([
+      edition("Die Königsmörder-Chronik, Band I", "ger"), edition("Die Königsmörder-Chronik, Band I", "ger"), edition("Die Königsmörder-Chronik (1)", "ger"),
+      edition("The Kingkiller Chronicle, Day 2", "eng"), edition("The Kingkiller Chronicles Day 2, DAW Books Collectors No. 1540", "eng"),
+    ])).toBe("The Kingkiller Chronicle");
+    expect(seriesFromEditions([edition("A Song of ice and fire -- bk. 1.", "eng")])).toBe("A Song of ice and fire");
+    expect(seriesFromEditions([edition("The Expanse Book One", "eng")])).toBe("The Expanse");
+    expect(seriesFromEditions([edition("The Book of Dust", "eng")])).toBe("The Book of Dust");
+  });
+
+  it("answers null for editions that name no series, and reads a 'series:' subject", () => {
+    expect(seriesFromEditions([{ languages: [{ key: "/languages/eng" }] }, {}])).toBeNull();
+    expect(seriesFromEditions(undefined)).toBeNull();
+    expect(seriesFromSubjects(["Fantasy", "series:Stormlight Archive"])).toBe("Stormlight Archive");
+    expect(seriesFromSubjects(["Fantasy"])).toBeNull();
   });
 });
 

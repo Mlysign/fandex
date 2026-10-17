@@ -35,7 +35,7 @@ export function useBggToken(env: Env): void {
 
 const HOUR = 3600;
 /** Bumped when what a shelf answers changes (a filter, a field), so a day-old cached answer is not served under the new rules. */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2; // 2: one book per language, no split editions or box sets; a series asked by both fields
 
 /** Answer from the edge cache, or run `load`, cache a non-empty answer for `ttl` seconds and answer. */
 async function cached(c: ShelfCtx, key: string, ttl: number, limiter: string, load: () => Promise<unknown[]>): Promise<Response> {

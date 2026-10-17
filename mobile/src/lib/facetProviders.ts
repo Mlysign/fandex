@@ -14,6 +14,7 @@ import { personKey } from '@/lib/facets';
 import { api, type GameSearchResult, type ProviderResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
+import { creditLine, creditWithParts, tmdbRole } from '~/lib/creditLine';
 
 const BASE = 'https://api.themoviedb.org/3';
 
@@ -52,11 +53,16 @@ function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
   };
 }
 
-/** A book or a board game the Worker found, as a card. */
-function shelfCard(r: ProviderResult): CardItem {
+/**
+ * A book or a board game the Worker found, as a card. On a person's page the
+ * person is its author or designer, on a studio's its publisher: the one role
+ * each of those facet answers is asked by (worker/src/shelves.ts).
+ */
+function shelfCard(r: ProviderResult, kind: 'tag' | 'person' | 'studio'): CardItem {
+  const role = kind === 'person' ? creditLine(r.type, ['creator']) : kind === 'studio' ? creditLine(r.type, ['publisher']) : null;
   return {
     key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type,
-    title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes,
+    title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes, role,
   };
 }
 
@@ -143,16 +149,28 @@ async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet>
     tmdb(`/person/${id}/images`, signal).catch(() => null),
   ]);
   const cards: CardItem[] = [];
-  const take = (c: any) => {
+  // What they did on each title, across its credits: a part played, a job held, or both.
+  const credit = new Map<string, { roles: string[]; characters: string[] }>();
+  const take = (c: any, note: (p: { roles: string[]; characters: string[] }) => void) => {
     if (!(c.media_type === 'movie' || c.media_type === 'tv') || c.id == null) return;
     // No votes and no poster is an entry nobody filled in.
     if ((c.vote_count ?? 0) === 0 && !c.poster_path) return;
-    cards.push(card(c));
+    const made = card(c);
+    cards.push(made);
+    const p = credit.get(made.key) ?? { roles: [], characters: [] };
+    note(p);
+    credit.set(made.key, p);
   };
-  for (const c of credits?.cast ?? []) if (!CAST_SELF_RE.test(String(c.character ?? ''))) take(c);
-  for (const c of credits?.crew ?? []) if (isAuthorCredit(c)) take(c);
+  for (const c of credits?.cast ?? []) {
+    if (CAST_SELF_RE.test(String(c.character ?? ''))) continue;
+    take(c, (p) => (typeof c.character === 'string' && c.character.trim() ? p.characters.push(c.character) : p.roles.push('cast')));
+  }
+  for (const c of credits?.crew ?? []) if (isAuthorCredit(c)) take(c, (p) => p.roles.push(tmdbRole(c.job)));
   return {
-    cards: unique(cards),
+    cards: unique(cards).map((c) => {
+      const p = credit.get(c.key);
+      return p ? { ...c, role: creditWithParts(c.type, p.roles, p.characters) } : c;
+    }),
     person: {
       name: meta?.name ?? key,
       biography: meta?.biography || null,
@@ -229,7 +247,7 @@ async function tagFilter(label: string, signal?: AbortSignal): Promise<string | 
  */
 export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
   // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's or a publisher's.
-  const books = api.facetBooks(kind, label).then((r) => r.results.map(shelfCard), () => [] as CardItem[]);
+  const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), () => [] as CardItem[]);
   // An author TMDB does not know still gets a face and a biography.
   const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
   if (!tmdbConfigured()) return { cards: unique(await books), person: await author };

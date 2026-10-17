@@ -69,6 +69,7 @@ export function CardFace({ item, score, center, link, bar, style, dateText, expl
         </View>
         <View style={cardStyles.body}>
           <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text>
+          {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role]}>{item.role}</Text> : null}
           <View style={cardStyles.metaRow}>
             <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
             {score != null ? <FandexScore score={score} center={center} />
@@ -210,6 +211,8 @@ export const cardStyles = StyleSheet.create({
   },
   typeDot: { width: 6, height: 6, borderRadius: radius.full },
   body: { paddingHorizontal: 10, paddingTop: 10, gap: 7 },
+  // Under the name, in the body's own gap: the part somebody had in the title (a person's or a studio's page).
+  role: { marginTop: -3, color: color.textSecondary },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 21 },
   barWrap: { paddingHorizontal: 10, paddingTop: 7, paddingBottom: 10 },
   bar: { flexDirection: 'row', gap: 6 },

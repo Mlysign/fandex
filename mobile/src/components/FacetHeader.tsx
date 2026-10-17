@@ -9,15 +9,13 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatStrip } from '~/components/kit';
+import { ROLE_LABEL } from '~/lib/creditLine';
 import { color, radius, type } from '~/theme';
 
 export type FacetKind = 'tag' | 'person' | 'studio';
 
 export const KIND_LABEL: Record<FacetKind, string> = { tag: 'Tag', person: 'Person', studio: 'Studio' };
-export const ROLE_LABEL: Record<string, string> = {
-  director: 'Director', creator: 'Creator', writer: 'Writer', cast: 'Cast',
-  developer: 'Developer', publisher: 'Publisher', studio: 'Studio', network: 'Network',
-};
+export { ROLE_LABEL };
 
 /** The line over the name: "Tag", or a person's or a studio's roles, most frequent first. */
 export function facetEyebrow(kind: FacetKind, roles: string[]): string {

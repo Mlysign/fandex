@@ -13,7 +13,7 @@
 // Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { bookDate, bookRating, bookSubjects, coverUrl, OL_WORK_ID } from "@/lib/sources/bookPure";
+import { bookDate, bookRating, bookSubjects, coverUrl, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects } from "@/lib/sources/bookPure";
 
 export * from "@/lib/sources/bookPure";
 
@@ -67,7 +67,25 @@ export async function getOpenLibraryWork(workId: string): Promise<any | null> {
   const search = await getJson(`/search.json?q=${encodeURIComponent(`key:/works/${id}`)}&fields=${OL_FIELDS}&limit=1`);
   const doc = search?.docs?.[0] ?? { key: `/works/${id}`, title: work.title };
   const description = typeof work.description === "string" ? work.description : work.description?.value ?? null;
-  return { ...trimDoc(doc), id, description, subjects_work: Array.isArray(work.subjects) ? work.subjects.slice(0, 40) : undefined };
+  const record = { ...trimDoc(doc), id, description, subjects_work: Array.isArray(work.subjects) ? work.subjects.slice(0, 40) : undefined };
+  // The search row names a series for a few works only; the editions name it
+  // for most ("The Stormlight Archive #1"). One more request, for a book with
+  // no series on its row, is what puts it in its franchise (Nils, 2026-10-17).
+  if (!record.series_name?.length) {
+    const series = await seriesOfWork(id, work.subjects);
+    if (series) record.series_name = [series];
+  }
+  return record;
+}
+
+/** A work's series off its English editions, else off a "series:" subject; null when neither names one. */
+async function seriesOfWork(id: string, subjects: unknown): Promise<string | null> {
+  let fromEditions: string | null = null;
+  try {
+    const editions = await getJson(`/works/${id}/editions.json?limit=50`);
+    fromEditions = seriesFromEditions(editions?.entries);
+  } catch { /* a series is a nicety: the book is stored without one */ }
+  return fromEditions ?? seriesFromSubjects(subjects);
 }
 
 export interface BookCard {
@@ -99,7 +117,12 @@ export function bookCard(doc: any): BookCard | null {
   };
 }
 
-const cards = (docs: unknown): BookCard[] => ((docs ?? []) as any[]).map(bookCard).filter((c): c is BookCard => !!c);
+/**
+ * Rows as cards, one per book: a translation filed as its own work and a split
+ * edition or a box set are left out (bookPure.ts, `isWholeBook`), so an author's
+ * or a series' books come back once each rather than once per language.
+ */
+const cards = (docs: unknown): BookCard[] => ((docs ?? []) as any[]).filter(isWholeBook).map(bookCard).filter((c): c is BookCard => !!c);
 
 /** Books matching a query, best match first. */
 export async function searchOpenLibrary(query: string, limit = 20): Promise<BookCard[]> {
@@ -161,12 +184,23 @@ export async function publisherOpenLibrary(name: string, limit = 40): Promise<Bo
   return cards(data?.docs);
 }
 
-/** A series' books (the franchise rail of a book page), first published first. */
+/**
+ * A series' books (the franchise rail of a book page), first published first.
+ * Two fields hold a series: `series_name` on the work's search row (The
+ * Kingkiller Chronicle) and `series` on its editions (The Stormlight Archive,
+ * which has no `series_name` at all). An OR of the two answers nothing
+ * (probed 2026-10-17), so both are asked and the answers joined.
+ */
 export async function seriesOpenLibrary(series: string, limit = 40): Promise<BookCard[]> {
   const s = series.trim().replace(/"/g, "").slice(0, 100);
   if (s.length < 2) return [];
-  const data = await getJson(`/search.json?q=${encodeURIComponent(`series_name:"${s}"`)}&sort=old&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs);
+  const ask = (field: string) =>
+    getJson(`/search.json?q=${encodeURIComponent(`${field}:"${s}"`)}&sort=old&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
+  const [byName, byEdition] = await Promise.all([ask("series_name"), ask("series")]);
+  const seen = new Set<string>();
+  return cards([...(byName?.docs ?? []), ...(byEdition?.docs ?? [])].filter((d) => (seen.has(d?.key) ? false : (seen.add(d?.key), true))))
+    .sort((a, b) => (a.releaseDate ?? "9999").localeCompare(b.releaseDate ?? "9999"))
+    .slice(0, limit);
 }
 
 /**

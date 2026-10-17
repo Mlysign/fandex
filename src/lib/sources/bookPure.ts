@@ -57,6 +57,77 @@ export function parseDay(raw: unknown): string | null {
 }
 
 /**
+ * Whether a work has an edition in English, or says nothing about languages.
+ * Open Library files a translation as a WORK of its own ("Der Weg der Könige"
+ * beside "The Way of Kings"), so an author's or a series' books came back once
+ * per language (Nils, 2026-10-17). The catalog is in English, as TMDB's titles
+ * are, so a work with editions only in other languages is left out and the
+ * English work stands for it. A record with no language list is kept: unknown
+ * is not "not English".
+ */
+export function hasEnglishEdition(doc: any): boolean {
+  const langs = doc?.language;
+  return !Array.isArray(langs) || langs.length === 0 || langs.includes("eng");
+}
+
+/**
+ * A work that is a piece or a bundle of another, catalogued on its own: a
+ * split edition ("Words of Radiance, Part Two", "The Wise Man's Fear [1/2]",
+ * "Oathbringer part 1") or a box set ("Stormlight Archive MM Boxed Set I,
+ * Books 1-3", "4 Books Collection Set"). Beside the book itself they are
+ * duplicates with a worse cover and no ratings.
+ */
+export function isPieceOfBook(title: unknown): boolean {
+  if (typeof title !== "string") return false;
+  return /(,\s*|\s+)part\s+(one|two|three|four|\d+)\s*$/i.test(title)
+    || /\[\s*\d+\s*\/\s*\d+\s*\]|\(\s*\d+\s+of\s+\d+\s*\)/i.test(title)
+    || /\b(boxed?\s+sets?|collection\s+sets?|books?\s+(collection|bundles?)|bundles?\s+sets?|\d+\s+books?\s+(collection|sets?|bundles?)|books\s+\d+\s*-\s*\d+)\b/i.test(title);
+}
+
+/** A work that is the book itself, in a language the catalog shows: what every shelf answer keeps. */
+export const isWholeBook = (doc: any): boolean => hasEnglishEdition(doc) && !isPieceOfBook(doc?.title);
+
+/** What an edition's `series` string adds after the name: "#1", ", 2", ", book 3", ", Day 2", " -- bk. 1", "(1)", "Band I". */
+const SERIES_NUMBERING = /(\s*--\s*.*|[,;]\s*.*|\s*#\s*\d+.*|\s*\(\s*\d+\s*\)\s*|\s+(book|bk\.?|band|vol\.?|volume|day|no\.?|part)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|[ivx]+)\b.*|\s+\d+)\s*$/i;
+
+/**
+ * A work's series, from its editions: Open Library's search row carries
+ * `series_name` for a few works only ("The Kingkiller Chronicle" yes, "The
+ * Stormlight Archive" no, seen 2026-10-17), while the editions say "The
+ * Stormlight Archive #1", "The Stormlight Archive, 2". English editions only,
+ * or the German printing's name wins by count. The name is the spelling most
+ * editions share once the numbering is taken off; null when no edition names one.
+ */
+export function seriesFromEditions(entries: unknown): string | null {
+  const counts = new Map<string, { label: string; n: number }>();
+  for (const ed of (Array.isArray(entries) ? entries : []) as any[]) {
+    const langs = ((ed?.languages ?? []) as any[]).map((l) => String(l?.key ?? l ?? "").replace("/languages/", ""));
+    if (langs.length && !langs.includes("eng")) continue;
+    for (const raw of (ed?.series ?? []) as unknown[]) {
+      if (typeof raw !== "string") continue;
+      const label = raw.replace(SERIES_NUMBERING, "").trim();
+      if (label.length < 2 || /^\d+$/.test(label)) continue;
+      const k = label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const c = counts.get(k) ?? { label, n: 0 };
+      c.n += 1;
+      counts.set(k, c);
+    }
+  }
+  let best: { label: string; n: number } | null = null;
+  for (const c of counts.values()) if (!best || c.n > best.n) best = c;
+  return best?.label ?? null;
+}
+
+/** A series named in a work's subjects, the way Open Library tags some ("series:Stormlight Archive"). */
+export function seriesFromSubjects(subjects: unknown): string | null {
+  for (const s of (Array.isArray(subjects) ? subjects : []) as unknown[]) {
+    const m = typeof s === "string" ? /^series:\s*(.+)$/i.exec(s.trim()) : null;
+    if (m && m[1].trim().length >= 2) return m[1].trim();
+  }
+  return null;
+}
+
+/**
  * Subjects that describe the book, not the library's handling of it. Open
  * Library's list mixes "Science fiction" with "Accessible book", "New York
  * Times reviewed", "nyt:hardcover-fiction=2021-01-03" and comma-chained

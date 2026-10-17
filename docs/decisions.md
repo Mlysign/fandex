@@ -178,6 +178,16 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   `/oauth2/@me`), and the leaked secret is rotated.
 - **Dropped, not to be raised again:** the IGDB licence email, pressing Import for his Letterboxd
   file, and rotating the Steam key. The widget's look "works fine for now".
+- **"Recommended for you" carries the green band only.** The rail uses the badge's own threshold
+  (`scoreBand`, `BAND_MARGIN` over your average); a title it would paint orange is not a
+  recommendation. An empty rail is the right answer when nothing upcoming is a strong match.
+- **The You tab is lighter than the site's profile page, on purpose.** No "Recently added" and
+  "Coming up" lists and no Wishlist or Your ratings rows: the tabs already are those. An Import row
+  instead. A parity pass must not put them back.
+- **One book per language.** Open Library files a translation as a work of its own; every shelf
+  answer keeps the works with an English edition (or no language given) and drops split editions
+  and box sets (`isWholeBook`). The English work stands for the book. A book's series is read off
+  its English editions when the search row has none.
 
 ---
 

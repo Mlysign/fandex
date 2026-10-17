@@ -26,7 +26,11 @@ export function useHomeRails() {
   const candidates = feed?.candidates;
   const stateOf = useCardStates(useMemo(() => (candidates ?? []).map((c) => c.id), [candidates]));
   const { score, center } = scores;
-  /** Null until there is a taste profile to rank by: signed out, or fewer than three ratings. */
+  /**
+   * Null until there is a taste profile to rank by: signed out, or fewer than
+   * three ratings. Empty when nothing upcoming scores a strong match for you,
+   * which draws no rail at all.
+   */
   const recommendation = useMemo(() => {
     if (!candidates || center == null) return null;
     return recommend(
@@ -35,6 +39,7 @@ export function useHomeRails() {
       (c) => score(c.id ?? c.key, genreFacets(c.genres))?.score ?? null,
       // Not what you already watched or played, and not what you asked not to be shown.
       (c) => (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
+      center,
     );
   }, [candidates, center, score, hidden, stateOf]);
 

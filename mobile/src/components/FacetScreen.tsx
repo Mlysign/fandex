@@ -21,6 +21,7 @@ import { backButtonStyle, FacetHeader, facetEyebrow, KIND_LABEL, ROLE_LABEL, typ
 import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
+import { creditLine } from '~/lib/creditLine';
 import { spokenKey, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
@@ -103,7 +104,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         label ||= hit[0].label;
         category ??= hit.find((f) => f.category)?.category ?? null;
         for (const f of hit) if (f.role) roles.set(f.role, (roles.get(f.role) ?? 0) + 1);
-        cards.push(cardFromCatalog(r));
+        // What they did on this one, under its name: "Director · Writer", "Author". A tag has no role.
+        cards.push({ ...cardFromCatalog(r), role: creditLine(r.type, hit.map((f) => f.role)) });
       }
       if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards });
     })();
@@ -137,7 +139,19 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     const ident = (c: CardItem) => `${c.type}|${c.title.toLowerCase().replace(/[^a-z0-9]+/g, '')}|${c.releaseDate?.slice(0, 4) ?? ''}`;
     const ids = new Set(own.map((c) => c.id));
     const names = new Set(own.map(ident));
-    return [...own, ...more.cards.filter((c) => !(c.id && ids.has(c.id)) && !names.has(ident(c)))];
+    // The provider's copy of a title the device holds is dropped, but its credit
+    // is kept: the device knows "Cast", TMDB knows "as Tony Stark".
+    const twinRole = new Map<string, string>();
+    for (const c of more.cards) {
+      if (!c.role) continue;
+      if (c.id) twinRole.set(`id:${c.id}`, c.role);
+      twinRole.set(ident(c), c.role);
+    }
+    const credited = own.map((c) => {
+      const r = (c.id && twinRole.get(`id:${c.id}`)) || twinRole.get(ident(c));
+      return r && r !== c.role ? { ...c, role: r } : c;
+    });
+    return [...credited, ...more.cards.filter((c) => !(c.id && ids.has(c.id)) && !names.has(ident(c)))];
   }, [found, more]);
   const ids = useMemo(() => (cards ?? []).map((c) => c.id), [cards]);
   const stateOf = useCardStates(ids);

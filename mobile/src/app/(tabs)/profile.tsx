@@ -1,12 +1,16 @@
 // You. The site's profile page (src/app/profile/ProfilePageClient.tsx): who you
-// are, three counts, the rows that lead to your pages, Sign out, what you added
-// lately, what is coming up, and a rail of recommendations.
+// are, three counts, the rows that lead to your pages, Sign out, and a rail of
+// recommendations.
 //
-// Signed out it is where you sign in. Not here yet: the Support Fandex row.
+// Lighter than the site's since 2026-10-17 (Nils): no "Recently added" and
+// "Coming up" lists and no Wishlist or Your ratings rows, which the tabs
+// already are; an Import row instead, which had no way in but the address.
+//
+// Signed out it is where you sign in.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Bookmark, ChevronRight, Heart, Settings as SettingsIcon, Star, TrendingUp } from 'lucide-react-native';
+import { ChevronRight, Heart, Settings as SettingsIcon, TrendingUp, Upload } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardRail } from '~/components/cards';
@@ -16,44 +20,14 @@ import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
-import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { SUPPORT_URL } from '~/lib/config';
-import { shortDate, todayIso } from '~/lib/dates';
 import { setReturnTo } from '~/lib/returnTo';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { useTypeFilter } from '~/lib/typeFilter';
-import { count } from '~/lib/plural';
 import { color, radius, type } from '~/theme';
 
-interface Line { id: string; type: string; slug: string | null; title: string; when: string | null }
-interface Stats { tracked: number; rated: number; wishlist: number; recent: Line[]; coming: Line[] }
-
-function TitleLines({ title, seeAll, lines }: { title: string; seeAll: string; lines: Line[] }) {
-  const router = useRouter();
-  if (!lines.length) return null;
-  return (
-    <View>
-      <View style={styles.sectionHead}>
-        <Text accessibilityRole="header" style={type.serifMd}>{title}</Text>
-        <Text accessibilityRole="link" onPress={() => router.push(seeAll as never)} style={[type.label, { color: color.textSecondary }]}>See all</Text>
-      </View>
-      <View style={{ gap: 6 }}>
-        {lines.map((l) => (
-          <Pressable
-            key={l.id}
-            onPress={() => router.push(itemHref(l) as never)}
-            accessibilityRole="link"
-            style={({ pressed }) => [styles.line, pressed && { opacity: 0.7 }]}>
-            <View style={[styles.dot, { backgroundColor: color.media[l.type] ?? '#888' }]} />
-            <Text numberOfLines={1} style={[type.bodySm, { flex: 1, color: color.textPrimary }]}>{l.title}</Text>
-            <Text style={type.meta}>{l.when ?? 'TBA'}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
+interface Stats { tracked: number; rated: number; wishlist: number }
 
 export default function ProfileScreen() {
   usePageTitle('Profile');
@@ -79,29 +53,14 @@ export default function ProfileScreen() {
       return;
     }
     (async () => {
-      const counts = await db.getFirstAsync<{ tracked: number; rated: number; wishlist: number }>(
+      const counts = await db.getFirstAsync<Stats>(
         `SELECT COUNT(DISTINCT CASE WHEN s.relation = 'library' THEN s.media_item_id END) AS tracked,
                 COUNT(DISTINCT CASE WHEN s.relation = 'library' AND s.rating > 0 THEN s.media_item_id END) AS rated,
                 COUNT(DISTINCT CASE WHEN s.relation = 'wishlist' THEN s.media_item_id END) AS wishlist
            FROM item_state s JOIN catalog c ON c.id = s.media_item_id`,
       );
-      const recent = await db.getAllAsync<{ id: string; type: string; slug: string | null; title: string; added_at: number }>(
-        `SELECT c.id, c.type, c.slug, c.title, MIN(s.added_at) AS added_at
-           FROM item_state s JOIN catalog c ON c.id = s.media_item_id
-          WHERE s.relation = 'library' GROUP BY c.id ORDER BY added_at DESC LIMIT 5`,
-      );
-      const coming = await db.getAllAsync<{ id: string; type: string; slug: string | null; title: string; release_date: string }>(
-        `SELECT DISTINCT c.id, c.type, c.slug, c.title, c.release_date
-           FROM item_state s JOIN catalog c ON c.id = s.media_item_id
-          WHERE c.release_date >= ? ORDER BY c.release_date, c.title LIMIT 5`,
-        [todayIso()],
-      );
       if (!live) return;
-      setStats({
-        tracked: counts?.tracked ?? 0, rated: counts?.rated ?? 0, wishlist: counts?.wishlist ?? 0,
-        recent: recent.map((r) => ({ id: r.id, type: r.type, slug: r.slug, title: r.title, when: shortDate(r.added_at) })),
-        coming: coming.map((r) => ({ id: r.id, type: r.type, slug: r.slug, title: r.title, when: shortDate(r.release_date) })),
-      });
+      setStats({ tracked: counts?.tracked ?? 0, rated: counts?.rated ?? 0, wishlist: counts?.wishlist ?? 0 });
     })();
     return () => { live = false; };
   }, [db, signedIn, auth.rowsRevision, catalog.revision]);
@@ -116,7 +75,7 @@ export default function ProfileScreen() {
         <ScrollView contentContainerStyle={styles.main}>
           <SignIn
             title="Sign in to see your profile"
-            hint="Your counts, what you added recently and what is coming up all live behind a sign-in. Sign in with Trakt and your history comes with you."
+            hint="Your counts, your insights and the import all live behind a sign-in. Sign in with Trakt and your history comes with you."
           />
           <LegalLinks />
         </ScrollView>
@@ -132,8 +91,7 @@ export default function ProfileScreen() {
 
   const entries: { href: string; label: string; hint: string; Icon: typeof TrendingUp; external?: boolean }[] = [
     { href: '/insights', label: 'Insights', hint: 'Your taste in numbers', Icon: TrendingUp },
-    { href: '/wishlist', label: 'Wishlist', hint: stats ? `${stats.wishlist} saved` : '', Icon: Bookmark },
-    { href: '/wishlist?tab=library', label: 'Your ratings', hint: stats ? count(stats.rated, 'title') : '', Icon: Star },
+    { href: '/import', label: 'Import', hint: 'A Letterboxd or IMDb export into your library', Icon: Upload },
     { href: '/settings', label: 'Settings', hint: 'Account, sync, privacy', Icon: SettingsIcon },
   ];
   // The site's donations row (H3.3): last, after what people came here to do, and only when a page is configured.
@@ -184,8 +142,6 @@ export default function ProfileScreen() {
 
         <Button label="Sign out" variant="secondary" size="lg" onPress={() => void auth.signOut()} />
 
-        <TitleLines title="Recently added" seeAll="/wishlist?tab=library" lines={stats?.recent ?? []} />
-        <TitleLines title="Coming up" seeAll="/calendar" lines={stats?.coming ?? []} />
         {recommended.length ? <CardRail title="Recommended for you" forYou seeAllHref="/discover" items={recommended} /> : null}
 
         <View style={styles.footer}><LegalLinks /></View>
@@ -210,11 +166,5 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center',
     backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
   },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  line: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 8, minHeight: 36,
-    backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border, borderRadius: radius.lg,
-  },
-  dot: { width: 6, height: 6, borderRadius: radius.full },
   footer: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: color.border },
 });

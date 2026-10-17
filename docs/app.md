@@ -11,15 +11,15 @@ code, in a browser.
 
 | Screen | Does | Data from |
 |---|---|---|
-| Home (`/`) | The type filter, then rails: Up next, Recommended for you, Popular right now, Upcoming. A guest panel when signed out. | Worker `/v1/calendar` (four months) and `/v1/lookup`, on-device SQLite, Trakt for Up next |
+| Home (`/`) | The type filter, then rails: Up next, Recommended for you (upcoming titles your taste scores a strong match, the green band and nothing under it, since 2026-10-17), Popular right now, Upcoming. A guest panel when signed out. | Worker `/v1/calendar` (four months) and `/v1/lookup`, on-device SQLite, Trakt for Up next |
 | Search (`/discover`) | One field, one grid of poster cards, four sorts. Typing searches the device at once and the databases a moment later, merged. | On-device SQLite, TMDB direct, Worker `/v1/search/games` |
 | Wishlist (`/wishlist`) | Three tabs: Wishlist, Progress, Library. A grid with search within, five sorts and month dividers by release date; Progress is the next episode per show with a tick. Asks for sign-in when signed out. | On-device SQLite; Trakt for Progress |
 | Calendar (`/calendar`) | A month grid that fits the screen, a day's titles in a rail under it, three sources (wishlist, library, popular), a list view, swipe between months. Your own films are placed by the day they open in your country (`lib/regionalDates.ts`), the day the popular cards already carry. | Worker `/v1/calendar` and `/v1/catalog/release-dates`, on-device SQLite |
 | Item page | Art, dates, ratings, description, people, platforms, where to watch, tags, links. Your Fandex Score with "Why?" opening the whole sum (a sign-in prompt when signed out). Signed in: rate it 1 to 10 (tap the rating again to clear it), wishlist it, remove it from the library, hide it from suggestions. Last: "More from {franchise}" and "More like this", picked on the device from its catalog copy (`lib/related.ts`). On a wide browser window the artwork has thumbnails and arrows. | Worker `/v1/items`, on-device SQLite, Trakt |
-| You (`/profile`) | Who you are, three counts, rows to your pages, Sign out, recently added, coming up, a rail of recommendations. Signed out it is the sign-in card. | On-device SQLite, Worker `/v1/me` |
+| You (`/profile`) | Who you are, three counts, rows to Insights, Import, Settings and Support, Sign out, a rail of recommendations. Lighter than the site's page since 2026-10-17 (Nils): no "Recently added" and "Coming up", no Wishlist or Your ratings rows, which the tabs already are. Signed out it is the sign-in card. | On-device SQLite, Worker `/v1/me` |
 | Insights (`/insights`) | Your taste in numbers, from the rows on the device: overview, how you rate, the spread per medium, taste by era, you against the crowd, how you rate tags, people and studios, who turns up most. | On-device SQLite |
-| Tag, person, studio (`/tag/{key}`, `/person/{key}`, `/studio/{key}`) | What it is, the crowd's average and yours, what it does to your Fandex Score ("Fandex impact", the number the item page's breakdown prints for it; one line per role for a person or a studio, `lib/facetImpact.ts`), and every title in the catalog that carries it. Reached from the item page's tags, cast and facts. | On-device SQLite |
-| Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, your platforms, the account, download and delete, the home-screen widget, what the device holds, and for an admin the links to `/dev`. Not there: Import, joining accounts ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
+| Tag, person, studio (`/tag/{key}`, `/person/{key}`, `/studio/{key}`) | What it is, the crowd's average and yours, what it does to your Fandex Score ("Fandex impact", the number the item page's breakdown prints for it; one line per role for a person or a studio, `lib/facetImpact.ts`), and every title in the catalog that carries it. On a person's or a studio's page each card says what they did on that title under its name ("Director · Writer", "as Tony Stark", "Author", "Publisher"; `lib/creditLine.ts`, since 2026-10-17): the roles the catalog files them under, and the part played where TMDB names it. Reached from the item page's tags, cast and facts. | On-device SQLite, TMDB direct, Worker `/v1/facet/books` |
+| Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, your platforms, the account, download and delete, the home-screen widget, what the device holds, and for an admin the links to `/dev`. Import is a row on the You tab ([app-parity.md](app-parity.md)). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
 | Admin (`/dev/users`, `/dev/scoring`, `/dev/analytics`) | Who is registered and what they hold. Pageviews, where they came from and the two thresholds they are counted for. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions), and Review, which proposes tag categories, franchise merges and missing members and remembers a no. An admin only: anybody else sees "Nothing here". | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
@@ -35,6 +35,16 @@ for. ⚠️ **A new media type is a string-union member, so `tsc` flags almost n
 lists are `MEDIA_TYPES` (site), `TYPE_LABEL`/`TYPE_PLURAL`/`color.media` (`theme.ts`),
 `TYPE_ICONS` (`typeIcons.ts`, typed as a full `Record`, so it does fail), `TYPES` in
 `mobile/web/build.mjs` and `worker.ts`, and the Worker's `TYPES`, `SOURCES` and `MEDIA_TYPES`.
+**One book per language** (Nils, 2026-10-17): Open Library files a translation as a work of its
+own, so an author's page listed the Stormlight Archive once per language. Every shelf answer now
+keeps the works with an English edition or no language given, and drops split editions and box
+sets (`isWholeBook`, `src/lib/sources/bookPure.ts`). **A book's series comes off its editions**
+when the search row names none (`seriesFromEditions`, one more Open Library request when a book is
+first fetched): that is what puts "The Way of Kings" in "The Stormlight Archive", gives the page
+its Series fact and "More from" rail, and the score its franchise facet. The rail asks Open
+Library by both series fields and joins the answers; coverage is Open Library's (three of the
+five Stormlight novels, 2026-10-17), and a book the catalog holds joins the rail through its
+facet whatever Open Library's index says.
 
 A person's picture opens a full-screen gallery of every photo TMDB holds of them
 (`PhotoGallery.tsx`).

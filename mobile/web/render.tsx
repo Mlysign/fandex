@@ -24,6 +24,7 @@ import { LegalLinks } from '~/components/LegalLinks';
 import { Screen } from '~/components/ui';
 import type { ItemDetail, ItemVector } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
+import { creditLine } from '~/lib/creditLine';
 import { spokenKey } from '~/lib/facetImpact';
 import { prepareTaxonomy, resolveFacets, type ScoreFacet, type Taxonomy, type TaxonomyJson } from '~/lib/fandexScore';
 import { indexFacets, pickRelated } from '~/lib/related';
@@ -191,7 +192,8 @@ const SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
  * address loads the app, as it did before.
  */
 export function facetPages(pool: PoolTitle[], min = 3): FacetPageData[] {
-  const groups = new Map<string, { kind: FacetKind; key: string; label: string; roles: Map<string, number>; ids: Set<string> }>();
+  // `ids`: each title carrying the facet, with the roles it files the person or studio under.
+  const groups = new Map<string, { kind: FacetKind; key: string; label: string; roles: Map<string, number>; ids: Map<string, string[]> }>();
   for (const { vector, facets } of pool) {
     for (const f of facets) {
       const kind = PAGE_KIND[f.kind];
@@ -199,10 +201,14 @@ export function facetPages(pool: PoolTitle[], min = 3): FacetPageData[] {
       const key = spokenKey(f.key);
       const id = `${kind}:${key}`;
       let g = groups.get(id);
-      if (!g) groups.set(id, g = { kind, key, label: f.label || key, roles: new Map(), ids: new Set() });
-      g.ids.add(vector.id);
+      if (!g) groups.set(id, g = { kind, key, label: f.label || key, roles: new Map(), ids: new Map() });
+      const held = g.ids.get(vector.id) ?? [];
+      g.ids.set(vector.id, held);
       const role = (f as { role?: string }).role;
-      if (role) g.roles.set(role, (g.roles.get(role) ?? 0) + 1);
+      if (role) {
+        held.push(role);
+        g.roles.set(role, (g.roles.get(role) ?? 0) + 1);
+      }
     }
   }
   const byId = new Map(pool.map((p) => [p.vector.id, p.vector]));
@@ -211,7 +217,9 @@ export function facetPages(pool: PoolTitle[], min = 3): FacetPageData[] {
     if (g.ids.size < min) continue;
     const slug = keyToSlug(g.key);
     if (!SAFE_SLUG.test(slug)) continue;
-    const cards = [...g.ids].map((i) => byId.get(i)!).filter((v) => v.slug).map(cardOf);
+    // The app's FacetScreen writes the same credit under each name.
+    const cards = [...g.ids].map(([i, roles]) => ({ v: byId.get(i)!, roles })).filter(({ v }) => v.slug)
+      .map(({ v, roles }) => ({ ...cardOf(v), role: creditLine(v.type, roles) }));
     if (cards.length < min) continue;
     out.push({
       kind: g.kind, key: g.key, slug, label: g.label,

@@ -32,6 +32,8 @@ export interface CardItem {
   communityVotes?: number;
   /** A score worked out for this card alone, from less than the full title: Home's recommendations. */
   fandexScore?: number | null;
+  /** On a person's or a studio's page: the part they had in this title ("Director · as Tony Stark", "Author"). */
+  role?: string | null;
 }
 
 export function cardFromCatalog(r: CatalogRow): CardItem {
