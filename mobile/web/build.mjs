@@ -62,7 +62,10 @@ if (!flag('skip-export')) {
   // build started soon after the last one found `metadata.json` locked for
   // about half a minute, so the delete waits up to a minute before giving up.
   fs.rmSync(APP, { recursive: true, force: true, maxRetries: 20, retryDelay: 3000 });
-  execSync('npx expo export --platform web --output-dir web/dist/app', {
+  // --clear: Metro keeps transformed files between builds, and an EXPO_PUBLIC_*
+  // value is inlined at transform time, so a value added to mobile/.env did not
+  // reach the bundle (the Discord id, 2026-10-17: published, and no button).
+  execSync('npx expo export --platform web --clear --output-dir web/dist/app', {
     cwd: mobile,
     stdio: ['ignore', 'ignore', 'inherit'],
     // "/" makes the app call /v1/* on its own origin (src/lib/config.ts). Set
