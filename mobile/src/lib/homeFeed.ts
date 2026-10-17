@@ -19,6 +19,7 @@
 
 import { dayISO, rotateRail, seedFor } from '@/lib/dailyRotation';
 import { tagKey } from '@/lib/facets';
+import { boardgamesOn } from '~/lib/features';
 import { api, type CalendarCard } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
@@ -77,18 +78,22 @@ export async function lookupHeld(cards: CalendarCard[]): Promise<Map<string, Hel
 
 /**
  * The trending pool: each source in its own order, taken in turn (a film, a
- * show, a game) so no one source fills the rail. The site ranked across
+ * show, a game, a book, a board game) so no one source fills the rail. The site ranked across
  * sources by each one's median (popularMonth.ts); taking turns is the same
  * idea without a number the three do not share. Null when nothing answered.
  */
 async function trendingPool(): Promise<FeedCard[] | null> {
   const settle = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[]);
-  const [films1, films2, shows, games] = await Promise.all([
+  const [films1, films2, shows, games, books, boardgames] = await Promise.all([
     settle(tmdbTrending('movie', 1)), settle(tmdbTrending('movie', 2)), settle(tmdbTrending('show', 1)),
     settle(api.browseGames(1, 'recent').then((r) => r.results.filter((g) => g.posterUrl))),
+    // Open Library's weekly trending and BGG's hot list (2026-10-17). Board games
+    // answer "not switched on" without a BGG token: an empty list, as a failure is.
+    settle(api.browseShelf('books').then((r) => r.results.filter((b) => b.posterUrl))),
+    settle(boardgamesOn().then((on) => (on ? api.browseShelf('boardgames').then((r) => r.results.filter((b) => b.posterUrl)) : []))),
   ]);
   const lists: { source: string; sourceId: string; type: CardItem['type']; title: string; releaseDate: string | null; posterUrl: string | null; votes: number; score?: number | null; rating?: number | null }[][] =
-    [[...films1, ...films2], shows, games];
+    [[...films1, ...films2], shows, games, books, boardgames];
   if (lists.every((l) => !l.length)) return null;
   const out: FeedCard[] = [];
   const seen = new Set<string>();

@@ -30,8 +30,20 @@ export function dayLabel(date: string): string {
 }
 
 /** "19 Nov 2026" for a YYYY-MM-DD, or null. */
+/**
+ * A date that names only a year ("1976") or a month ("1976-04"), as books and
+ * board games often do: said as such, never as the 1st of January (2026-10-17).
+ */
+function partial(date: string): string | null {
+  if (/^\d{4}$/.test(date)) return date;
+  const m = /^(\d{4})-(\d{2})$/.exec(date);
+  return m ? `${MONTHS[Number(m[2]) - 1]?.slice(0, 3) ?? ''} ${m[1]}`.trim() : null;
+}
+
 export function longDate(date: string | null | undefined): string | null {
   if (!date) return null;
+  const only = partial(date);
+  if (only) return only;
   const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return null;
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
@@ -40,6 +52,8 @@ export function longDate(date: string | null | undefined): string | null {
 /** "Nov 2026" for a YYYY-MM-DD: the date line on a poster card. "TBA" when there is none. */
 export function monthYear(date: string | null | undefined): string {
   if (!date) return 'TBA';
+  const only = partial(date);
+  if (only) return only;
   const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return date;
   return `${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
@@ -48,6 +62,8 @@ export function monthYear(date: string | null | undefined): string {
 /** "Oct 10, 2026" for a YYYY-MM-DD or a unix time in seconds. */
 export function shortDate(date: string | number | null | undefined): string | null {
   if (date == null) return null;
+  const only = typeof date === 'string' ? partial(date) : null;
+  if (only) return only;
   const d = typeof date === 'number' ? new Date(date * 1000) : new Date(`${date.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return null;
   return typeof date === 'number'

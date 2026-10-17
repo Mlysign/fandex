@@ -105,8 +105,30 @@ const cards = (docs: unknown): BookCard[] => ((docs ?? []) as any[]).map(bookCar
 export async function searchOpenLibrary(query: string, limit = 20): Promise<BookCard[]> {
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
-  const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=${OL_FIELDS}&limit=${Math.min(40, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs);
+  const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=${OL_FIELDS}&limit=40`, BROWSE_BUDGET_MS);
+  return cards(relevantBooks(data?.docs, q)).slice(0, limit);
+}
+
+const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+/** Summaries, study guides and workbooks of a book are not the book. */
+const NOT_THE_BOOK = /\b(summary|summaries|study guide|workbook|analysis of|sparknotes|cliffs ?notes|quicklet|book review)\b/i;
+
+/**
+ * Open Library's search is full text: "project hail mary" also brings Macbeth
+ * and Romeo and Juliet (seen 2026-10-17). A book is kept when its title and
+ * authors together hold every word typed, and it is not a summary of another.
+ */
+export function relevantBooks(docs: unknown, query: string): any[] {
+  const words = fold(query).split(" ").filter((w) => w.length > 1);
+  const kept = ((docs ?? []) as any[]).filter((d) => {
+    if (typeof d?.title !== "string" || NOT_THE_BOOK.test(d.title)) return false;
+    const hay = ` ${fold(`${d.title} ${(d.author_name ?? []).join(" ")}`)} `;
+    return words.every((w) => hay.includes(` ${w}`));
+  });
+  // A record with no cover and not one rating is a stub ("Project Hail Mary: A
+  // Novel", 0 ratings, beside the real one with 184): left out when a real one is there.
+  const real = kept.filter((d) => d.cover_i || Number(d.ratings_count) > 0);
+  return real.length ? real : kept;
 }
 
 /** What people are reading (Open Library's trending), as cards: Home's popular books. */
@@ -155,9 +177,14 @@ export async function seriesOpenLibrary(series: string, limit = 40): Promise<Boo
  * own date (`bookDate`). Checked 2026-10-17: Freida McFadden, Alice Feeney and
  * Rebecca Yarros near the top of 2026.
  */
-export async function upcomingOpenLibrary(month: string, limit = 100): Promise<BookCard[]> {
+export async function upcomingOpenLibrary(month: string, pages = 3): Promise<BookCard[]> {
   if (!/^\d{4}-\d{2}$/.test(month)) return [];
   const year = month.slice(0, 4);
-  const data = await getJson(`/search.json?q=${encodeURIComponent(`first_publish_year:${year}`)}&sort=want_to_read&fields=${OL_FIELDS}&limit=${Math.min(100, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs).filter((c) => !!c.releaseDate?.startsWith(month));
+  // ⚠️ Open Library knows little about books not out yet: of its 500 most wanted
+  // of 2026, six fall in October and none in November (measured 2026-10-17). Three
+  // pages are where more stops paying; a month a request is cached for a day.
+  const answers = await Promise.all(Array.from({ length: pages }, (_, i) =>
+    getJson(`/search.json?q=${encodeURIComponent(`first_publish_year:${year}`)}&sort=want_to_read&fields=${OL_FIELDS}&limit=100&page=${i + 1}`, BROWSE_BUDGET_MS)
+      .catch(() => null)));
+  return answers.flatMap((a) => cards(a?.docs)).filter((c) => !!c.releaseDate?.startsWith(month));
 }

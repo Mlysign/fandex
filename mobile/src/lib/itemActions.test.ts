@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 
-import { ratingWrite, traktIds, type ActionTarget, type HeldRow } from './itemActions';
+import { onTrakt, ratingWrite, statusFor, traktIds, type ActionTarget, type HeldRow } from './itemActions';
 
 const ID = '00000000-0000-4000-8000-00000000000a';
 const film: ActionTarget = { id: ID, type: 'movie', sources: [{ source: 'tmdb', sourceId: '603' }, { source: 'trakt', sourceId: '481' }] };
@@ -59,5 +59,17 @@ describe('the rows a rating writes', () => {
 
   it('writes nothing when there is no rating to clear', () => {
     expect(ratingWrite({ target: film, rows: [held('trakt', { rating: null })], rating: null, home: 'trakt', now: 500 })).toEqual({});
+  });
+});
+
+// 2026-10-17: "not a game" used to mean "film or show", and a book would have
+// been sent to Trakt as a show.
+describe('which titles go to Trakt', () => {
+  it('sends only films and shows', () => {
+    expect(['movie', 'show', 'game', 'book', 'boardgame'].filter((t) => onTrakt(t as never))).toEqual(['movie', 'show']);
+  });
+  it('marks a rated book read, a board game played', () => {
+    expect([statusFor('movie'), statusFor('show'), statusFor('game'), statusFor('book'), statusFor('boardgame')])
+      .toEqual(['watched', 'watched', 'played', 'read', 'played']);
   });
 });

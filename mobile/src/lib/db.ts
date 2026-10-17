@@ -10,6 +10,7 @@
 // it is SQLite and not a JSON blob in key-value storage.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
+import type { MediaType } from '~/lib/api';
 
 export const DATABASE_NAME = 'fandex.db';
 
@@ -198,7 +199,7 @@ export async function setMeta(db: SQLiteDatabase, key: string, value: string): P
 
 export interface CatalogRow {
   id: string;
-  type: 'game' | 'movie' | 'show';
+  type: MediaType;
   title: string;
   slug: string | null;
   poster_url: string | null;

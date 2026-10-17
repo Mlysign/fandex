@@ -9,13 +9,15 @@ import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 import type { MediaType } from '~/lib/api';
 
 export interface ProviderCard {
-  source: 'tmdb' | 'igdb';
+  source: 'tmdb' | 'igdb' | 'openlibrary' | 'bgg';
   sourceId: string;
   type: MediaType;
   title: string;
   releaseDate: string | null;
   posterUrl: string | null;
   votes: number;
+  /** The crowd's 0-100, where the source gives one (Open Library, BGG, IGDB). */
+  rating?: number | null;
 }
 
 const BASE = 'https://api.themoviedb.org/3';

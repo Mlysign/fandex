@@ -29,6 +29,8 @@ import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
+import { PhotoGallery } from '~/components/PhotoGallery';
+import { count } from '~/lib/plural';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
 import { color, font, radius, type } from '~/theme';
@@ -73,6 +75,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const impacts = useMemo(() => impactsFor(kind === 'studio' ? 'company' : kind, key), [impactsFor, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
+  /** The photo the gallery is open on, or null while it is shut. */
+  const [photoAt, setPhotoAt] = useState<number | null>(null);
   const [found, setFound] = useState<{ label: string; category: string | null; roles: string[]; cards: CardItem[] } | null>(null);
 
   useEffect(() => {
@@ -196,7 +200,16 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       )}
       eyebrow={facetEyebrow(kind, found.roles)}
       name={name}
-      avatar={person?.profileUrl ? <Avatar src={person.profileUrl} name={name} size={84} /> : null}
+      avatar={person?.profileUrl ? (
+        // The portrait opens every photo TMDB holds of them (Nils, 2026-10-17).
+        person.photos.length ? (
+          <Pressable onPress={() => setPhotoAt(0)} accessibilityRole="button" accessibilityLabel={`${count(person.photos.length, 'photo')} of ${name}`}
+            style={(s: { hovered?: boolean }) => [{ borderRadius: 999 }, s.hovered && { opacity: 0.85 }]}>
+            <Avatar src={person.profileUrl} name={name} size={84} />
+            {person.photos.length > 1 ? <View style={styles.photoCount}><Text style={styles.photoCountText}>{person.photos.length}</Text></View> : null}
+          </Pressable>
+        ) : <Avatar src={person.profileUrl} name={name} size={84} />
+      ) : null}
       life={life}
       bio={person?.biography ? (
         <Pressable onPress={() => setBioOpen((v) => !v)} accessibilityRole="button" accessibilityLabel={bioOpen ? 'Show less of the biography' : 'Show the whole biography'}>
@@ -238,12 +251,18 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         header={header}
         empty={asking ? <StateBlock loading /> : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or on TMDB carries this.'} />}
       />
+      {photoAt != null && person?.photos.length ? <PhotoGallery photos={person.photos} name={name} start={photoAt} onClose={() => setPhotoAt(null)} /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   bio: { marginTop: 12, maxWidth: 720 },
+  photoCount: {
+    position: 'absolute', right: -2, bottom: -2, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceOverlay, borderWidth: 1, borderColor: color.borderStrong,
+  },
+  photoCountText: { fontFamily: font.mono, fontSize: 10, color: color.textPrimary },
   impact: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   tagMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
   categoryChip: {

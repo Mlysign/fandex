@@ -13,11 +13,13 @@ import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import { SearchBar, SortMenu } from '~/components/kit';
 import { LogoOutline } from '~/components/Logo';
 import { useTypeFilter } from '~/lib/typeFilter';
+import { useOfferedTypes } from '~/lib/features';
+import { TYPE_ICONS as SHARED_TYPE_ICONS } from '~/lib/typeIcons';
 import { useOutsideClose } from '~/lib/useOutsideClose';
 import { useBarHidden } from '~/lib/barScroll';
 import { breakpoint, color, radius, type, TYPE_PLURAL } from '~/theme';
 
-const TYPE_ICONS: Record<string, typeof Gamepad2> = { game: Gamepad2, movie: Clapperboard, show: Tv };
+const TYPE_ICONS: Record<string, typeof Gamepad2> = SHARED_TYPE_ICONS;
 
 // ── The type filter ──────────────────────────────────────────────────────────
 
@@ -76,14 +78,16 @@ export function useChipRoom(px: number): boolean {
  */
 export function TypeFilter() {
   const f = useTypeFilter();
-  const roomy = useChipRoom(circlesWidth(MEDIA_TYPES.length + 1));
+  // Board games only once the API has them (lib/features.ts).
+  const offered = useOfferedTypes();
+  const roomy = useChipRoom(circlesWidth(offered.length + 1));
   const [open, setOpen] = useState(false);
   const group = useRef<View>(null);
   useOutsideClose(open, useCallback(() => setOpen(false), []), group);
 
   const shown = new Set<string>(f.shown);
-  const allActive = MEDIA_TYPES.every((t) => shown.has(t));
-  const selected = MEDIA_TYPES.filter((t) => shown.has(t));
+  const allActive = offered.every((t) => shown.has(t));
+  const selected = offered.filter((t) => shown.has(t));
 
   if (!open && !roomy) {
     const Only = selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
@@ -106,7 +110,7 @@ export function TypeFilter() {
       <Circle active={allActive} fill={color.accent} label="All types" onPress={f.selectAll}>
         <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
       </Circle>
-      {MEDIA_TYPES.map((t) => {
+      {offered.map((t) => {
         const Icon = TYPE_ICONS[t];
         const active = !allActive && shown.has(t);
         return (

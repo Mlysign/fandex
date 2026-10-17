@@ -32,7 +32,10 @@ const MONTHS: Record<string, string> = {
 export function bookDate(doc: any): string | null {
   const year = Number(doc?.first_publish_year);
   if (!Number.isInteger(year) || year <= 0) return null;
-  const days = ((doc?.publish_date ?? []) as unknown[]).map(parseDay).filter((d): d is string => !!d && d.startsWith(String(year))).sort();
+  // ⚠️ January 1st is how Open Library writes "some time that year" (Dune's 1965
+  // editions read "January 1, 1965"), so it counts as the year alone, not a day.
+  const days = ((doc?.publish_date ?? []) as unknown[]).map(parseDay)
+    .filter((d): d is string => !!d && d.startsWith(String(year)) && !d.endsWith("-01-01")).sort();
   return days[0] ?? String(year);
 }
 
@@ -66,9 +69,10 @@ export function bookSubjects(doc: any, limit = 20): string[] {
     if (typeof s !== "string") continue;
     const t = s.trim();
     if (!t || t.length > 40 || /[:=]/.test(t) || /,|\(|\)|--/.test(t)) continue;
-    if (/\b(accessible|protected daisy|in library|large type|reviewed|lending library|internet archive|award|translations? into|open library|staff picks|overdrive|juvenile literature)\b/i.test(t)) continue;
+    if (/\b(accessible|protected daisy|in library|large type|reviewed|lending library|internet archive|award|translations? into|open library|staff picks|overdrive|juvenile literature|bestsellers?|best sellers?|manual for civilization|long now|reading level|textbooks?)\b/i.test(t)) continue;
     if (/^(fiction|nonfiction|non-fiction|literature|english|american|novel|novels|general|books|reading)$/i.test(t)) continue;
-    const k = t.toLowerCase();
+    // "Science-fiction" and "Science fiction" are one subject.
+    const k = t.toLowerCase().replace(/[-_]+/g, " ");
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(t[0].toUpperCase() + t.slice(1));

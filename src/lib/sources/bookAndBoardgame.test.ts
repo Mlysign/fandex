@@ -113,3 +113,25 @@ describe("Open Library's books", () => {
     ]));
   });
 });
+
+describe("Open Library's placeholders", () => {
+  it("reads January 1st as the year alone, and folds spellings of one subject", () => {
+    expect(bookDate({ first_publish_year: 1965, publish_date: ["January 1, 1965", "1965"] })).toBe("1965");
+    expect(bookSubjects({ subject: ["Science fiction", "Science-fiction", "New York Times bestseller", "Long Now Manual for Civilization"] }))
+      .toEqual(["Science fiction"]);
+  });
+});
+
+describe("book search relevance", () => {
+  it("keeps the book and its author's, and drops full-text noise, summaries and stubs", async () => {
+    const { relevantBooks } = await import("@/lib/sources/openlibrary");
+    const docs = [
+      { title: "Project Hail Mary", author_name: ["Andy Weir"], cover_i: 1, ratings_count: 184 },
+      { title: "Project Hail Mary: A Novel", author_name: ["Andy Weir"], ratings_count: 0 },
+      { title: "Summary of Project Hail Mary by Andy Weir", cover_i: 2 },
+      { title: "Macbeth", author_name: ["William Shakespeare"], cover_i: 3, ratings_count: 151 },
+    ];
+    expect(relevantBooks(docs, "project hail mary").map((d) => d.title)).toEqual(["Project Hail Mary"]);
+    expect(relevantBooks(docs, "andy weir").map((d) => d.title)).toEqual(["Project Hail Mary"]);
+  });
+});

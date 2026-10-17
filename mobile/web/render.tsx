@@ -168,7 +168,7 @@ export function facetHead(facet: FacetPageData): { title: string; description: s
   const description =
     facet.kind === 'person' ? `Every movie and show ${label} worked on, with ratings and where to watch.`
     : facet.kind === 'studio' ? `Movies, shows and games from ${label}, ranked by rating.`
-    : `The best ${label} movies, shows and games, ranked by rating.`;
+    : `The best ${label} movies, shows, games and books, ranked by rating.`;
   return { title: label, description, canonical: `${SITE}/${facet.kind}/${facet.slug}` };
 }
 
@@ -297,7 +297,7 @@ export function calendarHead(page: CalendarPageData): { title: string; descripti
   const canonical = `${SITE}/calendar/${page.month}`;
   return {
     title: `Game, movie and TV releases in ${label}`,
-    description: `Everything coming out in ${label} across games, movies and shows, ranked by how much attention each release is getting. Free to browse on Fandex.`,
+    description: `Everything coming out in ${label} across games, movies, shows and books, ranked by how much attention each release is getting. Free to browse on Fandex.`,
     canonical,
     jsonLd: jsonLdScript([{
       '@context': 'https://schema.org', '@type': 'ItemList', name: `Releases in ${label}`,

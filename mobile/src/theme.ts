@@ -53,7 +53,7 @@ export const color = {
   facet: { person: '#E0B15C', genre: '#C8A24B', tag: '#AC9A72', company: '#C08152' },
 
   // The media-type axis. Not brand colours: a type, not a provider.
-  media: { game: '#4ade80', movie: '#f59e0b', show: '#a78bfa' } as Record<string, string>,
+  media: { game: '#4ade80', movie: '#f59e0b', show: '#a78bfa', book: '#38bdf8', boardgame: '#f472b6' } as Record<string, string>,
 } as const;
 
 export const space = { hairline: 1, xxs: 2, xs: 6, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, section: 44 } as const;
@@ -95,5 +95,5 @@ export const breakpoint = { sm: 640, md: 768, lg: 1024, xl: 1280 } as const;
 export const navHeight = { bottom: 53, top: 56 } as const;
 
 // The site's words: a film is a "movie" there, on every chip and card.
-export const TYPE_LABEL: Record<string, string> = { game: 'Game', movie: 'Movie', show: 'Show' };
-export const TYPE_PLURAL: Record<string, string> = { game: 'Games', movie: 'Movies', show: 'Shows' };
+export const TYPE_LABEL: Record<string, string> = { game: 'Game', movie: 'Movie', show: 'Show', book: 'Book', boardgame: 'Board game' };
+export const TYPE_PLURAL: Record<string, string> = { game: 'Games', movie: 'Movies', show: 'Shows', book: 'Books', boardgame: 'Board games' };

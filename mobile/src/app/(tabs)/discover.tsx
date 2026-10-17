@@ -20,7 +20,7 @@ import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from 
 import { EmptyState } from '~/components/kit';
 import { SubBar } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
-import { api } from '~/lib/api';
+import { api, ApiError, type ProviderResult } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
@@ -28,6 +28,7 @@ import { tmdbConfigured } from '~/lib/config';
 import { currentMonth, monthLabel } from '~/lib/dates';
 import { usePageTitle } from '~/lib/pageTitle';
 import { onSearchQuery, takeWaitingQuery } from '~/lib/searchHandoff';
+import { boardgamesOn } from '~/lib/features';
 import { catalogCards } from '~/lib/db';
 import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -57,7 +58,7 @@ const IDLE: Remote = { state: 'idle', rows: [] };
 
 const fromProvider = (r: ProviderCard): CardItem => ({
   key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type, title: r.title,
-  releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: null, communityVotes: r.votes,
+  releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating ?? null, communityVotes: r.votes,
 });
 /** The site's FacetMatchGroup: an eyebrow and a row of chips, each a link to its page. */
 function MatchGroup({ title, matches }: { title: string; matches: VocabEntry[] }) {
@@ -114,6 +115,8 @@ export default function DiscoverScreen() {
   const [pool, setPool] = useState<CardItem[] | null>(null);
   const [screen, setScreen] = useState<Remote>(IDLE);
   const [games, setGames] = useState<Remote>(IDLE);
+  // Books and board games (worker/src/shelves.ts). Board games answer "not switched on" without a BGG token, which is not an error.
+  const [shelf, setShelf] = useState<Remote>(IDLE);
   const [shown, setShown] = useState(STEP);
   const auth = useAuth();
   const router = useRouter();
@@ -133,6 +136,9 @@ export default function DiscoverScreen() {
       settle(tmdbUpcoming('movie', page, auth.region)),
       settle(tmdbUpcoming('show', page, auth.region)),
       settle(api.browseGames(page).then((r) => r.results)),
+      // What is popular in books and board games: one page of each, with the first page.
+      settle(page === 1 ? api.browseShelf('books').then((r) => r.results) : Promise.resolve([])),
+      settle(page === 1 ? boardgamesOn().then((on) => (on ? api.browseShelf('boardgames').then((r) => r.results, () => []) : [])) : Promise.resolve([])),
     ]).then((parts) => {
       const rows = parts.flatMap((part) => (part.v as ProviderCard[]).map(fromProvider));
       setFeed((f) => ({
@@ -156,6 +162,7 @@ export default function DiscoverScreen() {
     if (term.length < 2) {
       setScreen(IDLE);
       setGames(IDLE);
+      setShelf(IDLE);
       return;
     }
     const abort = new AbortController();
@@ -163,6 +170,7 @@ export default function DiscoverScreen() {
     const timer = setTimeout(() => {
       setScreen({ state: 'loading', rows: [] });
       setGames({ state: 'loading', rows: [] });
+      setShelf({ state: 'loading', rows: [] });
       // Each source answers on its own: one of them being down must not empty the other.
       searchTmdb(term, abort.signal)
         .then((rows) => { if (live) setScreen({ state: 'done', rows: rows.map(fromProvider) }); })
@@ -170,6 +178,15 @@ export default function DiscoverScreen() {
       api.searchGames(term)
         .then((res) => { if (live) setGames({ state: 'done', rows: res.results.map((g) => fromProvider({ ...g, votes: g.votes })) }); })
         .catch(() => { if (live) setGames({ state: 'error', rows: [] }); });
+      void Promise.all([
+        api.searchShelf('books', term).then((r) => ({ ok: true, rows: r.results }), () => ({ ok: false, rows: [] })),
+        boardgamesOn().then((on) => (on
+          ? api.searchShelf('boardgames', term).then((r) => ({ ok: true, rows: r.results }), (e: unknown) => ({ ok: e instanceof ApiError && e.code === 'not-configured', rows: [] as ProviderResult[] }))
+          : { ok: true, rows: [] })),
+      ]).then(([books, boardgames]) => {
+        if (!live) return;
+        setShelf({ state: books.ok || boardgames.ok ? 'done' : 'error', rows: [...books.rows, ...boardgames.rows].map(fromProvider) });
+      });
     }, DEBOUNCE_MS);
     return () => { live = false; clearTimeout(timer); abort.abort(); };
   }, [term]);
@@ -201,9 +218,9 @@ export default function DiscoverScreen() {
     }
     // What the catalog holds wins over the same title from a provider: it has your state and score.
     const held = new Set(local.map(identity));
-    const fresh = [...screen.rows, ...games.rows].filter((c) => !held.has(identity(c)));
+    const fresh = [...screen.rows, ...games.rows, ...shelf.rows].filter((c) => !held.has(identity(c)));
     return [...local, ...fresh];
-  }, [pool, keyed, norm, hidden, screen.rows, games.rows, feed.rows]);
+  }, [pool, keyed, norm, hidden, screen.rows, games.rows, shelf.rows, feed.rows]);
 
   const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
   // Your state for every title is only read while a "your lists" filter is on.
@@ -246,11 +263,12 @@ export default function DiscoverScreen() {
     return out;
   }, [sort, page]);
 
-  const searching = screen.state === 'loading' || games.state === 'loading';
+  const searching = screen.state === 'loading' || games.state === 'loading' || shelf.state === 'loading';
   const notes = [
     norm && !tmdbConfigured() ? 'Film and show search is not set up in this build.' : null,
     screen.state === 'error' ? 'Film and show search is not answering.' : null,
     games.state === 'error' ? 'Game search is not answering.' : null,
+    shelf.state === 'error' ? 'Book search is not answering.' : null,
     !norm && feed.loading && feed.page > 0 ? 'Asking for more upcoming titles…' : null,
     !norm && feed.failed ? 'Upcoming titles from TMDB and IGDB are not answering. Showing the catalog on this device.' : null,
     !norm && sync.state === 'syncing' && sync.written > 0 ? `Downloading the catalog… ${sync.total.toLocaleString('en')} so far` : null,
@@ -258,7 +276,7 @@ export default function DiscoverScreen() {
 
   const empty = pool === null ? <StateBlock loading />
     : searching ? <StateBlock loading title="Searching" />
-    : norm ? <EmptyState title="Nothing found" hint={term.length < 2 ? 'Type one more letter to search the databases.' : 'No game, movie or show by that name.'} />
+    : norm ? <EmptyState title="Nothing found" hint={term.length < 2 ? 'Type one more letter to search the databases.' : 'Nothing by that name in games, movies, shows, books or board games.'} />
     : sync.state === 'syncing' ? <StateBlock loading title="Downloading the catalog" detail="This happens once. After that only changes are fetched." />
     : sync.state === 'error' ? <EmptyState title="The catalog is not on this device yet" hint={sync.error} />
     : <EmptyState title="Nothing here" hint="No titles of the types you are looking at." />;
@@ -266,7 +284,7 @@ export default function DiscoverScreen() {
   return (
     <Screen wide>
       <SubBar
-        search={{ value: query, onChange: setQuery, placeholder: 'Search games, movies, shows…' }}
+        search={{ value: query, onChange: setQuery, placeholder: 'Search games, movies, shows, books…' }}
         count={pool ? { noun: 'titles', n: sorted.length } : null}
         sort={{ value: sort, options: center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS, onChange: setSort }}
         trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}

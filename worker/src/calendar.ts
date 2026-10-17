@@ -155,7 +155,9 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
     fetchShowPage(1, "future", win).catch(() => [] as FeedCandidate[]),
     // Books (2026-10-17): the month's most wanted first publications. Board
     // games have only a year from BGG, so none is placed on a day.
-    upcomingOpenLibrary(month).then((cards) => cards.map(bookCandidate)).catch(() => [] as FeedCandidate[]),
+    // A cover and at least three readers who shelved it: what Open Library calls
+    // 2026 also holds self-published leaflets nobody has seen.
+    upcomingOpenLibrary(month).then((cards) => cards.filter((b) => b.posterUrl && b.popularity >= 3).map(bookCandidate)).catch(() => [] as FeedCandidate[]),
   ]);
   const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows, ...books], win), MONTH_POOL_DEPTH);
   if (!ranked.length) return null;

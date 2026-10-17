@@ -16,7 +16,7 @@ import { TypeIcon } from '~/components/Logo';
 import { cardHref } from '~/lib/cardHref';
 import type { CardItem } from '~/lib/cards';
 import { monthYear } from '~/lib/dates';
-import { breakpoint, color, font, radius, type } from '~/theme';
+import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
 export function CardFace({ item, score, center, link, bar, style, dateText, explain }: {
@@ -64,7 +64,7 @@ export function CardFace({ item, score, center, link, bar, style, dateText, expl
           )}
           <View style={cardStyles.typeChip}>
             <View style={[cardStyles.typeDot, { backgroundColor: color.media[item.type] ?? '#888' }]} />
-            <Text style={[type.micro, { color: color.textPrimary }]}>{item.type}</Text>
+            <Text style={[type.micro, { color: color.textPrimary }]}>{(TYPE_LABEL[item.type] ?? item.type).toLowerCase()}</Text>
           </View>
         </View>
         <View style={cardStyles.body}>

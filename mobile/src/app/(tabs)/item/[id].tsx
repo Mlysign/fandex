@@ -34,7 +34,7 @@ import { tmdbCollectionFor } from '~/lib/tmdb';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
 
-const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
+const PUBLIC_TYPES = new Set(['movie', 'show', 'game', 'book', 'boardgame']);
 
 /**
  * "More from {franchise}" and "More like this", picked on the device from its
@@ -42,7 +42,11 @@ const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
  * all for a title with no franchise and too few titles like it: an empty shelf
  * reads as a broken one.
  */
-function Related({ itemId, facets, tmdbMovieId, igdbId }: { itemId: string; facets: ScoreFacet[]; tmdbMovieId: string | null; igdbId: string | null }) {
+function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
+  itemId: string; facets: ScoreFacet[]; tmdbMovieId: string | null; igdbId: string | null;
+  /** A book's series name: its other books come from Open Library. */
+  bookSeries?: string | null;
+}) {
   const db = useSQLiteContext();
   const catalog = useCatalogSync();
   const { taxonomy } = useScores();
@@ -68,6 +72,13 @@ function Related({ itemId, facets, tmdbMovieId, igdbId }: { itemId: string; face
           parts = (collection?.parts ?? []).map((p) => ({
             key: `tmdb:movie:${p.sourceId}`, id: null, source: 'tmdb', sourceId: p.sourceId, type: 'movie', title: p.title,
             releaseDate: p.releaseDate, posterUrl: p.posterUrl, communityScore: null, communityVotes: p.votes,
+          }));
+        } else if (bookSeries) {
+          label ??= bookSeries;
+          const books = await api.facetBooks('franchise', bookSeries).then((b) => b.results, () => []);
+          parts = books.map((b) => ({
+            key: `openlibrary:book:${b.sourceId}`, id: null, source: 'openlibrary', sourceId: b.sourceId, type: 'book', title: b.title,
+            releaseDate: b.releaseDate, posterUrl: b.posterUrl, communityScore: b.rating, communityVotes: b.votes,
           }));
         } else if (igdbId) {
           const ip = label ?? facets.find((f) => f.kind === 'ip')?.label ?? null;
@@ -98,7 +109,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId }: { itemId: string; face
       })
       .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
-  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId]);
+  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId, bookSeries]);
 
   if (!rails || (!rails.franchise?.items.length && !rails.similar.length)) return null;
   return (
@@ -369,7 +380,8 @@ export default function ItemScreen() {
         progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
         related={<Related itemId={item.id} facets={item.facets}
           tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null}
-          igdbId={item.type === 'game' ? item.vector.sources.find((s) => s.source === 'igdb')?.sourceId ?? null : null} />}
+          igdbId={item.type === 'game' ? item.vector.sources.find((s) => s.source === 'igdb')?.sourceId ?? null : null}
+          bookSeries={item.type === 'book' ? item.merged.collection ?? null : null} />}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}

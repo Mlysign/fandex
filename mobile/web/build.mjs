@@ -45,7 +45,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
 const limit = Number(args.find((a) => a.startsWith('--limit='))?.slice(8) ?? 0);
 
-const TYPES = ['movie', 'show', 'game'];
+const TYPES = ['movie', 'show', 'game', 'book', 'boardgame'];
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 const TITLE = 'Fandex: your index of every game, movie & show';
 const DESCRIPTION = "One index for every game, movie and show. Fandex tracks your wishlist and learns your taste, so you know what's out next.";
@@ -393,7 +393,8 @@ const popular = (type) => [...details.values()]
   .filter((i) => i.type === type && i.slug)
   .sort((a, b) => (b.vector.communityVotes ?? 0) - (a.vector.communityVotes ?? 0))
   .slice(0, 30);
-const homeList = (type, label) => `<section><h2>${label}</h2><ul>${popular(type).map((i) =>
+// A type with no titles in the pool yet has no section, rather than an empty one.
+const homeList = (type, label) => !popular(type).length ? '' : `<section><h2>${label}</h2><ul>${popular(type).map((i) =>
   `<li><a href="/${i.type}/${i.slug}">${esc(i.merged.title)}${i.merged.releaseDate ? ` <span>${i.merged.releaseDate.slice(0, 4)}</span>` : ''}</a></li>`).join('')}</ul></section>`;
 const HOME_CSS = `.ph{flex:1;overflow-y:auto;color:${C.text};font-family:${SANS}}`
   + `.ph header{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 20px;text-align:center}`
@@ -412,7 +413,7 @@ const home = shell
     + `<style>${fontCss}html,body{background:${C.surface}}#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}${HOME_CSS}</style>`)
   .replace('<div id="root"></div>',
     `<div id="prerender"><div class="ph"><header><p class="mark">Fandex</p><h1>Your index of every game, movie &amp; show</h1></header>`
-    + `<main>${homeList('movie', 'Movies')}${homeList('show', 'Shows')}${homeList('game', 'Games')}${legalNav('en')}</main></div></div><div id="root"></div>`);
+    + `<main>${homeList('movie', 'Movies')}${homeList('show', 'Shows')}${homeList('game', 'Games')}${homeList('book', 'Books')}${homeList('boardgame', 'Board games')}${legalNav('en')}</main></div></div><div id="root"></div>`);
 if (!home.includes('id="prerender"') || !home.includes('rel="canonical"')) throw new Error('The export\'s index.html changed shape: the home page was not written');
 fs.writeFileSync(path.join(STAGE, 'index.html'), home);
 

@@ -48,6 +48,8 @@ const FROM_ENV = {
   GOOGLE_CLIENT_ID: "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
   TRAKT_CLIENT_ID: "TRAKT_CLIENT_ID",
   DISCORD_CLIENT_ID: "DISCORD_CLIENT_ID",
+  // Optional: without it board games stay off (worker/src/shelves.ts).
+  BGG_TOKEN: "BGG_TOKEN",
 };
 
 function parseEnv(file) {

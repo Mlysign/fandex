@@ -37,7 +37,17 @@ const GUTTER = space.xl;
 
 export const SOURCE_LABEL: Record<string, string> = {
   trakt: 'Trakt', tmdb: 'TMDB', igdb: 'IGDB', steam: 'Steam', rawg: 'RAWG', letterboxd: 'Letterboxd',
+  openlibrary: 'Open Library', bgg: 'BoardGameGeek', local: 'Fandex',
 };
+
+/** "2-4 players", "1 player", "up to 5 players". */
+export function playersLabel(p: { min: number | null; max: number | null } | null | undefined): string | null {
+  if (!p || (p.min == null && p.max == null)) return null;
+  const { min, max } = p;
+  const range = min != null && max != null && min !== max ? `${min}-${max}` : min ?? max;
+  const many = (max ?? min ?? 0) !== 1;
+  return min == null ? `up to ${max} player${many ? 's' : ''}` : `${range} player${many ? 's' : ''}`;
+}
 
 function runtime(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -341,7 +351,10 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
   const m = item.merged;
   const images = [m.posterUrl, ...m.images].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
 
-  const credit = m.director ? `${item.type === 'show' ? 'by' : 'dir.'} ${m.director}` : null;
+  // A book's author and a board game's designer are its credit, as a film's director is.
+  const makers = item.type === 'book' ? m.authors : item.type === 'boardgame' ? m.designers : null;
+  const credit = makers?.length ? `by ${makers.slice(0, 2).join(', ')}`
+    : m.director ? `${item.type === 'show' ? 'by' : 'dir.'} ${m.director}` : null;
   const metaParts = [
     m.releaseDate ? m.releaseDate.slice(0, 4) : 'TBA',
     // "/ep" as in the Runtime fact below: without it a show's header read as
@@ -440,6 +453,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
 
         <View>
           <Fact label={item.type === 'show' ? 'Creator' : 'Director'} value={m.director} linkTo="person" />
+          <Fact label={(m.authors?.length ?? 0) > 1 ? 'Authors' : 'Author'} value={m.authors?.length ? m.authors.join(', ') : null} linkTo="person" />
+          <Fact label={(m.designers?.length ?? 0) > 1 ? 'Designers' : 'Designer'} value={m.designers?.length ? m.designers.join(', ') : null} linkTo="person" />
           <Fact label="Developer" value={m.developer} linkTo="studio" />
           <Fact label="Publisher" value={m.publisher && m.publisher !== m.developer ? m.publisher : null} linkTo="studio" />
           <Fact label="Network" value={m.network} linkTo="studio" />
@@ -458,7 +473,13 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
               ? `${m.nextEpisode.season != null && m.nextEpisode.episode != null ? `S${m.nextEpisode.season}E${m.nextEpisode.episode} · ` : ''}${longDate(m.nextEpisode.airDate)}`
               : null}
           />
-          <Fact label={item.type === 'game' ? 'Franchise' : 'Collection'} value={m.collection} />
+          <Fact label="Pages" value={m.pageCount ? String(m.pageCount) : null} />
+          <Fact label="Players" value={playersLabel(m.players)} />
+          <Fact label="Play time" value={m.playTimeMinutes ? runtime(m.playTimeMinutes) : null} />
+          <Fact label="Age" value={m.minAge ? `${m.minAge}+` : null} />
+          <Fact label="Weight" value={m.weight ? `${m.weight.toFixed(1)} / 5` : null} />
+          <Fact label="ISBN" value={m.isbn ?? null} />
+          <Fact label={item.type === 'game' ? 'Franchise' : item.type === 'book' || item.type === 'boardgame' ? 'Series' : 'Collection'} value={m.collection} />
           <Fact label="Language" value={m.originalLanguage} />
           <Fact label="Country" value={m.country} />
           <Fact label="Avg playtime" value={m.playtimeHours ? `${m.playtimeHours}h` : null} />
@@ -466,6 +487,17 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="Budget" value={m.budget ? money(m.budget) : null} />
           <Fact label="Box office" value={m.revenue ? money(m.revenue) : null} />
         </View>
+        {/* BGG's terms: a public page using its data says so, linked to BGG
+            (src/lib/sources/bgg.ts). Open Library asks for no credit, and gets one. */}
+        {item.type === 'boardgame' ? (
+          <ExtLink href="https://boardgamegeek.com" label="Powered by BoardGameGeek" style={styles.poweredBy}>
+            <T variant="caption">Powered by <Text style={{ color: color.textPrimary }}>BGG</Text></T>
+          </ExtLink>
+        ) : item.type === 'book' ? (
+          <ExtLink href="https://openlibrary.org" label="Book data from Open Library" style={styles.poweredBy}>
+            <T variant="caption">Book data from <Text style={{ color: color.textPrimary }}>Open Library</Text></T>
+          </ExtLink>
+        ) : null}
       </View>
       </View>
 
@@ -675,6 +707,7 @@ const styles = StyleSheet.create({
   description: { fontFamily: font.sans, fontSize: 14, lineHeight: 23, color: color.textSecondary },
 
   factLinks: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 10 },
+  poweredBy: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 4 },
   fact: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.lg,
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: color.border,

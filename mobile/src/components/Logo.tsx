@@ -63,6 +63,18 @@ export function TypeIcon({ type, size = 12, tint = color.textMuted }: { type: st
           <Rect x="3" y="7" width="18" height="12" rx="2" />
           <Polyline points="8 3 12 7 16 3" />
         </>
+      ) : type === 'book' ? (
+        <>
+          <Path d="M12 6.5C10 5 6.5 4.5 3 5v13c3.5-.5 7 0 9 1.5 2-1.5 5.5-2 9-1.5V5c-3.5-.5-7 0-9 1.5z" />
+          <Line x1="12" y1="6.5" x2="12" y2="19.5" />
+        </>
+      ) : type === 'boardgame' ? (
+        <>
+          <Rect x="4" y="4" width="16" height="16" rx="3" />
+          <Circle cx="9" cy="9" r="0.8" />
+          <Circle cx="15" cy="15" r="0.8" />
+          <Circle cx="12" cy="12" r="0.8" />
+        </>
       ) : (
         <Circle cx="12" cy="12" r="9" />
       )}

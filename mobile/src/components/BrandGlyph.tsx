@@ -11,6 +11,7 @@ import { color } from '~/theme';
 const MARK_BY_SOURCE: Record<string, string> = {
   steam: 'Steam', trakt: 'Trakt', tmdb: 'TMDB', igdb: 'IGDB', imdb: 'IMDb', gog: 'GOG',
   epic: 'Epic Games', itch: 'itch.io', reddit: 'Reddit', discord: 'Discord', wikipedia: 'Wikipedia',
+  bgg: 'BoardGameGeek',
 };
 
 export function hasBrandMark(source: string): boolean {

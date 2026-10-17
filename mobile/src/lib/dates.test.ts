@@ -45,3 +45,14 @@ describe('compact counts', () => {
     expect(compactCount(2_340_000)).toBe('2.3M');
   });
 });
+
+describe('a date that names only a year or a month', () => {
+  it('is said as such, never as the 1st of January', async () => {
+    const { longDate, monthYear, shortDate } = await import('./dates');
+    expect(longDate('1976')).toBe('1976');
+    expect(monthYear('1976')).toBe('1976');
+    expect(shortDate('1976')).toBe('1976');
+    expect(longDate('1976-04')).toBe('Apr 1976');
+    expect(longDate('1976-04-02')).toBe('2 Apr 1976');
+  });
+});

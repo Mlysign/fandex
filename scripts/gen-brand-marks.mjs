@@ -25,6 +25,8 @@ const WANT = {
   "Trakt": "siTrakt",
   "TMDB": "siThemoviedatabase",
   "IGDB": "siIgdb",
+  // Board games (2026-10-17). Open Library has no mark in simple-icons: globe.
+  "BoardGameGeek": "siBoardgamegeek",
 
   // ⚠️ "Google" is DELIBERATELY ABSENT and must stay that way (2026-09-01).
   // simple-icons ships a single monochrome path, and every consumer of this file

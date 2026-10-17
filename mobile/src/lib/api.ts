@@ -58,7 +58,7 @@ const json = (method: string, body: unknown): RequestInit => ({
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
-export type MediaType = 'game' | 'movie' | 'show';
+export type MediaType = 'game' | 'movie' | 'show' | 'book' | 'boardgame';
 
 export interface Facet {
   kind: 'tag' | 'person' | 'company' | 'ip';
@@ -131,6 +131,15 @@ export interface MergedItem {
   revenue?: number | null;
   nextEpisode?: { name: string | null; airDate: string | null; season: number | null; episode: number | null } | null;
   gameModes?: string[];
+  // Books and board games (2026-10-17, src/lib/merge.ts).
+  authors?: string[];
+  pageCount?: number | null;
+  isbn?: string | null;
+  designers?: string[];
+  players?: { min: number | null; max: number | null } | null;
+  playTimeMinutes?: number | null;
+  minAge?: number | null;
+  weight?: number | null;
   playtimeHours?: number | null;
   timeToBeat?: { hastily: number | null; normally: number | null; completely: number | null } | null;
   dlc?: string[];
@@ -158,7 +167,7 @@ export interface DeltaPage {
 }
 
 export interface CalendarCard {
-  source: 'tmdb' | 'igdb';
+  source: 'tmdb' | 'igdb' | 'openlibrary';
   sourceId: string;
   type: MediaType;
   title: string;
@@ -178,6 +187,21 @@ export interface CalendarMonth {
   builtAt: number;
   stale: boolean;
   data: { partial: boolean; items: CalendarCard[] };
+}
+
+/**
+ * A provider title as a card, the shape every search and browse route answers
+ * with: IGDB games, Open Library books, BGG board games (worker/src/shelves.ts).
+ */
+export interface ProviderResult {
+  source: 'igdb' | 'openlibrary' | 'bgg';
+  sourceId: string;
+  type: 'game' | 'book' | 'boardgame';
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  votes: number;
+  rating: number | null;
 }
 
 export interface GameSearchResult {
@@ -261,6 +285,14 @@ export const api = {
     request<{ region: string; dates: Record<string, string> }>('/v1/catalog/release-dates', json('POST', { region, ids })),
 
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
+  /** Open Library's or BGG's titles for a query. Board games answer 503 `not-configured` while BGG is off. */
+  searchShelf: (shelf: 'books' | 'boardgames', query: string) => request<{ results: ProviderResult[] }>(`/v1/search/${shelf}${q({ q: query })}`),
+  /** What is popular: Open Library's weekly trending books, BGG's hot board games. */
+  browseShelf: (shelf: 'books' | 'boardgames') => request<{ results: ProviderResult[] }>(`/v1/browse/${shelf}`),
+  /** A tag's, an author's, a publisher's or a series' books at Open Library. */
+  facetBooks: (kind: 'tag' | 'person' | 'studio' | 'franchise', label: string) => request<{ results: ProviderResult[] }>(`/v1/facet/books${q({ kind, q: label })}`),
+  /** Which optional types the API has switched on (board games need a BGG token). */
+  features: () => request<{ boardgames: boolean; books: boolean }>('/v1/features'),
   /** Upcoming games, most anticipated first, forty a page (1 to 10). */
   browseGames: (page: number, window?: 'recent') => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page), window })}`),
   /** A tag's or a studio's games at IGDB, most rated first. */

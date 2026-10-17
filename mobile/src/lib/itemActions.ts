@@ -57,6 +57,14 @@ export function traktIds(target: ActionTarget): { trakt: number } | { tmdb: numb
 
 const traktKey = (type: MediaType) => (type === 'movie' ? 'movies' : 'shows');
 
+/** Only films and shows live on Trakt. A game, a book or a board game is saved here alone. */
+export const onTrakt = (type: MediaType) => type === 'movie' || type === 'show';
+
+/** The status a rated title gets: watched, read or played. */
+export function statusFor(type: MediaType): string {
+  return type === 'movie' || type === 'show' ? 'watched' : type === 'book' ? 'read' : 'played';
+}
+
 /** The rows a rating change writes. Pure, so the averaging rule has a test. */
 export function ratingWrite(input: {
   target: ActionTarget;
@@ -68,7 +76,7 @@ export function ratingWrite(input: {
 }): StateWrite {
   const { target, rows, rating, home, now } = input;
   const library = rows.filter((r) => r.relation === 'library');
-  const fallbackStatus = target.type === 'game' ? 'played' : 'watched';
+  const fallbackStatus = statusFor(target.type);
   const row = (source: string, have: HeldRow | undefined): ItemStateUpsert => ({
     mediaItemId: target.id,
     source,
@@ -99,9 +107,10 @@ async function heldRows(db: SQLiteDatabase, id: string): Promise<HeldRow[]> {
   return db.getAllAsync<HeldRow>('SELECT source, relation, status, rating, review FROM item_state WHERE media_item_id = ?', [id]);
 }
 
-/** Films and shows go to Trakt when this device can reach it. */
+/** Films and shows go to Trakt when this device can reach it. Nothing else does. */
 async function traktFor(target: ActionTarget): Promise<{ token: string; ids: { trakt: number } | { tmdb: number } } | null> {
-  if (target.type === 'game') return null;
+  // "Not a game" used to mean "film or show"; a book would have gone to Trakt as a show (2026-10-17).
+  if (!onTrakt(target.type)) return null;
   const ids = traktIds(target);
   if (!ids || !(await loadTraktTokens())) return null;
   return { token: await traktAccessToken(), ids };

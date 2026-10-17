@@ -21,6 +21,8 @@ import { useToast } from '~/components/Toast';
 import { Screen, T } from '~/components/ui';
 import { toggled } from '~/lib/a11y';
 import { foldAt } from '~/lib/foldAt';
+import { TYPE_ICONS } from '~/lib/typeIcons';
+import { useOfferedTypes } from '~/lib/features';
 import { api, ApiError } from '~/lib/api';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
@@ -35,12 +37,12 @@ import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
 import { count } from '~/lib/plural';
-import { color, font, radius, space } from '~/theme';
+import { color, font, radius, space, TYPE_PLURAL } from '~/theme';
 
 type Notice = { msg: string; ok: boolean } | null;
 
 const PROVIDER_NAME: Record<string, string> = { trakt: 'Trakt', google: 'Google', discord: 'Discord', steam: 'Steam' };
-const TYPE_ICON = { game: Gamepad2, movie: Clapperboard, show: Tv } as const;
+const TYPE_ICON = TYPE_ICONS;
 
 function ago(ms: number | null): string {
   if (!ms) return 'never';
@@ -319,6 +321,7 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
   const value = auth.profile?.user.mediaTypes ?? null;
   const [selected, setSelected] = useState(enabledMediaTypes(value));
   const [saving, setSaving] = useState(false);
+  const offered = useOfferedTypes();
   const [error, setError] = useState<string | null>(null);
   const valueKey = (value ?? []).join(',');
   useEffect(() => {
@@ -349,7 +352,7 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
       .finally(() => setSaving(false));
   };
 
-  const allOn = selected.length === MEDIA_TYPES.length;
+  const allOn = offered.every((t) => selected.includes(t));
   return (
     <Section
       eyebrow="Default types"
@@ -357,7 +360,7 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
     >
       <Card>
         <View style={styles.chips}>
-          {MEDIA_TYPES.map((t) => {
+          {offered.map((t) => {
             const Icon = TYPE_ICON[t];
             const on = selected.includes(t);
             return (
@@ -379,7 +382,7 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
         <T variant="bodySm">
           {allOn
             ? 'Every list starts with all three.'
-            : `Off by default: ${MEDIA_TYPES.filter((t) => !selected.includes(t)).map((t) => MEDIA_TYPE_LABELS[t]).join(', ')}. Nothing is deleted or hidden for good. Tap the type in any list's filter row to bring it back for that visit.`}
+            : `Off by default: ${offered.filter((t) => !selected.includes(t)).map((t) => MEDIA_TYPE_LABELS[t]).join(', ')}. Nothing is deleted or hidden for good. Tap the type in any list's filter row to bring it back for that visit.`}
           {saving ? ' Saving…' : ''}
         </T>
       </Card>
@@ -708,9 +711,10 @@ function Device() {
     <Section eyebrow="This device" hint="The catalog is kept on the device, so lists and search work without a connection.">
       <Card>
         <Line label="Titles" value={sync.total.toLocaleString('en')} />
-        <Line label="Games" value={(counts.game ?? 0).toLocaleString('en')} />
-        <Line label="Movies" value={(counts.movie ?? 0).toLocaleString('en')} />
-        <Line label="Shows" value={(counts.show ?? 0).toLocaleString('en')} />
+        {/* Every type, books and board games included, and only those the device holds. */}
+        {MEDIA_TYPES.filter((t) => (counts[t] ?? 0) > 0 || t === 'game' || t === 'movie' || t === 'show').map((t) => (
+          <Line key={t} label={TYPE_PLURAL[t] ?? t} value={(counts[t] ?? 0).toLocaleString('en')} />
+        ))}
         <Line label="Status" value={status} tone={sync.state === 'error' ? color.danger : undefined} />
         {sync.error ? <T variant="bodySm">{sync.error}</T> : null}
         <Line label="Release dates for" value={auth.region} />

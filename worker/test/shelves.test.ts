@@ -43,11 +43,11 @@ describe("books", () => {
   it("searches Open Library and answers app cards, with the rating on 0-100", async () => {
     const calls = providers({
       "openlibrary.org/search.json": () => jsonResponse({ docs: [
-        { key: "/works/OL893414W", title: "Dune", first_publish_year: 1965, cover_i: 11481354, ratings_average: 4.3, ratings_count: 448, publish_date: ["August 1965", "1965-08-01"] },
+        { key: "/works/OL893414W", title: "Dune", first_publish_year: 1965, cover_i: 11481354, ratings_average: 4.3, ratings_count: 448, author_name: ["Frank Herbert"], publish_date: ["August 1965", "1965-08-01"] },
         { title: "no key, left out" },
       ] }),
     });
-    const res = await call("/v1/search/books?q=dune%20shelves%20test");
+    const res = await call("/v1/search/books?q=dune%20herbert");
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.results).toEqual([expect.objectContaining({
@@ -69,8 +69,8 @@ describe("books", () => {
 describe("board games", () => {
   it("are switched off without a BGG token, and say so instead of asking BGG", async () => {
     const calls = providers({});
-    expect(await (await call("/v1/features")).json()).toMatchObject({ boardgames: !!env.BGG_TOKEN, books: true });
-    if (!env.BGG_TOKEN) {
+    expect(await (await call("/v1/features")).json()).toMatchObject({ boardgames: !!(env as { BGG_TOKEN?: string }).BGG_TOKEN, books: true });
+    if (!(env as { BGG_TOKEN?: string }).BGG_TOKEN) {
       const res = await call("/v1/search/boardgames?q=catan%20shelf");
       expect(res.status).toBe(503);
       expect(await res.json()).toMatchObject({ error: "not-configured" });

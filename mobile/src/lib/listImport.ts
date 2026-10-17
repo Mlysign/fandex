@@ -27,6 +27,7 @@ import { api, ApiError, type ItemStateKey, type ItemStateUpsert, type MediaType,
 import { applyLocalWrite } from '~/lib/stateSync';
 import { searchTmdbMovieId, tmdbFindImdb } from '~/lib/tmdb';
 import { loadTraktTokens, traktAccessToken, traktPost } from '~/lib/trakt';
+import { onTrakt, statusFor } from '~/lib/itemActions';
 
 export { ImportParseError };
 
@@ -219,17 +220,18 @@ export function planImportWrites(input: { rows: ImportRowToWrite[]; held: HeldIt
   for (const r of ordered) {
     if (seen.has(r.mediaItemId)) continue;
     seen.add(r.mediaItemId);
-    const home = traktOn && (r.type === 'movie' || r.relation === 'wishlist') ? 'trakt' : 'local';
+    // Only a film or a show can live on Trakt (itemActions.onTrakt).
+    const home = traktOn && onTrakt(r.type) && (r.type === 'movie' || r.relation === 'wishlist') ? 'trakt' : 'local';
 
     if (r.relation === 'library') {
       if (rated.has(r.mediaItemId)) { plan.keptRated++; continue; }
       if (r.rating == null && listed.has(r.mediaItemId)) { plan.alreadyListed++; continue; }
       plan.upsert.push({
         mediaItemId: r.mediaItemId, source: home, relation: 'library',
-        status: r.type === 'game' ? 'played' : 'watched', rating: r.rating, review: null, reviewedAt: r.ratedAt ?? now,
+        status: statusFor(r.type), rating: r.rating, review: null, reviewedAt: r.ratedAt ?? now,
       });
       plan.ratings++;
-      if (traktOn && r.type !== 'game') {
+      if (traktOn && onTrakt(r.type)) {
         if (r.rating != null) plan.trakt.ratings.push(r);
         if (r.type === 'movie' && !traktLibrary.has(r.mediaItemId)) plan.trakt.history.push(r);
       }

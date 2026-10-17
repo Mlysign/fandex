@@ -19,7 +19,7 @@ interface Env {
   API: { fetch(request: Request): Promise<Response> };
 }
 
-const TYPES = new Set(['movie', 'show', 'game']);
+const TYPES = new Set(['movie', 'show', 'game', 'book', 'boardgame']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 /** The app's one-word screens, other than Home, which is `/` and a file. The site's own addresses. */

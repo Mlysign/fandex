@@ -11,7 +11,7 @@
 // by company, not by name.
 
 import { personKey } from '@/lib/facets';
-import { api, type GameSearchResult } from '~/lib/api';
+import { api, type GameSearchResult, type ProviderResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 
@@ -31,6 +31,8 @@ export interface FacetPerson {
   placeOfBirth: string | null;
   profileUrl: string | null;
   knownFor: string | null;
+  /** Every portrait TMDB holds of them, best voted first: `full` for the gallery, `thumb` for its strip. */
+  photos: { full: string; thumb: string; width: number; height: number }[];
 }
 
 export interface ProviderFacet {
@@ -47,6 +49,46 @@ function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
     posterUrl: c.poster_path ? `https://image.tmdb.org/t/p/w342${c.poster_path}` : null,
     communityScore: typeof c.vote_average === 'number' && c.vote_average > 0 ? Math.round(c.vote_average * 10) : null,
     communityVotes: c.vote_count ?? 0,
+  };
+}
+
+/** A book or a board game the Worker found, as a card. */
+function shelfCard(r: ProviderResult): CardItem {
+  return {
+    key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type,
+    title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes,
+  };
+}
+
+const OL = 'https://openlibrary.org';
+
+/**
+ * An author as Open Library knows them, for a person TMDB has no record of
+ * (most writers). The exact name with the most works wins: Open Library's first
+ * hit for "Frank Herbert" is Frank Herbert Hayward (21 works), not the author
+ * of Dune (141). Photos are its author covers; -1 means none.
+ */
+export async function openLibraryAuthor(name: string, signal?: AbortSignal): Promise<FacetPerson | null> {
+  const target = name.trim().toLowerCase();
+  if (target.length < 2) return null;
+  const res = await fetch(`${OL}/search/authors.json?q=${encodeURIComponent(name)}&limit=8&fields=key,name,work_count`, { signal });
+  if (!res.ok) return null;
+  const docs = ((await res.json())?.docs ?? []) as { key?: string; name?: string; work_count?: number }[];
+  const best = docs.filter((d) => d.key && d.name?.trim().toLowerCase() === target).sort((a, b) => (b.work_count ?? 0) - (a.work_count ?? 0))[0];
+  if (!best?.key) return null;
+  const a = await fetch(`${OL}/authors/${best.key}.json`, { signal }).then((r) => (r.ok ? r.json() : null), () => null);
+  if (!a) return null;
+  const photos = ((a.photos ?? []) as number[]).filter((id) => Number.isInteger(id) && id > 0).slice(0, 20);
+  const bio = typeof a.bio === 'string' ? a.bio : typeof a.bio?.value === 'string' ? a.bio.value : null;
+  return {
+    name: a.name ?? name,
+    biography: bio,
+    birthday: typeof a.birth_date === 'string' ? a.birth_date : null,
+    deathday: typeof a.death_date === 'string' ? a.death_date : null,
+    placeOfBirth: null,
+    profileUrl: photos[0] ? `https://covers.openlibrary.org/a/id/${photos[0]}-M.jpg` : null,
+    knownFor: 'Writing',
+    photos: photos.map((id) => ({ full: `https://covers.openlibrary.org/a/id/${id}-L.jpg`, thumb: `https://covers.openlibrary.org/a/id/${id}-S.jpg`, width: 2, height: 3 })),
   };
 }
 
@@ -95,7 +137,11 @@ async function personId(key: string, signal?: AbortSignal): Promise<number | nul
 async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet> {
   const id = await personId(key, signal);
   if (id == null) return { cards: [], person: null };
-  const [meta, credits] = await Promise.all([tmdb(`/person/${id}`, signal), tmdb(`/person/${id}/combined_credits`, signal)]);
+  const [meta, credits, images] = await Promise.all([
+    tmdb(`/person/${id}`, signal), tmdb(`/person/${id}/combined_credits`, signal),
+    // The photos behind the portrait (tap it on the person page). A failure costs the gallery, not the page.
+    tmdb(`/person/${id}/images`, signal).catch(() => null),
+  ]);
   const cards: CardItem[] = [];
   const take = (c: any) => {
     if (!(c.media_type === 'movie' || c.media_type === 'tv') || c.id == null) return;
@@ -115,6 +161,15 @@ async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet>
       placeOfBirth: meta?.place_of_birth || null,
       profileUrl: meta?.profile_path ? `https://image.tmdb.org/t/p/w300${meta.profile_path}` : null,
       knownFor: meta?.known_for_department || null,
+      photos: ((images?.profiles ?? []) as { file_path?: string; width?: number; height?: number; vote_average?: number }[])
+        .filter((p) => p.file_path)
+        .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+        .slice(0, 40)
+        .map((p) => ({
+          full: `https://image.tmdb.org/t/p/h632${p.file_path}`,
+          thumb: `https://image.tmdb.org/t/p/w185${p.file_path}`,
+          width: p.width ?? 2, height: p.height ?? 3,
+        })),
     },
   };
 }
@@ -173,7 +228,11 @@ async function tagFilter(label: string, signal?: AbortSignal): Promise<string | 
  * Throws when TMDB cannot be reached; the page then shows what the device holds.
  */
 export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
-  if (!tmdbConfigured()) return { cards: [], person: null };
+  // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's or a publisher's.
+  const books = api.facetBooks(kind, label).then((r) => r.results.map(shelfCard), () => [] as CardItem[]);
+  // An author TMDB does not know still gets a face and a biography.
+  const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
+  if (!tmdbConfigured()) return { cards: unique(await books), person: await author };
   let found: ProviderFacet;
   // The games run alongside TMDB and never fail the page: no games is a shorter list.
   const games = kind === 'person' ? Promise.resolve([] as CardItem[])
@@ -186,7 +245,11 @@ export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: stri
     const filter = await tagFilter(label, signal);
     found = { cards: filter ? await discover(filter, signal) : [], person: null };
   }
-  found.cards = unique([...found.cards, ...(await games)]);
+  found.cards = unique([...found.cards, ...(await games), ...(await books)]);
+  if (kind === 'person' && (!found.person || !found.person.profileUrl)) {
+    const ol = await author;
+    if (ol) found.person = found.person ? { ...ol, ...Object.fromEntries(Object.entries(found.person).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length))) } as FacetPerson : ol;
+  }
   if (!found.cards.length) return found;
   try {
     const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));

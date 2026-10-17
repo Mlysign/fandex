@@ -28,7 +28,9 @@ import { cardHref, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { Taxonomy } from '~/lib/fandexScore';
 import { useScores } from '~/lib/ScoreProvider';
-import { breakpoint, color, font, radius, type } from '~/theme';
+import { breakpoint, color, font, radius, type, TYPE_PLURAL } from '~/theme';
+import { MEDIA_TYPES } from '@/lib/mediaTypes';
+import type { MediaType } from '~/lib/api';
 
 interface Rated extends CardItem { rating: number; facets: StoredFacet[] }
 interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string }
@@ -230,7 +232,7 @@ export default function InsightsScreen() {
     if (!signedIn) { setRated(null); return; }
     (async () => {
       const rows = await db.getAllAsync<{
-        id: string; type: 'game' | 'movie' | 'show'; title: string; slug: string | null; poster_url: string | null;
+        id: string; type: MediaType; title: string; slug: string | null; poster_url: string | null;
         release_date: string | null; community_score: number | null; community_votes: number; facets: string; rating: number;
       }>(
         `SELECT c.id, c.type, c.title, c.slug, c.poster_url, c.release_date, c.community_score, c.community_votes, c.facets,
@@ -260,7 +262,7 @@ export default function InsightsScreen() {
     if (!rated?.length) return null;
     const baseline = rated.reduce((a, r) => a + r.rating, 0) / rated.length;
     const hist = (list: Rated[]) => Array.from({ length: 10 }, (_, i) => ({ bucket: i + 1, count: list.filter((r) => Math.min(10, Math.max(1, Math.round(r.rating))) === i + 1).length }));
-    const byType: Record<string, Rated[]> = { game: [], movie: [], show: [] };
+    const byType: Record<string, Rated[]> = Object.fromEntries(MEDIA_TYPES.map((t) => [t, [] as Rated[]]));
     for (const r of rated) byType[r.type]?.push(r);
 
     const decades = new Map<number, { n: number; sum: number }>();
@@ -321,6 +323,8 @@ export default function InsightsScreen() {
         { title: 'Directors', facets: most('person', 'director') },
         { title: 'Film studios', facets: most('company', 'studio') },
         { title: 'Game studios', facets: most('company', 'developer', 'publisher') },
+        // Authors, board game designers and show creators share the role.
+        { title: 'Creators and authors', facets: most('person', 'creator') },
       ],
     };
   }, [rated, taxonomy]);
@@ -384,7 +388,7 @@ export default function InsightsScreen() {
             {[
               <Stat key="r" label="Rated items" value={String(rated.length)} sub={`${libraryTotal} in library`} />,
               <Stat key="a" label="Average" value={data.baseline.toFixed(1)} sub="your mean rating" />,
-              ...data.byType.map((t) => <Stat key={t.type} label={`${t.type[0].toUpperCase()}${t.type.slice(1)}s`} value={String(t.count)} />),
+              ...data.byType.map((t) => <Stat key={t.type} label={TYPE_PLURAL[t.type] ?? t.type} value={String(t.count)} />),
             ].map((el, i) => <View key={i} style={[styles.cell, grid(width >= breakpoint.lg ? 5 : width >= breakpoint.sm ? 3 : 2)]}>{el}</View>)}
           </View>
         </View>
@@ -405,7 +409,7 @@ export default function InsightsScreen() {
                 <Panel style={{ padding: 12 }}>
                   <View style={styles.typeHead}>
                     <View style={[styles.dot, { backgroundColor: color.media[t.type] }]} />
-                    <Text style={[type.label, { textTransform: 'capitalize' }]}>{t.type}s</Text>
+                    <Text style={type.label}>{TYPE_PLURAL[t.type] ?? t.type}</Text>
                   </View>
                   <Histogram data={t.histogram} tint={color.media[t.type]} height={110} />
                 </Panel>
