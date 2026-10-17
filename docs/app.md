@@ -23,6 +23,22 @@ code, in a browser.
 | Admin (`/dev/users`, `/dev/scoring`, `/dev/analytics`) | Who is registered and what they hold. Pageviews, where they came from and the two thresholds they are counted for. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions), and Review, which proposes tag categories, franchise merges and missing members and remembers a no. An admin only: anybody else sees "Nothing here". | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
 
+**Books and board games (2026-10-17)** run through every screen above. Their search, popular
+rows, calendar entries and facet halves come from the Worker (`/v1/search/books`,
+`/v1/browse/books`, `/v1/facet/books`, `api.ts`), never from the provider directly. Board games
+are OFF until the Worker has a BGG token: `lib/features.ts` asks `/v1/features` and
+`useOfferedTypes()` drops the type from the filters and Settings, and `boardgamesOn()` keeps Search
+and Home from asking. A rating of either is stored as source `local` with status `read` or
+`played` (`itemActions.ts`, `onTrakt`, `statusFor`): neither provider has a write-back. Every
+book page credits Open Library and every board-game page BoardGameGeek, which their terms ask
+for. ⚠️ **A new media type is a string-union member, so `tsc` flags almost nothing**: the type
+lists are `MEDIA_TYPES` (site), `TYPE_LABEL`/`TYPE_PLURAL`/`color.media` (`theme.ts`),
+`TYPE_ICONS` (`typeIcons.ts`, typed as a full `Record`, so it does fail), `TYPES` in
+`mobile/web/build.mjs` and `worker.ts`, and the Worker's `TYPES`, `SOURCES` and `MEDIA_TYPES`.
+
+A person's picture opens a full-screen gallery of every photo TMDB holds of them
+(`PhotoGallery.tsx`).
+
 Opening a calendar card or a search result goes through `/open/{source}/{type}/{id}`, which asks the
 Worker to resolve the provider id (fetching the title if nobody holds it) and then replaces itself
 with the item page, so Back returns to the list.

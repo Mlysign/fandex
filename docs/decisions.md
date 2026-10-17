@@ -214,7 +214,10 @@ Answered in one rapid-fire pass.
 
 - **2026-06-18: public website first, Android as a PWA/TWA wrapper.** Fandex ships to the
   Play Store as a thin app displaying fandex.org, not a second codebase.
-- **2026-08-03: books (Hardcover + Open Library) POSTPONED as a media type**, and
+- **2026-10-17: books and board games ARE media types** (Nils), superseding the 2026-08-03
+  postponement below. Books come from Open Library, board games from BoardGameGeek behind
+  `BGG_TOKEN`. Neither has a two-way sync: a rating is stored as source `local`.
+- **2026-08-03 (superseded 2026-10-17): books POSTPONED as a media type**, and
   **Backloggd/Hardcover parked** — Hardcover's docs call its API "only for offline use at
   this time", which a hosted multi-user site is not.
 - **2026-08-19: monetization is ADS-FIRST.** Go live → wait for traction → ads → premium.
