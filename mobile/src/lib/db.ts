@@ -17,7 +17,7 @@ export const DATABASE_NAME = 'fandex.db';
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
@@ -131,6 +131,15 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       );
     `);
     await stamp(db, (version = 4));
+  }
+
+  if (version < 5) {
+    // Not a schema change. Up next stored "caught up" for every show a catalog
+    // start-over had not refilled yet, without asking Trakt (upNext.ts,
+    // watchedShows). Those rows cannot be told apart from true ones, so every
+    // caught-up row is asked about once more.
+    await db.execAsync('DELETE FROM up_next WHERE season IS NULL');
+    await stamp(db, (version = 5));
   }
 }
 

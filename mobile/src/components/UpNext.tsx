@@ -158,7 +158,12 @@ export function useUpNext(limit: number) {
     }
   }, [db, show]);
 
-  return { entries, pending, refreshing, error, done, leaving, tick, entryKey };
+  // A show is looked up only once the catalog copy holds it, and only among the
+  // rows this device has. While either is still arriving, an empty list means
+  // "not known yet", and saying "caught up" then is a claim nobody checked.
+  const filling = catalog.state === 'syncing' || auth.rowsSyncing;
+
+  return { entries, pending, refreshing, filling, error, done, leaving, tick, entryKey };
 }
 
 // ── Home's rail ──────────────────────────────────────────────────────────────
@@ -187,7 +192,9 @@ export function UpNextRail() {
         <Panel style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
           <Text style={type.bodySm}>
             {up.refreshing ? 'Asking Trakt what is next…'
-              : up.error ?? 'You are caught up. A show appears here when it has an episode out that you have not watched.'}
+              : up.error ? up.error
+              : up.filling ? 'Loading your shows…'
+              : 'You are caught up. A show appears here when it has an episode out that you have not watched.'}
           </Text>
         </Panel>
       </View>

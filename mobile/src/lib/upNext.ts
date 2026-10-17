@@ -117,20 +117,35 @@ export function showsToCheck(shows: ShowWatch[], stored: StoredRow[], now: numbe
   return due.slice(0, budget);
 }
 
+/**
+ * The shows you have ticked episodes of, among those the catalog copy holds.
+ *
+ * ⚠️ Only those. A show the copy does not hold YET cannot be looked up, and it
+ * used to be stored as caught up without Trakt being asked. A catalog start-over
+ * empties the copy and refills it page by page, and every page re-ran this:
+ * after the 2026-10-16 fold every device recorded most of its shows as caught
+ * up, and the answer held for a day to a week (TTL_ACTIVE, TTL_DORMANT). A show
+ * left out here is asked about once the page holding it lands.
+ */
 async function watchedShows(db: SQLiteDatabase): Promise<ShowWatch[]> {
   const rows = await db.getAllAsync<{ media_item_id: string; n: number; last: number | null }>(
     `SELECT e.media_item_id, COUNT(*) n, MAX(e.watched_at) last
        FROM episode_state e
       WHERE e.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
+        AND e.media_item_id IN (SELECT id FROM catalog)
       GROUP BY e.media_item_id`,
   );
   return rows.map((r) => ({ mediaItemId: r.media_item_id, watchedCount: r.n, lastWatchedAt: r.last }));
 }
 
-/** The show's Trakt id, out of the catalog copy. Null when the catalog holds no Trakt link for it. */
-async function traktIdOf(db: SQLiteDatabase, mediaItemId: string): Promise<number | null> {
+/**
+ * The show's Trakt id, out of the catalog copy. Null when the copy holds the
+ * show with no Trakt link; undefined when it does not hold the show at all,
+ * which says nothing about Trakt.
+ */
+async function traktIdOf(db: SQLiteDatabase, mediaItemId: string): Promise<number | null | undefined> {
   const row = await db.getFirstAsync<{ vector: string }>('SELECT vector FROM catalog WHERE id = ?', [mediaItemId]);
-  if (!row) return null;
+  if (!row) return undefined;
   try {
     const sources = (JSON.parse(row.vector) as { sources?: { source: string; sourceId: string }[] }).sources ?? [];
     const id = Number(sources.find((s) => s.source === 'trakt')?.sourceId);
@@ -154,9 +169,11 @@ async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: numb
 
 async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now: number): Promise<void> {
   const traktId = await traktIdOf(db, show.mediaItemId);
+  // Not in the catalog copy (yet): nothing is known, so nothing is stored.
+  if (traktId === undefined) return;
   // No Trakt link: there is nobody to ask. Stored as caught up so it is not
   // asked about on every run.
-  if (traktId == null) {
+  if (traktId === null) {
     await store(db, show, { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt }, now);
     return;
   }
@@ -229,7 +246,8 @@ export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNext
 export async function upNextPending(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) n FROM (SELECT DISTINCT media_item_id FROM episode_state)
-      WHERE media_item_id NOT IN (SELECT media_item_id FROM up_next)`,
+      WHERE media_item_id NOT IN (SELECT media_item_id FROM up_next)
+        AND media_item_id IN (SELECT id FROM catalog)`,
   );
   return row?.n ?? 0;
 }

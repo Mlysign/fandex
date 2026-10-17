@@ -266,6 +266,7 @@ function Progress({ tabs, query, setQuery }: { tabs: React.ReactNode; query: str
             !showsVisible ? <EmptyState title="Shows are filtered out" hint="Progress is about shows. Pick Shows, or all types, in the filter above." />
               : term ? <EmptyState title="Nothing matches" hint="No show you are watching has that in its name." />
               : up.refreshing ? <StateBlock loading title="Asking Trakt what is next" />
+              : up.filling ? <StateBlock loading title="Loading your shows" />
               : <EmptyState title="You are caught up" hint="A show appears here when it has an episode out that you have not watched." />
           }
           renderItem={({ item }) => {
