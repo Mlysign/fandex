@@ -191,18 +191,30 @@ export function bookIdentityKey(card: { title: string; authors?: string[] }): st
  * second holds that the first does not. The same book is one that shares an
  * ISBN-13, or the same title and author. Open Library goes first, so its
  * work stays the book's identity; a Hardcover card survives only for a book
- * Open Library did not answer with.
+ * Open Library did not answer with. A book both know keeps Open Library's
+ * cover and takes Hardcover's only when Open Library has none (Nils,
+ * 2026-10-17: "covers only if the other provider has none").
  */
 export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): BookCard[] {
-  const isbns = new Set<string>();
-  const keys = new Set<string>();
-  const note = (c: BookCard) => { for (const i of c.isbns ?? []) isbns.add(i); keys.add(bookIdentityKey(c)); };
-  for (const c of primary) note(c);
-  const out = [...primary];
+  const byIsbn = new Map<string, BookCard>();
+  const byKey = new Map<string, BookCard>();
+  const note = (c: BookCard) => {
+    for (const i of c.isbns ?? []) if (!byIsbn.has(i)) byIsbn.set(i, c);
+    const k = bookIdentityKey(c);
+    if (!byKey.has(k)) byKey.set(k, c);
+  };
+  // Copies: filling a cover in must not change the caller's card.
+  const out = primary.map((c) => ({ ...c }));
+  for (const c of out) note(c);
   for (const c of secondary) {
-    if ((c.isbns ?? []).some((i) => isbns.has(i)) || keys.has(bookIdentityKey(c))) continue;
-    note(c);
-    out.push(c);
+    const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
+    if (twin) {
+      if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
+      continue;
+    }
+    const copy = { ...c };
+    note(copy);
+    out.push(copy);
   }
   return out;
 }

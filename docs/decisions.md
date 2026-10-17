@@ -203,6 +203,11 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   matcher holds one id per namespace per item, and two editions' ISBNs would read as two works.
   In every list, Open Library's card wins a book both know (same ISBN-13, or same title and
   author), and Hardcover's cards follow.
+- **A Hardcover cover only where Open Library has none** (Nils: "covers only if the other
+  provider has none", 2026-10-17). On an item, the poster priority puts Open Library ahead of
+  Hardcover; in a merged list, a book both know keeps Open Library's cover and takes Hardcover's
+  only when Open Library's card has no cover. The 4,000-a-day budget with the Open Library
+  fallback is his too ("4000 limit is ok").
 - **A Hardcover-fed book page credits Open Library and Hardcover, though neither asks for it.**
   Hardcover's docs warn that its images are user-uploaded, so the support page names
   hello@fandex.org for takedown requests, in both languages.

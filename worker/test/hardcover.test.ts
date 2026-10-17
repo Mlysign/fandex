@@ -212,8 +212,8 @@ describe("resolving a Hardcover id", () => {
     const links = await db.prepare("SELECT source, source_id FROM media_links WHERE media_item_id = ? ORDER BY source").bind(id).all<{ source: string; source_id: string }>();
     expect(links.results).toEqual([{ source: "hardcover", source_id: "1" }, { source: "openlibrary", source_id: "OL8479867W" }]);
     const item = await db.prepare("SELECT title, poster_url, release_date FROM media_items WHERE id = ?").bind(id).first<{ title: string; poster_url: string; release_date: string }>();
-    // The title is Open Library's (the identity); the cover and the day are Hardcover's.
-    expect(item).toEqual({ title: "The Name of the Wind", poster_url: "https://fandex.org/v1/cover/hardcover/editions/31843562/8162436135689143.jpg", release_date: "2007-03-27" });
+    // The title and the cover are Open Library's (the identity, and it has a cover); the day is Hardcover's.
+    expect(item).toEqual({ title: "The Name of the Wind", poster_url: "https://covers.openlibrary.org/b/id/8259447-L.jpg", release_date: "2007-03-27" });
     expect(calls.some((c) => c.url.includes("q=isbn%3A"))).toBe(true);
 
     // Held now: the same id again is one indexed read, no provider call.

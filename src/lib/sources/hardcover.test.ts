@@ -155,7 +155,16 @@ describe("the two book sources as one list", () => {
     const other = hardcoverCard(parseHardcoverBook(ROW)!);
     const merged = mergeBookCards([dune], [hcDune, byTitle, other]);
     expect(merged.map((c) => `${c.source}:${c.sourceId}`)).toEqual(["openlibrary:OL893414W", "hardcover:426728"]);
+    // Open Library's cover stays, though Hardcover has one too.
+    expect(merged[0].posterUrl).toBe(dune.posterUrl);
     expect(stripIsbns(merged).every((c) => !("isbns" in c))).toBe(true);
+  });
+
+  it("gives a book Open Library has no cover for Hardcover's, and nothing else of Hardcover's", () => {
+    const bare = { ...dune, posterUrl: null };
+    const merged = mergeBookCards([bare], [hardcoverCard(DUNE_HC)]);
+    expect(merged).toEqual([{ ...bare, posterUrl: DUNE_HC.cover }]);
+    expect(bare.posterUrl).toBeNull();
   });
 
   it("keys a title without its subtitle or its article, plus the author's surname", () => {
@@ -176,11 +185,14 @@ describe("a book held by both", () => {
   const olLink = { source: "openlibrary", sourceId: "OL893414W", rawData: { ...DUNE_OL, id: "OL893414W", series_name: ["Dune"] } } as unknown as MediaLink;
   const hcLink = { source: "hardcover", sourceId: "1", rawData: DUNE_HC } as unknown as MediaLink;
 
-  it("takes its title and series from Open Library, its date and cover from Hardcover, and no Hardcover rating", () => {
+  it("takes its title, series and cover from Open Library, its date from Hardcover, and no Hardcover rating", () => {
     const m = mergeLinks([olLink, hcLink], "book");
     expect(m.title).toBe("Dune");
     expect(m.collection).toBe("Dune");
-    expect(m.posterUrl).toBe(DUNE_HC.cover);
+    expect(m.posterUrl).toBe("https://covers.openlibrary.org/b/id/11481354-L.jpg");
+    // Hardcover's cover only where Open Library has none (Nils, 2026-10-17).
+    const noCover = { ...olLink, rawData: { ...(olLink as any).rawData, cover_i: undefined } } as unknown as MediaLink;
+    expect(mergeLinks([noCover, hcLink], "book").posterUrl).toBe(DUNE_HC.cover);
     expect(m.releaseDate).toBe("1965-08-01");
     expect(m.authors).toEqual(["Frank Herbert"]);
     // Open Library's first ISBN as it lists it: its normalizer predates Hardcover and is unchanged.

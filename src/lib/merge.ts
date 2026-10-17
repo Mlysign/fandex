@@ -10,13 +10,14 @@ import { DEFAULT_COUNTRY } from "./countries";
 // ── Priority orders (single-value fields) ─────────────────────────
 const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "hardcover", "bgg"];
 const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb", "openlibrary", "hardcover", "bgg"];
-// Hardcover before Open Library for a book's DATE and COVER (2026-10-17): it
-// knows the day a book not yet out is due, where Open Library knows a year at
-// best, and its covers are curated. The title stays Open Library's: it is the identity.
+// Hardcover before Open Library for a book's DATE (2026-10-17): it knows the
+// day a book not yet out is due, where Open Library knows a year at best. The
+// title stays Open Library's: it is the identity. So does the COVER, where Open
+// Library has one (Nils: "covers only if the other provider has none").
 const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd", "hardcover", "openlibrary", "bgg"];
 // Poster = PORTRAIT box-art (card view). Prefer sources with true portrait art
 // (TMDB poster, IGDB cover, Steam library_capsule) over RAWG's landscape image.
-const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "hardcover", "openlibrary", "bgg"];
+const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "hardcover", "bgg"];
 // Backdrop = LANDSCAPE art (list-row thumbnail). TMDB backdrop for film/TV; for
 // games the Steam header / RAWG background / IGDB artwork.
 const BACKDROP_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb"];
