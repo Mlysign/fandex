@@ -26,27 +26,27 @@ token file and a memory of the screens, and it came out as a different product o
 colours. `node` a comment-stripper over the old file and copy its sizes: every number in
 `mobile/src/components/{kit,cards,SubBar,AppNav,UpNext}.tsx` is the old component's.
 
-## Where it stands (2026-10-10)
+## Where it stands (2026-10-17)
 
 Legend: **yes** at parity · **partial** exists, differs as noted · **no** not built.
 
 | Screen | State | What is still owed |
 |---|---|---|
-| Navigation | **yes** | The desktop bar's search box (`NavSearch.tsx`: suggestions for titles, people, tags). It is a link to Search for now. |
+| Navigation | **yes** | The desktop bar's search box since 2026-10-17 (`components/NavSearch.tsx`): People, Tags and Titles from the catalog copy, arrows and Enter, and Enter with nothing picked hands the text to Search. |
 | The kit | **yes** | See the kit table below. |
 | Home | partial | Popular people since 2026-10-15 (ranked by the site build into `/catalog/people.json`, with portraits). "Popular right now" is real trending since 2026-10-15: TMDB's week for films and shows, and the last sixty days' most rated games (`/v1/browse/games?window=recent`), taken in turn. Recommendations are ranked by genre only (a calendar card carries nothing finer). |
-| Wishlist / Library | partial | Grouping by your rating. |
-| Progress (Up next) | **yes** | A hidden show is left out and cannot be found by name. |
-| Search (Discover) | partial | Since 2026-10-15 the provider-fed feed is under the catalog when nothing is typed: upcoming films (your country) and shows from TMDB, asked from the device, and upcoming games from `/v1/browse/games`, five pages each as the list reaches its end. People and tag results above the titles since 2026-10-15 (`lib/facetVocab.ts`). Still owed: scroll and query restored on Back. |
-| Calendar | partial | The slide between months. The region comes from the device, not a setting. |
-| Item page | partial | Built 2026-10-11: the score panel (four states, "Why?" with baseline, linked reasons, left-out rows and the sum), Hide from suggestions, both related rails, thumbnails and hover arrows on a wide window. Still owed: franchise members the catalog does not hold (`franchise_members` is not in D1), "Rate it" as a button that opens the stars (the app shows the ten stars in place), your rating per provider and your review (`RatingsSection.tsx`), and returning to the title after signing in from it. (More than the site had: each episode shows its date and opens a sheet with its still and synopsis.) |
-| Profile | partial | The Support Fandex row. |
-| Settings | partial | Joining two accounts, and Google as a login method on Android (both in app.md, "Waiting on him"). The Import row and the download on a phone since 2026-10-15 (the phone part needs the next APK). The delete dialog lists what the device holds, not the server's per-table count. Steam is listed and does not sync. "Your platforms" folds a long group at eight chips where the site measured two rows. |
-| Facet pages (tag, person, studio) | partial | Games on a tag's and a studio's page since 2026-10-15 (`/v1/facet/games`). "Also known as", "you score X higher than the crowd". Static pages since 2026-10-15 for every facet with three or more titles (the 36 most popular as cards). |
+| Wishlist / Library | **yes** | Grouping by your rating, and the month column beside a release-date list on a wide window (2026-10-17). |
+| Progress (Up next) | **yes** | A hidden show is listed again while a name is typed (2026-10-17). Up next asks Trakt again when the next episode airs and when the app comes back to the front. |
+| Search (Discover) | **yes** | The query survives Back and a reload; the tab stays mounted, so its scroll does too. |
+| Calendar | **yes** | The slide between months, and the country setting (both checked 2026-10-17). |
+| Item page | **yes** | Franchise titles the catalog does not hold: a film's TMDB collection, a game's IGDB franchise or collection (2026-10-17, `/v1/facet/games?kind=franchise`). "More like this" ranks with the app's own `rankLike`. Rate it, your rating per account and your review, and coming back after signing in, were all there already. |
+| Profile | **yes** | The Support Fandex row is there (`EXPO_PUBLIC_SUPPORT_URL`). |
+| Settings | partial | Joining two accounts, and Google as a login method on Android (app.md). "Your platforms" folds each group at two measured rows (2026-10-17). Steam is listed and says it does not sync in this version. The delete dialog lists what the device holds. |
+| Facet pages (tag, person, studio) | **yes** | "Also known as" and "you score X higher than the crowd" are there. |
 | Insights | **yes** (2026-10-15) | The three rating sections have the site's search, minimum count, Highest or Lowest, and a panel per live tag category or role. Not carried: the admin's hover category editor on a tag row (that lives on `/dev/scoring`). |
 | Admin pages (`/dev`) | **yes** | Users, Scoring and Traffic are built, Review included since 2026-10-11. See "The admin pages" below. |
 | Import | **yes** (2026-10-15) | Letterboxd and IMDb, read on the device (`lib/listImport.ts` over the site's own `parseText.ts` and `matchCore.ts`). Seen end to end on the local stack with a test account. Two differences from the site, on purpose: an import never overwrites a rating the account already has, and with Trakt signed in on the device the new ratings and watchlist go to Trakt too. Choosing a file on Android needs the next APK. |
-| Sign-in | partial | Trakt, and Google in a browser since 2026-10-11 (not on Android, [app.md](app.md)). A dialog from any gated control, returning to where you were (it sends you to You). Google on the phone, joining accounts, Steam. |
+| Sign-in | partial | Trakt; Google in a browser; Discord built on both and switched off until its return addresses are listed (app.md, "Discord sign-in"). Not built: Google on the phone, joining accounts, Steam. |
 
 ### What changed on 2026-10-10
 
@@ -92,12 +92,12 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 
 | Thing | Site | App |
 |---|---|---|
-| Poster card | `PosterCard.tsx`, `ActionCells.tsx` | **yes** (`cards.tsx`). Not carried: the hover and long-press score explainer, "View details" on hover. |
+| Poster card | `PosterCard.tsx`, `ActionCells.tsx` | **yes** (`cards.tsx`). The score explainer since 2026-10-17 (`ScoreExplainer.tsx`): after the pointer rests on a card, or on a long press as a sheet. Not carried: "View details" on hover. |
 | Star picker | `ActionCells.tsx` | **yes**. Opens under the card's bar; the star that is your rating clears it. |
-| Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. Not carried: the rail's hover arrows, the month scrubber on a wide window, list view. |
-| Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Once opened on a phone it stays open; the site closed it on a tap outside. |
-| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | partial. No hide while scrolling. |
-| Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | partial (`Filters.tsx`): must include and exclude, available on, your lists, release year. The year is two fields where the site had a slider. |
+| Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. The rail's hover arrows and the month column on a wide window since 2026-10-17. List view: the site never offered it on any page. |
+| Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Open whenever every group fits on the bar from 768 px (measured, 2026-10-17); a phone keeps it folded and closes it on a tap outside. |
+| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | **yes**. Hides while a list scrolls down on a phone and comes back on any scroll up (`lib/barScroll.tsx`, 2026-10-17). |
+| Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | **yes** (`Filters.tsx`): must include and exclude, available on, your lists, release year. The year is two fields, as on the site (its slider was `/dev`'s tag frequency). |
 | Episode row, Up next rail | `EpisodeRow.tsx`, `ProgressRail.tsx` | **yes** (`UpNext.tsx`), with the tick's fill, hold and fade. |
 | Nav bars | `AppNav.tsx` | **yes** (`AppNav.tsx`). |
 | Button, Panel, Eyebrow, EmptyState, Avatar, StatStrip, Skeleton, Sheet, Toast | `ui/*` | **yes** (`kit.tsx`, `Toast.tsx`). The skeleton breathes where the site's shimmers. |

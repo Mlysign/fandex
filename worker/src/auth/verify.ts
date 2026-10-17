@@ -21,7 +21,7 @@ import type { Env } from "../env";
 
 /** What a provider vouched for. `providerUserId` is the identity; the rest is display. */
 export interface VerifiedIdentity {
-  provider: "google" | "trakt";
+  provider: "google" | "trakt" | "discord";
   providerUserId: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -167,4 +167,61 @@ export async function verifyTraktToken(
     displayName: typeof me.name === "string" && me.name.trim() ? me.name : username,
     avatarUrl: typeof me.images?.avatar?.full === "string" ? me.images.avatar.full : null,
   };
+}
+
+// ── Discord ──────────────────────────────────────────────────────────────────
+
+const DISCORD_AUTH_URL = "https://discord.com/api/v10/oauth2/@me";
+
+/**
+ * Ask Discord whose access token this is, and for which app it was issued.
+ *
+ * The client signs in with Discord's implicit grant (scope `identify`) and sends
+ * the access token. `/oauth2/@me` answers with the application the token belongs
+ * to as well as the user, and the APPLICATION check is the one that matters, as
+ * the audience is for Google: a token somebody gave to another site that uses
+ * Discord sign-in would otherwise sign that site's operator in as them here. No
+ * client secret is involved anywhere (the Railway site's code exchange needed
+ * one; this does not).
+ *
+ * The identity is Discord's user id, the snowflake, which is what the Railway
+ * site stored. The token is used for this one request and never stored.
+ */
+export async function verifyDiscordToken(
+  env: Env,
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<VerifiedIdentity> {
+  const appId = (env.DISCORD_CLIENT_ID ?? "").trim();
+  if (!appId) throw new IdentityRejected("Discord sign-in is not configured");
+  if (!accessToken || accessToken.length > 512 || /\s/.test(accessToken)) {
+    throw new IdentityRejected("Discord token is malformed");
+  }
+  let res: Response;
+  try {
+    res = await fetchImpl(DISCORD_AUTH_URL, {
+      headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "Fandex/1.0 (+https://fandex.org)" },
+    });
+  } catch (e) {
+    throw new Error(`Discord is unreachable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (res.status === 401 || res.status === 403) throw new IdentityRejected(`Discord refused the token (${res.status})`);
+  if (!res.ok) throw new Error(`Discord answered ${res.status}`);
+  const info = (await res.json()) as {
+    application?: { id?: unknown };
+    scopes?: unknown;
+    user?: { id?: unknown; username?: unknown; global_name?: unknown; avatar?: unknown };
+  };
+  if (info?.application?.id !== appId) throw new IdentityRejected("Discord token was issued to another app");
+  const id = typeof info.user?.id === "string" ? info.user.id.trim() : "";
+  // A snowflake is digits. A blank or odd one must never become an identity.
+  if (!/^\d{5,25}$/.test(id)) throw new IdentityRejected("Discord returned no user");
+  const user = info.user!;
+  const name = typeof user.global_name === "string" && user.global_name.trim()
+    ? user.global_name
+    : typeof user.username === "string" ? user.username : null;
+  const avatar = typeof user.avatar === "string" && /^[a-z0-9_]+$/i.test(user.avatar)
+    ? `https://cdn.discordapp.com/avatars/${id}/${user.avatar}.png?size=128`
+    : null;
+  return { provider: "discord", providerUserId: id, displayName: name, avatarUrl: avatar };
 }

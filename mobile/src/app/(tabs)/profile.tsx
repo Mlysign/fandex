@@ -23,6 +23,7 @@ import { shortDate, todayIso } from '~/lib/dates';
 import { setReturnTo } from '~/lib/returnTo';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { useTypeFilter } from '~/lib/typeFilter';
+import { count } from '~/lib/plural';
 import { color, radius, type } from '~/theme';
 
 interface Line { id: string; type: string; slug: string | null; title: string; when: string | null }
@@ -132,7 +133,7 @@ export default function ProfileScreen() {
   const entries: { href: string; label: string; hint: string; Icon: typeof TrendingUp; external?: boolean }[] = [
     { href: '/insights', label: 'Insights', hint: 'Your taste in numbers', Icon: TrendingUp },
     { href: '/wishlist', label: 'Wishlist', hint: stats ? `${stats.wishlist} saved` : '', Icon: Bookmark },
-    { href: '/wishlist?tab=library', label: 'Your ratings', hint: stats ? `${stats.rated} titles` : '', Icon: Star },
+    { href: '/wishlist?tab=library', label: 'Your ratings', hint: stats ? count(stats.rated, 'title') : '', Icon: Star },
     { href: '/settings', label: 'Settings', hint: 'Account, sync, privacy', Icon: SettingsIcon },
   ];
   // The site's donations row (H3.3): last, after what people came here to do, and only when a page is configured.

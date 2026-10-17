@@ -7,9 +7,9 @@
 // database, no session, no hooks but useState. ⚠️ Keep it that way: importing
 // anything that reaches expo-router here breaks the site's build.
 
-import { Bookmark, Star } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
+import { useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Img } from '~/components/Img';
 import { CommunityScore, FandexScore } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
@@ -19,7 +19,7 @@ import { monthYear } from '~/lib/dates';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
-export function CardFace({ item, score, center, link, bar, style, dateText }: {
+export function CardFace({ item, score, center, link, bar, style, dateText, explain }: {
   item: CardItem;
   /** In place of the month and year: a calendar page names the day. */
   dateText?: string;
@@ -28,16 +28,28 @@ export function CardFace({ item, score, center, link, bar, style, dateText }: {
   link: { anchor: object | null; onPress?: (e?: GestureResponderEvent) => void };
   bar: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /**
+   * The app's score explainer (cards.tsx): told when the pointer rests on the
+   * card or leaves it, with the card's place on screen, and when it is long
+   * pressed. A static page has none.
+   */
+  explain?: { hover: (on: boolean, at?: { left: number; right: number; top: number }) => void; longPress: () => void };
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const box = useRef<View>(null);
+  const placeOf = () => {
+    const r = (box.current as unknown as { getBoundingClientRect?: () => DOMRect } | null)?.getBoundingClientRect?.();
+    return r ? { left: r.left, right: r.right, top: r.top } : undefined;
+  };
   return (
-    <View style={[cardStyles.card, hovered && { borderColor: color.borderStrong }, style]}>
+    <View ref={box} style={[cardStyles.card, hovered && { borderColor: color.borderStrong }, style]}>
       <Pressable
         {...link.anchor}
         onPress={link.onPress}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
+        onLongPress={explain?.longPress}
+        onHoverIn={() => { setHovered(true); explain?.hover(true, placeOf()); }}
+        onHoverOut={() => { setHovered(false); explain?.hover(false); }}
         accessibilityRole="link"
         accessibilityLabel={`${item.title}, view details`}
         style={({ pressed }) => pressed && { opacity: 0.8 }}>
@@ -84,13 +96,47 @@ export function RailTitle({ title, forYou, action }: { title: string; forYou?: b
 
 /** A titled row that scrolls sideways. */
 export function RailFrame({ title, forYou, action, children }: { title: string; forYou?: boolean; action?: ReactNode; children: ReactNode }) {
+  // The site's chevrons (Rail.tsx): on a wide window, fading in while the
+  // pointer is over the rail, each a step of 320 px. A phone scrolls by finger.
+  const { width } = useWindowDimensions();
+  const wide = width >= breakpoint.md;
+  const [hovering, setHovering] = useState(false);
+  const scroller = useRef<ScrollView>(null);
+  const x = useRef(0);
+  const step = (dir: 1 | -1) => scroller.current?.scrollTo({ x: Math.max(0, x.current + dir * 320), animated: true });
   return (
     <View>
       <RailTitle title={title} forYou={forYou} action={action} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={cardStyles.railRow}>
-        {children}
-      </ScrollView>
+      <View
+        style={{ position: 'relative' }}
+        {...(wide ? ({ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) } as object) : null)}>
+        <ScrollView
+          ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={cardStyles.railRow}
+          onScroll={(e) => { x.current = e.nativeEvent.contentOffset.x; }} scrollEventThrottle={64}>
+          {children}
+        </ScrollView>
+        {wide ? (
+          <>
+            <RailArrow dir={-1} title={title} shown={hovering} onPress={() => step(-1)} />
+            <RailArrow dir={1} title={title} shown={hovering} onPress={() => step(1)} />
+          </>
+        ) : null}
+      </View>
     </View>
+  );
+}
+
+function RailArrow({ dir, title, shown, onPress }: { dir: 1 | -1; title: string; shown: boolean; onPress: () => void }) {
+  const Icon = dir < 0 ? ChevronLeft : ChevronRight;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Scroll ${title} ${dir < 0 ? 'left' : 'right'}`}
+      pointerEvents={shown ? 'auto' : 'none'}
+      style={[cardStyles.railArrow, dir < 0 ? { left: -18 } : { right: -18 }, { opacity: shown ? 1 : 0 }]}>
+      <Icon size={16} color={color.textPrimary} />
+    </Pressable>
   );
 }
 
@@ -173,6 +219,11 @@ export const cardStyles = StyleSheet.create({
   railTitle: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   forYou: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.accentSubtle },
   railRow: { gap: 12, paddingBottom: 4 },
+  railArrow: {
+    position: 'absolute', top: '50%', marginTop: -18, width: 36, height: 36, borderRadius: radius.full, zIndex: 2,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceOverlay, borderWidth: 1, borderColor: color.border,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+  },
   gridContent: { width: '100%', maxWidth: 1152, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 44 },
   staticGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
 });

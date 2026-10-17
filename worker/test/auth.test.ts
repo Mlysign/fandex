@@ -4,7 +4,7 @@ import {
   bumpSessionEpoch, createSession, readSession, signPendingMerge, verifyPendingMerge,
 } from "../src/auth/session";
 import { completeMerge, signIn } from "../src/auth/signin";
-import { IdentityRejected, nonceHash, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "../src/auth/verify";
+import { IdentityRejected, nonceHash, verifyDiscordToken, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "../src/auth/verify";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import { count, db, env, gameItem, movieItem, wipe } from "./helpers";
 
@@ -372,5 +372,56 @@ describe("signing in", () => {
     const out = await signIn(env, trakt("nilsm"), fresh.user);
     expect(out.kind).toBe("merged");
     expect(await count("user_hidden_items", "user_id = ?", [established.user.userId])).toBe(2);
+  });
+});
+
+describe("Discord tokens", () => {
+  const discordEnv = { ...env, DISCORD_CLIENT_ID: "1200000000000000001" };
+  const answering = (status: number, body: unknown) => {
+    const calls: Request[] = [];
+    const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(new Request(input as string, init));
+      return new Response(JSON.stringify(body), { status });
+    }) as typeof fetch;
+    return { impl, calls };
+  };
+  const ours = (user: Record<string, unknown>) => ({ application: { id: "1200000000000000001" }, scopes: ["identify"], user });
+
+  it("asks Discord whose token it is and keeps the user id as the identity", async () => {
+    const { impl, calls } = answering(200, ours({ id: "80351110224678912", username: "nelly", global_name: "Nelly", avatar: "8342729096ea3675442027381ff50dfe" }));
+    const id = await verifyDiscordToken(discordEnv, "tok_abc", impl);
+    expect(id).toEqual({
+      provider: "discord", providerUserId: "80351110224678912", displayName: "Nelly",
+      avatarUrl: "https://cdn.discordapp.com/avatars/80351110224678912/8342729096ea3675442027381ff50dfe.png?size=128",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://discord.com/api/v10/oauth2/@me");
+    expect(calls[0].headers.get("Authorization")).toBe("Bearer tok_abc");
+  });
+
+  it("refuses a token issued to another app: the check that stops another site's operator signing in as you", async () => {
+    const other = { application: { id: "999999999999999999" }, user: { id: "80351110224678912", username: "nelly" } };
+    await expect(verifyDiscordToken(discordEnv, "tok", answering(200, other).impl)).rejects.toThrow(/another app/);
+  });
+
+  it("refuses everything when no application id is configured", async () => {
+    const { impl, calls } = answering(200, ours({ id: "80351110224678912" }));
+    await expect(verifyDiscordToken({ ...env, DISCORD_CLIENT_ID: "" }, "tok", impl)).rejects.toBeInstanceOf(IdentityRejected);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("tells a refusal from an outage, and refuses a blank user", async () => {
+    await expect(verifyDiscordToken(discordEnv, "tok", answering(401, {}).impl)).rejects.toBeInstanceOf(IdentityRejected);
+    const outage = verifyDiscordToken(discordEnv, "tok", answering(502, {}).impl);
+    await expect(outage).rejects.toThrow(/502/);
+    await expect(outage).rejects.not.toBeInstanceOf(IdentityRejected);
+    await expect(verifyDiscordToken(discordEnv, "tok", answering(200, ours({ id: "" })).impl)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifyDiscordToken(discordEnv, "has a space", answering(200, ours({ id: "1" })).impl)).rejects.toBeInstanceOf(IdentityRejected);
+  });
+
+  it("falls back to the username when there is no display name, and drops an odd avatar hash", async () => {
+    const id = await verifyDiscordToken(discordEnv, "tok", answering(200, ours({ id: "80351110224678912", username: "nelly", avatar: "../x" })).impl);
+    expect(id.displayName).toBe("nelly");
+    expect(id.avatarUrl).toBeNull();
   });
 });

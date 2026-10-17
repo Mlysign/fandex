@@ -62,7 +62,10 @@ export function googleAvailable(): boolean {
  */
 export function safeReturnPath(path: unknown): string {
   if (typeof path !== 'string' || !/^\/(?![/\\])/.test(path) || path.includes('\\')) return '/profile';
-  if (path === GOOGLE_RETURN_PATH || path.startsWith(`${GOOGLE_RETURN_PATH}?`) || path.startsWith(`${GOOGLE_RETURN_PATH}#`)) return '/profile';
+  // Never a return screen: Google's, or Discord's (lib/discord.ts), which uses this too.
+  for (const screen of [GOOGLE_RETURN_PATH, '/auth/discord']) {
+    if (path === screen || path.startsWith(`${screen}?`) || path.startsWith(`${screen}#`)) return '/profile';
+  }
   return path;
 }
 

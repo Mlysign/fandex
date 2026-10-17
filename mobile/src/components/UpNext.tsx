@@ -94,7 +94,7 @@ export function EpisodeRow({ entry, ticked, exiting, onTick }: {
  * then asks Trakt about the shows that are due. A tick fills its box, holds,
  * fades the row out, and the list is read again with the show's next episode.
  */
-export function useUpNext(limit: number) {
+export function useUpNext(limit: number, includeHidden = false) {
   const db = useSQLiteContext();
   const auth = useAuth();
   const catalog = useCatalogSync();
@@ -106,10 +106,10 @@ export function useUpNext(limit: number) {
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
 
   const show = useCallback(async () => {
-    const [list, waiting] = await Promise.all([upNextList(db, limit), upNextPending(db)]);
+    const [list, waiting] = await Promise.all([upNextList(db, limit, includeHidden), upNextPending(db)]);
     setEntries(list);
     setPending(waiting);
-  }, [db, limit]);
+  }, [db, limit, includeHidden]);
 
   // Ask again when the screen comes back into view or the app comes back to the
   // front. Every tab stays mounted, so without this the list was asked about

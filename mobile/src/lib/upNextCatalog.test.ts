@@ -125,11 +125,13 @@ describe('the schema step that heals a stored "caught up"', () => {
     await migrate(db);
     // Back to how a version 4 database looked.
     raw.exec('ALTER TABLE up_next DROP COLUMN next_air_at');
+    raw.exec('ALTER TABLE catalog DROP COLUMN world_date');
+    raw.exec('DROP TABLE regional_date');
     raw.exec('PRAGMA user_version = 4');
     raw.exec(`INSERT INTO up_next (media_item_id, season, episode, watched_count, checked_at) VALUES
               ('wrongly-caught-up', NULL, NULL, 6, ${NOW}), ('real', 1, 7, 6, ${NOW})`);
     await migrate(db);
     expect(raw.prepare('SELECT media_item_id FROM up_next').all()).toEqual([{ media_item_id: 'real' }]);
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 6 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
   });
 });

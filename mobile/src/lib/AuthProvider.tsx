@@ -19,7 +19,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Platform } from 'react-native';
 import { api, ApiError, setSessionToken, type PrefsPatch, type Profile } from '~/lib/api';
 import { deviceRegion } from '~/lib/region';
-import { traktConfigured } from '~/lib/config';
+import { DISCORD_CLIENT_ID, traktConfigured } from '~/lib/config';
+import { DISCORD_APP_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
 import { clearState, syncState } from '~/lib/stateSync';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
 import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
@@ -58,6 +59,13 @@ interface Auth {
    * the reason, in words, when it did not work.
    */
   finishGoogleSignIn: (idToken: string, secret: string) => Promise<void>;
+  /**
+   * Discord (lib/discord.ts). In a browser the page leaves for Discord and
+   * `/auth/discord` calls `finishDiscordSignIn`; on a phone a browser sheet
+   * opens and this finishes the sign-in itself. Throws with the reason, in words.
+   */
+  startDiscordSignIn: (returnTo: string) => Promise<void>;
+  finishDiscordSignIn: (accessToken: string) => Promise<void>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -107,7 +115,7 @@ const TRAKT_SYNC_DRY_RUN = process.env.EXPO_PUBLIC_TRAKT_SYNC_DRY_RUN === '1';
 
 const Ctx = createContext<Auth | null>(null);
 
-function signInMessage(e: unknown, provider: 'Trakt' | 'Google' = 'Trakt'): string {
+function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' = 'Trakt'): string {
   if (e instanceof ApiError) {
     switch (e.code) {
       case 'offline': return 'No connection. Try again when you are online.';
@@ -377,6 +385,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void pullRows(true).then(() => runTraktSync(true));
   }, [pullRows, runTraktSync]);
 
+  const finishDiscordSignIn = useCallback(async (accessToken: string) => {
+    let result;
+    try {
+      result = await api.signInWithDiscord(accessToken);
+    } catch (e) {
+      throw new Error(signInMessage(e, 'Discord'));
+    }
+    await secretSet(SESSION_KEY, result.token);
+    setSessionToken(result.token);
+    setProfile(await api.me().catch(() => null));
+    setStatus('signedIn');
+    // Discord brings no library. An account that has Trakt on this device keeps syncing it.
+    void pullRows(true).then(() => runTraktSync(true));
+  }, [pullRows, runTraktSync]);
+
+  const startDiscordSignIn = useCallback(async (returnTo: string) => {
+    if (Platform.OS === 'web') {
+      startDiscordWebSignIn(returnTo);
+      return;
+    }
+    // A browser sheet that comes back to fandex://auth/discord, as Trakt's does.
+    const state = newDiscordState();
+    const url = discordAuthorizeUrl({ clientId: DISCORD_CLIENT_ID, redirectUri: DISCORD_APP_REDIRECT, state });
+    const result = await WebBrowser.openAuthSessionAsync(url, DISCORD_APP_REDIRECT);
+    // Closed without an answer: back where they started, not an error.
+    if (result.type !== 'success') return;
+    const back = readDiscordReturn(result.url.split('#')[1] ?? '', { state, returnTo });
+    if (!back.ok) {
+      if (back.reason === 'declined') return;
+      throw new Error('Discord did not confirm the sign-in. Try again.');
+    }
+    await finishDiscordSignIn(back.accessToken);
+  }, [finishDiscordSignIn]);
+
   /**
    * Sign in as a test account, on a developer's Worker (worker/src/devLogin.ts).
    * No Trakt tokens are kept, on purpose: with none, a rating has nowhere to go
@@ -485,7 +527,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn, devSignIn, signOut,
+      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn,
+      startDiscordSignIn, finishDiscordSignIn, devSignIn, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
       region, savePrefs, disconnect, deleteAccount,
     }}>

@@ -31,7 +31,7 @@ function appRoute(parts: string[]): boolean {
   if (parts[0] === 'item') return parts.length === 2 && UUID.test(parts[1]);
   if (parts[0] === 'open') return parts.length === 4;
   // `google` is where Google sends the browser back to after a sign-in (mobile/src/lib/google.ts).
-  if (parts[0] === 'auth') return parts.length === 2 && (parts[1] === 'trakt' || parts[1] === 'google');
+  if (parts[0] === 'auth') return parts.length === 2 && (parts[1] === 'trakt' || parts[1] === 'google' || parts[1] === 'discord');
   // The admin pages. The shell is public and says nothing; the data behind it is not.
   if (parts[0] === 'dev') return parts.length === 2 && ['users', 'analytics', 'scoring'].includes(parts[1]);
   // A tag, a person, a studio with fewer than three titles, or an address a file cannot hold:

@@ -62,3 +62,11 @@ export function traktConfigured(): boolean {
  * The Worker holds the same id and refuses a token issued to any other.
  */
 export const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';
+
+/**
+ * The Discord application's id, public the same way: it is in the address of
+ * Discord's sign-in page. Empty hides the Discord button, which is how a build
+ * stays without one until the return addresses are listed on the application
+ * (lib/discord.ts).
+ */
+export const DISCORD_CLIENT_ID = process.env.EXPO_PUBLIC_DISCORD_CLIENT_ID ?? '';

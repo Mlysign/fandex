@@ -7,12 +7,14 @@
 // the bar while scrolling down.
 
 import { Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import { SearchBar, SortMenu } from '~/components/kit';
 import { LogoOutline } from '~/components/Logo';
 import { useTypeFilter } from '~/lib/typeFilter';
+import { useOutsideClose } from '~/lib/useOutsideClose';
+import { useBarHidden } from '~/lib/barScroll';
 import { breakpoint, color, radius, type, TYPE_PLURAL } from '~/theme';
 
 const TYPE_ICONS: Record<string, typeof Gamepad2> = { game: Gamepad2, movie: Clapperboard, show: Tv };
@@ -38,15 +40,46 @@ function Circle({ active, fill, label, onPress, children, count }: {
   );
 }
 
+// ── Room for the chip groups ─────────────────────────────────────────────────
+//
+// A chip group (the types here, the calendar's sources) folds into one circle
+// so a phone's bar stays one row (SM53). On a wider screen it stays open
+// whenever every group fits on the row together (Nils, 2026-10-17: "uncollapse
+// if enough space on desktop"). It used to be a fixed 1024 px, which folded
+// everything in a 900 px browser window with half the bar empty.
+//
+// The bar measures its row; each group says how wide it is open. Phones stay
+// folded whatever the room, as SM53 agreed.
+
+const ChipRoom = createContext<{ width: number; claim: (id: string, px: number) => () => void; claimed: number } | null>(null);
+
+/** Width of an open group of `n` 40 px circles with 8 px between them. */
+export const circlesWidth = (n: number) => n * 40 + (n - 1) * 8;
+
+/** Whether this group may stay open. `px` is its width when open. */
+export function useChipRoom(px: number): boolean {
+  const room = useContext(ChipRoom);
+  const { width: windowWidth } = useWindowDimensions();
+  const id = useId();
+  const claim = room?.claim;
+  useEffect(() => claim?.(id, px), [claim, id, px]);
+  if (windowWidth < breakpoint.md) return false;
+  if (!room) return windowWidth >= breakpoint.lg;
+  // Measured, and every group's claim in: open only if they all fit.
+  return room.width > 0 && room.claimed > 0 && room.claimed <= room.width;
+}
+
 /**
- * Icon circles, one per media type, and one for all of them. Under 1024 px
- * they fold into a single circle that says what is picked, and open on a tap.
+ * Icon circles, one per media type, and one for all of them. On a phone, or
+ * where the bar has no room, they fold into a single circle that says what is
+ * picked, and open on a tap.
  */
 export function TypeFilter() {
   const f = useTypeFilter();
-  const { width } = useWindowDimensions();
-  const roomy = width >= breakpoint.lg;
+  const roomy = useChipRoom(circlesWidth(MEDIA_TYPES.length + 1));
   const [open, setOpen] = useState(false);
+  const group = useRef<View>(null);
+  useOutsideClose(open, useCallback(() => setOpen(false), []), group);
 
   const shown = new Set<string>(f.shown);
   const allActive = MEDIA_TYPES.every((t) => shown.has(t));
@@ -69,7 +102,7 @@ export function TypeFilter() {
   }
 
   return (
-    <View style={styles.circles} accessibilityLabel="Filter by type">
+    <View ref={group} style={styles.circles} accessibilityLabel="Filter by type">
       <Circle active={allActive} fill={color.accent} label="All types" onPress={f.selectAll}>
         <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
       </Circle>
@@ -127,14 +160,38 @@ export function SubBar<S extends string>({ tabs, filters, trailing, search, coun
   sort?: { value: S; options: [S, string][]; onChange: (v: S) => void };
   actions?: ReactNode;
 }) {
+  const [rowWidth, setRowWidth] = useState(0);
+  const [claims, setClaims] = useState<Record<string, number>>({});
+  const claim = useCallback((id: string, px: number) => {
+    setClaims((c) => (c[id] === px ? c : { ...c, [id]: px }));
+    return () => setClaims((c) => { const n = { ...c }; delete n[id]; return n; });
+  }, []);
+  const parts = Object.values(claims);
+  // The groups, the gaps between them, and one more circle for whatever else
+  // sits on the row unclaimed (the calendar's month/list toggle).
+  const claimed = parts.length ? parts.reduce((a, b) => a + b, 0) + parts.length * 8 + (filters ? 48 : 0) : 0;
+  const room = useMemo(() => ({ width: rowWidth, claim, claimed }), [rowWidth, claim, claimed]);
+
+  // Out of the way while the list scrolls down, back on any scroll up (lib/barScroll.tsx). A phone only.
+  const { width } = useWindowDimensions();
+  const hide = useBarHidden() && width < breakpoint.md;
+  const [barHeight, setBarHeight] = useState(0);
+  const shift = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(shift, { toValue: hide ? -barHeight : 0, duration: 200, useNativeDriver: false }).start();
+  }, [hide, barHeight, shift]);
+
   return (
-    <View style={styles.bar}>
+    <View style={{ overflow: 'hidden' }}>
+    <Animated.View style={[styles.bar, { marginTop: shift }]} onLayout={(e) => setBarHeight(Math.ceil(e.nativeEvent.layout.height))}>
       <View style={styles.inner}>
         <View style={styles.top}>
-          <View style={styles.row}>
-            <TypeFilter />
-            {filters}
-          </View>
+          <ChipRoom.Provider value={room}>
+            <View style={styles.row} onLayout={(e) => setRowWidth(Math.floor(e.nativeEvent.layout.width))}>
+              <TypeFilter />
+              {filters}
+            </View>
+          </ChipRoom.Provider>
           {trailing}
         </View>
         {tabs}
@@ -151,6 +208,7 @@ export function SubBar<S extends string>({ tabs, filters, trailing, search, coun
           </View>
         ) : null}
       </View>
+    </Animated.View>
     </View>
   );
 }

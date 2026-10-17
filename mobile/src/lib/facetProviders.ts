@@ -190,8 +190,11 @@ export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: stri
   if (!found.cards.length) return found;
   try {
     const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
-    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f.mediaItemId]));
-    found.cards = found.cards.map((c) => (held.has(c.key) ? { ...c, id: held.get(c.key) as string } : c));
+    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f]));
+    found.cards = found.cards.map((c) => {
+      const f = held.get(c.key);
+      return f ? { ...c, id: f.mediaItemId, slug: f.slug ?? null } : c;
+    });
   } catch { /* the cards still open; they just do not know your state */ }
   return found;
 }

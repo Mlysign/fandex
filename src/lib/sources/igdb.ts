@@ -230,13 +230,18 @@ export type IgdbDiscoverShape = "full" | "card";
  * answer for a week, and caching a failed call as "no games" would hide a
  * studio's games for that long. An unconfigured IGDB still answers [].
  */
-export async function discoverIgdbFacetCards(kind: "tag" | "studio", label: string, limit = 40): Promise<any[]> {
+export async function discoverIgdbFacetCards(kind: "tag" | "studio" | "franchise", label: string, limit = 40): Promise<any[]> {
   if (!igdbConfigured()) return [];
   const safe = sanitizeApicalypseSearch(label);
   if (!safe) return [];
+  // A franchise is matched by its whole name, not a part of it: "Alien" must not
+  // bring in every franchise with "alien" somewhere in its name. IGDB keeps a
+  // series in two places, a franchise and a collection, so either counts.
   const where = kind === "tag"
     ? `(themes.name ~ *"${safe}"* | keywords.name ~ *"${safe}"* | genres.name ~ *"${safe}"*)`
-    : `involved_companies.company.name ~ *"${safe}"*`;
+    : kind === "franchise"
+      ? `(franchises.name ~ "${safe}" | collections.name ~ "${safe}")`
+      : `involved_companies.company.name ~ *"${safe}"*`;
   return igdbQuery(
     "games",
     `${GAME_CARD_FIELDS} where ${where} & version_parent = null & parent_game = null; ` +

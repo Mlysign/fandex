@@ -42,7 +42,7 @@ const PUBLIC_TYPES = new Set(['movie', 'show', 'game']);
  * all for a title with no franchise and too few titles like it: an empty shelf
  * reads as a broken one.
  */
-function Related({ itemId, facets, tmdbMovieId }: { itemId: string; facets: ScoreFacet[]; tmdbMovieId: string | null }) {
+function Related({ itemId, facets, tmdbMovieId, igdbId }: { itemId: string; facets: ScoreFacet[]; tmdbMovieId: string | null; igdbId: string | null }) {
   const db = useSQLiteContext();
   const catalog = useCatalogSync();
   const { taxonomy } = useScores();
@@ -55,30 +55,50 @@ function Related({ itemId, facets, tmdbMovieId }: { itemId: string; facets: Scor
     relatedRails(db, catalog.revision, taxonomy, itemId, facets)
       .then(async (r) => {
         if (live) setRails(r);
-        // The films of its TMDB collection the catalog does not hold, after the
-        // ones it does: the site's franchise_members, which D1 does not have.
-        const collection = tmdbMovieId ? await tmdbCollectionFor(tmdbMovieId) : null;
-        if (!live || !collection?.parts.length) return;
+        // The titles of its franchise the catalog does not hold, after the ones
+        // it does: the site's franchise_members, which D1 does not have. A film's
+        // TMDB collection; a game's IGDB franchise or collection, by its name.
         const ident = (c: { title: string; releaseDate: string | null }) => `${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
         const have = new Set((r.franchise?.items ?? []).map(ident));
-        const extra: CardItem[] = collection.parts.filter((p) => !have.has(ident(p))).map((p) => ({
-          key: `tmdb:movie:${p.sourceId}`, id: null, source: 'tmdb', sourceId: p.sourceId, type: 'movie', title: p.title,
-          releaseDate: p.releaseDate, posterUrl: p.posterUrl, communityScore: null, communityVotes: p.votes,
-        }));
+        let label = r.franchise?.label ?? null;
+        let parts: CardItem[] = [];
+        if (tmdbMovieId) {
+          const collection = await tmdbCollectionFor(tmdbMovieId);
+          label ??= collection?.name ?? null;
+          parts = (collection?.parts ?? []).map((p) => ({
+            key: `tmdb:movie:${p.sourceId}`, id: null, source: 'tmdb', sourceId: p.sourceId, type: 'movie', title: p.title,
+            releaseDate: p.releaseDate, posterUrl: p.posterUrl, communityScore: null, communityVotes: p.votes,
+          }));
+        } else if (igdbId) {
+          const ip = label ?? facets.find((f) => f.kind === 'ip')?.label ?? null;
+          label ??= ip;
+          const games = ip ? await api.facetGames('franchise', ip).then((g) => g.results, () => []) : [];
+          parts = games.filter((g) => g.sourceId !== igdbId).map((g) => ({
+            key: `igdb:game:${g.sourceId}`, id: null, source: 'igdb', sourceId: g.sourceId, type: 'game', title: g.title,
+            releaseDate: g.releaseDate, posterUrl: g.posterUrl, communityScore: g.rating, communityVotes: g.votes,
+          }));
+        }
+        if (!live || !label) return;
+        const extra = parts.filter((p) => !have.has(ident(p)));
         if (!extra.length) return;
         try {
-          const res = await api.lookup(extra.map((c) => ({ source: 'tmdb', type: 'movie', id: c.sourceId as string })));
-          const held = new Map(res.found.map((f) => [f.id, f.mediaItemId]));
-          for (const c of extra) c.id = held.get(c.sourceId as string) ?? null;
+          const res = await api.lookup(extra.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
+          const held = new Map(res.found.map((f) => [f.id, f]));
+          for (const c of extra) {
+            const f = held.get(c.sourceId as string);
+            c.id = f?.mediaItemId ?? null;
+            c.slug = f?.slug ?? null;
+          }
         } catch { /* they open through /open all the same */ }
         if (!live) return;
-        const items = [...(r.franchise?.items ?? []), ...extra]
+        // The page's own title is never in its franchise rail, held or not.
+        const items = [...(r.franchise?.items ?? []), ...extra.filter((c) => c.id !== itemId)]
           .sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1)); // newest first, as the rail is
-        setRails({ ...r, franchise: { label: r.franchise?.label ?? collection.name, items } });
+        setRails({ ...r, franchise: { label, items } });
       })
       .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
-  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId]);
+  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId]);
 
   if (!rails || (!rails.franchise?.items.length && !rails.similar.length)) return null;
   return (
@@ -125,6 +145,10 @@ export default function ItemScreen() {
           ? { title: 'No connection', detail: 'This page needs a connection to load.' }
           : code === 'not-found'
             ? { title: 'Not in the catalog', detail: 'Fandex does not hold a title at this address.', gone: true }
+            // The Worker refuses an id that is not an id at all (`/item/not-a-uuid`).
+            // Asking again cannot change that, so no Try again (SM82).
+            : code === 'bad-request'
+            ? { title: 'Nothing here', detail: 'Fandex has no page at this address.', gone: true }
             : { title: 'Could not load this title', detail: 'Something went wrong.' },
       );
     }
@@ -343,7 +367,9 @@ export default function ItemScreen() {
         item={item}
         personal={personal}
         progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
-        related={<Related itemId={item.id} facets={item.facets} tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null} />}
+        related={<Related itemId={item.id} facets={item.facets}
+          tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null}
+          igdbId={item.type === 'game' ? item.vector.sources.find((s) => s.source === 'igdb')?.sourceId ?? null : null} />}
         // The static page ends with the legal links, so in a browser this one does too.
         footer={Platform.OS === 'web' ? <LegalLinks /> : undefined}
         taxonomy={scores.taxonomy}

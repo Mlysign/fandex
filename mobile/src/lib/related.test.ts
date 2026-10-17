@@ -83,19 +83,64 @@ describe('the two rails', () => {
   });
 
   it('puts the franchise in one rail and leaves it out of the other', () => {
-    const picked = pickRelated({ id: 'alien', facets: alien.facets, index, vectors });
+    const picked = pickRelated({ id: 'alien', facets: alien.facets, index, vectors, tax });
     expect(picked.franchise).toEqual({ label: 'Alien', ids: ['aliens'] });
     expect(picked.similar).not.toContain('aliens');
     expect(picked.similar).not.toContain('alien');
   });
 
   it('ranks by shared facets, the rare ones counting for more', () => {
-    const { similar } = pickRelated({ id: 'alien', facets: alien.facets, index, vectors });
-    // Space and the director: two rare facets. Then space and horror. A film
-    // sharing only one comes after, and one sharing nothing is not there.
-    expect(similar.slice(0, 2)).toEqual(['prometheus', 'event horizon']);
-    expect(similar).toContain('gladiator');
+    const { similar } = pickRelated({ id: 'alien', facets: alien.facets, index, vectors, tax });
+    // Space and the director first. These tags carry no category, so no genre
+    // rule applies and the director counts most: Gladiator and Event Horizon
+    // follow. A film sharing nothing is not there.
+    expect(similar[0]).toBe('prometheus');
+    expect(similar.slice(1, 3).sort()).toEqual(['event horizon', 'gladiator']);
     expect(similar).not.toContain('f0');
+  });
+
+  // 2026-10-17: the site's ranker gave Alien Saving Private Ryan and Top Gun,
+  // through a bit-part actor and a one-off keyword.
+  describe('what a person would call alike', () => {
+    const genre = (key: string): ScoreFacet => ({ kind: 'tag', key, label: key, category: 'genre' });
+    const keyword = (key: string): ScoreFacet => ({ kind: 'tag', key, label: key, category: 'other' });
+    const cast = (key: string): ScoreFacet => ({ kind: 'person', role: 'cast', key, label: key });
+    const extras = (n: number, from = 0) => Array.from({ length: n }, (_, i) => cast(`extra ${from + i}`));
+    const rows = [
+      { id: 'alien', type: 'movie', votes: 9000, facets: [genre('horror'), genre('science fiction'), person('ridley scott'), cast('sigourney weaver'), ...extras(6), keyword('countdown')] },
+      { id: 'event horizon', type: 'movie', votes: 2000, facets: [genre('horror'), genre('science fiction'), keyword('space')] },
+      // Shares a bit-part actor and a rare keyword, and no genre.
+      { id: 'top gun', type: 'movie', votes: 9000, facets: [genre('action'), cast('extra 5'), keyword('countdown')] },
+      // The same director, another genre.
+      { id: 'gladiator', type: 'movie', votes: 9000, facets: [genre('action'), person('ridley scott')] },
+      // Alike, and nobody has rated it.
+      { id: 'obscure', type: 'movie', votes: 0, facets: [genre('horror'), genre('science fiction'), keyword('space')] },
+      { id: 'alien isolation', type: 'game', votes: 3000, facets: [genre('horror'), genre('science fiction'), keyword('space')] },
+      ...Array.from({ length: 20 }, (_, i) => ({ id: `d${i}`, type: 'movie', votes: 10, facets: [genre('drama')] })),
+    ];
+    const idx = indexFacets(rows, tax);
+    const like = pickRelated({ id: 'alien', type: 'movie', facets: rows[0].facets, index: idx, vectors: new Map(), tax }).similar;
+
+    it('needs a shared genre: an actor or a keyword in common is not enough', () => {
+      expect(like).not.toContain('top gun');
+      expect(like).not.toContain('gladiator');
+    });
+
+    it('puts the crowd-known title before an unknown one equally alike, and another medium after both', () => {
+      expect(like).toEqual(['event horizon', 'obscure', 'alien isolation']);
+    });
+
+    it('counts a top-billed actor far above a bit part', () => {
+      const r2 = [
+        rows[0],
+        { id: 'lead', type: 'movie', votes: 100, facets: [genre('horror'), cast('sigourney weaver')] },
+        { id: 'extra', type: 'movie', votes: 100, facets: [genre('horror'), cast('extra 5')] },
+        { id: 'third', type: 'movie', votes: 100, facets: [genre('horror'), keyword('nothing')] },
+        ...rows.slice(6),
+      ];
+      const ranked = pickRelated({ id: 'alien', type: 'movie', facets: r2[0].facets, index: indexFacets(r2, tax), vectors: new Map(), tax }).similar;
+      expect(ranked.indexOf('lead')).toBeLessThan(ranked.indexOf('extra'));
+    });
   });
 
   it('is not emptied by facets only this title carries', () => {
@@ -108,21 +153,21 @@ describe('the two rails', () => {
       ...ROWS.filter((r) => r.id !== 'alien'),
     ];
     const idx = indexFacets(rows, tax);
-    const { similar } = pickRelated({ id: 'x', facets: rows[0].facets, index: idx, vectors: new Map() });
+    const { similar } = pickRelated({ id: 'x', facets: rows[0].facets, index: idx, vectors: new Map(), tax });
     expect(similar.slice(0, 2).sort()).toEqual(['aliens', 'event horizon']);
   });
 
   it('shows no similar rail for fewer than three titles, and no franchise rail for a franchise of one', () => {
     const rows = [{ id: 'a', facets: [ip('solo'), tag('odd')] }, { id: 'b', facets: [tag('odd')] }, { id: 'c', facets: [tag('other')] }];
     const small = indexFacets(rows, tax);
-    expect(pickRelated({ id: 'a', facets: rows[0].facets, index: small, vectors: new Map([['a', vector('a')]]) })).toEqual({ franchise: null, similar: [] });
+    expect(pickRelated({ id: 'a', facets: rows[0].facets, index: small, vectors: new Map([['a', vector('a')]]), tax })).toEqual({ franchise: null, similar: [] });
   });
 
   it('bundling two franchises makes one rail of both', () => {
     const bundled = taxonomy({ ipAliases: [['alien prequels', 'alien']] });
     const idx = indexFacets(ROWS, bundled);
     const v = new Map(['alien', 'aliens', 'prometheus'].map((id, i) => [id, vector(id, { releaseDate: `201${i}-01-01` })]));
-    const picked = pickRelated({ id: 'alien', facets: alien.facets, index: idx, vectors: v });
+    const picked = pickRelated({ id: 'alien', facets: alien.facets, index: idx, vectors: v, tax: bundled });
     // Newest first.
     expect(picked.franchise?.ids).toEqual(['prometheus', 'aliens']);
     expect(picked.similar).not.toContain('prometheus');

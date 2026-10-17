@@ -8,6 +8,7 @@ import { ApiError } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { lastSyncedAt, resetCatalog, syncCatalog } from '~/lib/catalogSync';
 import { catalogCount } from '~/lib/db';
+import { fillRegionalDates, pointDatesAt } from '~/lib/localDates';
 
 export type SyncState = 'idle' | 'syncing' | 'done' | 'error';
 
@@ -100,6 +101,36 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
     seenRows.current = rowsRevision;
     void run(false);
   }, [rowsRevision, run]);
+
+  // Every film's date in the country you chose (lib/localDates.ts): pointed at
+  // that country at once, from what this device already knows, then the films
+  // it does not know yet are asked about. After every sync, because a sync
+  // brings new films, and on a change of country.
+  const { region } = useAuth();
+  const wantedRegion = useRef(region);
+  // Declared before the effect that reads it, so it runs first.
+  useEffect(() => { wantedRegion.current = region; }, [region]);
+  const dating = useRef(false);
+  useEffect(() => {
+    if (state === 'syncing' || dating.current) return;
+    dating.current = true;
+    (async () => {
+      // A change of country while a run is under way is picked up when it ends.
+      let done: string | null = null;
+      while (done !== wantedRegion.current) {
+        const r: string = wantedRegion.current;
+        try {
+          if (await pointDatesAt(db, r)) setRevision((v) => v + 1);
+          if ((await fillRegionalDates(db, r)) > 0) setRevision((v) => v + 1);
+        } catch (e) {
+          // The worldwide date stays where nothing better is known.
+          console.warn('local_dates_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        }
+        done = r;
+      }
+      dating.current = false;
+    })();
+  }, [db, region, state, syncedAt]);
 
   const sync = useCallback(() => void run(false), [run]);
   const resync = useCallback(() => void run(true), [run]);

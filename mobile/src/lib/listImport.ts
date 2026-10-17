@@ -81,7 +81,10 @@ export interface ImportAnalysis {
   unmatched: number;
   /** Rows never looked up because the lookup budget ran out. */
   overBudget: number;
+  /** Matched library rows with a score. */
   ratings: number;
+  /** Matched library rows with no score: marked watched, not rated (SM84). */
+  unrated: number;
   wishlist: number;
 }
 
@@ -149,7 +152,8 @@ export async function analyzeImport(
     matchedAtProvider,
     unmatched: final.filter((r) => !isMatched(r)).length,
     overBudget: Math.max(0, final.filter((r) => !r.mediaItemId).length - queue.length),
-    ratings: final.filter((r) => isMatched(r) && r.relation === 'library').length,
+    ratings: final.filter((r) => isMatched(r) && r.relation === 'library' && r.rating != null).length,
+    unrated: final.filter((r) => isMatched(r) && r.relation === 'library' && r.rating == null).length,
     wishlist: final.filter((r) => isMatched(r) && r.relation === 'wishlist').length,
   };
 }

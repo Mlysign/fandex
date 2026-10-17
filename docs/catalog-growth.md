@@ -86,7 +86,8 @@ already outside that. But IGDB's own API ships **webhooks whose only purpose is 
 your copy of their data current**, and it offers a commercial partnership.
 
 Nils's call 2026-08-28: **carry on, behind a kill switch.** One email to
-`partner@igdb.com` settles it. Until then:
+`partner@igdb.com` would settle it; on 2026-10-17 he dropped sending it, so the kill switch is
+the standing answer:
 
 - `IGDB_ENABLED=0` stops every IGDB call at once. Pinned by `igdbKillSwitch.test.ts`,
   which asserts no `fetch` happens at all and fails any new function that skips the

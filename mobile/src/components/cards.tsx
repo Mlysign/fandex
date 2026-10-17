@@ -6,16 +6,18 @@
 
 import { useRouter } from 'expo-router';
 import { ArrowRight, Bookmark, Star } from 'lucide-react-native';
-import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, FlatList, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions,
+  ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
   type GestureResponderEvent, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFace';
-import { Popover, useAnchor } from '~/components/kit';
+import { Popover, Sheet, useAnchor } from '~/components/kit';
+import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExplainer';
 import { useToast } from '~/components/Toast';
 import { cardHref, useCardActions, useCardStates, type CardItem, type CardState } from '~/lib/cards';
 import { toggled } from '~/lib/a11y';
+import { useReportScroll } from '~/lib/barScroll';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -122,8 +124,51 @@ export const PosterCard = memo(function PosterCard({ item, state, score, center,
   style?: StyleProp<ViewStyle>;
 }) {
   const link = useLink(cardHref(item));
-  return <CardFace item={item} score={score} center={center} link={link} style={style} bar={<ActionBar item={item} state={state} actions={actions} />} />;
+  const explainer = useExplainer();
+  return (
+    <>
+      <CardFace
+        item={item} score={score} center={center} link={link} style={style} explain={explainer.explain}
+        bar={<ActionBar item={item} state={state} actions={actions} />}
+      />
+      {explainer.at ? <ScoreExplainerPopover item={item} score={score} center={center} state={state} anchor={explainer.at} /> : null}
+      {explainer.sheet ? (
+        <Sheet open onClose={explainer.close} title={item.title}>
+          <ScoreExplainerBody item={item} score={score} center={center} state={state} />
+        </Sheet>
+      ) : null}
+    </>
+  );
 });
+
+/** How long the pointer rests on a card before the explainer opens: long enough that sweeping across a grid opens nothing. */
+const HOVER_INTENT_MS = 350;
+
+/**
+ * When a card's explainer is open. On a pointer that can hover, after the
+ * pointer rests on the card; anywhere, on a long press, as a sheet.
+ *
+ * ⚠️ Only a pointer that can hover: a tap on a touch screen fires a hover too,
+ * and on the site that popped the explainer whenever a card's buttons were
+ * tapped (PosterCard.tsx there, the `(hover: hover)` test).
+ */
+function useExplainer() {
+  const [at, setAt] = useState<{ left: number; right: number; top: number } | null>(null);
+  const [sheet, setSheet] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const canHover = Platform.OS === 'web' && typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches;
+  const explain = useMemo(() => ({
+    hover: (on: boolean, place?: { left: number; right: number; top: number }) => {
+      if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+      if (!on) { setAt(null); return; }
+      if (!canHover || !place) return;
+      timer.current = setTimeout(() => setAt(place), HOVER_INTENT_MS);
+    },
+    longPress: () => { setAt(null); setSheet(true); },
+  }), [canHover]);
+  return { at, sheet, explain, close: () => setSheet(false) };
+}
 
 /** What a list of cards needs alongside the cards: your state, your scores, and the two actions. */
 export function useCardKit(items: CardItem[]) {
@@ -208,6 +253,7 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
   const columns = gridColumns(width);
   const all = useMemo(() => sections ? sections.flatMap((s) => s.items) : items ?? [], [items, sections]);
   const kit = useCardKit(all);
+  const reportScroll = useReportScroll();
 
   const rows = useMemo<Row[]>(() => {
     const chunk = (list: CardItem[], prefix: string): Row[] => {
@@ -219,8 +265,30 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
     return sections.flatMap((s): Row[] => [{ kind: 'divider', key: `d:${s.key}`, label: s.label, past: s.past, current: s.current }, ...chunk(s.items, `${s.key}:`)]);
   }, [items, sections, columns]);
 
-  return (
+  // The site's month scrubber (GroupedView.tsx, MonthNav): on a wide window a
+  // column of the sections beside the grid, the one in view lit, each a jump.
+  const list = useRef<FlatList<Row>>(null);
+  const withNav = !!sections && sections.length > 1 && width >= breakpoint.lg;
+  const [inView, setInView] = useState<string | null>(null);
+  const onViewable = useRef(({ viewableItems }: { viewableItems: { item: Row }[] }) => {
+    const first = viewableItems[0]?.item;
+    if (first) setInView(first.key.startsWith('d:') ? first.key.slice(2) : first.key.split(':')[0]);
+  }).current;
+  const jump = (key: string) => {
+    const index = rows.findIndex((r) => r.key === `d:${key}`);
+    if (index >= 0) list.current?.scrollToIndex({ index, animated: true, viewPosition: 0 });
+  };
+
+  const grid = (
     <FlatList
+      ref={list}
+      style={withNav ? { flex: 1 } : undefined}
+      onViewableItemsChanged={withNav ? onViewable : undefined}
+      // Rows have no fixed height. A jump past what is drawn goes most of the way, then again.
+      onScrollToIndexFailed={(info) => {
+        list.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+        setTimeout(() => list.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0 }), 60);
+      }}
       // The column count is part of each row's shape, so a resize rebuilds the list.
       key={columns}
       data={rows}
@@ -232,6 +300,8 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
       ListEmptyComponent={empty ? <View>{empty}</View> : null}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.6}
+      onScroll={reportScroll}
+      scrollEventThrottle={32}
       initialNumToRender={6}
       windowSize={7}
       renderItem={({ item: row }) => row.kind === 'divider' ? (
@@ -250,6 +320,37 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
       )}
     />
   );
+  if (!withNav) return grid;
+  return (
+    <View style={{ flex: 1, flexDirection: 'row' }}>
+      {grid}
+      <ScrollView style={styles.sectionNav} contentContainerStyle={{ paddingVertical: 24, gap: 2 }} showsVerticalScrollIndicator={false}>
+        {sections!.map((s, i) => {
+          const active = (inView ?? sections![0].key) === s.key;
+          const at = sections!.findIndex((x) => x.key === (inView ?? sections![0].key));
+          // Further from the month in view, smaller and fainter, as the site's did.
+          const d = Math.min(Math.abs(i - at) / 4, 1);
+          const t = d * d * (3 - 2 * d);
+          return (
+            <Pressable key={s.key} onPress={() => jump(s.key)} accessibilityRole="button" accessibilityLabel={`Jump to ${s.label}`}
+              style={(state: { hovered?: boolean }) => [styles.sectionNavItem, state.hovered && { backgroundColor: color.neutral800 }]}>
+              <Text style={[type.caption, { textAlign: 'right', color: color.textPrimary, opacity: active || s.current ? 1 : 1 - t * 0.65, transform: [{ scale: 1 - t * 0.22 }], fontFamily: s.current ? font.sansBold : undefined }]} numberOfLines={1}>
+                {shortSection(s.label)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+const MONTH_ABBR: Record<string, string> = { JANUARY: 'Jan', FEBRUARY: 'Feb', MARCH: 'Mar', APRIL: 'Apr', MAY: 'May', JUNE: 'Jun', JULY: 'Jul', AUGUST: 'Aug', SEPTEMBER: 'Sep', OCTOBER: 'Oct', NOVEMBER: 'Nov', DECEMBER: 'Dec' };
+/** "OCTOBER 2026" as "Oct 26", the scrubber's form; anything else as it is. */
+export function shortSection(label: string): string {
+  const m = /^([A-Za-z]+) (\d{4})$/.exec(label.trim());
+  const abbr = m ? MONTH_ABBR[m[1].toUpperCase()] : null;
+  return abbr ? `${abbr} ${m![2].slice(2)}` : label;
 }
 
 /** "OCTOBER 2026" with a rule beside it. The current month is a gold pill. */
@@ -268,6 +369,8 @@ export function MonthDivider({ label, past, current }: { label: string; past?: b
 
 const styles = { ...cardStyles, ...StyleSheet.create({
   barBtnOn: { backgroundColor: color.accentSubtle, borderColor: color.accentSubtle },
+  sectionNav: { width: 96, flexGrow: 0, paddingLeft: 16 },
+  sectionNavItem: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.sm },
   stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 8, paddingVertical: 6 },
   star: { paddingHorizontal: 2 },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 4 },

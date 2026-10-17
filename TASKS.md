@@ -11,26 +11,19 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Six items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
-0. **🔵 APP + WEBSITE ON CLOUDFLARE: the website is online (2026-10-10). Four things need Nils.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
+0. **🔵 APP + WEBSITE ON CLOUDFLARE: the website is online (2026-10-10). One thing needs Nils.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** Fixed from his three passes on 2026-10-10: the episode section on title pages (now with dates and a details sheet), Settings, "Available on", the filter button under Android's bar, the widget's look, Up next listing unscheduled episodes, facet pages with one title, the poster under the trailer. He confirmed a rating, an episode tick and a default-types change work. **Asked of him and not answered yet:** a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), and the episode sheet on the phone. Answered 2026-10-16: fandex.org/tag/steampunk reads "Fandex impact +4.3" for his account, and the CD PROJEKT RED studio page on his phone (27 titles) "looks fine". Download, Delete, a change of country or platforms, and Review's Accept and Deny were all run on a test account on 2026-10-11 and work (the smoke test section below). **Still never run by anybody: disconnecting one of two sign-ins, and Save weights, a category, an alias, a name or an attach on `/dev/scoring`.**
-   - **(b) The IGDB licence email** to partner@igdb.com. A draft is in his Gmail drafts. ⚠️ Read 2026-10-16, not sent: both fandex.org links in it are Google redirect URLs (`google.com/url?q=…`) and must become plain `https://fandex.org`, and "I am building an Android app" is out of date. Its other claims hold (credentials server-side, every game page links to IGDB, no IGDB refresh on a timer). I send it only on his word.
-   - **(f) Press Import for his Letterboxd file.** fandex.org/import, signed in, with the export he downloaded. It was read and matched on 2026-10-15 and nothing was written: it would add 58 ratings and 4 wishlist entries, sent to Trakt too, and keep the 532 he already has. I was stopped from pressing it for him, rightly: it writes to his Trakt account.
-   - **Next, mine:** the six smaller smoke-test findings, SM79 to SM84 (the table below; SM79's cause is `insights.tsx:279-280`, SM80's `homeFeed.ts:45`, SM81's `platformKeys.ts:111-114`). Then the per-screen "still owed" column in [docs/app-parity.md](docs/app-parity.md), top to bottom (Search, then the item page). After that, the RAWG-only and Steam-only game twins in "Added 2026-09-03" below. Build 0.2.8 on his phone has everything through commit 1e54ad3.
-   - **Still owed, mine, on 2026-10-16 or later:** run the restore drill (`node worker/scripts/restore-drill.mjs 2026-10-16`) on the first export paged by key (deployed 2026-10-15), and the insights command to see its reads fall from about 230,000 to about 25,000.
+   - **Next, mine:** nothing queued. The 2026-10-17 list (SM79 to SM84, the parity list, the game twins, the restore drill and the export's reads) is done and in the archive (grep "2026-10-17, his list").
    - **(e) Google sign-in is live in the browser (2026-10-11).** Its privacy and terms paragraphs, and the 2026-10-16 export and deletion lines, were read and approved by Nils on 2026-10-16 ("privacy looks fine"). A real sign-in passed on fandex.org with his account. Never run: the button pressed signed out, and a Google account Fandex has not seen ([docs/app.md](docs/app.md), "Google sign-in, in a browser").
-   - **Waiting on him:** the widget's look and feel, which he wants to go through together; do not redesign it unasked. Google sign-in on Android and joining two accounts are at the bottom of docs/app.md.
-
-1. **⬜ The keys printed to a transcript on 2026-09-03: only Steam is left, and it is optional.** (`railway ssh "env | grep …"` printed `TMDB_API_KEY`, `OMDB_API_KEY` and `STEAM_API_KEY`; never run `env` on a box → [[railway-cli-and-tool-sandbox]].) **TMDB: rotating protects nothing any more.** Checked 2026-10-16: the server key in `.env` is the SAME key the app ships as `EXPO_PUBLIC_TMDB_API_KEY`, so it has been public in every fandex.org bundle since 2026-10-04, by design (TMDB allows a client-side key, docs/app-plan.md). A new key would be just as public. **Steam:** read only by the old site (`src/lib/sources/steam.ts`), which runs nowhere; the Worker holds no Steam secret. Rotate at steamcommunity.com/dev/apikey whenever he likes, nothing needs updating after. OMDb was deleted on 2026-09-03.
+   - **Not built:** Google sign-in on Android and joining two accounts, at the bottom of docs/app.md. (The widget: Nils, 2026-10-17, "works fine for now"; do not redesign it unasked.)
 
 2. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
-3. **⬜ Should the collapsed type filter stay collapsed on DESKTOP?** (2026-09-02.) SM53 shipped it collapsed everywhere, which is the consistency he asked for, but it costs a tap on Home and Discover where vertical space is not scarce. One line to gate on a breakpoint. Only worth changing if it annoys him in use.
+3. **🔵 Discord sign-in is built and hidden until Nils does two things in the Discord developer portal** (2026-10-17, his call: "bring back discord sign-in and rotate the key"). (a) Add three redirect URIs to the Fandex application: `https://fandex.org/auth/discord`, `http://localhost:8081/auth/discord`, `fandex://auth/discord`. (b) Reset the client secret: it reached a session transcript on 2026-09-02, and the new stack does not use it at all (implicit grant, checked against `/oauth2/@me`), so nothing needs the new value except the old site's `.env`. Then mine: add `EXPO_PUBLIC_DISCORD_CLIENT_ID` (the `DISCORD_CLIENT_ID` value) to `mobile/.env`, publish, build an APK, and sign in once on each. → [docs/app.md](docs/app.md) ("Discord sign-in")
 
-4. **⬜ Decide whether to rotate `DISCORD_CLIENT_SECRET`. His call, not a blocker.** (2026-09-02.) ⚠️ **The secret was printed to a session transcript** while repairing a `.env` line I corrupted: the file had no trailing newline, so an append landed on the end of the secret's value and reading it back to fix it exposed it. The file is repaired and correct. Blast radius, measured: it is in **exactly one local file**, `~/.claude/projects/…/524438af-….jsonl`, and **not** in git history, the repo, or any memory file. So the realistic risk is low and rotation is a 60-second job — **Reset Secret** on the app's OAuth2 page, then update `.env` and Railway. Deleting that one file is the alternative he weighed; it does not undo the transmission. ⚠️ The var **rename is DONE** (I did it on Railway: `NEXT_PUBLIC_DISCORD_CLIENT_ID`, mirroring Google).
-
-5. **⬜ Should the LISTS show a film's date in your country?** (2026-10-10.) The calendar, Home and the item page follow the country setting. Discover, Wishlist, Library, the facet pages and Profile's "coming up" show the one worldwide date the device holds, and 136 of 200 pool films open on another day in Germany (mostly one to three days later, sometimes months). The cheap route is the calendar's: ask `POST /v1/catalog/release-dates` for the films on screen. The thorough one puts a per-country date map in the vector, which re-derives the pool and re-syncs every device. The corrected `release-dates` query was measured on live D1 on 2026-10-11 (9 to 20 rows a film, [docs/worker.md](docs/worker.md)), so the cheap route is priced: a screen of 60 films is about a thousand rows read.
+4. **⬜ *Warhammer 40,000: Space Marine II* is still two titles, because his two ratings for it disagree.** The RAWG-only twin holds an 8, the kept IGDB title a 6 (both "RAWG" ratings, both from 2026-06-25). Which one is right is his. Then: `node worker/scripts/fold-items.mjs <pair> --remote --move-user-rows --apply` after deleting the wrong row, and its old address into `mobile/web/folded.json`.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
@@ -55,20 +48,9 @@ The 13th run swept the live site, the 14th every write on a test account. All tw
 
 **Not re-logged, still true:** `/dashboard` is 404; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync; a title removed from the pool between two site builds sends new visitors back to the API for their first sync until the next publish.
 
-## Smoke test, 2026-10-16 (15th run, randomised, web and the native app)
+## Smoke test, 2026-10-16 (15th run): all fixed
 
-Scope: the local stack on two test accounts, the web app in the pane and a side-by-side native build on the phone (smoketest.md, "N-G"). Order shuffled from seed 170535259, plus 140 random taps/clicks over three runs. No crash, no JS error, every write landed in D1. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have. **SM76, SM77 and SM78 (the three 🟠) are fixed and in the archive** (grep "15th smoke test"), live on fandex.org and in build 0.2.8 on the phone.
-
-| ID | Sev | Type | Area | Finding (with repro) |
-|----|:--:|:--:|------|----------------------|
-| SM79 | 🟡 | bug | Insights | "You vs the crowd" puts the same titles in both columns: "You rate higher" lists Hades at −5.8. `insights.tsx:279-280` sorts one list both ways with no sign filter. |
-| SM80 | 🟡 | links | Home | Popular/Upcoming cards for titles the catalog holds link `/item/{uuid}`: `homeFeed.ts:45` sets the id and never the slug. Sibling of SM61. |
-| SM81 | 🟡 | data | Settings, platforms | "Xbox Series S/X" and "Xbox Series X\|S" both listed. `platformKeys.ts:111-114` folds `x/s`, not `s/x`. |
-| SM82 | 🟡 | errors | Title, `/open` | `/item/not-a-uuid`, `/open/foo/bar/1`, `/open/tmdb/movie/abc` (web and `fandex://`) say "Something went wrong" with a Try again that can never work. Unknown slugs already say "Not in the catalog". |
-| SM83 | 🔵 | ui | App routes | A `fandex://` link with three unknown segments (`fandex://legal/en/privacy`) shows Expo's raw "Unmatched Route" page with a Sitemap link; two segments get "Nothing here". Locally the web's `/legal/*` does the same under Metro (dev only). |
-| SM84 | 🔵 | copy | Settings, Import | "Library 1 titles". Import counts "4 ratings" when one of the four rows had no score. |
-
-**Held up well:** sign-in and isolation between the two test accounts on both; rate, re-rate, unrate, wishlist, hide and unhide, each read back from D1 (rate on a wishlisted title leaves one `library` row); a hide on the phone reaching web Search; country, default types and platforms saving from either device and Search following without a reload; Download (7 rows, 1 hidden, both identities); the Letterboxd import (4 of 5 matched, the junk row named, Amélie found); filters and the query surviving Back; type chips summing to the total; calendar month hops with no scroll; tag, person and studio pages; unknown slugs; no sideways overflow at 569 px.
+SM76 to SM84 are fixed and in the archive (grep "15th smoke test" and "2026-10-17, his list").
 
 ---
 
@@ -112,26 +94,7 @@ Scope: the local stack on two test accounts, the web app in the pane and a side-
      matter. Speculative, cheap, reversible.
 
 
-### Added 2026-10-11
-
-- **⬜ "More like this" picks odd titles, and it always did.** The rail is the old site's ranking,
-  ported as it was: it scores the eight RAREST facets two titles share, and the rarest facets a film
-  has are bit-part actors and one-off keywords. On the live catalog Alien gets *Saving Private
-  Ryan*, *Top Gun* and *Freddy's Dead*; Inception gets *The Dark Knight Rises*, *The Blue Lagoon*
-  and *Platoon*. One thing was changed in the port, because it left the rail empty for 1,074 of
-  4,561 titles: facets no other title carries are no longer offered to the ranker
-  (`mobile/src/lib/related.ts`). Whether the ranking itself should change (count every shared
-  facet, weight genre and director above cast) is Nils's call: it changes what the app recommends.
-  ⚠️ `src/lib/similarItems.ts` is shared with the old site's tests; change the caller, or both.
-
 ### Added 2026-09-03
-
-- **⬜ A few games are doubled by an old RAWG-only or Steam-only row.** Left over from the fold of 66 IGDB
-  ports on 2026-10-15 (archive, grep "game ports"): same-name-same-year groups that pair
-  an IGDB row with a RAWG-only or Steam-only one (8 on 2026-10-15), e.g. *Gothic II: Gold Edition*, where the IGDB row holds
-  Nils's Steam library entry. The row without IGDB is the one to fold, with
-  `node worker/scripts/fold-items.mjs` (it refuses if a user row sits on the row it deletes).
-  Not done because nobody has looked at each pair yet.
 
 - **⬜ The tag tail: ~9,000 tags in Other appearing three times or fewer.** The Review tab's rules
   deliberately stop at the head (91% of everything appearing 20+ times). The tail is not worth a

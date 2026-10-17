@@ -22,6 +22,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { pickFiles, readFiles, type PickedFile } from '~/lib/files';
 import { analyzeImport, applyImport, ImportParseError, readImportFiles, type ImportAnalysis, type ImportPhase } from '~/lib/listImport';
 import { usePageTitle } from '~/lib/pageTitle';
+import { count } from '~/lib/plural';
 import { color, radius, space } from '~/theme';
 
 const EXPORT_URL = 'https://letterboxd.com/settings/data/';
@@ -110,9 +111,9 @@ export default function ImportScreen() {
       const res = await applyImport(db, analysis, (phase, done, total) => setState({ kind: 'applying', analysis, phase, done, total }));
       hold(null);
       const parts = [
-        `${res.imported.toLocaleString('en')} titles added to your library`,
+        `${count(res.imported, 'title')} added to your library`,
         res.keptRated ? `${res.keptRated.toLocaleString('en')} you had already rated kept your rating` : null,
-        res.notAdded ? `${res.notAdded.toLocaleString('en')} new titles could not be added today, so import the file again tomorrow` : null,
+        res.notAdded ? `${count(res.notAdded, 'new title')} could not be added today, so import the file again tomorrow` : null,
       ].filter(Boolean);
       toast(`${parts.join('. ')}.`, 'success');
       router.replace('/insights' as never);
@@ -195,10 +196,14 @@ export default function ImportScreen() {
           <Panel style={styles.panel}>
             <View style={{ gap: 4 }}>
               <T variant="title">
-                {(analysis.matchedLocally + analysis.matchedAtProvider).toLocaleString('en')} of {analysis.total.toLocaleString('en')} titles matched
+                {(analysis.matchedLocally + analysis.matchedAtProvider).toLocaleString('en')} of {count(analysis.total, 'title')} matched
               </T>
               <T variant="bodySm">
-                {analysis.ratings.toLocaleString('en')} ratings and {analysis.wishlist.toLocaleString('en')} watchlist entries, read from {analysis.filesRead.join(' and ')}.
+                {[
+                  count(analysis.ratings, 'rating'),
+                  analysis.unrated ? `${count(analysis.unrated, 'title')} with no score` : null,
+                  count(analysis.wishlist, 'watchlist entry', 'watchlist entries'),
+                ].filter(Boolean).join(', ')}, read from {analysis.filesRead.join(' and ')}.
               </T>
               {analysis.matchedAtProvider > 0 ? (
                 <T variant="bodySm">
@@ -242,7 +247,7 @@ export default function ImportScreen() {
               </View>
             ) : signedIn ? (
               <Button
-                label={`Import ${(analysis.matchedLocally + analysis.matchedAtProvider).toLocaleString('en')} titles`}
+                label={`Import ${count(analysis.matchedLocally + analysis.matchedAtProvider, 'title')}`}
                 variant="primary" size="lg" icon={<Check size={14} color={color.surface} />}
                 onPress={() => void apply(analysis)}
               />

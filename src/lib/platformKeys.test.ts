@@ -173,6 +173,9 @@ describe("one platform described three ways by three providers", () => {
     expect(platformLabel("macOS")).toBe("macOS");
     expect(platformLabel("Xbox Series S")).toBe("Xbox Series X|S");
     expect(platformLabel("Xbox Series X")).toBe("Xbox Series X|S");
+    // SM81: the other order, which IGDB names it with.
+    expect(platformLabel("Xbox Series S/X")).toBe("Xbox Series X|S");
+    expect(platformLabel("Xbox Series X/S")).toBe("Xbox Series X|S");
   });
 
   it("still refuses to fold across console generations", () => {

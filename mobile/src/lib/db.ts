@@ -17,7 +17,7 @@ export const DATABASE_NAME = 'fandex.db';
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
  */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
@@ -147,6 +147,24 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
     // Up next asks about the show again once it passes (upNext.ts).
     await db.execAsync('ALTER TABLE up_next ADD COLUMN next_air_at INTEGER');
     await stamp(db, (version = 6));
+  }
+
+  if (version < 7) {
+    // A film's date in the country this device is set to (lib/localDates.ts).
+    // `world_date` keeps the catalog's one date; `release_date`, which every
+    // screen reads, becomes the local one as the answers arrive.
+    await db.execAsync(`
+      ALTER TABLE catalog ADD COLUMN world_date TEXT;
+      UPDATE catalog SET world_date = release_date;
+      CREATE TABLE IF NOT EXISTS regional_date (
+        region TEXT NOT NULL,
+        media_item_id TEXT NOT NULL,
+        date TEXT,
+        checked_at INTEGER NOT NULL,
+        PRIMARY KEY (region, media_item_id)
+      ) WITHOUT ROWID;
+    `);
+    await stamp(db, (version = 7));
   }
 }
 

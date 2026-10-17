@@ -93,6 +93,20 @@ if (googleClient) {
   console.log('  Google sign-in: the return address is accepted and the API checks the nonce');
 }
 
+// A Discord button needs the API's /v1/auth/discord, which answers 400 to an
+// empty body once it is deployed (and 404 before). Whether Discord accepts the
+// return address cannot be asked without signing in, so that one is on the
+// person who lists it on the Discord application (lib/discord.ts).
+const appEnv = fs.existsSync(path.join(here, '..', '.env')) ? fs.readFileSync(path.join(here, '..', '.env'), 'utf8') : '';
+if (/^EXPO_PUBLIC_DISCORD_CLIENT_ID=\s*\S+/m.test(appEnv)) {
+  const api = await fetch(`${SITE}/v1/auth/discord`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then((r) => r.status, () => 0);
+  if (api !== 400) {
+    fail(`this build has a Discord button, and the API on ${SITE} has no Discord sign-in yet (it answered ${api || 'nothing'} where 400 was expected). Deploy the Worker first: npx wrangler deploy, in worker/.`);
+  }
+  console.log('  Discord sign-in: the API has the route');
+}
+
 if (args.includes('--check')) {
   console.log(`\nChecked and not published: ${build.itemPages} item pages, ${build.files} files, built ${build.builtAt}`);
   process.exit(0);

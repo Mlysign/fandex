@@ -156,6 +156,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="auth/trakt" options={{ headerShown: false }} />
           <Stack.Screen name="auth/google" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/discord" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" options={{ headerShown: false, title: 'Nothing here' }} />
         </Stack>
       </ToastProvider>
       </TypeFilterProvider>

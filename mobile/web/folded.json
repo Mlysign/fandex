@@ -330,6 +330,26 @@
    "type": "game",
    "from": "worms-blast-2002",
    "to": "worms-blast"
+  },
+  {
+   "type": "game",
+   "from": "blade-sorcery",
+   "to": "blade-sorcery-2019"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-san-andreas-1",
+   "to": "grand-theft-auto-san-andreas"
+  },
+  {
+   "type": "game",
+   "from": "gothic-ii-gold-edition-2010",
+   "to": "gothic-ii-gold-edition"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-iii-1",
+   "to": "grand-theft-auto-iii"
   }
  ]
 }

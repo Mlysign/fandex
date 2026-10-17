@@ -2,9 +2,9 @@
 // A port of the site's src/lib/detail/relatedRails.ts.
 //
 // The site built them on its server from the scoring pool. The device holds the
-// same pool, so they are built here, with the site's own two rankers imported as
-// they are: `franchiseForItem` and `rankSimilar` are pure functions that take
-// "which titles carry this facet" as an argument.
+// same pool, so they are built here. The franchise rail is the site's own
+// `franchiseForItem`. "More like this" is the app's own since 2026-10-17
+// (`rankLike`, below): the site's ranker picked odd titles (Alien got Top Gun).
 //
 // What answers that question is an index of the catalog copy: every facet, with
 // the titles carrying it. One pass over the catalog, kept until the catalog or
@@ -16,7 +16,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Facet } from '@/lib/facets';
 import { franchiseForItem } from '@/lib/franchise';
-import { rankSimilar } from '@/lib/similarItems';
 import type { ItemVector } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import type { CatalogRow } from '~/lib/db';
@@ -36,23 +35,83 @@ export interface FacetIndex {
   ids: string[];
   /** facet id → positions in `ids` of the titles carrying it, in catalog order. */
   byFacet: Map<string, number[]>;
+  /** Per position: the title's media type, when the row said. */
+  types: (string | null)[];
+  /** Per position: the crowd's vote count, when the row said. */
+  votes: number[];
+  /** Per position: each facet the title carries and how much it says about the title (`facetWeight`). */
+  facetsOf: { id: string; w: number }[][];
+  /** The tag facets that are genres: "More like this" keeps to titles sharing one. */
+  genres: Set<string>;
+}
+
+/**
+ * How much one facet says about what a title is like, before rarity.
+ *
+ * The site's ranker had no such notion: it scored a title's eight RAREST facets,
+ * and the rarest are a bit-part actor or a one-off keyword, so Alien's rail was
+ * Saving Private Ryan, Top Gun and Freddy's Dead. Here a director counts for more
+ * than a top-billed actor, a top-billed actor for far more than a bit part, and a
+ * curated theme or setting for more than a raw keyword. A franchise counts for
+ * nothing: it has a rail of its own.
+ */
+export function facetWeight(f: ScoreFacet, castRank: number, tax: Taxonomy): number {
+  if (f.kind === 'ip') return 0;
+  if (f.kind === 'tag') {
+    const category = tax.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other';
+    if (tax.categories.get(category)?.ignored) return 0;
+    if (category === 'genre') return 1;
+    if (category === 'theme' || category === 'setting' || category === 'mood') return 1.2;
+    if (category === 'other') return 0.5;
+    return 0.6;
+  }
+  if (f.kind === 'person') {
+    if (f.role === 'director' || f.role === 'creator') return 1.6;
+    if (f.role === 'writer') return 0.9;
+    // Cast in billing order, as the provider lists it.
+    return castRank < 3 ? 0.9 : castRank < 6 ? 0.45 : 0.15;
+  }
+  // A developer makes the game; a publisher, studio or network mostly pays for it.
+  return f.role === 'developer' ? 1 : 0.3;
+}
+
+const isGenre = (f: ScoreFacet, tax: Taxonomy) =>
+  f.kind === 'tag' && (tax.tagCategoryOverrides.get(f.key) ?? f.category) === 'genre';
+
+/** Each facet once, with its weight; cast ranked in the order given. */
+function weighted(facets: ScoreFacet[], tax: Taxonomy): { f: ScoreFacet; id: string; w: number }[] {
+  const out: { f: ScoreFacet; id: string; w: number }[] = [];
+  const seen = new Set<string>();
+  let cast = 0;
+  for (const f of facets) {
+    const id = facetId(f);
+    // A title carrying one facet twice is one title.
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const w = facetWeight(f, f.kind === 'person' && f.role === 'cast' ? cast++ : 0, tax);
+    out.push({ f, id, w });
+  }
+  return out;
 }
 
 /** Index titles by the facets the score reads: after bundles, attaches and detaches. */
-export function indexFacets(rows: { id: string; facets: ScoreFacet[] }[], tax: Taxonomy, into?: FacetIndex): FacetIndex {
-  const index = into ?? { size: 0, ids: [], byFacet: new Map<string, number[]>() };
+export function indexFacets(
+  rows: { id: string; type?: string; votes?: number; facets: ScoreFacet[] }[], tax: Taxonomy, into?: FacetIndex,
+): FacetIndex {
+  const index = into ?? { size: 0, ids: [], byFacet: new Map<string, number[]>(), types: [], votes: [], facetsOf: [], genres: new Set<string>() };
   for (const r of rows) {
     const at = index.ids.length;
     index.ids.push(r.id);
-    const seen = new Set<string>();
-    for (const f of resolveFacets(r.facets, r.id, tax)) {
-      const id = facetId(f);
-      // A title carrying one facet twice is one title.
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const list = index.byFacet.get(id);
-      if (list) list.push(at); else index.byFacet.set(id, [at]);
+    index.types.push(r.type ?? null);
+    index.votes.push(r.votes ?? 0);
+    const list: { id: string; w: number }[] = [];
+    for (const { f, id, w } of weighted(resolveFacets(r.facets, r.id, tax), tax)) {
+      const carriers = index.byFacet.get(id);
+      if (carriers) carriers.push(at); else index.byFacet.set(id, [at]);
+      if (w > 0) list.push({ id, w });
+      if (isGenre(f, tax)) index.genres.add(id);
     }
+    index.facetsOf.push(list);
   }
   index.size = index.ids.length;
   return index;
@@ -63,6 +122,93 @@ const idfOf = (index: FacetIndex, id: string) => Math.log((index.size + 1) / ((i
 
 const idsFor = (index: FacetIndex, f: { kind: string; role?: string; key: string }) =>
   (index.byFacet.get(facetId(f)) ?? []).map((i) => index.ids[i]);
+
+/** A facet on more of the catalog than this finds candidates through others; it still counts in the score. */
+const BROAD_SHARE = 0.15;
+/** A title of another media type is "like" this one at this fraction. */
+const OTHER_TYPE = 0.4;
+
+const norms = new WeakMap<FacetIndex, { size: number; norm: Float64Array }>();
+
+/**
+ * Each title's length as a vector of facet weight × rarity, over the facets some
+ * other title also carries. One no other title carries can match nothing, and
+ * counting it would mark down a title for having a long list of one-off keywords.
+ */
+function normOf(index: FacetIndex): Float64Array {
+  const hit = norms.get(index);
+  if (hit && hit.size === index.size) return hit.norm;
+  const idf = new Map<string, number>();
+  const norm = new Float64Array(index.size);
+  index.facetsOf.forEach((list, i) => {
+    let sum = 0;
+    for (const { id, w } of list) {
+      if ((index.byFacet.get(id)?.length ?? 0) < 2) continue;
+      let v = idf.get(id);
+      if (v === undefined) { v = idfOf(index, id); idf.set(id, v); }
+      sum += (w * v) ** 2;
+    }
+    norm[i] = Math.sqrt(sum);
+  });
+  norms.set(index, { size: index.size, norm });
+  return norm;
+}
+
+/**
+ * "More like this", as ids, best first.
+ *
+ * Cosine similarity over every facet two titles share, each weighted by what kind
+ * of facet it is (`facetWeight`) and by how rare it is. Then three rules a reader
+ * would expect: a title that shares no genre with this one is not like it (when
+ * this one has a genre); another media type counts for less; and among titles
+ * about as alike, the one more people have rated comes first, so a rail is not a
+ * list of things nobody has heard of.
+ */
+export function rankLike(input: { id: string; type?: string; facets: ScoreFacet[]; index: FacetIndex; tax: Taxonomy; limit: number }): string[] {
+  const { id, facets, index, tax, limit } = input;
+  const self = index.ids.indexOf(id);
+  const type = input.type ?? (self >= 0 ? index.types[self] : null);
+  const target = new Map<string, number>();
+  const genres = new Set<string>();
+  let normT = 0;
+  for (const { id: fid, w } of weighted(facets, tax)) {
+    if (index.genres.has(fid)) genres.add(fid);
+    const carriers = index.byFacet.get(fid) ?? [];
+    // Only facets some OTHER title carries can say anything about likeness.
+    if (w <= 0 || !carriers.some((i) => i !== self)) continue;
+    const v = w * idfOf(index, fid);
+    target.set(fid, v);
+    normT += v * v;
+  }
+  if (!target.size) return [];
+  normT = Math.sqrt(normT);
+
+  const broad = Math.max(50, index.size * BROAD_SHARE);
+  const candidates = new Set<number>();
+  for (const fid of target.keys()) {
+    const carriers = index.byFacet.get(fid) ?? [];
+    if (carriers.length > broad) continue;
+    for (const i of carriers) if (i !== self) candidates.add(i);
+  }
+
+  const norm = normOf(index);
+  const scored: { i: number; score: number }[] = [];
+  for (const i of candidates) {
+    let dot = 0;
+    let sharesGenre = genres.size === 0;
+    for (const { id: fid, w } of index.facetsOf[i]) {
+      const t = target.get(fid);
+      if (t !== undefined) dot += t * w * idfOf(index, fid);
+      if (!sharesGenre && genres.has(fid)) sharesGenre = true;
+    }
+    if (dot <= 0 || !sharesGenre || !norm[i]) continue;
+    let score = dot / (normT * norm[i]);
+    if (type && index.types[i] && index.types[i] !== type) score *= OTHER_TYPE;
+    score *= 0.7 + 0.3 * Math.min(1, Math.log10(1 + index.votes[i]) / 4);
+    scored.push({ i, score });
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((s) => index.ids[s.i]);
+}
 
 /** The titles any of this title's franchises holds: the ones `pickRelated` needs vectors for. */
 export function franchiseCandidateIds(index: FacetIndex, facets: ScoreFacet[]): string[] {
@@ -77,11 +223,11 @@ export function franchiseCandidateIds(index: FacetIndex, facets: ScoreFacet[]): 
  * franchise rail is picked by crowd attention and shown newest first, and both
  * are read off the vector.
  */
-export function pickRelated(input: { id: string; facets: ScoreFacet[]; index: FacetIndex; vectors: Map<string, ItemVector> }): {
+export function pickRelated(input: { id: string; type?: string; facets: ScoreFacet[]; index: FacetIndex; vectors: Map<string, ItemVector>; tax: Taxonomy }): {
   franchise: { label: string; ids: string[] } | null;
   similar: string[];
 } {
-  const { id, facets, index, vectors } = input;
+  const { id, type, facets, index, vectors, tax } = input;
   // A title with no vector in hand still has its id, which is all the similarity ranker reads.
   const stub = (vid: string): ItemVector => vectors.get(vid) ?? ({ id: vid, title: '', releaseDate: null, communityVotes: 0, sources: [] } as unknown as ItemVector);
   const candidates = (f: Facet) => idsFor(index, f).map(stub);
@@ -89,18 +235,8 @@ export function pickRelated(input: { id: string; facets: ScoreFacet[]; index: Fa
   const franchise = franchiseForItem(id, facets as unknown as Facet[], candidates);
   const inFranchise = new Set(franchise?.items.map((v) => v.id) ?? []);
 
-  const idf = new Map<string, number>();
-  for (const f of facets) idf.set(facetId(f), idfOf(index, facetId(f)));
-  // ⚠️ Only facets some OTHER title carries are offered to the ranker. It scores
-  // a title's eight rarest facets, and the rarest facet there is belongs to this
-  // title alone: a bit-part actor, a one-off keyword. Such a facet can find
-  // nothing. On the live catalog (2026-10-11) 12,140 of 20,504 facets are like
-  // that, and for 1,074 of 4,561 titles they filled all eight places, so the
-  // rail was empty: Alien and Severance among them.
-  const shared = facets.filter((f) => idsFor(index, f).some((other) => other !== id));
   // Asked for more than the cap, so dropping the franchise's titles still leaves a full rail.
-  const similar = rankSimilar(id, shared as unknown as Facet[], idf, candidates, RAIL_CAP + inFranchise.size)
-    .map((r) => r.vector.id)
+  const similar = rankLike({ id, type, facets, index, tax, limit: RAIL_CAP + inFranchise.size })
     .filter((vid) => !inFranchise.has(vid))
     .slice(0, RAIL_CAP);
 
@@ -119,10 +255,10 @@ function parse(json: string): ScoreFacet[] {
 }
 
 async function buildIndex(db: SQLiteDatabase, tax: Taxonomy): Promise<FacetIndex> {
-  const rows = await db.getAllAsync<{ id: string; facets: string }>('SELECT id, facets FROM catalog');
-  const index: FacetIndex = { size: 0, ids: [], byFacet: new Map() };
+  const rows = await db.getAllAsync<{ id: string; type: string; community_votes: number; facets: string }>('SELECT id, type, community_votes, facets FROM catalog');
+  const index: FacetIndex = { size: 0, ids: [], byFacet: new Map(), types: [], votes: [], facetsOf: [], genres: new Set() };
   for (let i = 0; i < rows.length; i += PARSE_CHUNK) {
-    indexFacets(rows.slice(i, i + PARSE_CHUNK).map((r) => ({ id: r.id, facets: parse(r.facets) })), tax, index);
+    indexFacets(rows.slice(i, i + PARSE_CHUNK).map((r) => ({ id: r.id, type: r.type, votes: r.community_votes ?? 0, facets: parse(r.facets) })), tax, index);
     await new Promise<void>((done) => setTimeout(done, 0));
   }
   return index;
@@ -172,7 +308,7 @@ export async function relatedRails(db: SQLiteDatabase, revision: number, tax: Ta
     try { vectors.set(vid, JSON.parse(row.vector) as ItemVector); } catch { /* a title with an unreadable vector is left out */ }
   }
 
-  const picked = pickRelated({ id, facets, index, vectors });
+  const picked = pickRelated({ id, facets, index, vectors, tax });
   const rows = await byId<CatalogRow>(
     db, 'id, type, title, slug, poster_url, release_date, year, community_score, community_votes',
     [...(picked.franchise?.ids ?? []), ...picked.similar],

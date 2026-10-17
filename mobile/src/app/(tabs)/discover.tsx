@@ -27,6 +27,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { tmdbConfigured } from '~/lib/config';
 import { currentMonth, monthLabel } from '~/lib/dates';
 import { usePageTitle } from '~/lib/pageTitle';
+import { onSearchQuery, takeWaitingQuery } from '~/lib/searchHandoff';
 import { catalogCards } from '~/lib/db';
 import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -98,8 +99,13 @@ export default function DiscoverScreen() {
   // returns to the mounted screen with its query and scroll, and this covers a
   // reload.
   const [query, setQuery] = useState(() => {
+    // Typed into the nav bar's search box before this screen existed (components/NavSearch.tsx).
+    const handed = takeWaitingQuery();
+    if (handed != null) return handed;
     try { return Platform.OS === 'web' ? globalThis.sessionStorage?.getItem(QUERY_KEY) ?? '' : ''; } catch { return ''; }
   });
+  // And while it is mounted: the nav bar hands the text over on Enter.
+  useEffect(() => onSearchQuery(setQuery), []);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     try { globalThis.sessionStorage?.setItem(QUERY_KEY, query); } catch { /* storage refused: nothing kept */ }

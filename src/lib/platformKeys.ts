@@ -112,6 +112,13 @@ const PLATFORM_ALIAS: Record<string, string> = {
   "xbox series s": "Xbox Series X|S",
   "xbox series x|s": "Xbox Series X|S",
   "xbox series x/s": "Xbox Series X|S",
+  // Both orders are in the wild: "Xbox Series S/X" sat next to "Xbox Series
+  // X|S" in Settings (SM81).
+  "xbox series s/x": "Xbox Series X|S",
+  "xbox series s|x": "Xbox Series X|S",
+  "xbox series x & s": "Xbox Series X|S",
+  "xbox series s & x": "Xbox Series X|S",
+  "xbox series x and s": "Xbox Series X|S",
 };
 
 /** Display label for a raw provider name: service tiers folded, platform aliases canonicalised. */

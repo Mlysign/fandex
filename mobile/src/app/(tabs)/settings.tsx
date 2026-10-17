@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { COUNTRIES } from '@/lib/countries';
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from '@/lib/mediaTypes';
 import { platformMarkName, type PlatformOption } from '@/lib/platformKeys';
@@ -16,10 +16,11 @@ import { BrandGlyph } from '~/components/BrandGlyph';
 import { GoogleMark } from '~/components/GoogleMark';
 import { Button, Sheet } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
-import { SignIn, TraktCodeCard, useGoogleSignIn } from '~/components/SignIn';
+import { SignIn, TraktCodeCard, useDiscordSignIn, useGoogleSignIn } from '~/components/SignIn';
 import { useToast } from '~/components/Toast';
 import { Screen, T } from '~/components/ui';
 import { toggled } from '~/lib/a11y';
+import { foldAt } from '~/lib/foldAt';
 import { api, ApiError } from '~/lib/api';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
@@ -27,16 +28,18 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { catalogCounts, shelfCounts } from '~/lib/db';
 import { saveJsonFile } from '~/lib/files';
+import { discordAvailable } from '~/lib/discord';
 import { googleAvailable } from '~/lib/google';
 import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
 import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
+import { count } from '~/lib/plural';
 import { color, font, radius, space } from '~/theme';
 
 type Notice = { msg: string; ok: boolean } | null;
 
-const PROVIDER_NAME: Record<string, string> = { trakt: 'Trakt', google: 'Google', steam: 'Steam' };
+const PROVIDER_NAME: Record<string, string> = { trakt: 'Trakt', google: 'Google', discord: 'Discord', steam: 'Steam' };
 const TYPE_ICON = { game: Gamepad2, movie: Clapperboard, show: Tv } as const;
 
 function ago(ms: number | null): string {
@@ -52,13 +55,12 @@ function ago(ms: number | null): string {
 function traktSummary(r: TraktSyncResult): string {
   const changed = r.itemsChanged + r.episodesChanged;
   const removed = r.itemsRemoved + r.episodesRemoved;
-  const titles = (n: number, what: string) => `${n.toLocaleString('en')} ${what}${n === 1 ? '' : 's'}`;
   const parts = [
     changed ? `${changed.toLocaleString('en')} updated` : null,
     removed ? `${removed.toLocaleString('en')} removed` : null,
-    r.deferred ? `${titles(r.deferred, 'new title')} waiting for the next sync` : null,
-    r.watchlistTidied ? `${titles(r.watchlistTidied, 'rated title')} taken off your Trakt watchlist` : null,
-    r.wishlistTidied ? `${titles(r.wishlistTidied, 'rated title')} taken off your wishlist` : null,
+    r.deferred ? `${count(r.deferred, 'new title')} waiting for the next sync` : null,
+    r.watchlistTidied ? `${count(r.watchlistTidied, 'rated title')} taken off your Trakt watchlist` : null,
+    r.wishlistTidied ? `${count(r.wishlistTidied, 'rated title')} taken off your wishlist` : null,
   ].filter(Boolean);
   const what = parts.length ? parts.join(', ') : 'Nothing had changed';
   return r.dryRun ? `Test run, nothing written. Would be: ${what.toLowerCase()}.` : `${what}.`;
@@ -112,6 +114,7 @@ function Line({ label, value, tone }: { label: string; value: string; tone?: str
 /** The site's provider list (SettingsPageClient.tsx), for the ones this stack knows. */
 const PROVIDERS: Record<string, { label: string; description: string; identityOnly?: boolean; readOnly?: boolean }> = {
   google: { label: 'Google', description: 'Signs you in. No library to import.', identityOnly: true },
+  discord: { label: 'Discord', description: 'Signs you in. No library to import.', identityOnly: true },
   trakt: { label: 'Trakt.tv', description: 'Movies & TV shows watchlist' },
   steam: { label: 'Steam', description: 'Games from your wishlist', readOnly: true },
 };
@@ -187,7 +190,8 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
       ) : null}
       {meta.identityOnly ? (
         <T variant="bodySm">
-          {Platform.OS === 'web'
+          {/* Discord signs in on a phone too (lib/discord.ts); Google does not yet (docs/app.md). */}
+          {Platform.OS === 'web' || provider === 'discord'
             ? 'A way to sign in. It holds no library.'
             : 'A way to sign in on fandex.org. It holds no library, and signing in with it in this app is not built yet.'}
         </T>
@@ -217,14 +221,15 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
  * This is what lets an account made with Google get its Trakt library, without
  * signing out and ending up with two accounts.
  */
-function AddProvider({ provider }: { provider: 'trakt' | 'google' }) {
+function AddProvider({ provider }: { provider: 'trakt' | 'google' | 'discord' }) {
   const auth = useAuth();
   const google = useGoogleSignIn();
+  const discord = useDiscordSignIn();
   const meta = PROVIDERS[provider];
   const flow = auth.trakt;
   const traktBusy = provider === 'trakt' && (flow.phase === 'starting' || flow.phase === 'finishing');
-  const busy = traktBusy || (provider === 'google' && google.leaving);
-  const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : google.error;
+  const busy = traktBusy || (provider === 'google' && google.leaving) || (provider === 'discord' && discord.leaving);
+  const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : provider === 'discord' ? discord.error : google.error;
 
   if (provider === 'trakt' && flow.phase === 'waiting') return <TraktCodeCard />;
   return (
@@ -242,7 +247,7 @@ function AddProvider({ provider }: { provider: 'trakt' | 'google' }) {
         <View style={styles.providerActions}>
           <Button
             label={busy ? '...' : 'Connect'} disabled={busy}
-            onPress={provider === 'trakt' ? auth.startTraktSignIn : google.start}
+            onPress={provider === 'trakt' ? auth.startTraktSignIn : provider === 'discord' ? discord.start : google.start}
           />
         </View>
       </View>
@@ -384,13 +389,15 @@ function DefaultTypes({ onNotice }: { onNotice: (n: Notice) => void }) {
 
 // ── Your platforms ───────────────────────────────────────────────────────────
 
-/** How many chips a group shows before "Show all". The site measured two rows; this is about two on a phone. */
-const PLATFORM_FOLD = 8;
 
 function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
   label: string; items: PlatformOption[]; selected: string[]; onToggle: (key: string) => void; collapsible: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { width } = useWindowDimensions();
+  const tops = useRef<number[]>([]);
+  // The cut for this order and this width. Measured again when either changes.
+  const [cut, setCut] = useState<{ key: string; at: number | null } | null>(null);
   // Selected first, in the order they had when the group was last opened or
   // closed: a chip must not jump away under the finger that just tapped it.
   const orderKey = `${items.map((o) => o.key).join('|')}|${expanded}`;
@@ -399,9 +406,17 @@ function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
     return [...items.filter((o) => picked.has(o.key)), ...items.filter((o) => !picked.has(o.key))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderKey]);
+  const measureKey = `${orderKey}|${width}`;
+  const measured = cut?.key === measureKey ? cut : null;
   if (items.length === 0) return null;
   const collapsed = collapsible && !expanded;
-  const shown = collapsed ? order.slice(0, PLATFORM_FOLD) : order;
+  const shown = collapsed && measured?.at != null ? order.slice(0, measured.at) : order;
+  const measuring = collapsed && !measured;
+  const place = (i: number, y: number) => {
+    tops.current[i] = y;
+    if (!measuring || tops.current.filter((t) => t != null).length < order.length) return;
+    setCut({ key: measureKey, at: foldAt(tops.current.slice(0, order.length)) });
+  };
   return (
     <View style={{ gap: space.sm }}>
       <T variant="meta">{label}</T>
@@ -411,6 +426,7 @@ function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
           return (
             <Pressable
               key={o.key} onPress={() => onToggle(o.key)} accessibilityRole="button" {...toggled(on)}
+              onLayout={measuring ? (e) => place(order.indexOf(o), e.nativeEvent.layout.y) : undefined}
               style={[styles.platformChip, on && styles.chipOn]}
             >
               <BrandGlyph source={platformMarkName(o.label)} size={16} tint={on ? color.textPrimary : color.textSecondary} />
@@ -420,7 +436,7 @@ function PlatformGroup({ label, items, selected, onToggle, collapsible }: {
           );
         })}
       </View>
-      {collapsible && items.length > PLATFORM_FOLD ? (
+      {collapsible && (expanded || measured?.at != null) ? (
         <Pressable onPress={() => setExpanded((v) => !v)} accessibilityRole="button" accessibilityState={{ expanded }} style={styles.textButton}>
           <T variant="label" style={{ color: color.accent }}>{expanded ? 'Show fewer' : `Show all ${items.length}`}</T>
         </Pressable>
@@ -774,6 +790,7 @@ export default function SettingsScreen() {
               {/* Only once the profile has loaded: offline, "not connected" would be a guess. */}
               {auth.profile && !identities.some((i) => i.provider === 'trakt') ? <AddProvider provider="trakt" /> : null}
               {auth.profile && googleAvailable() && !identities.some((i) => i.provider === 'google') ? <AddProvider provider="google" /> : null}
+              {auth.profile && discordAvailable() && !identities.some((i) => i.provider === 'discord') ? <AddProvider provider="discord" /> : null}
               {!auth.profile ? <T variant="bodySm">Offline. Showing what is on this device.</T> : null}
             </Section>
 
@@ -785,8 +802,8 @@ export default function SettingsScreen() {
             <Section eyebrow="Account">
               <Card>
                 <Line label="Logged in as" value={who ? `${who}${via ? ` via ${via}` : ''}` : via || 'Yes'} />
-                <Line label="Library" value={`${counts.library.toLocaleString('en')} titles`} />
-                <Line label="Wishlist" value={`${counts.wishlist.toLocaleString('en')} titles`} />
+                <Line label="Library" value={count(counts.library, 'title')} />
+                <Line label="Wishlist" value={count(counts.wishlist, 'title')} />
                 {auth.rowsSyncing ? <T variant="bodySm">Refreshing your library…</T> : null}
                 {auth.rowsError ? <T variant="bodySm" style={{ color: color.warning }}>{auth.rowsError}</T> : null}
                 <View style={styles.actions}>

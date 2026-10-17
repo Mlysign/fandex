@@ -1,6 +1,6 @@
 // Fold duplicate titles into the title they duplicate, on D1.
 //
-//   node worker/scripts/fold-items.mjs <pairs.json> --local|--remote [--apply]
+//   node worker/scripts/fold-items.mjs <pairs.json> --local|--remote [--apply] [--move-user-rows]
 //
 // pairs.json is [{ port, target, title }], item ids. Without --apply it checks
 // and backs up, and prints what it would do. With --apply it runs the deletes.
@@ -65,8 +65,39 @@ const list = (ids) => ids.map((id) => `'${id}'`).join(",");
 const portList = list([...ports]);
 
 // ── 1. Nothing personal on a duplicate ───────────────────────────────────────
+//
+// With --move-user-rows, a library or wishlist row on a duplicate is carried
+// over instead of refused, in the two cases where no choice is involved
+// (2026-10-17, the RAWG-only and Steam-only game twins):
+//   • the kept title has no row for that account, source and relation: the
+//     row moves to it, and nothing is lost;
+//   • it has one with the same status and rating: the duplicate's is the same
+//     fact twice, and it is dropped.
+// Any other overlap (two ratings that differ, a status that differs) still
+// refuses: which one wins is the person's call (AGENTS.md, the merge rule).
+const moveUserRows = flags.includes("--move-user-rows");
+const userSql = [];
+let userBackup = [];
+if (moveUserRows) {
+  const onPorts = query(`SELECT * FROM user_item_state WHERE media_item_id IN (${portList})`);
+  const targetOf = new Map(pairs.map((p) => [p.port, p.target]));
+  const onTargets = query(`SELECT * FROM user_item_state WHERE media_item_id IN (${list([...new Set(pairs.map((p) => p.target))])})`);
+  const conflicts = [];
+  for (const r of onPorts) {
+    const target = targetOf.get(r.media_item_id);
+    const same = onTargets.find((t) => t.media_item_id === target && t.user_id === r.user_id && t.source === r.source && t.relation === r.relation);
+    const at = `user_id = '${r.user_id}' AND media_item_id = '${r.media_item_id}' AND source = '${r.source}' AND relation = '${r.relation}'`;
+    if (!same) userSql.push(`UPDATE user_item_state SET media_item_id = '${target}', updated_at = unixepoch() WHERE ${at};`);
+    else if (same.rating === r.rating && same.status === r.status) userSql.push(`DELETE FROM user_item_state WHERE ${at};`);
+    else conflicts.push(`${r.source}/${r.relation} on ${r.media_item_id}: ${r.status} ${r.rating ?? "-"} here, ${same.status} ${same.rating ?? "-"} on ${target}`);
+  }
+  if (conflicts.length) throw new Error(`these rows disagree with the kept title's, and which wins is a person's call:\n  ${conflicts.join("\n  ")}`);
+  userBackup = onPorts;
+  if (/[^0-9a-z_-]/i.test(onPorts.map((r) => r.user_id + r.source + r.relation).join(""))) throw new Error("unexpected characters in a user row key");
+  console.log(`${onPorts.length} user row(s) on the duplicates: ${userSql.filter((s) => s.startsWith("UPDATE")).length} move, ${userSql.filter((s) => s.startsWith("DELETE")).length} are the same fact twice and go.`);
+}
 const personal = [
-  ["user_item_state", `media_item_id IN (${portList})`],
+  ...(moveUserRows ? [] : [["user_item_state", `media_item_id IN (${portList})`]]),
   ["user_episode_state", `media_item_id IN (${portList})`],
   ["user_hidden_items", `media_item_id IN (${portList})`],
   ["taxonomy_suggestion_dismissed", `substr(ref, 1, 36) IN (${portList})`],
@@ -78,7 +109,7 @@ for (const [table, cond] of personal) {
 const targets = query(`SELECT id FROM media_items WHERE id IN (${list([...new Set(pairs.map((p) => p.target))])})`);
 if (targets.length !== new Set(pairs.map((p) => p.target)).size) throw new Error("a target is missing from media_items");
 const present = query(`SELECT id FROM media_items WHERE id IN (${portList})`).map((r) => r.id);
-console.log(`${pairs.length} pairs, ${present.length} duplicates still present, no user rows on any.`);
+console.log(`${pairs.length} pairs, ${present.length} duplicates still present${moveUserRows ? '' : ', no user rows on any'}.`);
 if (!present.length) process.exit(0);
 
 // ── 2. Back up every row that goes ───────────────────────────────────────────
@@ -89,11 +120,11 @@ for (const table of ["media_items", "media_links", "item_doc", "media_external_i
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const backupFile = path.join(ROOT, "data", "backups", `fold-items-${where.slice(2)}-${stamp}.json`);
 fs.mkdirSync(path.dirname(backupFile), { recursive: true });
-fs.writeFileSync(backupFile, JSON.stringify({ pairs, rows: backup }));
+fs.writeFileSync(backupFile, JSON.stringify({ pairs, rows: { ...backup, user_item_state: userBackup } }));
 console.log(`backup: ${path.relative(ROOT, backupFile)} (${Object.entries(backup).map(([t, r]) => `${t} ${r.length}`).join(", ")})`);
 
 // ── 3. The statements ───────────────────────────────────────────────────────
-const sql = [];
+const sql = [...userSql];
 for (const { port, target } of pairs) {
   sql.push(`UPDATE OR IGNORE item_ip_override SET media_item_id = '${target}' WHERE media_item_id = '${port}';`);
   for (const t of ["item_ip_override", "item_doc", "media_external_ids", "media_links"]) sql.push(`DELETE FROM ${t} WHERE media_item_id = '${port}';`);

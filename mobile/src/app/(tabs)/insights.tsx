@@ -276,8 +276,10 @@ export default function InsightsScreen() {
     // Against the crowd, on a 0 to 10 scale. Only titles with enough votes to call it a crowd.
     const diverging = rated.filter((r) => r.communityScore != null && (r.communityVotes ?? 0) >= 50)
       .map((r) => ({ r, delta: r.rating - (r.communityScore as number) / 10 }));
-    const over = [...diverging].sort((a, b) => b.delta - a.delta).slice(0, 8);
-    const under = [...diverging].sort((a, b) => a.delta - b.delta).slice(0, 8);
+    // Each column takes only its own sign. One list sorted both ways put a title
+    // you rate 5.8 BELOW the crowd under "You rate higher" (SM79).
+    const over = diverging.filter((d) => d.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 8);
+    const under = diverging.filter((d) => d.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 8);
 
     const stats = new Map<string, { f: StoredFacet; n: number; sum: number }>();
     for (const r of rated) {

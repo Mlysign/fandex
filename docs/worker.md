@@ -28,10 +28,10 @@ Public, no session:
 | `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |
 | `GET /v1/resolve/{tmdb\|igdb}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. |
-| `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held. Never fetches. A library sync calls this, then `resolve` for the misses. |
+| `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held, with each held title's `slug` since 2026-10-17 (one primary-key read each), so a card links `/{type}/{slug}`. Never fetches. A library sync calls this, then `resolve` for the misses. |
 | `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. |
 | `GET /v1/browse/games?page[&window=recent]` | Upcoming games, most anticipated first, 40 a page, pages 1 to 10: the Search feed. With `window=recent`, the last sixty days' games, most rated first: Home's trending. Card fields only. Edge-cached six hours per page and day; an empty page is never cached. Measured 2026-10-15: 4 ms CPU on a miss. Reads and writes no D1 row. |
-| `GET /v1/facet/games?kind=tag|studio&q` | A tag's games (theme, keyword or genre containing it) or a studio's (company name containing it), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
+| `GET /v1/facet/games?kind=tag|studio|franchise&q` | A tag's games (theme, keyword or genre containing it), a studio's (company name containing it), or a franchise's (IGDB franchise or collection named exactly that, since 2026-10-17: a game page's "More from" rail), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
 | `GET /v1/calendar/{YYYY-MM}?region` | The month's popular releases, 40 cards. |
 | `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. |
@@ -40,6 +40,7 @@ A real route asked with the wrong method answers 405 with an `Allow` header (the
 table in `src/index.ts`); an address that is no route at all stays 404.
 
 Sign-in: `POST /v1/auth/google {idToken, nonce}`, `POST /v1/auth/trakt {accessToken}`,
+`POST /v1/auth/discord {accessToken}` (since 2026-10-17: Discord's `/oauth2/@me` must name our `DISCORD_CLIENT_ID` as the application; no client secret),
 `POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout`.
 
 ### The test accounts (a developer's machine only)
@@ -303,7 +304,7 @@ Run from `worker/` unless a path says otherwise.
 | Apply a migration | `npx wrangler d1 migrations apply fandex --remote`, and BEFORE the deploy that needs it |
 | What read the most rows today | `npx wrangler d1 insights fandex --timePeriod 1d --sort-type sum --sort-by reads --limit 15 --json` (answers while D1 refuses queries) |
 | Query D1 | `npx wrangler d1 execute fandex --remote --command "…"` |
-| Fold duplicate titles into the one they duplicate | `node worker/scripts/fold-items.mjs <pairs.json> --local\|--remote [--apply]`. Refuses if a user row sits on a duplicate, backs every deleted row up to `data/backups/`, drops the kept counts. Rehearse with `--local` first. Then add each old address to `mobile/web/folded.json` and publish the site, or the old address opens "not found". |
+| Fold duplicate titles into the one they duplicate | `node worker/scripts/fold-items.mjs <pairs.json> --local\|--remote [--apply]`. Refuses if a user row sits on a duplicate; with `--move-user-rows` it moves a library or wishlist row the kept title lacks and drops one it already has word for word, and still refuses two that disagree. Backs every deleted row up to `data/backups/`, drops the kept counts. Rehearse with `--local` first. Then add each old address to `mobile/web/folded.json` and publish the site, or the old address opens "not found". |
 | Rows a query reads | the same with `--json`: `meta.rows_read`. ⚠️ Not with `--file`, which reports the upload and not the query. |
 | Logs with CPU time | `npx wrangler tail fandex-api --format json` |
 | Set secrets from `.env` | `node worker/scripts/push-secrets.mjs` (from the repo root) |

@@ -399,6 +399,33 @@ says "This browser is not signed in to Trakt yet", and Settings shows **Sign in 
 a line saying why (`traktSync.onDevice`). Seen on the local stack with a test account given a
 Trakt identity row; published to fandex.org the same day. Not in an APK yet.
 
+## Discord sign-in (2026-10-17, built, switched off)
+
+`src/lib/discord.ts`, `src/app/auth/discord.tsx`, `AuthProvider.startDiscordSignIn`, the button in
+`components/SignIn.tsx` and Settings' Connect row. The Worker's half is `POST /v1/auth/discord`
+(`worker/src/auth/verify.ts`, `verifyDiscordToken`).
+
+Discord's implicit grant, scope `identify`: the browser goes to Discord and comes back to
+`/auth/discord` with an access token after the `#`; on the phone a browser sheet comes back to
+`fandex://auth/discord`, as Trakt's does. The Worker asks Discord's `/oauth2/@me` whose token it
+is and which application it was issued to, and refuses one issued to any other app. **No client
+secret is used anywhere**, which is why the leaked `DISCORD_CLIENT_SECRET` can be reset without
+touching the Worker. A `state` made before leaving and checked on return stops a planted token.
+The privacy policy says so in both languages since 2026-10-17.
+
+**Switched off until the return addresses exist on the Discord application.** The button shows
+only in a build with `EXPO_PUBLIC_DISCORD_CLIENT_ID` in `mobile/.env`, and that line is not there
+yet. Discord answers an unlisted address with an error page only after the person has logged in,
+so no publish check can catch it (Google's can). To switch it on:
+
+1. In the Discord developer portal, application Fandex → OAuth2 → Redirects: add
+   `https://fandex.org/auth/discord`, `http://localhost:8081/auth/discord` and
+   `fandex://auth/discord`.
+2. Add `EXPO_PUBLIC_DISCORD_CLIENT_ID=<the DISCORD_CLIENT_ID in .env>` to `mobile/.env`.
+3. `node worker/scripts/push-secrets.mjs` (pushes `DISCORD_CLIENT_ID` among the rest), then
+   publish. `publish.mjs` refuses a build with the button while the API lacks the route.
+4. Build an APK for the phone.
+
 ## Known problems
 
 - **The widget's look and feel is not right yet** (Nils, 2026-10-04: "the ux not feeling and

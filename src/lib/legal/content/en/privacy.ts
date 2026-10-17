@@ -16,6 +16,10 @@ import type { LegalDocument } from "@/lib/legal/types";
 //   Google sign-in        mobile/src/lib/google.ts (scope `openid profile`, the
 //                         tab's one-time value), worker/src/auth/verify.ts (name
 //                         and picture kept, keys fetched, nothing sent to Google)
+//   Discord sign-in       mobile/src/lib/discord.ts (implicit grant, scope
+//                         `identify`, the one-time `state`), worker/src/auth/verify.ts
+//                         (one call to /oauth2/@me with the token, then dropped;
+//                         id, display name and avatar kept)
 //   backups               worker/src/cron.ts (nightly, to R2, EU), D1 Time Travel
 //   export and deletion   Settings → Your data, Download and Delete
 //                         (mobile/src/app/(tabs)/settings.tsx) on GET /v1/me/export
@@ -24,7 +28,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // If the rule is ever removed, that sentence is false.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-10-16",
+  updated: "2026-10-17",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why, rather than assembled from a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
     "It covers the website at fandex.org and the Fandex app for Android. Both are the same app and work the same way.",
@@ -44,7 +48,7 @@ const privacy: LegalDocument = {
         {
           list: [
             "Account: an internal account id, when the account was created, the day you were last seen, your country and display preferences if you set them (which media types and platforms you want shown), and a counter used to end your sessions when you sign out.",
-            "Sign-in provider: which provider you signed in with (Trakt or Google), that provider's own account id and display name for you, and your avatar image URL if the provider supplies one. For a Google account the display name is the name on that account and the avatar is its profile picture. Fandex's servers do not store a password or an access token for your provider account.",
+            "Sign-in provider: which provider you signed in with (Trakt, Google or Discord), that provider's own account id and display name for you, and your avatar image URL if the provider supplies one. For a Google account the display name is the name on that account and the avatar is its profile picture. For a Discord account it is your Discord display name (or, without one, your username) and your Discord avatar. Fandex's servers do not store a password or an access token for your provider account.",
             "Your library and wishlist: which titles you've marked watched or played, which you want, your rating and any written review, the status of each, and where each entry came from (Trakt, Steam, or Fandex itself).",
             "Episodes: which episodes of a show you've marked watched.",
             "Hidden titles: the titles you asked Fandex not to suggest.",
@@ -57,14 +61,14 @@ const privacy: LegalDocument = {
       body: [
         "Fandex keeps a working copy on the device you use it on, so that it is fast and works without a connection. That copy holds the public catalog, your own library rows, your Fandex session and, if you signed in with Trakt, the Trakt access tokens.",
         "In a browser this lives in the browser's own storage for fandex.org. In the Android app it lives in the app's private storage, with the session and the tokens in the system keystore. The Trakt tokens are used only to talk to Trakt from your device. They are never sent to Fandex's servers, apart from the single moment of sign-in described below.",
-        "If you sign in with Google, the browser tab keeps a one-time random value while you are on Google's page, so that Google's answer can be matched to the tab that asked. It is deleted when you come back, and it is gone in any case when the tab closes.",
+        "If you sign in with Google or Discord, the browser tab (in the Android app, the app itself) keeps a one-time random value while you are on that provider's page, so that its answer can be matched to the sign-in that asked. It is deleted when you come back, and it is gone in any case when the tab closes.",
         "Signing out removes the session, the tokens and your library rows from the device.",
       ],
     },
     {
       heading: "What Fandex does NOT store",
       body: [
-        "No email address, no name other than the display name your provider gives us (for a Google account that is the name on the account), no payment information (Fandex has no payment feature today), no provider password or token on its servers, and no third-party analytics or advertising identifiers. Fandex does count pageviews, but it does so itself and without identifying anyone; see \"Usage statistics\" below.",
+        "No email address, no name other than the display name your provider gives us (for a Google account that is the name on the account, for a Discord account your Discord display name), no payment information (Fandex has no payment feature today), no provider password or token on its servers, and no third-party analytics or advertising identifiers. Fandex does count pageviews, but it does so itself and without identifying anyone; see \"Usage statistics\" below.",
       ],
     },
     {
@@ -95,6 +99,7 @@ const privacy: LegalDocument = {
             "IGDB (part of Twitch): game information, asked for by Fandex's servers only. IGDB never sees anything about you individually.",
             "Trakt: if you sign in with Trakt, the app on your device talks to Trakt directly. It reads your Trakt history, ratings and watchlist, and it sends your ratings, watched status and watchlist changes to your Trakt account. Fandex's servers contact Trakt once, at sign-in, to confirm which Trakt account is signing in. The token used for that one request is not kept.",
             "Google: if you choose to sign in with Google, your browser leaves Fandex for Google's own sign-in page and comes back. Nothing is sent to Google before you press that button, and no Google script runs on Fandex. Google then confirms three things to Fandex: an account id, the name on your Google account and its profile picture. Fandex does not ask for your email address and gets no access to anything in your Google account. Google learns that you signed in to Fandex and when. Fandex's servers send Google nothing about you; they only download Google's public keys, to check that the confirmation is genuine.",
+            "Discord: if you choose to sign in with Discord, your browser (in the Android app, a browser window) leaves Fandex for Discord's own sign-in page and comes back. Nothing is sent to Discord before you press that button. Fandex asks Discord only who you are (the permission Discord calls \"identify\"), not for your email address, your servers or your messages. Discord hands your browser a short-lived access token for that. Fandex's servers use it once, to ask Discord which account it belongs to and whether it was issued to Fandex, and then discard it. What Fandex keeps is an account id, your Discord display name and your avatar. Discord learns that you signed in to Fandex and when.",
             "Images: posters and artwork are loaded by your device straight from the image servers of TMDB, IGDB and, for some games, Steam and RAWG. Each of them receives your IP address when an image loads, as any website does.",
             "Trailers: a title page with a trailer embeds YouTube's player. YouTube (Google) receives your IP address when that page loads and may set its own cookies. What YouTube does with that is governed by Google's privacy policy.",
           ],
@@ -104,7 +109,7 @@ const privacy: LegalDocument = {
           list: [
             "Catalog information only: no personal data leaves Fandex's servers. A request from Fandex to TMDB or IGDB carries a title or an id and nothing about you.",
             "Requests your own device makes. Searches to TMDB, images and trailers go from your device to that provider, as they would if you visited its website. They carry your IP address and nothing from your Fandex account.",
-            "The account you sign in with. If you sign in with Trakt, data goes to an account you already hold there, at your instruction, and only while you stay signed in. That transfer happens because you explicitly asked for it (Art. 49(1)(a) GDPR), and from the moment it arrives Trakt handles it under its own privacy policy, not this one. If you sign in with Google, Fandex transfers nothing to Google. You are on Google's own page for that step, as you would be signing in to Google anywhere else, and what Google records there is governed by Google's privacy policy.",
+            "The account you sign in with. If you sign in with Trakt, data goes to an account you already hold there, at your instruction, and only while you stay signed in. That transfer happens because you explicitly asked for it (Art. 49(1)(a) GDPR), and from the moment it arrives Trakt handles it under its own privacy policy, not this one. If you sign in with Google, Fandex transfers nothing to Google. You are on Google's own page for that step, as you would be signing in to Google anywhere else, and what Google records there is governed by Google's privacy policy. If you sign in with Discord, Fandex's servers send Discord one request, carrying the access token Discord gave your browser, to ask whose account it is. That request is made because you asked to sign in with Discord (Art. 49(1)(a) GDPR), it carries nothing else about you, and Discord handles it under its own privacy policy.",
             "The provider that processes data on Fandex's behalf. That is Cloudflare, which delivers the website, runs the database and its backups, and routes the hello@fandex.org mailbox. The database and the backups are kept in the European Union. Cloudflare is based in the United States and its staff can reach what it hosts for us, which counts as a transfer, so Cloudflare self-certifies under the EU-US Data Privacy Framework and additionally commits to the European Commission's Standard Contractual Clauses as a fallback should that certification lapse. Checked August 2026. Certifications can be withdrawn, so this is re-checked rather than assumed.",
           ],
         },

@@ -380,6 +380,7 @@ describe("rate limits", () => {
 
 describe("looking up many provider ids at once", () => {
   const lookup = (refs: unknown) => call("/v1/lookup", { method: "POST", ...jsonBody({ refs }) });
+  const slugOf = async (id: string) => (await db.prepare("SELECT slug FROM media_items WHERE id = ?").bind(id).first<{ slug: string }>())?.slug;
 
   it("says which are held and which are not, without fetching anything", async () => {
     const film = await upsertMediaItem(db, movieItem());
@@ -394,8 +395,8 @@ describe("looking up many provider ids at once", () => {
 
     // The same number is a film AND a show. The type decides which.
     expect(res.found).toEqual([
-      { source: "tmdb", type: "movie", id: "603", mediaItemId: film.id },
-      { source: "tmdb", type: "show", id: "603", mediaItemId: show.id },
+      { source: "tmdb", type: "movie", id: "603", mediaItemId: film.id, slug: await slugOf(film.id) },
+      { source: "tmdb", type: "show", id: "603", mediaItemId: show.id, slug: await slugOf(show.id) },
     ]);
     expect(res.missing).toEqual([
       { source: "tmdb", type: "movie", id: "999" },

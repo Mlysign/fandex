@@ -264,13 +264,16 @@ export const api = {
   /** Upcoming games, most anticipated first, forty a page (1 to 10). */
   browseGames: (page: number, window?: 'recent') => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page), window })}`),
   /** A tag's or a studio's games at IGDB, most rated first. */
-  facetGames: (kind: 'tag' | 'studio', label: string) => request<{ results: GameSearchResult[] }>(`/v1/facet/games${q({ kind, q: label })}`),
+  /** `franchise` is a game's "More from" rail: the games IGDB files under that franchise or collection. */
+  facetGames: (kind: 'tag' | 'studio' | 'franchise', label: string) => request<{ results: GameSearchResult[] }>(`/v1/facet/games${q({ kind, q: label })}`),
 
   // ── Sign-in ──
   /** The Trakt token is sent once so the Worker can ask Trakt whose it is. It is not stored there. */
   signInWithTrakt: (accessToken: string) => request<SignInResult>('/v1/auth/trakt', json('POST', { accessToken })),
   /** Google's ID token, and the secret whose hash Google wrote into it (lib/google.ts). Neither is stored there. */
   signInWithGoogle: (idToken: string, nonce: string) => request<SignInResult>('/v1/auth/google', json('POST', { idToken, nonce })),
+  /** Discord's access token from its implicit grant (lib/discord.ts). Checked with Discord there, never stored. */
+  signInWithDiscord: (accessToken: string) => request<SignInResult>('/v1/auth/discord', json('POST', { accessToken })),
   /** A test account. Only a Worker on a developer's machine has this route (worker/src/devLogin.ts). */
   devSignIn: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account })),
   /** Signs out EVERY device: the Worker revokes all of the account's sessions. */
@@ -344,7 +347,8 @@ export const api = {
 
 export interface ProviderRef { source: string; type: string; id: string }
 export interface LookupResult {
-  found: (ProviderRef & { mediaItemId: string })[];
+  /** `slug` is the title's public address, /{type}/{slug}; null for an old row. */
+  found: (ProviderRef & { mediaItemId: string; slug?: string | null })[];
   missing: ProviderRef[];
 }
 

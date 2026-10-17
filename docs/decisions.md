@@ -163,6 +163,22 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   watchlist is taken off Trakt's watchlist by the next sync (`ratedButWishlisted`,
   `mobile/src/lib/traktSync.ts`). A watched, unrated title stays on it.
 
+### Added 2026-10-17 (Nils, going through the open list)
+
+- **Every date is the one in your country, on every screen.** Not only the calendar, Home and the
+  item page: the lists too. A film's local date is what `catalog.release_date` holds on a device
+  (`mobile/src/lib/localDates.ts`). A title the catalog does not hold yet shows its provider's date.
+- **"More like this" is the app's own ranking now**, delegated to me: every shared facet counts,
+  weighted by kind and rarity, a shared genre is required, another medium counts less, and the
+  better-known title wins a tie (`rankLike` in `mobile/src/lib/related.ts`). The old site's
+  `similarItems.ts` is untouched.
+- **The type filter opens whenever the bar has room, from 768 px; a phone keeps it folded** (SM53
+  stands for phones).
+- **Discord sign-in comes back**, without a client secret (implicit grant, checked against
+  `/oauth2/@me`), and the leaked secret is rotated.
+- **Dropped, not to be raised again:** the IGDB licence email, pressing Import for his Letterboxd
+  file, and rotating the Steam key. The widget's look "works fine for now".
+
 ---
 
 ## Decided 2026-09-02

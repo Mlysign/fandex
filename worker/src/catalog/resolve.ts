@@ -169,12 +169,15 @@ export async function lookupRefsJson(db: D1Database, refs: ProviderRef[]): Promi
   const row = await first<{ found: string | null; missing: string | null }>(
     db,
     `SELECT
-       json_group_array(json_object('source', s, 'type', t, 'id', sid, 'mediaItemId', mid)) FILTER (WHERE mid IS NOT NULL) found,
+       json_group_array(json_object('source', s, 'type', t, 'id', sid, 'mediaItemId', mid, 'slug', slug)) FILTER (WHERE mid IS NOT NULL) found,
        json_group_array(json_object('source', s, 'type', t, 'id', sid)) FILTER (WHERE mid IS NULL) missing
-       FROM (SELECT j.value ->> 'source' s, j.value ->> 'type' t, j.value ->> 'id' sid, l.media_item_id mid
+       FROM (SELECT j.value ->> 'source' s, j.value ->> 'type' t, j.value ->> 'id' sid, l.media_item_id mid, m.slug slug
                FROM json_each(?1) j
                LEFT JOIN media_links l
-                 ON l.source = j.value ->> 'source' AND l.source_id = j.value ->> 'id' AND l.media_type = j.value ->> 'type')`,
+                 ON l.source = j.value ->> 'source' AND l.source_id = j.value ->> 'id' AND l.media_type = j.value ->> 'type'
+               -- The slug, so a card links /{type}/{slug} and not /item/{id} (SM80).
+               -- One primary-key read per held title.
+               LEFT JOIN media_items m ON m.id = l.media_item_id)`,
     [JSON.stringify(refs)],
   );
   return `{"found":${row?.found ?? "[]"},"missing":${row?.missing ?? "[]"}}`;

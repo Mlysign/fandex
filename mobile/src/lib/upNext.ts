@@ -53,6 +53,8 @@ export interface UpNextEntry {
   releaseDate: string | null;
   votes: number;
   communityScore: number | null;
+  /** You hid this show. Only listed when asked for (a search by name: Hide promises it stays findable). */
+  hidden?: boolean;
 }
 
 interface ShowWatch {
@@ -231,26 +233,33 @@ export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: numb
   return { checked, waiting: due.length - checked };
 }
 
-export async function upNextList(db: SQLiteDatabase, limit = 30): Promise<UpNextEntry[]> {
+/**
+ * The list, best first. A show you hid is left out, unless `includeHidden`:
+ * the Progress tab asks for it while a name is typed, so a hidden show is
+ * findable as Hide promises (the site's Progress tab did the same).
+ */
+export async function upNextList(db: SQLiteDatabase, limit = 30, includeHidden = false): Promise<UpNextEntry[]> {
   const rows = await db.getAllAsync<{
     media_item_id: string; slug: string | null; title: string; poster_url: string | null;
     season: number; episode: number; episode_title: string | null; event_at: number | null;
-    release_date: string | null; community_votes: number; community_score: number | null;
+    release_date: string | null; community_votes: number; community_score: number | null; hidden: number;
   }>(
     `SELECT u.media_item_id, c.slug, c.title, c.poster_url, c.release_date, c.community_votes, c.community_score,
             u.season, u.episode, u.title AS episode_title,
+            (u.media_item_id IN (SELECT media_item_id FROM hidden_item)) AS hidden,
             MAX(COALESCE(u.last_watched_at, 0), COALESCE(u.aired_at, 0), COALESCE((SELECT MAX(e.watched_at) FROM episode_state e WHERE e.media_item_id = u.media_item_id), 0)) AS event_at
        FROM up_next u JOIN catalog c ON c.id = u.media_item_id
       WHERE u.season IS NOT NULL AND u.aired_at IS NOT NULL
-        AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)
+        AND (? OR u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item))
       ORDER BY event_at DESC, c.title
       LIMIT ?`,
-    [limit],
+    [includeHidden ? 1 : 0, limit],
   );
   return rows.map((r) => ({
     mediaItemId: r.media_item_id, slug: r.slug, title: r.title, posterUrl: r.poster_url,
     season: r.season, episode: r.episode, episodeTitle: r.episode_title, eventAt: r.event_at || null,
     releaseDate: r.release_date, votes: r.community_votes ?? 0, communityScore: r.community_score,
+    hidden: !!r.hidden,
   }));
 }
 

@@ -12,6 +12,7 @@ import { useCallback, useEffect } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
+import { NavSearch } from '~/components/NavSearch';
 import { useAuth } from '~/lib/AuthProvider';
 import { sendPageview } from '~/lib/pageview';
 import { takeReturnTo } from '~/lib/returnTo';
@@ -37,7 +38,7 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: color.surface }}>
-      {desktop ? <AppNav variant="top" pathname={pathname} onNavigate={go} /> : null}
+      {desktop ? <AppNav variant="top" pathname={pathname} onNavigate={go} search={<NavSearch />} /> : null}
       <View style={{ flex: 1 }}>
         <Tabs
           // Back returns to the screen you came from, not to the first tab.

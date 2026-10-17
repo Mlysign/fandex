@@ -7,6 +7,7 @@
 // where every slot is a plain link.
 
 import { Bookmark, CalendarDays, House, Search, User } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { Logo } from '~/components/Logo';
 import { color, font, navHeight, radius, type } from '~/theme';
@@ -31,6 +32,11 @@ export interface AppNavProps {
   onNavigate?: (href: string) => void;
   /** What the bottom bar has to clear on a phone that draws under its gesture bar. */
   bottomInset?: number;
+  /**
+   * The top bar's search box (components/NavSearch.tsx). It reads the device's
+   * catalog, so a static page leaves it out and gets a link to Search instead.
+   */
+  search?: ReactNode;
 }
 
 function useSlot(href: string, onNavigate?: (href: string) => void) {
@@ -68,7 +74,7 @@ function Slot({ href, label, Icon, active, variant, onNavigate }: {
   );
 }
 
-export function AppNav({ variant, pathname, onNavigate, bottomInset = 0 }: AppNavProps) {
+export function AppNav({ variant, pathname, onNavigate, bottomInset = 0, search: searchBox }: AppNavProps) {
   const you = youActive(pathname);
   const home = useSlot('/', onNavigate);
   const search = useSlot('/discover', onNavigate);
@@ -96,9 +102,11 @@ export function AppNav({ variant, pathname, onNavigate, bottomInset = 0 }: AppNa
           <Slot key={it.key} href={it.href} label={it.label} Icon={it.Icon} active={it.match(pathname)} variant="top" onNavigate={onNavigate} />
         ))}
         <View style={styles.rule} />
-        <Pressable {...search} accessibilityRole="link" accessibilityLabel="Search titles" hitSlop={4} style={styles.circle}>
-          <Search size={16} color={color.textSecondary} />
-        </Pressable>
+        {searchBox ?? (
+          <Pressable {...search} accessibilityRole="link" accessibilityLabel="Search titles" hitSlop={4} style={styles.circle}>
+            <Search size={16} color={color.textSecondary} />
+          </Pressable>
+        )}
         <Pressable
           {...profile}
           accessibilityRole="link"
@@ -120,6 +128,8 @@ const styles = StyleSheet.create({
   top: {
     height: navHeight.top, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 24, backgroundColor: color.surface, borderBottomWidth: 1, borderBottomColor: color.border,
+    // Above the page, so the search box's suggestions are not drawn under it.
+    zIndex: 20,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   wordmark: { fontFamily: font.serif, fontSize: 17, lineHeight: 20, letterSpacing: -0.4, color: color.textPrimary },

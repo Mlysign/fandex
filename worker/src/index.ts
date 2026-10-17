@@ -17,6 +17,7 @@
 //
 //   Sign-in
 //     POST /v1/auth/google   {idToken, nonce}
+//     POST /v1/auth/discord  {accessToken}         Discord's implicit grant, checked with Discord
 //     POST /v1/auth/trakt    {accessToken}
 //     POST /v1/auth/merge    {mergeToken, resolution}
 //     POST /v1/auth/logout
@@ -41,7 +42,7 @@ import {
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
-import { IdentityRejected, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
+import { IdentityRejected, verifyDiscordToken, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
 import { capFrom, spend, spent } from "./budget";
 import { calendarMonth } from "./calendar";
 import {
@@ -186,7 +187,7 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   if (a === "auth" && method === "POST") {
-    if (b === "google" || b === "trakt") return authenticate(c, b);
+    if (b === "google" || b === "trakt" || b === "discord") return authenticate(c, b);
     if (b === "merge") return merge(c);
     if (b === "logout") return logout(c);
   }
@@ -238,7 +239,7 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^shows\/[^/]+\/episodes$/, "GET"],
   [/^search\/games$/, "GET"],
   [/^calendar\/[^/]+$/, "GET"],
-  [/^auth\/(google|trakt|merge|logout)$/, "POST"],
+  [/^auth\/(google|trakt|discord|merge|logout)$/, "POST"],
   [/^t\/pv$/, "POST"],
 ];
 
@@ -384,7 +385,7 @@ async function browseGames(c: Ctx): Promise<Response> {
 async function facetGames(c: Ctx): Promise<Response> {
   const kind = c.url.searchParams.get("kind");
   const label = (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
-  if ((kind !== "tag" && kind !== "studio") || label.length < 2) return error(400, "bad-request", "kind must be tag or studio, q at least two characters");
+  if ((kind !== "tag" && kind !== "studio" && kind !== "franchise") || label.length < 2) return error(400, "bad-request", "kind must be tag, studio or franchise, q at least two characters");
   const cacheKey = new Request(`https://cache.fandex.internal/facet/games?kind=${kind}&q=${encodeURIComponent(label.toLowerCase())}`);
   const hit = await caches.default.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
@@ -422,7 +423,7 @@ function signInResponse(c: Ctx, out: SignInOutcome | { kind: "merged"; token: st
   }
 }
 
-async function authenticate(c: Ctx, provider: "google" | "trakt"): Promise<Response> {
+async function authenticate(c: Ctx, provider: "google" | "trakt" | "discord"): Promise<Response> {
   if (!(await allow(c.env.RL_AUTH, `auth:${clientIp(c.request)}`))) return error(429, "rate-limited");
   const body = (await readJson(c.request, AUTH_BODY_MAX)) as Record<string, unknown> | null;
   const credential = provider === "google" ? body?.idToken : body?.accessToken;
@@ -436,7 +437,9 @@ async function authenticate(c: Ctx, provider: "google" | "trakt"): Promise<Respo
   try {
     identity = provider === "google"
       ? await verifyGoogleIdToken(c.env, credential, nonce)
-      : await verifyTraktToken(c.env, credential);
+      : provider === "discord"
+        ? await verifyDiscordToken(c.env, credential)
+        : await verifyTraktToken(c.env, credential);
   } catch (e) {
     if (e instanceof IdentityRejected) return error(401, "identity-rejected", e.message);
     console.warn("identity_check_failed", { provider, error: e instanceof Error ? e.message : String(e) });

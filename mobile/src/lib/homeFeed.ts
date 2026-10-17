@@ -37,12 +37,18 @@ export interface HomeFeed {
   candidates: FeedCard[];
 }
 
+/**
+ * A title the catalog holds: its id, and its slug so the card links
+ * /{type}/{slug}. Without the slug every held card linked /item/{id} (SM80).
+ */
+export interface Held { id: string; slug: string | null }
+
 const cardKey = (c: CalendarCard) => `${c.source}:${c.type}:${c.sourceId}`;
 
-export function toCard(c: CalendarCard, held: Map<string, string>): FeedCard {
+export function toCard(c: CalendarCard, held: Map<string, Held>): FeedCard {
   const key = cardKey(c);
   return {
-    key, id: held.get(key) ?? null, source: c.source, sourceId: c.sourceId, type: c.type, title: c.title,
+    key, id: held.get(key)?.id ?? null, slug: held.get(key)?.slug ?? null, source: c.source, sourceId: c.sourceId, type: c.type, title: c.title,
     releaseDate: c.releaseDate, posterUrl: c.posterUrl, genres: c.genres ?? [],
     communityScore: c.voteAverage != null && c.voteCount > 0 ? Math.round(c.voteAverage * 10) : null,
     communityVotes: c.voteCount,
@@ -59,12 +65,12 @@ export function genreFacets(genres: string[]): ScoreFacet[] {
  * card can show your bookmark and your real score. One request, and it never
  * makes the Worker fetch. A failure is an empty answer: the cards still open.
  */
-export async function lookupHeld(cards: CalendarCard[]): Promise<Map<string, string>> {
-  const held = new Map<string, string>();
+export async function lookupHeld(cards: CalendarCard[]): Promise<Map<string, Held>> {
+  const held = new Map<string, Held>();
   if (!cards.length) return held;
   try {
     const res = await api.lookup(cards.map((c) => ({ source: c.source, type: c.type, id: c.sourceId })));
-    for (const f of res.found) held.set(`${f.source}:${f.type}:${f.id}`, f.mediaItemId);
+    for (const f of res.found) held.set(`${f.source}:${f.type}:${f.id}`, { id: f.mediaItemId, slug: f.slug ?? null });
   } catch { /* they just do not know your state */ }
   return held;
 }
@@ -102,8 +108,12 @@ async function trendingPool(): Promise<FeedCard[] | null> {
   }
   try {
     const res = await api.lookup(out.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
-    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f.mediaItemId]));
-    for (const c of out) c.id = held.get(c.key) ?? null;
+    const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f]));
+    for (const c of out) {
+      const f = held.get(c.key);
+      c.id = f?.mediaItemId ?? null;
+      c.slug = f?.slug ?? null;
+    }
   } catch { /* the cards still open; they just do not know your state */ }
   return out;
 }

@@ -17,6 +17,7 @@ import { normalizeName } from '@/lib/normalize';
 import { api, type DeltaCursor, type DeltaPage } from '~/lib/api';
 import { CATALOG_FILES_URL } from '~/lib/config';
 import { catalogCount, getMeta, setMeta, inTransaction } from '~/lib/db';
+import { DATE_REGION_KEY } from '~/lib/localDates';
 
 const CURSOR_KEY = 'catalog_cursor';
 const LAST_SYNC_KEY = 'catalog_synced_at';
@@ -65,19 +66,27 @@ export async function resetCatalog(db: SQLiteDatabase): Promise<void> {
 }
 
 /** One page's rows and the cursor after them, in ONE transaction: a page that half wrote must not move the cursor. */
-async function storePage(db: SQLiteDatabase, items: DeltaPage['items'], next: DeltaCursor): Promise<void> {
+export async function storePage(db: SQLiteDatabase, items: DeltaPage['items'], next: DeltaCursor): Promise<void> {
   if (!items.length) {
     await setMeta(db, CURSOR_KEY, JSON.stringify(next));
     return;
   }
   await inTransaction(db, async () => {
     const insert = await db.prepareAsync(
-      `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, year,
+      // `release_date` is the date in this device's country where one is known
+      // (lib/localDates.ts), `world_date` the catalog's own. Written together, so
+      // a re-synced film does not fall back to the worldwide day.
+      `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, world_date, year,
                             community_score, community_votes, updated_at, vector, facets)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6,
+               COALESCE((SELECT r.date FROM regional_date r
+                          WHERE ?2 = 'movie'
+                            AND r.region = (SELECT value FROM meta WHERE key = '${DATE_REGION_KEY}')
+                            AND r.media_item_id = ?1), ?7),
+               ?7, ?8, ?9, ?10, ?11, ?12, ?13)
        ON CONFLICT(id) DO UPDATE SET
          type = excluded.type, title = excluded.title, norm_title = excluded.norm_title, slug = excluded.slug,
-         poster_url = excluded.poster_url, release_date = excluded.release_date, year = excluded.year,
+         poster_url = excluded.poster_url, release_date = excluded.release_date, world_date = excluded.world_date, year = excluded.year,
          community_score = excluded.community_score, community_votes = excluded.community_votes,
          updated_at = excluded.updated_at, vector = excluded.vector, facets = excluded.facets`,
     );

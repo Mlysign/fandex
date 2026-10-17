@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, t
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Img } from '~/components/Img';
 import { color, radius, space, type, TYPE_LABEL } from '~/theme';
+import { BarScrollProvider } from '~/lib/barScroll';
 
 type Variant = keyof typeof type;
 
@@ -30,7 +31,7 @@ export function Screen({ children, style, headed, wide }: {
 }) {
   return (
     <SafeAreaView style={styles.screen} edges={headed ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <View style={[styles.column, wide && { maxWidth: '100%' }, style]}>{children}</View>
+      <View style={[styles.column, wide && { maxWidth: '100%' }, style]}><BarScrollProvider>{children}</BarScrollProvider></View>
     </SafeAreaView>
   );
 }

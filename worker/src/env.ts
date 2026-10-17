@@ -13,6 +13,8 @@ export interface Env {
   /** One or more Google OAuth client ids, comma-separated. Public values. */
   GOOGLE_CLIENT_ID: string;
   TRAKT_CLIENT_ID: string;
+  /** Discord application id. Public: it is in every Discord sign-in address. Unset turns Discord sign-in off. */
+  DISCORD_CLIENT_ID?: string;
 
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;

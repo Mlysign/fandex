@@ -19,12 +19,13 @@ import { Img } from '~/components/Img';
 import { EmptyState } from '~/components/kit';
 import { SlideIn } from '~/components/SlideIn';
 import { TypeIcon } from '~/components/Logo';
-import { SubBar } from '~/components/SubBar';
+import { circlesWidth, SubBar, useChipRoom } from '~/components/SubBar';
 import { Screen } from '~/components/ui';
 import { toggled } from '~/lib/a11y';
 import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { usePageTitle } from '~/lib/pageTitle';
+import { useOutsideClose } from '~/lib/useOutsideClose';
 import { cardFromCatalog, cardHref, type CardItem, type CardState } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
@@ -56,9 +57,10 @@ function longDay(date: string): string {
 // ── The source circles ───────────────────────────────────────────────────────
 
 function ScopeFilter({ active, onToggle, signedIn, onSignIn }: { active: Scope[]; onToggle: (s: Scope) => void; signedIn: boolean; onSignIn: () => void }) {
-  const { width } = useWindowDimensions();
-  const roomy = width >= breakpoint.lg;
+  const roomy = useChipRoom(circlesWidth(SCOPES.length));
   const [open, setOpen] = useState(false);
+  const group = useRef<View>(null);
+  useOutsideClose(open, useCallback(() => setOpen(false), []), group);
   const selected = SCOPES.filter((s) => active.includes(s.key));
   const all = selected.length === SCOPES.length;
 
@@ -77,7 +79,7 @@ function ScopeFilter({ active, onToggle, signedIn, onSignIn }: { active: Scope[]
     );
   }
   return (
-    <View style={styles.circles} accessibilityLabel="Filter by source">
+    <View ref={group} style={styles.circles} accessibilityLabel="Filter by source">
       {SCOPES.map(({ key, label, Icon }) => {
         // Your lists need an account. The circle stays, dimmed, and leads to sign-in.
         const locked = !signedIn && key !== 'popular';

@@ -18,6 +18,7 @@ import { SignIn } from '~/components/SignIn';
 import { SubBar, Tabs, type TabDef } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
 import { EPISODE_ROW_GAP, EpisodeRow, useUpNext } from '~/components/UpNext';
+import { useReportScroll } from '~/lib/barScroll';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
@@ -225,7 +226,9 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
 function Progress({ tabs, query, setQuery }: { tabs: React.ReactNode; query: string; setQuery: (v: string) => void }) {
   const types = useTypeFilter();
   // The whole list, not the home rail's first thirty.
-  const up = useUpNext(10_000);
+  // While a name is typed, hidden shows are in the list too: Hide promises they stay findable.
+  const up = useUpNext(10_000, query.trim().length > 0);
+  const reportScroll = useReportScroll();
   const [sort, setSort] = useState<ProgressSort>('upNext');
 
   const term = searchKey(query.trim());
@@ -251,6 +254,8 @@ function Progress({ tabs, query, setQuery }: { tabs: React.ReactNode; query: str
       />
       {up.entries === null ? <StateBlock loading /> : (
         <FlatList
+          onScroll={reportScroll}
+          scrollEventThrottle={32}
           data={showsVisible ? shown : []}
           keyExtractor={up.entryKey}
           contentContainerStyle={styles.list}

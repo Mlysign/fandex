@@ -28,6 +28,10 @@ function describe(e: unknown): { title: string; detail: string; retry: boolean }
         return { title: 'No connection', detail: 'This title is not on your device yet, so it needs a connection to open.', retry: true };
       case 'not-found':
         return { title: 'Not found', detail: 'The database this came from no longer lists this title.', retry: false };
+      // An unknown source or type, or an id that is not an id (`/open/tmdb/movie/abc`).
+      // Asking again cannot change that (SM82).
+      case 'bad-request':
+        return { title: 'Nothing here', detail: 'This link does not point at a title.', retry: false };
       case 'budget-exhausted':
         return { title: 'Try again tomorrow', detail: 'Fandex has added all the new titles it can for today. Titles already in the catalog still open.', retry: false };
       case 'rate-limited':
