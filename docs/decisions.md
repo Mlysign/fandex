@@ -199,7 +199,10 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   identity.** `GET /v1/resolve/hardcover/book/{id}` asks Open Library by the book's ISBNs first
   and, when a work comes back, resolves that and attaches the Hardcover link to it. Only a book
   Open Library has no edition of (announced and not out: "The Doors of Stone") is created under
-  source `hardcover`, with its Hardcover id as the only cross id. ISBNs are not cross ids: the
+  source `hardcover`, with its Hardcover id as the only cross id. A STUB at Open Library (no
+  cover and not one rating, which is how it holds "Untitled Rothfuss 3 Of 3" under the very ISBNs
+  Hardcover's placeholder editions carry) cannot claim a Hardcover book: the book would take the
+  stub's title. ISBNs are not cross ids: the
   matcher holds one id per namespace per item, and two editions' ISBNs would read as two works.
   In every list, Open Library's card wins a book both know (same ISBN-13, or same title and
   author), and Hardcover's cards follow.

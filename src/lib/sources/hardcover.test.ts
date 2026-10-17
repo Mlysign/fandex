@@ -6,7 +6,7 @@ import {
   isbn13, parseHardcoverBook, searchDocuments, searchHardcover, seriesHardcover, setHardcoverEnv, upcomingHardcover,
 } from "@/lib/sources/hardcover";
 import { bookIdentityKey, mergeBookCards, stripIsbns } from "@/lib/sources/bookPure";
-import { bookCard } from "@/lib/sources/openlibrary";
+import { bookCard, openLibraryWorkByIsbn } from "@/lib/sources/openlibrary";
 import { __resetBreakers } from "@/lib/http";
 import { extractFacets } from "@/lib/facets";
 import { mergeLinks } from "@/lib/merge";
@@ -130,8 +130,12 @@ describe("a Hardcover record", () => {
     expect(hardcoverTags(null, ["Fantasy", "Fantasy"], [{ tag: "magic" }])).toEqual(["Fantasy", "magic"]);
   });
 
-  it("only ever points a cover at Hardcover's asset host, under the shape it uses", () => {
+  it("only ever points a cover at Hardcover's asset host, under the shapes it uses", () => {
     expect(hardcoverCoverPath("https://assets.hardcover.app/editions/19454574/9509867934646082.jpg")).toBe("editions/19454574/9509867934646082.jpg");
+    // Probed live 2026-10-17: the singular folder, a hash or a uuid for a file name, and a sized book image.
+    expect(hardcoverCoverPath("https://assets.hardcover.app/edition/30399253/4012102f186dc02f51e56a849f8d76c6dd8d2dc9.jpeg")).toBe("edition/30399253/4012102f186dc02f51e56a849f8d76c6dd8d2dc9.jpeg");
+    expect(hardcoverCoverPath("https://assets.hardcover.app/edition/31571207/601b0d78-4db6-4573-9927-a3af83802ba2.jpg")).toBe("edition/31571207/601b0d78-4db6-4573-9927-a3af83802ba2.jpg");
+    expect(hardcoverCoverPath("https://assets.hardcover.app/books/1/291303-L.jpg")).toBe("books/1/291303-L.jpg");
     expect(hardcoverCoverPath("https://assets.hardcover.app/static/logos/hardcover-logo.jpeg")).toBeNull();
     expect(hardcoverCoverPath("https://hardcover.app/books/x/ogimage.png")).toBeNull();
     expect(hardcoverCoverPath("https://assets.hardcover.app/editions/1/../../x.jpg")).toBeNull();
@@ -243,11 +247,25 @@ describe("talking to Hardcover", () => {
   it("finds a series by search, the exact name over the first hit, then asks for its books in order", async () => {
     const calls = answers([
       { search: { results: { hits: [{ document: { id: "9", name: "The Kingkiller Chronicle Companion" } }, { document: { id: "24", name: "The Kingkiller Chronicle" } }] } } },
-      { series: [{ name: "The Kingkiller Chronicle", book_series: [{ position: 1, book: { ...ROW, id: 1, title: "The Name of the Wind" } }, { position: 3, book: ROW }] }] },
+      { series: [{ name: "The Kingkiller Chronicle", book_series: [
+        // What Hardcover listed on 2026-10-17: the book, then its copies at the same position.
+        { position: 1, book: { ...ROW, id: 1, title: "The Name of the Wind", editions_count: 108 } },
+        { position: 1, book: { ...ROW, id: 2, title: "El nombre del viento", editions_count: 1 } },
+        { position: 1, book: { ...ROW, id: 3, title: "The Name of the Wind Limited Edition - Full Color", editions_count: 1, image: null } },
+        { position: 1, book: { ...ROW, id: 4, title: "Kingkiller Chronicle Patrick Rothfuss Collection 3 Books Set", editions_count: 1 } },
+        { position: 1.1, book: { ...ROW, id: 5, title: "The Name of the Wind, Book 1", is_partial_book: true } },
+        { position: 3, book: ROW },
+      ] }] },
     ]);
     const cards = await seriesHardcover("the kingkiller chronicle");
     expect(body(calls[1]).variables).toMatchObject({ id: 24 });
+    // One per position, the one with the most editions; no box set, no part, nothing without a cover.
     expect(cards.map((c) => c.title)).toEqual(["The Name of the Wind", "The Doors of Stone"]);
+  });
+
+  it("lists only a book with a cover: a record without one is a translation, a bundle or a stub", async () => {
+    answers([{ search: { results: { hits: [{ document: SEARCH_DOC }, { document: { ...SEARCH_DOC, id: "77", title: "Not Yet Announced", image: null } }] } } }]);
+    expect((await searchHardcover("doors")).map((c) => c.sourceId)).toEqual(["426728"]);
   });
 
   it("asks for a month's books by the month's bounds, and leaves a part of a book out", async () => {
@@ -263,6 +281,31 @@ describe("talking to Hardcover", () => {
     vi.restoreAllMocks();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 429 }));
     await expect(searchHardcover("dune")).rejects.toThrow(/429/);
+  });
+});
+
+describe("matching a Hardcover book at Open Library", () => {
+  const olAnswers = (docs: unknown[]) => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ docs }), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    return calls;
+  };
+
+  it("asks by several ISBNs at once and answers the work", async () => {
+    const calls = olAnswers([{ key: "/works/OL893414W", title: "Dune", cover_i: 11481354, ratings_count: 448 }]);
+    expect(await openLibraryWorkByIsbn(["9780441172719", "0441172717", "bad"])).toBe("OL893414W");
+    expect(decodeURIComponent(calls[0])).toContain("isbn:(9780441172719 OR 0441172717)");
+  });
+
+  it("lets no stub claim a book: Open Library's Doors of Stone is a coverless, unrated placeholder", async () => {
+    // Probed 2026-10-17: Hardcover's placeholder editions share their ISBNs with
+    // OL35688235W "Untitled Rothfuss 3 Of 3", and that title must not win.
+    olAnswers([{ key: "/works/OL35688235W", title: "Untitled Rothfuss 3 Of 3", first_publish_year: 2012 }]);
+    expect(await openLibraryWorkByIsbn(["9780575081468"])).toBeNull();
+    expect(await openLibraryWorkByIsbn([])).toBeNull();
   });
 });
 

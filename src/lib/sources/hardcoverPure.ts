@@ -22,10 +22,14 @@ export const DEFAULT_COVER_ORIGIN = "https://fandex.org";
 
 /**
  * What a cover's path under assets.hardcover.app looks like: a folder, a
- * numeric id, a file name with a content hash. `editions/19454574/9509867934646082.jpg`
- * on 2026-10-17. Anything else is refused by the cover route.
+ * numeric id, a file name that is a hash, a uuid or a numbered size. Probed
+ * 2026-10-17: `editions/19454574/9509867934646082.jpg`,
+ * `edition/30399253/4012102f….jpeg`, `edition/31571207/601b0d78-4db6-….jpg`,
+ * `external_data/60951398/fcce5973….jpeg`, `books/1/291303-L.jpg`,
+ * `authors/142979/6691222-L.jpg`. Both spellings of a folder occur. Anything
+ * else is refused by the cover route.
  */
-export const HARDCOVER_COVER_PATH = /^(editions|books|external_data|images|authors|users)\/\d{1,12}\/[A-Za-z0-9_-]{1,96}\.(jpe?g|png|webp)$/;
+export const HARDCOVER_COVER_PATH = /^(editions?|books?|external_data|images?|authors?|users?)\/\d{1,12}\/[A-Za-z0-9_-]{1,96}\.(jpe?g|png|webp)$/;
 
 /** A Hardcover book as the catalog keeps it. Every field is a fact about the book. */
 export interface HardcoverBook {

@@ -28,7 +28,7 @@
 // Imported by the Worker: no Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import type { BookCard } from "@/lib/sources/bookPure";
+import { isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
 import {
   DEFAULT_COVER_ORIGIN, isWholeHardcoverBook, parseHardcoverBook, searchDocuments, type HardcoverBook,
 } from "@/lib/sources/hardcoverPure";
@@ -128,13 +128,26 @@ export function hardcoverCard(b: HardcoverBook): BookCard {
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
-/** Rows as cards, one per book, whole books only, in the order given. */
+/**
+ * A row as a record fit for a list, or null: a whole book with a cover that is
+ * not a box set or a part. Probed 2026-10-17 on The Kingkiller Chronicle:
+ * beside the books, Hardcover lists a Russian and a French translation with no
+ * cover, a "Limited Edition - Full Color", a "3 Books Set" and "The Name of
+ * the Wind, Book 1" (a part), each a book of its own. A record without a cover
+ * is nearly always one of those; a real book somebody would look for has one.
+ */
+function listable(raw: any): HardcoverBook | null {
+  const b = parseHardcoverBook(raw, hardcoverCoverOrigin());
+  return isWholeHardcoverBook(b, raw) && b.cover && !isPieceOfBook(b.title) ? b : null;
+}
+
+/** Rows as cards, one per book, listable books only, in the order given. */
 function cards(rows: unknown): BookCard[] {
   const out: BookCard[] = [];
   const seen = new Set<number>();
   for (const raw of Array.isArray(rows) ? rows : []) {
-    const b = parseHardcoverBook(raw, hardcoverCoverOrigin());
-    if (!isWholeHardcoverBook(b, raw) || seen.has(b.id)) continue;
+    const b = listable(raw);
+    if (!b || seen.has(b.id)) continue;
     seen.add(b.id);
     out.push(hardcoverCard(b));
   }
@@ -197,8 +210,20 @@ export async function seriesHardcover(series: string, limit = 40): Promise<BookC
     { id: Number(pick.id), n: Math.min(60, Math.max(limit, 1)) },
     BROWSE_BUDGET_MS,
   );
-  const rows = (data?.series?.[0]?.book_series ?? []).map((r: any) => r?.book).filter(Boolean);
-  return cards(rows).slice(0, limit);
+  // One book per position. A translation, a limited edition or a box set is
+  // filed at the SAME position as the book it is a copy of (twelve members at
+  // positions 0.6 to 1.1 for the Kingkiller Chronicle, probed 2026-10-17); the
+  // edition count tells them apart: 108 for The Name of the Wind, 1 for each
+  // translation. The map keeps position order, which the query sorted.
+  const best = new Map<string, HardcoverBook>();
+  for (const r of (data?.series?.[0]?.book_series ?? []) as any[]) {
+    const b = listable(r?.book);
+    if (!b) continue;
+    const key = typeof r?.position === "number" ? `pos:${r.position}` : `id:${b.id}`;
+    const held = best.get(key);
+    if (!held || (b.editionsCount ?? 0) > (held.editionsCount ?? 0)) best.set(key, b);
+  }
+  return [...best.values()].map(hardcoverCard).slice(0, limit);
 }
 
 /**

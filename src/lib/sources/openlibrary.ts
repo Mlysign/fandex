@@ -113,6 +113,13 @@ export function bookCard(doc: any): BookCard | null {
  * it. Asked with several at once: a Hardcover book's editions carry a handful,
  * and any one hit names the work. What turns a Hardcover id into an Open
  * Library identity (worker/src/catalog/resolve.ts).
+ *
+ * ⚠️ A STUB does not count. Open Library holds "The Doors of Stone" as
+ * "Untitled Rothfuss 3 Of 3" (OL35688235W): no cover, not one rating, and the
+ * placeholder editions' ISBNs, which Hardcover's editions carry too (probed
+ * 2026-10-17). Handing the Hardcover book to that work would title it
+ * "Untitled Rothfuss 3 Of 3". The rule is `relevantBooks`'s: a work with no
+ * cover and no rating is a stub, and a stub cannot claim a book.
  */
 export async function openLibraryWorkByIsbn(isbns: string[]): Promise<string | null> {
   const clean = isbns.filter((i) => /^\d{9}[\dX]$|^\d{13}$/i.test(i)).slice(0, 6);
@@ -120,8 +127,8 @@ export async function openLibraryWorkByIsbn(isbns: string[]): Promise<string | n
   const q = clean.length === 1 ? `isbn:${clean[0]}` : `isbn:(${clean.join(" OR ")})`;
   const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=key,title,language,cover_i,ratings_count&limit=5`, BROWSE_BUDGET_MS);
   const workId = (d: any): string | null => /\/works\/(OL\d+W)$/.exec(String(d?.key ?? ""))?.[1] ?? null;
-  const docs = ((data?.docs ?? []) as any[]).filter((d) => workId(d));
-  const pick = docs.find(isWholeBook) ?? docs[0];
+  const real = ((data?.docs ?? []) as any[]).filter((d) => workId(d) && (d.cover_i || Number(d.ratings_count) > 0));
+  const pick = real.find(isWholeBook) ?? real[0];
   return pick ? workId(pick) : null;
 }
 
