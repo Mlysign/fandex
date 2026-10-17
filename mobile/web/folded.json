@@ -350,6 +350,11 @@
    "type": "game",
    "from": "grand-theft-auto-iii-1",
    "to": "grand-theft-auto-iii"
+  },
+  {
+   "type": "game",
+   "from": "warhammer-40-000-space-marine-ii-2024",
+   "to": "warhammer-40-000-space-marine-ii"
   }
  ]
 }
