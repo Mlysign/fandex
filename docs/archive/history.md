@@ -6024,3 +6024,15 @@ Built and live the same evening, commits 7fdde3e, bd653df, d2830ee:
 - Docs: PLATFORMS.md row, docs/worker.md (routes, R2, budgets, health), docs/app.md,
   docs/decisions.md (identity, facts-only, the cover rule), AGENTS.md, README env rows, and the
   support page's takedown sentence in both languages (Hardcover's docs ask for one; Nils approved).
+
+## 2026-10-17 late, a hand-made franchise sweep across media
+
+Nils asked whether the Review sweep still works and for a manual pass, especially across media and books, and for titles in no franchise at all ("this should go into a dracula franchise"). The sweep runs and its 23 tests pass; over the live pool (4,725 titles, 766 franchises, 35 dismissals) it proposed nothing, because its rules only fold near-identical franchise names and attach a title that STARTS with a franchise's name. It never proposes a new franchise, and never pairs a book with its film when neither has one.
+
+Run in Node over the published catalog files plus the delta, with the device's own `runTaxonomySweep` and `surveyFranchises` (the scripts lived in a session scratchpad). Then by hand, written as the Scoring page's own rows (`ip_alias`, `item_ip_override` source `manual`, `facet_label_override`):
+- **9 bundles**: A Song of Ice and Fire into Game of Thrones, The Dark Knight into Batman, Hulk Koleksiyonu (TMDB's Turkish label) into Hulk, the two Oz book series together (named "Oz"), The Heroes of Olympus into Percy Jackson, Wonka into Charlie and the Chocolate Factory, Disney's Pinocchio and Disney's Robin Hood into new Pinocchio and Robin Hood, Adventures of Sherlock Holmes into Sherlock Holmes.
+- **152 attaches**, 39 new franchises among them: adaptation pairs (Dracula with both Nosferatus and Renfield, Frankenstein with The Bride!, A Christmas Carol with Scrooged, The Green Mile, Ready Player One, The Handmaid's Tale and a dozen more), game series with no provider franchise (Fable, Just Cause, Ori, SuperHot, The Outer Worlds, Ghost of Tsushima and Yōtei, Monster Train, A Plague Tale), shows into their franchise (House of the Dragon, Hannibal, Bates Motel, Wednesday, Dune: Prophecy, Sherlock, the Marvel and DC shows), and stray editions (Fallout: London, Overwatch 2 Season 2, a Wolfenstein II edition, two NieR titles).
+- **1 denial**: the sweep then proposed Monster Train into Monster (the anime); recorded as a no.
+Undo, every row: `docs/archive/franchise-sweep-2026-10-17-undo.sql`.
+
+Left for Nils, judgment rather than fact: the Joker films apart from Batman; most MCU films sit in their own collections and not in "Marvel"; twins and test builds in the games (PUBG twice, ABZÛ twice, Google Blocks twice, a dozen playtests, betas and demos).
