@@ -1,5 +1,5 @@
 export type MediaType = "game" | "movie" | "show" | "book" | "boardgame";
-export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd" | "openlibrary" | "bgg";
+export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd" | "openlibrary" | "bgg" | "hardcover";
 
 // An identity provider a user_identities row (and therefore a session) can be
 // minted from.

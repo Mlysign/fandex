@@ -167,7 +167,7 @@ export interface DeltaPage {
 }
 
 export interface CalendarCard {
-  source: 'tmdb' | 'igdb' | 'openlibrary';
+  source: 'tmdb' | 'igdb' | 'openlibrary' | 'hardcover';
   sourceId: string;
   type: MediaType;
   title: string;
@@ -194,7 +194,7 @@ export interface CalendarMonth {
  * with: IGDB games, Open Library books, BGG board games (worker/src/shelves.ts).
  */
 export interface ProviderResult {
-  source: 'igdb' | 'openlibrary' | 'bgg';
+  source: 'igdb' | 'openlibrary' | 'hardcover' | 'bgg';
   sourceId: string;
   type: 'game' | 'book' | 'boardgame';
   title: string;
@@ -322,7 +322,7 @@ export const api = {
   /** A tag's, an author's, a publisher's or a series' books at Open Library. */
   facetBooks: (kind: 'tag' | 'person' | 'studio' | 'franchise', label: string) => request<{ results: ProviderResult[] }>(`/v1/facet/books${q({ kind, q: label })}`),
   /** Which optional types the API has switched on (board games need a BGG token). */
-  features: () => request<{ boardgames: boolean; books: boolean }>('/v1/features'),
+  features: () => request<{ boardgames: boolean; books: boolean; hardcover?: boolean }>('/v1/features'),
   /** Upcoming games, most anticipated first, forty a page (1 to 10). */
   browseGames: (page: number, window?: 'recent') => request<{ results: GameSearchResult[]; more: boolean }>(`/v1/browse/games${q({ page: String(page), window })}`),
   /** A tag's or a studio's games at IGDB, most rated first. */

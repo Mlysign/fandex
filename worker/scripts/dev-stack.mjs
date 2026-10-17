@@ -50,6 +50,8 @@ const FROM_ENV = {
   DISCORD_CLIENT_ID: "DISCORD_CLIENT_ID",
   // Optional: without it board games stay off (worker/src/shelves.ts).
   BGG_TOKEN: "BGG_TOKEN",
+  // Optional: without it books come from Open Library alone (src/lib/sources/hardcover.ts).
+  HARDCOVER_TOKEN: "HARDCOVER_TOKEN",
 };
 
 function parseEnv(file) {

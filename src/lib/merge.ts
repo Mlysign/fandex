@@ -8,31 +8,35 @@ import { DEFAULT_COUNTRY } from "./countries";
 // source touches only that registry, never this file.
 
 // ── Priority orders (single-value fields) ─────────────────────────
-const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "bgg"];
-const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
-const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd", "openlibrary", "bgg"];
+const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "hardcover", "bgg"];
+const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb", "openlibrary", "hardcover", "bgg"];
+// Hardcover before Open Library for a book's DATE and COVER (2026-10-17): it
+// knows the day a book not yet out is due, where Open Library knows a year at
+// best, and its covers are curated. The title stays Open Library's: it is the identity.
+const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd", "hardcover", "openlibrary", "bgg"];
 // Poster = PORTRAIT box-art (card view). Prefer sources with true portrait art
 // (TMDB poster, IGDB cover, Steam library_capsule) over RAWG's landscape image.
-const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "openlibrary", "bgg"];
+const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd", "hardcover", "openlibrary", "bgg"];
 // Backdrop = LANDSCAPE art (list-row thumbnail). TMDB backdrop for film/TV; for
 // games the Steam header / RAWG background / IGDB artwork.
 const BACKDROP_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb"];
 const TAGLINE_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const RUNTIME_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const STATUS_PRIORITY: Source[] = ["tmdb", "trakt", "igdb"];
-const COLLECTION_PRIORITY: Source[] = ["tmdb", "igdb", "openlibrary", "bgg"];
+const COLLECTION_PRIORITY: Source[] = ["tmdb", "igdb", "openlibrary", "hardcover", "bgg"];
 const LANGUAGE_PRIORITY: Source[] = ["tmdb", "trakt"];
 const COUNTRY_PRIORITY: Source[] = ["tmdb", "trakt"];
 const NETWORK_PRIORITY: Source[] = ["tmdb", "trakt"];
-const DEVELOPER_PRIORITY: Source[] = ["rawg", "steam", "igdb", "openlibrary", "bgg"];
+const DEVELOPER_PRIORITY: Source[] = ["rawg", "steam", "igdb", "openlibrary", "hardcover", "bgg"];
 
 // Union-field source lists — shared by mergeLinks and explainMerge so the
 // debug matrix can never drift from the real merge.
-const IMAGE_SOURCES: Source[] = ["steam", "tmdb", "rawg", "igdb", "letterboxd", "openlibrary", "bgg"];
-const TAG_SOURCES: Source[] = ["rawg", "steam", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
+const IMAGE_SOURCES: Source[] = ["steam", "tmdb", "rawg", "igdb", "letterboxd", "hardcover", "openlibrary", "bgg"];
+const TAG_SOURCES: Source[] = ["rawg", "steam", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "hardcover", "bgg"];
 const PLATFORM_SOURCES: Source[] = ["steam", "rawg", "igdb"];
-const STORE_LINK_SOURCES: Source[] = ["steam", "rawg", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "bgg"];
+const STORE_LINK_SOURCES: Source[] = ["steam", "rawg", "tmdb", "trakt", "letterboxd", "igdb", "openlibrary", "hardcover", "bgg"];
 const TRAILER_SOURCES: Source[] = ["tmdb", "trakt", "igdb", "steam"];
+// Not Hardcover: its ratings are other users' data and may not be shown (sources/hardcover.ts).
 const RATING_SOURCES: Source[] = ["tmdb", "trakt", "letterboxd", "igdb", "rawg", "steam", "openlibrary", "bgg"];
 const DLC_SOURCES: Source[] = ["igdb", "steam"];
 const GAME_MODE_SOURCES: Source[] = ["igdb"];
@@ -84,8 +88,14 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   const network = type === "show" ? pickField(NETWORK_PRIORITY, norm, "network") : null;
   const playtimeHours = pickField(["rawg"], norm, "playtimeHours");
   const timeToBeat = pickField(["igdb"], norm, "timeToBeat");
-  // Books and board games (2026-10-17).
-  const book = norm.get("openlibrary");
+  // Books and board games (2026-10-17). A book's facts come from whichever of
+  // its two sources holds them, Open Library first.
+  const bookSources = ["openlibrary", "hardcover"].map((s) => norm.get(s as Source)).filter((b): b is SourceNormalized => !!b);
+  const book = bookSources.length ? {
+    authors: bookSources.find((b) => b.authors?.length)?.authors ?? [],
+    pageCount: bookSources.find((b) => b.pageCount != null)?.pageCount ?? null,
+    isbn: bookSources.find((b) => b.isbn)?.isbn ?? null,
+  } : null;
   const boardgame = norm.get("bgg");
 
   // TMDB-only facts.

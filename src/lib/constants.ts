@@ -49,6 +49,9 @@ export const ROLE_LABELS: Record<string, string> = {
 export const SOURCE_LABELS: Record<Source | string, string> = {
   ...CATALOG_LABELS,
   igdb: "IGDB",
+  openlibrary: "Open Library",
+  hardcover: "Hardcover",
+  bgg: "BoardGameGeek",
   imdb: "IMDb",
   rt: "Rotten Tomatoes",
   metacritic: "Metacritic",

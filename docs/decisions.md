@@ -188,6 +188,24 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   answer keeps the works with an English edition (or no language given) and drops split editions
   and box sets (`isWholeBook`). The English work stands for the book. A book's series is read off
   its English editions when the search row has none.
+- **Hardcover is the SECOND book source, facts only, behind `HARDCOVER_TOKEN`** (Nils: "please
+  add the token yourself", 2026-10-17, which settled the yes). Its API Rules now allow a
+  professional project to use facts about books, editions and series; what they forbid is used
+  nowhere: no Hardcover rating, review, list or count of readers is asked for, stored or shown
+  (`src/lib/sources/hardcoverPure.ts` is the guarantee), and its covers are copied into R2 and
+  served from Fandex, never linked. The one aggregate touched is the sort key of the upcoming
+  query (most shelved first, Hardcover's own order), and that number is neither kept nor shown.
+- **A book's identity is its Open Library work; a Hardcover id is a fallback, not a second
+  identity.** `GET /v1/resolve/hardcover/book/{id}` asks Open Library by the book's ISBNs first
+  and, when a work comes back, resolves that and attaches the Hardcover link to it. Only a book
+  Open Library has no edition of (announced and not out: "The Doors of Stone") is created under
+  source `hardcover`, with its Hardcover id as the only cross id. ISBNs are not cross ids: the
+  matcher holds one id per namespace per item, and two editions' ISBNs would read as two works.
+  In every list, Open Library's card wins a book both know (same ISBN-13, or same title and
+  author), and Hardcover's cards follow.
+- **A Hardcover-fed book page credits Open Library and Hardcover, though neither asks for it.**
+  Hardcover's docs warn that its images are user-uploaded, so the support page names
+  hello@fandex.org for takedown requests, in both languages.
 
 ---
 

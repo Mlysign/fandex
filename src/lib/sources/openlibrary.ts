@@ -13,7 +13,8 @@
 // Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { bookDate, bookRating, bookSubjects, coverUrl, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects } from "@/lib/sources/bookPure";
+import { bookDate, bookRating, bookSubjects, coverUrl, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects, type BookCard } from "@/lib/sources/bookPure";
+import { isbnList } from "@/lib/sources/hardcoverPure";
 
 export * from "@/lib/sources/bookPure";
 
@@ -88,20 +89,7 @@ async function seriesOfWork(id: string, subjects: unknown): Promise<string | nul
   return fromEditions ?? seriesFromSubjects(subjects);
 }
 
-export interface BookCard {
-  source: "openlibrary";
-  sourceId: string;
-  type: "book";
-  title: string;
-  releaseDate: string | null;
-  posterUrl: string | null;
-  votes: number;
-  /** 0-100, from Open Library's 1-5 stars. */
-  rating: number | null;
-  /** How many readers shelved it (want to read + read): Open Library's reach. */
-  popularity: number;
-  genres: string[];
-}
+export type { BookCard };
 
 /** A search or list row as a card. Null for a row with no work key or no title. */
 export function bookCard(doc: any): BookCard | null {
@@ -114,7 +102,27 @@ export function bookCard(doc: any): BookCard | null {
     rating: bookRating(doc.ratings_average),
     popularity: (Number(doc.want_to_read_count) || 0) + (Number(doc.already_read_count) || 0),
     genres: bookSubjects(doc, 6),
+    authors: (Array.isArray(doc.author_name) ? doc.author_name : []).filter((a: unknown): a is string => typeof a === "string").slice(0, 6),
+    // The search row's ISBNs are every edition's: what a Hardcover card is matched on (bookPure.ts, mergeBookCards).
+    isbns: isbnList(doc.isbn),
   };
+}
+
+/**
+ * The work an ISBN belongs to, or null when Open Library has no edition with
+ * it. Asked with several at once: a Hardcover book's editions carry a handful,
+ * and any one hit names the work. What turns a Hardcover id into an Open
+ * Library identity (worker/src/catalog/resolve.ts).
+ */
+export async function openLibraryWorkByIsbn(isbns: string[]): Promise<string | null> {
+  const clean = isbns.filter((i) => /^\d{9}[\dX]$|^\d{13}$/i.test(i)).slice(0, 6);
+  if (!clean.length) return null;
+  const q = clean.length === 1 ? `isbn:${clean[0]}` : `isbn:(${clean.join(" OR ")})`;
+  const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=key,title,language,cover_i,ratings_count&limit=5`, BROWSE_BUDGET_MS);
+  const workId = (d: any): string | null => /\/works\/(OL\d+W)$/.exec(String(d?.key ?? ""))?.[1] ?? null;
+  const docs = ((data?.docs ?? []) as any[]).filter((d) => workId(d));
+  const pick = docs.find(isWholeBook) ?? docs[0];
+  return pick ? workId(pick) : null;
 }
 
 /**

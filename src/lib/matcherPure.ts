@@ -43,6 +43,11 @@ export function extractCrossIds(source: Source, rawData: any): Record<string, st
     case "steam": if (rawData.appid != null) ids.steam = String(rawData.appid); break;
     case "igdb":  if (rawData.id != null) ids.igdb = String(rawData.id); break;
     case "openlibrary": if (typeof rawData.id === "string") ids.openlibrary = rawData.id; break;
+    // Only the Hardcover id. ISBNs are deliberately NOT cross ids: a namespace
+    // holds one id per item here, and two editions' ISBNs would read as two
+    // different works. A Hardcover id is matched to an Open Library work by
+    // asking Open Library (worker/src/catalog/resolve.ts).
+    case "hardcover": if (rawData.id != null) ids.hardcover = String(rawData.id); break;
     case "bgg": if (rawData.id != null) ids.bgg = String(rawData.id); break;
   }
   return ids;

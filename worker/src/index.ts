@@ -52,6 +52,7 @@ import {
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
 import { shelves } from "./shelves";
+import { coverRoute } from "./covers";
 import { nowSeconds } from "./d1";
 import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin";
 import type { Env } from "./env";
@@ -175,6 +176,10 @@ async function route(c: Ctx): Promise<Response> {
   const shelf = await shelves(c, method, a, b, d);
   if (shelf) return shelf;
 
+  // A book cover copied from Hardcover: worker/src/covers.ts.
+  const cover = await coverRoute(c, method, parts);
+  if (cover) return cover;
+
   if (a === "search" && b === "games" && method === "GET") return searchGames(c);
   if (a === "browse" && b === "games" && !d && method === "GET") return browseGames(c);
   if (a === "facet" && b === "games" && !d && method === "GET") return facetGames(c);
@@ -256,6 +261,7 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^browse\/(games|books|boardgames)$/, "GET"],
   [/^facet\/(games|books)$/, "GET"],
   [/^features$/, "GET"],
+  [/^cover\/hardcover\/.+$/, "GET, HEAD"],
   [/^calendar\/[^/]+$/, "GET"],
   [/^auth\/(google|trakt|discord|merge|logout)$/, "POST"],
   [/^t\/pv$/, "POST"],

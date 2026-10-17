@@ -205,6 +205,9 @@ export function extractFacets(
   // writer is.
   const ol = bySource.get("openlibrary");
   if (ol) for (const a of (ol.author_name ?? []).slice(0, 4)) addPerson(a, "creator");
+  // Hardcover's record (sources/hardcoverPure.ts) carries the same facts under its own names.
+  const hc = bySource.get("hardcover");
+  if (hc) for (const a of (Array.isArray(hc.authors) ? hc.authors : []).slice(0, 4)) addPerson(a, "creator");
   const bgg = bySource.get("bgg");
   if (bgg) for (const d of (bgg.designers ?? []).slice(0, 4)) addPerson(d, "creator");
 
@@ -259,6 +262,7 @@ export function extractFacets(
   // A book series (Open Library) and a board game's series or franchise family
   // (BGG): what lets the score count your average for the rest of the series.
   if (ol) for (const s of (ol.series_name ?? []).slice(0, 2)) addIp(s);
+  if (hc) addIp(hc.series?.name);
   if (bgg) for (const f of bggFranchises(Array.isArray(bgg.families) ? bgg.families : []).slice(0, 3)) addIp(f);
 
   return out;

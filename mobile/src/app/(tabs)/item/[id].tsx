@@ -77,7 +77,8 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
           label ??= bookSeries;
           const books = await api.facetBooks('franchise', bookSeries).then((b) => b.results, () => []);
           parts = books.map((b) => ({
-            key: `openlibrary:book:${b.sourceId}`, id: null, source: 'openlibrary', sourceId: b.sourceId, type: 'book', title: b.title,
+            // The card's own source: a series member only Hardcover lists opens by its Hardcover id.
+            key: `${b.source}:book:${b.sourceId}`, id: null, source: b.source, sourceId: b.sourceId, type: 'book', title: b.title,
             releaseDate: b.releaseDate, posterUrl: b.posterUrl, communityScore: b.rating, communityVotes: b.votes,
           }));
         } else if (igdbId) {

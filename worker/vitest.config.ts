@@ -25,6 +25,9 @@ export default defineConfig(async () => {
             TWITCH_CLIENT_SECRET: "test-twitch-secret",
             GOOGLE_CLIENT_ID: "test-google-client.apps.googleusercontent.com",
             TRAKT_CLIENT_ID: "test-trakt-client",
+            // Hardcover ON in the suite, so the merged book routes are what is
+            // tested; a test of the "off" state passes its own env.
+            HARDCOVER_TOKEN: "test-hardcover-token",
           },
         },
       }),

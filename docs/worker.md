@@ -11,6 +11,7 @@ are in app-plan.md; the settled calls are in [decisions.md](decisions.md)._
 | Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev`, and `https://fandex.org/v1/*` | Free plan. The Android app uses the first address. The website's Worker hands `/v1/*` to this one through a service binding ([website.md](website.md)), so a browser on fandex.org calls its own origin. |
 | D1 database `fandex` | id `6daba7e4-ea55-4c72-b297-eb92ada8c581`, EU jurisdiction | 110 MB of a 500 MB cap after the seed. |
 | R2 `fandex-backups` (EU) | bound as `BACKUPS` | `railway/` holds snapshots of the old database, `d1/{day}/` the nightly export. |
+| R2 `fandex-covers` (EU) | bound as `COVERS` | Book covers copied from Hardcover (2026-10-17), under `hardcover/{path}`, served at `/v1/cover/hardcover/{path}`. Not exported: every object can be fetched again. R2's free tier is 10 GB, 1 million writes and 10 million reads a month; a cover is 50 to 150 KB, so about 100,000 of them fit. |
 | Cloudflare access | Wrangler, by OAuth | Logged in from Nils's machine through his browser. No API token exists, and none should be minted for a session. |
 
 Everything is created with `--jurisdiction eu`. An EU bucket has its own S3 endpoint
@@ -27,16 +28,17 @@ Public, no session:
 | `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is kept current with this. A device with nothing starts from the website's `/catalog/` files instead ([website.md](website.md)), so a first visit is one call here and not thirty-one. |
 | `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |
-| `GET /v1/resolve/{tmdb\|igdb\|openlibrary\|bgg}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. Each provider takes only its own types and id shape (`TARGETS` in `catalog/resolve.ts`): an Open Library work is `OL…W`, a BGG id is digits. |
+| `GET /v1/resolve/{tmdb\|igdb\|openlibrary\|hardcover\|bgg}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. Each provider takes only its own types and id shape (`TARGETS` in `catalog/resolve.ts`): an Open Library work is `OL…W`, a BGG or Hardcover id is digits. A Hardcover id is asked at Open Library by its ISBNs first: a work found there is the item, with the Hardcover link attached to it; only a book Open Library has no edition of is created under the Hardcover id ([decisions.md](decisions.md), 2026-10-17). 404 while Hardcover is off. |
 | `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held, with each held title's `slug` since 2026-10-17 (one primary-key read each), so a card links `/{type}/{slug}`. Never fetches. A library sync calls this, then `resolve` for the misses. |
 | `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. |
 | `GET /v1/browse/games?page[&window=recent]` | Upcoming games, most anticipated first, 40 a page, pages 1 to 10: the Search feed. With `window=recent`, the last sixty days' games, most rated first: Home's trending. Card fields only. Edge-cached six hours per page and day; an empty page is never cached. Measured 2026-10-15: 4 ms CPU on a miss. Reads and writes no D1 row. |
 | `GET /v1/facet/games?kind=tag|studio|franchise&q` | A tag's games (theme, keyword or genre containing it), a studio's (company name containing it), or a franchise's (IGDB franchise or collection named exactly that, since 2026-10-17: a game page's "More from" rail), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
-| `GET /v1/features` | Which provider-fed types this Worker can serve: `{"books":true,"boardgames":<BGG_TOKEN set>}`. The app hides a type answered false. Not cached. |
-| `GET /v1/search/{books,boardgames}?q` | Open Library search (filtered by `relevantBooks`: every typed word in the title or authors, no summaries or study guides) or BGG search. Card fields, rating on 0-100. Edge-cached a day under `CACHE_VERSION` (bump it when what a shelf answers changes); an empty answer is never cached. Board games answer 503 `not-configured` without `BGG_TOKEN`. Rate-limited on `RL_RESOLVE`. |
-| `GET /v1/browse/{books,boardgames}` | Open Library's weekly trending, or BGG's hot list: Home's and Search's popular books and board games. Same caching. |
-| `GET /v1/facet/books?kind=tag|person|studio|franchise&q` | A subject's, an author's, a publisher's or a series' books: the book half of a tag, person, studio and franchise page. Same caching. |
+| `GET /v1/features` | Which provider-fed types and sources this Worker can serve: `{"books":true,"boardgames":<BGG_TOKEN set>,"hardcover":<HARDCOVER_TOKEN set and not switched off>}`. The app hides a type answered false. Not cached. |
+| `GET /v1/search/{books,boardgames}?q` | Open Library search (filtered by `relevantBooks`: every typed word in the title or authors, no summaries or study guides) or BGG search. Card fields, rating on 0-100, authors since 2026-10-17. Edge-cached a day under `CACHE_VERSION` (bump it when what a shelf answers changes); an empty answer is never cached. Board games answer 503 `not-configured` without `BGG_TOKEN`. Rate-limited on `RL_RESOLVE`. **With `HARDCOVER_TOKEN`, Hardcover's search is asked alongside** (one request) and its cards follow Open Library's, less the books Open Library already answered with (the same ISBN-13, or the same title and author: `mergeBookCards` in `src/lib/sources/bookPure.ts`). A Hardcover card carries no votes and no rating (its readers' numbers are theirs) and a cover served by this Worker. Hardcover failing, off, or over its day's budget leaves Open Library's answer as it is; Open Library failing answers Hardcover's alone. |
+| `GET /v1/browse/{books,boardgames}` | Open Library's weekly trending, or BGG's hot list: Home's and Search's popular books and board games. Same caching. Open Library only. |
+| `GET /v1/facet/books?kind=tag|person|studio|franchise&q` | A subject's, an author's, a publisher's or a series' books: the book half of a tag, person, studio and franchise page. Same caching. A series (`franchise`) also asks Hardcover, which holds every member in order including the ones not out yet: two requests (find the series by search, then its books), merged the same way, oldest first and an undated book last. |
+| `GET /v1/cover/hardcover/{folder}/{id}/{file}` | A book cover copied from Hardcover, whose rules forbid hot-linking (`src/covers.ts`). The first request fetches it from `assets.hardcover.app`, puts it in R2 `fandex-covers` and counts one against `cover` (3,000 a day); every later one is served from R2, a year in the edge cache, `immutable`. Only Hardcover's own path shape is accepted (a folder, a numeric id, a hashed file name), only an `image/*` under 3 MB is kept, and a new copy is refused while Hardcover is off; a held one still serves. Rate-limited on `RL_RESOLVE`. Answers `HEAD`. |
 | `GET /v1/calendar/{YYYY-MM}?region` | The month's popular releases, 40 cards. |
 | `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. |
 
@@ -178,9 +180,12 @@ write) where the site had a uuid plus a `UNIQUE` index (three). The seed's cost 
 | A calendar month | 1 |
 | Each `spend()` on a budget | 1 |
 
-Three budgets stop a stranger spending the day's writes: `fetch` (new titles, 2,000 a day),
-`user_writes` (40,000 rows a day across everyone), `calendar` (150 month builds a day). They live
-in `daily_budget` and are read at call time.
+Five budgets stop a stranger spending the day's writes, or a provider's day: `fetch` (new titles,
+2,000 a day), `user_writes` (40,000 rows a day across everyone), `calendar` (150 month builds a
+day), `hardcover` (requests to Hardcover, 4,000 a day of the 5,000 their free plan allows, one
+per top-level query field; `HARDCOVER_DAILY_CAP`) and `cover` (covers copied from Hardcover,
+3,000 a day; `DAILY_COVER_CAP`). They live in `daily_budget` and are read at call time. Over the
+Hardcover budget, a book route answers Open Library's half alone and says nothing.
 
 **CPU, measured on the live Worker with `wrangler tail`:**
 

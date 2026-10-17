@@ -37,7 +37,7 @@ const GUTTER = space.xl;
 
 export const SOURCE_LABEL: Record<string, string> = {
   trakt: 'Trakt', tmdb: 'TMDB', igdb: 'IGDB', steam: 'Steam', rawg: 'RAWG', letterboxd: 'Letterboxd',
-  openlibrary: 'Open Library', bgg: 'BoardGameGeek', local: 'Fandex',
+  openlibrary: 'Open Library', hardcover: 'Hardcover', bgg: 'BoardGameGeek', local: 'Fandex',
 };
 
 /** "2-4 players", "1 player", "up to 5 players". */
@@ -488,15 +488,23 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="Box office" value={m.revenue ? money(m.revenue) : null} />
         </View>
         {/* BGG's terms: a public page using its data says so, linked to BGG
-            (src/lib/sources/bgg.ts). Open Library asks for no credit, and gets one. */}
+            (src/lib/sources/bgg.ts). Open Library asks for no credit, and gets one;
+            so does Hardcover, on a book it contributed to (src/lib/sources/hardcover.ts). */}
         {item.type === 'boardgame' ? (
           <ExtLink href="https://boardgamegeek.com" label="Powered by BoardGameGeek" style={styles.poweredBy}>
             <T variant="caption">Powered by <Text style={{ color: color.textPrimary }}>BGG</Text></T>
           </ExtLink>
         ) : item.type === 'book' ? (
-          <ExtLink href="https://openlibrary.org" label="Book data from Open Library" style={styles.poweredBy}>
-            <T variant="caption">Book data from <Text style={{ color: color.textPrimary }}>Open Library</Text></T>
-          </ExtLink>
+          <View style={[styles.poweredBy, { flexDirection: 'row', flexWrap: 'wrap' }]}>
+            <ExtLink href="https://openlibrary.org" label="Book data from Open Library">
+              <T variant="caption">Book data from <Text style={{ color: color.textPrimary }}>Open Library</Text></T>
+            </ExtLink>
+            {item.vector.sources.some((s) => s.source === 'hardcover') ? (
+              <ExtLink href="https://hardcover.app" label="and Hardcover">
+                <T variant="caption"> and <Text style={{ color: color.textPrimary }}>Hardcover</Text></T>
+              </ExtLink>
+            ) : null}
+          </View>
         ) : null}
       </View>
       </View>

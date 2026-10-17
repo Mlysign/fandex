@@ -24,7 +24,10 @@
     }
   ],
   "r2_buckets": [
-    { "binding": "BACKUPS", "bucket_name": "fandex-backups", "jurisdiction": "eu" }
+    { "binding": "BACKUPS", "bucket_name": "fandex-backups", "jurisdiction": "eu" },
+    // Book covers copied from Hardcover, whose rules forbid hot-linking
+    // (src/covers.ts). Served at /v1/cover/hardcover/{path}, a year in the edge cache.
+    { "binding": "COVERS", "bucket_name": "fandex-covers", "jurisdiction": "eu" }
   ],
   // One of the account's five cron triggers. Every ten minutes, a small slice
   // each time: a cron run gets the same 10 ms of CPU a request does, so the
@@ -46,9 +49,14 @@
     "DAILY_FETCH_CAP": "2000",
     // Who may open the admin pages (/dev) and call /v1/admin/*. Fandex user ids,
     // comma separated. An id is not a credential: the session still has to be theirs.
-    "ADMIN_USER_IDS": "38892bb2-eacb-4ba2-8e69-5075f5a6ab73"
+    "ADMIN_USER_IDS": "38892bb2-eacb-4ba2-8e69-5075f5a6ab73",
+    // Where a copied book cover is served from (src/covers.ts). The website
+    // hands /v1/* to this Worker, so the public address answers from anywhere,
+    // and a record stored with it stays right whatever the Worker's own address is.
+    "COVER_ORIGIN": "https://fandex.org"
   }
   // Secrets, set with `node scripts/push-secrets.mjs` (never committed):
   //   JWT_SECRET, TMDB_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET,
-  //   GOOGLE_CLIENT_ID, TRAKT_CLIENT_ID, DISCORD_CLIENT_ID
+  //   GOOGLE_CLIENT_ID, TRAKT_CLIENT_ID, DISCORD_CLIENT_ID,
+  //   and the optional BGG_TOKEN (board games) and HARDCOVER_TOKEN (the second book source)
 }

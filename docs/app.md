@@ -31,7 +31,14 @@ are OFF until the Worker has a BGG token: `lib/features.ts` asks `/v1/features` 
 and Home from asking. A rating of either is stored as source `local` with status `read` or
 `played` (`itemActions.ts`, `onTrakt`, `statusFor`): neither provider has a write-back. Every
 book page credits Open Library and every board-game page BoardGameGeek, which their terms ask
-for. ⚠️ **A new media type is a string-union member, so `tsc` flags almost nothing**: the type
+for. **Hardcover is a second book source since 2026-10-17** (`src/lib/sources/hardcover.ts`,
+`docs/worker.md`), on the Worker only and off until it has `HARDCOVER_TOKEN`: its cards come
+behind Open Library's in Search and in a book page's "More from" rail, and in the calendar's
+months, with a cover the Worker serves (`/v1/cover/hardcover/…`), no votes and no rating. A
+card's `source` is `hardcover` then, and the app opens it through `/open/hardcover/book/{id}`
+like any other provider card; the Worker turns it into an Open Library work where one exists.
+A book page says "Book data from Open Library and Hardcover" when the item carries a Hardcover
+link. The app needs no switch of its own: `/v1/features` reports `hardcover`, but nothing reads it. ⚠️ **A new media type is a string-union member, so `tsc` flags almost nothing**: the type
 lists are `MEDIA_TYPES` (site), `TYPE_LABEL`/`TYPE_PLURAL`/`color.media` (`theme.ts`),
 `TYPE_ICONS` (`typeIcons.ts`, typed as a full `Record`, so it does fail), `TYPES` in
 `mobile/web/build.mjs` and `worker.ts`, and the Worker's `TYPES`, `SOURCES` and `MEDIA_TYPES`.

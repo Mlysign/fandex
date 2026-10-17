@@ -3,7 +3,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // H4.8 — support/contact page around the already-live hello@fandex.org.
 const support: LegalDocument = {
   title: "Support",
-  updated: "2026-10-10",
+  updated: "2026-10-17",
   intro: [
     "Fandex is built and run by one person, as a hobby project alongside everything else in their life, not as a company with a support team. Here's what that actually means for you.",
   ],
@@ -12,6 +12,9 @@ const support: LegalDocument = {
       heading: "Contact",
       body: [
         "hello@fandex.org, for bug reports, account questions (including anything about your data), or general feedback.",
+        // 2026-10-17: Hardcover's covers are uploaded by its users, and its API
+        // docs ask a site showing them to name a takedown contact. Same address.
+        "The same address takes requests to remove a cover image or any other content you hold the rights to. Say which page it is on, and it comes down promptly.",
       ],
     },
     {

@@ -28,7 +28,10 @@ import { capFrom, kvGet, kvSet, spend } from "./budget";
 import { all, first, run } from "./d1";
 import type { Env } from "./env";
 import { useSharedIgdbToken } from "./catalog/resolve";
-import { upcomingOpenLibrary, type BookCard } from "@/lib/sources/openlibrary";
+import { upcomingOpenLibrary } from "@/lib/sources/openlibrary";
+import { mergeBookCards, type BookCard } from "@/lib/sources/bookPure";
+import { upcomingHardcover } from "@/lib/sources/hardcover";
+import { hardcoverHalf } from "./hardcover";
 
 /** How deep a stored month goes. The calendar shows 15; the rest is room to filter. */
 export const MONTH_POOL_DEPTH = 40;
@@ -98,10 +101,15 @@ function ttlFor(month: string, partial: boolean, now: Date): number {
   return monthWindow(month).lte < now.toISOString().slice(0, 10) ? TTL_PAST : TTL_OPEN;
 }
 
-/** An Open Library card as a calendar candidate. Its reach (readers who shelved it) is what ranks it among the month's books. */
+/**
+ * A book card as a calendar candidate. An Open Library card's reach (readers
+ * who shelved it) is what ranks it among the month's books; a Hardcover card
+ * has no such number (a count of readers is theirs, not ours), so its bucket
+ * keeps Hardcover's own order.
+ */
 function bookCandidate(b: BookCard): FeedCandidate {
   return {
-    id: `openlibrary:${b.sourceId}`, rawId: 0, sourceId: b.sourceId, source: "openlibrary", type: "book",
+    id: `${b.source}:${b.sourceId}`, rawId: 0, sourceId: b.sourceId, source: b.source, type: "book",
     title: b.title, releaseDate: b.releaseDate, posterUrl: b.posterUrl, ids: {},
     genreNames: b.genres, originalLanguage: null, voteCount: b.votes,
     voteAverage: b.rating != null ? b.rating / 10 : null, popularity: b.popularity,
@@ -147,7 +155,7 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
   // Page 1 of each source is enough: each is already sorted by its own
   // popularity, so page 2 holds titles that could never place. Each fetcher
   // degrades to [] on its own, so one provider being down costs its own titles.
-  const [games, movies, shows, books] = await Promise.all([
+  const [games, movies, shows, olBooks, hcBooks] = await Promise.all([
     // "card": card fields only. Forty full IGDB payloads are ~200 KB to parse,
     // which was most of a build's CPU, and nothing here stores them.
     fetchIgdbGamePage(1, "future", win, "card").catch(() => [] as FeedCandidate[]),
@@ -157,8 +165,14 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
     // games have only a year from BGG, so none is placed on a day.
     // A cover and at least three readers who shelved it: what Open Library calls
     // 2026 also holds self-published leaflets nobody has seen.
-    upcomingOpenLibrary(month).then((cards) => cards.filter((b) => b.posterUrl && b.popularity >= 3).map(bookCandidate)).catch(() => [] as FeedCandidate[]),
+    upcomingOpenLibrary(month).then((cards) => cards.filter((b) => b.posterUrl && b.popularity >= 3)).catch(() => [] as BookCard[]),
+    // Hardcover (2026-10-17): the books due that month it knows and Open
+    // Library does not, most shelved there first. Merged behind Open Library's
+    // by ISBN or title and author, so a book both know counts once, as Open
+    // Library's. A cover and an author: what separates a book from a listing.
+    hardcoverHalf(env, "calendar", 1, () => upcomingHardcover(month)).then((cards) => cards.filter((b) => b.posterUrl && b.authors.length)),
   ]);
+  const books = mergeBookCards(olBooks, hcBooks).map(bookCandidate);
   const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows, ...books], win), MONTH_POOL_DEPTH);
   if (!ranked.length) return null;
   // Books are not in `partial`: a month a year out often has none, and that is an answer.

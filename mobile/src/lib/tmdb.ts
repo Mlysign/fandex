@@ -9,7 +9,7 @@ import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 import type { MediaType } from '~/lib/api';
 
 export interface ProviderCard {
-  source: 'tmdb' | 'igdb' | 'openlibrary' | 'bgg';
+  source: 'tmdb' | 'igdb' | 'openlibrary' | 'hardcover' | 'bgg';
   sourceId: string;
   type: MediaType;
   title: string;

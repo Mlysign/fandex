@@ -151,3 +151,63 @@ export function bookSubjects(doc: any, limit = 20): string[] {
   }
   return out;
 }
+
+// ── Cards, and the two book sources as one list (2026-10-17) ─────────────────
+
+/** A book as the app's provider card, the shape /v1/search/books answers with. */
+export interface BookCard {
+  source: "openlibrary" | "hardcover";
+  sourceId: string;
+  type: "book";
+  title: string;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  votes: number;
+  /** 0-100, from Open Library's 1-5 stars. Null for Hardcover: its ratings are not ours to show. */
+  rating: number | null;
+  /** How many readers shelved it at Open Library. 0 for Hardcover (a count of readers is theirs). */
+  popularity: number;
+  genres: string[];
+  authors: string[];
+  /** ISBN-13s, for matching the two sources. Dropped from the wire (`stripIsbns`). */
+  isbns?: string[];
+}
+
+const foldKey = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * What one book looks like whichever provider names it: the title before any
+ * subtitle, without a leading article, plus the first author's surname. "The
+ * Doors of Stone" at Hardcover and "Doors of Stone" at Open Library are one key.
+ */
+export function bookIdentityKey(card: { title: string; authors?: string[] }): string {
+  const title = foldKey(card.title.split(/[:(]/)[0]).replace(/^(the|a|an) /, "");
+  const author = card.authors?.[0] ? foldKey(card.authors[0]).split(" ").pop() ?? "" : "";
+  return `${title}|${author}`;
+}
+
+/**
+ * Two providers' cards as one list: the first list in full, then whatever the
+ * second holds that the first does not. The same book is one that shares an
+ * ISBN-13, or the same title and author. Open Library goes first, so its
+ * work stays the book's identity; a Hardcover card survives only for a book
+ * Open Library did not answer with.
+ */
+export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): BookCard[] {
+  const isbns = new Set<string>();
+  const keys = new Set<string>();
+  const note = (c: BookCard) => { for (const i of c.isbns ?? []) isbns.add(i); keys.add(bookIdentityKey(c)); };
+  for (const c of primary) note(c);
+  const out = [...primary];
+  for (const c of secondary) {
+    if ((c.isbns ?? []).some((i) => isbns.has(i)) || keys.has(bookIdentityKey(c))) continue;
+    note(c);
+    out.push(c);
+  }
+  return out;
+}
+
+/** Cards for the wire: the ISBN lists are for matching, not for a client. */
+export function stripIsbns(cards: BookCard[]): BookCard[] {
+  return cards.map(({ isbns: _isbns, ...rest }) => rest);
+}

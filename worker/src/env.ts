@@ -17,6 +17,11 @@ export interface Env {
   DISCORD_CLIENT_ID?: string;
   /** BoardGameGeek application token (boardgamegeek.com/applications). Unset switches board games off. */
   BGG_TOKEN?: string;
+  /** Hardcover Personal Access Token (hardcover.app/account/api, read scopes). Unset leaves books on Open Library alone. */
+  HARDCOVER_TOKEN?: string;
+
+  /** Copied book covers (src/covers.ts). R2 `fandex-covers`. */
+  COVERS: R2Bucket;
 
   // Plain vars (wrangler.jsonc).
   ALLOWED_ORIGINS: string;
@@ -42,4 +47,12 @@ export interface Env {
   DEV_LOGIN?: string;
   /** "0" or "false" turns IGDB off everywhere. Default on. Read by src/lib/sources/igdb.ts. */
   IGDB_ENABLED?: string;
+  /** "0" or "false" turns Hardcover off with the token in place. Default on. Read by src/lib/sources/hardcover.ts. */
+  HARDCOVER_ENABLED?: string;
+  /** Hardcover requests allowed per UTC day across every route. Optional; src/hardcover.ts has the default (their free plan allows 5,000). */
+  HARDCOVER_DAILY_CAP?: string;
+  /** Cover copies allowed per UTC day (one per cover, ever). Optional; src/covers.ts has the default. */
+  DAILY_COVER_CAP?: string;
+  /** Where a copied cover is served from, in a card and in a stored record. Unset: the public site. */
+  COVER_ORIGIN?: string;
 }

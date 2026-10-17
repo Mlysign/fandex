@@ -529,6 +529,30 @@ function normalizeOpenLibrary(d: any): SourceNormalized {
   return out;
 }
 
+// ── Hardcover (books, second source) ─────────────────────────────────────────
+// The record is a `HardcoverBook` (sources/hardcoverPure.ts): facts only, so
+// there is no rating to normalize, by construction. The cover is already the
+// address Fandex serves it from.
+function normalizeHardcover(d: any): SourceNormalized {
+  const out: SourceNormalized = {};
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  out.title = typeof d.title === "string" ? d.title : null;
+  out.description = typeof d.description === "string" ? d.description : null;
+  out.releaseDate = typeof d.releaseDate === "string" ? d.releaseDate : null;
+  out.poster = typeof d.cover === "string" ? d.cover : null;
+  out.images = out.poster ? [out.poster] : [];
+  out.tags = list(d.tags);
+  out.collection = typeof d.series?.name === "string" ? d.series.name : null;
+  out.authors = list(d.authors).slice(0, 6);
+  out.pageCount = typeof d.pages === "number" ? d.pages : null;
+  out.isbn = list(d.isbns)[0] ?? null;
+  out.communityRatings = [];
+  out.storeLinks = typeof d.slug === "string" && d.slug
+    ? [{ name: "Hardcover", url: `https://hardcover.app/books/${d.slug}`, source: "hardcover" }]
+    : [];
+  return out;
+}
+
 // ── BoardGameGeek (board games) ──────────────────────────────────────────────
 // The record is a parsed BGG `thing` (sources/bgg.ts, BggThing).
 function normalizeBgg(d: any): SourceNormalized {
@@ -564,6 +588,7 @@ const NORMALIZERS: Partial<Record<Source, (data: any, type: MediaType) => Source
   rawg: (d) => normalizeRawg(d),
   igdb: (d) => normalizeIgdb(d),
   openlibrary: (d) => normalizeOpenLibrary(d),
+  hardcover: (d) => normalizeHardcover(d),
   bgg: (d) => normalizeBgg(d),
 };
 

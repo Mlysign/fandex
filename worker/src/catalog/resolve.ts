@@ -16,12 +16,14 @@ import type { MediaType } from "@/types";
 import { capFrom, kvGet, kvSet, spend } from "../budget";
 import { first } from "../d1";
 import type { Env } from "../env";
-import { upsertMediaItem, type SourceItem } from "./ingest";
-import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
+import { linkSourceToItem, upsertMediaItem, type SourceItem } from "./ingest";
+import { bookDate, getOpenLibraryWork, openLibraryWorkByIsbn } from "@/lib/sources/openlibrary";
+import { getHardcoverBook, HardcoverNotConfigured } from "@/lib/sources/hardcover";
 import { getBggThing } from "@/lib/sources/bgg";
+import { useHardcover } from "../hardcover";
 import { useBggToken } from "../shelves";
 
-export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "bgg";
+export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "hardcover" | "bgg";
 
 export type ResolveOutcome =
   | { ok: true; id: string; created: boolean }
@@ -36,6 +38,7 @@ const TARGETS: Record<ResolveSource, { types: Set<string>; id: RegExp }> = {
   tmdb: { types: new Set(["movie", "show"]), id: /^\d{1,12}$/ },
   igdb: { types: new Set(["game"]), id: /^\d{1,12}$/ },
   openlibrary: { types: new Set(["book"]), id: /^OL\d{1,12}W$/ },
+  hardcover: { types: new Set(["book"]), id: /^\d{1,12}$/ },
   bgg: { types: new Set(["boardgame"]), id: /^\d{1,9}$/ },
 };
 const TYPES = new Set<string>(["movie", "show", "game", "book", "boardgame"]);
@@ -111,10 +114,30 @@ export async function resolveItem(
   try {
     item = await fetchFromProvider(env, source as ResolveSource, type as MediaType, id);
   } catch (e) {
+    // Hardcover switched off is a title that does not exist, not an outage.
+    if (e instanceof HardcoverNotConfigured) return { ok: false, reason: "not-found" };
     console.warn("resolve_fetch_failed", { source, type, id, error: e instanceof Error ? e.message : String(e) });
     return { ok: false, reason: "provider" };
   }
   if (!item) return { ok: false, reason: "not-found" };
+
+  // A Hardcover book's identity is its Open Library work, when Open Library
+  // has one (docs/decisions.md, 2026-10-17): asked by the book's ISBNs, the
+  // work is resolved as itself and the Hardcover link attached to it, so the
+  // item carries both and a later Open Library resolve finds the same row.
+  // Only a book Open Library has no edition of is created under Hardcover's id.
+  // Open Library being down answers the Hardcover id on its own: a wishlist
+  // tap must not wait for a second provider.
+  if (item.source === "hardcover") {
+    const olId = await openLibraryWorkByIsbn(item.rawData?.isbns ?? []).catch(() => null);
+    if (olId) {
+      const work = await resolveItem(env, "openlibrary", "book", olId);
+      if (work.ok) {
+        await linkSourceToItem(env.DB, work.id, item);
+        return work;
+      }
+    }
+  }
 
   // An IGDB port or edition opens its main game: IGDB keeps each console port
   // and each "Gold Edition" as a game of its own, often with the same name and
@@ -230,6 +253,14 @@ async function fetchFromProvider(env: Env, source: ResolveSource, type: MediaTyp
     if (!w?.title) return null;
     // A merged work answers under its new id: that one is stored, so the next lookup finds it.
     return { source: "openlibrary", sourceId: w.id, type: "book", title: w.title, releaseDate: bookDate(w), rawData: w };
+  }
+
+  if (source === "hardcover") {
+    useHardcover(env);
+    const b = await getHardcoverBook(id);
+    if (!b) return null;
+    // Stored under the id that answered: a duplicate was followed to its canonical book.
+    return { source: "hardcover", sourceId: String(b.id), type: "book", title: b.title, releaseDate: b.releaseDate, rawData: b };
   }
 
   if (source === "bgg") {
