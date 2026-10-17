@@ -49,8 +49,10 @@ Sign-in: `POST /v1/auth/google {idToken, nonce}`, `POST /v1/auth/trakt {accessTo
 
 ### The test accounts (a developer's machine only)
 
-`POST /v1/dev/login {account?}` signs in as one of two fixed accounts, `smoketest` (the default)
-or `plain`, creating it on first use (`src/devLogin.ts`). It exists so a rating, a hide, a changed
+`POST /v1/dev/login {account?}` signs in as one of three fixed accounts, `smoketest` (the default),
+`plain` or `third`, creating it on first use (`src/devLogin.ts`). `third` signs in "with Discord"
+so it can be joined to the others: `{account, connect: true}` with a session adds that account's way
+in to the signed-in one through the real `signIn()`, which is how joining accounts is tried here. It exists so a rating, a hide, a changed
 setting, a download or a deleted account can be tried without touching a real one. Their identity
 is `google` with a made-up id, so they hold no Trakt and nothing they do leaves the machine.
 

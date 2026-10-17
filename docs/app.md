@@ -364,8 +364,27 @@ sideloading and is not a Play upload key.
    reused. Until then a person who made their account with Google cannot sign in to it on the
    phone, and Settings there says so on the Google row. The Worker side is ready for it: the
    native call takes a nonce, and `GOOGLE_CLIENT_ID` takes a comma-separated list.
-2. **Joining two accounts.** The Worker answers `merge-required` with what overlaps; the app says
-   so and stops. The form that lets the person choose is not built.
+
+## Joining two accounts (2026-10-17)
+
+A way in added in Settings (Trakt, Google, Discord) can belong to ANOTHER Fandex account. With no
+titles in common the Worker joins them at once and answers with a session for the survivor. With
+some in common it answers 409 `merge-required` with a short-lived proof, the overlap and both
+accounts' summaries, and nothing changes until the person chooses.
+
+`AuthProvider` keeps that answer in memory (`pendingMerge`, with the Trakt tokens when Trakt was
+the way being added, so the joined account keeps syncing Trakt here) and Settings shows
+`MergePanel` above the account list: a port of the old site's, both accounts side by side, what
+moves with nothing to decide, what overlaps with a few titles, and two buttons with **nothing
+preselected**. `completeMerge` posts `/v1/auth/merge`, takes the survivor's session, and replaces
+the device's rows with a forced pull. "Not now" drops the proof; so does a reload. The survivor is
+the account the added way in belongs to, and its own settings (country, types, platforms) win.
+
+**Trying it locally:** signed in to a local Worker as either test account, Settings offers
+"Connect the third test account". The third account signs in "with Discord", so it can be joined to
+either of the others, and the connect goes through the real `signIn()`
+([worker.md](worker.md), "The test accounts"). Walked through on 2026-10-17: the form, "keep the
+other account's copies", the survivor holding the 9 over the 6, and the device showing it.
 
 ## Google sign-in, in a browser (2026-10-11)
 
