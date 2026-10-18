@@ -508,13 +508,6 @@ export async function runScheduled(env: Env): Promise<void> {
   } catch (e) {
     console.error("ol_refetch_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
-  // The games stored before their collections were asked for, until none are left.
-  try {
-    const ic = await runIgdbCollectionsStep(env);
-    if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
-  } catch (e) {
-    console.error("igdb_collections_step_failed", { error: e instanceof Error ? e.message : String(e) });
-  }
   try {
     const up = await runUpcomingRefreshStep(env, slots);
     if (up.refreshed || up.failed) console.log("tmdb_upcoming_step", up);
@@ -528,5 +521,15 @@ export async function runScheduled(env: Env): Promise<void> {
     if (cal.built) console.log("calendar_step", cal);
   } catch (e) {
     console.error("calendar_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The games stored before their collections were asked for, until none are
+  // left. After everything else: a run of it measured 59 and 113 ms of CPU on
+  // 2026-10-18, past the free plan's 10, so if a run is ever cut short it is
+  // this one. A cut batch is safe to repeat: a stored game leaves the query.
+  try {
+    const ic = await runIgdbCollectionsStep(env);
+    if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
+  } catch (e) {
+    console.error("igdb_collections_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
 }

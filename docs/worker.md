@@ -289,6 +289,13 @@ Each of these is a way the Worker differs from the site, and each has a test.
   here never moves `last_synced`: the six-month cap is counted from that column. The title goes
   on a skip list in `kv` for three days. Not covered: a title nobody acted on (`browsed = 1`),
   any game, and a running show's next season, whose first air date is long past.
+- **Games stored before 2026-10-18 get their IGDB collections from a cron walk**
+  (`runIgdbCollectionsStep`). 2,788 IGDB links had none; a run takes the next 12 by `source_id`
+  after the `igdb_collections_cursor` row in `kv`, asks IGDB for all of them in one call, and
+  stores each again with `collections` merged in, which re-derives its facets (the franchise
+  facet's `series`) and moves it in the delta sync. Past the last id the cursor reads `done` and
+  the step costs one kv read. A failed IGDB call leaves the cursor, so the batch is asked again.
+  Delete the `kv` row to walk again.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer.**
   `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges a doc with
   an older stamp from its blobs, whatever the region, and the next write of the item re-stamps it.
