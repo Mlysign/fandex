@@ -1,0 +1,112 @@
+[
+ {
+  "ref": "franchise-new|limbo",
+  "why": "The game and the 2021 film share a word and nothing else.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|prey",
+  "why": "Arkane's Prey has nothing to do with the Predator film Prey.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|silence",
+  "why": "The 2016 game and Scorsese's 2016 film are unrelated.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|invasion",
+  "why": "The game Invasion! and the Apple TV show Invasion are unrelated.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|abigail",
+  "why": "The 2019 and 2024 films called Abigail are unrelated.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|q u b e",
+  "why": "Q.U.B.E. and its Director's Cut are one game, not a franchise.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|vertigo",
+  "why": "Vertigo and Vertigo: Remastered are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|wanted killer",
+  "why": "Wanted Killer and its VR version are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|virtual desktop",
+  "why": "Two versions of one app.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|black desert",
+  "why": "Black Desert and its Explorer's Package are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|nongunz",
+  "why": "Nongunz and its Doppelganger Edition are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|quanero",
+  "why": "Quanero and Quanero VR are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|inkbound",
+  "why": "Inkbound and its technical test are one game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-merge|rebuild of evangelion>neon genesis evangelion",
+  "why": "Rebuild is a real sub-series; attach, never bundle.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-merge|shin megami tensei>megami tensei",
+  "why": "Shin Megami Tensei is a real sub-series of Megami Tensei.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-merge|forza horizon>forza",
+  "why": "Forza Horizon is a real sub-series of Forza.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-merge|the wolf among us>fables",
+  "why": "Both keys hold the same single game; bundling changes nothing a person sees.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-member|3347aaa2-f35b-4f6e-ac09-108c8c5e6161>disney s peter pan",
+  "why": "Hook is a Peter Pan sequel but not Disney's; no non-Disney Peter Pan franchise exists to join.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-member|5d8b135e-ec72-4209-933f-6ca286ab2883>the witcher",
+  "why": "The Blood of Dawnwalker is by ex-Witcher developers but is not a Witcher game.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-member|eb328165-5ca5-4327-8ec5-b315443a71fc>control",
+  "why": "Alan Wake II shares Remedy's connected universe with Control but is its own series.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-new|bachman books",
+  "why": "The Bachman Books is an anthology that contains The Long Walk, not a series.",
+  "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-member|ea614e77-56fb-461d-b343-68a4a933bea6>jurassic park",
+  "why": "The Lost World (2001) is the Conan Doyle novel, not Jurassic Park.",
+  "on": "2026-10-18"
+ }
+]
