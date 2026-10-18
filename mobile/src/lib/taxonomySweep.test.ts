@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaxonomyJson } from '~/lib/fandexScore';
 import type { CatalogTitle } from '~/lib/ipSurvey';
 import type { TagRow } from '~/lib/tagVocab';
-import { runTaxonomySweep, type FranchiseMergeSuggestion, type TagCategorySuggestion } from '~/lib/taxonomySweep';
+import { runTaxonomySweep, type FranchiseMergeSuggestion, type FranchiseNewSuggestion, type TagCategorySuggestion } from '~/lib/taxonomySweep';
 
 // The rules are the site's (src/lib/taxonomyRules.ts) and are tested there. What
 // is tested here is what the port adds: which tags are candidates, which live
@@ -116,5 +116,75 @@ describe('missing member proposals', () => {
     expect(sweep({ titles: TITLES, dismissed: [['franchise-member', 'b>blade runner']] }).suggestions).toEqual([]);
     const attached = taxonomy({ itemIpOverrides: [{ mediaItemId: 'b', ipKey: 'blade runner', label: 'Blade Runner', mode: 'add', source: 'manual' }] });
     expect(sweep({ titles: TITLES, tax: attached }).suggestions).toEqual([]);
+  });
+});
+
+describe('new franchise proposals', () => {
+  // The real titles of the 2026-10-17 hand sweep, before it ran.
+  const book = (id: string, title: string, ips: CatalogTitle['ips'] = []): CatalogTitle => ({ id, title, type: 'book', ips });
+  const game = (id: string, title: string, ips: CatalogTitle['ips'] = []): CatalogTitle => ({ id, title, type: 'game', ips });
+  const show = (id: string, title: string, ips: CatalogTitle['ips'] = []): CatalogTitle => ({ id, title, type: 'show', ips });
+  const TITLES = [
+    book('dracula-book', 'Dracula'), film('dracula-film', 'Dracula'),
+    game('mt1', 'Monster Train'), game('mt2', 'Monster Train 2'), game('mt3', 'Monster Train 2: Destiny of the Railforged'),
+    // False friends: the same name, and not the same work.
+    game('limbo-game', 'Limbo'), film('limbo-film', 'Limbo'),
+    game('prey-game', 'Prey'), film('prey-film', 'Prey', [ip('predator', 'Predator Collection')]),
+  ];
+  const news = (r: ReturnType<typeof sweep>) => r.suggestions.filter((s): s is FranchiseNewSuggestion => s.kind === 'franchise-new');
+  const cards = (over: Partial<Parameters<typeof runTaxonomySweep>[0]> = {}) =>
+    news(sweep({ titles: TITLES, ...over })).map((s) => [s.ref, s.ipLabel, s.signal, s.members.map((m) => m.mediaItemId)]);
+
+  it('pairs a book and its film, and names a series three games begin with', () => {
+    expect(cards()).toEqual([
+      ['dracula', 'Dracula', 'same-work', ['dracula-book', 'dracula-film']],
+      ['monster train', 'Monster Train', 'shared-words', ['mt1', 'mt2', 'mt3']],
+    ]);
+    expect(news(sweep({ titles: TITLES }))[0]).toMatchObject({ title: 'New franchise: Dracula', joins: false, why: expect.stringContaining('a book and a film') });
+  });
+
+  it('never pairs a game with a film by name alone', () => {
+    const refs = news(sweep({ titles: TITLES })).map((s) => s.ref);
+    expect(refs).not.toContain('limbo');
+    expect(refs).not.toContain('prey');
+    // A book of the game's name is what lets a game in.
+    expect(cards({ titles: [game('g', 'Limbo'), book('b', 'Limbo')] })).toEqual([['limbo', 'Limbo', 'same-work', ['b', 'g']]]);
+  });
+
+  it('counts a hand-made attach as placed, not only the provider data', () => {
+    const attach = (mediaItemId: string, ipKey: string, label: string) => ({ mediaItemId, ipKey, label, mode: 'add' as const, source: 'manual' as const });
+    const placed = taxonomy({
+      itemIpOverrides: [
+        attach('dracula-book', 'dracula', 'Dracula'), attach('dracula-film', 'dracula', 'Dracula'),
+        attach('mt1', 'monster train', 'Monster Train'), attach('mt2', 'monster train', 'Monster Train'), attach('mt3', 'monster train', 'Monster Train'),
+      ],
+    });
+    expect(cards({ tax: placed })).toEqual([]);
+    // Half placed: the franchise exists, so the book is a membership card and not a second "Dracula".
+    const half = sweep({ titles: TITLES, tax: taxonomy({ itemIpOverrides: [attach('dracula-film', 'dracula', 'Dracula')] }) });
+    expect(news(half).map((s) => s.ref)).toEqual(['monster train']);
+    expect(half.suggestions).toContainEqual(expect.objectContaining({ kind: 'franchise-member', ref: 'dracula-book>dracula' }));
+  });
+
+  it('joins the franchise the placed half of a pair already sits in', () => {
+    const titles = [film('h-film', 'Hannibal', [ip('the hannibal lecter', 'The Hannibal Lecter Collection')]), show('h-show', 'Hannibal')];
+    expect(news(sweep({ titles }))).toMatchObject([{ ref: 'the hannibal lecter', title: 'Join The Hannibal Lecter Collection', joins: true, members: [{ mediaItemId: 'h-show' }] }]);
+  });
+
+  it('takes the part before a colon, and a numbered sequel as a series of two', () => {
+    expect(cards({ titles: [book('b', 'Snowpiercer'), show('s', 'Snowpiercer: The Series')] })).toEqual([['snowpiercer', 'Snowpiercer', 'same-work', ['b', 's']]]);
+    expect(cards({ titles: [game('a', 'Just Cause 2'), game('b', 'Just Cause 3')] })).toEqual([['just cause', 'Just Cause', 'shared-words', ['a', 'b']]]);
+    expect(cards({ titles: [game('a', 'The Gallery: Episode 1 - Call of the Starseed'), game('b', 'The Gallery: Episode 2 - Heart of the Emberstone')] }))
+      .toEqual([['the gallery', 'The Gallery', 'shared-words', ['a', 'b']]]);
+  });
+
+  it('is not fooled by a zero, by twins, or by filler words', () => {
+    expect(cards({ titles: [film('a', 'Event Horizon'), game('b', 'Event[0]')] })).toEqual([]);
+    expect(cards({ titles: [game('a', 'PUBG: Battlegrounds'), game('b', 'PUBG: Battlegrounds'), game('c', 'PUBG: Battlegrounds')] })).toEqual([]);
+    expect(cards({ titles: [film('a', 'The Last Duel'), show('b', 'The Last Kingdom'), film('c', 'The Last Samurai')] })).toEqual([]);
+  });
+
+  it('does not bring back a franchise somebody said no to', () => {
+    expect(cards({ dismissed: [['franchise-new', 'dracula']] }).map(([ref]) => ref)).toEqual(['monster train']);
   });
 });

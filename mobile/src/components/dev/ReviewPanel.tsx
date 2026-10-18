@@ -26,7 +26,8 @@ import type { TaxonomyJson } from '~/lib/fandexScore';
 import { catalogTitles, type CatalogTitle } from '~/lib/ipSurvey';
 import { buildTagRows, rawTagCounts } from '~/lib/tagVocab';
 import {
-  runTaxonomySweep, type FranchiseMemberSuggestion, type FranchiseMergeSuggestion, type SweepReport, type TagCategorySuggestion,
+  runTaxonomySweep, type FranchiseMemberSuggestion, type FranchiseMergeSuggestion, type FranchiseNewSuggestion, type SweepReport,
+  type TagCategorySuggestion,
 } from '~/lib/taxonomySweep';
 import { color, font, radius } from '~/theme';
 import { num } from './parts';
@@ -34,10 +35,11 @@ import { Select } from './Select';
 import type { Category } from './WeightsPanel';
 
 type Write = (run: () => Promise<TaxonomyJson>) => Promise<boolean>;
-type Lens = 'all' | 'tag-category' | 'franchise-merge' | 'franchise-member';
+type Lens = 'all' | 'tag-category' | 'franchise-merge' | 'franchise-new' | 'franchise-member';
 
 const LENSES: [Lens, string][] = [
-  ['all', 'Everything'], ['tag-category', 'Tag categories'], ['franchise-merge', 'Franchise merges'], ['franchise-member', 'Missing members'],
+  ['all', 'Everything'], ['tag-category', 'Tag categories'], ['franchise-merge', 'Franchise merges'],
+  ['franchise-new', 'New franchises'], ['franchise-member', 'Missing members'],
 ];
 const MEMBER_PAGE = 40;
 const TAGS_SHOWN = 14;
@@ -175,6 +177,65 @@ function MergeCard({ card, busy, onBundle, onDeny }: {
   );
 }
 
+// ── Titles that are one franchise nobody has named ───────────────────────────
+
+function NewFranchiseCard({ card, busy, onAccept, onDeny }: {
+  card: FranchiseNewSuggestion; busy: boolean; onAccept: (card: FranchiseNewSuggestion, mediaItemIds: string[], label: string) => void; onDeny: () => void;
+}) {
+  // The name is the correction: the proposal takes it from the shortest
+  // title, and the franchise may want another one ("Oz", not "The Wizard of Oz").
+  const [label, setLabel] = useState(card.ipLabel);
+  // What is left out, as on a tag batch: the set starts as everything.
+  const [dropped, setDropped] = useState<Set<string>>(new Set());
+  const ids = card.members.filter((m) => !dropped.has(m.mediaItemId)).map((m) => m.mediaItemId);
+  const toggle = (id: string) => setDropped((d) => { const n = new Set(d); if (!n.delete(id)) n.add(id); return n; });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <View style={{ flexShrink: 1, minWidth: 0, flexBasis: 280, flexGrow: 1 }}>
+          <Text style={[styles.text, { color: color.textPrimary }]}>{card.title}</Text>
+          <Text style={[styles.tiny, { marginTop: 2 }]}>{card.why}</Text>
+        </View>
+        <Text style={[styles.tiny, { marginLeft: 'auto' }]}>{card.members.length} title{card.members.length === 1 ? '' : 's'}</Text>
+      </View>
+
+      <View style={styles.chips}>
+        {card.members.map((m) => {
+          const out = dropped.has(m.mediaItemId);
+          return (
+            <Pressable
+              key={m.mediaItemId} onPress={() => toggle(m.mediaItemId)} accessibilityRole="button"
+              accessibilityLabel={out ? `Put ${m.title} back` : `Leave ${m.title} out of this franchise`}
+              style={[styles.chip, out && { backgroundColor: color.surface }]}
+            >
+              <Text style={[styles.tiny, { color: out ? color.textMuted : color.textPrimary }, out && { textDecorationLine: 'line-through' }]}>
+                {m.title} <Text style={styles.kind}>{m.type}</Text>
+                {m.inFranchises.length ? <Text style={{ color: color.textMuted }}> · also in {m.inFranchises.join(', ')}</Text> : null}
+              </Text>
+            </Pressable>
+          );
+        })}
+        <Text style={[styles.tiny, { fontSize: 11, color: color.textMuted, paddingLeft: 4 }]}>press one to leave it out</Text>
+      </View>
+
+      <View style={styles.actions}>
+        <Button
+          label={busy ? 'Adding…' : `Add ${ids.length}`} disabled={busy || ids.length === 0 || !label.trim()}
+          onPress={() => onAccept(card, ids, label.trim())}
+        />
+        <Text style={styles.tiny}>to</Text>
+        <TextInput
+          value={label} onChangeText={setLabel} editable={!busy} accessibilityLabel="Franchise name"
+          style={[styles.input, { width: 220 }]}
+        />
+        {dropped.size > 0 ? <Text style={[styles.tiny, { color: color.textMuted }]}>{dropped.size} left out</Text> : null}
+        <Button label="Deny" variant="ghost" disabled={busy} onPress={onDeny} style={{ marginLeft: 'auto' }} />
+      </View>
+    </View>
+  );
+}
+
 // ── A title that belongs to a franchise and is in none ───────────────────────
 
 function MemberCard({ card, busy, franchiseLabels, onAttach, onDeny }: {
@@ -282,6 +343,10 @@ export function ReviewPanel({ json, write }: { json: TaxonomyJson; write: Write 
   };
   const bundle = (ref: string, aliasKey: string, canonicalKey: string) => void act(ref, [() => api.adminAddAliases('ip', canonicalKey, [aliasKey])]);
   const attach = (ref: string, mediaItemId: string, label: string) => void act(ref, [() => api.adminIpOverride({ mediaItemId, mode: 'add', label })]);
+  // One attach per title, the Franchises list's own write. The first makes the
+  // franchise (an attach takes a NAME), the rest join it.
+  const found = (card: FranchiseNewSuggestion, mediaItemIds: string[], label: string) =>
+    void act(card.ref, mediaItemIds.map((mediaItemId) => () => api.adminIpOverride({ mediaItemId, mode: 'add', label })));
 
   const deny = async (kind: string, ref: string) => {
     setBusy(ref);
@@ -299,7 +364,7 @@ export function ReviewPanel({ json, write }: { json: TaxonomyJson; write: Write 
   const shown = lens === 'all' ? all : all.filter((s) => s.kind === lens);
   const members = shown.filter((s): s is FranchiseMemberSuggestion => s.kind === 'franchise-member');
   const franchiseLabels = useMemo(() => [...new Set((report?.suggestions ?? []).flatMap((s) =>
-    s.kind === 'franchise-merge' ? [s.canonicalLabel, s.aliasLabel] : s.kind === 'franchise-member' ? [s.ipLabel] : []))].sort(), [report]);
+    s.kind === 'franchise-merge' ? [s.canonicalLabel, s.aliasLabel] : s.kind === 'franchise-member' || s.kind === 'franchise-new' ? [s.ipLabel] : []))].sort(), [report]);
   const sweeping = !report && !error;
 
   return (
@@ -340,6 +405,8 @@ export function ReviewPanel({ json, write }: { json: TaxonomyJson; write: Write 
           <TagCard key={s.ref} card={s} categories={json.tagCategories} busy={busy === s.ref} onAccept={acceptTags} onDeny={() => void deny(s.kind, s.ref)} />
         ) : s.kind === 'franchise-merge' ? (
           <MergeCard key={s.ref} card={s} busy={busy === s.ref} onBundle={bundle} onDeny={() => void deny(s.kind, s.ref)} />
+        ) : s.kind === 'franchise-new' ? (
+          <NewFranchiseCard key={s.ref} card={s} busy={busy === s.ref} onAccept={found} onDeny={() => void deny(s.kind, s.ref)} />
         ) : null))}
         {members.slice(0, memberLimit).map((s) => (
           <MemberCard key={s.ref} card={s} busy={busy === s.ref} franchiseLabels={franchiseLabels} onAttach={attach} onDeny={() => void deny(s.kind, s.ref)} />

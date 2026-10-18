@@ -279,15 +279,15 @@ export async function clearIpOverride(db: D1Database, mediaItemId: string | null
 
 // ── Review: the proposals somebody said no to ────────────────────────────────
 
-const SUGGESTION_KINDS = new Set(["tag-category", "franchise-merge", "franchise-member"]);
+const SUGGESTION_KINDS = new Set(["tag-category", "franchise-merge", "franchise-member", "franchise-new"]);
 
 /**
  * One denied proposal. `ref` is whatever the sweep called it (a rule id,
- * `alias>canonical`, `mediaItemId>ipKey`); it is only ever compared, never
+ * `alias>canonical`, `mediaItemId>ipKey`, a new franchise's key); it is only ever compared, never
  * looked up, so any short string is acceptable.
  */
 export function parseDismissal(kind: unknown, ref: unknown): { kind: string; ref: string } {
-  if (typeof kind !== "string" || !SUGGESTION_KINDS.has(kind)) throw new BadRequest("kind must be tag-category, franchise-merge or franchise-member");
+  if (typeof kind !== "string" || !SUGGESTION_KINDS.has(kind)) throw new BadRequest("kind must be tag-category, franchise-merge, franchise-member or franchise-new");
   return { kind, ref: key(ref, "ref") };
 }
 

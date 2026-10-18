@@ -13,15 +13,18 @@
 // itself, a denied one would come back for ever.
 //
 // Accepting has no route of its own. A tag batch is the Tags table's category
-// write, a merge is the Franchises list's bundle, a membership is its attach.
+// write, a merge is the Franchises list's bundle, a membership is its attach,
+// and a new franchise is one attach per title.
 
 import { categorizeTag } from '@/lib/tags';
 import { TAG_RULES, ruleFor, type TagRule } from '@/lib/taxonomyRules';
 import type { TaxonomyJson } from '~/lib/fandexScore';
-import { suggestFranchisesByTitle, surveyFranchises, type CatalogTitle, type FranchiseRow } from '~/lib/ipSurvey';
+import {
+  suggestFranchisesByTitle, suggestNewFranchises, surveyFranchises, type CatalogTitle, type FranchiseRow, type NewFranchiseMember,
+} from '~/lib/ipSurvey';
 import type { TagRow } from '~/lib/tagVocab';
 
-export type SuggestionKind = 'tag-category' | 'franchise-merge' | 'franchise-member';
+export type SuggestionKind = 'tag-category' | 'franchise-merge' | 'franchise-member' | 'franchise-new';
 
 export interface SuggestedTag { key: string; label: string; count: number }
 
@@ -65,7 +68,22 @@ export interface FranchiseMemberSuggestion {
   franchiseSize: number;
 }
 
-export type Suggestion = TagCategorySuggestion | FranchiseMergeSuggestion | FranchiseMemberSuggestion;
+export interface FranchiseNewSuggestion {
+  kind: 'franchise-new';
+  /** The proposed franchise's key. A no to it is a no to the franchise, whichever titles it would hold. */
+  ref: string;
+  title: string;
+  why: string;
+  signal: 'same-work' | 'shared-words';
+  ipKey: string;
+  ipLabel: string;
+  /** True when the franchise exists and the titles join it. */
+  joins: boolean;
+  /** What accepting attaches, one row each. */
+  members: NewFranchiseMember[];
+}
+
+export type Suggestion = TagCategorySuggestion | FranchiseMergeSuggestion | FranchiseMemberSuggestion | FranchiseNewSuggestion;
 
 export interface SweepReport {
   suggestions: Suggestion[];
@@ -224,6 +242,39 @@ function memberSuggestions(titles: CatalogTitle[], tax: TaxonomyJson, survey: Fr
     .sort((a, b) => b.franchiseSize - a.franchiseSize || a.itemTitle.localeCompare(b.itemTitle));
 }
 
+// ── New franchises ──────────────────────────────────────────────────────────
+
+const MEDIA: Record<string, string> = { book: 'a book', movie: 'a film', show: 'a show', game: 'a game', boardgame: 'a board game' };
+
+function mediaList(types: string[]): string {
+  const names = [...new Set(types)].sort().map((t) => MEDIA[t] ?? t);
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+function newFranchiseSuggestions(
+  titles: CatalogTitle[], tax: TaxonomyJson, survey: FranchiseRow[], members: FranchiseMemberSuggestion[], dismissed: Set<string>,
+): FranchiseNewSuggestion[] {
+  // A title a membership card already offers to this same franchise is that
+  // card's. Two cards writing one row would leave the second one stale.
+  const offered = new Set(members.map((m) => m.ref));
+  const out: FranchiseNewSuggestion[] = [];
+  for (const s of suggestNewFranchises(titles, tax, survey)) {
+    if (dismissed.has(`franchise-new|${s.ipKey}`)) continue;
+    const list = s.members.filter((m) => !offered.has(`${m.mediaItemId}>${s.ipKey}`));
+    if (!list.length) continue;
+    const why = s.joins
+      ? `The same name as a title already in ${s.ipLabel}, in another medium, and placed nowhere yet.`
+      : s.signal === 'same-work'
+        ? `One name as ${mediaList(list.map((m) => m.type))}, and no provider puts them in a franchise together.`
+        : `${list.length} titles begin with "${s.ipLabel}" and no provider names the series.`;
+    out.push({
+      kind: 'franchise-new', ref: s.ipKey, title: s.joins ? `Join ${s.ipLabel}` : `New franchise: ${s.ipLabel}`, why,
+      signal: s.signal, ipKey: s.ipKey, ipLabel: s.ipLabel, joins: s.joins, members: list,
+    });
+  }
+  return out;
+}
+
 // ── The sweep ────────────────────────────────────────────────────────────────
 
 export function runTaxonomySweep(input: {
@@ -238,10 +289,12 @@ export function runTaxonomySweep(input: {
   const dismissed = new Set(input.dismissed.map(([kind, ref]) => `${kind}|${ref}`));
   const survey = surveyFranchises(input.titles, input.tax);
   const tags = tagSuggestions(input.tags, input.tax, dismissed);
+  const members = memberSuggestions(input.titles, input.tax, survey, dismissed);
   const suggestions: Suggestion[] = [
     ...tags.list,
     ...mergeSuggestions(survey, dismissed),
-    ...memberSuggestions(input.titles, input.tax, survey, dismissed),
+    ...newFranchiseSuggestions(input.titles, input.tax, survey, members, dismissed),
+    ...members,
   ];
   const covered = tags.list.reduce((n, s) => n + s.tags.length, 0);
   return {

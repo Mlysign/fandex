@@ -176,6 +176,7 @@ describe("a proposal somebody said no to", () => {
 
   it("refuses a kind the sweep does not make, and an empty ref", () => {
     expect(parseDismissal("tag-category", "moods")).toEqual({ kind: "tag-category", ref: "moods" });
+    expect(parseDismissal("franchise-new", "dracula")).toEqual({ kind: "franchise-new", ref: "dracula" });
     expect(() => parseDismissal("user", "x")).toThrow("kind must be");
     expect(() => parseDismissal("franchise-member", "")).toThrow("ref is required");
     expect(() => parseDismissal("franchise-member", null)).toThrow("ref is required");
