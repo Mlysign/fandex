@@ -3,11 +3,11 @@
 // Ports of src/components/SubBar.tsx, ui/TypeFilter.tsx, ui/CollapsibleChips.tsx
 // and LibraryWishlistTabs.tsx.
 //
-// The Filters sheet is components/Filters.tsx. Not carried over yet: hiding
-// the bar while scrolling down.
+// The Filters sheet is components/Filters.tsx. Hiding the bar while a list
+// scrolls down is lib/barScroll.tsx.
 
 import { ChevronLeft, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import { SearchBar, SortMenu } from '~/components/kit';
@@ -16,7 +16,7 @@ import { useTypeFilter } from '~/lib/typeFilter';
 import { useOfferedTypes } from '~/lib/features';
 import { TYPE_ICONS as SHARED_TYPE_ICONS } from '~/lib/typeIcons';
 import { useOutsideClose } from '~/lib/useOutsideClose';
-import { useBarHidden } from '~/lib/barScroll';
+import { useBarFrame } from '~/lib/barScroll';
 import { breakpoint, color, radius, type, TYPE_PLURAL } from '~/theme';
 
 const TYPE_ICONS: Record<string, typeof Gamepad2> = SHARED_TYPE_ICONS;
@@ -192,18 +192,25 @@ export function SubBar<S extends string>({ tabs, filters, trailing, search, coun
   const claimed = parts.length ? parts.reduce((a, b) => a + b, 0) + parts.length * 8 + (filters ? 48 : 0) : 0;
   const room = useMemo(() => ({ width: rowWidth, claim, claimed }), [rowWidth, claim, claimed]);
 
-  // Out of the way while the list scrolls down, back on any scroll up (lib/barScroll.tsx). A phone only.
+  // Out of the way while the list scrolls down, back on any scroll up. A phone
+  // only. Over a list it floats and slides, and never moves the list (lib/barScroll.tsx).
   const { width } = useWindowDimensions();
-  const hide = useBarHidden() && width < breakpoint.md;
+  const phone = width < breakpoint.md;
+  const frame = useBarFrame();
+  const setFrameHeight = frame?.setHeight;
   const [barHeight, setBarHeight] = useState(0);
+  useLayoutEffect(() => setFrameHeight?.(phone ? barHeight : 0), [setFrameHeight, phone, barHeight]);
+  const floating = !!frame?.floating;
+  const hide = !!frame?.hidden;
   const shift = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(shift, { toValue: hide ? -barHeight : 0, duration: 200, useNativeDriver: false }).start();
+    Animated.timing(shift, { toValue: hide ? -barHeight : 0, duration: 200, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [hide, barHeight, shift]);
 
   return (
-    <View style={{ overflow: 'hidden' }}>
-    <Animated.View style={[styles.bar, { marginTop: shift }]} onLayout={(e) => setBarHeight(Math.ceil(e.nativeEvent.layout.height))}>
+    // box-none: once the bar has slid away, the list under this frame takes the touches.
+    <View style={[{ overflow: 'hidden', pointerEvents: 'box-none' }, floating && styles.float]}>
+    <Animated.View style={[styles.bar, { transform: [{ translateY: shift }] }]} onLayout={(e) => setBarHeight(Math.ceil(e.nativeEvent.layout.height))}>
       <View style={styles.inner}>
         <View style={styles.top}>
           <ChipRoom.Provider value={room}>
@@ -234,6 +241,7 @@ export function SubBar<S extends string>({ tabs, filters, trailing, search, coun
 }
 
 const styles = StyleSheet.create({
+  float: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   bar: { backgroundColor: color.surface, borderBottomWidth: 1, borderBottomColor: color.border, paddingHorizontal: 24, paddingVertical: 12 },
   inner: { width: '100%', maxWidth: 1152, alignSelf: 'center', gap: 12 },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
