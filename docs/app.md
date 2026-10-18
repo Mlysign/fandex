@@ -128,6 +128,15 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   transaction is active". The catalog download and the pull of your rows overlap in any tab or
   install that is still downloading, and what the screen showed was "Could not refresh your
   library" over 0 titles. `inTransaction` queues them.
+- **A re-read keeps the screen; only another page blanks it** (2026-10-18). Rating a title can bring it
+  into the catalog copy, which bumps `catalog.revision` a few seconds later; a screen that set its list
+  to null on that bump redrew the grid at the top. `FacetScreen` and the item page's rails remember which
+  page they were showing (a ref) and reset only when that changes.
+- **A provider card carries its genres** (`CardItem.genres`: Open Library subjects, TMDB genre ids by
+  name through `@/lib/tmdbGenres`, IGDB genres and themes from the Worker), so a facet page estimates a
+  Fandex Score for a title nobody holds from them and the page's own facet (`estimateFacets`,
+  `lib/facetImpact.ts`). The Worker's game routes key their edge cache on `GAME_CARD_VERSION`; bump it
+  when `gameCard` changes, or the old shape is served for up to a week.
 - **A screen that shows your rows must say when they are still arriving.** A fresh tab or a new
   sign-in has an empty copy for some seconds. Insights said "No rated items" and the episode
   tracker said "0 of 19 watched" in that window, and a tick made from the second one would have

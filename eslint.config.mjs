@@ -7,6 +7,10 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Gitignored working data. The weekly taxonomy sweep writes a work folder
+    // under data/taxonomy-sweep/ and may leave a helper script in it; a local
+    // lint read one as an error that CI, which has no data/, never sees.
+    "data/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
