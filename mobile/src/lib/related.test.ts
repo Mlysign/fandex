@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { facetId as siteFacetId } from '@/lib/facets';
 import type { ItemVector } from '~/lib/api';
-import { facetId, prepareTaxonomy, type ScoreFacet, type TaxonomyJson } from '~/lib/fandexScore';
+import { facetId, prepareTaxonomy, resolveFacets, type ScoreFacet, type TaxonomyJson } from '~/lib/fandexScore';
 import { franchiseCandidateIds, indexFacets, pickRelated } from '~/lib/related';
 
 // The rankers are the site's and are tested there (similarItems, franchise).
@@ -160,7 +160,57 @@ describe('the two rails', () => {
   it('shows no similar rail for fewer than three titles, and no franchise rail for a franchise of one', () => {
     const rows = [{ id: 'a', facets: [ip('solo'), tag('odd')] }, { id: 'b', facets: [tag('odd')] }, { id: 'c', facets: [tag('other')] }];
     const small = indexFacets(rows, tax);
-    expect(pickRelated({ id: 'a', facets: rows[0].facets, index: small, vectors: new Map([['a', vector('a')]]), tax })).toEqual({ franchise: null, similar: [] });
+    expect(pickRelated({ id: 'a', facets: rows[0].facets, index: small, vectors: new Map([['a', vector('a')]]), tax })).toEqual({ series: null, franchise: null, similar: [] });
+  });
+
+  // 2026-10-18: "the franchise carousel of Harry Potter has so many entries and
+  // it is not clear which books are the main book series".
+  describe('the series rail', () => {
+    const hp = (id: string, type: string, raw: string, year: number): { id: string; type: string; facets: ScoreFacet[] } =>
+      ({ id, type, facets: [ip(raw, raw === 'harry potter' ? 'Harry Potter Collection' : 'Harry Potter'), tag('magic')] });
+    // Seven books and eight films under the provider key; a game and a companion book attached by hand.
+    const rows = [
+      ...Array.from({ length: 7 }, (_, i) => hp(`book${i + 1}`, 'book', 'harry potter', 1997 + i)),
+      ...Array.from({ length: 8 }, (_, i) => hp(`film${i + 1}`, 'movie', 'harry potter', 2001 + i)),
+      { id: 'game', type: 'game', facets: [tag('magic')] },
+      { id: 'companion', type: 'book', facets: [tag('magic')] },
+    ];
+    const tax = taxonomy({ itemIpOverrides: [
+      { mediaItemId: 'game', ipKey: 'harry potter', label: 'Harry Potter', mode: 'add', source: 'manual' },
+      { mediaItemId: 'companion', ipKey: 'harry potter', label: 'Harry Potter', mode: 'add', source: 'manual' },
+    ] });
+    const idx = indexFacets(rows, tax);
+    const vectors = new Map(rows.map((r, i) => [r.id, vector(r.id, { type: r.type as never, releaseDate: `${1990 + i}-01-01` })]));
+    const pick = (id: string) => pickRelated({ id, facets: resolveFacets(rows.find((r) => r.id === id)!.facets, id, tax), rawFacets: rows.find((r) => r.id === id)!.facets, index: idx, vectors, tax });
+
+    it('is the provider series of this medium, oldest first, beside the whole franchise', () => {
+      const picked = pick('book3');
+      expect(picked.series).toEqual({ label: 'Harry Potter books', ids: ['book1', 'book2', 'book4', 'book5', 'book6', 'book7'] });
+      // The franchise rail still holds everything: the films, the game and the companion book.
+      expect(picked.franchise?.ids).toHaveLength(16);
+      expect(picked.franchise?.ids).toContain('companion');
+    });
+
+    it('names a series inside a bigger franchise by its own name', () => {
+      const dk = (id: string, year: number) => ({ id, type: 'movie', facets: [ip('the dark knight', 'The Dark Knight Collection')] });
+      const bat = (id: string) => ({ id, type: 'movie', facets: [ip('batman', 'Batman Collection')] });
+      const r = [dk('begins', 2005), dk('dark knight', 2008), dk('rises', 2012), bat('batman 89'), bat('returns'), bat('forever')];
+      const bundled = taxonomy({ ipAliases: [['the dark knight', 'batman']] });
+      const i2 = indexFacets(r, bundled);
+      const v = new Map(r.map((x, n) => [x.id, vector(x.id, { releaseDate: `${2000 + n}-01-01` })]));
+      const picked = pickRelated({ id: 'begins', facets: resolveFacets(r[0].facets, 'begins', bundled), rawFacets: r[0].facets, index: i2, vectors: v, tax: bundled });
+      expect(picked.series).toEqual({ label: 'The Dark Knight series', ids: ['dark knight', 'rises'] });
+      // The franchise rail is the whole bundle (its label is the item's own spelling until a name is chosen).
+      expect(picked.franchise?.ids).toHaveLength(5);
+    });
+
+    it('is left out when it would repeat the franchise rail, or for fewer than three titles', () => {
+      const r = [hp('a', 'movie', 'alien', 1979), hp('b', 'movie', 'alien', 1986), hp('c', 'movie', 'alien', 1992)];
+      const i2 = indexFacets(r, taxonomy());
+      const v = new Map(r.map((x) => [x.id, vector(x.id)]));
+      expect(pickRelated({ id: 'a', facets: r[0].facets, rawFacets: r[0].facets, index: i2, vectors: v, tax: taxonomy() }).series).toBeNull();
+      expect(pick('game').series).toBeNull();
+    });
   });
 
   it('bundling two franchises makes one rail of both', () => {

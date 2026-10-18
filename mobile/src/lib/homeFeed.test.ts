@@ -1,9 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { recommend, tierOf, type Candidate } from '~/lib/homeFeed';
+import { balanceByType, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard } from '~/lib/homeFeed';
 import { BAND_MARGIN } from '~/lib/scoreReasons';
 
-const card = (key: string, id: string | null = null): Candidate => ({
-  key, id, type: 'movie', title: key, releaseDate: '2026-12-01', posterUrl: null, communityScore: null, genres: [],
+const card = (key: string, id: string | null = null, type: Candidate['type'] = 'movie'): Candidate => ({
+  key, id, type, title: key, releaseDate: '2026-12-01', posterUrl: null, communityScore: null, genres: [],
+});
+
+describe('an even share of each type', () => {
+  const many = (type: string, n: number) => Array.from({ length: n }, (_, i) => ({ type, key: `${type}${i}` }));
+
+  it('deals the types in turn, each from its own ranking', () => {
+    const out = balanceByType([...many('game', 40), ...many('movie', 40), ...many('book', 40)], 15, 'test', '2026-10-18');
+    expect(out).toHaveLength(15);
+    const count = (t: string) => out.filter((c) => c.type === t).length;
+    expect(count('game')).toBe(5);
+    expect(count('movie')).toBe(5);
+    expect(count('book')).toBe(5);
+    expect(out.slice(0, 3).map((c) => c.type).sort()).toEqual(['book', 'game', 'movie']);
+    // The best of each type leads its share.
+    expect(out.filter((c) => c.type === 'book')[0].key).toBe('book0');
+  });
+
+  it('hands a short type’s unused slots to the others', () => {
+    const out = balanceByType([...many('game', 40), ...many('book', 2)], 15, 'test', '2026-10-18');
+    expect(out).toHaveLength(15);
+    expect(out.filter((c) => c.type === 'book')).toHaveLength(2);
+    expect(out.filter((c) => c.type === 'game')).toHaveLength(13);
+  });
+
+  it('is the plain rotation when one type is all there is', () => {
+    const out = balanceByType(many('game', 40), 15, 'test', '2026-10-18');
+    expect(out).toHaveLength(15);
+    expect(out.slice(0, 3).map((c) => c.key)).toEqual(['game0', 'game1', 'game2']);
+  });
+
+  it('keeps Recommended to the types on screen before sharing', () => {
+    const cards = [...Array.from({ length: 20 }, (_, i) => card(`g${i}`, null, 'game')), ...Array.from({ length: 20 }, (_, i) => card(`b${i}`, null, 'book'))];
+    const out = recommend([cards], () => 90, () => false, 50, ['book']);
+    expect(out).toHaveLength(RAIL_SIZE);
+    expect(out.every((c) => c.type === 'book')).toBe(true);
+  });
+
+  it('builds Upcoming for the types on screen, soonest first', () => {
+    const feed = (key: string, type: FeedCard['type'], date: string): FeedCard => ({ ...card(key, null, type), releaseDate: date, genres: [] });
+    const out = upcomingRail([feed('g', 'game', '2026-12-05'), feed('m', 'movie', '2026-11-01'), feed('b', 'book', '2026-11-20')], ['movie', 'book']);
+    expect(out.map((c) => c.key)).toEqual(['m', 'b']);
+  });
 });
 
 describe('Recommended for you', () => {

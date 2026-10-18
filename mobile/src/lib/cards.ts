@@ -34,6 +34,8 @@ export interface CardItem {
   fandexScore?: number | null;
   /** On a person's or a studio's page: the part they had in this title ("Director · as Tony Stark", "Author"). */
   role?: string | null;
+  /** The same, as the catalog's role keys (`director`, `cast`, `publisher`): what a score can be estimated from for a title nobody holds. */
+  roles?: string[];
 }
 
 export function cardFromCatalog(r: CatalogRow): CardItem {

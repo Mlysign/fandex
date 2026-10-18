@@ -41,7 +41,8 @@ describe('where a reason leads', () => {
     expect(reasonHref(reason('Warner Bros. Pictures', 1, { kind: 'company', role: 'studio' }))).toMatch(/^\/studio\/warner/);
   });
   it('has nowhere to go for a franchise', () => {
-    expect(reasonHref(reason('Alien', 1, { kind: 'ip', role: 'ip' }))).toBeNull();
+    // A franchise has a page since 2026-10-18, under the key every spelling of its name shares.
+    expect(reasonHref(reason('Alien Collection', 1, { kind: 'ip', role: 'ip' }))).toBe('/franchise/alien');
   });
 });
 

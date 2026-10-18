@@ -30,7 +30,7 @@ import { prepareTaxonomy, resolveFacets, type ScoreFacet, type Taxonomy, type Ta
 import { indexFacets, pickRelated } from '~/lib/related';
 import { byPopularity } from '~/lib/sortCards';
 import { type } from '~/theme';
-import { personKey } from '@/lib/facets';
+import { ipDisplayLabel, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import { buildEntityJsonLd, jsonLdScript } from '@/lib/jsonLd';
 import { everyLegalRoute, getLegalDocument } from '@/lib/legal/registry';
@@ -56,7 +56,7 @@ function Frame({ path, children }: { path: string; children: ReactNode }) {
   );
 }
 
-export interface StaticRails { franchise: { label: string; items: CardItem[] } | null; similar: CardItem[] }
+export interface StaticRails { series?: { label: string; items: CardItem[] } | null; franchise: { label: string; items: CardItem[] } | null; similar: CardItem[] }
 
 function Page({ item, taxonomy, rails }: { item: ItemDetail; taxonomy: Taxonomy | null; rails: StaticRails | null }) {
   const path = `/${item.type}/${item.slug}`;
@@ -70,8 +70,9 @@ function Page({ item, taxonomy, rails }: { item: ItemDetail; taxonomy: Taxonomy 
               // app's own ranker (lib/related.ts). They are the page's links to other
               // titles: what a crawler follows, and the one lever on crawl priority
               // that is ours (docs/seo.md).
-              related={rails && (rails.franchise?.items.length || rails.similar.length) ? (
+              related={rails && (rails.series?.items.length || rails.franchise?.items.length || rails.similar.length) ? (
                 <>
+                  {rails.series?.items.length ? <StaticRail title={rails.series.label} items={rails.series.items} /> : null}
                   {rails.franchise?.items.length ? <StaticRail title={`More from ${rails.franchise.label}`} items={rails.franchise.items} /> : null}
                   {rails.similar.length ? <StaticRail title="More like this" items={rails.similar} /> : null}
                 </>
@@ -169,6 +170,7 @@ export function facetHead(facet: FacetPageData): { title: string; description: s
   const description =
     facet.kind === 'person' ? `Every movie and show ${label} worked on, with ratings and where to watch.`
     : facet.kind === 'studio' ? `Movies, shows and games from ${label}, ranked by rating.`
+    : facet.kind === 'franchise' ? `Every ${label} movie, show, game and book in one place, ranked by rating.`
     : `The best ${label} movies, shows, games and books, ranked by rating.`;
   return { title: label, description, canonical: `${SITE}/${facet.kind}/${facet.slug}` };
 }
@@ -180,7 +182,7 @@ const cardOf = (v: ItemVector): CardItem => ({
   key: v.id, id: v.id, type: v.type, title: v.title, slug: v.slug, releaseDate: v.releaseDate,
   posterUrl: v.posterUrl, communityScore: v.communityScore, communityVotes: v.communityVotes,
 });
-const PAGE_KIND: Record<string, FacetKind> = { tag: 'tag', person: 'person', company: 'studio' };
+const PAGE_KIND: Record<string, FacetKind> = { tag: 'tag', person: 'person', company: 'studio', ip: 'franchise' };
 /** An address the build may write a file for. A tag key can keep punctuation; those stay app-only. */
 const SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
@@ -191,17 +193,23 @@ const SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
  * page, which it marked noindex; here it gets no static page at all and its
  * address loads the app, as it did before.
  */
-export function facetPages(pool: PoolTitle[], min = 3): FacetPageData[] {
+export function facetPages(pool: PoolTitle[], min = 3, taxonomyJson?: TaxonomyJson): FacetPageData[] {
   // `ids`: each title carrying the facet, with the roles it files the person or studio under.
   const groups = new Map<string, { kind: FacetKind; key: string; label: string; roles: Map<string, number>; ids: Map<string, string[]> }>();
-  for (const { vector, facets } of pool) {
+  // A franchise page is the franchise after the taxonomy: bundles folded, hand-made
+  // attaches in, detaches out, the chosen name shown. The same facets the app's
+  // FacetScreen and the score read (lib/fandexScore.ts, resolveFacets).
+  const tax = taxonomyJson ? prepareTaxonomy(taxonomyJson) : null;
+  for (const { vector, facets: raw } of pool) {
+    const facets = tax ? resolveFacets(raw, vector.id, tax) : raw;
     for (const f of facets) {
       const kind = PAGE_KIND[f.kind];
       if (!kind || !f.key) continue;
+      if (kind === 'franchise' && !tax) continue;
       const key = spokenKey(f.key);
       const id = `${kind}:${key}`;
       let g = groups.get(id);
-      if (!g) groups.set(id, g = { kind, key, label: f.label || key, roles: new Map(), ids: new Map() });
+      if (!g) groups.set(id, g = { kind, key, label: kind === 'franchise' ? ipDisplayLabel(f.label || key) : f.label || key, roles: new Map(), ids: new Map() });
       const held = g.ids.get(vector.id) ?? [];
       g.ids.set(vector.id, held);
       const role = (f as { role?: string }).role;
@@ -322,22 +330,35 @@ const styles = StyleSheet.create({
 
 // ── Popular people ───────────────────────────────────────────────────────────
 
-/** The old site's role weights (src/lib/discovery.ts, ROLE_WEIGHT). */
+/** The old site's role weights (src/lib/discovery.ts, ROLE_WEIGHT). A book's author is its `creator`. */
 const PERSON_ROLE_WEIGHT: Record<string, number> = { director: 1.3, creator: 1.3, writer: 1.0, cast: 0.6 };
 /** The old site's index threshold: a person on fewer titles has no static page to link to. */
 const PEOPLE_MIN_TITLES = 3;
-/** Ranked this deep; the app rotates a shorter rail out of it. */
-const PEOPLE_POOL = 60;
+/**
+ * Ranked this deep; the app rotates a shorter rail out of it. Was 60, which
+ * with a rail of 20 and a day-seeded draw showed much the same faces every day
+ * (Nils, 2026-10-18); the app now deals disjoint hands out of the pool every
+ * six hours (`rotateRailFresh`), and 150 is room for a day's four hands.
+ */
+const PEOPLE_POOL = 150;
 
 export interface PopularPersonOut {
   key: string; name: string; href: string; portraitUrl: string | null; titleCount: number; topRole: string; score: number;
+  /** The medium most of their titles are: a book's `creator` is shown as its author. */
+  topType: string;
 }
 
 /**
  * Home's "Popular people", as the old site ranked it (src/lib/popularPeople.ts):
  * the sum over pool titles of the role's weight times a gentle recency factor,
- * three titles or more. The portraits come from the titles' cast lists, which
- * the build already holds, so neither the build nor the app asks TMDB per face.
+ * three titles or more. Since 2026-10-18 each title also counts by how many
+ * people rated it (the log of its vote count), so somebody on a few titles
+ * everybody knows outranks somebody on many nobody has heard of: "actually
+ * popular people" (Nils), without asking TMDB for a popularity per face. Book
+ * authors are in it by the same sum (their role is `creator`); their portraits
+ * are Open Library's, fetched by the build (build.mjs, `authorPortraits`).
+ * The screen portraits come from the titles' cast lists, which the build
+ * already holds, so neither the build nor the app asks TMDB per face.
  */
 export function popularPeople(pool: PoolTitle[], details: Iterable<ItemDetail>, now = new Date()): PopularPersonOut[] {
   const thisYear = now.getUTCFullYear();
@@ -346,16 +367,19 @@ export function popularPeople(pool: PoolTitle[], details: Iterable<ItemDetail>, 
     if (!Number.isFinite(age)) return 1;
     return age <= 1 ? 1.6 : age <= 3 ? 1.35 : age <= 8 ? 1.15 : age <= 20 ? 1 : 0.85;
   };
-  const acc = new Map<string, { name: string; score: number; items: Set<string>; roles: Map<string, number> }>();
+  // A title's reach, 0.3 for one nobody rated to about 1.5 for one with a hundred thousand votes.
+  const reach = (votes: number | null | undefined) => 0.3 + 0.25 * Math.log10(1 + Math.max(0, votes ?? 0));
+  const acc = new Map<string, { name: string; score: number; items: Set<string>; roles: Map<string, number>; types: Map<string, number> }>();
   for (const { vector, facets } of pool) {
-    const boost = recency(vector.releaseDate);
+    const boost = recency(vector.releaseDate) * reach(vector.communityVotes);
     for (const f of facets as (ScoreFacet & { role?: string; prominence?: number })[]) {
       if (f.kind !== 'person' || !f.role || !f.key) continue;
       const weight = (PERSON_ROLE_WEIGHT[f.role] ?? 1) * (f.prominence ?? 1);
-      const cur = acc.get(f.key) ?? { name: f.label || f.key, score: 0, items: new Set<string>(), roles: new Map<string, number>() };
+      const cur = acc.get(f.key) ?? { name: f.label || f.key, score: 0, items: new Set<string>(), roles: new Map<string, number>(), types: new Map<string, number>() };
       cur.score += weight * boost;
       cur.items.add(vector.id);
       cur.roles.set(f.role, (cur.roles.get(f.role) ?? 0) + weight);
+      cur.types.set(vector.type, (cur.types.get(vector.type) ?? 0) + 1);
       if (f.label && f.label.length > cur.name.length) cur.name = f.label;
       acc.set(f.key, cur);
     }
@@ -372,7 +396,8 @@ export function popularPeople(pool: PoolTitle[], details: Iterable<ItemDetail>, 
     const slug = keyToSlug(key);
     if (!SAFE_SLUG.test(slug)) continue;
     const topRole = [...a.roles.entries()].sort((x, y) => y[1] - x[1])[0][0];
-    out.push({ key, name: a.name, href: `/person/${slug}`, portraitUrl: portraits.get(key) ?? null, titleCount: a.items.size, topRole, score: a.score });
+    const topType = [...a.types.entries()].sort((x, y) => y[1] - x[1])[0][0];
+    out.push({ key, name: a.name, href: `/person/${slug}`, portraitUrl: portraits.get(key) ?? null, titleCount: a.items.size, topRole, topType, score: a.score });
   }
   return out.sort((x, y) => y.score - x.score).slice(0, PEOPLE_POOL);
 }
@@ -383,9 +408,10 @@ export function relatedPicker(pool: PoolTitle[], taxonomyJson: TaxonomyJson): (i
   const index = indexFacets(pool.map((p) => ({ id: p.vector.id, type: p.vector.type, votes: p.vector.communityVotes ?? 0, facets: p.facets })), tax);
   const vectors = new Map(pool.map((p) => [p.vector.id, p.vector]));
   return (id, rawFacets) => {
-    const picked = pickRelated({ id, facets: resolveFacets(rawFacets, id, tax), index, vectors, tax });
+    const picked = pickRelated({ id, facets: resolveFacets(rawFacets, id, tax), rawFacets, index, vectors, tax });
     const cards = (ids: string[]) => ids.map((i) => vectors.get(i)).filter((v): v is ItemVector => !!v && !!v.slug).map(cardOf);
     return {
+      series: picked.series ? { label: picked.series.label, items: cards(picked.series.ids) } : null,
       franchise: picked.franchise ? { label: picked.franchise.label, items: cards(picked.franchise.ids) } : null,
       similar: cards(picked.similar),
     };

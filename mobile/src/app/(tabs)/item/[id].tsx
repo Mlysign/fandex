@@ -112,9 +112,11 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
     return () => { live = false; };
   }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId, bookSeries]);
 
-  if (!rails || (!rails.franchise?.items.length && !rails.similar.length)) return null;
+  if (!rails || (!rails.series?.items.length && !rails.franchise?.items.length && !rails.similar.length)) return null;
   return (
     <View style={{ gap: 40 }}>
+      {/* The provider's own series of this medium, in order, before the whole franchise (lib/related.ts, seriesForItem). */}
+      {rails.series?.items.length ? <CardRail title={rails.series.label} items={rails.series.items} /> : null}
       {rails.franchise?.items.length ? <CardRail title={`More from ${rails.franchise.label}`} items={rails.franchise.items} /> : null}
       {rails.similar.length ? <CardRail title="More like this" items={rails.similar} /> : null}
     </View>

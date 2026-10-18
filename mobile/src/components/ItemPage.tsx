@@ -16,7 +16,7 @@
 import { ArrowLeft, ArrowRight, Globe, Share2 } from 'lucide-react-native';
 import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
-import { companyKey, personKey } from '@/lib/facets';
+import { companyKey, ipDisplayLabel, ipKey, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { BrandGlyph, hasBrandMark } from '~/components/BrandGlyph';
@@ -280,17 +280,19 @@ function FacetLink({ href, label, style, children }: { href: string; label?: str
 }
 
 /** One row of the facts table. `linkTo` makes each name in the value a link to its own page. */
-function Fact({ label, value, linkTo }: { label: string; value: string | null | undefined; linkTo?: 'person' | 'studio' }) {
+function Fact({ label, value, linkTo }: { label: string; value: string | null | undefined; linkTo?: 'person' | 'studio' | 'franchise' }) {
   if (!value) return null;
-  const names = linkTo ? value.split(', ').filter(Boolean) : [];
+  // A franchise's name can hold a comma ("Pirates of the Caribbean, Wonders"): it is one link.
+  const names = linkTo === 'franchise' ? [value] : linkTo ? value.split(', ').filter(Boolean) : [];
   return (
     <View style={styles.fact}>
       <T variant="caption">{label}</T>
       {linkTo ? (
         <View style={styles.factLinks}>
           {names.map((name) => {
-            const key = linkTo === 'person' ? personKey(name) : companyKey(name);
-            const tint = linkTo === 'person' ? color.facet.person : color.facet.company;
+            const key = linkTo === 'person' ? personKey(name) : linkTo === 'franchise' ? ipKey(name) : companyKey(name);
+            // A franchise takes the tag's colour: the palette is four colours, on purpose.
+            const tint = linkTo === 'person' ? color.facet.person : linkTo === 'franchise' ? color.facet.tag : color.facet.company;
             return key ? (
               <FacetLink key={name} href={`/${linkTo}/${keyToSlug(key)}`}>
                 <T variant="body" style={[styles.factValue, { color: tint }]}>{name}</T>
@@ -479,7 +481,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="Age" value={m.minAge ? `${m.minAge}+` : null} />
           <Fact label="Weight" value={m.weight ? `${m.weight.toFixed(1)} / 5` : null} />
           <Fact label="ISBN" value={m.isbn ?? null} />
-          <Fact label={item.type === 'game' ? 'Franchise' : item.type === 'book' || item.type === 'boardgame' ? 'Series' : 'Collection'} value={m.collection} />
+          {/* Leads to the franchise's page (2026-10-18), named without the provider's "Collection". */}
+          <Fact label={item.type === 'game' ? 'Franchise' : item.type === 'book' || item.type === 'boardgame' ? 'Series' : 'Collection'} value={m.collection ? ipDisplayLabel(m.collection) : null} linkTo="franchise" />
           <Fact label="Language" value={m.originalLanguage} />
           <Fact label="Country" value={m.country} />
           <Fact label="Avg playtime" value={m.playtimeHours ? `${m.playtimeHours}h` : null} />

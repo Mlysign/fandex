@@ -152,13 +152,19 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
 
   const day = dayISO();
   const candidates = future.map((c) => toCard(c, held));
-  const upcoming = rotateRail(candidates, RAIL_SIZE, seedFor('upcoming', day))
-    .sort((a, b) => ((a.releaseDate as string) < (b.releaseDate as string) ? -1 : 1));
+  const upcoming = upcomingRail(candidates);
   const trending = rotateRail((await trendingAsked) ?? released.map((c) => toCard(c, held)), RAIL_SIZE, seedFor('trending', day));
 
   const feed = { trending, upcoming, candidates };
   cached = { at: Date.now(), region, feed };
   return feed;
+}
+
+/** Today's Upcoming rail out of the calendar's candidates: an even share of each type the viewer is looking at, soonest first. */
+export function upcomingRail(candidates: FeedCard[], types?: readonly string[]): FeedCard[] {
+  const pool = types ? candidates.filter((c) => types.includes(c.type)) : candidates;
+  return balanceByType(pool, RAIL_SIZE, 'upcoming')
+    .sort((a, b) => ((a.releaseDate as string) < (b.releaseDate as string) ? -1 : 1));
 }
 
 /** A title the rail may recommend: a calendar card, or a row of the catalog copy. */
@@ -178,7 +184,11 @@ export type Candidate = CardItem & { genres?: string[] };
  * the first. `center` is your average; null means there is no taste profile,
  * and nothing is recommended.
  */
-export function recommend<T extends Candidate>(tiers: T[][], scoreOf: (c: T) => number | null, skip: (c: T) => boolean, center: number | null): (T & { fandexScore: number })[] {
+export function recommend<T extends Candidate>(
+  tiers: T[][], scoreOf: (c: T) => number | null, skip: (c: T) => boolean, center: number | null,
+  /** The media types the rail may hold, each given an even share. Everything when absent. */
+  types?: readonly string[],
+): (T & { fandexScore: number })[] {
   if (center == null) return [];
   const seen = new Set<string>();
   const ranked: (T & { fandexScore: number })[] = [];
@@ -186,7 +196,7 @@ export function recommend<T extends Candidate>(tiers: T[][], scoreOf: (c: T) => 
     const strong = tier
       .filter((c) => {
         const key = c.id ?? c.key;
-        if (seen.has(key) || skip(c)) return false;
+        if (seen.has(key) || skip(c) || (types && !types.includes(c.type))) return false;
         seen.add(key);
         return true;
       })
@@ -195,7 +205,47 @@ export function recommend<T extends Candidate>(tiers: T[][], scoreOf: (c: T) => 
       .sort((a, b) => b.fandexScore - a.fandexScore);
     ranked.push(...strong);
   }
-  return rotateRail(ranked, RAIL_SIZE, seedFor('recommendation', dayISO()));
+  return balanceByType(ranked, RAIL_SIZE, 'recommendation');
+}
+
+/**
+ * A rail with an even share of each media type in `ranked` (Nils, 2026-10-18:
+ * Recommended "is now flooded with games"; books were in neither rail). Each
+ * type's titles are rotated out of its own ranking, so a type with a hundred
+ * green games and one with three books each get their share of the fifteen,
+ * and a type that runs out leaves its slots to the others. The types are
+ * dealt in turn, so the first cards on screen are one of each.
+ */
+export function balanceByType<T extends { type: string }>(ranked: T[], size: number, railName: string, day = dayISO()): T[] {
+  const byType = new Map<string, T[]>();
+  for (const c of ranked) {
+    const list = byType.get(c.type);
+    if (list) list.push(c); else byType.set(c.type, [c]);
+  }
+  if (byType.size < 2) return rotateRail(ranked, size, seedFor(railName, day));
+  // Shares: an even split, with what a short type cannot use handed on.
+  const share = new Map<string, number>();
+  let left = size;
+  let open = [...byType.entries()].sort((a, b) => a[1].length - b[1].length);
+  while (open.length && left > 0) {
+    const each = Math.ceil(left / open.length);
+    const [type, list] = open[0];
+    const take = Math.min(each, list.length);
+    share.set(type, take);
+    left -= take;
+    open = open.slice(1);
+  }
+  const picked = new Map<string, T[]>();
+  for (const [type, list] of byType) picked.set(type, rotateRail(list, share.get(type) ?? 0, seedFor(railName, type, day), 1));
+  const out: T[] = [];
+  const order = [...byType.keys()];
+  for (let i = 0; out.length < size && order.some((t) => i < (picked.get(t)?.length ?? 0)); i++) {
+    for (const t of order) {
+      const c = picked.get(t)?.[i];
+      if (c) out.push(c);
+    }
+  }
+  return out;
 }
 
 /** Which tier a catalog title falls in, by its date: 0 still to come, 1 out in the last year, 2 the rest. A title with no date is the rest. */

@@ -35,6 +35,8 @@ import { hardcoverHalf } from "./hardcover";
 
 /** How deep a stored month goes. The calendar shows 15; the rest is room to filter. */
 export const MONTH_POOL_DEPTH = 40;
+/** At least this many of a month's books, when the month has them, whatever the ranking says (see buildMonth). */
+export const BOOK_FLOOR = 5;
 /** How far from the current month a request may ask. Wider than the cron's window on purpose. */
 export const SERVABLE_MONTHS = 24;
 /** The window the cron keeps fresh: the site's snapshot window, -5 .. +6. */
@@ -175,6 +177,16 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
   const books = mergeBookCards(olBooks, hcBooks).map(bookCandidate);
   const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows, ...books], win), MONTH_POOL_DEPTH);
   if (!ranked.length) return null;
+  // A floor for books (2026-10-18). The ranking measures "standout for its
+  // medium", and a book's reach (readers who shelved it, usually single
+  // digits) is a tiny bucket with a tiny median, so no book placed in any
+  // month and Home's Upcoming rail never showed one (Nils). The ranking is
+  // kept as it is for the three screen types (docs/decisions, 2026-07-28: a
+  // month is not re-balanced into quotas); the month's best books are added
+  // after it, up to BOOK_FLOOR, in the month's own order of reach.
+  const placed = new Set(ranked.map((c) => c.id));
+  const extraBooks = inWindow(books, win).filter((b) => !placed.has(b.id)).slice(0, Math.max(0, BOOK_FLOOR - ranked.filter((c) => c.type === "book").length));
+  ranked.push(...extraBooks);
   // Books are not in `partial`: a month a year out often has none, and that is an answer.
   return { partial: !games.length || !movies.length || !shows.length, items: ranked.map(toCard) };
 }

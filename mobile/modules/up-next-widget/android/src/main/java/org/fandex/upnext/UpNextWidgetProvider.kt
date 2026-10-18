@@ -38,9 +38,12 @@ class UpNextWidgetProvider : AppWidgetProvider() {
   companion object {
     private fun views(context: Context, widgetId: Int): RemoteViews {
       val views = RemoteViews(context.packageName, R.layout.up_next_widget)
+      // As small as a row's episode line (Nils, 2026-10-18: "the up next text
+      // can be much smaller"), so the rows get the room. An eyebrow, in the
+      // app's mono, as the section labels in the app are.
       views.setImageViewBitmap(
         R.id.up_next_heading,
-        WidgetText.line(context, context.getString(R.string.up_next_widget_name), R.font.dm_serif_display, 19f, WidgetText.PRIMARY, 240f),
+        WidgetText.line(context, context.getString(R.string.up_next_widget_name).uppercase(), R.font.space_mono, 10f, WidgetText.SECONDARY, 240f),
       )
 
       val service = Intent(context, UpNextWidgetService::class.java).apply {

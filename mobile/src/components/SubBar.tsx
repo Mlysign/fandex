@@ -6,7 +6,7 @@
 // The Filters sheet is components/Filters.tsx. Not carried over yet: hiding
 // the bar while scrolling down.
 
-import { Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
+import { ChevronLeft, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
@@ -23,12 +23,14 @@ const TYPE_ICONS: Record<string, typeof Gamepad2> = SHARED_TYPE_ICONS;
 
 // ── The type filter ──────────────────────────────────────────────────────────
 
-function Circle({ active, fill, label, onPress, children, count }: {
-  active: boolean; fill?: string; label: string; onPress: () => void; children: ReactNode; count?: number;
+function Circle({ active, fill, label, hint, onPress, onLongPress, children, count }: {
+  active: boolean; fill?: string; label: string; hint?: string; onPress: () => void; onLongPress?: () => void; children: ReactNode; count?: number;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityHint={hint}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       // A browser has no "selected" for a button; pressed is what a toggle is there.
@@ -105,20 +107,34 @@ export function TypeFilter() {
     );
   }
 
+  // One tap narrows a full row to that type; from a partial row a tap adds or
+  // drops; a long press hides one type (lib/typeFilter.tsx, `tapType`). The
+  // logo circle shows every type and, on a folded bar, closes the row: it used
+  // to only select, so the row could not be put away (Nils, 2026-10-18).
+  const folded = !roomy;
   return (
     <View ref={group} style={styles.circles} accessibilityLabel="Filter by type">
-      <Circle active={allActive} fill={color.accent} label="All types" onPress={f.selectAll}>
+      <Circle active={allActive} fill={color.accent} label="All types" hint={folded ? 'Shows every type and closes the row' : undefined}
+        onPress={() => { f.selectAll(); if (folded) setOpen(false); }}>
         <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
       </Circle>
       {offered.map((t) => {
         const Icon = TYPE_ICONS[t];
         const active = !allActive && shown.has(t);
         return (
-          <Circle key={t} active={active} fill={color.media[t]} label={TYPE_PLURAL[t] ?? t} onPress={() => f.toggle(t)}>
+          <Circle
+            key={t} active={active} fill={color.media[t]} label={TYPE_PLURAL[t] ?? t}
+            hint={allActive ? 'Tap to see only this type, hold to hide it' : active ? 'Tap to hide this type' : 'Tap to add this type'}
+            onPress={() => f.tapType(t, offered)} onLongPress={() => f.exclude(t, offered)}>
             <Icon size={16} color={active ? color.textOnAccent : color.textSecondary} />
           </Circle>
         );
       })}
+      {folded ? (
+        <Pressable onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close the type filter" hitSlop={6} style={styles.fold}>
+          <ChevronLeft size={16} color={color.textSecondary} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -227,6 +243,7 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
     alignItems: 'center', justifyContent: 'center',
   },
+  fold: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },
   count: {
     position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: radius.full,
     backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center',

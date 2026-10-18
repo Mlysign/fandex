@@ -1,30 +1,41 @@
-// A tag, a person or a studio: what it is, how the crowd and you rate it, and
-// every title in the catalog that carries it. The site's facet page
-// (src/components/facet/PublicFacetView.tsx), from the catalog on the device.
+// A tag, a person, a studio or a franchise: what it is, how the crowd and you
+// rate it, and every title in the catalog that carries it. The site's facet
+// page (src/components/facet/PublicFacetView.tsx), from the catalog on the
+// device.
 //
-// One page per person, tag or studio, as on the site: a person's page shows
-// everything they worked on, whatever the role, and `/studio` folds developer,
-// publisher, studio and network together.
+// One page per person, tag, studio or franchise, as on the site: a person's
+// page shows everything they worked on, whatever the role, `/studio` folds
+// developer, publisher, studio and network together, and `/franchise` (since
+// 2026-10-18) is the franchise after the taxonomy: bundles folded, hand-made
+// attaches in, detaches out.
 //
-// Not carried over: a person's photo and biography, "also known as", and the
-// titles the catalog does not hold (the site fetched those from the providers).
+// Since 2026-10-18 the list can be narrowed: a row of media types under the
+// numbers, and the same Filters sheet Search has (components/Filters.tsx).
+// Nothing is narrowed until somebody taps, so a page opens as it always did.
+//
+// Not carried over: "also known as" for a person.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ipDisplayLabel } from '@/lib/facets';
 import { slugToKey } from '@/lib/facetUrl';
+import type { MediaType } from '@/types';
 import { PosterGrid } from '~/components/cards';
+import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { Avatar, EmptyState, SortMenu } from '~/components/kit';
 import { backButtonStyle, FacetHeader, facetEyebrow, KIND_LABEL, ROLE_LABEL, type FacetKind } from '~/components/FacetHeader';
 import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { creditLine } from '~/lib/creditLine';
-import { spokenKey, type PageImpact } from '~/lib/facetImpact';
+import { spokenKey, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
+import { useOfferedTypes } from '~/lib/features';
+import type { ScoreFacet } from '~/lib/fandexScore';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -34,7 +45,8 @@ import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
-import { color, font, radius, type } from '~/theme';
+import { TYPE_ICONS } from '~/lib/typeIcons';
+import { color, font, radius, type, TYPE_PLURAL } from '~/theme';
 
 export type { FacetKind } from '~/components/FacetHeader';
 
@@ -43,9 +55,8 @@ const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', '
 
 interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string }
 
-/** Does a stored facet belong on this page? */
-const matches = (f: StoredFacet, kind: FacetKind, key: string) =>
-  spokenKey(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
+/** The profile's kind for a page's kind: a studio page reads `company` entries, a franchise page `ip`. */
+const IMPACT_KIND: Record<FacetKind, ImpactKind> = { tag: 'tag', person: 'person', studio: 'company', franchise: 'ip' };
 
 const IMPACT_TONE = {
   up: { backgroundColor: color.successSubtle, color: color.success },
@@ -56,6 +67,7 @@ const IMPACT_TONE = {
 /** The site's sentence for a tag. A person or a studio is scored per role, so theirs names the role. */
 function impactLine(kind: FacetKind, im: PageImpact): string {
   const who = kind === 'tag' ? 'titles with this tag'
+    : kind === 'franchise' ? 'titles in this franchise'
     : im.role === 'cast' ? 'titles with them in the cast'
     : `titles with them as ${(ROLE_LABEL[im.role ?? ''] ?? KIND_LABEL[kind]).toLowerCase()}`;
   const how = im.direction === 'up' ? 'typically score above your average'
@@ -64,21 +76,88 @@ function impactLine(kind: FacetKind, im: PageImpact): string {
   return `${who} ${how} · ${im.ratedCount} rated`;
 }
 
+/**
+ * The facets a title nobody holds is known to carry on this page: the page's
+ * own, in the roles the card came with. Enough for a Fandex Score the way
+ * Home's calendar cards get one from their genres: an estimate from less than
+ * the full title, where there was only the crowd's rating (Nils, 2026-10-18:
+ * "facet pages still show some items with an average rating").
+ */
+export function pageFacets(kind: FacetKind, key: string, label: string, roles: string[] | undefined): ScoreFacet[] {
+  if (kind === 'tag') return [{ kind: 'tag', key, label }];
+  if (kind === 'franchise') return [{ kind: 'ip', role: 'ip', key, label }];
+  const had = roles?.length ? roles : [kind === 'person' ? 'cast' : 'studio'];
+  return had.map((role) => ({ kind: kind === 'person' ? 'person' : 'company', role, key, label }));
+}
+
+/** A row of media types under the numbers: tap one to keep that type, tap again to drop it, none kept shows every type. */
+function TypeRow({ offered, kept, onToggle }: { offered: MediaType[]; kept: Set<string>; onToggle: (t: string) => void }) {
+  return (
+    <View style={styles.typeRow} accessibilityLabel="Show only these types">
+      {offered.map((t) => {
+        const Icon = TYPE_ICONS[t];
+        const on = kept.has(t);
+        return (
+          <Pressable
+            key={t} onPress={() => onToggle(t)} accessibilityRole="button" accessibilityLabel={TYPE_PLURAL[t] ?? t}
+            accessibilityState={{ selected: on }} {...(Platform.OS === 'web' ? ({ 'aria-pressed': on } as object) : null)} hitSlop={2}
+            style={({ pressed }) => [styles.typeChip, on && { backgroundColor: color.media[t], borderColor: color.media[t] }, pressed && { opacity: 0.7 }]}>
+            {Icon ? <Icon size={14} color={on ? color.textOnAccent : color.textSecondary} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function FacetScreen({ kind }: { kind: FacetKind }) {
   const params = useLocalSearchParams<{ key: string }>();
-  // The address says "christopher-nolan"; the catalog's key is "christopher nolan".
-  const key = slugToKey(params.key ?? '');
   const router = useRouter();
   const db = useSQLiteContext();
   const auth = useAuth();
   const sync = useCatalogSync();
-  const { center, impactsFor, taxonomy } = useScores();
-  const impacts = useMemo(() => impactsFor(kind === 'studio' ? 'company' : kind, key), [impactsFor, kind, key]);
+  const { center, score, impactsFor, impactAbsenceFor, taxonomy } = useScores();
+  // The address says "christopher-nolan"; the catalog's key is "christopher nolan".
+  // A franchise's address may spell a bundled name: its page is the franchise it is bundled into.
+  const spoken = slugToKey(params.key ?? '');
+  const key = kind === 'franchise' && taxonomy ? (taxonomy.ipAliases.get(spoken) ?? spoken) : spoken;
+  const impacts = useMemo(() => impactsFor(IMPACT_KIND[kind], key), [impactsFor, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
   /** The photo the gallery is open on, or null while it is shut. */
   const [photoAt, setPhotoAt] = useState<number | null>(null);
   const [found, setFound] = useState<{ label: string; category: string | null; roles: string[]; cards: CardItem[] } | null>(null);
+  // Narrowing: media types kept (none kept is every type), and the Filters sheet.
+  const offered = useOfferedTypes();
+  const [kept, setKept] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState(noFilters);
+  const [sheet, setSheet] = useState(false);
+
+  // The other keys this franchise page answers for: every name bundled into it.
+  const memberKeys = useMemo(() => {
+    if (kind !== 'franchise' || !taxonomy) return [key];
+    return [key, ...[...taxonomy.ipAliases.entries()].filter(([, canonical]) => canonical === key).map(([alias]) => alias)];
+  }, [kind, key, taxonomy]);
+  // Titles attached to this franchise by hand, and titles detached from it.
+  const overrides = useMemo(() => {
+    const added: string[] = [];
+    const removed = new Set<string>();
+    if (kind === 'franchise' && taxonomy) {
+      for (const [id, list] of taxonomy.ipOverrides) {
+        for (const o of list) {
+          if ((taxonomy.ipAliases.get(o.ipKey) ?? o.ipKey) !== key) continue;
+          if (o.mode === 'add') added.push(id); else removed.add(id);
+        }
+      }
+    }
+    return { added, removed };
+  }, [kind, key, taxonomy]);
+
+  /** Does a stored facet belong on this page? */
+  const matches = (f: StoredFacet) => {
+    if (kind === 'franchise') return f.kind === 'ip' && memberKeys.includes(f.key);
+    return spokenKey(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
+  };
 
   useEffect(() => {
     let live = true;
@@ -87,32 +166,44 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       // The key is inside a JSON column. LIKE narrows four thousand rows to a
       // handful; the parse below is what decides.
       // On the key's first word only: the rest may be stored with hyphens where the address has spaces.
-      const escaped = (key.split(' ')[0] ?? '').replace(/[\\%_]/g, (c) => `\\${c}`);
+      const patterns = memberKeys.map((k) => `%"key":"${(k.split(' ')[0] ?? '').replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+      const columns = 'id, type, title, slug, poster_url, release_date, year, community_score, community_votes, facets';
       const rows = await db.getAllAsync<CatalogRow & { facets: string }>(
-        `SELECT id, type, title, slug, poster_url, release_date, year, community_score, community_votes, facets
-           FROM catalog WHERE facets LIKE ? ESCAPE '\\'`,
-        [`%"key":"${escaped}%`],
+        `SELECT ${columns} FROM catalog WHERE ${patterns.map(() => "facets LIKE ? ESCAPE '\\'").join(' OR ')}`,
+        patterns,
       );
+      // A franchise's hand-attached titles carry no such facet; they are read by id.
+      const attached = overrides.added.length
+        ? await db.getAllAsync<CatalogRow & { facets: string }>(`SELECT ${columns} FROM catalog WHERE id IN (${overrides.added.map(() => '?').join(',')})`, overrides.added)
+        : [];
       let label = '';
       let category: string | null = null;
       const roles = new Map<string, number>();
       const cards: CardItem[] = [];
-      for (const r of rows) {
+      const seen = new Set<string>();
+      for (const r of [...rows, ...attached]) {
+        if (seen.has(r.id) || overrides.removed.has(r.id)) continue;
         let hit: StoredFacet[] = [];
-        try { hit = (JSON.parse(r.facets) as StoredFacet[]).filter((f) => matches(f, kind, key)); } catch { /* an unreadable row is not a match */ }
-        if (!hit.length) continue;
-        label ||= hit[0].label;
+        try { hit = (JSON.parse(r.facets) as StoredFacet[]).filter(matches); } catch { /* an unreadable row is not a match */ }
+        if (!hit.length && !overrides.added.includes(r.id)) continue;
+        seen.add(r.id);
+        // A franchise's own spelling wins over a bundled one's ("Batman", not "The Dark Knight Collection").
+        const own = hit.find((f) => f.key === key) ?? hit[0];
+        if (own && (!label || own.key === key)) label = own.label;
         category ??= hit.find((f) => f.category)?.category ?? null;
         for (const f of hit) if (f.role) roles.set(f.role, (roles.get(f.role) ?? 0) + 1);
-        // What they did on this one, under its name: "Director · Writer", "Author". A tag has no role.
-        cards.push({ ...cardFromCatalog(r), role: creditLine(r.type, hit.map((f) => f.role)) });
+        // What they did on this one, under its name: "Director · Writer", "Author". A tag or a franchise has no role.
+        const had = hit.map((f) => f.role).filter((x): x is string => !!x);
+        cards.push({ ...cardFromCatalog(r), role: creditLine(r.type, had), roles: had.length ? [...new Set(had)] : undefined });
       }
+      if (kind === 'franchise') label = taxonomy?.labels.get(`ip|${key}`) ?? (label ? ipDisplayLabel(label) : '');
       if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards });
     })();
     return () => { live = false; };
-  }, [db, kind, key, sync.revision]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db, kind, key, memberKeys, overrides, sync.revision]);
 
-  // What TMDB has beyond the catalog copy. The device's rows show at once; these join them.
+  // What the providers have beyond the catalog copy. The device's rows show at once; these join them.
   const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null } | null>(null);
   const [asking, setAsking] = useState(false);
   const label = found?.label ?? '';
@@ -127,7 +218,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     setAsking(true);
     providerFacet(kind, key, label || key, abort.signal)
       .then((p) => { if (!abort.signal.aborted) setMore(p); })
-      .catch(() => { /* offline or TMDB down: the page is what the device holds */ })
+      .catch(() => { /* offline or the providers down: the page is what the device holds */ })
       .finally(() => { if (!abort.signal.aborted) setAsking(false); });
     return () => abort.abort();
   }, [kind, key, label, ready]);
@@ -155,18 +246,31 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   }, [found, more]);
   const ids = useMemo(() => (cards ?? []).map((c) => c.id), [cards]);
   const stateOf = useCardStates(ids);
-  const scores = useRowScores(useMemo(() => (sort === 'fandexScore' ? ids.filter((i): i is string => !!i) : []), [sort, ids]));
+  const scores = useRowScores(useMemo(() => ids.filter((i): i is string => !!i), [ids]));
+
+  // Every card with the score it can have: the catalog's for a title the device
+  // holds, an estimate from this page's facet for one it does not.
+  const scored = useMemo(() => (cards ?? []).map((c) => {
+    if (c.id && scores.has(c.id)) return c;
+    const estimate = center == null ? null : score(c.key, pageFacets(kind, key, label || key, c.roles))?.score ?? null;
+    return estimate == null ? c : { ...c, fandexScore: estimate };
+  }), [cards, scores, center, score, kind, key, label]);
+
+  // Narrowed: the kept types, then the sheet's filters.
+  const typed = useMemo(() => (kept.size ? scored.filter((c) => kept.has(c.type)) : scored), [scored, kept]);
+  const filtered = useFiltered(typed, filters, stateOf);
 
   const sorted = useMemo(() => {
-    const list = [...(cards ?? [])];
+    const list = [...filtered];
     const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
+    const fandexOf = (c: CardItem) => (c.id ? scores.get(c.id) : null) ?? c.fandexScore ?? -1;
     switch (sort) {
       case 'popularity': return byPopularity(list, crowdOf, true);
       case 'rating': return byRating(list, crowdOf);
-      case 'fandexScore': return list.sort((a, b) => ((b.id ? scores.get(b.id) : null) ?? -1) - ((a.id ? scores.get(a.id) : null) ?? -1));
+      case 'fandexScore': return list.sort((a, b) => fandexOf(b) - fandexOf(a));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
-  }, [cards, sort, scores]);
+  }, [filtered, sort, scores]);
 
   const tiles = useMemo(() => {
     const all = cards ?? [];
@@ -192,12 +296,14 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   }, [cards, stateOf]);
 
   // A tag's place in the taxonomy (the site's Q18): its category, and the
-  // spellings bundled into it ("Also known as").
+  // spellings bundled into it ("Also known as"). A franchise lists its bundled names the same way.
   const tagCategory = kind === 'tag' && taxonomy
     ? taxonomy.categories.get(taxonomy.tagCategoryOverrides.get(key) ?? found?.category ?? 'other')?.label ?? null
     : null;
-  const akas = kind === 'tag' && taxonomy
-    ? [...taxonomy.tagAliases.entries()].filter(([alias, canon]) => spokenKey(canon) === key && spokenKey(alias) !== key).map(([alias]) => alias)
+  const akas = taxonomy
+    ? kind === 'tag' ? [...taxonomy.tagAliases.entries()].filter(([alias, canon]) => spokenKey(canon) === key && spokenKey(alias) !== key).map(([alias]) => alias)
+    : kind === 'franchise' ? memberKeys.slice(1)
+    : []
     : [];
 
   if (!found) return <Screen wide><StateBlock loading /></Screen>;
@@ -205,6 +311,9 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const person = more?.person ?? null;
   const name = found.label || person?.name || key.replace(/-/g, ' ');
   const life = person ? [person.birthday ? `Born ${longDate(person.birthday) ?? person.birthday}` : null, person.deathday ? `died ${longDate(person.deathday) ?? person.deathday}` : null, person.placeOfBirth].filter(Boolean).join(' · ') : '';
+  const absence = impacts.length ? null : impactAbsenceFor(IMPACT_KIND[kind], key, name);
+  const narrowed = kept.size > 0 || countActive(filters) > 0;
+  const typesHere = offered.filter((t) => scored.some((c) => c.type === t));
   const header = (
     <FacetHeader
       back={(
@@ -251,10 +360,18 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
               <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
             </View>
           ))}
+          {/* No impact row has a reason, and the reason is said (AGENTS.md: a component that renders null must know why). */}
+          {absence ? <Text style={[type.caption, { color: color.textSecondary, marginTop: 12 }]}>{absence}</Text> : null}
         </>
       )}
-      count={`titles · ${(cards ?? []).length}${asking ? ' · asking TMDB for more…' : ''}`}
-      sort={<SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />}
+      count={`titles · ${sorted.length}${narrowed && sorted.length !== (cards ?? []).length ? ` of ${(cards ?? []).length}` : ''}${asking ? ' · asking for more…' : ''}`}
+      sort={(
+        <View style={styles.controls}>
+          {typesHere.length > 1 ? <TypeRow offered={typesHere} kept={kept} onToggle={(t) => setKept((s) => { const n = new Set(s); if (n.has(t)) n.delete(t); else n.add(t); return n; })} /> : null}
+          <FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />
+          <SortMenu value={sort} options={center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS} onChange={setSort} />
+        </View>
+      )}
     />
   );
 
@@ -263,7 +380,14 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       <PosterGrid
         items={sorted}
         header={header}
-        empty={asking ? <StateBlock loading /> : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or on TMDB carries this.'} />}
+        empty={asking ? <StateBlock loading />
+          : narrowed ? <EmptyState title="Nothing matches these filters" hint="Widen the types or the filters above." />
+          : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or at the providers carries this.'} />}
+      />
+      <FilterSheet
+        open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters}
+        resultCount={sorted.length} noun="titles" signedIn={auth.status === 'signedIn'}
+        items={typed} onEditPlatforms={() => { setSheet(false); router.push('/settings' as never); }}
       />
       {photoAt != null && person?.photos.length ? <PhotoGallery photos={person.photos} name={name} start={photoAt} onClose={() => setPhotoAt(null)} /> : null}
     </Screen>
@@ -287,4 +411,7 @@ const styles = StyleSheet.create({
     fontFamily: font.sansBold, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'],
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: 'hidden',
   },
+  controls: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10, flexShrink: 1 },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  typeChip: { width: 30, height: 30, borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong, alignItems: 'center', justifyContent: 'center' },
 });

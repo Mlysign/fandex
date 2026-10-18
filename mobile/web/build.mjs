@@ -284,7 +284,7 @@ const poolTitles = [...byId.values()].map((p) => ({ vector: p.vector, facets: p.
 const facetsOf = new Map(poolTitles.map((p) => [p.vector.id, p.facets]));
 const relatedFor = relatedPicker(poolTitles, taxonomy);
 // Worked out before the item pages, whose breadcrumb names a tag only when its page exists.
-const allFacets = facetPages(poolTitles);
+const allFacets = facetPages(poolTitles, 3, taxonomy);
 const crumbFor = tagCrumbs(allFacets);
 
 step(`rendering ${details.size} item pages`);
@@ -295,7 +295,7 @@ for (const item of details.values()) {
   if (!item.slug || !SLUG.test(item.slug) || !TYPES.includes(item.type)) continue;
   const head = itemHead(item, crumbFor(facetsOf.get(item.id) ?? []));
   const rails = relatedFor(item.id, facetsOf.get(item.id) ?? []);
-  if (rails.similar.length || rails.franchise?.items.length) withRails++;
+  if (rails.similar.length || rails.franchise?.items.length || rails.series?.items.length) withRails++;
   const { body, css } = renderItem(item, taxonomy, rails);
   // What check-html.mjs guards: a page with no heading or no image in its HTML
   // is the react-native-web default coming back, and a crawler gets nothing.
@@ -335,7 +335,7 @@ for (const facet of facets) {
   urls.push({ loc: head.canonical, lastmod: new Date().toISOString().slice(0, 10) });
 }
 const facetCount = (k) => facets.filter((f) => f.kind === k).length;
-step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios), the largest ${(facetLargest / 1024).toFixed(0)} KB`);
+step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios, ${facetCount('franchise')} franchises), the largest ${(facetLargest / 1024).toFixed(0)} KB`);
 
 // ── Calendar months ──────────────────────────────────────────────────────────
 
@@ -549,7 +549,16 @@ if (!limit) {
       const found = await getJson(`https://api.themoviedb.org/3/search/person?api_key=${tmdbKey}&query=${encodeURIComponent(p.name)}`);
       const exact = (found?.results ?? []).filter((r) => r.profile_path && r.name?.toLowerCase() === p.name.toLowerCase())
         .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))[0];
-      const url = exact ? `https://image.tmdb.org/t/p/w185${exact.profile_path}` : null;
+      let url = exact ? `https://image.tmdb.org/t/p/w185${exact.profile_path}` : null;
+      // A book's author is rarely at TMDB. Open Library's author photo, the
+      // exact name with the most works (the app's own rule, lib/facetProviders.ts).
+      if (!url && p.topType === 'book') {
+        const ol = await getJson(`https://openlibrary.org/search/authors.json?q=${encodeURIComponent(p.name)}&limit=8&fields=key,name,work_count`).catch(() => null);
+        const best = (ol?.docs ?? []).filter((d) => d.key && d.name?.trim().toLowerCase() === p.name.toLowerCase()).sort((a, b) => (b.work_count ?? 0) - (a.work_count ?? 0))[0];
+        const author = best?.key ? await getJson(`https://openlibrary.org/authors/${best.key}.json`).catch(() => null) : null;
+        const photo = (author?.photos ?? []).find((id) => Number.isInteger(id) && id > 0);
+        if (photo) url = `https://covers.openlibrary.org/a/id/${photo}-M.jpg`;
+      }
       portraits[p.key] = { url, at: Date.now() };
       p.portraitUrl = url;
       asked++;

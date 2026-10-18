@@ -42,6 +42,10 @@ const SCOPES: { key: Scope; label: string; Icon: typeof Flame }[] = [
   { key: 'popular', label: 'Popular releases', Icon: Flame },
 ];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// The grid's columns run Monday to Sunday (Nils, 2026-10-18), as a European calendar does.
+const GRID_DAYS = [1, 2, 3, 4, 5, 6, 0];
+/** A date's column in the grid: Monday 0, Sunday 6. */
+const mondayFirst = (dayOfWeek: number) => (dayOfWeek + 6) % 7;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MAX_MONTHS_AWAY = 24;
 const RAIL_OPEN_PX = 400;
@@ -277,7 +281,7 @@ export default function CalendarScreen() {
   // ── The month's shape ──
   const [y, m] = month.split('-').map(Number);
   const dayCount = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const startPad = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const startPad = mondayFirst(new Date(Date.UTC(y, m - 1, 1)).getUTCDay());
   const weekCount = Math.max(1, Math.ceil((startPad + dayCount) / 7));
   const today = todayIso();
   const here = currentMonth();
@@ -375,7 +379,7 @@ export default function CalendarScreen() {
               ) : null}
             </View>
             <View style={[styles.weekdays, { gap }]}>
-              {WEEKDAYS.map((d) => <Text key={d} accessibilityLabel={d} style={[type.micro, styles.weekday]}>{d[0]}</Text>)}
+              {GRID_DAYS.map((i) => <Text key={WEEKDAYS[i]} accessibilityLabel={WEEKDAYS[i]} style={[type.micro, styles.weekday]}>{WEEKDAYS[i][0]}</Text>)}
             </View>
 
             <View style={styles.box} onLayout={onBox} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -452,7 +456,8 @@ function Agenda({ items, kit }: { items: CardItem[]; kit: ReturnType<typeof useC
   const groups = useMemo(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOf = (weeks: number) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + (6 - start.getDay()) + weeks * 7, 23, 59, 59);
+    // A week ends on Sunday, as the grid's does.
+    const endOf = (weeks: number) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + (6 - mondayFirst(start.getDay())) + weeks * 7, 23, 59, 59);
     const thisWeek = endOf(0);
     const nextWeek = endOf(1);
     const today = todayIso();

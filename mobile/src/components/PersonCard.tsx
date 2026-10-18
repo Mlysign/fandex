@@ -16,14 +16,16 @@ export interface PopularPerson {
   portraitUrl: string | null;
   titleCount: number;
   topRole: string;
+  /** The medium most of their titles are. Absent in a people file written before 2026-10-18. */
+  topType?: string;
 }
 
-/** The site's roleLabel (src/lib/personRail.ts). */
-export function roleLabel(role: string): string {
+/** The site's roleLabel (src/lib/personRail.ts). A book's creator is its author, a board game's its designer. */
+export function roleLabel(role: string, topType?: string): string {
   switch (role) {
     case 'director': return 'Director';
     case 'writer': return 'Writer';
-    case 'creator': return 'Creator';
+    case 'creator': return topType === 'book' ? 'Author' : topType === 'boardgame' ? 'Designer' : 'Creator';
     case 'cast': return 'Actor';
     default: return role.charAt(0).toUpperCase() + role.slice(1);
   }
@@ -51,7 +53,7 @@ export function PersonCard({ person }: { person: PopularPerson }) {
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       accessibilityRole="link"
-      accessibilityLabel={`${person.name}, ${roleLabel(person.topRole)}`}
+      accessibilityLabel={`${person.name}, ${roleLabel(person.topRole, person.topType)}`}
       style={styles.card}>
       <View style={[styles.circle, hovered && { borderColor: color.borderStrong }]}>
         {person.portraitUrl && !failed
@@ -60,7 +62,7 @@ export function PersonCard({ person }: { person: PopularPerson }) {
       </View>
       <Text numberOfLines={2} style={[styles.name, hovered && { textDecorationLine: 'underline' }]}>{person.name}</Text>
       <Text style={[type.label, { color: color.textSecondary, marginTop: 2 }]}>
-        {roleLabel(person.topRole)} · {person.titleCount} titles
+        {roleLabel(person.topRole, person.topType)} · {person.titleCount} titles
       </Text>
     </Pressable>
   );

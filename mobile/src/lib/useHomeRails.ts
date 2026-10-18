@@ -9,8 +9,9 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { todayIso } from '~/lib/dates';
 import { catalogCandidates } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
-import { genreFacets, loadHomeFeed, recommend, tierOf, type Candidate, type HomeFeed } from '~/lib/homeFeed';
+import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type HomeFeed } from '~/lib/homeFeed';
 import { useScores } from '~/lib/ScoreProvider';
+import { useTypeFilter } from '~/lib/typeFilter';
 
 /** The catalog copy's titles not in your library, each with the score its full facets earn. */
 interface Pool { cards: CardItem[]; scores: Map<string, number> }
@@ -33,6 +34,14 @@ export function useHomeRails() {
   const hidden = useHiddenIds();
   const signedIn = auth.status === 'signedIn';
   const { score, scoresFor, center, revision } = scores;
+  // The types the viewer is looking at: each gets an even share of the two
+  // personal rails, so a catalog that is a third games does not make a rail
+  // that is all games (Nils, 2026-10-18). Filtering afterwards would do the
+  // opposite: a balanced fifteen cut to two types is six cards.
+  const { shown } = useTypeFilter();
+  const typesKey = shown.join(',');
+  const types = useMemo(() => typesKey.split(',').filter(Boolean), [typesKey]);
+  const upcoming = useMemo(() => (feed ? upcomingRail(feed.candidates, types) : null), [feed, types]);
 
   // "Recommended for you" chooses from the whole catalog copy, not only from
   // the calendar's next months: those alone, scored by genre, left one green
@@ -76,13 +85,16 @@ export function useHomeRails() {
       // Not what you already watched or played, and not what you asked not to be shown.
       (c) => (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
       center,
+      types,
     );
-  }, [candidates, center, pool, score, hidden, stateOf]);
+  }, [candidates, center, pool, score, hidden, stateOf, types]);
 
   const withoutHidden = useCallback(<T extends CardItem>(items: T[]) => items.filter((i) => !(i.id && hidden.has(i.id))), [hidden]);
 
   return {
     feed, failed, load, recommendation, withoutHidden, signedIn,
+    /** Today's Upcoming rail for the types on screen; null until the feed is in. */
+    upcoming,
     /** Signed in, and the personal rail cannot be drawn yet. */
     personalPending: signedIn && (!feed || !scores.ready || (center != null && !pool)) && !failed,
   };

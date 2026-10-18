@@ -10,7 +10,7 @@
 // which keeps each answer a week. A person's page has none: IGDB files people
 // by company, not by name.
 
-import { personKey } from '@/lib/facets';
+import { ipDisplayLabel, personKey } from '@/lib/facets';
 import { api, type GameSearchResult, type ProviderResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
@@ -58,13 +58,17 @@ function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
  * person is its author or designer, on a studio's its publisher: the one role
  * each of those facet answers is asked by (worker/src/shelves.ts).
  */
-function shelfCard(r: ProviderResult, kind: 'tag' | 'person' | 'studio'): CardItem {
-  const role = kind === 'person' ? creditLine(r.type, ['creator']) : kind === 'studio' ? creditLine(r.type, ['publisher']) : null;
+function shelfCard(r: ProviderResult, kind: FacetPageKind): CardItem {
+  const roles = kind === 'person' ? ['creator'] : kind === 'studio' ? ['publisher'] : undefined;
   return {
     key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type,
-    title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes, role,
+    title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes,
+    role: roles ? creditLine(r.type, roles) : null, roles,
   };
 }
+
+/** The kinds of page this answers for. A franchise page since 2026-10-18. */
+export type FacetPageKind = 'tag' | 'person' | 'studio' | 'franchise';
 
 const OL = 'https://openlibrary.org';
 
@@ -169,7 +173,9 @@ async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet>
   return {
     cards: unique(cards).map((c) => {
       const p = credit.get(c.key);
-      return p ? { ...c, role: creditWithParts(c.type, p.roles, p.characters) } : c;
+      // The roles as keys too: what a Fandex Score can be estimated from for a title nobody holds.
+      const roles = p ? [...new Set([...p.roles, ...(p.characters.length ? ['cast'] : [])])] : undefined;
+      return p ? { ...c, role: creditWithParts(c.type, p.roles, p.characters), roles } : c;
     }),
     person: {
       name: meta?.name ?? key,
@@ -238,15 +244,29 @@ async function tagFilter(label: string, signal?: AbortSignal): Promise<string | 
   return keyword ? `with_keywords=${keyword.id}` : null;
 }
 
+// ── Franchise: TMDB's collection of that name ────────────────────────────────
+
+/** The films of the TMDB collection named like the franchise, when one is. Shows have no collection at TMDB. */
+async function collection(label: string, signal?: AbortSignal): Promise<CardItem[]> {
+  const want = plain(label);
+  const results: any[] = (await tmdb(`/search/collection?query=${encodeURIComponent(label)}`, signal))?.results ?? [];
+  // "Star Wars Collection" is the franchise "Star Wars": compare with the provider's suffix peeled.
+  const hit = results.find((c) => plain(ipDisplayLabel(c.name ?? '')) === want) ?? results.find((c) => plain(c.name ?? '').startsWith(want));
+  if (!hit?.id) return [];
+  const c = await tmdb(`/collection/${hit.id}`, signal);
+  return ((c?.parts ?? []) as any[]).filter((p) => p?.id).map((p) => card(p, 'movie'));
+}
+
 // ── The page's question ──────────────────────────────────────────────────────
 
 /**
- * What TMDB has for this facet, with each title the Worker already knows given
- * its Fandex id, so the card shows your state and opens the page it has.
- * Throws when TMDB cannot be reached; the page then shows what the device holds.
+ * What the providers have for this facet, with each title the Worker already
+ * knows given its Fandex id, so the card shows your state and opens the page
+ * it has. Throws when TMDB cannot be reached; the page then shows what the
+ * device holds.
  */
-export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
-  // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's or a publisher's.
+export async function providerFacet(kind: FacetPageKind, key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
+  // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's, a publisher's or a series'.
   const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), () => [] as CardItem[]);
   // An author TMDB does not know still gets a face and a biography.
   const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
@@ -258,7 +278,9 @@ export async function providerFacet(kind: 'tag' | 'person' | 'studio', key: stri
   if (kind === 'person') found = await person(key, signal);
   else if (kind === 'studio') {
     const id = await companyId(label, signal);
-    found = { cards: id == null ? [] : await discover(`with_companies=${id}`, signal), person: null };
+    found = { cards: id == null ? [] : (await discover(`with_companies=${id}`, signal)).map((c) => ({ ...c, roles: ['studio'] })), person: null };
+  } else if (kind === 'franchise') {
+    found = { cards: await collection(label, signal).catch(() => [] as CardItem[]), person: null };
   } else {
     const filter = await tagFilter(label, signal);
     found = { cards: filter ? await discover(filter, signal) : [], person: null };

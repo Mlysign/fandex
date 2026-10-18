@@ -12,14 +12,14 @@ import { StatStrip } from '~/components/kit';
 import { ROLE_LABEL } from '~/lib/creditLine';
 import { color, radius, type } from '~/theme';
 
-export type FacetKind = 'tag' | 'person' | 'studio';
+export type FacetKind = 'tag' | 'person' | 'studio' | 'franchise';
 
-export const KIND_LABEL: Record<FacetKind, string> = { tag: 'Tag', person: 'Person', studio: 'Studio' };
+export const KIND_LABEL: Record<FacetKind, string> = { tag: 'Tag', person: 'Person', studio: 'Studio', franchise: 'Franchise' };
 export { ROLE_LABEL };
 
-/** The line over the name: "Tag", or a person's or a studio's roles, most frequent first. */
+/** The line over the name: "Tag", "Franchise", or a person's or a studio's roles, most frequent first. */
 export function facetEyebrow(kind: FacetKind, roles: string[]): string {
-  if (kind === 'tag') return KIND_LABEL.tag;
+  if (kind === 'tag' || kind === 'franchise') return KIND_LABEL[kind];
   return roles.length ? roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ') : KIND_LABEL[kind];
 }
 

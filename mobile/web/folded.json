@@ -355,6 +355,23 @@
    "type": "game",
    "from": "warhammer-40-000-space-marine-ii-2024",
    "to": "warhammer-40-000-space-marine-ii"
-  }
+  },
+  { "type": "game", "from": "playerunknowns-battlegrounds", "to": "pubg-battlegrounds" },
+  { "type": "game", "from": "abzu", "to": "abzu-2016" },
+  { "type": "game", "from": "blocks-by-google", "to": "google-blocks" },
+  { "type": "game", "from": "mortal-shell-ii-open-beta", "to": "mortal-shell-ii" },
+  { "type": "game", "from": "onimusha-way-of-the-sword-demo", "to": "onimusha-way-of-the-sword" },
+  { "type": "game", "from": "pathogenic-demo", "to": "pathogenic" },
+  { "type": "game", "from": "lost-ark-closed-technical-beta", "to": "lost-ark" },
+  { "type": "game", "from": "waltz-of-the-wizard-legacy-demo", "to": "waltz-of-the-wizard" },
+  { "type": "game", "from": "fallout-76-public-test-server", "to": "fallout-76" },
+  { "type": "game", "from": "tom-clancys-rainbow-six-siege-test-server", "to": "tom-clancys-rainbow-six-siege-operation-skull-rain" },
+  { "type": "game", "from": "danganronpa-v3-killing-harmony-demo-ver", "to": "danganronpa-v3-killing-harmony" },
+  { "type": "game", "from": "nightingale-playtest", "to": "nightingale" },
+  { "type": "game", "from": "arc-raiders-playtest", "to": "arc-raiders" },
+  { "type": "game", "from": "h1z1-test-server", "to": "h1z1" },
+  { "type": "game", "from": "veiled-experts-final-beta", "to": "veiled-experts" },
+  { "type": "game", "from": "mechabellum-playtest-server", "to": "mechabellum" },
+  { "type": "game", "from": "park-beyond-open-beta-test", "to": "park-beyond" }
  ]
 }

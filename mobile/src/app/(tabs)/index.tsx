@@ -46,7 +46,7 @@ export default function HomeScreen() {
   const types = useTypeFilter();
   const { width } = useWindowDimensions();
   const roomy = width >= breakpoint.md;
-  const { feed, failed, load, recommendation, withoutHidden, signedIn, personalPending } = useHomeRails();
+  const { feed, failed, load, recommendation, upcoming, withoutHidden, signedIn, personalPending } = useHomeRails();
   const people = usePopularPeople();
 
   const rail = (title: string, items: CardItem[] | null | undefined, seeAllHref: string, forYou = false) => {
@@ -67,7 +67,7 @@ export default function HomeScreen() {
     );
   };
 
-  const hasRails = !!(feed?.trending.length || feed?.upcoming.length || recommendation?.length);
+  const hasRails = !!(feed?.trending.length || feed?.candidates.length || recommendation?.length);
 
   return (
     <Screen wide>
@@ -105,7 +105,7 @@ export default function HomeScreen() {
           <>
             {personalPending ? <RailSkeleton title="Recommended for you" /> : rail('Recommended for you', recommendation, '/discover', true)}
             {rail('Popular right now', feed.trending, '/discover')}
-            {rail('Upcoming', feed.upcoming, '/calendar')}
+            {rail('Upcoming', upcoming?.length ? upcoming : feed.upcoming, '/calendar')}
             {/* Not filtered by media type, as on the site: a director is not a movie,
                 and hiding the rail because somebody ticked Games would be a dead control. */}
             {people.length ? (

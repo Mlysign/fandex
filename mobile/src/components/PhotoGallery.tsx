@@ -6,6 +6,7 @@
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Img } from '~/components/Img';
 import { color, radius, type } from '~/theme';
 
@@ -13,6 +14,9 @@ export interface Photo { full: string; thumb: string; width: number; height: num
 
 export function PhotoGallery({ photos, name, start, onClose }: { photos: Photo[]; name: string; start: number; onClose: () => void }) {
   const { width, height } = useWindowDimensions();
+  // A Modal draws edge to edge on Android: without these the Close button sat
+  // under the status bar and could not be reached (Nils, 2026-10-18).
+  const insets = useSafeAreaInsets();
   const [at, setAt] = useState(start);
   const pager = useRef<ScrollView>(null);
   const strip = useRef<ScrollView>(null);
@@ -50,10 +54,10 @@ export function PhotoGallery({ photos, name, start, onClose }: { photos: Photo[]
     if (i !== at) setAt(i);
   };
 
-  const stage = height - 150;
+  const stage = height - 150 - insets.top - insets.bottom;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.root} accessibilityViewIsModal accessibilityLabel={`Photos of ${name}`}>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]} accessibilityViewIsModal accessibilityLabel={`Photos of ${name}`}>
         <View style={styles.top}>
           <Text style={[type.label, { color: color.textSecondary }]}>{name} · {at + 1} of {photos.length}</Text>
           <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} style={styles.round}>
@@ -75,12 +79,12 @@ export function PhotoGallery({ photos, name, start, onClose }: { photos: Photo[]
           })}
         </ScrollView>
         {wide && at > 0 ? (
-          <Pressable onPress={() => go(at - 1)} accessibilityRole="button" accessibilityLabel="Previous photo" style={[styles.round, styles.arrow, { left: 16, top: stage / 2 + 30 }]}>
+          <Pressable onPress={() => go(at - 1)} accessibilityRole="button" accessibilityLabel="Previous photo" style={[styles.round, styles.arrow, { left: 16, top: insets.top + stage / 2 + 30 }]}>
             <ChevronLeft size={20} color={color.textPrimary} />
           </Pressable>
         ) : null}
         {wide && at < photos.length - 1 ? (
-          <Pressable onPress={() => go(at + 1)} accessibilityRole="button" accessibilityLabel="Next photo" style={[styles.round, styles.arrow, { right: 16, top: stage / 2 + 30 }]}>
+          <Pressable onPress={() => go(at + 1)} accessibilityRole="button" accessibilityLabel="Next photo" style={[styles.round, styles.arrow, { right: 16, top: insets.top + stage / 2 + 30 }]}>
             <ChevronRight size={20} color={color.textPrimary} />
           </Pressable>
         ) : null}

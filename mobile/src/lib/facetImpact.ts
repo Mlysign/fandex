@@ -31,12 +31,14 @@ const directionOf = (points: number): ImpactDirection => (Math.abs(points) < 0.5
  * returns it. Empty when there is no score to speak of, or when none of your
  * rated titles carry the facet (or its tag category is ignored).
  */
-export function pageImpacts(kind: 'tag' | 'person' | 'company', key: string, profile: Profile, tax: Taxonomy): PageImpact[] {
+export type ImpactKind = 'tag' | 'person' | 'company' | 'ip';
+
+export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax: Taxonomy): PageImpact[] {
   if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return [];
-  // The profile learned a bundled tag under its canonical key, so a member spelling's page reads that entry.
+  // The profile learned a bundled tag or franchise under its canonical key, so a member spelling's page reads that entry.
   let target = key;
-  if (kind === 'tag') {
-    for (const [alias, canonical] of tax.tagAliases) {
+  if (kind === 'tag' || kind === 'ip') {
+    for (const [alias, canonical] of kind === 'tag' ? tax.tagAliases : tax.ipAliases) {
       if (spokenKey(alias) === key) { target = spokenKey(canonical); break; }
     }
   }
@@ -45,9 +47,22 @@ export function pageImpacts(kind: 'tag' | 'person' | 'company', key: string, pro
     if (m.kind !== kind || spokenKey(m.key) !== target) continue;
     const points = facetImpact(facetId(m), profile, tax);
     if (points == null) continue;
-    rows.push({ role: kind === 'tag' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n });
+    rows.push({ role: kind === 'tag' || kind === 'ip' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n });
   }
   // Two stored spellings of one tag can speak the same: the one you rated more is the tag.
-  if (kind === 'tag') return rows.sort((a, b) => b.ratedCount - a.ratedCount).slice(0, 1);
+  if (kind === 'tag' || kind === 'ip') return rows.sort((a, b) => b.ratedCount - a.ratedCount).slice(0, 1);
   return rows.sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
+}
+
+/**
+ * Why a page shows no impact row, in words, so an empty space never reads as
+ * a broken feature (AGENTS.md: a component that renders null must know why).
+ * Null when there IS a row to show, or when nobody is signed in.
+ */
+export function impactAbsence(kind: ImpactKind, key: string, profile: Profile | null, tax: Taxonomy | null, name: string): string | null {
+  if (!profile || !tax) return null;
+  if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return `Rate ${MIN_RATED_FOR_FANDEX_SCORE} titles and this page will say what ${name} does to your Fandex Score.`;
+  if (pageImpacts(kind, key, profile, tax).length) return null;
+  const what = kind === 'tag' ? 'this tag' : kind === 'ip' ? 'this franchise' : 'them';
+  return `Not in your Fandex Score yet: none of the ${profile.ratedItemCount} titles you rated carries ${what}.`;
 }

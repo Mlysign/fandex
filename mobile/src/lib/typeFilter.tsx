@@ -22,6 +22,17 @@ interface TypeFilter {
   /** What a list should show right now. */
   shown: string[];
   toggle: (type: string) => void;
+  /**
+   * One tap on a type's circle (Nils, 2026-10-18, the three stories: "only this
+   * type", "hide this type", "these two only"). With every type showing, a tap
+   * narrows to that type alone; with some showing, a tap adds a type that is
+   * off or drops one that is on, and dropping the last one shows everything
+   * again. So "only games" is one tap, "games and films" is two, and a long
+   * press (`exclude`) hides one type from a full row in one.
+   */
+  tapType: (type: string, offered: readonly string[]) => void;
+  /** Hide one type and keep the rest: a long press on its circle. */
+  exclude: (type: string, offered: readonly string[]) => void;
   /** The "all" circle: clear the pick, or widen it when the account tracks only some types. */
   selectAll: () => void;
   /** Drop the chip selection, so the account's default shows again. */
@@ -54,11 +65,22 @@ export function TypeFilterProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<TypeFilter>(() => {
     const shown = visibleTypes(active, stored);
+    const offeredShown = (offered: readonly string[]) => offered.filter((t) => shown.includes(t as never));
     return {
       active,
       stored,
       shown,
       toggle: (type) => save(active.includes(type) ? active.filter((t) => t !== type) : [...active, type]),
+      tapType: (type, offered) => {
+        const on = offeredShown(offered);
+        if (on.length >= offered.length) return save([type]);
+        const next = on.includes(type) ? on.filter((t) => t !== type) : [...on, type];
+        save(next.length && next.length < offered.length ? next : []);
+      },
+      exclude: (type, offered) => {
+        const next = offeredShown(offered).filter((t) => t !== type);
+        save(next.length && next.length < offered.length ? next : []);
+      },
       reset: () => save([]),
       selectAll: () => save(enabledMediaTypes(stored).length === MEDIA_TYPES.length ? [] : [...MEDIA_TYPES]),
       isVisible: (type) => shown.includes(type as never),

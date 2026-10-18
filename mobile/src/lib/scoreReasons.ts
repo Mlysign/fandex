@@ -2,7 +2,7 @@
 // (components/FandexScorePanel.tsx). The rules are the site's: FandexScoreBadge's
 // bands and FandexScoreSection's one-line reason and row order.
 
-import { companyKey, personKey, tagKey } from '@/lib/facets';
+import { companyKey, ipKey, personKey, tagKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import type { ScoreReason } from '~/lib/fandexScore';
 
@@ -31,12 +31,19 @@ export function sortReasons(reasons: ScoreReason[]): ScoreReason[] {
   return [...reasons].sort((a, b) => (!!a.capped === !!b.capped ? b.contribution - a.contribution : a.capped ? 1 : -1));
 }
 
-/** Where a reason's chip leads, or null for one with no page of its own (a franchise). */
+/** Where a reason's chip leads, or null for one with no page of its own. A franchise has one since 2026-10-18. */
 export function reasonHref(r: ScoreReason): string | null {
   if (r.kind === 'tag') return `/tag/${keyToSlug(tagKey(r.label))}`;
   if (r.kind === 'person') return `/person/${keyToSlug(personKey(r.label))}`;
   if (r.kind === 'company') return `/studio/${keyToSlug(companyKey(r.label))}`;
+  if (r.kind === 'ip') return franchiseHref(r.label);
   return null;
+}
+
+/** A franchise page's address from any spelling of its name: "Star Wars Collection" and "Star Wars" lead to one page. */
+export function franchiseHref(name: string): string | null {
+  const key = ipKey(name);
+  return key ? `/franchise/${keyToSlug(key)}` : null;
 }
 
 /** `+4.2`, `−1.0`: a real minus sign, the width of the plus. */

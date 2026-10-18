@@ -215,6 +215,32 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   Hardcover's docs warn that its images are user-uploaded, so the support page names
   hello@fandex.org for takedown requests, in both languages.
 
+### Added 2026-10-18 (Nils, answering the 2026-10-17 list, and his new one)
+
+- **The Joker films join Batman and keep their own series** (TMDB's Joker Collection is that
+  series already). **The MCU films and shows join "Marvel" by ATTACH, keeping their own
+  collections**: attach, never bundle, is the pattern for an umbrella franchise.
+  `docs/archive/franchise-decisions-2026-10-18.sql`, undo beside it.
+- **The game twins and test builds are folded** (PUBG, ABZÛ, Google Blocks; the playtests,
+  betas and demos into their games, six of which were created for it). Serious Sam Fusion
+  2017 (beta) stays: it is a product. THE FINALS PLAYTEST stays: IGDB's search did not find
+  THE FINALS.
+- **A series rail beside the franchise rail**, read from the provider's own franchise key and
+  shown OLDEST first: a series is read in order, where "More from" (newest first, 2026-08-23)
+  is a shelf. Both stand.
+- **Recommended and Upcoming give each media type on screen an even share.** The calendar
+  month itself is NOT re-balanced (2026-07-28 stands); books get a floor of five in a month
+  because their reach signal cannot place them at all.
+- **The type filter: one tap on a type means "only this type" from a full row.** Add and drop
+  from a narrowed row, long press to hide one, the logo shows all and folds the row.
+- **The weekly taxonomy sweep APPLIES its changes** (Nils: "the sweep should do all things"),
+  with an undo file and a report per run, under per-kind limits, and never over a row made
+  by hand. Monday 08:00 on this PC, `scripts/taxonomy-sweep/`. Review stays for the rules'
+  own proposals.
+- **A franchise has a page**, `/franchise/{key}`, static like the other facet pages. The old
+  site's "ip is not a linkable kind" (`src/lib/facetUrl.ts`) was about that site's lint gate
+  and is left as it is.
+
 ---
 
 ## Decided 2026-09-02
