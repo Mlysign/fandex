@@ -6036,3 +6036,13 @@ Run in Node over the published catalog files plus the delta, with the device's o
 Undo, every row: `docs/archive/franchise-sweep-2026-10-17-undo.sql`.
 
 Left for Nils, judgment rather than fact: the Joker films apart from Batman; most MCU films sit in their own collections and not in "Marvel"; twins and test builds in the games (PUBG twice, ABZÛ twice, Google Blocks twice, a dozen playtests, betas and demos).
+
+## 2026-10-17 afternoon, his third list: recommendations, books, credits, the You tab
+
+- **`2113c5e`, `1bb9a18` Recommended for you is the green band only, chosen from the whole catalog copy.** `recommend` keeps a title only when `scoreBand` says high (the badge's margin over your average). The calendar's three months alone, scored by genre, left one card, so the rail now fills in three tiers from every catalog title not in your library, scored with full facets: still to come, the last year, the rest (`tierOf`). An account whose average sits near the top still gets no rail, by the rule.
+- **`2113c5e` One book per language.** Open Library files a translation as its own work; every shelf answer keeps works with an English edition or no language, and drops split editions and box sets (`isWholeBook`). Shelf `CACHE_VERSION` 2.
+- **`2113c5e`, `1bb9a18`, `67e4ef6` A book's series comes off its editions** (`seriesFromEditions`): the search row names one for a few works only. The 181 books stored before the fix are refetched by a cron step (`runOpenLibraryRefetchStep`), two a run, through the same upsert a resolve uses; The Way of Kings was moved to the front by hand and showed "The Stormlight Archive" at 16:20 UTC.
+- **`2113c5e` A person's or a studio's cards say what they did on each title** (`lib/creditLine.ts`): the catalog's roles, plus the part played where TMDB names it. The static facet pages write the same line.
+- **`2113c5e` The You tab lost Recently added, Coming up, Wishlist and Your ratings, and gained Import** (Nils). Recorded in decisions.md so a parity pass does not restore them.
+- **`8edc1a1` CI's App job had been red since the morning**: a type import from the website build reaching `db.ts` through `jsonLd.ts`, missing `@types/react-dom`, and Pressable hover callbacks typed as a weak type. `appSiteImports.test.ts` walks `mobile/web` too now.
+- Published to fandex.org twice that day; the API Worker deployed with each Worker change; **0.3.4 installed on the Pixel 8 at 18:29** with all of it, checked on his account (the You tab, and a Recommended rail hidden only because the phone's type filter was on Books).
