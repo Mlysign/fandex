@@ -96,7 +96,7 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Star picker | `ActionCells.tsx` | **yes**. Opens under the card's bar; the star that is your rating clears it. |
 | Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. The rail's hover arrows and the month column on a wide window since 2026-10-17. List view: the site never offered it on any page. |
 | Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Open whenever every group fits on the bar from 768 px (measured, 2026-10-17); a phone keeps it folded and closes it on a tap outside. |
-| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | **yes**. Hides while a list scrolls down on a phone and comes back on any scroll up (`lib/barScroll.tsx`, 2026-10-17). |
+| List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | **yes**. Hides while a list scrolls down on a phone and comes back on any scroll up (`lib/barScroll.tsx`, 2026-10-17). Floats over the list rather than resizing it, so a held thumb no longer makes it flicker (2026-10-18). |
 | Filters sheet | `discovery/FilterPanel.tsx`, `FacetAutocomplete.tsx`, `ui/TriToggle.tsx` | **yes** (`Filters.tsx`): must include and exclude, available on, your lists, release year. The year is two fields, as on the site (its slider was `/dev`'s tag frequency). |
 | Episode row, Up next rail | `EpisodeRow.tsx`, `ProgressRail.tsx` | **yes** (`UpNext.tsx`), with the tick's fill, hold and fade. |
 | Nav bars | `AppNav.tsx` | **yes** (`AppNav.tsx`). |

@@ -17,7 +17,7 @@ import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExp
 import { useToast } from '~/components/Toast';
 import { cardHref, useCardActions, useCardStates, type CardItem, type CardState } from '~/lib/cards';
 import { toggled } from '~/lib/a11y';
-import { useReportScroll } from '~/lib/barScroll';
+import { useBarList } from '~/lib/barScroll';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -253,7 +253,7 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
   const columns = gridColumns(width);
   const all = useMemo(() => sections ? sections.flatMap((s) => s.items) : items ?? [], [items, sections]);
   const kit = useCardKit(all);
-  const reportScroll = useReportScroll();
+  const bar = useBarList();
 
   const rows = useMemo<Row[]>(() => {
     const chunk = (list: CardItem[], prefix: string): Row[] => {
@@ -295,12 +295,12 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
       keyExtractor={(r) => r.key}
       contentContainerStyle={styles.gridContent}
       // A View, not a fragment: the list hands these an onLayout, which a fragment cannot take.
-      ListHeaderComponent={header ? <View>{header}</View> : null}
+      ListHeaderComponent={header || bar.inset ? <View>{bar.inset ? <View style={{ height: bar.inset }} /> : null}{header}</View> : null}
       ListFooterComponent={footer ? <View>{footer}</View> : null}
       ListEmptyComponent={empty ? <View>{empty}</View> : null}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.6}
-      onScroll={reportScroll}
+      onScroll={bar.onScroll}
       scrollEventThrottle={32}
       initialNumToRender={6}
       windowSize={7}
