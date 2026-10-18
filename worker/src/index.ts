@@ -319,7 +319,7 @@ async function searchGames(c: Ctx): Promise<Response> {
 
   // The edge cache answers a repeat of the same search without spending an IGDB
   // call. Keyed on the normalised term, not the raw url.
-  const cacheKey = new Request(`https://cache.fandex.internal/search/games?q=${encodeURIComponent(q.toLowerCase())}`);
+  const cacheKey = new Request(`https://cache.fandex.internal/search/games?v=${GAME_CARD_VERSION}&q=${encodeURIComponent(q.toLowerCase())}`);
   const cache = caches.default;
   const hit = await cache.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
@@ -352,6 +352,13 @@ async function searchGames(c: Ctx): Promise<Response> {
   if (results.length) c.defer(cache.put(cacheKey, response.clone()));
   return response;
 }
+
+/**
+ * The game card's shape, in the edge cache keys of every route that answers
+ * with it. Bump it when gameCard changes, or the old shape is served for up to
+ * a week (2: genres, 2026-10-18).
+ */
+const GAME_CARD_VERSION = 2;
 
 /** An IGDB game as the app's provider card, the shape /v1/search/games answers with. */
 function gameCard(g: any) {
@@ -394,7 +401,7 @@ async function browseGames(c: Ctx): Promise<Response> {
   // Keyed by the day, so the window moves with it.
   const day = new Date().toISOString().slice(0, 10);
   const recent = c.url.searchParams.get("window") === "recent";
-  const cacheKey = new Request(`https://cache.fandex.internal/browse/games?day=${day}&page=${page}&recent=${recent ? 1 : 0}`);
+  const cacheKey = new Request(`https://cache.fandex.internal/browse/games?v=${GAME_CARD_VERSION}&day=${day}&page=${page}&recent=${recent ? 1 : 0}`);
   const hit = await caches.default.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
   if (!(await allow(c.env.RL_RESOLVE, `browse:${clientIp(c.request)}`))) return error(429, "rate-limited");
@@ -423,7 +430,7 @@ async function facetGames(c: Ctx): Promise<Response> {
   const kind = c.url.searchParams.get("kind");
   const label = (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
   if ((kind !== "tag" && kind !== "studio" && kind !== "franchise") || label.length < 2) return error(400, "bad-request", "kind must be tag, studio or franchise, q at least two characters");
-  const cacheKey = new Request(`https://cache.fandex.internal/facet/games?kind=${kind}&q=${encodeURIComponent(label.toLowerCase())}`);
+  const cacheKey = new Request(`https://cache.fandex.internal/facet/games?v=${GAME_CARD_VERSION}&kind=${kind}&q=${encodeURIComponent(label.toLowerCase())}`);
   const hit = await caches.default.match(cacheKey);
   if (hit) return new Response(hit.body, hit);
   if (!(await allow(c.env.RL_RESOLVE, `facet:${clientIp(c.request)}`))) return error(429, "rate-limited");
