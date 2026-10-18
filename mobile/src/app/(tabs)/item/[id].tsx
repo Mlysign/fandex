@@ -3,7 +3,7 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Eye, EyeOff, Star } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { CardRail, StarPicker } from '~/components/cards';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
@@ -52,9 +52,17 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
   const { taxonomy } = useScores();
   const [rails, setRails] = useState<RelatedRails | null>(null);
 
+  // The rails go blank only for another title. Re-picked for the same one (the
+  // catalog copy changed: rating a card in a rail brings that title in), the old
+  // rails stay until the new ones are ready. Blanking them shrank the page under
+  // a reader near its foot, and the browser threw them up it (2026-10-18).
+  const railsFor = useRef<string | null>(null);
   useEffect(() => {
     let live = true;
-    setRails(null);
+    if (railsFor.current !== itemId) {
+      railsFor.current = itemId;
+      setRails(null);
+    }
     if (!taxonomy) return;
     relatedRails(db, catalog.revision, taxonomy, itemId, facets)
       .then(async (r) => {

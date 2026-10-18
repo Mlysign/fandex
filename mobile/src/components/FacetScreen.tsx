@@ -18,7 +18,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ArrowLeft } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ipDisplayLabel } from '@/lib/facets';
 import { slugToKey } from '@/lib/facetUrl';
@@ -159,9 +159,18 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     return spokenKey(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
   };
 
+  // Blank the page only when it becomes another page. A re-read for the same one
+  // (the catalog copy changed: a rating brought a title in, a sync landed) keeps
+  // the list on screen until the new one replaces it. Blanking it swapped the
+  // grid for a loading screen and the new grid opened at the top: rating a card
+  // threw you back up the page (Nils, 2026-10-18).
+  const shownFor = useRef<string | null>(null);
   useEffect(() => {
     let live = true;
-    setFound(null);
+    if (shownFor.current !== `${kind}|${key}`) {
+      shownFor.current = `${kind}|${key}`;
+      setFound(null);
+    }
     (async () => {
       // The key is inside a JSON column. LIKE narrows four thousand rows to a
       // handful; the parse below is what decides.
