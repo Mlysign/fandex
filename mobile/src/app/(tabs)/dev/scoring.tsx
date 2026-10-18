@@ -39,7 +39,7 @@ function Admin() {
   useEffect(() => { void load(); }, [load]);
 
   // After a save: this page reads what is now stored, and the app's own scores
-  // switch to it without waiting for the twelve-hour check.
+  // switch to it without waiting for the next app start.
   const saved = useCallback(async () => {
     await Promise.all([load(), scores.reloadTaxonomy()]);
   }, [load, scores]);

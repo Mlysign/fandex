@@ -13,6 +13,7 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
@@ -26,8 +27,13 @@ import {
 const TAXONOMY_KEY = 'taxonomy';
 const TAXONOMY_ETAG_KEY = 'taxonomy_etag';
 const TAXONOMY_AT_KEY = 'taxonomy_at';
-/** The taxonomy is edited by hand, rarely. Asking twice a day is plenty, and an unchanged one costs a 304. */
-const TAXONOMY_TTL_MS = 12 * 60 * 60 * 1000;
+/**
+ * Asked on every start and every return to the app, at most once a minute (a
+ * browser fires "active" on every tab switch). An unchanged taxonomy is a 304
+ * off one kept row on the Worker (worker/src/catalog/read.ts), so asking often
+ * is cheap; asking twice a day left a sweep invisible for up to twelve hours.
+ */
+const TAXONOMY_CHECK_GAP_MS = 60_000;
 /** Host parameters per statement, kept well under any SQLite build's limit. */
 const ID_CHUNK = 200;
 
@@ -73,10 +79,10 @@ async function storedTaxonomy(db: SQLiteDatabase): Promise<Taxonomy | null> {
   try { return prepareTaxonomy(JSON.parse(raw) as TaxonomyJson); } catch { return null; }
 }
 
-/** Fetch the taxonomy if the stored one is old. True when a new one was stored. Never throws: the stored one stands. */
+/** Ask for the taxonomy unless it was asked for under a minute ago. True when a new one was stored. Never throws: the stored one stands. */
 async function refreshTaxonomy(db: SQLiteDatabase, force: boolean): Promise<boolean> {
   const at = Number(await getMeta(db, TAXONOMY_AT_KEY)) || 0;
-  if (!force && Date.now() - at < TAXONOMY_TTL_MS) return false;
+  if (!force && Date.now() - at < TAXONOMY_CHECK_GAP_MS) return false;
   try {
     const etag = await getMeta(db, TAXONOMY_ETAG_KEY);
     const res = await fetch(`${API_URL}/v1/taxonomy`, { headers: etag ? { 'If-None-Match': etag } : {} });
@@ -114,19 +120,29 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
 
-  // The taxonomy: what is stored, at once; then a fresher one if it is due.
+  // The taxonomy: what is stored, at once; then asked for again, on start and
+  // on every return to the app, so an edit or a sweep shows on the next open.
   useEffect(() => {
     let live = true;
+    const check = async () => {
+      if (await refreshTaxonomy(db, false)) {
+        const fresh = await storedTaxonomy(db);
+        if (live && fresh) setTaxonomy(fresh);
+      }
+    };
     (async () => {
       const stored = await storedTaxonomy(db);
       if (!live) return;
       if (stored) setTaxonomy(stored);
-      if (await refreshTaxonomy(db, !stored)) {
+      if (!stored && (await refreshTaxonomy(db, true))) {
         const fresh = await storedTaxonomy(db);
         if (live && fresh) setTaxonomy(fresh);
+      } else if (stored) {
+        await check();
       }
     })();
-    return () => { live = false; };
+    const sub = AppState.addEventListener('change', (next) => { if (next === 'active') void check(); });
+    return () => { live = false; sub.remove(); };
   }, [db]);
 
   // The profile: rebuilt when your rows, the catalog copy or the taxonomy change.

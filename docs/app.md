@@ -300,7 +300,7 @@ write nothing; that is how the sync was proven before it was allowed to delete.
 - **The Fandex Score is computed on the device** (`fandexScore.ts`, `ScoreProvider.tsx`). It is a
   port of the site's `buildProfile` and `computeFandexScore` with the database taken out: pure
   functions of the titles you rated (with the catalog copy's raw facets), the taxonomy from
-  `/v1/taxonomy` (kept in SQLite, re-asked twice a day with its ETag) and the facets of the title
+  `/v1/taxonomy` (kept in SQLite, re-asked with its ETag on every start and every return to the app, at most once a minute; the Worker answers an unchanged one with a 304 off one kept row) and the facets of the title
   being scored. The profile is rebuilt when your rows, the catalog copy or the taxonomy change.
   ⚠️ **The port and the site must give the same number**, and nothing but
   `scripts/probe-app-score.mjs` checks that. Run it after touching either side's scoring:

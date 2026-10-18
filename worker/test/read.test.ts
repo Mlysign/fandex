@@ -4,7 +4,7 @@ import { DERIVE_VERSION } from "../src/catalog/derive";
 import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
   RELEASE_DATES_SQL,
-  showEpisodesJson, taxonomyJson,
+  DROP_TAXONOMY_SQL, keepTaxonomy, keptTaxonomy, keptTaxonomyEtag, showEpisodesJson, taxonomyJson,
 } from "../src/catalog/read";
 import { db, gameItem, movieItem, showItem, wipe } from "./helpers";
 
@@ -235,6 +235,48 @@ describe("taxonomy", () => {
     expect((await taxonomyJson(db)).etag).toBe(a.etag);
     await db.prepare("INSERT INTO tag_alias (alias_key, canonical_key) VALUES ('sf', 'sci fi')").run();
     expect((await taxonomyJson(db)).etag).not.toBe(a.etag);
+  });
+
+  const categories = () =>
+    db.prepare("INSERT INTO tag_category (id, label, color, weight, sort_order) VALUES ('genre', 'Genre', '#fff', 1, 1), ('theme', 'Theme', '#fff', 1, 2)").run();
+
+  it("is kept: answered off kv until a write keeps it again, the sweep drops it, or the hour runs out", async () => {
+    await categories();
+    await db.prepare("INSERT INTO tag_category_override (tag_key, category_id) VALUES ('sci fi', 'genre')").run();
+    const a = await keptTaxonomy(db);
+    expect(await keptTaxonomyEtag(db)).toBe(a.etag);
+
+    // A row written behind its back is not seen while the kept copy stands.
+    await db.prepare("INSERT INTO tag_category_override (tag_key, category_id) VALUES ('noir', 'genre')").run();
+    expect((await keptTaxonomy(db)).etag).toBe(a.etag);
+
+    // An admin write keeps it again.
+    const b = await keepTaxonomy(db);
+    expect(b.etag).not.toBe(a.etag);
+    expect(JSON.parse((await keptTaxonomy(db)).body).tagCategoryOverrides).toContainEqual(["noir", "genre"]);
+
+    // The sweep's statement drops it, and the next ask builds it.
+    await db.prepare("INSERT INTO tag_category_override (tag_key, category_id) VALUES ('heist', 'genre')").run();
+    await db.prepare(DROP_TAXONOMY_SQL).run();
+    expect(await keptTaxonomyEtag(db)).toBeNull();
+    expect(JSON.parse((await keptTaxonomy(db)).body).tagCategoryOverrides).toContainEqual(["heist", "genre"]);
+
+    // An expired copy is not served.
+    await db.prepare("UPDATE kv SET expires_at = 1 WHERE key IN ('taxonomy', 'taxonomy_etag')").run();
+    expect(await keptTaxonomyEtag(db)).toBeNull();
+  });
+
+  it("costs one row read to answer an unchanged device, however big the taxonomy", async () => {
+    await categories();
+    const put = db.prepare("INSERT INTO tag_category_override (tag_key, category_id) VALUES (?, 'theme')");
+    for (let i = 0; i < 2000; i += 100) await db.batch(Array.from({ length: 100 }, (_, j) => put.bind(`tag ${i + j}`)));
+    const built = await db.prepare("SELECT json_group_array(json_array(tag_key, category_id)) j FROM (SELECT * FROM tag_category_override ORDER BY tag_key)").run();
+    await keptTaxonomy(db);
+    // The statement keptTaxonomyEtag runs (budget.ts kvGet).
+    const check = await db.prepare("SELECT value, expires_at FROM kv WHERE key = ?").bind("taxonomy_etag").run();
+    console.log("taxonomy, rows read:", { build: built.meta.rows_read, unchangedCheck: check.meta.rows_read });
+    expect(built.meta.rows_read).toBeGreaterThanOrEqual(2000);
+    expect(check.meta.rows_read).toBe(1);
   });
 
   it("is valid JSON on an empty database", async () => {

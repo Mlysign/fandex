@@ -82,8 +82,8 @@ offer the pages (a section at the foot of Settings; on the site the addresses we
 
 **What an edit costs.** The device applies aliases, category moves, labels and the scoring config
 when it scores, from `/v1/taxonomy`. Nothing stored per item is rewritten, so an edit is a few
-row writes and reaches a device the next time it fetches the taxonomy (every twelve hours, or at
-once for the admin who made it). I had this wrong on 2026-10-10 morning and wrote that an alias
+row writes and reaches a device the next time it fetches the taxonomy (the next time the app opens or comes back,
+at most a minute apart, or at once for the admin who made it). I had this wrong on 2026-10-10 morning and wrote that an alias
 would have to rewrite every item carrying the tag.
 
 ## The kit

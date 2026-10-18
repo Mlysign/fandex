@@ -47,7 +47,7 @@ import { capFrom, spend, spent } from "./budget";
 import { calendarMonth } from "./calendar";
 import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
-  showEpisodesJson, taxonomyJson,
+  keepTaxonomy, keptTaxonomy, keptTaxonomyEtag, showEpisodesJson,
 } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
@@ -145,9 +145,15 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   if (a === "taxonomy" && method === "GET") {
-    const { body, etag } = await taxonomyJson(c.env.DB);
-    if (request.headers.get("If-None-Match") === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
-    return json(body, 200, { ETag: etag, "Cache-Control": "public, max-age=300" });
+    // Devices ask on every start and every return to the app, so the usual
+    // answer is a 304 off one kept row. no-cache: a browser must ask too, or a
+    // change waits out its HTTP cache.
+    const asked = request.headers.get("If-None-Match");
+    const notModified = (etag: string) => new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "no-cache" } });
+    if (asked && asked === (await keptTaxonomyEtag(c.env.DB))) return notModified(asked);
+    const { body, etag } = await keptTaxonomy(c.env.DB);
+    if (asked === etag) return notModified(etag);
+    return json(body, 200, { ETag: etag, "Cache-Control": "no-cache" });
   }
 
   if (a === "items" && method === "GET") {
@@ -532,7 +538,8 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
   // The Scoring page's writes. Each answers with the taxonomy as it now is, so
   // the page redraws from what was stored and not from what it sent.
   const db = c.env.DB;
-  const saved = async () => json((await taxonomyJson(db)).body, 200, PRIVATE);
+  // Builds and keeps it again, so every device's next check sees the write.
+  const saved = async () => json((await keepTaxonomy(db)).body, 200, PRIVATE);
   if (b === "scoring" && method === "PUT" && !d) {
     await saveScoringConfig(db, parseScoringConfig(await readJson(c.request, AUTH_BODY_MAX)));
     return saved();

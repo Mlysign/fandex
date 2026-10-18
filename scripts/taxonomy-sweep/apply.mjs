@@ -14,7 +14,8 @@
 // (ON CONFLICT DO NOTHING where the admin would update), and an attach is
 // filed under source 'sweep', so the Franchises panel and the undo can tell
 // the sweep's rows from Nils's. The taxonomy is read live by every device
-// (/v1/taxonomy, asked twice a day), so nothing needs a deploy or a publish.
+// (/v1/taxonomy, asked on every app start and return), so nothing needs a deploy or a publish;
+// the SQL it writes ends by dropping the Worker's kept copy, so the next ask sees the change.
 //
 // Actions (every one carries a one-line `why`, kept in the report):
 //   franchise-attach  { mediaItemId, franchise }         the title joins the franchise, made if new
@@ -242,9 +243,13 @@ for (const r of backup.ip_alias ?? []) restore.push(`INSERT INTO ip_alias (alias
 for (const r of backup.tag_alias ?? []) restore.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at) VALUES (${q(r.alias_key)}, ${q(r.canonical_key)}, ${r.updated_at}) ON CONFLICT (alias_key) DO UPDATE SET canonical_key = excluded.canonical_key;`);
 for (const r of backup.tag_category ?? []) restore.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at) VALUES (${q(r.id)}, ${q(r.label)}, ${q(r.color)}, ${r.weight}, ${r.ignored}, ${r.sort_order}, ${r.updated_at}) ON CONFLICT (id) DO NOTHING;`);
 for (const r of backup.tag_category_override_by_category ?? []) restore.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (${q(r.tag_key)}, ${q(r.category_id)}, ${r.updated_at}) ON CONFLICT (tag_key) DO UPDATE SET category_id = excluded.category_id;`);
+// The Worker keeps the built taxonomy in kv (worker/src/catalog/read.ts, DROP_TAXONOMY_SQL).
+// Dropping it, last, is what makes devices see this sweep or its undo on their next check
+// rather than within the hour.
+const DROP_KEPT_TAXONOMY = "DELETE FROM kv WHERE key IN ('taxonomy', 'taxonomy_etag');";
 
-fs.writeFileSync(path.join(ARCHIVE, `${stamp}.sql`), `${head}\n${sql.join("\n")}\n`);
-fs.writeFileSync(path.join(ARCHIVE, `${stamp}-undo.sql`), `-- Undo for ${stamp}.sql: the sweep's rows out, the rows it changed back as they were.\n${[...undo, ...restore].join("\n")}\n`);
+fs.writeFileSync(path.join(ARCHIVE, `${stamp}.sql`), `${head}\n${[...sql, DROP_KEPT_TAXONOMY].join("\n")}\n`);
+fs.writeFileSync(path.join(ARCHIVE, `${stamp}-undo.sql`), `-- Undo for ${stamp}.sql: the sweep's rows out, the rows it changed back as they were.\n${[...undo, ...restore, DROP_KEPT_TAXONOMY].join("\n")}\n`);
 fs.writeFileSync(path.join(ARCHIVE, `${stamp}.md`), md.join("\n"));
 const backupDir = path.join(REPO, "data", "backups");
 fs.mkdirSync(backupDir, { recursive: true });

@@ -344,6 +344,54 @@ export async function taxonomyJson(db: D1Database): Promise<{ body: string; etag
   return { body, etag: await weakEtag(body) };
 }
 
+// The taxonomy, kept. Building it reads every row of seven tables (about 8,300
+// after the sweeps of 2026-10-18), and devices ask on every start and every
+// return to the app, so the built answer is kept in kv and a check costs one row
+// read. An admin write builds and keeps it again (`keepTaxonomy`); the sweep
+// script (scripts/taxonomy-sweep/apply.mjs) ends its SQL and its undo with the
+// same statement as DROP_TAXONOMY_SQL, so rename the keys in both places or
+// neither; the hour is the bound on a change
+// nobody told it about, such as SQL run by hand.
+
+const TAXONOMY_BODY_KEY = "taxonomy";
+const TAXONOMY_ETAG_KEY = "taxonomy_etag";
+const TAXONOMY_TTL_SECONDS = 3600;
+export const DROP_TAXONOMY_SQL = `DELETE FROM kv WHERE key IN ('${TAXONOMY_BODY_KEY}', '${TAXONOMY_ETAG_KEY}')`;
+
+/** Build the taxonomy and keep it. A failed keep is logged and the built answer still served. */
+export async function keepTaxonomy(db: D1Database): Promise<{ body: string; etag: string }> {
+  const t = await taxonomyJson(db);
+  const put = db.prepare(
+    `INSERT INTO kv (key, value, expires_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`,
+  );
+  const expires = nowSeconds() + TAXONOMY_TTL_SECONDS;
+  try {
+    // One batch, so the kept body and its etag never disagree.
+    await db.batch([put.bind(TAXONOMY_BODY_KEY, t.body, expires), put.bind(TAXONOMY_ETAG_KEY, t.etag, expires)]);
+  } catch (e) {
+    console.warn("taxonomy_keep_failed", String(e));
+  }
+  return t;
+}
+
+/** The kept taxonomy's etag, or null when none is kept or it has expired. One row read. */
+export async function keptTaxonomyEtag(db: D1Database): Promise<string | null> {
+  return kvGet(db, TAXONOMY_ETAG_KEY);
+}
+
+/** The kept taxonomy, built and kept first when there is none. */
+export async function keptTaxonomy(db: D1Database): Promise<{ body: string; etag: string }> {
+  const rows = await all<{ key: string; value: string }>(
+    db,
+    "SELECT key, value FROM kv WHERE key IN (?, ?) AND (expires_at IS NULL OR expires_at > ?)",
+    [TAXONOMY_BODY_KEY, TAXONOMY_ETAG_KEY, nowSeconds()],
+  );
+  const body = rows.find((r) => r.key === TAXONOMY_BODY_KEY)?.value;
+  const etag = rows.find((r) => r.key === TAXONOMY_ETAG_KEY)?.value;
+  return body && etag ? { body, etag } : keepTaxonomy(db);
+}
+
 export async function weakEtag(body: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
   const hex = [...new Uint8Array(digest).slice(0, 12)].map((b) => b.toString(16).padStart(2, "0")).join("");

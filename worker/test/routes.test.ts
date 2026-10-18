@@ -81,6 +81,12 @@ describe("routing", () => {
     expect(etag).toBeTruthy();
     const again = await call("/v1/taxonomy", { headers: { "If-None-Match": etag } });
     expect(again.status).toBe(304);
+    // A browser must ask every time too, or a sweep waits out its HTTP cache.
+    expect(first.headers.get("Cache-Control")).toBe("no-cache");
+    // An old etag gets the whole body.
+    const stale = await call("/v1/taxonomy", { headers: { "If-None-Match": 'W/"old"' } });
+    expect(stale.status).toBe(200);
+    expect(stale.headers.get("ETag")).toBe(etag);
   });
 });
 
