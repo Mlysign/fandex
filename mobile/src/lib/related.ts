@@ -292,7 +292,8 @@ export function seriesForItem(input: { id: string; type?: string; rawFacets: Sco
  */
 export function pickRelated(input: { id: string; type?: string; facets: ScoreFacet[]; rawFacets?: ScoreFacet[]; index: FacetIndex; vectors: Map<string, ItemVector>; tax: Taxonomy }): {
   series: { label: string; ids: string[] } | null;
-  franchise: { label: string; ids: string[] } | null;
+  /** `key` is the franchise's canonical key: its page is `/franchise/{key}`. */
+  franchise: { key: string; label: string; ids: string[] } | null;
   similar: string[];
 } {
   const { id, type, facets, index, vectors, tax } = input;
@@ -314,7 +315,7 @@ export function pickRelated(input: { id: string; type?: string; facets: ScoreFac
 
   return {
     series,
-    franchise: franchise && franchise.items.length ? { label: franchise.label, ids: franchise.items.map((v) => v.id) } : null,
+    franchise: franchise && franchise.items.length ? { key: franchise.key, label: franchise.label, ids: franchise.items.map((v) => v.id) } : null,
     similar: similar.length >= MIN_SIMILAR ? similar : [],
   };
 }
@@ -368,7 +369,8 @@ const toCard = (r: CatalogRow): CardItem => ({
 export interface RelatedRails {
   /** The provider's own series of this medium ("Harry Potter books"), when it differs from the franchise rail. */
   series: { label: string; items: CardItem[] } | null;
-  franchise: { label: string; items: CardItem[] } | null;
+  /** `key` is null when the rail is a TMDB collection the catalog has no franchise for: no page to open. */
+  franchise: { key: string | null; label: string; items: CardItem[] } | null;
   similar: CardItem[];
 }
 
@@ -391,7 +393,7 @@ export async function relatedRails(db: SQLiteDatabase, revision: number, tax: Ta
   const cards = (ids: string[]) => ids.map((cid) => rows.get(cid)).filter((r): r is CatalogRow => !!r).map(toCard);
   return {
     series: picked.series ? { label: picked.series.label, items: cards(picked.series.ids) } : null,
-    franchise: picked.franchise ? { label: picked.franchise.label, items: cards(picked.franchise.ids) } : null,
+    franchise: picked.franchise ? { key: picked.franchise.key, label: picked.franchise.label, items: cards(picked.franchise.ids) } : null,
     similar: cards(picked.similar),
   };
 }

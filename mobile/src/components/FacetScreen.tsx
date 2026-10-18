@@ -13,6 +13,9 @@
 // numbers, and the same Filters sheet Search has (components/Filters.tsx).
 // Nothing is narrowed until somebody taps, so a page opens as it always did.
 //
+// A franchise page opens with a carousel per series, the rest in the grid under
+// them (lib/franchiseSeries.ts, 2026-10-18).
+//
 // Not carried over: "also known as" for a person.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,7 +26,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ipDisplayLabel } from '@/lib/facets';
 import { slugToKey } from '@/lib/facetUrl';
 import type { MediaType } from '@/types';
-import { PosterGrid } from '~/components/cards';
+import { CardRail, PosterGrid, RailHeader } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { Avatar, EmptyState, SortMenu } from '~/components/kit';
 import { backButtonStyle, FacetHeader, facetEyebrow, KIND_LABEL, ROLE_LABEL, type FacetKind } from '~/components/FacetHeader';
@@ -35,6 +38,7 @@ import { estimateFacets, spokenKey, type ImpactKind, type PageImpact } from '~/l
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { useOfferedTypes } from '~/lib/features';
+import { splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -111,7 +115,11 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const [bioOpen, setBioOpen] = useState(false);
   /** The photo the gallery is open on, or null while it is shut. */
   const [photoAt, setPhotoAt] = useState<number | null>(null);
-  const [found, setFound] = useState<{ label: string; category: string | null; roles: string[]; cards: CardItem[] } | null>(null);
+  const [found, setFound] = useState<{
+    label: string; category: string | null; roles: string[]; cards: CardItem[];
+    /** A franchise page's: each held title's provider keys that belong to this page, which its series are made of. */
+    seriesKeys: Map<string, SeriesKey[]>;
+  } | null>(null);
   // Narrowing: media types kept (none kept is every type), and the Filters sheet.
   const offered = useOfferedTypes();
   const [kept, setKept] = useState<Set<string>>(new Set());
@@ -174,6 +182,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       let category: string | null = null;
       const roles = new Map<string, number>();
       const cards: CardItem[] = [];
+      const seriesKeys = new Map<string, SeriesKey[]>();
       const seen = new Set<string>();
       for (const r of [...rows, ...attached]) {
         if (seen.has(r.id) || overrides.removed.has(r.id)) continue;
@@ -187,11 +196,14 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         category ??= hit.find((f) => f.category)?.category ?? null;
         for (const f of hit) if (f.role) roles.set(f.role, (roles.get(f.role) ?? 0) + 1);
         // What they did on this one, under its name: "Director · Writer", "Author". A tag or a franchise has no role.
-        const had = hit.map((f) => f.role).filter((x): x is string => !!x);
+        // A franchise's facet says "ip" in its role, which is no credit.
+        const had = kind === 'franchise' ? [] : hit.map((f) => f.role).filter((x): x is string => !!x);
         cards.push({ ...cardFromCatalog(r), role: creditLine(r.type, had), roles: had.length ? [...new Set(had)] : undefined });
+        // A hand-attached title carries none of these, and so is in no series.
+        if (kind === 'franchise') seriesKeys.set(r.id, hit.map((f) => ({ key: f.key, label: f.label })));
       }
       if (kind === 'franchise') label = taxonomy?.labels.get(`ip|${key}`) ?? (label ? ipDisplayLabel(label) : '');
-      if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards });
+      if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards, seriesKeys });
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,6 +277,22 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
   }, [filtered, sort, scores]);
+
+  // A franchise page: a carousel per provider series, the rest in the grid (lib/franchiseSeries.ts).
+  // From the narrowed list, so the type row and the filters reach the carousels too.
+  const split = useMemo(() => {
+    if (kind !== 'franchise' || !found) return { series: [], rest: sorted };
+    return splitSeries({
+      cards: sorted,
+      // A card the device does not hold came from the providers, asked by this franchise's name.
+      // TMDB's collection and IGDB's franchise match that name exactly, so theirs join its
+      // series. Open Library's series search is loose (box sets, books ABOUT Harry Potter),
+      // so one of its books joins only when the Worker holds it: the real ones are in the
+      // catalog, the box sets are not. The device's copy may not have them all yet.
+      seriesOf: (c) => (c.id && found.seriesKeys.get(c.id)) || (c.id || c.source === 'tmdb' || c.source === 'igdb' ? undefined : []),
+      franchiseKey: key, franchiseLabel: found.label || key,
+    });
+  }, [kind, found, sorted, key]);
 
   const tiles = useMemo(() => {
     const all = cards ?? [];
@@ -369,12 +397,21 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     />
   );
 
+  const grouped = split.series.length > 0;
   return (
     <Screen wide>
       <PosterGrid
-        items={sorted}
-        header={header}
-        empty={asking ? <StateBlock loading />
+        items={split.rest}
+        header={grouped ? (
+          <>
+            {header}
+            <View style={styles.series}>
+              {split.series.map((s) => <CardRail key={s.id} title={s.label} items={s.items} />)}
+              {split.rest.length ? <RailHeader title="Everything else" /> : null}
+            </View>
+          </>
+        ) : header}
+        empty={grouped ? undefined : asking ? <StateBlock loading />
           : narrowed ? <EmptyState title="Nothing matches these filters" hint="Widen the types or the filters above." />
           : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or at the providers carries this.'} />}
       />
@@ -390,6 +427,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
 
 const styles = StyleSheet.create({
   bio: { marginTop: 12, maxWidth: 720 },
+  // The item page's gap between rails.
+  series: { gap: 40, paddingTop: 8, paddingBottom: 16 },
   photoCount: {
     position: 'absolute', right: -2, bottom: -2, minWidth: 22, height: 22, paddingHorizontal: 5, borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceOverlay, borderWidth: 1, borderColor: color.borderStrong,

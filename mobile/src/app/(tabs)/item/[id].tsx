@@ -14,6 +14,7 @@ import { Button } from '~/components/kit';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
+import { keyToSlug } from '@/lib/facetUrl';
 import { normalizeName } from '@/lib/normalize';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toggled } from '~/lib/a11y';
@@ -114,7 +115,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
         // The page's own title is never in its franchise rail, held or not.
         const items = [...(r.franchise?.items ?? []), ...extra.filter((c) => c.id !== itemId)]
           .sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1)); // newest first, as the rail is
-        setRails({ ...r, franchise: { label, items } });
+        setRails({ ...r, franchise: { key: r.franchise?.key ?? null, label, items } });
       })
       .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
@@ -125,7 +126,13 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
     <View style={{ gap: 40 }}>
       {/* The provider's own series of this medium, in order, before the whole franchise (lib/related.ts, seriesForItem). */}
       {rails.series?.items.length ? <CardRail title={rails.series.label} items={rails.series.items} /> : null}
-      {rails.franchise?.items.length ? <CardRail title={`More from ${rails.franchise.label}`} items={rails.franchise.items} /> : null}
+      {/* See all opens the franchise's page, split into its series (Nils, 2026-10-18). */}
+      {rails.franchise?.items.length ? (
+        <CardRail
+          title={`More from ${rails.franchise.label}`} items={rails.franchise.items}
+          seeAllHref={rails.franchise.key ? `/franchise/${keyToSlug(rails.franchise.key)}` : undefined}
+        />
+      ) : null}
       {rails.similar.length ? <CardRail title="More like this" items={rails.similar} /> : null}
     </View>
   );

@@ -84,7 +84,8 @@ describe('the two rails', () => {
 
   it('puts the franchise in one rail and leaves it out of the other', () => {
     const picked = pickRelated({ id: 'alien', facets: alien.facets, index, vectors, tax });
-    expect(picked.franchise).toEqual({ label: 'Alien', ids: ['aliens'] });
+    // The key is what See all opens: /franchise/alien.
+    expect(picked.franchise).toEqual({ key: 'alien', label: 'Alien', ids: ['aliens'] });
     expect(picked.similar).not.toContain('aliens');
     expect(picked.similar).not.toContain('alien');
   });
