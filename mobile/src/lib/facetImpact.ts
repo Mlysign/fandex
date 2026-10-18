@@ -6,7 +6,38 @@
 // per role (a director and a cast member are scored apart), so their page gets
 // one row per role you have rated them in.
 
-import { facetImpact, facetId, MIN_RATED_FOR_FANDEX_SCORE, type Profile, type Taxonomy } from './fandexScore';
+import { tagKey } from '@/lib/facets';
+import { facetImpact, facetId, MIN_RATED_FOR_FANDEX_SCORE, type Profile, type ScoreFacet, type Taxonomy } from './fandexScore';
+
+/**
+ * What a facet page knows of a title nobody holds, as the facets a Fandex Score
+ * is estimated from: the page's own facet (the author, the franchise, the tag),
+ * in the roles the card came with, and the card's genres (a book's subjects,
+ * IGDB's genres and themes, TMDB's genres).
+ *
+ * The page's facet alone scored only what you had rated that person or tag on
+ * before, so an author you had not read showed the crowd's rating on every card
+ * (Paolo Bacigalupi, Nils, 2026-10-18). The genres are what Home's calendar
+ * cards are scored from, for the same reason.
+ */
+export function estimateFacets(kind: 'tag' | 'person' | 'studio' | 'franchise', key: string, label: string, roles: string[] | undefined, genres: string[] | undefined): ScoreFacet[] {
+  let own: ScoreFacet[];
+  if (kind === 'tag') own = [{ kind: 'tag', key, label }];
+  else if (kind === 'franchise') own = [{ kind: 'ip', role: 'ip', key, label }];
+  else {
+    const had = roles?.length ? roles : [kind === 'person' ? 'cast' : 'studio'];
+    own = had.map((role) => ({ kind: kind === 'person' ? 'person' : 'company', role, key, label }));
+  }
+  const seen = new Set(own.filter((f) => f.kind === 'tag').map((f) => f.key));
+  const tags: ScoreFacet[] = [];
+  for (const g of genres ?? []) {
+    const k = tagKey(g);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    tags.push({ kind: 'tag', key: k, label: g });
+  }
+  return [...own, ...tags];
+}
 
 /** A stored key as an address spells it: hyphens and runs of spaces are one space (src/lib/facetUrl.ts, slugToKey). */
 export const spokenKey = (key: string) => key.toLowerCase().replace(/-+/g, ' ').replace(/\s+/g, ' ').trim();

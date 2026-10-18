@@ -202,6 +202,8 @@ export interface ProviderResult {
   posterUrl: string | null;
   votes: number;
   rating: number | null;
+  /** A book's subjects, a board game's categories. */
+  genres?: string[];
 }
 
 export interface GameSearchResult {
@@ -213,6 +215,8 @@ export interface GameSearchResult {
   posterUrl: string | null;
   votes: number;
   rating: number | null;
+  /** IGDB's genres and themes. Absent from a Worker deployed before 2026-10-18. */
+  genres?: string[];
 }
 
 export interface Health { ok: boolean; time: number; today: { fetches: number; userWrites: number } }

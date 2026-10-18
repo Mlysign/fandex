@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pageImpacts } from './facetImpact';
+import { estimateFacets, pageImpacts } from './facetImpact';
 import { buildProfile, computeFandexScore, prepareTaxonomy, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 const json = (over: Partial<TaxonomyJson> = {}): TaxonomyJson => ({
@@ -64,5 +64,30 @@ describe("a facet page's Fandex impact", () => {
     expect(pageImpacts('tag', 'western', profile, tax)).toEqual([]);
     expect(pageImpacts('company', 'steampunk', profile, tax)).toEqual([]);
     expect(pageImpacts('tag', 'steampunk', buildProfile(library.slice(0, 2), tax), tax)).toEqual([]);
+  });
+});
+
+// 2026-10-18: Paolo Bacigalupi's page showed the crowd's rating on every card,
+// because none of his books is held and you had rated none of them.
+describe('a Fandex Score for a title nobody holds', () => {
+  const tax = prepareTaxonomy(json());
+  const profile = buildProfile([
+    rated('x', 9, [tag('science fiction'), tag('dystopian')]),
+    rated('y', 8, [tag('science fiction')]),
+    rated('z', 3, [tag('romance')]),
+  ], tax);
+
+  it('is estimated from the card\u2019s genres when the page\u2019s own facet says nothing', () => {
+    const facets = estimateFacets('person', 'paolo bacigalupi', 'Paolo Bacigalupi', ['creator'], ['Science Fiction', 'Dystopian']);
+    expect(facets).toContainEqual({ kind: 'person', role: 'creator', key: 'paolo bacigalupi', label: 'Paolo Bacigalupi' });
+    expect(facets.filter((f) => f.kind === 'tag').map((f) => f.key)).toEqual(['science fiction', 'dystopian']);
+    expect(computeFandexScore(facets, 'card', profile, tax)).not.toBeNull();
+    // The author alone, as before the fix: nothing to score from.
+    expect(computeFandexScore(estimateFacets('person', 'paolo bacigalupi', 'Paolo Bacigalupi', ['creator'], []), 'card', profile, tax)).toBeNull();
+  });
+
+  it('counts a tag page\u2019s own tag once', () => {
+    const facets = estimateFacets('tag', 'science fiction', 'Science fiction', undefined, ['Science Fiction', 'Science fiction', 'Space']);
+    expect(facets.map((f) => f.key)).toEqual(['science fiction', 'space']);
   });
 });

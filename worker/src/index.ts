@@ -364,6 +364,9 @@ function gameCard(g: any) {
     posterUrl: igdbImageUrl(g.cover?.image_id) ?? igdbImageUrl(g.artworks?.[0]?.image_id, "t_720p") ?? igdbImageUrl(g.screenshots?.[0]?.image_id, "t_720p"),
     votes: typeof g.total_rating_count === "number" ? g.total_rating_count : 0,
     rating: typeof g.total_rating === "number" ? Math.round(g.total_rating) : null,
+    // Genres and themes, which IGDB already sends with the card fields: what the
+    // app estimates a Fandex Score from for a game nobody holds (2026-10-18).
+    genres: [...(g.genres ?? []), ...(g.themes ?? [])].map((x: { name?: unknown }) => x?.name).filter((n: unknown): n is string => typeof n === "string").slice(0, 8),
   };
 }
 

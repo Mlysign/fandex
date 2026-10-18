@@ -11,6 +11,7 @@
 // by company, not by name.
 
 import { ipDisplayLabel, personKey } from '@/lib/facets';
+import { tmdbGenreNames } from '@/lib/tmdbGenres';
 import { api, type GameSearchResult, type ProviderResult } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
@@ -50,6 +51,8 @@ function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
     posterUrl: c.poster_path ? `https://image.tmdb.org/t/p/w342${c.poster_path}` : null,
     communityScore: typeof c.vote_average === 'number' && c.vote_average > 0 ? Math.round(c.vote_average * 10) : null,
     communityVotes: c.vote_count ?? 0,
+    // TMDB's genre ids as names: what a Fandex Score can be estimated from for a title nobody holds.
+    genres: tmdbGenreNames(c.genre_ids, type),
   };
 }
 
@@ -63,7 +66,7 @@ function shelfCard(r: ProviderResult, kind: FacetPageKind): CardItem {
   return {
     key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type,
     title: r.title, releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating, communityVotes: r.votes,
-    role: roles ? creditLine(r.type, roles) : null, roles,
+    role: roles ? creditLine(r.type, roles) : null, roles, genres: r.genres ?? [],
   };
 }
 
@@ -107,7 +110,7 @@ function gameCard(g: GameSearchResult): CardItem {
   return {
     key: `igdb:game:${g.sourceId}`, id: null, source: 'igdb', sourceId: g.sourceId, type: 'game',
     title: g.title, releaseDate: g.releaseDate, posterUrl: g.posterUrl,
-    communityScore: g.rating, communityVotes: g.votes,
+    communityScore: g.rating, communityVotes: g.votes, genres: g.genres ?? [],
   };
 }
 

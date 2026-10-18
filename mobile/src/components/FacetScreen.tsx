@@ -31,11 +31,10 @@ import { Screen, StateBlock } from '~/components/ui';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
 import { creditLine } from '~/lib/creditLine';
-import { spokenKey, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
+import { estimateFacets, spokenKey, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { useOfferedTypes } from '~/lib/features';
-import type { ScoreFacet } from '~/lib/fandexScore';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -74,20 +73,6 @@ function impactLine(kind: FacetKind, im: PageImpact): string {
     : im.direction === 'down' ? 'typically score below your average'
     : 'score about the same as your average';
   return `${who} ${how} · ${im.ratedCount} rated`;
-}
-
-/**
- * The facets a title nobody holds is known to carry on this page: the page's
- * own, in the roles the card came with. Enough for a Fandex Score the way
- * Home's calendar cards get one from their genres: an estimate from less than
- * the full title, where there was only the crowd's rating (Nils, 2026-10-18:
- * "facet pages still show some items with an average rating").
- */
-export function pageFacets(kind: FacetKind, key: string, label: string, roles: string[] | undefined): ScoreFacet[] {
-  if (kind === 'tag') return [{ kind: 'tag', key, label }];
-  if (kind === 'franchise') return [{ kind: 'ip', role: 'ip', key, label }];
-  const had = roles?.length ? roles : [kind === 'person' ? 'cast' : 'studio'];
-  return had.map((role) => ({ kind: kind === 'person' ? 'person' : 'company', role, key, label }));
 }
 
 /** A row of media types under the numbers: tap one to keep that type, tap again to drop it, none kept shows every type. */
@@ -261,7 +246,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   // holds, an estimate from this page's facet for one it does not.
   const scored = useMemo(() => (cards ?? []).map((c) => {
     if (c.id && scores.has(c.id)) return c;
-    const estimate = center == null ? null : score(c.key, pageFacets(kind, key, label || key, c.roles))?.score ?? null;
+    const estimate = center == null ? null : score(c.key, estimateFacets(kind, key, label || key, c.roles, c.genres))?.score ?? null;
     return estimate == null ? c : { ...c, fandexScore: estimate };
   }), [cards, scores, center, score, kind, key, label]);
 

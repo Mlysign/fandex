@@ -36,6 +36,8 @@ export interface CardItem {
   role?: string | null;
   /** The same, as the catalog's role keys (`director`, `cast`, `publisher`): what a score can be estimated from for a title nobody holds. */
   roles?: string[];
+  /** A provider card's genres (a book's subjects, IGDB's genres and themes, TMDB's genres): the rest of what that estimate reads. */
+  genres?: string[];
 }
 
 export function cardFromCatalog(r: CatalogRow): CardItem {
