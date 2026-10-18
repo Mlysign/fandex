@@ -134,11 +134,36 @@ const GAME_FIELDS =
   "game_type,parent_game,version_parent," + // disambiguate base game vs port/remaster/edition
   "rating,rating_count,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count," +
   "cover.image_id,screenshots.image_id,artworks.image_id,videos.name,videos.video_id," +
-  "genres.name,themes.name,keywords.name,game_modes.name,player_perspectives.name,franchises.name,game_engines.name," +
+  "genres.name,themes.name,keywords.name,game_modes.name,player_perspectives.name,franchises.name,collections.name,game_engines.name," +
   "platforms.name,release_dates.human,release_dates.date,release_dates.platform.name,release_dates.release_region," +
   "age_ratings.organization,age_ratings.rating_category,alternative_names.name," +
   "dlcs.name,expansions.name,websites.url,websites.type," +
   "involved_companies.developer,involved_companies.publisher,involved_companies.company.name;";
+
+// IGDB's collections are its series inside a franchise: the Harry Potter
+// film tie-ins are the collection "Harry Potter", the LEGO ones "Lego Harry
+// Potter", and Hogwarts Legacy is in neither (2026-10-18). IGDB leaves an empty
+// field out, so a payload asked with GAME_FIELDS is given `collections: []`
+// when it has none: absent then means "asked before collections were", which
+// the facet reads as unknown (facets.ts, Facet.series).
+function withKnownCollections<T>(rows: T[]): T[] {
+  for (const g of rows as any[]) if (g && typeof g === "object" && !Array.isArray(g.collections)) g.collections = [];
+  return rows;
+}
+
+/**
+ * The collections of these games, and nothing else: what the Worker's
+ * backfill merges into a stored game (worker/src/cron.ts). Every id asked
+ * comes back with `collections`, [] for a game in none. A game IGDB no longer
+ * has is left out.
+ */
+export async function getIgdbCollections(ids: number[]): Promise<{ id: number; collections: { name: string }[] }[]> {
+  if (!igdbConfigured()) return [];
+  const safe = ids.slice(0, 500).map((i) => safeInt(i, 0)).filter((i) => i > 0);
+  if (!safe.length) return [];
+  const rows = await igdbQuery("games", `fields collections.name; where id = (${safe.join(",")}); limit 500;`);
+  return withKnownCollections(rows as any[]).map((g) => ({ id: g.id, collections: g.collections }));
+}
 
 // Attach how-long-to-beat data (separate endpoint, seconds) as `time_to_beat`.
 async function withTimeToBeat(game: any | null): Promise<any | null> {
@@ -177,7 +202,7 @@ export async function getIgdbGame(id: number): Promise<any | null> {
   // Self-gated like its siblings: without this, an ungated caller (the /r/
   // resolver page) turns the kill switch into a throw instead of a no-op.
   if (!igdbConfigured()) return null;
-  const rows = await igdbQuery("games", `${GAME_FIELDS} where id = ${safeInt(id, 0)};`);
+  const rows = withKnownCollections(await igdbQuery("games", `${GAME_FIELDS} where id = ${safeInt(id, 0)};`));
   return withTimeToBeat(rows[0] ?? null);
 }
 
@@ -191,7 +216,7 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
   // (69 pool rows on 2026-10-15). ⚠️ NOT `parent_game = null`, which the browse
   // queries use: that also drops every DLC, expansion, remaster and remake
   // (Oblivion Remastered, Metal Gear Solid Delta), which are works of their own.
-  return igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & game_type != 11; limit ${safeInt(limit, 10)};`);
+  return withKnownCollections(await igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & game_type != 11; limit ${safeInt(limit, 10)};`));
 }
 
 // Upcoming games whose first release falls in a unix-second window, most
@@ -257,7 +282,7 @@ export async function discoverIgdbUpcoming(
   if (!igdbConfigured()) return [];
   const sortField = sort === "total_rating_count" ? "total_rating_count" : "hypes";
   try {
-    return await igdbQuery(
+    const rows = await igdbQuery(
       "games",
       `${shape === "card" ? GAME_CARD_FIELDS : GAME_FIELDS} ` +
         `where first_release_date >= ${safeInt(gte, 0)} & first_release_date <= ${safeInt(lte, 0)} ` +
@@ -268,6 +293,8 @@ export async function discoverIgdbUpcoming(
       // contributed nothing this round".
       BROWSE_BUDGET_MS
     );
+    // A card never asked for collections, so it must not claim to know there are none.
+    return shape === "card" ? rows : withKnownCollections(rows);
   } catch { return []; }
 }
 
@@ -332,7 +359,7 @@ export async function discoverIgdbByTags(queries: string[], limit = 40): Promise
     .map((s) => `(themes.name ~ *"${s}"* | keywords.name ~ *"${s}"* | genres.name ~ *"${s}"*)`)
     .join(" & ");
   try {
-    return await igdbQuery(
+    return withKnownCollections(await igdbQuery(
       "games",
       `${GAME_FIELDS} ` +
         `where ${clauses} & version_parent = null & parent_game = null; ` +
@@ -340,7 +367,7 @@ export async function discoverIgdbByTags(queries: string[], limit = 40): Promise
       // Browse path (advanced search + the public facet pages), same as
       // discoverIgdbUpcoming above: degrade rather than pay the retry ladder.
       BROWSE_BUDGET_MS
-    );
+    ));
   } catch { return []; }
 }
 

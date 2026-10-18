@@ -205,6 +205,22 @@ describe('the two rails', () => {
       expect(picked.franchise?.ids).toHaveLength(5);
     });
 
+    it("is a game's IGDB collection, not its whole franchise", () => {
+      // IGDB files every Harry Potter game under one franchise; its collections split them (2026-10-18).
+      const game = (id: string, series: string[]) => ({ id, type: 'game', facets: [{ ...ip('harry potter', 'Harry Potter'), series }, tag('magic')] });
+      const r = [
+        game('stone', ['Harry Potter']), game('chamber', ['Harry Potter']), game('azkaban', ['Harry Potter']),
+        game('lego 1-4', ['Lego Harry Potter']), game('legacy', []), game('mystery', []),
+      ];
+      const i2 = indexFacets(r, taxonomy());
+      const v = new Map(r.map((x, n) => [x.id, vector(x.id, { type: 'game', releaseDate: `${2001 + n}-01-01` })]));
+      const at = (id: string) => pickRelated({ id, facets: r.find((x) => x.id === id)!.facets, rawFacets: r.find((x) => x.id === id)!.facets, index: i2, vectors: v, tax: taxonomy() });
+      expect(at('stone').series).toEqual({ label: 'Harry Potter games', ids: ['chamber', 'azkaban'] });
+      // In no collection: no series rail, and "More from Harry Potter" still has every game.
+      expect(at('legacy').series).toBeNull();
+      expect(at('legacy').franchise?.ids).toHaveLength(5);
+    });
+
     it('is left out when it would repeat the franchise rail, or for fewer than three titles', () => {
       const r = [hp('a', 'movie', 'alien', 1979), hp('b', 'movie', 'alien', 1986), hp('c', 'movie', 'alien', 1992)];
       const i2 = indexFacets(r, taxonomy());

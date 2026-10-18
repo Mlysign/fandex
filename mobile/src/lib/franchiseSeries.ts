@@ -9,11 +9,13 @@
 // such key and goes in the grid, as on the item page (AGENTS.md: a hand attach
 // belongs in "More from", never in a series rail).
 //
-// ⚠️ IGDB's franchise is broad: every Harry Potter game, tie-ins and Hogwarts
-// Legacy alike, is one franchise there. The finer split is IGDB's collections,
-// which the catalog does not store.
+// IGDB's franchise is broad: every Harry Potter game, tie-ins and Hogwarts
+// Legacy alike, is one franchise there. So for a game the series is IGDB's
+// collection, carried on the franchise facet as `series` since 2026-10-18:
+// the tie-ins are "Harry Potter", the LEGO games "Lego Harry Potter", and
+// Hogwarts Legacy is in none, so it goes in the grid.
 
-import { ipDisplayLabel } from '@/lib/facets';
+import { ipDisplayLabel, ipKey } from '@/lib/facets';
 import type { CardItem } from '~/lib/cards';
 
 /** Fewer titles than this is not a series. The item page's series rail starts at three too. */
@@ -26,6 +28,17 @@ const MEDIA_ORDER = ['book', 'movie', 'show', 'game', 'boardgame'];
 
 export interface SeriesKey { key: string; label: string }
 export interface Series { id: string; label: string; items: CardItem[] }
+
+/**
+ * The series one franchise facet puts a title in. A game's IGDB collections
+ * when they are known ([] for a game in none); otherwise the franchise as the
+ * provider named it, which for a film, a book or a game stored before
+ * collections were asked for is the series.
+ */
+export function seriesOfFacet(f: { key: string; label: string; series?: string[] }): SeriesKey[] {
+  if (!Array.isArray(f.series)) return [{ key: f.key, label: f.label }];
+  return f.series.map((name) => ({ key: ipKey(name), label: name })).filter((s) => !!s.key);
+}
 
 const oldestFirst = (a: CardItem, b: CardItem) => {
   const da = a.releaseDate; const db = b.releaseDate;

@@ -19,6 +19,7 @@ import { franchiseForItem } from '@/lib/franchise';
 import type { ItemVector } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import type { CatalogRow } from '~/lib/db';
+import { seriesOfFacet } from '~/lib/franchiseSeries';
 import { facetId, resolveFacets, type ScoreFacet, type Taxonomy } from '~/lib/fandexScore';
 
 /** How many cards "More like this" holds. The site's RAIL_CAP. */
@@ -39,7 +40,9 @@ export interface FacetIndex {
    * A provider's own franchise key (before bundles and hand-made attaches) →
    * the positions of the titles the PROVIDER put in it. What the series rail
    * reads: TMDB's collection is the eight Harry Potter films and nothing else,
-   * where the bundled, hand-filled franchise is thirty-eight titles.
+   * where the bundled, hand-filled franchise is thirty-eight titles. A game is
+   * keyed by its IGDB collections instead, where they are known: IGDB's
+   * franchise holds every Harry Potter game (`seriesOfFacet`).
    */
   byRawIp: Map<string, number[]>;
   /** Per position: the title's media type, when the row said. */
@@ -113,10 +116,14 @@ export function indexFacets(
     index.votes.push(r.votes ?? 0);
     const rawIps = new Set<string>();
     for (const f of r.facets) {
-      if (f.kind !== 'ip' || !f.key || rawIps.has(f.key)) continue;
-      rawIps.add(f.key);
-      const carriers = index.byRawIp.get(f.key);
-      if (carriers) carriers.push(at); else index.byRawIp.set(f.key, [at]);
+      if (f.kind !== 'ip' || !f.key) continue;
+      // A game's IGDB collections, where known, in place of its broad franchise (lib/franchiseSeries.ts).
+      for (const s of seriesOfFacet(f)) {
+        if (rawIps.has(s.key)) continue;
+        rawIps.add(s.key);
+        const carriers = index.byRawIp.get(s.key);
+        if (carriers) carriers.push(at); else index.byRawIp.set(s.key, [at]);
+      }
     }
     const list: { id: string; w: number }[] = [];
     for (const { f, id, w } of weighted(resolveFacets(r.facets, r.id, tax), tax)) {
@@ -228,7 +235,7 @@ export function rankLike(input: { id: string; type?: string; facets: ScoreFacet[
 export function franchiseCandidateIds(index: FacetIndex, facets: ScoreFacet[], rawFacets: ScoreFacet[] = []): string[] {
   const out = new Set<string>();
   for (const f of facets) if (f.kind === 'ip') for (const id of idsFor(index, f)) out.add(id);
-  for (const f of rawFacets) if (f.kind === 'ip') for (const i of index.byRawIp.get(f.key) ?? []) out.add(index.ids[i]);
+  for (const f of rawFacets) if (f.kind === 'ip') for (const s of seriesOfFacet(f)) for (const i of index.byRawIp.get(s.key) ?? []) out.add(index.ids[i]);
   return [...out];
 }
 
@@ -257,11 +264,11 @@ export function seriesForItem(input: { id: string; type?: string; rawFacets: Sco
   if (!type) return null;
   let best: { key: string; label: string; ids: string[] } | null = null;
   const seen = new Set<string>();
-  for (const f of rawFacets) {
-    if (f.kind !== 'ip' || !f.key || seen.has(f.key)) continue;
-    seen.add(f.key);
-    const ids = (index.byRawIp.get(f.key) ?? []).filter((i) => i !== self && index.types[i] === type).map((i) => index.ids[i]);
-    if (!best || ids.length > best.ids.length) best = { key: f.key, label: ipDisplayLabel(f.label || f.key), ids };
+  for (const s of rawFacets.filter((f) => f.kind === 'ip' && f.key).flatMap(seriesOfFacet)) {
+    if (seen.has(s.key)) continue;
+    seen.add(s.key);
+    const ids = (index.byRawIp.get(s.key) ?? []).filter((i) => i !== self && index.types[i] === type).map((i) => index.ids[i]);
+    if (!best || ids.length > best.ids.length) best = { key: s.key, label: ipDisplayLabel(s.label || s.key), ids };
   }
   // One other title is a pair the franchise rail already shows; a series starts at three.
   if (!best || best.ids.length < 2) return null;

@@ -36,6 +36,12 @@ export interface Facet {
   // item's specific occurrence) — a lead role should move the needle more
   // than a cameo, in both directions.
   prominence?: number;
+  // 2026-10-18, a game's franchise only: the IGDB collections (its series
+  // inside the franchise) the game is in. [] = in none, which is Hogwarts
+  // Legacy inside Harry Potter; absent = not known, a payload stored before
+  // collections were asked for. Not part of the facet's identity: the app's
+  // series rails and franchise page read it, the score does not.
+  series?: string[];
 }
 
 // Stable id for dedup + preference-map keys. A person who is both director and
@@ -252,13 +258,18 @@ export function extractFacets(
   // spanning more than one media type, EVERY one is game+movie — not a single
   // show, because neither source describes one. So a Star Wars film and a Star
   // Wars game share this facet; a Star Wars series does not.
-  const addIp = (name: unknown) => {
+  const addIp = (name: unknown, series?: string[]) => {
     if (typeof name !== "string") return;
     const label = name.trim();
-    if (label) push({ kind: "ip", role: "ip", key: ipKey(label), label });
+    if (label) push({ kind: "ip", role: "ip", key: ipKey(label), label, ...(series ? { series } : {}) });
   };
   if (tmdb) addIp(tmdb.belongs_to_collection?.name);
-  if (igdb) for (const f of igdb.franchises ?? []) addIp(f?.name);
+  // IGDB's franchise is broad (every Harry Potter game is one); its collections
+  // are the series inside it. Absent from a payload asked before they were.
+  const igdbSeries = Array.isArray(igdb?.collections)
+    ? [...new Set<string>(igdb.collections.map((c: any) => (typeof c?.name === "string" ? c.name.trim() : "")).filter(Boolean))]
+    : undefined;
+  if (igdb) for (const f of igdb.franchises ?? []) addIp(f?.name, igdbSeries);
   // A book series (Open Library) and a board game's series or franchise family
   // (BGG): what lets the score count your average for the rest of the series.
   if (ol) for (const s of (ol.series_name ?? []).slice(0, 2)) addIp(s);

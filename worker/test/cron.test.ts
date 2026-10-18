@@ -3,7 +3,7 @@ import { __resetBreakers } from "@/lib/http";
 import { kvSet } from "../src/budget";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
-  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
+  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
 } from "../src/cron";
 import { db, env, gameItem, movieItem, tmdbMovie, wipe } from "./helpers";
 
@@ -435,5 +435,69 @@ describe("the books stored before their series was read", () => {
     const again = openLibrary(answers());
     expect(await runOpenLibraryRefetchStep(env, 2, NOW)).toEqual({ refreshed: 0, failed: 0 });
     expect(again).toEqual([]);
+  });
+});
+
+describe("the games stored before their IGDB collections were asked for", () => {
+  const cursor = () => db.prepare("SELECT value FROM kv WHERE key = 'igdb_collections_cursor'").first<{ value: string }>();
+  const facetsOf = async (id: string) =>
+    JSON.parse((await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>())!.facets) as any[];
+
+  function igdb(collections: Record<number, string[] | null>): string[] {
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("id.twitch.tv")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      if (url.includes("api.igdb.com/v4/games")) {
+        bodies.push(String(init?.body ?? ""));
+        // IGDB leaves an empty field out, and a game it no longer has out of the answer.
+        return Response.json(Object.entries(collections).filter(([, c]) => c !== null)
+          .map(([id, c]) => ({ id: Number(id), ...(c!.length ? { collections: c!.map((name) => ({ name })) } : {}) })));
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+    return bodies;
+  }
+
+  it("stores each game again with its collections, as the series on its franchise facet", async () => {
+    const tieIn = await upsertMediaItem(db, gameItem({ id: 101, name: "Harry Potter and the Chamber of Secrets", franchises: [{ name: "Harry Potter" }] }));
+    const legacy = await upsertMediaItem(db, gameItem({ id: 102, name: "Hogwarts Legacy", franchises: [{ name: "Harry Potter" }] }));
+    const gone = await upsertMediaItem(db, gameItem({ id: 103, name: "Gone", franchises: [{ name: "Harry Potter" }] }));
+    const bodies = igdb({ 101: ["Harry Potter"], 102: [], 103: null });
+
+    expect(await runIgdbCollectionsStep(env, 10)).toEqual({ refreshed: 2, missing: 1 });
+    // One call for the whole batch.
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain("where id = (101,102,103)");
+    expect((await facetsOf(tieIn.id)).find((f) => f.kind === "ip")).toMatchObject({ key: "harry potter", series: ["Harry Potter"] });
+    // In no collection is an answer: [] where "not known" is no field at all.
+    expect((await facetsOf(legacy.id)).find((f) => f.kind === "ip").series).toEqual([]);
+    expect((await facetsOf(gone.id)).find((f) => f.kind === "ip").series).toBeUndefined();
+    // The rest of the stored payload survives the merge.
+    expect((await facetsOf(tieIn.id)).some((f) => f.kind === "company")).toBe(true);
+    expect((await cursor())!.value).toBe("103");
+  });
+
+  it("walks in batches from its cursor, then parks for good", async () => {
+    await upsertMediaItem(db, gameItem({ id: 201, name: "A" }));
+    await upsertMediaItem(db, gameItem({ id: 202, name: "B" }));
+    const bodies = igdb({ 201: [], 202: [] });
+    expect(await runIgdbCollectionsStep(env, 1)).toEqual({ refreshed: 1, missing: 0 });
+    expect(await runIgdbCollectionsStep(env, 1)).toEqual({ refreshed: 1, missing: 0 });
+    expect(await runIgdbCollectionsStep(env, 1)).toEqual({ refreshed: 0, missing: 0 });
+    expect((await cursor())!.value).toBe("done");
+    expect(await runIgdbCollectionsStep(env, 1)).toEqual({ refreshed: 0, missing: 0 });
+    expect(bodies).toHaveLength(2);
+  });
+
+  it("leaves the cursor where it was when IGDB fails, so the batch is asked again", async () => {
+    await upsertMediaItem(db, gameItem({ id: 301, name: "A" }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("id.twitch.tv")) return Response.json({ access_token: "t", expires_in: 5_000_000 });
+      return new Response("down", { status: 500 });
+    });
+    await expect(runIgdbCollectionsStep(env, 5)).rejects.toThrow();
+    expect(await cursor()).toBeNull();
   });
 });

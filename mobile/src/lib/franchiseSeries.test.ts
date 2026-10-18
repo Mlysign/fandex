@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MediaType } from '@/types';
 import type { CardItem } from '~/lib/cards';
-import { splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
+import { seriesOfFacet, splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
 
 const card = (id: string, type: MediaType, releaseDate: string | null): CardItem => ({
   key: id, id, type, title: id, releaseDate, posterUrl: null, communityScore: null, communityVotes: 0,
@@ -63,5 +63,31 @@ describe('a franchise page split into series', () => {
     const { series } = splitSeries({ cards: [show, ...games, both], seriesOf: (c) => map.get(c.key), franchiseKey: 'harry potter', franchiseLabel: 'Harry Potter' });
     expect(series).toHaveLength(1);
     expect(series[0].items).toContain(both);
+  });
+});
+
+describe('a game read by its IGDB collection', () => {
+  const hp = (series?: string[]) => ({ key: 'harry potter', label: 'Harry Potter', ...(series ? { series } : {}) });
+
+  it('is in its collections when they are known, in none for [], and in the franchise when not known', () => {
+    expect(seriesOfFacet(hp(['Harry Potter', 'Lego Harry Potter']))).toEqual([
+      { key: 'harry potter', label: 'Harry Potter' }, { key: 'lego harry potter', label: 'Lego Harry Potter' },
+    ]);
+    expect(seriesOfFacet(hp([]))).toEqual([]);
+    expect(seriesOfFacet(hp())).toEqual([{ key: 'harry potter', label: 'Harry Potter' }]);
+  });
+
+  it('splits the tie-ins from the LEGO games, and leaves Hogwarts Legacy for the grid', () => {
+    const tieIns = Array.from({ length: 4 }, (_, i) => card(`tie${i}`, 'game', `${2001 + i}-11-15`));
+    const lego = Array.from({ length: 3 }, (_, i) => card(`lego${i}`, 'game', `${2010 + i}-06-25`));
+    const legacy = card('legacy', 'game', '2023-02-10');
+    const map = new Map<string, SeriesKey[]>([
+      ...tieIns.map((c) => [c.key, seriesOfFacet(hp(['Harry Potter']))] as [string, SeriesKey[]]),
+      ...lego.map((c) => [c.key, seriesOfFacet(hp(['Lego Harry Potter']))] as [string, SeriesKey[]]),
+      ['legacy', seriesOfFacet(hp([]))],
+    ]);
+    const { series, rest } = splitSeries({ cards: [legacy, ...lego, ...tieIns], seriesOf: (c) => map.get(c.key), franchiseKey: 'harry potter', franchiseLabel: 'Harry Potter' });
+    expect(series.map((s) => s.label)).toEqual(['Harry Potter games', 'Lego Harry Potter games']);
+    expect(rest).toEqual([legacy]);
   });
 });

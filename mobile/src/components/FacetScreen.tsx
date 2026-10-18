@@ -38,7 +38,7 @@ import { estimateFacets, spokenKey, type ImpactKind, type PageImpact } from '~/l
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { useOfferedTypes } from '~/lib/features';
-import { splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
+import { seriesOfFacet, splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -56,7 +56,7 @@ export type { FacetKind } from '~/components/FacetHeader';
 type Sort = 'popularity' | 'releaseDate' | 'rating' | 'fandexScore';
 const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', 'Release date'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
 
-interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string }
+interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string; series?: string[] }
 
 /** The profile's kind for a page's kind: a studio page reads `company` entries, a franchise page `ip`. */
 const IMPACT_KIND: Record<FacetKind, ImpactKind> = { tag: 'tag', person: 'person', studio: 'company', franchise: 'ip' };
@@ -200,7 +200,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         const had = kind === 'franchise' ? [] : hit.map((f) => f.role).filter((x): x is string => !!x);
         cards.push({ ...cardFromCatalog(r), role: creditLine(r.type, had), roles: had.length ? [...new Set(had)] : undefined });
         // A hand-attached title carries none of these, and so is in no series.
-        if (kind === 'franchise') seriesKeys.set(r.id, hit.map((f) => ({ key: f.key, label: f.label })));
+        if (kind === 'franchise') seriesKeys.set(r.id, hit.flatMap(seriesOfFacet));
       }
       if (kind === 'franchise') label = taxonomy?.labels.get(`ip|${key}`) ?? (label ? ipDisplayLabel(label) : '');
       if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards, seriesKeys });
@@ -285,11 +285,13 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     return splitSeries({
       cards: sorted,
       // A card the device does not hold came from the providers, asked by this franchise's name.
-      // TMDB's collection and IGDB's franchise match that name exactly, so theirs join its
-      // series. Open Library's series search is loose (box sets, books ABOUT Harry Potter),
-      // so one of its books joins only when the Worker holds it: the real ones are in the
-      // catalog, the box sets are not. The device's copy may not have them all yet.
-      seriesOf: (c) => (c.id && found.seriesKeys.get(c.id)) || (c.id || c.source === 'tmdb' || c.source === 'igdb' ? undefined : []),
+      // TMDB's collection matches that name exactly, so its films join the series. A game's
+      // series is its IGDB collection, which a provider card does not carry: the grid.
+      // Open Library's series search is loose (box sets, books ABOUT Harry Potter), so one
+      // of its books joins only when the Worker holds it: the real ones are in the catalog,
+      // the box sets are not. The device's copy may not have them all yet.
+      seriesOf: (c) => (c.id && found.seriesKeys.get(c.id))
+        || (c.type !== 'game' && (c.source === 'tmdb' || c.id) ? undefined : []),
       franchiseKey: key, franchiseLabel: found.label || key,
     });
   }, [kind, found, sorted, key]);

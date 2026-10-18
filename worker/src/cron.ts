@@ -20,6 +20,7 @@
 //      TMDB titles are refetched daily when near and weekly when far, with
 //      whatever the refresh above leaves of a run.
 
+import { getIgdbCollections, igdbConfigured } from "@/lib/sources/igdb";
 import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
 import { kvGet, kvSet } from "./budget";
@@ -27,6 +28,7 @@ import { runCalendarStep } from "./calendar";
 import { all, nowSeconds, utcDay } from "./d1";
 import type { Env } from "./env";
 import { upsertMediaItem } from "./catalog/ingest";
+import { useSharedIgdbToken } from "./catalog/resolve";
 
 // ── 1. The export ───────────────────────────────────────────────────────────
 
@@ -422,6 +424,61 @@ export async function runOpenLibraryRefetchStep(env: Env, slots: number, now = n
   return { refreshed, failed };
 }
 
+// ── 2c. Games stored before their IGDB collections were asked for ────────────
+//
+// A game's IGDB franchise is broad: the 2001 film tie-ins and Hogwarts Legacy
+// are both "Harry Potter". Its collections are the series inside it, asked for
+// since 2026-10-18 (src/lib/sources/igdb.ts) and carried on the franchise
+// facet as `series` (src/lib/facets.ts). The 2,788 games stored before that
+// carry none. This walks them once in source-id order, a batch per run: one
+// IGDB call for the batch, then each game stored again with its collections
+// merged in, which re-derives its facets and moves it in the delta sync.
+// Self-terminating: past the last id it parks for good.
+
+/** Games a run stores again. A re-derive is the CPU; one IGDB call answers them all. */
+export const IGDB_COLLECTIONS_PER_RUN = 12;
+const IGDB_COLLECTIONS_CURSOR_KEY = "igdb_collections_cursor";
+const IGDB_COLLECTIONS_DONE = "done";
+
+export async function runIgdbCollectionsStep(env: Env, batch = IGDB_COLLECTIONS_PER_RUN): Promise<{ refreshed: number; missing: number }> {
+  const cursor = await kvGet(env.DB, IGDB_COLLECTIONS_CURSOR_KEY);
+  if (cursor === IGDB_COLLECTIONS_DONE) return { refreshed: 0, missing: 0 };
+  // Switched off or without credentials, nothing moves: the walk waits for IGDB.
+  if (!igdbConfigured()) return { refreshed: 0, missing: 0 };
+
+  // The primary key is (source, source_id, media_type), so this reads from the cursor on.
+  const due = await all<{ source_id: string; title: string; release_date: string | null }>(
+    env.DB,
+    `SELECT source_id, title, release_date FROM media_links
+      WHERE source = 'igdb' AND source_id > ? AND media_type = 'game' AND raw_data NOT LIKE '%"collections":%'
+      ORDER BY source_id LIMIT ?`,
+    [cursor ?? "", batch],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, IGDB_COLLECTIONS_CURSOR_KEY, IGDB_COLLECTIONS_DONE);
+    return { refreshed: 0, missing: 0 };
+  }
+
+  useSharedIgdbToken(env);
+  // A throw here leaves the cursor where it was: the batch is asked again next run.
+  const found = new Map((await getIgdbCollections(due.map((d) => Number(d.source_id)))).map((g) => [String(g.id), g.collections]));
+  let refreshed = 0;
+  let missing = 0;
+  for (const link of due) {
+    const collections = found.get(link.source_id);
+    // A game IGDB no longer has keeps what it had; its series stays unknown.
+    if (!collections) { missing++; continue; }
+    await upsertMediaItem(env.DB, {
+      source: "igdb", sourceId: link.source_id, type: "game", title: link.title, releaseDate: link.release_date,
+      // Merged over the stored payload (mergeRawData): only `collections` is new.
+      rawData: { id: Number(link.source_id), collections },
+    });
+    refreshed++;
+  }
+  await kvSet(env.DB, IGDB_COLLECTIONS_CURSOR_KEY, due[due.length - 1].source_id);
+  return { refreshed, missing };
+}
+
 // ── The trigger ─────────────────────────────────────────────────────────────
 
 export async function runScheduled(env: Env): Promise<void> {
@@ -450,6 +507,13 @@ export async function runScheduled(env: Env): Promise<void> {
     if (ol.refreshed || ol.failed) console.log("ol_refetch_step", ol);
   } catch (e) {
     console.error("ol_refetch_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The games stored before their collections were asked for, until none are left.
+  try {
+    const ic = await runIgdbCollectionsStep(env);
+    if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
+  } catch (e) {
+    console.error("igdb_collections_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
   try {
     const up = await runUpcomingRefreshStep(env, slots);

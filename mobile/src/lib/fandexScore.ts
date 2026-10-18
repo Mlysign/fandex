@@ -26,6 +26,8 @@ export interface ScoreFacet {
   category?: string;
   /** Cast billing weight, 1 for a lead down to a floor for a bit part. Absent means 1. */
   prominence?: number;
+  /** A game's franchise only: its IGDB collections, the series inside the franchise. [] is none, absent is not known (src/lib/facets.ts). */
+  series?: string[];
 }
 
 /** `/v1/taxonomy`, as the Worker answers it. */
