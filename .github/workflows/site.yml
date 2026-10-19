@@ -95,7 +95,7 @@ jobs:
       # again only for titles whose updatedAt moved (build.mjs, step 3).
       - name: Titles from the last build
         if: steps.token.outputs.ready == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: mobile/web/dist/cache
           key: site-items-${{ github.run_id }}
