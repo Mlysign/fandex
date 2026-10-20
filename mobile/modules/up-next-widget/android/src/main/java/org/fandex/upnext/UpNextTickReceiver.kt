@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactInstanceEventListener
@@ -41,26 +42,23 @@ class UpNextTickReceiver : BroadcastReceiver() {
     val app = context.applicationContext
     val pending = goAsync()
     val main = Handler(Looper.getMainLooper())
-    var finished = false
+    val finished = AtomicBoolean(false)
 
     // The row says "marking" at once. The tap has an answer before the network does.
     UpNextStore.setBusy(app, id, true)
     UpNextWidgetProvider.refreshAll(app)
 
     val finish = Runnable {
-      if (!finished) {
-        finished = true
-        pending.finish()
-      }
+      if (finished.compareAndSet(false, true)) pending.finish()
     }
     // If the JavaScript never answers, give the row back its tick and let go.
     // Under the time Android allows a receiver, so this fires first.
     val giveUp = Runnable {
-      if (!finished) {
+      if (!finished.get()) {
         Log.w(TAG, "the tick task did not finish in time")
         UpNextStore.setBusy(app, null, false)
-        UpNextWidgetProvider.refreshAll(app)
-        finish.run()
+        // Let go only once the redraw is handed over (UpNextWidgetProvider.refreshAll).
+        UpNextWidgetProvider.refreshAll(app) { finish.run() }
       }
     }
     main.postDelayed(giveUp, GIVE_UP_MS)
@@ -92,8 +90,7 @@ class UpNextTickReceiver : BroadcastReceiver() {
             // tick can never be tapped again. So the flag is cleared HERE,
             // whatever the JavaScript did.
             UpNextStore.setBusy(app, null, false)
-            UpNextWidgetProvider.refreshAll(app)
-            finish.run()
+            UpNextWidgetProvider.refreshAll(app) { finish.run() }
           }
         }
         tasks.addTaskEventListener(listener)
