@@ -283,6 +283,13 @@ write nothing; that is how the sync was proven before it was allowed to delete.
     tick an episode) and tells them apart by the address the row fills in
     (`widget://open/{id}`, `widget://tick/{id}/{season}/{episode}`). The template is mutable, and
     Android 14 only allows a mutable one that names its component.
+  - ⚠️ **On Android 12 and later the rows travel INSIDE the widget's one update**
+    (`RemoteCollectionItems`, `UpNextWidgetProvider`), not through the list service and a separate
+    "data changed" call. The Pixel launcher defers and replays those two channels apart: once the
+    rows were new and the taps dead (below), and on 2026-10-20 the taps new and the rows old (a
+    tick moved One Piece to the top; the top row still read Sunny and opened One Piece). Every
+    redraw runs on one background thread, in order, because a row reads its poster from the
+    network the first time. `UpNextWidgetService` is kept for Android 11 and older only.
   - **The widget does not read the app's SQLite file.** Android's SQLite and the one expo-sqlite
     ships are two copies of the library, and two copies on one file in one process do not see
     each other's locks. The app hands the widget its rows (`publishWidget` → `setRows` → a small
