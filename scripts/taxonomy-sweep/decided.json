@@ -108,5 +108,60 @@
   "ref": "franchise-member|ea614e77-56fb-461d-b343-68a4a933bea6>jurassic park",
   "why": "The Lost World (2001) is the Conan Doyle novel, not Jurassic Park.",
   "on": "2026-10-18"
+ },
+ {
+  "ref": "franchise-merge|puss in boots>shrek",
+  "why": "Puss in Boots is a real spin-off series; the two keys already share its films.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-merge|the hobbit>the lord of the rings",
+  "why": "The Hobbit is its own trilogy; its films were attached to The Lord of the Rings instead.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-merge|the super mario>mario",
+  "why": "The films keep their collection; attached to Mario instead.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-merge|the lego movie>lego",
+  "why": "The films keep their collection; attached to LEGO instead.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|5153bc1d-22c9-4dfe-aab0-1668e4c6bbb2>left 4 dead",
+  "why": "Back 4 Blood is a spiritual successor by the same team, not a Left 4 Dead game.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|f656ffa6-74d0-4fb8-bb92-637ccc6461b2>dishonored",
+  "why": "Deathloop is Arkane's, but not set in Dishonored.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|66f92adc-6fb4-4005-9767-2793e3b3858b>disney s peter pan",
+  "why": "Finding Neverland is about J.M. Barrie, not an adaptation of Peter Pan.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|68cb348c-8944-4b33-885a-a5f0b8f3111c>super meat boy",
+  "why": "Indie Game: The Movie covers three games, not one series.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|40adcddd-f96a-4b62-a608-8e8a7912ef5f>the odyssey",
+  "why": "Troy adapts the Iliad, not the Odyssey.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|2bea8d1f-2499-418d-8be9-527bc7339956>the hitchhiker s guide to the galaxy",
+  "why": "Dirk Gently is a different Douglas Adams series.",
+  "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-merge|frankenweenie>frankenstein",
+  "why": "Frankenweenie is Burton's pastiche with its own story, not Frankenstein.",
+  "on": "2026-10-20"
  }
 ]
