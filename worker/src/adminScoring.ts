@@ -97,7 +97,7 @@ export function parseCategoryWeights(body: unknown): CategoryWeight[] {
 export async function saveCategoryWeights(db: D1Database, updates: CategoryWeight[]): Promise<void> {
   if (!updates.length) return;
   await db.batch(updates.map((u) =>
-    db.prepare("UPDATE tag_category SET weight = ?, ignored = ?, updated_at = unixepoch() WHERE id = ?").bind(u.weight, u.ignored ? 1 : 0, u.id)));
+    db.prepare("UPDATE tag_category SET weight = ?, ignored = ?, updated_at = unixepoch(), source = 'hand' WHERE id = ?").bind(u.weight, u.ignored ? 1 : 0, u.id)));
 }
 
 export interface CategoryEdit { id: string; label: string; color: string; weight: number; ignored: boolean; sortOrder?: number }
@@ -122,7 +122,8 @@ export async function saveCategory(db: D1Database, c: CategoryEdit): Promise<voi
     `INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, COALESCE(?6, (SELECT COUNT(*) FROM tag_category)), unixepoch())
      ON CONFLICT(id) DO UPDATE SET label = excluded.label, color = excluded.color, weight = excluded.weight,
-       ignored = excluded.ignored, sort_order = COALESCE(?6, tag_category.sort_order), updated_at = excluded.updated_at`,
+       ignored = excluded.ignored, sort_order = COALESCE(?6, tag_category.sort_order), updated_at = excluded.updated_at,
+       source = 'hand'`,
     [c.id, c.label, c.color, c.weight, c.ignored ? 1 : 0, c.sortOrder ?? null],
   );
 }
@@ -158,7 +159,7 @@ export async function setTagOverrides(db: D1Database, tagKeys: string[], categor
   if (!(await first<{ id: string }>(db, "SELECT id FROM tag_category WHERE id = ?", [category]))) throw new BadRequest("No such category");
   const put = db.prepare(
     `INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (?, ?, unixepoch())
-     ON CONFLICT(tag_key) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at`,
+     ON CONFLICT(tag_key) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at, source = 'hand'`,
   );
   // D1 takes at most a hundred statements in a batch.
   for (let i = 0; i < tagKeys.length; i += 100) await db.batch(tagKeys.slice(i, i + 100).map((k) => put.bind(k, category)));
@@ -192,10 +193,11 @@ export async function setAlias(db: D1Database, table: AliasTable, alias: string,
   const target = (await first<{ c: string }>(db, `SELECT canonical_key c FROM ${table} WHERE alias_key = ?`, [canonical]))?.c ?? canonical;
   if (alias === target) throw new BadRequest("A tag cannot be an alias of itself.");
   await db.batch([
-    db.prepare(`UPDATE ${table} SET canonical_key = ?, updated_at = unixepoch() WHERE canonical_key = ?`).bind(target, alias),
+    // A row a person re-points is theirs from then on (`source`, migration 0005).
+    db.prepare(`UPDATE ${table} SET canonical_key = ?, updated_at = unixepoch(), source = 'hand' WHERE canonical_key = ?`).bind(target, alias),
     db.prepare(
       `INSERT INTO ${table} (alias_key, canonical_key, updated_at) VALUES (?, ?, unixepoch())
-       ON CONFLICT(alias_key) DO UPDATE SET canonical_key = excluded.canonical_key, updated_at = excluded.updated_at`,
+       ON CONFLICT(alias_key) DO UPDATE SET canonical_key = excluded.canonical_key, updated_at = excluded.updated_at, source = 'hand'`,
     ).bind(alias, target),
   ]);
 }
@@ -220,7 +222,7 @@ export async function setLabel(db: D1Database, kind: "tag" | "ip", k: string, la
   await run(
     db,
     `INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES (?, ?, ?, unixepoch())
-     ON CONFLICT(kind, key) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`,
+     ON CONFLICT(kind, key) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at, source = 'hand'`,
     [kind, k, label],
   );
 }

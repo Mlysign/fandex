@@ -17,13 +17,13 @@
 // (/v1/taxonomy, asked on every app start and return), so nothing needs a deploy or a publish;
 // the SQL it writes ends by dropping the Worker's kept copy, so the next ask sees the change.
 //
-// ⚠️ Only item_ip_override has a `source` column. ip_alias, tag_alias,
-// facet_label_override and tag_category_override do not, so an existing row
-// there cannot be told apart as hand-made and is never changed: a bundle or a
-// spelling that would have to re-point existing aliases is skipped, not
-// flattened. Every row the sweep writes carries one fixed `updated_at` (STAMP),
-// and the undo deletes only rows still holding it: never a row that was there
-// before, and never one edited by hand since.
+// Every taxonomy table has a `source` column since migration 0005 (2026-10-23):
+// 'hand' for the admin pages, 'sweep' for this. Rows from before it all read
+// 'hand', so an existing row is still never changed: a bundle or a spelling
+// that would have to re-point existing aliases is skipped, not flattened.
+// Every row the sweep writes carries source 'sweep' and one fixed `updated_at`
+// (STAMP), and the undo deletes only rows holding both: never a row that was
+// there before, and never one edited by hand since (an edit makes it 'hand').
 //
 // category-merge rewrites hand-placed overrides and deletes a hand-made
 // category, so it runs only with --allow-category-merge, which the scheduled
@@ -134,12 +134,12 @@ for (const [n, a] of actions.entries()) {
       if (ipAlias.has(alias)) throw new Error(`${alias} is already bundled into ${ipAlias.get(alias)}; the sweep never changes an existing alias (skipped)`);
       const pointing = [...ipAlias].filter(([, c]) => c === alias).map(([k]) => k);
       if (pointing.length) throw new Error(`${pointing.length} alias(es) point at ${alias} (${pointing.slice(0, 5).join(", ")}); moving them is the Scoring admin's job (skipped)`);
-      sql.push(`INSERT INTO ip_alias (alias_key, canonical_key, updated_at) VALUES (${q(alias)}, ${q(target)}, ${STAMP}) ON CONFLICT (alias_key) DO NOTHING;`);
-      undo.push(`DELETE FROM ip_alias WHERE alias_key = ${q(alias)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP};`);
+      sql.push(`INSERT INTO ip_alias (alias_key, canonical_key, updated_at, source) VALUES (${q(alias)}, ${q(target)}, ${STAMP}, 'sweep') ON CONFLICT (alias_key) DO NOTHING;`);
+      undo.push(`DELETE FROM ip_alias WHERE alias_key = ${q(alias)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP} AND source = 'sweep';`);
       touched.ip_alias.push(alias);
       if (a.label) {
-        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(target)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
-        undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
+        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at, source) VALUES ('ip', ${q(target)}, ${q(a.label.trim())}, ${STAMP}, 'sweep') ON CONFLICT (kind, key) DO NOTHING;`);
+        undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP} AND source = 'sweep';`);
         touched.facet_label_override.push(["ip", target]);
       }
       ipAlias.set(alias, target);
@@ -147,8 +147,8 @@ for (const [n, a] of actions.entries()) {
     } else if (a.kind === "franchise-name") {
       const key = canonicalIp(a.franchise);
       if (typeof a.label !== "string" || !a.label.trim()) throw new Error("label required");
-      sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(key)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
-      undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(key)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
+      sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at, source) VALUES ('ip', ${q(key)}, ${q(a.label.trim())}, ${STAMP}, 'sweep') ON CONFLICT (kind, key) DO NOTHING;`);
+      undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(key)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP} AND source = 'sweep';`);
       touched.facet_label_override.push(["ip", key]);
       report[a.kind].push(`${key} shown as "${a.label.trim()}": ${a.why}`);
     } else if (a.kind === "tag-category") {
@@ -163,8 +163,8 @@ for (const [n, a] of actions.entries()) {
       }
       if (!keys.length) throw new Error("every tag was placed by hand or unknown, nothing moved (skipped)");
       for (const k of keys) {
-        sql.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (${q(k)}, ${q(a.categoryId)}, ${STAMP}) ON CONFLICT (tag_key) DO NOTHING;`);
-        undo.push(`DELETE FROM tag_category_override WHERE tag_key = ${q(k)} AND category_id = ${q(a.categoryId)} AND updated_at = ${STAMP};`);
+        sql.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at, source) VALUES (${q(k)}, ${q(a.categoryId)}, ${STAMP}, 'sweep') ON CONFLICT (tag_key) DO NOTHING;`);
+        undo.push(`DELETE FROM tag_category_override WHERE tag_key = ${q(k)} AND category_id = ${q(a.categoryId)} AND updated_at = ${STAMP} AND source = 'sweep';`);
         touched.tag_category_override.push(k);
       }
       report[a.kind].push(`${keys.length} tags → ${a.categoryId} (${keys.slice(0, 12).join(", ")}${keys.length > 12 ? ", …" : ""}): ${a.why}`);
@@ -183,14 +183,14 @@ for (const [n, a] of actions.entries()) {
       }
       if (!members.length) throw new Error("every member was already aliased, nothing folded (skipped)");
       for (const m of members) {
-        sql.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at) VALUES (${q(m)}, ${q(target)}, ${STAMP}) ON CONFLICT (alias_key) DO NOTHING;`);
-        undo.push(`DELETE FROM tag_alias WHERE alias_key = ${q(m)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP};`);
+        sql.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at, source) VALUES (${q(m)}, ${q(target)}, ${STAMP}, 'sweep') ON CONFLICT (alias_key) DO NOTHING;`);
+        undo.push(`DELETE FROM tag_alias WHERE alias_key = ${q(m)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP} AND source = 'sweep';`);
         touched.tag_alias.push(m);
         tagAlias.set(m, target);
       }
       if (a.label) {
-        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('tag', ${q(target)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
-        undo.push(`DELETE FROM facet_label_override WHERE kind = 'tag' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
+        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at, source) VALUES ('tag', ${q(target)}, ${q(a.label.trim())}, ${STAMP}, 'sweep') ON CONFLICT (kind, key) DO NOTHING;`);
+        undo.push(`DELETE FROM facet_label_override WHERE kind = 'tag' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP} AND source = 'sweep';`);
         touched.facet_label_override.push(["tag", target]);
       }
       report[a.kind].push(`${members.join(", ")} → ${target}${a.label ? ` as "${a.label}"` : ""}: ${a.why}`);
@@ -200,8 +200,8 @@ for (const [n, a] of actions.entries()) {
       if (typeof a.label !== "string" || !a.label.trim()) throw new Error("label required");
       const weight = a.weight ?? 1;
       if (typeof weight !== "number" || weight < 0) throw new Error("weight must be a number of zero or more");
-      sql.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at) VALUES (${q(a.id)}, ${q(a.label.trim())}, ${q(tagCategoryHex(a.id))}, ${weight}, ${a.ignored ? 1 : 0}, (SELECT COUNT(*) FROM tag_category), ${STAMP}) ON CONFLICT (id) DO NOTHING;`);
-      undo.push(`DELETE FROM tag_category WHERE id = ${q(a.id)} AND updated_at = ${STAMP};`);
+      sql.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at, source) VALUES (${q(a.id)}, ${q(a.label.trim())}, ${q(tagCategoryHex(a.id))}, ${weight}, ${a.ignored ? 1 : 0}, (SELECT COUNT(*) FROM tag_category), ${STAMP}, 'sweep') ON CONFLICT (id) DO NOTHING;`);
+      undo.push(`DELETE FROM tag_category WHERE id = ${q(a.id)} AND updated_at = ${STAMP} AND source = 'sweep';`);
       touched.tag_category.push(a.id);
       createdCategories.add(a.id);
       report[a.kind].push(`${a.id} "${a.label.trim()}" (weight ${weight}${a.ignored ? ", ignored" : ""}): ${a.why}`);

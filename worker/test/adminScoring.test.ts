@@ -188,3 +188,19 @@ describe("a proposal somebody said no to", () => {
     expect(row!.sql).not.toMatch(/user_id/);
   });
 });
+
+describe("who made a taxonomy row (migration 0005)", () => {
+  it("marks an admin write 'hand', and takes over a row the sweep wrote when a person edits it", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO tag_alias (alias_key, canonical_key, updated_at, source) VALUES ('scifi', 'science-fiction', 1, 'sweep')"),
+      db.prepare("INSERT INTO facet_label_override (kind, key, label, updated_at, source) VALUES ('tag', 'science-fiction', 'Sci-Fi', 1, 'sweep')"),
+    ]);
+    await setAlias(db, "tag_alias", "sci-fi", "science-fiction");
+    await setLabel(db, "tag", "science-fiction", "Science fiction");
+    const src = async (sql: string) => (await db.prepare(sql).first<{ source: string }>())!.source;
+    expect(await src("SELECT source FROM tag_alias WHERE alias_key = 'sci-fi'")).toBe("hand");
+    expect(await src("SELECT source FROM facet_label_override WHERE kind = 'tag' AND key = 'science-fiction'")).toBe("hand");
+    // A sweep row nobody touched keeps saying so.
+    expect(await src("SELECT source FROM tag_alias WHERE alias_key = 'scifi'")).toBe("sweep");
+  });
+});
