@@ -6154,3 +6154,4 @@ The pass itself: AGENTS.md split into a CLAUDE.md per package (always-loaded 61.
 the old site memory moved to `memory/old-site/`, `.claude/plans/` and `.design/` deleted, the old
 half of `smoketest.md` and eight old-site docs moved to `docs/archive/old-site/`, about twenty
 rules that named deleted code rewritten against the Worker and the app.
+- **Housekeeping, the same night, on his word:** the two finished worktrees (`practical-jennings-151cbf`, merged; `cranky-sutherland-b5b333`, whose one commit `d17ac5b` was superseded by the `afterReset` guard and whose branch is kept) and the old site's local databases (`data/rr.db` and the July 2026-07-17 backup, 274 MB) were deleted. `data/prod-snapshots/` stays.
