@@ -25,9 +25,9 @@
     "eslint": "^9",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "simple-icons": "^16.28.0",
+    "simple-icons": "^16.35.0",
     "typescript": "^5",
-    "typescript-eslint": "^8.60.1",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^4.1.12"
   }
 }
