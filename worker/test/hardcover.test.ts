@@ -44,6 +44,7 @@ const OL_DOC = (over: Record<string, unknown> = {}) => ({
   subject: ["Fantasy"], language: ["eng"], ...over,
 });
 const COVER = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 interface Fake {
   hardcover?: (query: string, variables: Record<string, unknown>) => unknown;
@@ -166,8 +167,11 @@ describe("a cover", () => {
     expect(await env.COVERS.get("hardcover/editions/1/abc.jpg")).not.toBeNull();
     expect(await count("daily_budget", "kind = 'cover' AND n = 1")).toBe(1);
 
-    // A cover R2 already holds is served without asking Hardcover, even with Hardcover off.
-    await env.COVERS.put("hardcover/editions/2/held.jpg", COVER, { httpMetadata: { contentType: "image/png" } });
+    expect(first.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
+
+    // A cover R2 already holds is served without asking Hardcover, even with
+    // Hardcover off. Its type is read from its bytes, not from what was stored.
+    await env.COVERS.put("hardcover/editions/2/held.jpg", PNG, { httpMetadata: { contentType: "image/jpeg" } });
     const held = await call("/v1/cover/hardcover/editions/2/held.jpg", {}, OFF);
     expect(held.status).toBe(200);
     expect(held.headers.get("Content-Type")).toBe("image/png");
@@ -187,6 +191,19 @@ describe("a cover", () => {
     expect((await call("/v1/cover/hardcover/editions/4/new.jpg", {}, OFF)).status).toBe(404);
     expect(calls.filter((c) => c.url.startsWith("https://assets.hardcover.app/"))).toHaveLength(1);
     expect((await call("/v1/cover/hardcover/editions/1/abc.jpg", { method: "POST" })).status).toBe(405);
+  });
+
+  it("refuses an SVG, whatever its address and its declared type say", async () => {
+    // An SVG can carry script, and this route answers from fandex.org.
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    providers({ assets: () => new Response(svg, { headers: { "Content-Type": "image/svg+xml" } }) });
+    expect((await call("/v1/cover/hardcover/editions/5/x.png")).status).toBe(502);
+    expect(await env.COVERS.get("hardcover/editions/5/x.png")).toBeNull();
+    // One already in R2 is not served either.
+    await env.COVERS.put("hardcover/editions/6/x.png", svg, { httpMetadata: { contentType: "image/png" } });
+    expect((await call("/v1/cover/hardcover/editions/6/x.png", {}, OFF)).status).toBe(404);
+    // Hardcover's members' uploads are not covers.
+    expect((await call("/v1/cover/hardcover/users/7/x.png")).status).toBe(400);
   });
 });
 

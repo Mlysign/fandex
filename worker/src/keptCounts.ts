@@ -115,7 +115,15 @@ const POOL_COUNT_TTL_SECONDS = 86_400;
  */
 export const DROP_POOL_COUNT_SQL = `DELETE FROM kv WHERE key = '${POOL_COUNT_KEY}'`;
 
-/** Count the pool and keep the answer, in one statement, so no change can land between the two. */
+/**
+ * Count the pool and keep the answer, in one statement, so no change can land between the two.
+ *
+ * It counts pool rows, not pool rows WITH an `item_doc`, which is what the delta
+ * sends. A row without a doc would make this one too high (a device misses a
+ * deletion for up to a day). Counting through the doc would be exact, but a doc
+ * written later for such a row drops no count, and that leaves it too LOW, the
+ * direction that is not allowed. Live D1 held 0 such rows on 2026-10-23.
+ */
 export const POOL_RECOUNT_SQL = `
   INSERT INTO kv (key, value, expires_at)
   SELECT ?1, COUNT(*), ?2 FROM media_items WHERE browsed = 0

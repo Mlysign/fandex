@@ -40,6 +40,14 @@ export interface Env {
   RL_RESOLVE?: RateLimit;
   RL_AUTH?: RateLimit;
   RL_WRITE?: RateLimit;
+  /** The open read routes that cost many rows a call: the catalog delta and lookup. */
+  RL_READ?: RateLimit;
+  /** Catalog delta pages served per UTC day. Optional; index.ts has the default. */
+  DAILY_DELTA_CAP?: string;
+  /** Refs /v1/lookup may answer per UTC day. Optional; index.ts has the default. */
+  DAILY_LOOKUP_CAP?: string;
+  /** User-state row writes one account may make per UTC day. Optional; me.ts has the default. */
+  DAILY_USER_WRITE_CAP_PER_USER?: string;
   /**
    * "1" lets a Worker on a loopback host sign in as a test account (src/devLogin.ts).
    * ⚠️ Only ever in `.dev.vars`. Never in wrangler.jsonc, never pushed as a secret.

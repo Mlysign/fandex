@@ -309,8 +309,31 @@ async function pickFreeSlug(
 }
 
 /**
+ * What the item's links look like, as one string: their number, their sync
+ * times and their sizes. Asked when the links are read and again at the head
+ * of the write batch.
+ */
+export const LINKS_TOKEN_SQL =
+  `SELECT COUNT(*) || ':' || COALESCE(SUM(last_synced), 0) || ':' || COALESCE(SUM(LENGTH(raw_data)), 0) AS token
+     FROM media_links WHERE media_item_id = ?`;
+/**
+ * Fails its batch when the links moved since the token was taken: json() of a
+ * string that is not JSON raises. The argument is built from the row, not a
+ * literal, so SQLite cannot evaluate it once up front as a constant. Binds
+ * (token, mediaItemId), in that order.
+ */
+export const LINKS_GUARD_SQL = `SELECT CASE WHEN t.token = ? THEN 1 ELSE json(t.token || ' links moved') END FROM (${LINKS_TOKEN_SQL}) t`;
+const LINK_WRITE_ATTEMPTS = 3;
+
+/**
  * Store (or refresh) one link on an existing item, then recompute everything
  * derived from the item's links. One read batch, one write batch.
+ *
+ * D1 has no transaction across the two, so a second writer can land between
+ * them: a cron refresh and a resolve attaching another source to the same
+ * item. The later batch would then derive the item from a link set without the
+ * other's link. The write batch opens with a guard that fails it when the links
+ * moved, and the whole read and derive is done again.
  */
 async function writeLinkAndRederive(
   db: D1Database,
@@ -319,7 +342,24 @@ async function writeLinkAndRederive(
   projected: any,
   projectionVersion: number,
 ): Promise<void> {
-  const [itemRes, linksRes, extRes] = await db.batch([
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await writeLinkAndRederiveOnce(db, mediaItemId, item, projected, projectionVersion);
+      return;
+    } catch (e) {
+      if (attempt >= LINK_WRITE_ATTEMPTS || !(e instanceof Error) || !/malformed JSON/i.test(e.message)) throw e;
+    }
+  }
+}
+
+async function writeLinkAndRederiveOnce(
+  db: D1Database,
+  mediaItemId: string,
+  item: SourceItem,
+  projected: any,
+  projectionVersion: number,
+): Promise<void> {
+  const [itemRes, linksRes, extRes, tokenRes] = await db.batch([
     stmt(db, "SELECT id, type, slug, created_at FROM media_items WHERE id = ?", [mediaItemId]),
     stmt(
       db,
@@ -327,7 +367,9 @@ async function writeLinkAndRederive(
       [mediaItemId],
     ),
     stmt(db, "SELECT source, external_id FROM media_external_ids WHERE media_item_id = ?", [mediaItemId]),
+    stmt(db, LINKS_TOKEN_SQL, [mediaItemId]),
   ]);
+  const token = (tokenRes.results as { token: string }[])[0]?.token ?? "";
   const row = (itemRes.results as ItemRow[])[0];
   if (!row) throw new Error(`writeLinkAndRederive: no media_items row ${mediaItemId}`);
 
@@ -342,6 +384,7 @@ async function writeLinkAndRederive(
   const links = [...others, incoming];
 
   const statements: D1PreparedStatement[] = [
+    stmt(db, LINKS_GUARD_SQL, [token, mediaItemId]),
     // ON CONFLICT leaves media_item_id alone: a link never moves between items here.
     stmt(
       db,

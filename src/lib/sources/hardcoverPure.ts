@@ -27,9 +27,11 @@ export const DEFAULT_COVER_ORIGIN = "https://fandex.org";
  * `edition/30399253/4012102f….jpeg`, `edition/31571207/601b0d78-4db6-….jpg`,
  * `external_data/60951398/fcce5973….jpeg`, `books/1/291303-L.jpg`,
  * `authors/142979/6691222-L.jpg`. Both spellings of a folder occur. Anything
- * else is refused by the cover route.
+ * else is refused by the cover route. Not `users/`: that folder holds what
+ * Hardcover's members upload, which is neither a fact about a book nor
+ * something to serve from fandex.org (2026-10-23).
  */
-export const HARDCOVER_COVER_PATH = /^(editions?|books?|external_data|images?|authors?|users?)\/\d{1,12}\/[A-Za-z0-9_-]{1,96}\.(jpe?g|png|webp)$/;
+export const HARDCOVER_COVER_PATH = /^(editions?|books?|external_data|images?|authors?)\/\d{1,12}\/[A-Za-z0-9_-]{1,96}\.(jpe?g|png|webp)$/;
 
 /** A Hardcover book as the catalog keeps it. Every field is a fact about the book. */
 export interface HardcoverBook {

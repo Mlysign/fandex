@@ -29,7 +29,7 @@ import { hardcoverConfigured, searchHardcover, seriesHardcover } from "@/lib/sou
 import { bggConfigured, BggNotConfigured, hotBgg, searchBgg, setBggToken } from "@/lib/sources/bgg";
 import type { Env } from "./env";
 import { hardcoverHalf, useHardcover } from "./hardcover";
-import { allow, clientIp, error, json } from "./http";
+import { allow, cachedAnswer, clientIp, error, json } from "./http";
 
 interface ShelfCtx {
   env: Env;
@@ -51,7 +51,7 @@ const CACHE_VERSION = 3; // 3: Hardcover's cards behind Open Library's in search
 async function cached(c: ShelfCtx, key: string, ttl: number, limiter: string, load: () => Promise<unknown[]>): Promise<Response> {
   const cacheKey = new Request(`https://cache.fandex.internal/v${CACHE_VERSION}/${key}`);
   const hit = await caches.default.match(cacheKey);
-  if (hit) return new Response(hit.body, hit);
+  if (hit) return cachedAnswer(hit, `public, max-age=${Math.min(ttl, HOUR)}`);
   if (!(await allow(c.env.RL_RESOLVE, `${limiter}:${clientIp(c.request)}`))) return error(429, "rate-limited");
   let results: unknown[];
   try {

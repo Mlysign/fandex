@@ -17,14 +17,29 @@ import { first, nowSeconds, run, utcDay } from "./d1";
  * by the number of in-flight requests is fine.
  */
 export async function spend(db: D1Database, kind: string, cap: number, units = 1): Promise<boolean> {
+  // Once a kind is over its cap it stays over until the day turns, because the
+  // counter only grows. Remembering that in the isolate saves the row write a
+  // refusal would otherwise cost, which is what a burst past the cap is made of.
+  const day = utcDay();
+  if (exhausted.get(kind) === day) return false;
   const row = await first<{ n: number }>(
     db,
     `INSERT INTO daily_budget (day, kind, n) VALUES (?, ?, ?)
      ON CONFLICT(day, kind) DO UPDATE SET n = n + excluded.n
      RETURNING n`,
-    [utcDay(), kind, units],
+    [day, kind, units],
   );
-  return (row?.n ?? units) <= cap;
+  const ok = (row?.n ?? units) <= cap;
+  if (!ok) exhausted.set(kind, day);
+  return ok;
+}
+
+/** Kinds this isolate has seen refused, and the UTC day it saw it. */
+const exhausted = new Map<string, string>();
+
+/** For tests: a fresh isolate's view. */
+export function forgetExhausted(): void {
+  exhausted.clear();
 }
 
 /** Today's count for `kind`, without spending. */

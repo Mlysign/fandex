@@ -15,6 +15,11 @@
   // src/lib/sources/{tmdb,igdb}.ts and src/lib/http.ts run here unchanged.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // The API's own domain, which the Android app calls. A custom domain is what
+  // makes caches.default work: on workers.dev every cache put is dropped. The
+  // workers.dev address stays on for the APKs installed before 2026-10-23.
+  "routes": [{ "pattern": "api.fandex.org", "custom_domain": true }],
+  "workers_dev": true,
   "d1_databases": [
     {
       "binding": "DB",
@@ -38,12 +43,16 @@
   "ratelimits": [
     { "name": "RL_RESOLVE", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } },
     { "name": "RL_AUTH", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
-    { "name": "RL_WRITE", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+    { "name": "RL_WRITE", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
+    // The catalog delta and lookup. Higher than RL_RESOLVE: a device starting its
+    // copy over walks ~30 delta pages in a row, and that must not hit a 429.
+    { "name": "RL_READ", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } }
   ],
   "vars": {
     // Origins allowed to call the API with credentials. The app's web build
-    // lives on fandex.org; localhost is the Expo web dev server.
-    "ALLOWED_ORIGINS": "https://fandex.org,http://localhost:8081,http://localhost:19006",
+    // lives on fandex.org. The Expo web dev servers on localhost are added by
+    // scripts/dev-stack.mjs in .dev.vars, never here.
+    "ALLOWED_ORIGINS": "https://fandex.org",
     // New catalog rows the Worker may create per UTC day, across all callers.
     // One created item costs about 12 row writes, so 2,000 is ~24k of the 100k.
     "DAILY_FETCH_CAP": "2000",

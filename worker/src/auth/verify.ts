@@ -25,6 +25,12 @@ export interface VerifiedIdentity {
   providerUserId: string;
   displayName: string | null;
   avatarUrl: string | null;
+  /**
+   * The id this identity was stored under before a stable one was used: Trakt
+   * identities were keyed by username until 2026-10-23. Sign-in moves a row
+   * still keyed that way to `providerUserId` (signin.ts).
+   */
+  legacyProviderUserId?: string;
 }
 
 export class IdentityRejected extends Error {
@@ -120,7 +126,8 @@ export async function verifyGoogleIdToken(
 
 // ── Trakt ────────────────────────────────────────────────────────────────────
 
-const TRAKT_ME_URL = "https://api.trakt.tv/users/me";
+const TRAKT_ME_URL = "https://api.trakt.tv/users/settings";
+const TRAKT_UUID = /^[0-9a-f-]{8,64}$/i;
 
 /**
  * Ask Trakt whose access token this is.
@@ -128,10 +135,15 @@ const TRAKT_ME_URL = "https://api.trakt.tv/users/me";
  * The request carries OUR client id in `trakt-api-key`. That header is half of
  * the check: Trakt ties a token to the app it was issued to, so a token minted
  * for some other Trakt app is refused here rather than accepted as a login.
+ * ⚠️ That binding is Trakt's documented behaviour, not something a test here
+ * can prove; it was never tried with another app's token.
  *
- * The identity is the Trakt USERNAME, because that is what the Railway site
- * stored (`/users/me` → `username`) and the seeded identity row has to keep
- * matching the same person.
+ * The identity is Trakt's `ids.uuid` from /users/settings. A username can
+ * change, and a deleted account's username can be taken by somebody else, so
+ * keying on it could sign a stranger into an old account. The Railway site
+ * stored the USERNAME, so `legacyProviderUserId` carries it and sign-in moves
+ * such a row to the uuid the first time its owner signs in. Without a uuid in
+ * the answer the username is used, as before.
  */
 export async function verifyTraktToken(
   env: Env,
@@ -158,12 +170,17 @@ export async function verifyTraktToken(
   }
   if (res.status === 401 || res.status === 403) throw new IdentityRejected(`Trakt refused the token (${res.status})`);
   if (!res.ok) throw new Error(`Trakt answered ${res.status}`);
-  const me = (await res.json()) as { username?: unknown; name?: unknown; images?: { avatar?: { full?: unknown } } };
+  type TraktUser = { username?: unknown; name?: unknown; ids?: { uuid?: unknown }; images?: { avatar?: { full?: unknown } } };
+  const body = (await res.json()) as { user?: TraktUser } & TraktUser;
+  // /users/settings nests the profile under `user`; /users/me does not.
+  const me: TraktUser = body?.user ?? body;
   const username = typeof me?.username === "string" ? me.username.trim() : "";
   if (!username) throw new IdentityRejected("Trakt returned no username");
+  const uuid = typeof me.ids?.uuid === "string" && TRAKT_UUID.test(me.ids.uuid) ? me.ids.uuid.toLowerCase() : null;
   return {
     provider: "trakt",
-    providerUserId: username,
+    providerUserId: uuid ?? username,
+    ...(uuid ? { legacyProviderUserId: username } : {}),
     displayName: typeof me.name === "string" && me.name.trim() ? me.name : username,
     avatarUrl: typeof me.images?.avatar?.full === "string" ? me.images.avatar.full : null,
   };

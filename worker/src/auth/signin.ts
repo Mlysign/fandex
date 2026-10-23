@@ -46,6 +46,18 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
 
   let existing = await lookup();
 
+  // A row still keyed the old way (a Trakt username) is moved to the stable id
+  // the provider gave, once, by the sign-in that proves it is the same person.
+  if (!existing && identity.legacyProviderUserId && identity.legacyProviderUserId !== identity.providerUserId) {
+    const moved = await db.prepare(
+      "UPDATE user_identities SET provider_user_id = ? WHERE provider = ? AND provider_user_id = ?",
+    ).bind(identity.providerUserId, identity.provider, identity.legacyProviderUserId).run();
+    if (moved.meta.changes) {
+      console.log("identity_rekeyed", { provider: identity.provider });
+      existing = await lookup();
+    }
+  }
+
   if (!existing) {
     // An identity nobody has seen. The session's account takes it, or a new one does.
     const userId = current?.userId ?? crypto.randomUUID();
@@ -79,7 +91,12 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
     if (!guard.ok) return { kind: "provider-taken", provider: identity.provider, conflict: guard.provider };
 
     const conflicts = await mergeConflicts(db, current.userId, existing.user_id);
-    if (conflicts.itemState > 0 || conflicts.episodeState > 0) {
+    // Folding away an account that holds titles always asks, overlap or not. A
+    // join with no question is only for the minutes-old empty account. Without
+    // this, one sign-in the person did not mean to make (a login CSRF through a
+    // provider whose flow is only checked on the client) would move their whole
+    // library into the account that owns the identity, somebody else's.
+    if (conflicts.itemState > 0 || conflicts.episodeState > 0 || (await holdsRows(db, current.userId))) {
       // Overlapping titles are the person's call. Nothing is written here.
       const mergeToken = await signPendingMerge(env, {
         from: current.userId, into: existing.user_id, provider: identity.provider,
@@ -101,6 +118,18 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
   }
 
   return finish(env, identity, existing, "signed-in");
+}
+
+/** Whether an account holds any per-title row. Three primary-key probes. */
+async function holdsRows(db: D1Database, userId: string): Promise<boolean> {
+  const row = await first<{ held: number }>(
+    db,
+    `SELECT EXISTS (SELECT 1 FROM user_item_state WHERE user_id = ?1)
+         OR EXISTS (SELECT 1 FROM user_episode_state WHERE user_id = ?1)
+         OR EXISTS (SELECT 1 FROM user_hidden_items WHERE user_id = ?1) AS held`,
+    [userId],
+  );
+  return !!row?.held;
 }
 
 /** Refresh what the provider says about the person, then mint the session for the OWNER. */

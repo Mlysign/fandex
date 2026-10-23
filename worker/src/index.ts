@@ -31,7 +31,7 @@
 //     DELETE /v1/me
 
 import { providerBreakerSnapshot } from "@/lib/http";
-import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
+import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { analyticsSnapshot, countPageView } from "./telemetry";
@@ -56,7 +56,7 @@ import { coverRoute } from "./covers";
 import { nowSeconds } from "./d1";
 import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin";
 import type { Env } from "./env";
-import { allow, BodyError, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
+import { allow, BodyError, cachedAnswer, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
   applyStateWrite, BadRequest, DEFAULT_DAILY_USER_WRITE_CAP, episodeStateJson, hiddenJson, itemStateJson, parsePrefs,
   parseStateWrite, profileJson, writePrefs,
@@ -71,6 +71,15 @@ const AUTH_BODY_MAX = 16 * 1024;
 const LOOKUP_BODY_MAX = 256 * 1024;
 const DATES_BODY_MAX = 16 * 1024;
 const STATE_BODY_MAX = 2 * 1024 * 1024;
+
+/**
+ * Daily ceilings on the two open routes that read many rows a call. Priced so
+ * both at their caps stay under half of D1 Free's 5M reads a day: a delta page
+ * reads up to ~400 rows (4,000 pages, ~1.6M), a looked-up ref two (300,000 refs,
+ * ~0.6M). A normal day is a few hundred of each.
+ */
+const DEFAULT_DAILY_DELTA_CAP = 4000;
+const DEFAULT_DAILY_LOOKUP_CAP = 300_000;
 
 /** A short client-side cache for catalog reads. The data changes on the scale of days. */
 const CATALOG_CACHE = { "Cache-Control": "public, max-age=300" };
@@ -115,6 +124,12 @@ async function route(c: Ctx): Promise<Response> {
   }
 
   if (a === "catalog" && b === "delta" && method === "GET") {
+    // Open to anybody and up to ~400 rows read a page, so a script looping on it
+    // could spend the day's 5M reads and stop every query until midnight UTC.
+    if (!(await allow(c.env.RL_READ, `delta:${clientIp(request)}`))) return error(429, "rate-limited");
+    if (!(await spend(c.env.DB, "delta_pages", capFrom(c.env.DAILY_DELTA_CAP, DEFAULT_DAILY_DELTA_CAP)))) {
+      return error(503, "budget-exhausted", "The catalog cannot be synced again until tomorrow (UTC).");
+    }
     const body = await catalogDeltaJson(
       c.env.DB,
       parseCursor(url.searchParams.get("since"), url.searchParams.get("after")),
@@ -170,6 +185,12 @@ async function route(c: Ctx): Promise<Response> {
   if (a === "lookup" && method === "POST" && !b) {
     const refs = parseRefs(await readJson(request, LOOKUP_BODY_MAX));
     if (!refs) return error(400, "bad-request", `Expected {refs: [{source, type, id}]}, at most ${LOOKUP_MAX}`);
+    // Two primary-key reads a ref and no sign-in needed: the cheapest way to
+    // spend the day's reads, so both a limiter and a daily count of refs.
+    if (!(await allow(c.env.RL_READ, `lookup:${clientIp(request)}`))) return error(429, "rate-limited");
+    if (!(await spend(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), refs.length))) {
+      return error(503, "budget-exhausted", "Fandex cannot look up more titles until tomorrow (UTC).");
+    }
     return json(await lookupRefsJson(c.env.DB, refs), 200, { "Cache-Control": "no-store" });
   }
 
@@ -322,7 +343,7 @@ async function searchGames(c: Ctx): Promise<Response> {
   const cacheKey = new Request(`https://cache.fandex.internal/search/games?v=${GAME_CARD_VERSION}&q=${encodeURIComponent(q.toLowerCase())}`);
   const cache = caches.default;
   const hit = await cache.match(cacheKey);
-  if (hit) return new Response(hit.body, hit);
+  if (hit) return cachedAnswer(hit);
 
   if (!(await allow(c.env.RL_RESOLVE, `search:${clientIp(c.request)}`))) return error(429, "rate-limited");
 
@@ -334,18 +355,10 @@ async function searchGames(c: Ctx): Promise<Response> {
     console.warn("igdb_search_failed", { error: e instanceof Error ? e.message : String(e) });
     return error(502, "provider-unavailable");
   }
-  const results = rows
-    .filter((g) => g?.id && g?.name)
-    .map((g) => ({
-      source: "igdb",
-      sourceId: String(g.id),
-      type: "game",
-      title: String(g.name),
-      releaseDate: igdbReleaseDate(g),
-      posterUrl: igdbImageUrl(g.cover?.image_id),
-      votes: typeof g.total_rating_count === "number" ? g.total_rating_count : 0,
-      rating: typeof g.total_rating === "number" ? Math.round(g.total_rating) : null,
-    }));
+  // The same card every other games route answers with: search used to build
+  // its own, without genres or the artwork fallback, so a searched game had
+  // nothing to estimate a score from.
+  const results = rows.filter((g) => g?.id && g?.name).map(gameCard);
   const response = json({ results }, 200, { "Cache-Control": "public, max-age=3600" });
   // Never cache an empty answer for long: an empty result during an IGDB hiccup
   // would pin "no such game" in place for the whole TTL.
@@ -356,9 +369,9 @@ async function searchGames(c: Ctx): Promise<Response> {
 /**
  * The game card's shape, in the edge cache keys of every route that answers
  * with it. Bump it when gameCard changes, or the old shape is served for up to
- * a week (2: genres, 2026-10-18).
+ * a week (2: genres, 2026-10-18; 3: search uses it too, 2026-10-23).
  */
-const GAME_CARD_VERSION = 2;
+const GAME_CARD_VERSION = 3;
 
 /** An IGDB game as the app's provider card, the shape /v1/search/games answers with. */
 function gameCard(g: any) {
@@ -403,7 +416,7 @@ async function browseGames(c: Ctx): Promise<Response> {
   const recent = c.url.searchParams.get("window") === "recent";
   const cacheKey = new Request(`https://cache.fandex.internal/browse/games?v=${GAME_CARD_VERSION}&day=${day}&page=${page}&recent=${recent ? 1 : 0}`);
   const hit = await caches.default.match(cacheKey);
-  if (hit) return new Response(hit.body, hit);
+  if (hit) return cachedAnswer(hit);
   if (!(await allow(c.env.RL_RESOLVE, `browse:${clientIp(c.request)}`))) return error(429, "rate-limited");
 
   useSharedIgdbToken(c.env);
@@ -432,7 +445,7 @@ async function facetGames(c: Ctx): Promise<Response> {
   if ((kind !== "tag" && kind !== "studio" && kind !== "franchise") || label.length < 2) return error(400, "bad-request", "kind must be tag, studio or franchise, q at least two characters");
   const cacheKey = new Request(`https://cache.fandex.internal/facet/games?v=${GAME_CARD_VERSION}&kind=${kind}&q=${encodeURIComponent(label.toLowerCase())}`);
   const hit = await caches.default.match(cacheKey);
-  if (hit) return new Response(hit.body, hit);
+  if (hit) return cachedAnswer(hit);
   if (!(await allow(c.env.RL_RESOLVE, `facet:${clientIp(c.request)}`))) return error(429, "rate-limited");
 
   useSharedIgdbToken(c.env);
@@ -445,7 +458,12 @@ async function facetGames(c: Ctx): Promise<Response> {
   }
   const results = rows.filter((g) => g?.id && g?.name).map(gameCard);
   const response = json({ results }, 200, { "Cache-Control": "public, max-age=3600" });
-  c.defer(caches.default.put(cacheKey, new Response(response.clone().body, { headers: { ...Object.fromEntries(response.headers), "Cache-Control": "public, max-age=604800" } })));
+  // An empty answer is kept only when IGDB was really asked. With the kill switch
+  // on, every facet answers [] without a call, and keeping that for a week would
+  // outlast the switch by the whole week.
+  if (results.length || igdbConfigured()) {
+    c.defer(caches.default.put(cacheKey, new Response(response.clone().body, { headers: { ...Object.fromEntries(response.headers), "Cache-Control": "public, max-age=604800" } })));
+  }
   return response;
 }
 
@@ -666,6 +684,8 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
 
   if (b === "state") {
     if (method === "GET") {
+      // A page is up to 4,000 rows read. A full pull is a handful of pages.
+      if ((d === "items" || d === "episodes") && !(await allow(c.env.RL_READ, `state:${userId}`))) return error(429, "rate-limited");
       if (d === "items") return json(await itemStateJson(db, userId, c.url.searchParams), 200, PRIVATE);
       if (d === "episodes") return json(await episodeStateJson(db, userId, c.url.searchParams), 200, PRIVATE);
       if (d === "hidden") return json(await hiddenJson(db, userId), 200, PRIVATE);

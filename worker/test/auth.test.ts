@@ -190,9 +190,17 @@ describe("Trakt tokens", () => {
     const id = await verifyTraktToken(env, "tok_abc", impl);
     expect(id).toEqual({ provider: "trakt", providerUserId: "nilsm", displayName: "Nils", avatarUrl: "https://t/a.png" });
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("https://api.trakt.tv/users/me");
+    expect(calls[0].url).toBe("https://api.trakt.tv/users/settings");
     expect(calls[0].headers.get("trakt-api-key")).toBe("test-trakt-client");
     expect(calls[0].headers.get("Authorization")).toBe("Bearer tok_abc");
+  });
+
+  it("keys the identity on Trakt's uuid when /users/settings sends one, with the username as the legacy key", async () => {
+    const { impl } = answering(200, { user: { username: "nilsm", name: "Nils", ids: { slug: "nilsm", uuid: "B6589FC6AB0DC82CF12099D1C2D40AB994E8410C" } } });
+    expect(await verifyTraktToken(env, "tok", impl)).toEqual({
+      provider: "trakt", providerUserId: "b6589fc6ab0dc82cf12099d1c2d40ab994e8410c", legacyProviderUserId: "nilsm",
+      displayName: "Nils", avatarUrl: null,
+    });
   });
 
   it("rejects a token Trakt refuses, and tells an outage apart from a refusal", async () => {
@@ -260,15 +268,12 @@ describe("signing in", () => {
     expect(await count("user_identities")).toBe(1);
   });
 
-  it("merges straight away when the identity belongs to another account and nothing overlaps", async () => {
+  it("merges straight away when the identity belongs to another account and the signed-in one is empty", async () => {
     // The established account, reached with Trakt.
     const established = await signIn(env, trakt("nilsm"), null);
     // A fresh account, made by signing in with Google on a new device.
     const fresh = await signIn(env, google("g-1"), null);
     if (established.kind !== "created" || fresh.kind !== "created") throw new Error("setup");
-    const film = await upsertMediaItem(db, movieItem());
-    await db.prepare("INSERT INTO user_item_state (user_id, media_item_id, source, relation) VALUES (?, ?, 'local', 'wishlist')")
-      .bind(fresh.user.userId, film.id).run();
 
     // Signed in as the fresh account, the person proves they own the Trakt one.
     const out = await signIn(env, trakt("nilsm"), fresh.user);
@@ -278,10 +283,46 @@ describe("signing in", () => {
     expect(out.user.userId).toBe(established.user.userId);
     expect(await count("users")).toBe(1);
     expect(await count("user_identities", "user_id = ?", [established.user.userId])).toBe(2);
-    expect(await count("user_item_state", "user_id = ?", [established.user.userId])).toBe(1);
     // The old token names an account that no longer exists.
     expect(await readSession(env, bearer(fresh.token))).toBeNull();
     expect((await readSession(env, bearer(out.token)))?.user.userId).toBe(established.user.userId);
+  });
+
+  it("asks before folding away an account that holds titles, even when nothing overlaps", async () => {
+    // A sign-in the person did not mean to make must not move their library
+    // into somebody else's account without a question.
+    const established = await signIn(env, trakt("nilsm"), null);
+    const fresh = await signIn(env, google("g-1"), null);
+    if (established.kind !== "created" || fresh.kind !== "created") throw new Error("setup");
+    const film = await upsertMediaItem(db, movieItem());
+    await db.prepare("INSERT INTO user_item_state (user_id, media_item_id, source, relation) VALUES (?, ?, 'local', 'wishlist')")
+      .bind(fresh.user.userId, film.id).run();
+
+    const out = await signIn(env, trakt("nilsm"), fresh.user);
+    expect(out.kind).toBe("merge-required");
+    if (out.kind !== "merge-required") return;
+    expect(out.conflicts).toMatchObject({ itemState: 0, episodeState: 0 });
+    expect(await count("users")).toBe(2);
+
+    // A yes joins them, and the title goes with the account.
+    const done = await completeMerge(env, fresh.user, out.mergeToken, "keep-theirs");
+    expect(done.kind).toBe("merged");
+    expect(await count("users")).toBe(1);
+    expect(await count("user_item_state", "user_id = ?", [established.user.userId])).toBe(1);
+  });
+
+  it("moves a Trakt identity kept under a username to the uuid, on its owner's next sign-in", async () => {
+    const old = await signIn(env, trakt("nilsm"), null);
+    if (old.kind !== "created") throw new Error("setup");
+    const keyed: VerifiedIdentity = { ...trakt("nilsm"), providerUserId: "b6589fc6ab0dc82c", legacyProviderUserId: "nilsm" };
+    const out = await signIn(env, keyed, null);
+    expect(out.kind).toBe("signed-in");
+    if (out.kind !== "signed-in") return;
+    expect(out.user.userId).toBe(old.user.userId);
+    expect(await count("user_identities", "provider = 'trakt' AND provider_user_id = 'b6589fc6ab0dc82c'")).toBe(1);
+    expect(await count("user_identities", "provider = 'trakt' AND provider_user_id = 'nilsm'")).toBe(0);
+    // A later answer under the uuid finds it directly; the username is not asked again.
+    expect((await signIn(env, keyed, null)).kind).toBe("signed-in");
   });
 
   it("asks rather than picking a winner when both accounts hold the same title", async () => {
@@ -374,8 +415,11 @@ describe("signing in", () => {
     for (const [user, item] of [[established.user.userId, film.id], [fresh.user.userId, film.id], [fresh.user.userId, game.id]]) {
       await db.prepare("INSERT INTO user_hidden_items (user_id, media_item_id) VALUES (?, ?)").bind(user, item).run();
     }
+    // The fresh account holds rows, so the join is asked first (no overlap in item state).
     const out = await signIn(env, trakt("nilsm"), fresh.user);
-    expect(out.kind).toBe("merged");
+    expect(out.kind).toBe("merge-required");
+    if (out.kind !== "merge-required") return;
+    expect((await completeMerge(env, fresh.user, out.mergeToken, "keep-theirs")).kind).toBe("merged");
     expect(await count("user_hidden_items", "user_id = ?", [established.user.userId])).toBe(2);
   });
 });

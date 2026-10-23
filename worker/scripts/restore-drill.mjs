@@ -41,16 +41,20 @@ const useLive = !args.includes("--no-live");
 const dayArg = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
 const seedDir = path.join(root, "data", "d1-seed");
 
+// Wrangler's own script under node, with an argument list and no shell (as
+// fold-items.mjs does). Through `npx` and a shell, Windows splits a SQL
+// argument at its spaces and every argument had to be quoted by hand.
+const WRANGLER = path.join(workerDir, "node_modules", "wrangler", "bin", "wrangler.js");
+
 /** Run wrangler, resolve with its output. Never rejects: the caller decides what a failure means. */
 function wrangler(argv) {
   return new Promise((resolve) => {
-    // shell: true so the `npx` shim resolves on Windows. Every argument is built
-    // from constants and validated identifiers in this file.
-    const child = spawn("npx", ["wrangler", ...argv], { cwd: workerDir, shell: true });
+    const child = spawn(process.execPath, [WRANGLER, ...argv], { cwd: workerDir });
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (err += d));
+    child.on("error", (e) => resolve({ code: -1, out, err: `${err}\n${e.message}` }));
     child.on("close", (code) => resolve({ code, out, err }));
   });
 }
@@ -62,7 +66,7 @@ function wrangler(argv) {
  */
 async function getObject(key, dest) {
   for (let attempt = 1; ; attempt++) {
-    const res = await wrangler(["r2", "object", "get", `${BUCKET}/${key}`, "--file", JSON.stringify(dest), "--jurisdiction", "eu", "--remote"]);
+    const res = await wrangler(["r2", "object", "get", `${BUCKET}/${key}`, "--file", dest, "--jurisdiction", "eu", "--remote"]);
     if (res.code === 0 && fs.existsSync(dest)) return fs.readFileSync(dest, "utf8");
     const text = `${res.out}\n${res.err}`;
     if (/does not exist|NoSuchKey|not found|10007/i.test(text)) return null;
@@ -251,7 +255,7 @@ const content = {
 let live = null;
 if (useLive) {
   const d1 = async (sql) => {
-    const res = await wrangler(["d1", "execute", "fandex", "--remote", "--json", "--command", JSON.stringify(sql)]);
+    const res = await wrangler(["d1", "execute", "fandex", "--remote", "--json", "--command", sql.replace(/\s+/g, " ")]);
     if (res.code !== 0) throw new Error(`d1 query failed: ${(res.err || res.out).trim().split("\n").slice(-2).join(" | ")}`);
     return JSON.parse(res.out.slice(res.out.indexOf("[")))[0].results;
   };

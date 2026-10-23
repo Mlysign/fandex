@@ -18,7 +18,7 @@
 //
 // Who may ask: anybody, which is why the path is checked against the one shape
 // Hardcover uses, the fetch is rate-limited per IP and capped per day, and
-// anything that is not an image is refused. A stranger can make the Worker
+// anything whose bytes are not a JPEG, PNG or WebP is refused. A stranger can make the Worker
 // copy a Hardcover cover nobody asked for, and nothing worse.
 
 import { BROWSE_BUDGET_MS, httpFetch } from "@/lib/http";
@@ -45,7 +45,23 @@ const headers = (contentType: string, length: number): Record<string, string> =>
   "Content-Length": String(length),
   "Cache-Control": `public, max-age=${YEAR}, immutable`,
   "X-Content-Type-Options": "nosniff",
+  // Served from fandex.org, where the web session lives. A picture needs none
+  // of a page's powers, so a file that is not one can do nothing either.
+  "Content-Security-Policy": "default-src 'none'; sandbox",
 });
+
+/**
+ * The raster types a cover may be, told from the bytes rather than from what
+ * the upstream says. An SVG is an image/* type that can carry script, and this
+ * route serves from the site's own origin.
+ */
+export function coverType(bytes: ArrayBuffer): string | null {
+  const b = new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength));
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return null;
+}
 
 /** `parts` is the path split: ["v1", "cover", "hardcover", ...path]. Null for any other address. */
 export async function coverRoute(c: CoverCtx, method: string, parts: string[]): Promise<Response | null> {
@@ -64,7 +80,10 @@ export async function coverRoute(c: CoverCtx, method: string, parts: string[]): 
   const held = await c.env.COVERS.get(key);
   if (held) {
     bytes = await held.arrayBuffer();
-    contentType = held.httpMetadata?.contentType ?? "image/jpeg";
+    // A copy made before the bytes were checked is checked now.
+    const type = coverType(bytes);
+    if (!type) return error(404, "not-found");
+    contentType = type;
   } else {
     useHardcover(c.env);
     // Off means off: no new copies are made, though the ones held keep serving.
@@ -82,10 +101,13 @@ export async function coverRoute(c: CoverCtx, method: string, parts: string[]): 
     }
     if (res.status === 404) return error(404, "not-found");
     if (!res.ok) return error(502, "provider-unavailable");
-    contentType = (res.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
-    if (!contentType.startsWith("image/")) return error(502, "provider-unavailable", "Not an image.");
+    const declared = (res.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!declared.startsWith("image/")) return error(502, "provider-unavailable", "Not an image.");
     bytes = await res.arrayBuffer();
     if (!bytes.byteLength || bytes.byteLength > MAX_BYTES) return error(502, "provider-unavailable", "Not a cover.");
+    const type = coverType(bytes);
+    if (!type) return error(502, "provider-unavailable", "Not a cover.");
+    contentType = type;
     await c.env.COVERS.put(key, bytes, { httpMetadata: { contentType } });
   }
 

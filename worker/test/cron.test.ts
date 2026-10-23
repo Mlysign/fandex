@@ -213,7 +213,7 @@ describe("the TMDB refresh", () => {
     expect(link!.last_synced).toBeGreaterThan(OLD);
   });
 
-  it("keeps the stored data when a refresh fails, and moves the link back in the queue", async () => {
+  it("keeps the stored data and its true age when a refresh fails, and sets the link aside", async () => {
     const { id } = await upsertMediaItem(db, movieItem());
     await age("603", OLD);
     const before = await db.prepare("SELECT raw_data FROM media_links WHERE source_id = '603'").first<{ raw_data: string }>();
@@ -225,8 +225,10 @@ describe("the TMDB refresh", () => {
     // A failed refresh must never overwrite a stored blob with nothing.
     expect(after!.raw_data).toBe(before!.raw_data);
     expect((await db.prepare("SELECT title FROM media_items WHERE id = ?").bind(id).first<{ title: string }>())!.title).toBe("The Matrix");
-    // No longer the oldest, so a title TMDB deleted cannot block the queue.
-    expect(after!.last_synced).toBeGreaterThan(OLD);
+    // The copy's age is what TMDB's six-month cap counts from, so it does not
+    // move. The link is set aside instead, so a title TMDB deleted cannot block
+    // the queue.
+    expect(after!.last_synced).toBe(OLD);
     const calls = tmdb({});
     expect(await runTmdbRefreshStep(env, NOW)).toEqual({ refreshed: 0, failed: 0 });
     expect(calls).toEqual([]);

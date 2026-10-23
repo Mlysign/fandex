@@ -24,7 +24,7 @@ import { getIgdbCollections, igdbConfigured } from "@/lib/sources/igdb";
 import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
 import { kvGet, kvSet } from "./budget";
-import { runCalendarStep } from "./calendar";
+import { monthKey, runCalendarStep, SERVABLE_MONTHS, shiftMonth } from "./calendar";
 import { all, nowSeconds, utcDay } from "./d1";
 import type { Env } from "./env";
 import { upsertMediaItem } from "./catalog/ingest";
@@ -201,6 +201,10 @@ const REFRESH_PER_RUN = 2;
 
 /** A link whose refresh failed becomes due again after this long. */
 const REFRESH_RETRY_SECONDS = 7 * 86_400;
+const REFRESH_SKIP_KEY = "tmdb_refresh_skip";
+const REFRESH_SKIP_MAX = 200;
+/** TMDB's cap on an unrefreshed copy (API Terms §1.C). A failure past it is logged as overdue. */
+const TMDB_RETENTION_DAYS = 180;
 const REFRESH_IDLE_KEY = "tmdb_refresh_idle";
 /** How long to stop looking after a scan finds nothing due. */
 const REFRESH_IDLE_SECONDS = 6 * 3600;
@@ -217,8 +221,15 @@ async function refetchTmdbLink(env: Env, link: DueLink): Promise<void> {
   await upsertMediaItem(env.DB, {
     source: "tmdb", sourceId: String(d.id), type: link.media_type as "movie" | "show", title,
     releaseDate: (link.media_type === "movie" ? d.release_date : d.first_air_date) || null, rawData: d,
-  });
+  }, CRON_UPSERT);
 }
+
+/**
+ * A refresh stores what it is given under the id that answered, and when that
+ * is a title nobody holds yet it creates one. That title was not acted on, so
+ * it goes in as browsed, outside the scoring pool every device shares.
+ */
+const CRON_UPSERT = { browsed: 1 } as const;
 
 export async function runTmdbRefreshStep(env: Env, now = nowSeconds()): Promise<{ refreshed: number; failed: number }> {
   // The scan below reads every TMDB link to find the oldest, and D1 bills each
@@ -228,13 +239,17 @@ export async function runTmdbRefreshStep(env: Env, now = nowSeconds()): Promise<
   if (await kvGet(env.DB, REFRESH_IDLE_KEY)) return { refreshed: 0, failed: 0 };
 
   const cutoff = now - TMDB_REFRESH_AFTER_DAYS * 86_400;
-  const stale = await all<{ source_id: string; media_type: string }>(
+  let skip: Record<string, number> = {};
+  try { skip = JSON.parse((await kvGet(env.DB, REFRESH_SKIP_KEY)) ?? "{}") ?? {}; } catch { skip = {}; }
+  for (const [key, until] of Object.entries(skip)) if (!(until > now)) delete skip[key];
+  const skipped = Object.keys(skip).length;
+  const stale = (await all<{ source_id: string; media_type: string; last_synced: number }>(
     env.DB,
-    `SELECT source_id, media_type FROM media_links
+    `SELECT source_id, media_type, last_synced FROM media_links
       WHERE source = 'tmdb' AND last_synced < ? AND media_type IN ('movie', 'show')
       ORDER BY last_synced LIMIT ?`,
-    [cutoff, REFRESH_PER_RUN],
-  );
+    [cutoff, REFRESH_PER_RUN + skipped],
+  )).filter((l) => !skip[`${l.media_type}:${l.source_id}`]).slice(0, REFRESH_PER_RUN);
   if (!stale.length) {
     await kvSet(env.DB, REFRESH_IDLE_KEY, "1", REFRESH_IDLE_SECONDS);
     return { refreshed: 0, failed: 0 };
@@ -248,17 +263,23 @@ export async function runTmdbRefreshStep(env: Env, now = nowSeconds()): Promise<
       refreshed++;
     } catch (e) {
       // A failed refresh must never overwrite a stored blob with nothing, so the
-      // row keeps its data. It is pushed a week back in the queue, though:
-      // the scan takes the OLDEST links, and a title TMDB has deleted would
-      // otherwise sit at the front and block every run behind it forever.
+      // row keeps its data. It is set aside for a week, though: the scan takes
+      // the OLDEST links, and a title TMDB has deleted would otherwise sit at
+      // the front and block every run behind it forever.
+      // ⚠️ Set aside in kv, NOT by moving `last_synced`. That column is the
+      // stored copy's age and TMDB's six-month cap counts from it; stamping a
+      // failed copy as fresh hid it from this job for good (2026-10-23 review).
       failed++;
-      await env.DB.prepare(
-        "UPDATE media_links SET last_synced = ? WHERE source = 'tmdb' AND source_id = ? AND media_type = ?",
-      ).bind(cutoff + REFRESH_RETRY_SECONDS, link.source_id, link.media_type).run();
-      console.warn("tmdb_refresh_failed", {
-        id: link.source_id, type: link.media_type, error: e instanceof Error ? e.message : String(e),
+      skip[`${link.media_type}:${link.source_id}`] = now + REFRESH_RETRY_SECONDS;
+      const ageDays = Math.floor((now - link.last_synced) / 86_400);
+      console.warn(ageDays >= TMDB_RETENTION_DAYS ? "tmdb_retention_overdue" : "tmdb_refresh_failed", {
+        id: link.source_id, type: link.media_type, ageDays, error: e instanceof Error ? e.message : String(e),
       });
     }
+  }
+  if (failed) {
+    const kept = Object.entries(skip).sort((a, b) => b[1] - a[1]).slice(0, REFRESH_SKIP_MAX);
+    await kvSet(env.DB, REFRESH_SKIP_KEY, JSON.stringify(Object.fromEntries(kept)));
   }
   return { refreshed, failed };
 }
@@ -379,7 +400,7 @@ const OL_REFETCH_IDLE_KEY = "ol_refetch_idle";
 async function refetchOpenLibraryLink(db: Env["DB"], sourceId: string, now: number): Promise<void> {
   const w = await getOpenLibraryWork(sourceId);
   if (!w?.title) throw new Error("empty payload");
-  await upsertMediaItem(db, { source: "openlibrary", sourceId: w.id, type: "book", title: w.title, releaseDate: bookDate(w), rawData: w });
+  await upsertMediaItem(db, { source: "openlibrary", sourceId: w.id, type: "book", title: w.title, releaseDate: bookDate(w), rawData: w }, CRON_UPSERT);
   // A work Open Library merged into another answers under the new id, and the
   // upsert stored that one. The old link must still move past the cutoff, or
   // it is due again every run.
@@ -436,7 +457,7 @@ export async function runOpenLibraryRefetchStep(env: Env, slots: number, now = n
 // Self-terminating: past the last id it parks for good.
 
 /** Games a run stores again. A re-derive is the CPU; one IGDB call answers them all. */
-export const IGDB_COLLECTIONS_PER_RUN = 12;
+export const IGDB_COLLECTIONS_PER_RUN = 8;
 const IGDB_COLLECTIONS_CURSOR_KEY = "igdb_collections_cursor";
 const IGDB_COLLECTIONS_DONE = "done";
 
@@ -472,21 +493,55 @@ export async function runIgdbCollectionsStep(env: Env, batch = IGDB_COLLECTIONS_
       source: "igdb", sourceId: link.source_id, type: "game", title: link.title, releaseDate: link.release_date,
       // Merged over the stored payload (mergeRawData): only `collections` is new.
       rawData: { id: Number(link.source_id), collections },
-    });
+    }, CRON_UPSERT);
     refreshed++;
   }
   await kvSet(env.DB, IGDB_COLLECTIONS_CURSOR_KEY, due[due.length - 1].source_id);
   return { refreshed, missing };
 }
 
+// ── 4. Housekeeping ─────────────────────────────────────────────────────────
+//
+// Two tables only ever grew. `daily_budget` gains a row per kind per day, and
+// one per account per day since the per-account write share (me.ts).
+// `calendar_month` keeps every month and region ever built, and the calendar
+// step scans it each run. Once a UTC day, a couple of DELETEs.
+
+/** Days of spending counters kept. Health and the logs only ever read today's. */
+export const BUDGET_KEEP_DAYS = 30;
+const HOUSEKEEPING_KEY = "housekeeping_day";
+
+export async function runHousekeepingStep(env: Env, now = Date.now()): Promise<{ budgetRows: number; months: number } | null> {
+  const day = utcDay(now);
+  if ((await kvGet(env.DB, HOUSEKEEPING_KEY)) === day) return null;
+  const month = monthKey(new Date(now));
+  const [budget, months] = await env.DB.batch([
+    env.DB.prepare("DELETE FROM daily_budget WHERE day < ?").bind(utcDay(now - BUDGET_KEEP_DAYS * 86_400_000)),
+    // Outside what a request may ask for, so nobody can be served it again.
+    env.DB.prepare("DELETE FROM calendar_month WHERE month < ? OR month > ?")
+      .bind(shiftMonth(month, -SERVABLE_MONTHS), shiftMonth(month, SERVABLE_MONTHS)),
+  ]);
+  await kvSet(env.DB, HOUSEKEEPING_KEY, day, 2 * 86_400);
+  return { budgetRows: budget.meta.changes ?? 0, months: months.meta.changes ?? 0 };
+}
+
 // ── The trigger ─────────────────────────────────────────────────────────────
 
 export async function runScheduled(env: Env): Promise<void> {
+  try {
+    const hk = await runHousekeepingStep(env);
+    if (hk && (hk.budgetRows || hk.months)) console.log("housekeeping_step", hk);
+  } catch (e) {
+    console.error("housekeeping_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
   // Independent: a failure in one must not starve the other.
+  let exporting = false;
   try {
     const ex = await runExportStep(env);
+    exporting = ex.wrote > 0;
     if (ex.wrote) console.log("export_step", ex);
   } catch (e) {
+    exporting = true;
     console.error("export_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
   // The two refreshes share the run's fetches, the retention one first.
@@ -526,6 +581,10 @@ export async function runScheduled(env: Env): Promise<void> {
   // left. After everything else: a run of it measured 59 and 113 ms of CPU on
   // 2026-10-18, past the free plan's 10, so if a run is ever cut short it is
   // this one. A cut batch is safe to repeat: a stored game leaves the query.
+  // ⚠️ An invocation may run 50 D1 queries. The export's chunks take about
+  // twenty and a batch of games three each, so the walk sits out the runs the
+  // export is working in rather than finding the ceiling half way.
+  if (exporting) return;
   try {
     const ic = await runIgdbCollectionsStep(env);
     if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);

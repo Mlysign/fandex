@@ -213,7 +213,7 @@ describe("signing in over HTTP", () => {
   });
 
   it("signs a Trakt user in, and the token it returns works", async () => {
-    providers({ "api.trakt.tv/users/me": () => Response.json({ username: "nilsm", name: "Nils" }) });
+    providers({ "api.trakt.tv/users/settings": () => Response.json({ username: "nilsm", name: "Nils" }) });
     const res = await call("/v1/auth/trakt", { method: "POST", ...jsonBody({ accessToken: "tok_abc" }) });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
@@ -229,7 +229,7 @@ describe("signing in over HTTP", () => {
   });
 
   it("gives a browser on our origin the cookie as well", async () => {
-    providers({ "api.trakt.tv/users/me": () => Response.json({ username: "nilsm" }) });
+    providers({ "api.trakt.tv/users/settings": () => Response.json({ username: "nilsm" }) });
     const body = jsonBody({ accessToken: "tok_abc" });
     const res = await call("/v1/auth/trakt", { method: "POST", body: body.body, headers: { ...body.headers, Origin: ORIGIN } });
     const cookie = res.headers.get("Set-Cookie")!;
@@ -237,7 +237,7 @@ describe("signing in over HTTP", () => {
   });
 
   it("answers 502, not 401, when the provider is down", async () => {
-    providers({ "api.trakt.tv/users/me": () => new Response("upstream", { status: 503 }) });
+    providers({ "api.trakt.tv/users/settings": () => new Response("upstream", { status: 503 }) });
     const res = await call("/v1/auth/trakt", { method: "POST", ...jsonBody({ accessToken: "tok_abc" }) });
     expect(res.status).toBe(502);
   });
@@ -438,6 +438,8 @@ describe("game search", () => {
     expect(((await res.json()) as any).results).toEqual([{
       source: "igdb", sourceId: "1942", type: "game", title: "The Witcher 3: Wild Hunt",
       releaseDate: "2015-05-19", posterUrl: expect.stringContaining("co1wyy"), votes: 4200, rating: 94,
+      // The card every games route answers with, so a searched game has genres to score from.
+      genres: ["Role-playing (RPG)", "Fantasy"],
     }]);
   });
 

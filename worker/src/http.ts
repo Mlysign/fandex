@@ -82,12 +82,16 @@ export class BodyError extends Error {
   }
 }
 
-/** Parse a JSON body, refusing one over `maxBytes` before reading it where possible. */
+/**
+ * Parse a JSON body, refusing one over `maxBytes`. The cap counts BYTES and is
+ * checked while the body streams in, so a chunked body with no Content-Length
+ * stops at the cap instead of being read whole first. A count of characters
+ * let a non-ASCII body past the cap and into a D1 bind it was too big for.
+ */
 export async function readJson(request: Request, maxBytes: number): Promise<unknown> {
   const declared = Number(request.headers.get("Content-Length") ?? 0);
   if (declared > maxBytes) throw new BodyError(413, "Request body too large");
-  const text = await request.text();
-  if (text.length > maxBytes) throw new BodyError(413, "Request body too large");
+  const text = await readCapped(request, maxBytes);
   try {
     return JSON.parse(text);
   } catch {
@@ -95,10 +99,61 @@ export async function readJson(request: Request, maxBytes: number): Promise<unkn
   }
 }
 
+async function readCapped(request: Request, maxBytes: number): Promise<string> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new BodyError(413, "Request body too large");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { bytes.set(c, at); at += c.byteLength; }
+  return new TextDecoder().decode(bytes);
+}
+
+// ── Edge cache ───────────────────────────────────────────────────────────────
+
+/**
+ * An edge-cache hit, as the client should get it. The edge keeps its copy for
+ * days, but the stored Cache-Control would tell a browser the same, and a
+ * browser holding a week-old copy is never reached by a cache version bump. So
+ * a hit carries the lifetime a miss sends.
+ */
+export function cachedAnswer(hit: Response, cacheControl = "public, max-age=3600"): Response {
+  const res = new Response(hit.body, hit);
+  res.headers.set("Cache-Control", cacheControl);
+  return res;
+}
+
 // ── Rate limiting ────────────────────────────────────────────────────────────
 
+/**
+ * The rate limiters' key for a caller. An IPv6 address is cut to its /64: one
+ * connection is usually handed a whole /64, so keying the full address let a
+ * single client rotate past every limiter for free.
+ */
 export function clientIp(request: Request): string {
-  return request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  // An IPv4-mapped address ("::ffff:1.2.3.4") is one host, not a network.
+  return ip.includes(":") && !ip.includes(".") ? ipv6Prefix64(ip) : ip;
+}
+
+export function ipv6Prefix64(ip: string): string {
+  const [head, tail] = ip.toLowerCase().split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const fill = tail === undefined ? [] : Array(Math.max(0, 8 - left.length - right.length)).fill("0");
+  const groups = [...left, ...fill, ...right];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 /** True when the call may proceed. A missing binding (tests, local runs) allows. */

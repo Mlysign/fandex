@@ -74,14 +74,37 @@ export function validResolveTarget(source: string, type: string, id: string): bo
   return !!target && target.types.has(type) && target.id.test(id);
 }
 
-/** The item a provider id already maps to, or null. One indexed read. */
+/**
+ * The item a provider id already maps to, or null. One indexed read, and a
+ * second one into `provider_aliases` only on a miss.
+ */
 export async function findByProviderId(db: D1Database, source: string, type: string, id: string): Promise<string | null> {
   const row = await first<{ media_item_id: string }>(
     db,
     "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ? AND media_type = ?",
     [source, id, type],
   );
-  return row?.media_item_id ?? null;
+  if (row) return row.media_item_id;
+  const alias = await first<{ media_item_id: string }>(
+    db,
+    "SELECT media_item_id FROM provider_aliases WHERE source = ? AND source_id = ? AND media_type = ?",
+    [source, id, type],
+  );
+  return alias?.media_item_id ?? null;
+}
+
+/**
+ * Remember that `askedId` answered as `itemId` under another id (migration
+ * 0004). Best effort: a failure here costs a provider call next time, nothing else.
+ */
+async function rememberAlias(db: D1Database, source: string, type: string, askedId: string, itemId: string): Promise<void> {
+  try {
+    await db.prepare(
+      "INSERT OR IGNORE INTO provider_aliases (source, source_id, media_type, media_item_id) VALUES (?, ?, ?, ?)",
+    ).bind(source, askedId, type, itemId).run();
+  } catch (e) {
+    console.warn("alias_write_failed", { source, type, askedId, error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**
@@ -120,7 +143,23 @@ export async function resolveItem(
     return { ok: false, reason: "provider" };
   }
   if (!item) return { ok: false, reason: "not-found" };
+  const out = await resolveFetched(env, item);
+  // The id asked answered as another one (a merged work, a duplicate, a port):
+  // keep the asked id too, so the next lookup of it is a read and not a fetch.
+  if (out.ok && out.via !== id) await rememberAlias(env.DB, source, type, id, out.id);
+  return out.ok ? { ok: true, id: out.id, created: out.created } : out;
+}
 
+/**
+ * Store a fetched title. `via` is the provider id the item ended up stored
+ * under for the ASKED source, which differs from the asked id when the title
+ * was followed somewhere else.
+ */
+async function resolveFetched(
+  env: Env,
+  fetched: SourceItem,
+): Promise<{ ok: true; id: string; created: boolean; via: string } | { ok: false; reason: "bad-request" | "not-found" | "budget" | "provider" | "rate-limited" }> {
+  let item = fetched;
   // A Hardcover book's identity is its Open Library work, when Open Library
   // has one (docs/decisions.md, 2026-10-17): asked by the book's ISBNs, the
   // work is resolved as itself and the Hardcover link attached to it, so the
@@ -134,7 +173,7 @@ export async function resolveItem(
       const work = await resolveItem(env, "openlibrary", "book", olId);
       if (work.ok) {
         await linkSourceToItem(env.DB, work.id, item);
-        return work;
+        return { ...work, via: item.sourceId };
       }
     }
   }
@@ -146,19 +185,19 @@ export async function resolveItem(
   const main = item.source === "igdb" ? mainGameId(item.rawData) : null;
   if (main) {
     const heldMain = await findByProviderId(env.DB, "igdb", "game", main);
-    if (heldMain) return { ok: true, id: heldMain, created: false };
+    if (heldMain) return { ok: true, id: heldMain, created: false, via: main };
     try {
       item = (await fetchFromProvider(env, "igdb", "game", main)) ?? item;
     } catch (e) {
       // The port itself was fetched fine. Better the port than nothing.
-      console.warn("resolve_main_game_failed", { id, main, error: e instanceof Error ? e.message : String(e) });
+      console.warn("resolve_main_game_failed", { id: fetched.sourceId, main, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
   // browsed = 1: a title somebody opened is not yet a title somebody acted on,
   // and only acted-on rows belong in the scoring pool every device shares.
   const res = await upsertMediaItem(env.DB, item, { browsed: 1 });
-  return { ok: true, id: res.id, created: res.created };
+  return { ok: true, id: res.id, created: res.created, via: item.sourceId };
 }
 
 // ── Looking up many at once ──────────────────────────────────────────────────
@@ -206,13 +245,19 @@ export async function lookupRefsJson(db: D1Database, refs: ProviderRef[]): Promi
     `SELECT
        json_group_array(json_object('source', s, 'type', t, 'id', sid, 'mediaItemId', mid, 'slug', slug)) FILTER (WHERE mid IS NOT NULL) found,
        json_group_array(json_object('source', s, 'type', t, 'id', sid)) FILTER (WHERE mid IS NULL) missing
-       FROM (SELECT j.value ->> 'source' s, j.value ->> 'type' t, j.value ->> 'id' sid, l.media_item_id mid, m.slug slug
-               FROM json_each(?1) j
-               LEFT JOIN media_links l
-                 ON l.source = j.value ->> 'source' AND l.source_id = j.value ->> 'id' AND l.media_type = j.value ->> 'type'
+       FROM (SELECT x.s, x.t, x.sid, x.mid, m.slug slug
+               FROM (SELECT j.value ->> 'source' s, j.value ->> 'type' t, j.value ->> 'id' sid,
+                            -- An id that answered as another one (migration 0004). COALESCE
+                            -- stops at its first non-NULL, so the alias is read for a miss only.
+                            COALESCE(l.media_item_id,
+                              (SELECT a.media_item_id FROM provider_aliases a
+                                WHERE a.source = j.value ->> 'source' AND a.source_id = j.value ->> 'id' AND a.media_type = j.value ->> 'type')) mid
+                       FROM json_each(?1) j
+                       LEFT JOIN media_links l
+                         ON l.source = j.value ->> 'source' AND l.source_id = j.value ->> 'id' AND l.media_type = j.value ->> 'type') x
                -- The slug, so a card links /{type}/{slug} and not /item/{id} (SM80).
                -- One primary-key read per held title.
-               LEFT JOIN media_items m ON m.id = l.media_item_id)`,
+               LEFT JOIN media_items m ON m.id = x.mid)`,
     [JSON.stringify(refs)],
   );
   return `{"found":${row?.found ?? "[]"},"missing":${row?.missing ?? "[]"}}`;

@@ -55,8 +55,9 @@ export async function itemDetailJson(
 
   const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
   let merged = row.merged;
-  if (region !== DEFAULT_COUNTRY || (row.derive_version ?? 0) < DERIVE_VERSION) {
-    const regional = await mergedForRegion(db, row.id, row.type as MediaType, region);
+  const stale = (row.derive_version ?? 0) < DERIVE_VERSION;
+  if (region !== DEFAULT_COUNTRY || stale) {
+    const regional = await mergedForRegion(db, row.id, row.type as MediaType, region, stale);
     if (regional) merged = regional;
   }
 
@@ -67,14 +68,19 @@ export async function itemDetailJson(
   );
 }
 
-async function mergedForRegion(db: D1Database, id: string, type: MediaType, region: string): Promise<string | null> {
+/**
+ * `stale`: the stored doc predates the current merge rule, so it is merged
+ * again whatever the sources. Without it a game, book or board game (no TMDB
+ * link) kept its old doc until something rewrote the row.
+ */
+async function mergedForRegion(db: D1Database, id: string, type: MediaType, region: string, stale = false): Promise<string | null> {
   const rows = await all<{ source: string; source_id: string; release_date: string | null; last_synced: number; raw_data: string }>(
     db,
     "SELECT source, source_id, release_date, last_synced, raw_data FROM media_links WHERE media_item_id = ?",
     [id],
   );
   // Only TMDB carries per-region data. Without it the default doc is already right.
-  if (!rows.some((r) => r.source === "tmdb")) return null;
+  if (!stale && !rows.some((r) => r.source === "tmdb")) return null;
   const links: MediaLink[] = rows.map((r) => {
     let data: any = {};
     try { data = JSON.parse(r.raw_data); } catch { /* derives as empty */ }
@@ -209,17 +215,23 @@ export async function catalogDeltaJson(
   // form walks the index from its start and discards everything before the
   // cursor, and D1 bills each discarded row as a row read: a caught-up client
   // would pay for the whole pool on every sync.
-  const rows = await all<{ id: string; updated_at: number; vector: string; facets: string }>(
-    db,
-    `SELECT mi.id, mi.updated_at, d.vector, d.facets
-       FROM media_items mi JOIN item_doc d ON d.media_item_id = mi.id
-      WHERE mi.browsed = 0 AND (mi.updated_at, mi.id) > (?1, ?2)
-      ORDER BY mi.updated_at, mi.id
-      LIMIT ?3`,
-    [cursor.since, cursor.after, limit],
-  );
+  // The clock the cursor settles against is D1's own, asked in the same round
+  // trip: `updated_at` is written by D1's unixepoch(), and settling against the
+  // Worker's clock would lose a write if the two drifted apart by more than the
+  // settle window. The second statement reads no row.
+  const [page, clock] = await db.batch([
+    db.prepare(
+      `SELECT mi.id, mi.updated_at, d.vector, d.facets
+         FROM media_items mi JOIN item_doc d ON d.media_item_id = mi.id
+        WHERE mi.browsed = 0 AND (mi.updated_at, mi.id) > (?1, ?2)
+        ORDER BY mi.updated_at, mi.id
+        LIMIT ?3`,
+    ).bind(cursor.since, cursor.after, limit),
+    db.prepare("SELECT unixepoch() AS now"),
+  ]);
+  const rows = (page.results ?? []) as { id: string; updated_at: number; vector: string; facets: string }[];
 
-  const now = nowSeconds();
+  const now = Number((clock.results?.[0] as { now?: number } | undefined)?.now ?? nowSeconds());
   const done = rows.length < limit;
   let next: DeltaCursor = cursor;
   if (rows.length) {

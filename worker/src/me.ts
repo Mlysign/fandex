@@ -27,6 +27,12 @@ export const STATE_PAGE_DEFAULT = 3000;
 export const STATE_PAGE_MAX = 4000;
 /** User-state row writes allowed per UTC day, across everyone. See budget.ts. */
 export const DEFAULT_DAILY_USER_WRITE_CAP = 40_000;
+/**
+ * One account's share of that. Room for a first Trakt sync of a large library
+ * (the biggest account holds ~12,400 episode rows), and less than half the
+ * global cap, so one account can never leave the rest with nothing.
+ */
+export const DEFAULT_DAILY_USER_WRITE_CAP_PER_USER = 15_000;
 
 const RELATIONS = new Set(["wishlist", "library", "ignored"]);
 const SOURCES = new Set(["trakt", "tmdb", "steam", "rawg", "igdb", "letterboxd", "local", "openlibrary", "hardcover", "bgg"]);
@@ -321,6 +327,11 @@ export type StateWriteResult =
 export async function applyStateWrite(env: Env, userId: string, w: StateWrite): Promise<StateWriteResult> {
   const db = env.DB;
   const size = stateWriteSize(w);
+  // The account's own share first. Without it one account could spend the
+  // whole day's cap in twenty full writes and leave everybody else a 503.
+  if (!(await spend(db, `user_writes:${userId}`, capFrom(env.DAILY_USER_WRITE_CAP_PER_USER, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER), size))) {
+    return { ok: false, reason: "budget" };
+  }
   if (!(await spend(db, "user_writes", capFrom(env.DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP), size))) {
     return { ok: false, reason: "budget" };
   }

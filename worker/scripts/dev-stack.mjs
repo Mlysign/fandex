@@ -83,10 +83,13 @@ const had = parseEnv(varsPath);
 const vars = {
   DEV_LOGIN: "1",
   ADMIN_USER_IDS: TEST_ADMIN,
+  // The Expo web dev servers. Here and not in wrangler.jsonc, so the deployed
+  // Worker trusts no localhost page with a signed-in fetch.
+  ALLOWED_ORIGINS: "https://fandex.org,http://localhost:8081,http://localhost:19006",
   // Kept from run to run, so a session in a browser tab survives a second prepare.
   JWT_SECRET: had.JWT_SECRET && had.JWT_SECRET.length >= 16 ? had.JWT_SECRET : randomBytes(48).toString("base64url"),
 };
-const report = ["  set      DEV_LOGIN", "  set      ADMIN_USER_IDS  (the first test account)", `  ${had.JWT_SECRET ? "kept    " : "set     "} JWT_SECRET  (${vars.JWT_SECRET.length} chars, this machine's own)`];
+const report = ["  set      DEV_LOGIN", "  set      ADMIN_USER_IDS  (the first test account)", "  set      ALLOWED_ORIGINS  (fandex.org and the two Expo web ports)", `  ${had.JWT_SECRET ? "kept    " : "set     "} JWT_SECRET  (${vars.JWT_SECRET.length} chars, this machine's own)`];
 for (const [name, envKey] of Object.entries(FROM_ENV)) {
   const value = env[envKey];
   if (!value) { report.push(`  MISSING  ${name}  (no ${envKey} in .env: what needs it will answer 502)`); continue; }

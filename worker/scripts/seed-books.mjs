@@ -10,15 +10,16 @@
 //
 // What it does:
 //   1. builds the list from Open Library directly (no Worker involved);
-//   2. opens each through the Worker's own /v1/resolve, so every book is
-//      ingested by the same code as a person opening it (browsed = 1);
+//   2. with --apply, opens each through the Worker's own /v1/resolve, so every
+//      book is ingested by the same code as a person opening it (browsed = 1);
 //      paced under the route's 30 a minute;
 //   3. with --apply, moves those rows into the pool (browsed = 0) and drops the
 //      kept pool count in the same command (worker/src/keptCounts.ts).
 //
-// Without --apply it stops after step 2: the books exist as opened titles and
-// nothing changes for anybody. Undoing step 3 is the same UPDATE with
-// browsed = 1, plus dropping the pool count again.
+// Without --apply it stops after step 1 and prints the list: a dry run writes
+// nothing anywhere. (Step 2 alone is a write: a resolve creates the title.)
+// Undoing step 3 is the same UPDATE with browsed = 1, plus dropping the pool
+// count again.
 //
 // Cost: one resolve is one row in budget "fetch" (cap 2,000 a day) and roughly
 // ten row writes. 300 books is about 3,000 of D1's 100,000 a day.
@@ -63,6 +64,11 @@ for (const s of SUBJECTS) {
   add((await ol(`/search.json?subject=${s}&sort=want_to_read&fields=key,title,cover_i&limit=40`)).docs);
 }
 const list = ids.slice(0, LIMIT);
+if (!apply) {
+  console.log(`${list.length} books would be opened through ${API}:\n${list.join(" ")}`);
+  console.log("dry run: nothing opened, nothing moved into the pool. Re-run with --apply.");
+  process.exit(0);
+}
 console.log(`${list.length} books to open through ${API}`);
 
 const opened = [];
@@ -86,20 +92,23 @@ fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, JSON.stringify({ opened, failed }, null, 2));
 console.log(`ids written to ${out}`);
 
-if (!apply) {
-  console.log("dry run: nothing moved into the pool. Re-run with --apply.");
-  process.exit(0);
-}
 const unique = [...new Set(opened)];
 const quoted = unique.map((id) => `'${id.replace(/'/g, "")}'`).join(",");
 const sql = `UPDATE media_items SET browsed = 0, updated_at = unixepoch() WHERE browsed = 1 AND type = 'book' AND id IN (${quoted}); DELETE FROM kv WHERE key = 'pool_count';`;
 // A file, not --command: 300 ids overrun Windows' 8,191-character command line.
 const sqlFile = out.replace(/\.json$/, ".sql");
 fs.writeFileSync(sqlFile, sql);
-const wrangler = (args) => execFileSync("npx", ["wrangler", "d1", "execute", "fandex", where, ...args, "--json", "--yes"], {
-  cwd: workerDir, encoding: "utf8", shell: true,
-});
-wrangler(["--file", JSON.stringify(sqlFile)]);
+// Wrangler's own script under node, with an argument list and no shell (as
+// fold-items.mjs does): through a shell, Windows splits a SQL argument at its
+// spaces, and quoting it by hand is a way to run something else.
+const WRANGLER = path.join(workerDir, "node_modules", "wrangler", "bin", "wrangler.js");
+const wrangler = (args) => {
+  const out = execFileSync(process.execPath, [WRANGLER, "d1", "execute", "fandex", where, ...args, "--json", "--yes"], {
+    cwd: workerDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+  });
+  return out.slice(out.indexOf("["));
+};
+wrangler(["--file", sqlFile]);
 // --file reports no row counts, so the result is read back.
-const books = JSON.parse(wrangler(["--command", JSON.stringify("SELECT COUNT(*) AS n FROM media_items WHERE type = 'book' AND browsed = 0")]));
+const books = JSON.parse(wrangler(["--command", "SELECT COUNT(*) AS n FROM media_items WHERE type = 'book' AND browsed = 0"]));
 console.log(`books in the pool now: ${books[0]?.results?.[0]?.n}; pool count dropped`);
