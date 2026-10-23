@@ -33,6 +33,7 @@ import { saveJsonFile } from '~/lib/files';
 import { discordAvailable } from '~/lib/discord';
 import { googleAvailable } from '~/lib/google';
 import { shelfItemIds, usePlatformIndex } from '~/lib/platforms';
+import type { SteamSyncResult } from '~/lib/steamSync';
 import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
@@ -66,6 +67,16 @@ function traktSummary(r: TraktSyncResult): string {
   ].filter(Boolean);
   const what = parts.length ? parts.join(', ') : 'Nothing had changed';
   return r.dryRun ? `Test run, nothing written. Would be: ${what.toLowerCase()}.` : `${what}.`;
+}
+
+function steamSummary(r: SteamSyncResult): string {
+  const parts = [
+    r.itemsChanged ? `${r.itemsChanged.toLocaleString('en')} updated` : null,
+    r.itemsRemoved ? `${r.itemsRemoved.toLocaleString('en')} removed` : null,
+    r.deferred ? `${count(r.deferred, 'new title')} waiting for the next sync` : null,
+    r.unmatched ? `${count(r.unmatched, 'app')} with no game in the catalog` : null,
+  ].filter(Boolean);
+  return `${parts.length ? parts.join(', ') : 'Nothing had changed'}.`;
 }
 
 /** Why a save did not happen, in words. */
@@ -118,12 +129,12 @@ const PROVIDERS: Record<string, { label: string; description: string; identityOn
   google: { label: 'Google', description: 'Signs you in. No library to import.', identityOnly: true },
   discord: { label: 'Discord', description: 'Signs you in. No library to import.', identityOnly: true },
   trakt: { label: 'Trakt.tv', description: 'Movies & TV shows watchlist' },
-  steam: { label: 'Steam', description: 'Games from your wishlist', readOnly: true },
+  steam: { label: 'Steam', description: 'Your games and wishlist', readOnly: true },
 };
 
 function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n: Notice) => void }) {
   const auth = useAuth();
-  const { traktSync } = auth;
+  const { traktSync, steamSync } = auth;
   const meta = PROVIDERS[provider] ?? { label: provider, description: '' };
   const identity = auth.profile?.identities.find((i) => i.provider === provider);
   const [asking, setAsking] = useState(false);
@@ -164,6 +175,9 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
             : traktSync.needsSignIn
             ? <Button label="Sign in again" onPress={auth.startTraktSignIn} />
             : <Button label={traktSync.running ? 'Syncing...' : 'Sync'} onPress={auth.syncTraktNow} disabled={traktSync.running} />}
+          {provider === 'steam'
+            ? <Button label={steamSync.running ? 'Syncing...' : 'Sync'} onPress={auth.syncSteamNow} disabled={steamSync.running} />
+            : null}
           <Button label={disconnecting ? '...' : 'Disconnect'} variant="danger" onPress={() => setAsking(true)} disabled={disconnecting} />
         </View>
       </View>
@@ -184,10 +198,21 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
           {traktSync.error ? <T variant="bodySm" style={{ color: color.warning }}>{traktSync.error}</T> : null}
         </>
       ) : null}
+      {provider === 'steam' ? (
+        <>
+          <T variant="bodySm">
+            Last synced {steamSync.running ? 'now' : ago(steamSync.syncedAt)}
+            {steamSync.last && !steamSync.running
+              ? ` · ${steamSync.last.library.toLocaleString('en')} owned, ${steamSync.last.wishlist.toLocaleString('en')} on your wishlist. ${steamSummary(steamSync.last)}`
+              : ''}
+          </T>
+          {steamSync.error ? <T variant="bodySm" style={{ color: color.warning }}>{steamSync.error}</T> : null}
+        </>
+      ) : null}
       {meta.readOnly ? (
         <T variant="bodySm">
-          Read-only. {meta.label} doesn’t support adding to a wishlist via its API. It does not sync in this version yet:
-          what it brought in before is still in your library.
+          Read-only. {meta.label} doesn’t support adding to a wishlist via its API, so Fandex only reads your games
+          and wishlist. Your Steam profile’s Game details have to be public for that.
         </T>
       ) : null}
       {meta.identityOnly ? (

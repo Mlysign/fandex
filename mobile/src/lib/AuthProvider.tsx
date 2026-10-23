@@ -30,6 +30,7 @@ import {
   startBrowserSignIn, TRAKT_REDIRECT_URI, TraktAuthError, traktSignInMessage, type TraktTokens,
 } from '~/lib/trakt';
 import { clearUpNext } from '~/lib/upNext';
+import { clearSteamSync, steamSyncedAt, syncSteam, type SteamSyncResult } from '~/lib/steamSync';
 import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktSyncResult } from '~/lib/traktSync';
 
 
@@ -81,6 +82,9 @@ interface Auth {
   rowsChanged: () => void;
   traktSync: TraktSyncState;
   syncTraktNow: () => void;
+  /** Steam, for an account that has it connected: read by the Worker, compared on this device. */
+  steamSync: SteamSyncState;
+  syncSteamNow: () => void;
   /** The country release dates and "where to watch" use: the account's, or the device's until one is chosen. */
   region: string;
   /** Save a preference to the account. Throws when it did not save. */
@@ -99,6 +103,15 @@ interface Auth {
   completeMerge: (resolution: MergeResolution) => Promise<void>;
   /** Leave both accounts as they are. */
   cancelMerge: () => void;
+}
+
+export interface SteamSyncState {
+  running: boolean;
+  /** Why the last run did not finish, in words. Nothing was deleted. */
+  error: string | null;
+  last: SteamSyncResult | null;
+  /** Unix ms of the last run that finished. */
+  syncedAt: number | null;
 }
 
 export interface TraktSyncState {
@@ -297,10 +310,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   }, [db]);
 
+  // ── Steam, synced from this device through the Worker (lib/steamSync.ts) ──
+  const [steamSync, setSteamSync] = useState<SteamSyncState>({ running: false, error: null, last: null, syncedAt: null });
+  const syncingSteam = useRef(false);
+
+  /** Runs only for an account that has Steam connected; there is no Steam sign-in on this device to need. */
+  const runSteamSync = useCallback(async (onlyIfStale: boolean): Promise<void> => {
+    if (syncingSteam.current) return;
+    if (!profileRef.current?.identities.some((i) => i.provider === 'steam')) return;
+    const syncedAt = await steamSyncedAt(db);
+    if (onlyIfStale && syncedAt && Date.now() - syncedAt < TRAKT_STALE_MS) {
+      setSteamSync((s) => ({ ...s, syncedAt }));
+      return;
+    }
+    syncingSteam.current = true;
+    setSteamSync((s) => ({ ...s, running: true, error: null }));
+    const mine = session.current;
+    const stillCurrent = () => session.current === mine;
+    try {
+      const last = await syncSteam(db, { stillCurrent });
+      if (!stillCurrent()) return;
+      setSteamSync({ running: false, error: null, last, syncedAt: await steamSyncedAt(db) });
+      if (last.itemsChanged + last.itemsRemoved > 0) setRowsRevision((r) => r + 1);
+    } catch (e) {
+      if (e instanceof StaleSync || !stillCurrent()) { setSteamSync((s) => ({ ...s, running: false })); return; }
+      if (e instanceof ApiError && e.status === 401) { setSteamSync((s) => ({ ...s, running: false })); onRevoked.current(); return; }
+      // Whatever went wrong, nothing was deleted: see steamSync.ts.
+      const error =
+        e instanceof TraktSyncRefused ? e.message
+        : e instanceof ApiError && e.code === 'steam-private' ? 'Steam did not share your games. In Steam, set your profile’s Game details to Public, then sync again.'
+        : e instanceof ApiError && e.code === 'offline' ? 'No connection. Your library is unchanged.'
+        : e instanceof ApiError && e.code === 'budget-exhausted' ? 'Fandex cannot ask Steam again until tomorrow.'
+        : e instanceof ApiError && e.code === 'not-configured' ? 'Steam sync is not switched on yet.'
+        : 'The Steam sync did not finish. Your library is unchanged.';
+      console.warn('steam_sync_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      setSteamSync((s) => ({ ...s, running: false, error }));
+    } finally {
+      syncingSteam.current = false;
+    }
+  }, [db]);
+
   const forget = useCallback(async () => {
     setSession(null);
-    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearUpNext(db)]);
+    await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearSteamSync(db), clearUpNext(db)]);
     setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
+    setSteamSync({ running: false, error: null, last: null, syncedAt: null });
     setProfile(null);
     setPendingMerge(null);
     setRowsRevision((r) => r + 1);
@@ -323,10 +377,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await api.me();
         if (!live) return;
         setProfile(me);
+        profileRef.current = me; // before the syncs below ask whether Steam is connected
         setStatus('signedIn');
         // The Trakt sync pulls the rows itself first, so it replaces the plain
         // pull when there is a Trakt to sync and it is due.
-        void pullRows().then(() => runTraktSync(true));
+        void pullRows().then(() => runTraktSync(true)).then(() => runSteamSync(true));
         // A widget placed before this build, or after the data was cleared, has no rows yet.
         void publishWidget(db);
       } catch (e) {
@@ -342,7 +397,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { live = false; };
-  }, [db, forget, pullRows, runTraktSync]);
+  }, [db, forget, pullRows, runTraktSync, runSteamSync]);
 
   const cancelTraktSignIn = useCallback(() => {
     flow.current++;
@@ -371,8 +426,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     setTrakt({ phase: 'idle' });
-    void pullRows(true).then(() => runTraktSync(false));
-  }, [adoptMerge, pullRows, runTraktSync]);
+    void pullRows(true).then(() => runTraktSync(false)).then(() => runSteamSync(true));
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
 
   const startTraktBrowserSignIn = useCallback(() => {
     if (!traktConfigured()) {
@@ -461,8 +516,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     // An account that also has Trakt on this device keeps syncing it; one that does not has nothing to sync.
-    void pullRows(true).then(() => runTraktSync(true));
-  }, [adoptMerge, pullRows, runTraktSync]);
+    void pullRows(true).then(() => runTraktSync(true)).then(() => runSteamSync(true));
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
 
   const finishDiscordSignIn = useCallback(async (accessToken: string) => {
     let result;
@@ -477,8 +532,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     // Discord brings no library. An account that has Trakt on this device keeps syncing it.
-    void pullRows(true).then(() => runTraktSync(true));
-  }, [adoptMerge, pullRows, runTraktSync]);
+    void pullRows(true).then(() => runTraktSync(true)).then(() => runSteamSync(true));
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
 
   const startDiscordSignIn = useCallback(async (returnTo: string) => {
     if (Platform.OS === 'web') {
@@ -566,6 +621,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await Promise.all([clearTraktTokens(), clearTraktSync(db), clearUpNext(db)]);
       setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
     }
+    if (provider === 'steam') {
+      await clearSteamSync(db);
+      setSteamSync({ running: false, error: null, last: null, syncedAt: null });
+    }
     setProfile(await api.me().catch(() => null));
     await pullRows(true);
   }, [db, pullRows]);
@@ -605,8 +664,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingMerge(null);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
-    void pullRows(true).then(() => runTraktSync(!pending.traktTokens));
-  }, [db, pendingMerge, pullRows, runTraktSync]);
+    void pullRows(true).then(() => runTraktSync(!pending.traktTokens)).then(() => runSteamSync(true));
+  }, [db, pendingMerge, pullRows, runTraktSync, runSteamSync]);
 
   const cancelMerge = useCallback(() => setPendingMerge(null), []);
 
@@ -617,6 +676,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncTraktNow = useCallback(() => {
     void runTraktSync(false).then((ran) => { if (!ran) void pullRows(true); });
   }, [runTraktSync, pullRows]);
+  const syncSteamNow = useCallback(() => void runSteamSync(false), [runSteamSync]);
   const rowsChanged = useCallback(() => setRowsRevision((r) => r + 1), []);
 
   // The widget's tick writes your rows with no screen mounted. When the app is
@@ -635,10 +695,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A start without a connection never learned the profile, so the country
       // fell back to the device's for the whole session. Ask again here.
       if (!profileRef.current) void api.me().then(setProfile).catch(() => undefined);
-      void pullRows().then(() => runTraktSync(true));
+      void pullRows().then(() => runTraktSync(true)).then(() => runSteamSync(true));
     });
     return () => sub.remove();
-  }, [status, pullRows, runTraktSync]);
+  }, [status, pullRows, runTraktSync, runSteamSync]);
 
   // Hand the widget its rows again once the app has left the screen.
   //
@@ -663,7 +723,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn,
       startDiscordSignIn, finishDiscordSignIn, devSignIn, devConnect, signOut,
-      rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow,
+      rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow, steamSync, syncSteamNow,
       region, savePrefs, disconnect, deleteAccount, pendingMerge, completeMerge, cancelMerge,
     }}>
       {children}

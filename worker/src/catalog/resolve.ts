@@ -11,7 +11,7 @@
 // nothing, and the whole thing sits behind a budget.
 
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
-import { getIgdbGame, igdbReleaseDate, setIgdbTokenStore } from "@/lib/sources/igdb";
+import { getIgdbGame, igdbGameIdForSteamApp, igdbReleaseDate, setIgdbTokenStore } from "@/lib/sources/igdb";
 import type { MediaType } from "@/types";
 import { capFrom, kvGet, kvSet, spend } from "../budget";
 import { first } from "../d1";
@@ -23,7 +23,7 @@ import { getBggThing } from "@/lib/sources/bgg";
 import { useHardcover } from "../hardcover";
 import { useBggToken } from "../shelves";
 
-export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "hardcover" | "bgg";
+export type ResolveSource = "tmdb" | "igdb" | "openlibrary" | "hardcover" | "bgg" | "steam";
 
 export type ResolveOutcome =
   | { ok: true; id: string; created: boolean }
@@ -40,6 +40,9 @@ const TARGETS: Record<ResolveSource, { types: Set<string>; id: RegExp }> = {
   openlibrary: { types: new Set(["book"]), id: /^OL\d{1,12}W$/ },
   hardcover: { types: new Set(["book"]), id: /^\d{1,12}$/ },
   bgg: { types: new Set(["boardgame"]), id: /^\d{1,9}$/ },
+  // A Steam app id. Not a source of its own: it is answered by the IGDB game
+  // IGDB maps it to, and kept as an alias of that title (2026-10-23).
+  steam: { types: new Set(["game"]), id: /^\d{1,10}$/ },
 };
 const TYPES = new Set<string>(["movie", "show", "game", "book", "boardgame"]);
 const DEFAULT_DAILY_FETCH_CAP = 2000;
@@ -316,7 +319,11 @@ async function fetchFromProvider(env: Env, source: ResolveSource, type: MediaTyp
   }
 
   useSharedIgdbToken(env);
-  const g = await getIgdbGame(Number(id));
+  // A Steam app is the IGDB game IGDB's external_games names for it. The item
+  // is stored under IGDB's id, so the caller keeps the app id as an alias.
+  const igdbId = source === "steam" ? await igdbGameIdForSteamApp(Number(id)) : Number(id);
+  if (!igdbId) return null;
+  const g = await getIgdbGame(igdbId);
   if (!g?.id || !g?.name) return null;
   return { source: "igdb", sourceId: String(g.id), type: "game", title: g.name, releaseDate: igdbReleaseDate(g), rawData: g };
 }

@@ -31,7 +31,6 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
-- ⬜ **Steam sync on the new stack.** Steam is listed as connected on his account and syncs nothing; the old site's adapter went with it (tag `old-site-final`, `src/lib/sources/adapters/steam.ts`). It needs a Worker route (the Steam key may not ship in an APK), a map from Steam app ids to IGDB games (IGDB's `external_games`, as THE FINALS was found on 2026-10-23), and the prune invariant on the device. A feature of its own, not a fix.
 - 🔵 **The TMDB projection walk** (2026-10-23): the cron refetches the 1,698 TMDB links stored before projection v4, four per run, so a film's novelist becomes a writer facet (Stephen King on his adaptations). About three days; watch `tmdb_projection_step` in the logs and `kv` key `tmdb_projection_cursor` reading `done:4`. Then check a King film's page shows him.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
@@ -59,7 +58,7 @@ them; each says why it looks stale. One word from Nils and they move to the arch
 - **Fandex Score `priorStrength` (C=5) and class weights may want re-tuning** (2026-08). Time-gated to "after a few weeks of real scores"; the live config already reads C=2 since then, and a re-tune is a design call for him, not a cleanup. Keep if he wants it looked at.
 - **The 2026-08-23 optimization sweep pointer** and **the platform-integrations standing context** (AniList blocked on its terms, books postponed then shipped 2026-10-17). Neither has a next action; the first is about the old site, the second belongs in [docs/decisions.md](docs/decisions.md) and [PLATFORMS.md](PLATFORMS.md).
 - **Two light-theme contrast gaps** (`--color-accent-hover` 3.47:1, accent on `--color-surface-inset` 4.32:1). Old-site tokens; the app has one dark theme.
-- **From the 2026-10-11 smoke test, "not re-logged":** `/dashboard` 404 is fixed (a 301 to `/wishlist` since 2026-10-23), Profile's "Coming up" no longer exists (Profile was made lighter on 2026-10-17), Steam is now the task above, and "a title removed from the pool between two site builds sends new visitors to the API" is how a static site works, not a bug.
+- **From the 2026-10-11 smoke test, "not re-logged":** `/dashboard` 404 is fixed (a 301 to `/wishlist` since 2026-10-23), Profile's "Coming up" no longer exists (Profile was made lighter on 2026-10-17), Steam syncs again since 2026-10-23, and "a title removed from the pool between two site builds sends new visitors to the API" is how a static site works, not a bug.
 
 ---
 
@@ -67,7 +66,7 @@ them; each says why it looks stale. One word from Nils and they move to the arch
 
 Fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
 
-- **The 2026-10-23 review and the open tasks after it** ✅: hand-made taxonomy rows marked (`source`, migration 0005), the `exhaustive-deps` warnings, the old-site docs moved to `docs/archive/old-site/`, THE FINALS PLAYTEST folded, the TMDB writer jobs, the never-run admin checks. → grep `2026-10-23`.
+- **The 2026-10-23 review, the open tasks after it, and Steam sync** ✅: hand-made taxonomy rows marked (`source`, migration 0005), the `exhaustive-deps` warnings, the old-site docs moved to `docs/archive/old-site/`, THE FINALS PLAYTEST folded, the TMDB writer jobs, the never-run admin checks. → grep `2026-10-23`.
 - **Smoke tests 13 to 15** ✅ (2026-10-11 to 10-17). → grep `13th smoke test`, `14th smoke test`, `15th smoke test`.
 - **Backups** ✅ proven restorable (2026-10-05 on D1). → grep `restore drill`.
 - **Legal pages** ✅. **The rule that outlives it: strings in `src/lib/legal/content/{de,en}/*.ts` `body:` arrays RENDER to users; they are not code comments.**

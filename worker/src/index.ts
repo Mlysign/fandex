@@ -28,6 +28,7 @@
 //     GET    /v1/me/state/{items|episodes|hidden|counts}
 //     PUT    /v1/me/state
 //     GET    /v1/me/export
+//     GET    /v1/me/steam                          the Steam library and wishlist, for the device's sync
 //     DELETE /v1/me
 
 import { providerBreakerSnapshot } from "@/lib/http";
@@ -52,6 +53,7 @@ import {
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runScheduled } from "./cron";
 import { shelves } from "./shelves";
+import { steamLibrary } from "./steam";
 import { coverRoute } from "./covers";
 import { nowSeconds } from "./d1";
 import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin";
@@ -719,6 +721,8 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
     if (trustedOrigin(c.env, c.request)) headers["Set-Cookie"] = sessionCookie(token);
     return json({ ok: true, removedRows: out.removedRows, token, user }, 200, headers);
   }
+  // The Steam library and wishlist, for the device's Steam sync (src/steam.ts).
+  if (b === "steam" && method === "GET" && !d) return steamLibrary(c, userId);
   if (b === "export" && method === "GET") {
     const body = await buildAccountExportJson(db, userId);
     if (!body) return error(401, "unauthorized");

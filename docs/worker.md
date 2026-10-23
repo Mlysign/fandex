@@ -80,7 +80,17 @@ carries `DEV_LOGIN=1`. A test of what a deployed Worker does must build its own 
 
 Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/me/state/{items|episodes|hidden|counts}`, `PUT /v1/me/state`, `GET /v1/me/export`,
-`DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`.
+`DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`, `GET /v1/me/steam`.
+
+**Steam** (2026-10-23, `src/steam.ts`): `GET /v1/me/steam` reads the account's owned games and
+wishlist from the Steam Web API with the Worker's `STEAM_API_KEY` (a Web API key may never ship
+in the app) and answers `{library:[{appid,playtime,lastPlayed}], wishlist:[{appid,addedAt}]}`.
+Whole or an error: either Steam call failing is a 502, and a **private profile** (no `games` in
+Steam's answer) is a 409 `steam-private`, never an empty library, because the device deletes what
+the answer leaves out. Rate-limited per account, `spend("steam", …)` per call pair.
+`GET /v1/resolve/steam/game/{appid}` answers a Steam app with the IGDB game IGDB's
+`external_games` maps it to, and keeps the app id in `provider_aliases`; an app IGDB has no game
+for is a 404.
 
 `GET /v1/catalog/platforms?region=` lists, for every pool title, the game platforms or the
 streaming services of one country, as names. Built once a day per country and kept in `kv`

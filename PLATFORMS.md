@@ -53,7 +53,7 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 | **Trakt** | movie, show | ✅ | oauth | R/W | R | R/W | – | ✅ | **R/W** | Free. ⚠️ **2026 free caps: watchlist 250, ratings 10k, 5 lists, and NOTHING in the adapter handles a rejected write** (PL2, a live bug: a user past 250 gets a silent partial push). VIP 5,000/20k/100. **Monetized apps need approval.** Only source of per-episode state. |
 | **TMDB** | movie, show | ✅ | oauth | R/W | R | R/W | – | – | – | No watched concept; "library" = rated items. Commercial licence as in table 1. |
 | **RAWG** | game | ✅ | credentials | R/W | R | R/W | – | ✅ | – | No review text. ⚠️ **Quota exhausted today — 401 on every call.** |
-| **Steam** | game | ✅ | openid | R | R | – | – | – | – | Free. Read-only by design. |
+| **Steam** | game | ✅ | openid | R | R | – | – | – | – | Free. Read-only by design. Synced from the device through the Worker since 2026-10-23 (`worker/src/steam.ts`, `mobile/src/lib/steamSync.ts`); no Steam sign-in in the app yet. |
 | **Letterboxd** | movie | 🔵 | oauth | R/W | R | R/W | R | ✅ | – | 🔴 **No working API key; 401s on every call.** Built and hidden. |
 | **AniList** | anime, manga | ⏸️ | oauth | R/W | R | R/W | R | ✅ | – | 🔴 **Barred by terms:** API prohibited "within competing, non-complementary services of the same nature… anime and manga list or tracker services". Fandex is one. ⚠️ Verify by hand — `docs.anilist.co` 403s to automated fetch. |
 | **MyAnimeList** | anime, manga | ❔ | oauth | R/W | R | R/W | – | ✅ | – | Free. Viable AniList alternative **without** the competing-service clause. ⏸️ **Anime as a media type was decided against 2026-08-23** (new type, ~9 enumeration points `tsc` will not flag). |
@@ -77,7 +77,7 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 | Source | Media | Format | Cost to user | Carries | Matching | Verdict |
 |---|---|---|---|---|---|---|
 | **IMDb** | movie, show | CSV export (list / watchlist / ratings) | **Free** | title, year, **IMDb id**, your rating, dates | 🟢 stable id we already store | 🟢 **Best target, and DECIDED 2026-08-23: build it next** (PL4). Match local-first via an `imdb` pseudo-source row in `media_links`; budget the provider fallback per IMPORT, not per row. |
-| **Steam** | game | Web API | Free | owned games, wishlist, playtime | 🟢 appid | ✅ Already live as a connector. |
+| **Steam** | game | Web API | Free | owned games, wishlist, playtime | 🟢 appid | ✅ Live again since 2026-10-23: owned games (owned or played, last played) and the wishlist; an app id maps to IGDB through `external_games`. |
 | **Trakt** | movie, show | API / VIP export | Free | everything | 🟢 trakt+imdb+tmdb ids | ✅ Already live as a connector. |
 | **Letterboxd** | movie | CSV in ZIP (`diary`, `ratings`, `watchlist`, `reviews`, `lists`) | 🟢 **FREE for all members** (corrected 2026-08-23) | title, year, Letterboxd URI, rating (0.5–5.0), dates | 🟢 title+year, and it is a GOOD key here | 🟢 **Best target for reaching a real userbase.** See the box below. |
 | **MyAnimeList** | anime | XML export, native | Free | title, MAL id, score, status, episodes | 🟢 MAL id | 🟡 Only once anime is a media type. |
@@ -113,8 +113,8 @@ The Fandex Score reads **only** facets off persisted `media_links`: tags, people
 Four obligations, and two are already met:
 
 - ✅ **No `nofollow` on links to Valve.** The terms say links to Valve "shall not" carry it. Checked across the codebase: every outbound Steam link uses `noopener noreferrer`, and none carries `nofollow`. ⚠️ Keep it that way, and note `StoreLink.tsx` adds `sponsored` to AFFILIATE links: Steam is not an affiliate merchant here (only GOG is), so no Steam link should ever get that token.
-- ✅ **A privacy policy covering non-public end-user data.** `/legal/{en,de}/privacy` names Steam explicitly and says what is read.
-- ✅ **"Store the Steam Data in a country identified in your privacy policy."** DONE 2026-08-23. Region confirmed by Nils: **Railway `europe-west4`, so the database is in the Netherlands**, now named in both the EN and DE privacy policies. ⚠️ The policy deliberately does NOT claim the data never leaves the EU: Railway and Cloudflare are US companies whose staff can reach what they host, which is a transfer under the GDPR, so the DPF and SCC sentence stays.
+- ✅ **A privacy policy covering non-public end-user data.** `/legal/{en,de}/privacy` names Steam explicitly and says what is read (rewritten for the new stack 2026-10-23: the Worker asks Steam with its key and the account's Steam id).
+- ✅ **"Store the Steam Data in a country identified in your privacy policy."** DONE 2026-08-23; since 2026-10-05 the database is D1 in the EU, which the policy says. Region confirmed by Nils: **Railway `europe-west4`, so the database is in the Netherlands**, now named in both the EN and DE privacy policies. ⚠️ The policy deliberately does NOT claim the data never leaves the EU: Railway and Cloudflare are US companies whose staff can reach what they host, which is a transfer under the GDPR, so the DPF and SCC sentence stays.
 - ⚠️ **Valve name and logo must appear** on pages using the API. `BrandGlyph` renders the Steam mark, which likely satisfies this, but it has not been audited page by page.
 
 ⚠️ **These terms cover `api.steampowered.com`. They do NOT cover `IStoreQueryService`**, the store front-end's own undocumented endpoint behind the tag search, which remains the separate and larger risk already noted below.

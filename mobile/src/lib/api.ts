@@ -417,7 +417,16 @@ export const api = {
    * infers a delete, so what is sent here is the whole of what changes.
    */
   writeState: (write: StateWrite) => request<StateWriteResult>('/v1/me/state', json('PUT', write)),
+
+  /** The Steam library and wishlist of the signed-in account, read by the Worker with its key (lib/steamSync.ts). */
+  steamLibrary: () => request<SteamLibrary>('/v1/me/steam'),
 };
+
+export interface SteamLibrary {
+  /** `playtime` in minutes; `lastPlayed` unix seconds, null when never played. */
+  library: { appid: number; playtime: number; lastPlayed: number | null }[];
+  wishlist: { appid: number; addedAt: number | null }[];
+}
 
 export interface ProviderRef { source: string; type: string; id: string }
 export interface LookupResult {

@@ -227,6 +227,22 @@ export async function getIgdbGame(id: number): Promise<any | null> {
   return withTimeToBeat(rows[0] ?? null);
 }
 
+/**
+ * The IGDB game a Steam app is, from IGDB's own `external_games` map, or null
+ * when IGDB lists none (software, a soundtrack, a store item IGDB never added).
+ * Exact where a name search is not: IGDB's search does not surface THE FINALS
+ * at all, its Steam app id finds it (2026-10-23). Throws when IGDB fails, so a
+ * caller can tell "IGDB does not know this app" from "IGDB did not answer".
+ */
+export async function igdbGameIdForSteamApp(appId: number): Promise<number | null> {
+  if (!igdbConfigured()) return null;
+  const id = safeInt(appId, 0);
+  if (!id) return null;
+  const rows = await igdbQuery("external_games", `fields game; where uid = "${id}" & (category = 1 | external_game_source = 1); limit 5;`);
+  const game = rows.find((r: any) => Number.isInteger(r?.game) && r.game > 0)?.game;
+  return game ?? null;
+}
+
 export async function searchIgdbGames(title: string, limit = 10): Promise<any[]> {
   if (!igdbConfigured()) return [];
   const safe = sanitizeApicalypseSearch(title);

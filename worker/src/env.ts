@@ -19,6 +19,10 @@ export interface Env {
   BGG_TOKEN?: string;
   /** Hardcover Personal Access Token (hardcover.app/account/api, read scopes). Unset leaves books on Open Library alone. */
   HARDCOVER_TOKEN?: string;
+  /** Steam Web API key (steamcommunity.com/dev/apikey). Unset: Steam libraries do not sync. Never in the app. */
+  STEAM_API_KEY?: string;
+  /** Steam calls allowed per UTC day across everyone. Optional; src/steam.ts has the default. */
+  DAILY_STEAM_CAP?: string;
 
   /** Copied book covers (src/covers.ts). R2 `fandex-covers`. */
   COVERS: R2Bucket;

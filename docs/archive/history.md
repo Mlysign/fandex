@@ -6114,3 +6114,21 @@ Nils: "do all open tasks in tasks.md". Done the same evening:
 - **`/dashboard`** 301s to `/wishlist` again, as on the old site.
 - **Lint at 0 warnings**, and the old site's five reference docs moved to `docs/archive/old-site/`.
 - Ten TASKS.md items flagged as outdated rather than done; they wait for Nils's word.
+
+## 2026-10-23 late, Steam sync on the new stack
+
+Nils: "do this task here". Steam had shown as connected on his account and synced nothing since
+the old site went.
+
+- **Worker** (`worker/src/steam.ts`): `GET /v1/me/steam` reads the owned games and the wishlist with
+  the Worker's `STEAM_API_KEY` (pushed as a secret the same evening). Whole or an error, and a
+  private profile is a 409, never an empty library. `GET /v1/resolve/steam/game/{appid}` answers
+  with the IGDB game `external_games` names and keeps the app id in `provider_aliases`.
+- **App** (`mobile/src/lib/steamSync.ts`): the Trakt sync's shape and guards (session counter, edit
+  guard, deletes blocked while any app is unmatched for a reason that may pass, refused past a
+  tenth). Runs with the Trakt sync and from a Sync button in Settings.
+- **Proven on the local stack** with the local test account given his Steam id (removed after):
+  the real Steam API answered 481 owned (238 played) and 22 wishlisted; the first sync wrote 501
+  rows (241 owned, 238 played, 22 wishlist), four apps resolved through IGDB, one app has no game;
+  a second sync changed nothing.
+- **The privacy policy** names what is asked of Steam, in both languages (updated 2026-10-23).

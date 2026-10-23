@@ -116,6 +116,15 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   browser tabs). A Trakt write's `not_found` makes the row `local`. A row pull or catalog sync
   asked for while one runs runs again after it, and the catalog's progress bumps `revision` at
   most every 2.5 s.
+- **Steam syncs from the device too, since 2026-10-23** (`steamSync.ts`), for an account that has
+  Steam connected (today only accounts carried over from the old site: there is no Steam sign-in in
+  the app). The Worker reads the library and wishlist with its key (`GET /v1/me/steam`); the device
+  maps each app id to a catalog title through `/v1/lookup` and `/v1/resolve/steam/game/{appid}`
+  (25 resolves a run, the rest wait and block deletes), and writes `source = 'steam'` rows: `owned`,
+  or `played` with the last-played time, and the wishlist. The Trakt sync's guards apply: the
+  session counter, rows edited during the run are left alone, and a run deleting more than a tenth
+  of the Steam rows is refused. It runs with the Trakt sync (start, return to the app when six hours
+  old) and from Settings' Steam Sync button; a private Steam profile shows how to make it public.
 - **The API address** is `https://api.fandex.org` (`lib/config.ts`) unless a build sets
   `EXPO_PUBLIC_API_URL`; the website's build sets `/`.
 
@@ -266,7 +275,7 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   the average across providers), and takes the title off the wishlist; clearing a rating keeps
   the title in the library. Films and shows live on Trakt when the device is signed in to it.
   Games have no provider that takes a rating, so theirs are source `local`. Steam's rows are
-  never written or deleted from here. ⚠️ **TMDB gets no write-back**: the app has no TMDB user
+  never written or deleted by a rating; only the Steam sync writes them. ⚠️ **TMDB gets no write-back**: the app has no TMDB user
   session, so a rating changed here is not changed on TMDB.
 - **Up next asks Trakt, one show at a time** (`upNext.ts`). The Worker's episode catalog stopped
   being filled when the site did, so the device asks `/shows/{id}/progress/watched` and keeps the

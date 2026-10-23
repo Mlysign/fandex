@@ -52,6 +52,9 @@ const FROM_ENV = {
   BGG_TOKEN: "BGG_TOKEN",
   // Optional: without it books come from Open Library alone (src/lib/sources/hardcover.ts).
   HARDCOVER_TOKEN: "HARDCOVER_TOKEN",
+  // Optional: without it Steam libraries do not sync (worker/src/steam.ts). Server-side only:
+  // a Steam Web API key may never ship in the app.
+  STEAM_API_KEY: "STEAM_API_KEY",
 };
 
 function parseEnv(file) {

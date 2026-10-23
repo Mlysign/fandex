@@ -28,7 +28,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // If the rule is ever removed, that sentence is false.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-10-17",
+  updated: "2026-10-23",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why, rather than assembled from a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
     "It covers the website at fandex.org and the Fandex app for Android. Both are the same app and work the same way.",
@@ -49,6 +49,7 @@ const privacy: LegalDocument = {
           list: [
             "Account: an internal account id, when the account was created, the day you were last seen, your country and display preferences if you set them (which media types and platforms you want shown), and a counter used to end your sessions when you sign out.",
             "Sign-in provider: which provider you signed in with (Trakt, Google or Discord), that provider's own account id and display name for you, and your avatar image URL if the provider supplies one. For a Google account the display name is the name on that account and the avatar is its profile picture. For a Discord account it is your Discord display name (or, without one, your username) and your Discord avatar. Fandex's servers do not store a password or an access token for your provider account.",
+            "Connected Steam account: if a Steam account is connected to yours, its Steam account id (a public number Steam gives every account) and its display name.",
             "Your library and wishlist: which titles you've marked watched or played, which you want, your rating and any written review, the status of each, and where each entry came from (Trakt, Steam, or Fandex itself).",
             "Episodes: which episodes of a show you've marked watched.",
             "Hidden titles: the titles you asked Fandex not to suggest.",
@@ -100,6 +101,7 @@ const privacy: LegalDocument = {
             "Trakt: if you sign in with Trakt, the app on your device talks to Trakt directly. It reads your Trakt history, ratings and watchlist, and it sends your ratings, watched status and watchlist changes to your Trakt account. Fandex's servers contact Trakt once, at sign-in, to confirm which Trakt account is signing in. The token used for that one request is not kept.",
             "Google: if you choose to sign in with Google, your browser leaves Fandex for Google's own sign-in page and comes back. Nothing is sent to Google before you press that button, and no Google script runs on Fandex. Google then confirms three things to Fandex: an account id, the name on your Google account and its profile picture. Fandex does not ask for your email address and gets no access to anything in your Google account. Google learns that you signed in to Fandex and when. Fandex's servers send Google nothing about you; they only download Google's public keys, to check that the confirmation is genuine.",
             "Discord: if you choose to sign in with Discord, your browser (in the Android app, a browser window) leaves Fandex for Discord's own sign-in page and comes back. Nothing is sent to Discord before you press that button. Fandex asks Discord only who you are (the permission Discord calls \"identify\"), not for your email address, your servers or your messages. Discord hands your browser a short-lived access token for that. Fandex's servers use it once, to ask Discord which account it belongs to and whether it was issued to Fandex, and then discard it. What Fandex keeps is an account id, your Discord display name and your avatar. Discord learns that you signed in to Fandex and when.",
+            "Steam: if a Steam account is connected to yours, Fandex's servers ask Steam, with Fandex's own Steam key and your Steam account id, for the games you own (with how long and when you last played each) and for your Steam wishlist, and hand the answer to your device. Your device saves which games you own or have played and which are on your wishlist, as described above. Steam is asked only when your library is synced, and only if your Steam profile's game details are public. Steam receives a request from Fandex's servers, never from you, and nothing about you except the account id it already knows.",
             "Images: posters and artwork are loaded by your device straight from the image servers of TMDB, IGDB and, for some games, Steam and RAWG. Each of them receives your IP address when an image loads, as any website does.",
             "Trailers: a title page with a trailer embeds YouTube's player. YouTube (Google) receives your IP address when that page loads and may set its own cookies. What YouTube does with that is governed by Google's privacy policy.",
           ],
