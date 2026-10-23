@@ -23,6 +23,40 @@ full history.
 
 ---
 
+## Product review, 2026-10-23: the fixes (RV1 to RV35)
+
+A journalist-style pass over fandex.org and the native app, logged as RV1 to RV35 in TASKS.md and
+decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product review"). Commits
+`223b004` (score), `ad6b781` (search, add-ons), `90af976` (catalog), `26aaa32` (app and API),
+`dd7e009` (docs). Live the same evening: Worker, `worker/scripts/mark-addons.sql` (656 games) and
+`data-fixes-2026-10-23.sql` (three slugs, one year) on D1, the website, APK 0.3.15.
+
+- **The Fandex Score (RV1 to RV5).** Backtested on his 1,707 ratings: rank correlation 0.84 as
+  shown, 0.29 left-out; no retune of prior, `ip`, minimum count or top-N beat 0.29; ridge
+  regression over the same facets 0.28; crowd alone 0.42; crowd plus taste-as-difference 0.44,
+  turned down (taste only). Fixed: a rated title is scored leave-one-out (`computeFandexScore`
+  subtracts its rating from the baseline and each facet's sums); `softRange` bends the sum into
+  0 to 100 past halfway to the edge (max 99.2 on his catalog, was 129); the reason line names the
+  row that agrees with the band; no profile rebuild while the catalog copy fills; plain copy.
+- **Search (RV6 to RV8).** IGDB gets the term accent-folded; asked for 50, re-ranked: exact title
+  (with votes or hype), known games by votes plus hypes, add-ons, the unrated. Books: one card
+  per book within Open Library's answer, no "Summary of…" companions.
+- **Add-ons (RV10, RV23).** `addon: true` on a game's vector from IGDB `game_type` 1, 3, 5, 6, 7,
+  12, 13, 14; rails and Recommended skip them, a search puts them last. Recommended keeps
+  wishlisted titles, two a rail.
+- **Catalog (RV12 to RV20).** Cyrillic and Greek romanized in `slugify` only; Markdown out of
+  book descriptions (`plainDescription`, normalizer and item page); a book year outside 1450 to
+  five years ahead is none; a game's date is its earliest (`DERIVE_VERSION` 3); ignored tag
+  categories hidden; platform chips through `platformLabel`, PS Vita folded; no RAWG chip, one
+  Steam pill; per-source dates only a week apart or more; no crowd number under 20 votes.
+- **App, site, API (RV21 to RV35).** Undo toast on Remove from library (the removal waits);
+  `logout?scope=device`, "Sign out everywhere" the old call; a phone's busy calendar day is a
+  poster and "+N"; "Sign in" on the guest panel; books in the tagline; country from the time
+  zone, own age rating first; rail titles `<h2>`; meta descriptions cut at a word; a month three
+  days stale rebuilt after answering; 404 for a non-UUID show, HEAD on GET routes, 413 named.
+  RV33 needed nothing: the second `User-agent: *` group is Cloudflare's managed AI-crawler block,
+  and same-agent groups merge (RFC 9309).
+
 ## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
 
 `644ddc2` `bc3f2d2` `6e2325b`. One session, phases 0 to 2 of `docs/app-plan.md`. The live

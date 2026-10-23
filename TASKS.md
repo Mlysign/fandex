@@ -35,52 +35,12 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Product review, 2026-10-23 (ids RV#)
 
-A journalist-style pass over fandex.org (signed out and signed in) and the native app, plus a curl probe of the API and static pages. Decisions Nils took on it are in [docs/decisions.md](docs/decisions.md) ("Added 2026-10-23, the product review"). Not fixed, by his call: the calendar is a top-40 on purpose, and Search keeps titles you already rated.
+A journalist-style pass over fandex.org and the native app; Nils's calls on it are in [docs/decisions.md](docs/decisions.md) ("Added 2026-10-23, the product review"). **31 of 35 are fixed and live** (Worker, D1, website, APK 0.3.15): grep `docs/archive/history.md` for "Product review, 2026-10-23". Not fixed, by his call: the calendar is a top-40 on purpose, and Search keeps titles you already rated. Open:
 
-**The Fandex Score.** Backtest on his 1,707 ratings (rank correlation with what he really rated): 0.84 as shown, 0.29 honestly, and no retune of the prior, the weights or the top-N beat 0.29.
-- ⬜ **RV1** A rated title's score reads its own rating (The Last of Us Part I: 101, its own franchise +11.3). Fix: score it leave-one-out, as if unrated.
-- ⬜ **RV2** Scores pass 100 and go below 0. Fix: a soft knee, linear up to halfway between your average and 100 (or 0), then bending toward it; the breakdown scales with it so it still adds up.
-- ⬜ **RV3** "Weak match. You rate BoulderLight Pictures highly.": the line named the top row whatever the band said. Fix: name the reason that agrees with the band.
-- ⬜ **RV4** A fresh tab built five profiles in seven seconds and every score moved. Fix: no rebuild while the catalog copy fills.
-- ⬜ **RV5** The breakdown's "Not counted for this title, being outside the top matches this item selects". Fix: plain copy.
-
-**Search.**
-- ⬜ **RV6** `pokémon` returns no games (IGDB gets the accent). Fix: fold accents on the Worker before IGDB.
-- ⬜ **RV7** Games search is IGDB's text order: bundles, DLC and fan games above Zelda, Baldur's Gate 3, Spider-Man. Fix: ask for 50, rank exact title first, then main games by votes, add-ons last.
-- ⬜ **RV8** Books search: nine identical "The Witcher" works and Hardcover's "Summary of…" knock-offs. Fix: drop summary and study-guide titles; fold same title and author.
-- ⬜ **RV9** No typo tolerance ("witchr", "cyberpnk"). Fix later: a one-edit fallback on the device when few titles match.
-
-**Catalog data.**
-- ⬜ **RV10** DLC, season passes, packs and bundles fill "More like this", franchise and series rails. Fix (Nils: rank down, keep out of rails): an `addon` flag on the game vector from IGDB `game_type`/`parent_game`, set on the live catalog once; rails and Recommended skip add-ons, Search ranks them last.
-- ⬜ **RV11** Duplicate and mixed-up games at the best addresses: `/game/final-fantasy-vii` (2013 title, Remake link, SFC text), four Dead Space, an empty `/game/baldurs-gate-3`, 123 same-title groups. Fix: a fold pass with the twins tooling, its own session (his library rows point at some).
-- ⬜ **RV12** Seven books at `/book/untitled-…` (Crime and Punishment is `untitled-1866`). Fix: transliterate Cyrillic and Greek in `slugify`, and re-slug the seven (their old addresses carry nothing).
-- ⬜ **RV13** Book descriptions show raw Markdown (links, `**`, `----------`, "From [wikipedia]"). Fix: strip it where Open Library's text is read.
-- ⬜ **RV14** Impossible book years (Interview with the Vampire 1672, a year 30). Fix: a book date before 1450 or more than five years ahead is no date.
-- ⬜ **RV15** A game's headline date is Steam's (The Last of Us Part I: PC 2023, not PS5 2022). Fix: the earliest of the game's dates.
-- ⬜ **RV16** The tag group "Meta / Noise" (an ignored category) is shown on item pages. Fix: ignored categories are not displayed.
-- ⬜ **RV17** Platforms twice: "PC" and "PC (Microsoft Windows)" on a page, "PS Vita" and "PlayStation Vita" in Settings. Fix: the page's chips through `platformLabel`, and a Vita alias.
-- ⬜ **RV18** A stale RAWG rating chip (retired provider) and two Steam chips for one fact. Fix: no RAWG chip; one Steam pill, "84% · Very Positive".
-- ⬜ **RV19** Two provider dates a day apart under "Released" (TMDB 15 Jul, Trakt 16 Jul). Fix: list them only when they differ by more than a week.
-- ⬜ **RV20** Unreleased films carry 8.5 and 9.0 crowd ratings from a handful of votes. Fix: no crowd number under 20 votes.
-
-**The app and the site.**
-- ⬜ **RV21** "Remove from library" drops a rated title in one tap. Fix (Nils): an undo toast; the removal waits for it.
-- ⬜ **RV22** Signing out signs out every device. Fix (Nils): Sign out is this device; "Sign out everywhere" keeps today's behaviour.
-- ⬜ **RV23** Recommended suggests wishlisted titles. Fix (Nils): keep them, at most two per rail.
-- ⬜ **RV24** Web: Home → title → Search tab → title → Back returns to the first title. Fix: investigate the tab history (one shared item route).
-- ⬜ **RV25** The phone's month grid truncates every title to two letters. Fix: a busy day on a phone shows its top title's poster and "+N".
-- ⬜ **RV26** Home's guest panel offers only Trakt; the profile offers three. Fix: one "Sign in" that opens the full card.
-- ⬜ **RV27** "Your index of every game, movie & show" leaves out books. Fix: name books in the tagline and the home description.
-- ⬜ **RV28** "1 of your titles are still downloading." Fix: grammar, "still loading".
-- ⬜ **RV29** Settings: Google sign-in "in this app is not built yet". Fix: say what it does, not what is missing.
-- ⬜ **RV30** Signed out with a browser language without a region ("de"), stores are US and the rating reads FSK first. Fix: guess the country from the time zone; the viewer's own certification first.
-- ⬜ **RV31** The app holds about 945 MB (PSS) on the phone, and posters come back blank after a cold start. Fix: measure what holds it (catalog copy, image cache), then decide.
-
-**Static site and API.**
-- ⬜ **RV32** Meta descriptions cut mid-word at 200 characters, three `<h1>` per title page. Fix: cut at a word with an ellipsis; one `<h1>`.
-- ⬜ **RV33** `robots.txt` has two `User-agent: *` groups. Fix: one group.
-- ⬜ **RV34** The calendar for a region nobody saved is built once and served stale forever (FR from 2026-10-10). Fix: a stale month older than three days is rebuilt in the background, under a daily cap.
-- ⬜ **RV35** API odds: `/v1/shows/abc/episodes` answers 405, HEAD on an item 405, a 413 says `bad-request`. Fix: 404, HEAD as GET, `payload-too-large`.
+- ⬜ **RV9** No typo tolerance on the device ("witchr", "cyberpnk"). Fix: when a query of four letters or more finds under five titles, also match titles one edit away.
+- ⬜ **RV11** Duplicate and mixed-up games at the best addresses: `/game/final-fantasy-vii` (2013 title, the Remake's link, Super Famicom text), four Dead Space, an empty `/game/baldurs-gate-3`, 123 same-title groups. Fix: a fold pass with the 2026-10-18 twins tooling, its own session, since his library rows point at some of them.
+- ⬜ **RV24** Web only: Home → title → Search tab → title → browser Back returns to the first title, not to Search (one shared item route under a tab navigator with `backBehavior="history"`). Fix: reproduce on the local stack and find where the tab history and the browser's disagree.
+- ⬜ **RV31** The phone app holds about 945 MB (PSS), and posters come back blank after a cold start. Fix: measure with `dumpsys meminfo` what holds it (the catalog copy, the facet index, expo-image's cache) before changing anything.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
