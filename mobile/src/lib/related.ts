@@ -49,6 +49,8 @@ export interface FacetIndex {
   types: (string | null)[];
   /** Per position: the crowd's vote count, when the row said. */
   votes: number[];
+  /** Per position: a DLC, bundle, mod, season or pack, which no rail shows (Nils, 2026-10-23). */
+  addon: boolean[];
   /** Per position: each facet the title carries and how much it says about the title (`facetWeight`). */
   facetsOf: { id: string; w: number }[][];
   /** The tag facets that are genres: "More like this" keeps to titles sharing one. */
@@ -106,14 +108,15 @@ function weighted(facets: ScoreFacet[], tax: Taxonomy): { f: ScoreFacet; id: str
 
 /** Index titles by the facets the score reads: after bundles, attaches and detaches. */
 export function indexFacets(
-  rows: { id: string; type?: string; votes?: number; facets: ScoreFacet[] }[], tax: Taxonomy, into?: FacetIndex,
+  rows: { id: string; type?: string; votes?: number; addon?: boolean; facets: ScoreFacet[] }[], tax: Taxonomy, into?: FacetIndex,
 ): FacetIndex {
-  const index = into ?? { size: 0, ids: [], byFacet: new Map<string, number[]>(), byRawIp: new Map<string, number[]>(), types: [], votes: [], facetsOf: [], genres: new Set<string>() };
+  const index = into ?? { size: 0, ids: [], byFacet: new Map<string, number[]>(), byRawIp: new Map<string, number[]>(), types: [], votes: [], addon: [], facetsOf: [], genres: new Set<string>() };
   for (const r of rows) {
     const at = index.ids.length;
     index.ids.push(r.id);
     index.types.push(r.type ?? null);
     index.votes.push(r.votes ?? 0);
+    index.addon.push(!!r.addon);
     const rawIps = new Set<string>();
     for (const f of r.facets) {
       if (f.kind !== 'ip' || !f.key) continue;
@@ -141,8 +144,9 @@ export function indexFacets(
 /** The site's rarity weight (discovery.ts, computeIdf): a facet on most titles says little. */
 const idfOf = (index: FacetIndex, id: string) => Math.log((index.size + 1) / ((index.byFacet.get(id)?.length ?? 0) + 1));
 
+/** The titles carrying a facet, add-ons left out: every rail reads its candidates through here or skips them itself. */
 const idsFor = (index: FacetIndex, f: { kind: string; role?: string; key: string }) =>
-  (index.byFacet.get(facetId(f)) ?? []).map((i) => index.ids[i]);
+  (index.byFacet.get(facetId(f)) ?? []).filter((i) => !index.addon[i]).map((i) => index.ids[i]);
 
 /** A facet on more of the catalog than this finds candidates through others; it still counts in the score. */
 const BROAD_SHARE = 0.15;
@@ -209,7 +213,7 @@ export function rankLike(input: { id: string; type?: string; facets: ScoreFacet[
   for (const fid of target.keys()) {
     const carriers = index.byFacet.get(fid) ?? [];
     if (carriers.length > broad) continue;
-    for (const i of carriers) if (i !== self) candidates.add(i);
+    for (const i of carriers) if (i !== self && !index.addon[i]) candidates.add(i);
   }
 
   const norm = normOf(index);
@@ -235,7 +239,7 @@ export function rankLike(input: { id: string; type?: string; facets: ScoreFacet[
 export function franchiseCandidateIds(index: FacetIndex, facets: ScoreFacet[], rawFacets: ScoreFacet[] = []): string[] {
   const out = new Set<string>();
   for (const f of facets) if (f.kind === 'ip') for (const id of idsFor(index, f)) out.add(id);
-  for (const f of rawFacets) if (f.kind === 'ip') for (const s of seriesOfFacet(f)) for (const i of index.byRawIp.get(s.key) ?? []) out.add(index.ids[i]);
+  for (const f of rawFacets) if (f.kind === 'ip') for (const s of seriesOfFacet(f)) for (const i of index.byRawIp.get(s.key) ?? []) if (!index.addon[i]) out.add(index.ids[i]);
   return [...out];
 }
 
@@ -267,7 +271,7 @@ export function seriesForItem(input: { id: string; type?: string; rawFacets: Sco
   for (const s of rawFacets.filter((f) => f.kind === 'ip' && f.key).flatMap(seriesOfFacet)) {
     if (seen.has(s.key)) continue;
     seen.add(s.key);
-    const ids = (index.byRawIp.get(s.key) ?? []).filter((i) => i !== self && index.types[i] === type).map((i) => index.ids[i]);
+    const ids = (index.byRawIp.get(s.key) ?? []).filter((i) => i !== self && index.types[i] === type && !index.addon[i]).map((i) => index.ids[i]);
     if (!best || ids.length > best.ids.length) best = { key: s.key, label: ipDisplayLabel(s.label || s.key), ids };
   }
   // One other title is a pair the franchise rail already shows; a series starts at three.
@@ -336,10 +340,12 @@ function parse(json: string): ScoreFacet[] {
 }
 
 async function buildIndex(db: SQLiteDatabase, tax: Taxonomy): Promise<FacetIndex> {
-  const rows = await db.getAllAsync<{ id: string; type: string; community_votes: number; facets: string }>('SELECT id, type, community_votes, facets FROM catalog');
-  const index: FacetIndex = { size: 0, ids: [], byFacet: new Map(), byRawIp: new Map(), types: [], votes: [], facetsOf: [], genres: new Set() };
+  const rows = await db.getAllAsync<{ id: string; type: string; community_votes: number; addon: number | null; facets: string }>(
+    "SELECT id, type, community_votes, json_extract(vector, '$.addon') AS addon, facets FROM catalog",
+  );
+  const index: FacetIndex = { size: 0, ids: [], byFacet: new Map(), byRawIp: new Map(), types: [], votes: [], addon: [], facetsOf: [], genres: new Set() };
   for (let i = 0; i < rows.length; i += PARSE_CHUNK) {
-    indexFacets(rows.slice(i, i + PARSE_CHUNK).map((r) => ({ id: r.id, type: r.type, votes: r.community_votes ?? 0, facets: parse(r.facets) })), tax, index);
+    indexFacets(rows.slice(i, i + PARSE_CHUNK).map((r) => ({ id: r.id, type: r.type, votes: r.community_votes ?? 0, addon: !!r.addon, facets: parse(r.facets) })), tax, index);
     await new Promise<void>((done) => setTimeout(done, 0));
   }
   return index;

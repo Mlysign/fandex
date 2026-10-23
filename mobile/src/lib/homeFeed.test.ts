@@ -83,3 +83,12 @@ describe('Recommended for you', () => {
     expect(tierOf(null, '2026-10-17')).toBe(2);
   });
 });
+
+describe('wishlisted titles in Recommended (2026-10-23)', () => {
+  it('lets at most two through, the strongest ones', () => {
+    const cards = ['w1', 'w2', 'w3', 'a', 'b'].map((key) => ({ key, id: key, type: 'movie' as const, releaseDate: null }));
+    const score: Record<string, number> = { w1: 99, w2: 98, w3: 97, a: 90, b: 89 };
+    const out = recommend([cards as never[]], (c: { key: string }) => score[c.key], () => false, 50, undefined, (c: { key: string }) => c.key.startsWith('w'));
+    expect(out.map((c: { key: string }) => c.key)).toEqual(['w1', 'w2', 'a', 'b']);
+  });
+});

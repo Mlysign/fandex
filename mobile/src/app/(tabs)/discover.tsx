@@ -56,10 +56,13 @@ const FEED_START: Feed = { rows: [], page: 0, done: false, loading: false, faile
 const FEED_PAGES = 5;
 const IDLE: Remote = { state: 'idle', rows: [] };
 
-const fromProvider = (r: ProviderCard): CardItem => ({
+const fromProvider = (r: ProviderCard & { addon?: boolean }): CardItem => ({
   key: `${r.source}:${r.type}:${r.sourceId}`, id: null, source: r.source, sourceId: r.sourceId, type: r.type, title: r.title,
   releaseDate: r.releaseDate, posterUrl: r.posterUrl, communityScore: r.rating ?? null, communityVotes: r.votes,
+  ...(r.addon ? { addon: true } : {}),
 });
+/** A search puts DLC, bundles and packs after every title of its own, keeping the sort within each (Nils, 2026-10-23). */
+const addonsLast = (list: CardItem[]) => [...list.filter((c) => !c.addon), ...list.filter((c) => c.addon)];
 /** The site's FacetMatchGroup: an eyebrow and a row of chips, each a link to its page. */
 function MatchGroup({ title, matches }: { title: string; matches: VocabEntry[] }) {
   const router = useRouter();
@@ -240,7 +243,7 @@ export default function DiscoverScreen() {
     const list = [...visible];
     switch (sort) {
       // Browsing mixes the types by each title's rank among its own; a search keeps the raw count (lib/sortCards.ts).
-      case 'popularity': return byPopularity(list, crowdOf, !norm);
+      case 'popularity': return norm ? addonsLast(byPopularity(list, crowdOf, false)) : byPopularity(list, crowdOf, true);
       case 'rating': return byRating(list, crowdOf);
       case 'fandexScore': return list.sort((a, b) => ((b.id ? allScores.get(b.id) : null) ?? -1) - ((a.id ? allScores.get(a.id) : null) ?? -1));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));

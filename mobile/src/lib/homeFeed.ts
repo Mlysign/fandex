@@ -184,10 +184,15 @@ export type Candidate = CardItem & { genres?: string[] };
  * the first. `center` is your average; null means there is no taste profile,
  * and nothing is recommended.
  */
+/** At most this many titles you already wishlisted in one Recommended rail (Nils, 2026-10-23). */
+export const MAX_WISHLISTED = 2;
+
 export function recommend<T extends Candidate>(
   tiers: T[][], scoreOf: (c: T) => number | null, skip: (c: T) => boolean, center: number | null,
   /** The media types the rail may hold, each given an even share. Everything when absent. */
   types?: readonly string[],
+  /** Titles on your wishlist: they may be recommended, `MAX_WISHLISTED` to a rail. */
+  wishlisted: (c: T) => boolean = () => false,
 ): (T & { fandexScore: number })[] {
   if (center == null) return [];
   const seen = new Set<string>();
@@ -205,7 +210,9 @@ export function recommend<T extends Candidate>(
       .sort((a, b) => b.fandexScore - a.fandexScore);
     ranked.push(...strong);
   }
-  return balanceByType(ranked, RAIL_SIZE, 'recommendation');
+  let kept = 0;
+  const capped = ranked.filter((c) => !wishlisted(c) || kept++ < MAX_WISHLISTED);
+  return balanceByType(capped, RAIL_SIZE, 'recommendation');
 }
 
 /**

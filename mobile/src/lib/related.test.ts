@@ -240,3 +240,20 @@ describe('the two rails', () => {
     expect(picked.similar).not.toContain('prometheus');
   });
 });
+
+describe('add-ons in the rails (2026-10-23)', () => {
+  it('keeps a DLC or pack out of the franchise, series and similar rails', () => {
+    const tax = taxonomy();
+    const rows = [
+      ...ROWS,
+      { id: 'alien dlc', addon: true, facets: [ip('alien', 'Alien Collection'), tag('space'), tag('horror'), person('ridley scott')] },
+    ];
+    const index = indexFacets(rows, tax);
+    const vectors = new Map(rows.map((r) => [r.id, vector(r.id)]));
+    const self = rows[0];
+    const picked = pickRelated({ id: self.id, facets: resolveFacets(self.facets, self.id, tax), rawFacets: self.facets, index, vectors, tax });
+    const shown = [...(picked.franchise?.ids ?? []), ...(picked.series?.ids ?? []), ...picked.similar];
+    expect(shown).not.toContain('alien dlc');
+    expect(franchiseCandidateIds(index, resolveFacets(self.facets, self.id, tax), self.facets)).not.toContain('alien dlc');
+  });
+});

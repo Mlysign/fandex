@@ -15,6 +15,7 @@ import { extractFacets, type Facet } from "@/lib/facets";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { communityVotes } from "@/lib/ratingsSort";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
+import { isIgdbAddon } from "@/lib/sources/igdb";
 import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
 
 /**
@@ -65,6 +66,13 @@ export interface ItemVector {
   runtimeMinutes: number | null;
   addedAt: number;
   sources: { source: string; sourceId: string }[];
+  /**
+   * A DLC, bundle, mod, season or pack, by its IGDB `game_type`. Present only
+   * when true. Rails and Recommended leave these out and Search ranks them last
+   * (Nils, 2026-10-23). Rows stored before it were marked by
+   * `worker/scripts/mark-addons.sql`.
+   */
+  addon?: true;
 }
 
 export interface DerivedItem {
@@ -124,6 +132,7 @@ export function deriveItem(type: MediaType, links: ParsedLink[], region: string 
       communityVotes: communityVotes(merged.communityRatings),
       runtimeMinutes: merged.runtimeMinutes,
       sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
+      ...(links.some((l) => l.source === "igdb" && isIgdbAddon(l.data)) ? { addon: true as const } : {}),
     },
   };
 }

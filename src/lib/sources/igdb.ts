@@ -244,9 +244,55 @@ export async function igdbGameIdForSteamApp(appId: number): Promise<number | nul
   return game ?? null;
 }
 
+/**
+ * IGDB `game_type`s that are part of another game rather than one of their
+ * own: DLC (1), bundle (3), mod (5), episode (6), season (7), fork (12), pack
+ * (13), update (14). An expansion (2), a standalone expansion (4), a remake (8)
+ * and a remaster (9) are works people track, so they are not add-ons.
+ */
+const IGDB_ADDON_TYPES = new Set([1, 3, 5, 6, 7, 12, 13, 14]);
+
+/** True for a DLC, bundle, mod, season pass or pack (Nils, 2026-10-23: ranked last in search, kept out of rails). */
+export function isIgdbAddon(g: { game_type?: unknown } | null | undefined): boolean {
+  return typeof g?.game_type === "number" && IGDB_ADDON_TYPES.has(g.game_type);
+}
+
+/**
+ * A search term IGDB can match: accents folded. IGDB matches "pokemon" to
+ * "Pokémon" but returns nothing at all for "pokémon" (2026-10-23).
+ */
+export function foldSearchTerm(term: string): string {
+  return term.normalize("NFKD").replace(/[̀-ͯ]/g, "").normalize("NFC");
+}
+
+// An apostrophe is dropped, not spaced: "baldurs gate" is how Baldur's Gate is typed.
+const titleKey = (s: string) => foldSearchTerm(String(s ?? "")).toLowerCase().replace(/['‘’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * IGDB's search answers in text-relevance order, which ignores how known a
+ * game is: a 0-vote bundle came first for "baldurs gate", a ROM hack ahead of
+ * Ocarina of Time for "zelda" (2026-10-23). Re-ranked: the exact title first
+ * (decided 2026-09-02), then games people know by votes and hype, then
+ * add-ons, then everything nobody has rated. IGDB's own order breaks ties.
+ */
+export function rankIgdbSearch<T extends { name?: unknown; game_type?: unknown; total_rating_count?: unknown; hypes?: unknown }>(rows: T[], term: string): T[] {
+  const want = titleKey(term);
+  const reach = (g: T) => (typeof g.total_rating_count === "number" ? g.total_rating_count : 0) + (typeof g.hypes === "number" ? g.hypes : 0);
+  const tier = (g: T) => {
+    const addon = isIgdbAddon(g);
+    if (!addon && titleKey(String(g.name ?? "")) === want) return 0;
+    if (reach(g) === 0) return addon ? 4 : 3;
+    return addon ? 2 : 1;
+  };
+  return rows
+    .map((g, i) => ({ g, i, t: tier(g), r: reach(g) }))
+    .sort((a, b) => a.t - b.t || b.r - a.r || a.i - b.i)
+    .map((x) => x.g);
+}
+
 export async function searchIgdbGames(title: string, limit = 10): Promise<any[]> {
   if (!igdbConfigured()) return [];
-  const safe = sanitizeApicalypseSearch(title);
+  const safe = sanitizeApicalypseSearch(foldSearchTerm(title));
   if (!safe) return []; // nothing meaningful to search → don't run a malformed query
   // No ports (game_type 11) and no editions (version_parent): IGDB keeps each
   // console port and each "Gold Edition" as a game of its own, often with the
@@ -254,7 +300,11 @@ export async function searchIgdbGames(title: string, limit = 10): Promise<any[]>
   // (69 pool rows on 2026-10-15). ⚠️ NOT `parent_game = null`, which the browse
   // queries use: that also drops every DLC, expansion, remaster and remake
   // (Oblivion Remastered, Metal Gear Solid Delta), which are works of their own.
-  return withKnownCollections(await igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & game_type != 11; limit ${safeInt(limit, 10)};`));
+  // Asks for 50 and keeps the best `limit` after re-ranking: Breath of the Wild
+  // is not in IGDB's first 20 for "zelda". Still one IGDB call.
+  const n = safeInt(limit, 10);
+  const rows = await igdbQuery("games", `search "${safe}"; ${GAME_FIELDS} where version_parent = null & game_type != 11; limit ${Math.max(50, n)};`);
+  return withKnownCollections(rankIgdbSearch(rows, safe).slice(0, n));
 }
 
 // Upcoming games whose first release falls in a unix-second window, most

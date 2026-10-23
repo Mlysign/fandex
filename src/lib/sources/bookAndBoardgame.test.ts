@@ -217,3 +217,22 @@ describe("a book's identity in another script", () => {
     expect(bookIdentityKey(card("openlibrary", "OL4W", "!!!", "x"))).not.toBe(bookIdentityKey(card("openlibrary", "OL5W", "???", "x")));
   });
 });
+
+describe("book search clutter (2026-10-23 review)", () => {
+  const card = (sourceId: string, title: string, author: string, source: "openlibrary" | "hardcover" = "openlibrary") => ({
+    source, sourceId, type: "book" as const, title, releaseDate: null, posterUrl: null,
+    votes: 0, rating: null, popularity: 0, genres: [], authors: [author],
+  });
+
+  it("drops the summaries and workbooks that ride a bestseller's name", async () => {
+    const { isCompanionBook } = await import("@/lib/sources/bookPure");
+    for (const t of ["Summary of Andy Weir's Project Hail Mary", "SUMMARY AND ANALYSIS OF PROJECT HAIL MARY BY ANDY WEIR", "Epilogue for Project Hail Mary", "Workbook for Atomic Habits", "A Study Guide for Dune"]) expect(isCompanionBook(t)).toBe(true);
+    for (const t of ["Project Hail Mary", "The Summary", "Summer of Night", "Analysis Paralysis", "Epilogue"]) expect(isCompanionBook(t)).toBe(false);
+  });
+
+  it("keeps one card for the same book twice in Open Library's own answer", async () => {
+    const { mergeBookCards } = await import("@/lib/sources/bookPure");
+    const out = mergeBookCards([card("OL1W", "The Witcher", "Andrzej Sapkowski"), card("OL2W", "The Witcher", "Andrzej Sapkowski"), card("OL3W", "The Witcher", "Someone Else")], [card("5", "Summary of The Witcher", "X", "hardcover")]);
+    expect(out.map((c) => c.sourceId)).toEqual(["OL1W", "OL3W"]);
+  });
+});

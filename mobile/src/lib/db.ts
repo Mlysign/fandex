@@ -207,9 +207,11 @@ export interface CatalogRow {
   year: number | null;
   community_score: number | null;
   community_votes: number;
+  /** 1 for a DLC, bundle, mod, season or pack (the vector's `addon`), else null. */
+  addon?: number | null;
 }
 
-const CARD_COLUMNS = 'id, type, title, slug, poster_url, release_date, year, community_score, community_votes';
+const CARD_COLUMNS = "id, type, title, slug, poster_url, release_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon";
 
 export async function catalogCount(db: SQLiteDatabase): Promise<number> {
   return (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM catalog'))?.n ?? 0;
@@ -387,11 +389,13 @@ export async function catalogCards(db: SQLiteDatabase): Promise<CatalogRow[]> {
  * What "Recommended for you" may choose from: every title the catalog copy
  * holds that is not in your library (watched, played or read). A wishlisted
  * title stays: being recommended what you already want is confirmation, not
- * noise. What you hid is taken out by the caller (lib/hidden.ts).
+ * noise, up to two a rail (lib/homeFeed.ts). What you hid is taken out by the
+ * caller (lib/hidden.ts). A DLC, bundle or pack is not a recommendation.
  */
 export async function catalogCandidates(db: SQLiteDatabase): Promise<CatalogRow[]> {
   return db.getAllAsync<CatalogRow>(
     `SELECT ${CARD_COLUMNS} FROM catalog c
-      WHERE NOT EXISTS (SELECT 1 FROM item_state s WHERE s.media_item_id = c.id AND s.relation = 'library')`,
+      WHERE NOT EXISTS (SELECT 1 FROM item_state s WHERE s.media_item_id = c.id AND s.relation = 'library')
+        AND json_extract(c.vector, '$.addon') IS NULL`,
   );
 }

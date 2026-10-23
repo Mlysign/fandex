@@ -38,12 +38,15 @@ export interface CardItem {
   roles?: string[];
   /** A provider card's genres (a book's subjects, IGDB's genres and themes, TMDB's genres): the rest of what that estimate reads. */
   genres?: string[];
+  /** A DLC, bundle, mod, season or pack (IGDB's game_type): ranked last in search, kept out of rails. */
+  addon?: boolean;
 }
 
 export function cardFromCatalog(r: CatalogRow): CardItem {
   return {
     key: r.id, id: r.id, type: r.type, title: r.title, slug: r.slug, releaseDate: r.release_date,
     posterUrl: r.poster_url, communityScore: r.community_score, communityVotes: r.community_votes,
+    ...(r.addon ? { addon: true } : {}),
   };
 }
 

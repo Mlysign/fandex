@@ -82,10 +82,11 @@ export function useHomeRails() {
       tiers,
       // A catalog row's score from everything it carries; a calendar card carries its genres and nothing finer.
       (c) => (c.id && pool.scores.has(c.id) ? (pool.scores.get(c.id) as number) : score(c.id ?? c.key, genreFacets(c.genres ?? []))?.score ?? null),
-      // Not what you already watched or played, and not what you asked not to be shown.
-      (c) => (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
+      // Not what you already watched or played, not what you asked not to be shown, and no DLC or pack.
+      (c) => !!c.addon || (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
       center,
       types,
+      (c) => (c.id ? stateOf(c.id).wishlisted : false),
     );
   }, [candidates, center, pool, score, hidden, stateOf, types]);
 

@@ -405,7 +405,7 @@ export function popularPeople(pool: PoolTitle[], details: Iterable<ItemDetail>, 
 /** Both rails for every pool title, picked as the app picks them (lib/related.ts). Build once, ask per title. */
 export function relatedPicker(pool: PoolTitle[], taxonomyJson: TaxonomyJson): (id: string, rawFacets: ScoreFacet[]) => StaticRails {
   const tax = prepareTaxonomy(taxonomyJson);
-  const index = indexFacets(pool.map((p) => ({ id: p.vector.id, type: p.vector.type, votes: p.vector.communityVotes ?? 0, facets: p.facets })), tax);
+  const index = indexFacets(pool.map((p) => ({ id: p.vector.id, type: p.vector.type, votes: p.vector.communityVotes ?? 0, addon: !!p.vector.addon, facets: p.facets })), tax);
   const vectors = new Map(pool.map((p) => [p.vector.id, p.vector]));
   return (id, rawFacets) => {
     const picked = pickRelated({ id, facets: resolveFacets(rawFacets, id, tax), rawFacets, index, vectors, tax });

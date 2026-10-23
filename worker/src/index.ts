@@ -32,7 +32,7 @@
 //     DELETE /v1/me
 
 import { providerBreakerSnapshot } from "@/lib/http";
-import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate, searchIgdbGames } from "@/lib/sources/igdb";
+import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbConfigured, igdbImageUrl, igdbReleaseDate, isIgdbAddon, searchIgdbGames } from "@/lib/sources/igdb";
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { analyticsSnapshot, countPageView } from "./telemetry";
@@ -371,9 +371,10 @@ async function searchGames(c: Ctx): Promise<Response> {
 /**
  * The game card's shape, in the edge cache keys of every route that answers
  * with it. Bump it when gameCard changes, or the old shape is served for up to
- * a week (2: genres, 2026-10-18; 3: search uses it too, 2026-10-23).
+ * a week (2: genres, 2026-10-18; 3: search uses it too, 2026-10-23; 4: `addon`,
+ * and search re-ranked, 2026-10-23).
  */
-const GAME_CARD_VERSION = 3;
+const GAME_CARD_VERSION = 4;
 
 /** An IGDB game as the app's provider card, the shape /v1/search/games answers with. */
 function gameCard(g: any) {
@@ -389,6 +390,8 @@ function gameCard(g: any) {
     // Genres and themes, which IGDB already sends with the card fields: what the
     // app estimates a Fandex Score from for a game nobody holds (2026-10-18).
     genres: [...(g.genres ?? []), ...(g.themes ?? [])].map((x: { name?: unknown }) => x?.name).filter((n: unknown): n is string => typeof n === "string").slice(0, 8),
+    // A DLC, bundle, mod, season or pack: the app keeps it out of rails and ranks it last (2026-10-23).
+    ...(isIgdbAddon(g) ? { addon: true } : {}),
   };
 }
 

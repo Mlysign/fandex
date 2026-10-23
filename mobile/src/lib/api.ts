@@ -85,6 +85,8 @@ export interface ItemVector {
   runtimeMinutes: number | null;
   addedAt: number;
   sources: { source: string; sourceId: string }[];
+  /** A DLC, bundle, mod, season or pack. Absent on every other title. */
+  addon?: true;
 }
 
 export interface CommunityRating { source: string; label: string; score: number; outOf: number; votes?: number | null; url?: string | null }
@@ -217,6 +219,8 @@ export interface GameSearchResult {
   rating: number | null;
   /** IGDB's genres and themes. Absent from a Worker deployed before 2026-10-18. */
   genres?: string[];
+  /** A DLC, bundle, mod, season or pack. */
+  addon?: boolean;
 }
 
 export interface Health { ok: boolean; time: number; today: { fetches: number; userWrites: number } }

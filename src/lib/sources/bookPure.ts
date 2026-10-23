@@ -203,6 +203,15 @@ export function bookIdentityKey(card: { title: string; authors?: string[]; sourc
 }
 
 /**
+ * A book about another book that exists to ride its search traffic: "Summary
+ * of Andy Weir's Project Hail Mary", "SUMMARY AND ANALYSIS OF …", "Workbook
+ * for Atomic Habits", "Epilogue for …". Hardcover lists a dozen per bestseller.
+ */
+export function isCompanionBook(title: string): boolean {
+  return /^(?:an? )?(?:(?:summary|analysis|study guide|workbook|epilogue|quicklet|trivia|conversation starters|cliffsnotes|sparknotes)\b.*?\b(?:of|for|to|on)\b|summary\s*(?:&|and)\s*analysis\b)/i.test(title.trim());
+}
+
+/**
  * Two providers' cards as one list: the first list in full, then whatever the
  * second holds that the first does not. The same book is one that shares an
  * ISBN-13, or the same title and author. Open Library goes first, so its
@@ -210,6 +219,10 @@ export function bookIdentityKey(card: { title: string; authors?: string[]; sourc
  * Open Library did not answer with. A book both know keeps Open Library's
  * cover and takes Hardcover's only when Open Library has none (Nils,
  * 2026-10-17: "covers only if the other provider has none").
+ *
+ * Since 2026-10-23 the same book twice in ONE list is one card too ("witcher"
+ * answered nine "The Witcher" works), and a summary, study guide or workbook
+ * of somebody else's book is no card at all.
  */
 export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): BookCard[] {
   const byIsbn = new Map<string, BookCard>();
@@ -220,9 +233,20 @@ export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): Book
     if (!byKey.has(k)) byKey.set(k, c);
   };
   // Copies: filling a cover in must not change the caller's card.
-  const out = primary.map((c) => ({ ...c }));
-  for (const c of out) note(c);
+  const out: BookCard[] = [];
+  for (const c of primary) {
+    if (isCompanionBook(c.title)) continue;
+    const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
+    if (twin) {
+      if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
+      continue;
+    }
+    const copy = { ...c };
+    note(copy);
+    out.push(copy);
+  }
   for (const c of secondary) {
+    if (isCompanionBook(c.title)) continue;
     const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
     if (twin) {
       if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
