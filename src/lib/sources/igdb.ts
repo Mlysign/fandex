@@ -280,7 +280,8 @@ export function rankIgdbSearch<T extends { name?: unknown; game_type?: unknown; 
   const reach = (g: T) => (typeof g.total_rating_count === "number" ? g.total_rating_count : 0) + (typeof g.hypes === "number" ? g.hypes : 0);
   const tier = (g: T) => {
     const addon = isIgdbAddon(g);
-    if (!addon && titleKey(String(g.name ?? "")) === want) return 0;
+    // An exact title nobody has rated or followed is no answer: a 0-vote "Zelda" led "zelda".
+    if (!addon && reach(g) > 0 && titleKey(String(g.name ?? "")) === want) return 0;
     if (reach(g) === 0) return addon ? 4 : 3;
     return addon ? 2 : 1;
   };
