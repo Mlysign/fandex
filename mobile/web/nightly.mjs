@@ -102,8 +102,10 @@ try {
   if (!run('git', ['clean', '-fd'], SITE)) fail('git clean failed in the worktree.');
   log(`building ${git('rev-parse', '--short', sha)}: ${git('log', '-1', '--format=%s', sha)}`);
 
-  // 2. Packages, only when a lockfile changed. dist/ is gitignored and stays, so
-  //    the build's per-title cache carries over between nights.
+  // 2. Packages, only when a lockfile or a patch changed (patch-package applies
+  //    mobile/patches on install, and the expo-router one keeps browser Forward
+  //    working). dist/ is gitignored and stays, so the build's per-title cache
+  //    carries over between nights.
   const stampFile = path.join(LOGS, 'installed.json');
   let stamps = {};
   // A stamp file that does not parse only costs an `npm ci`.
@@ -111,7 +113,10 @@ try {
   for (const dir of ['.', 'mobile', 'worker']) {
     const lockPath = path.join(SITE, dir, 'package-lock.json');
     if (!fs.existsSync(lockPath)) fail(`${dir}/package-lock.json is missing in the worktree.`);
-    const hash = crypto.createHash('sha256').update(fs.readFileSync(lockPath)).digest('hex');
+    const sum = crypto.createHash('sha256').update(fs.readFileSync(lockPath));
+    const patches = path.join(SITE, dir, 'patches');
+    if (fs.existsSync(patches)) for (const f of fs.readdirSync(patches).sort()) sum.update(f).update(fs.readFileSync(path.join(patches, f)));
+    const hash = sum.digest('hex');
     if (stamps[dir] === hash && fs.existsSync(path.join(SITE, dir, 'node_modules'))) continue;
     if (!run('npm', ['ci', '--no-audit', '--no-fund'], path.join(SITE, dir))) fail(`npm ci failed in ${dir}.`);
     stamps[dir] = hash;

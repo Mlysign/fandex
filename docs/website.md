@@ -105,7 +105,7 @@ The Windows task **"Fandex nightly site"** on Nils's PC runs `node mobile/web/ni
 06:30 local time, after the D1 export, or as soon as the PC is on if it was off then. It builds a
 worktree of `origin/main` of its own at `C:\fx\site`, never this checkout (other sessions'
 half-finished edits live here), runs `git clean -fd` there so no untracked file reaches the
-bundle, runs `npm ci` only when a lockfile changed, copies `mobile/.env` in, and runs
+bundle, runs `npm ci` only when a lockfile or a `patches/` file changed, copies `mobile/.env` in, and runs
 `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`; a failed run, a thrown
 error included, also leaves `LAST-RUN-FAILED.txt` there, because the task's own result reads 0
 either way.
