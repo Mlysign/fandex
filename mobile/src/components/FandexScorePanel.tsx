@@ -106,8 +106,8 @@ export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, signI
   return (
     <View style={styles.panel}>
       <Shell
-        number={String(rounded)} tone={tone} eyebrow="Your Fandex Score"
-        line={scoreReasonLine(fandex.score, fandex.center, sorted.find((r) => !r.capped))}
+        number={String(rounded)} tone={tone} eyebrow={fandex.leftOut ? 'Fandex Score, without your rating' : 'Your Fandex Score'}
+        line={scoreReasonLine(fandex.score, fandex.center, sorted)}
         action={sorted.length ? (
           // The one control on the panel: the number and the sentence are not buttons.
           <Pressable onPress={() => setOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Show Fandex Score breakdown" style={({ pressed }) => [styles.why, pressed && { opacity: 0.6 }]}>
@@ -119,7 +119,7 @@ export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, signI
       <Sheet open={open} onClose={() => setOpen(false)} title="Fandex Score breakdown">
         <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={styles.breakdown}>
           <View style={[styles.sumRow, styles.ruleBelow]}>
-            <Text style={styles.small}>Your baseline (average rating × 10)</Text>
+            <Text style={styles.small}>{fandex.leftOut ? 'Your baseline without this title (average × 10)' : 'Your baseline (average rating × 10)'}</Text>
             <Text style={[styles.small, styles.strong]}>{baseline}</Text>
           </View>
 
@@ -131,7 +131,7 @@ export function FandexScorePanel({ state, fandex, categoryLabel, onSignIn, signI
             return (
               <View key={`${r.kind}|${r.role ?? ''}|${r.label}`}>
                 {firstCapped ? (
-                  <Text style={styles.cappedNote}>Not counted for this title, being outside the top matches this item selects</Text>
+                  <Text style={styles.cappedNote}>Also matched, not counted: only the strongest few of each kind count</Text>
                 ) : null}
                 <View style={[styles.reason, r.capped && { opacity: 0.4 }]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

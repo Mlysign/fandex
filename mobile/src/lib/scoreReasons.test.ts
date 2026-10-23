@@ -19,11 +19,22 @@ describe('the score band', () => {
 
 describe('the one line under the number', () => {
   it('names the band and the strongest counted reason', () => {
-    expect(scoreReasonLine(92, 75, reason('Thriller', 6))).toBe('Strong match. You rate Thriller highly.');
-    expect(scoreReasonLine(60, 75, reason('Musical', -5))).toBe('Weak match. You rate Musical lower than most.');
+    expect(scoreReasonLine(92, 75, [reason('Thriller', 6)])).toBe('Strong match. You rate Thriller highly.');
+    expect(scoreReasonLine(60, 75, [reason('Musical', -5)])).toBe('Weak match. You rate Musical lower than most.');
+  });
+  it('names the reason that agrees with the band, not the top row', () => {
+    // Buddy, 2026-10-23: "Weak match. You rate BoulderLight Pictures highly."
+    const rows = [reason('BoulderLight Pictures', 2.6), reason('slasher', -2.6), reason('Cristin Milioti', -5.3)];
+    expect(scoreReasonLine(55, 67, rows)).toBe('Weak match. You rate Cristin Milioti lower than most.');
+    expect(scoreReasonLine(90, 67, rows)).toBe('Strong match. You rate BoulderLight Pictures highly.');
+    expect(scoreReasonLine(67, 67, rows)).toBe('Typical match. You rate Cristin Milioti lower than most.');
+  });
+  it('names no reason that contradicts the band, and skips rows left out', () => {
+    expect(scoreReasonLine(55, 67, [reason('Comedy', 1)])).toBe('Weak match for your taste.');
+    expect(scoreReasonLine(55, 67, [reason('Horror', -4, { capped: true })])).toBe('Weak match for your taste.');
   });
   it('says so plainly when nothing counted', () => {
-    expect(scoreReasonLine(75, 75, undefined)).toBe('Typical match for your taste.');
+    expect(scoreReasonLine(75, 75, [])).toBe('Typical match for your taste.');
   });
 });
 

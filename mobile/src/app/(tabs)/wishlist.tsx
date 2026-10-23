@@ -216,7 +216,7 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
           auth.rowsError || missing > 0 ? (
             <View style={{ gap: 4, marginBottom: 12 }}>
               {auth.rowsError ? <Text style={[type.caption, { color: color.warning }]}>{auth.rowsError}</Text> : null}
-              {missing > 0 ? <Text style={type.caption}>{missing.toLocaleString('en')} of your titles are still downloading.</Text> : null}
+              {missing > 0 ? <Text style={type.caption}>{missing === 1 ? 'One of your titles is' : `${missing.toLocaleString('en')} of your titles are`} still loading.</Text> : null}
             </View>
           ) : null
         }

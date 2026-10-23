@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfile, computeFandexScore, prepareTaxonomy, resolveFacets, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
+import { buildProfile, computeFandexScore, prepareTaxonomy, resolveFacets, softRange, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 // Agreement with the site over a real library is scripts/probe-app-score.mjs's
 // job (4,559 of 4,559 identical on 2026-10-04). These pin the rules a change
@@ -37,6 +37,34 @@ describe('the Fandex Score on the device', () => {
     expect(disliked.score).toBeLessThan(60);
     // The breakdown IS the computation: centre plus the contributions is the score.
     expect(liked.center + liked.reasons.reduce((n, r) => n + r.contribution, 0)).toBeCloseTo(liked.score, 1);
+  });
+
+  it('scores a title you rated as if you had not rated it', () => {
+    const tax = prepareTaxonomy(json());
+    const lib = [...library, rated('e', 8, [tag('noir'), director('villeneuve')])];
+    const left = computeFandexScore(lib[0].facets, 'a', buildProfile(lib, tax), tax)!;
+    // The same as a profile that never held title a, to the tenth, breakdown included.
+    const without = computeFandexScore(lib[0].facets, 'a', buildProfile(lib.slice(1), tax), tax)!;
+    expect(left.score).toBe(without.score);
+    expect(left.center).toBe(without.center);
+    expect(left.reasons.map((r) => [r.label, r.contribution, r.n])).toEqual(without.reasons.map((r) => [r.label, r.contribution, r.n]));
+    // A facet only that title carried says nothing about it.
+    const solo = computeFandexScore([tag('noir'), tag('heist')], 'z', buildProfile([...lib, rated('z', 10, [tag('heist')])], tax), tax)!;
+    expect(solo.reasons.map((r) => r.label)).toEqual(['noir']);
+  });
+
+  it('never passes 100 or 0, and leaves an ordinary score as it was', () => {
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 0.1, mappingConstantUp: 80, mappingConstantDown: 80 } } }));
+    const lib = [rated('a', 10, [tag('noir')]), rated('b', 10, [tag('noir')]), rated('c', 1, [tag('musical')]), rated('d', 1, [tag('musical')])];
+    const profile = buildProfile(lib, tax);
+    const high = computeFandexScore([tag('noir')], 'x', profile, tax)!;
+    const low = computeFandexScore([tag('musical')], 'y', profile, tax)!;
+    expect(high.score).toBeLessThanOrEqual(100);
+    expect(high.score).toBeGreaterThan(90);
+    expect(low.score).toBeGreaterThanOrEqual(0);
+    expect(low.score).toBeLessThan(10);
+    // Bent, the breakdown still adds up.
+    expect(high.center + high.reasons.reduce((n, r) => n + r.contribution, 0)).toBeCloseTo(high.score, 0);
   });
 
   it('gives no score below three rated titles, or when nothing matches', () => {
@@ -81,5 +109,17 @@ describe('the Fandex Score on the device', () => {
     expect(tax.config.roleWeights.director).toBe(2);
     expect(tax.config.roleWeights.ip).toBe(1.3);
     expect(buildProfile(library, tax).meta.get('person|director|villeneuve')?.classWeight).toBe(2);
+  });
+});
+
+describe('the soft range', () => {
+  it('is the identity up to halfway to the edge, then bends toward it and never reaches it', () => {
+    expect(softRange(70, 10)).toBe(10);
+    expect(softRange(70, 15)).toBe(15);
+    expect(softRange(70, 30)).toBeLessThan(30);
+    expect(softRange(70, 30)).toBeGreaterThan(softRange(70, 20));
+    expect(70 + softRange(70, 500)).toBeLessThanOrEqual(100);
+    expect(70 + softRange(70, -500)).toBeGreaterThanOrEqual(0);
+    expect(softRange(70, -35)).toBe(-35);
   });
 });

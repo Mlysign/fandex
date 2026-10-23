@@ -19,10 +19,27 @@ export function scoreBand(score: number, center: number | null): ScoreBand {
 
 const STRENGTH: Record<ScoreBand, string> = { high: 'Strong match', baseline: 'Typical match', low: 'Weak match' };
 
-/** The band in words, and the strongest counted reason when there is one. */
-export function scoreReasonLine(score: number, center: number | null, top: ScoreReason | undefined): string {
-  const strength = STRENGTH[scoreBand(score, center)];
-  if (!top) return `${strength} for your taste.`;
+/**
+ * The counted reason that agrees with the band: the biggest lift on a strong
+ * match, the biggest drag on a weak one, the biggest either way on a typical
+ * one. "Weak match. You rate X highly." named the top row whatever the band said.
+ */
+export function leadReason(band: ScoreBand, reasons: ScoreReason[]): ScoreReason | undefined {
+  const counted = reasons.filter((r) => !r.capped && r.contribution !== 0);
+  const pick = (better: (a: ScoreReason, b: ScoreReason) => boolean) =>
+    counted.reduce<ScoreReason | undefined>((best, r) => (!best || better(r, best) ? r : best), undefined);
+  if (band === 'high') return pick((a, b) => a.contribution > b.contribution);
+  if (band === 'low') return pick((a, b) => a.contribution < b.contribution);
+  return pick((a, b) => Math.abs(a.contribution) > Math.abs(b.contribution));
+}
+
+/** The band in words, and the counted reason that agrees with it when there is one. */
+export function scoreReasonLine(score: number, center: number | null, reasons: ScoreReason[]): string {
+  const band = scoreBand(score, center);
+  const strength = STRENGTH[band];
+  const top = leadReason(band, reasons);
+  // A strong match whose every counted row pulls down (or the reverse) has no honest reason to name.
+  if (!top || (band === 'high' && top.contribution < 0) || (band === 'low' && top.contribution > 0)) return `${strength} for your taste.`;
   return `${strength}. You rate ${top.label} ${top.contribution >= 0 ? 'highly' : 'lower than most'}.`;
 }
 

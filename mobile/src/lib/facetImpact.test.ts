@@ -25,14 +25,15 @@ const library: RatedTitle[] = [
 
 describe("a facet page's Fandex impact", () => {
   it('is the number the item page prints for the same tag', () => {
-    const tax = prepareTaxonomy(json());
+    // A gain that keeps the title inside the soft range's knee: past it the item's row shrinks with the score.
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 5, mappingConstantDown: 4 } } }));
     const profile = buildProfile(library, tax);
     const [row] = pageImpacts('tag', 'steampunk', profile, tax);
     const onATitle = computeFandexScore([tag('steampunk', 'setting')], 'x', profile, tax)!.reasons[0];
     expect(row.points).toBe(onATitle.impact);
     expect(row.points).toBe(onATitle.contribution);
     // The category weight is in it: a setting counts double here.
-    expect(row.points).toBeCloseTo(10 * 2 * (profile.meta.get('tag||steampunk')!.BA - profile.baseline), 1);
+    expect(row.points).toBeCloseTo(5 * 2 * (profile.meta.get('tag||steampunk')!.BA - profile.baseline), 1);
     expect(row).toMatchObject({ direction: 'up', ratedCount: 2 });
   });
 

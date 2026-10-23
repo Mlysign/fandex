@@ -158,6 +158,9 @@ interface FacetMeta {
   BA: number;
   /** How many of your rated titles carry it. */
   n: number;
+  /** The sums BA is made of, kept so one title can be taken back out (leave-one-out). */
+  weightedSum: number;
+  weightedCount: number;
 }
 
 export interface Profile {
@@ -167,6 +170,10 @@ export interface Profile {
   /** Your mean rating, 0-10. */
   baseline: number;
   ratedItemCount: number;
+  /** Your rating per rated title id, so scoring one of them can leave it out. */
+  ratings: Map<string, number>;
+  /** The sum of every rating, for the baseline without one title. */
+  ratingSum: number;
 }
 
 /** Below this many rated titles there is no score at all, rather than one built on two samples. */
@@ -174,9 +181,11 @@ export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
 export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
   const stats = new Map<string, { kind: string; role?: string; key: string; label: string; category?: string; count: number; weightedCount: number; weightedSum: number }>();
+  const ratings = new Map<string, number>();
   let ratingSum = 0;
   for (const item of rated) {
     ratingSum += item.rating;
+    ratings.set(item.id, item.rating);
     for (const f of resolveFacets(item.facets, item.id, tax)) {
       const id = facetId(f);
       const prominence = f.prominence ?? 1;
@@ -210,9 +219,9 @@ export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
     }
     const BA = (C * baseline + f.weightedSum) / (C + f.weightedCount);
     w.set(id, (BA - baseline) * classWeight);
-    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, classWeight, BA, n: f.count });
+    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, classWeight, BA, n: f.count, weightedSum: f.weightedSum, weightedCount: f.weightedCount });
   }
-  return { w, meta, baseline, ratedItemCount: rated.length };
+  return { w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum };
 }
 
 /**
@@ -228,6 +237,23 @@ export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number
 }
 
 // ── Scoring one title ────────────────────────────────────────────────────────
+
+/**
+ * How far a score may move from your average, bent so it never passes 100 or
+ * 0. Unchanged up to halfway to the edge, which is where nearly every score
+ * sits (the band margin is 10), then a tanh that meets the edge only in the
+ * limit: a strong match still outranks a slightly weaker one, nothing reads 101.
+ * `offset` is the points the facets add to the centre; the answer is the same
+ * kind of number.
+ */
+export function softRange(center: number, offset: number): number {
+  const room = offset >= 0 ? 100 - center : center;
+  if (room <= 0) return 0;
+  const knee = room / 2;
+  const size = Math.abs(offset);
+  if (size <= knee) return offset;
+  return Math.sign(offset) * (knee + (room - knee) * Math.tanh((size - knee) / (room - knee)));
+}
 
 export interface ScoreReason {
   kind: string;
@@ -250,6 +276,8 @@ export interface FandexScore {
   /** Your own mean rating × 10: the score of a title you have no opinion about. */
   center: number;
   reasons: ScoreReason[];
+  /** A title you rated, scored with your rating of it left out. */
+  leftOut?: boolean;
 }
 
 interface Contrib { f: ScoreFacet; dev: number; classWeight: number; meta: FacetMeta }
@@ -260,17 +288,34 @@ interface Contrib { f: ScoreFacet; dev: number; classWeight: number; meta: Facet
  * can score a title against keys the profile did not learn under.
  */
 export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, profile: Profile, tax: Taxonomy): FandexScore | null {
-  if (profile.w.size === 0 || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
+  // A title you rated is scored as if you had not (decided 2026-10-23): its own
+  // rating left out of the baseline and of every facet it carries. Read with
+  // its own rating in, The Last of Us Part I scored 101, +11.3 of it from a
+  // franchise average its own 10 had raised. Only this title's facets enter the
+  // score, so taking it out of those is the whole leave-one-out, exactly.
+  const own = itemId != null ? profile.ratings.get(itemId) : undefined;
+  const ratedCount = profile.ratedItemCount - (own === undefined ? 0 : 1);
+  if (profile.w.size === 0 || ratedCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
   const cfg = tax.config;
+  const baseline = own === undefined ? profile.baseline : (profile.ratingSum - own) / ratedCount;
 
   const matched: Contrib[] = [];
   for (const f of resolveFacets(facets, itemId, tax)) {
     const id = facetId(f);
-    const w = profile.w.get(id);
-    const meta = profile.meta.get(id);
-    if (w == null || !meta?.classWeight) continue;
-    // The profile's weight recovers the deviation; THIS title's cast billing scales what it is worth here.
-    matched.push({ f, dev: w / meta.classWeight, classWeight: meta.classWeight * (f.prominence ?? 1), meta });
+    const stored = profile.meta.get(id);
+    if (profile.w.get(id) == null || !stored?.classWeight) continue;
+    let meta = stored;
+    if (own !== undefined) {
+      const p = f.prominence ?? 1;
+      const weightedCount = stored.weightedCount - p;
+      // A facet only this title carried has no evidence left.
+      if (stored.n <= 1 || weightedCount <= 0) continue;
+      const weightedSum = stored.weightedSum - own * p;
+      const C = cfg.priorStrength;
+      meta = { ...stored, n: stored.n - 1, weightedSum, weightedCount, BA: (C * baseline + weightedSum) / (C + weightedCount) };
+    }
+    // THIS title's cast billing scales what the facet is worth here.
+    matched.push({ f, dev: meta.BA - baseline, classWeight: meta.classWeight * (f.prominence ?? 1), meta });
   }
   if (!matched.length) return null;
 
@@ -301,23 +346,32 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   ];
   if (!kept.length) return null;
 
-  // A raw sum, not a mean, and not clamped: 0-100 is a target, not a rule (spec §1).
+  // A raw sum, not a mean (spec §3.3), then bent so 100 is the max and 0 the
+  // min (decided 2026-10-23, superseding the unclamped range of 2026-08-17).
   const rawSum = kept.reduce((acc, c) => acc + weighted(c), 0);
-  const center = profile.baseline * 10;
+  const center = baseline * 10;
   const gain = rawSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  const raw = gain * rawSum;
+  const bent = softRange(center, raw);
+  // Every counted row shrinks by the same share, so the breakdown still adds up to the score.
+  const share = raw === 0 ? 1 : bent / raw;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
-  const impactOf = (c: Contrib) => facetImpact(facetId(c.f), profile, tax) ?? 0;
+  // What the facet is worth on any title; for a title you rated, without that title.
+  const impactOf = (c: Contrib) => (own === undefined
+    ? facetImpact(facetId(c.f), profile, tax) ?? 0
+    : round1((c.dev * c.meta.classWeight >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown) * c.dev * c.meta.classWeight));
   const reason = (c: Contrib, counted: boolean): ScoreReason => ({
     kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.meta.category ?? c.f.category,
-    contribution: counted ? round1(gain * weighted(c)) : 0,
+    contribution: counted ? round1(gain * weighted(c) * share) : 0,
     impact: impactOf(c), BA: c.meta.BA, n: c.meta.n,
     ...(counted ? {} : { capped: true }),
   });
 
   return {
-    score: round1(center + gain * rawSum),
+    score: round1(center + bent),
     center: round1(center),
+    ...(own === undefined ? {} : { leftOut: true }),
     reasons: [
       ...[...kept].sort((a, b) => weighted(b) - weighted(a)).map((c) => reason(c, true)),
       ...[...capped].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a))).map((c) => reason(c, false)),

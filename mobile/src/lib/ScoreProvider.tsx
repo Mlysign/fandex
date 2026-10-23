@@ -146,7 +146,13 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   // The profile: rebuilt when your rows, the catalog copy or the taxonomy change.
+  // Not while the catalog copy is filling: a rated title only counts once its
+  // catalog row has landed, so a fresh tab built five profiles in seven seconds
+  // (0, 197, 796, 1517, 1707 titles) and every score moved under the reader.
+  // The last whole profile stands until the fill ends; a device with none shows
+  // no score until then, rather than one built on a fraction of its ratings.
   const signedIn = auth.status === 'signedIn';
+  const filling = catalog.state === 'syncing';
   useEffect(() => {
     let live = true;
     if (!signedIn || !taxonomy) {
@@ -154,6 +160,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       if (auth.status !== 'loading') setReady(true);
       return;
     }
+    if (filling) return;
     (async () => {
       const started = Date.now();
       const rated = await ratedTitles(db);
@@ -165,7 +172,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       setRevision((r) => r + 1);
     })();
     return () => { live = false; };
-  }, [db, signedIn, auth.status, taxonomy, auth.rowsRevision, catalog.revision]);
+  }, [db, signedIn, auth.status, taxonomy, auth.rowsRevision, catalog.revision, filling]);
 
   const score = useCallback((id: string, facets: ScoreFacet[]) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy) : null), [profile, taxonomy]);

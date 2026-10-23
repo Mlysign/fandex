@@ -220,7 +220,7 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
           {/* Discord signs in on a phone too (lib/discord.ts); Google does not yet (docs/app.md). */}
           {Platform.OS === 'web' || provider === 'discord'
             ? 'A way to sign in. It holds no library.'
-            : 'A way to sign in on fandex.org. It holds no library, and signing in with it in this app is not built yet.'}
+            : 'Signs you in on fandex.org. It holds no library.'}
         </T>
       ) : null}
 
