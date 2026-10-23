@@ -3,6 +3,7 @@
 // but would leave a value import of it in place → "does not provide an export".
 import type { Source } from "@/types";
 import { COUNTRIES } from "@/lib/countries";
+import { KEPT_CREW_JOBS } from "@/lib/crewJobs";
 
 // ── H2a: raw_data projection ─────────────────────────────────────────────────
 //
@@ -54,7 +55,11 @@ import { COUNTRIES } from "@/lib/countries";
 // clickable and show a stream/rent/buy line. Only TMDB rows are affected —
 // migration 12 pre-stamps every non-TMDB row forward to v3 directly (a plain
 // integer UPDATE, no re-projection), so games don't pay for a TMDB-only change.
-export const PROJECTION_VERSION = 3;
+// v4 (2026-10-23): a TMDB blob keeps every writer job facets.ts reads ("Novel",
+// "Story", "Characters"...), not just Writer and Screenplay, so an adapted
+// author gets a writer facet. Only TMDB is affected, and the Worker's cron walks
+// the TMDB links below v4 and refetches them (worker/src/cron.ts).
+export const PROJECTION_VERSION = 4;
 
 // The only countries `users.country` can be set to (validated by
 // normalizeCountry), so region data outside this set is unreachable by design.
@@ -142,9 +147,10 @@ function projectTmdb(d: any): any {
       cast: (d.credits.cast ?? []).slice(0, CAST_LIMIT).map((c: any) =>
         pick(c, ["id", "name", "character", "profile_path", "order"])
       ),
-      // Only the crew rows any consumer looks up by job.
+      // Only the crew rows any consumer looks up by job: the list facets.ts
+      // reads, from the same module (v4, 2026-10-23: "Novel" was dropped here).
       crew: (d.credits.crew ?? [])
-        .filter((c: any) => ["Director", "Creator", "Writer", "Screenplay"].includes(c?.job))
+        .filter((c: any) => KEPT_CREW_JOBS.has(c?.job))
         .map((c: any) => pick(c, ["id", "name", "job", "profile_path"])),
     };
   }

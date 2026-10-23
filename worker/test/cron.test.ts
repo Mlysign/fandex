@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetBreakers } from "@/lib/http";
+import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { kvSet } from "../src/budget";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
-  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
+  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runProjectionRefreshStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
 } from "../src/cron";
 import { db, env, gameItem, movieItem, tmdbMovie, wipe } from "./helpers";
 
@@ -501,5 +502,39 @@ describe("the games stored before their IGDB collections were asked for", () => 
     });
     await expect(runIgdbCollectionsStep(env, 5)).rejects.toThrow();
     expect(await cursor()).toBeNull();
+  });
+});
+
+describe("the TMDB links stored under an older projection", () => {
+  afterEach(() => vi.restoreAllMocks());
+  beforeEach(async () => {
+    await wipe();
+    __resetBreakers();
+  });
+
+  it("refetches each once, so a novelist becomes a writer facet, and parks when none are left", async () => {
+    const { id } = await upsertMediaItem(db, movieItem());
+    await db.prepare("UPDATE media_links SET projection_version = 3 WHERE source = 'tmdb'").run();
+    const withNovel = tmdbMovie({
+      credits: { cast: [], crew: [{ id: 3027, name: "Stephen King", job: "Novel" }, { id: 1, name: "Lana Wachowski", job: "Director" }] },
+    });
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      return Response.json(withNovel);
+    });
+
+    expect(await runProjectionRefreshStep(env)).toEqual({ refreshed: 1, failed: 0 });
+    const link = await db.prepare("SELECT projection_version, raw_data FROM media_links WHERE source = 'tmdb'").first<{ projection_version: number; raw_data: string }>();
+    expect(link!.projection_version).toBe(PROJECTION_VERSION);
+    expect(JSON.parse(link!.raw_data).credits.crew.map((c: { job: string }) => c.job)).toContain("Novel");
+    const facets = (await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>())!.facets;
+    expect(facets).toContain("Stephen King");
+
+    // Nothing left below the version: the walk parks, and asks TMDB nothing more.
+    expect(await runProjectionRefreshStep(env)).toEqual({ refreshed: 0, failed: 0 });
+    expect(await runProjectionRefreshStep(env)).toEqual({ refreshed: 0, failed: 0 });
+    expect(calls).toHaveLength(1);
   });
 });

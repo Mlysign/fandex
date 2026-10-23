@@ -8,6 +8,7 @@
 // `tags` + `keywords` (which already union genres/keywords across sources).
 
 import type { MediaLink, MediaType, Source } from "@/types";
+import { WRITER_JOBS } from "@/lib/crewJobs";
 import { categorizeTag } from "@/lib/tags";
 import { transliterate } from "@/lib/translit";
 import { bggFranchises } from "@/lib/sources/bggPure";
@@ -128,11 +129,7 @@ export function ipDisplayLabel(name: string): string {
   return parts.join(" ");
 }
 
-// TMDB crew jobs that count as "writer".
-const WRITER_JOBS = new Set([
-  "Writer", "Screenplay", "Story", "Novel", "Author", "Comic Book",
-  "Characters", "Teleplay", "Co-Writer", "Original Story",
-]);
+// TMDB crew jobs that count as "writer": crewJobs.ts, shared with the projection.
 
 const CAST_CAP = 8;   // bound per-item facet count (matters for scoring top-K)
 const STUDIO_CAP = 6; // production_companies tail is mostly distributor noise

@@ -22,6 +22,7 @@
 
 import { getIgdbCollections, igdbConfigured } from "@/lib/sources/igdb";
 import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
+import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
 import { kvGet, kvSet } from "./budget";
 import { monthKey, runCalendarStep, SERVABLE_MONTHS, shiftMonth } from "./calendar";
@@ -500,6 +501,64 @@ export async function runIgdbCollectionsStep(env: Env, batch = IGDB_COLLECTIONS_
   return { refreshed, missing };
 }
 
+// ── 2d. TMDB links stored under an older projection ─────────────────────────
+//
+// A blob is stored projected (src/lib/sources/project.ts), and what a projection
+// dropped can only come back from TMDB. v4 (2026-10-23) keeps every writer job,
+// so an adapted author (Stephen King on The Shining) gets a writer facet; the
+// 1,698 TMDB links stored before it carry no such crew. This walks them once in
+// key order, a few per run, and parks for good past the last one. Only TMDB:
+// v4 changed nothing for any other source.
+
+/** Links a run fetches again. One TMDB call and one re-derive each. */
+export const PROJECTION_REFRESH_PER_RUN = 4;
+const PROJECTION_CURSOR_KEY = "tmdb_projection_cursor";
+/** The cursor's "finished", per version: a later bump finds a different value and walks again by itself. */
+const projectionDone = () => `done:${PROJECTION_VERSION}`;
+
+export async function runProjectionRefreshStep(env: Env, batch = PROJECTION_REFRESH_PER_RUN): Promise<{ refreshed: number; failed: number }> {
+  const raw = await kvGet(env.DB, PROJECTION_CURSOR_KEY);
+  if (raw === projectionDone()) return { refreshed: 0, failed: 0 };
+  // A cursor is [source_id, media_type, version]. One left by another version,
+  // or that version's "done", starts the walk from the beginning.
+  let after: [string, string] = ["", ""];
+  try {
+    const c = raw && !raw.startsWith("done") ? (JSON.parse(raw) as [string, string, number]) : null;
+    if (c && c[2] === PROJECTION_VERSION) after = [c[0], c[1]];
+  } catch { /* from the start */ }
+
+  // The primary key is (source, source_id, media_type): a row-value seek from the cursor.
+  const due = await all<DueLink>(
+    env.DB,
+    `SELECT source_id, media_type FROM media_links
+      WHERE source = 'tmdb' AND (source_id, media_type) > (?, ?) AND media_type IN ('movie', 'show')
+        AND projection_version < ?
+      ORDER BY source_id, media_type LIMIT ?`,
+    [after[0], after[1], PROJECTION_VERSION, batch],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, PROJECTION_CURSOR_KEY, projectionDone());
+    return { refreshed: 0, failed: 0 };
+  }
+
+  let refreshed = 0;
+  let failed = 0;
+  for (const link of due) {
+    try {
+      await refetchTmdbLink(env, link);
+      refreshed++;
+    } catch (e) {
+      // The stored row keeps what it had. The walk moves past it: the retention
+      // refresh retries a title TMDB still has, at its own pace.
+      failed++;
+      console.warn("tmdb_projection_refresh_failed", { id: link.source_id, type: link.media_type, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  const last = due[due.length - 1];
+  await kvSet(env.DB, PROJECTION_CURSOR_KEY, JSON.stringify([last.source_id, last.media_type, PROJECTION_VERSION]));
+  return { refreshed, failed };
+}
+
 // ── 4. Housekeeping ─────────────────────────────────────────────────────────
 //
 // Two tables only ever grew. `daily_budget` gains a row per kind per day, and
@@ -585,6 +644,13 @@ export async function runScheduled(env: Env): Promise<void> {
   // twenty and a batch of games three each, so the walk sits out the runs the
   // export is working in rather than finding the ceiling half way.
   if (exporting) return;
+  // The TMDB links stored under an older projection, until none are left.
+  try {
+    const pr = await runProjectionRefreshStep(env);
+    if (pr.refreshed || pr.failed) console.log("tmdb_projection_step", pr);
+  } catch (e) {
+    console.error("tmdb_projection_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
   try {
     const ic = await runIgdbCollectionsStep(env);
     if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
