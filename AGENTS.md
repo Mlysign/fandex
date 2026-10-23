@@ -56,7 +56,7 @@ TypeScript · Cloudflare Workers + D1 + R2 · Expo / React Native (also exported
 
 **A write is tested on this machine with a test account, never on fandex.org**, where the one account is Nils's and a rating is a real write to Trakt: `node worker/scripts/dev-stack.mjs`, the launch configurations `worker-local` and `app-web-local`, then "Test account" on a sign-in card. → `docs/worker.md` ("The test accounts"), `smoketest.md`
 
-Don't hand-mint a JWT (the harness blocks it as credential forging, correctly). **Never sign out of Nils's real session to see the signed-out side**: sign-out bumps `session_epoch` and signs out every device he has. The in-app browser pane is already signed out.
+Don't hand-mint a JWT (the harness blocks it as credential forging, correctly). **Never sign out of Nils's real session to see the signed-out side**: it ends that session, and "Sign out everywhere" (or an app before 0.3.15) bumps `session_epoch` and signs out every device he has. The in-app browser pane is already signed out.
 
 ## Rules that span packages
 

@@ -47,7 +47,11 @@ table in `src/index.ts`); an address that is no route at all stays 404.
 
 Sign-in: `POST /v1/auth/google {idToken, nonce}`, `POST /v1/auth/trakt {accessToken}`,
 `POST /v1/auth/discord {accessToken}` (since 2026-10-17: Discord's `/oauth2/@me` must name our `DISCORD_CLIENT_ID` as the application; no client secret),
-`POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout`.
+`POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout` (bumps `session_epoch`: every
+device signs out; what "Sign out everywhere" and apps before 0.3.15 send) and
+`POST /v1/auth/logout?scope=device` (since 2026-10-23: clears this browser's cookie only; the app's
+"Sign out"). A token a device forgot stays valid until it expires, 30 days.
+A route that answers GET answers HEAD the same, without the body (2026-10-23).
 
 ### The test accounts (a developer's machine only)
 
