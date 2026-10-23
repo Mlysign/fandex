@@ -1,0 +1,472 @@
+{
+ "note": "RV11 (2026-10-23): same-title game twins and mis-merged titles. Ports, cancelled ports, and same-title remasters, expanded versions and re-release bundles fold into the main game IGDB names as their parent; remakes stay their own title. Run with worker/scripts/regroup-items.mjs. Report: docs/archive/rv11-game-twins-2026-10-23.md.",
+ "type": "game",
+ "moves": [
+  {
+   "link": "rawg:259801",
+   "to": "final-fantasy-vii-remake"
+  },
+  {
+   "link": "steam:3837340",
+   "to": "final-fantasy-vii-1997"
+  },
+  {
+   "link": "rawg:638654",
+   "to": "dead-space-2023"
+  },
+  {
+   "link": "steam:1693980",
+   "to": "dead-space-2023"
+  },
+  {
+   "link": "steam:2357570",
+   "to": "overwatch-2023"
+  },
+  {
+   "link": "rawg:15272",
+   "to": "system-shock-2023"
+  },
+  {
+   "link": "steam:482400",
+   "to": "system-shock-2023"
+  },
+  {
+   "link": "igdb:191738",
+   "to": "soul-hackers-2"
+  }
+ ],
+ "drops": [
+  {
+   "link": "igdb:210434",
+   "aliasTo": "tony-hawks-pro-skater-4-2002"
+  },
+  {
+   "link": "igdb:228334",
+   "aliasTo": "soul-hackers-2"
+  }
+ ],
+ "folds": [
+  {
+   "from": "batman-the-video-game-1990",
+   "to": "batman-the-video-game"
+  },
+  {
+   "from": "bayonetta-2-2018",
+   "to": "bayonetta-2"
+  },
+  {
+   "from": "beyond-castle-wolfenstein",
+   "to": "beyond-castle-wolfenstein-1984-3"
+  },
+  {
+   "from": "bioshock-2008",
+   "to": "bioshock"
+  },
+  {
+   "from": "bioshock-2010",
+   "to": "bioshock"
+  },
+  {
+   "from": "bioshock-2014",
+   "to": "bioshock"
+  },
+  {
+   "from": "blood-omen-2-legacy-of-kain-2024",
+   "to": "blood-omen-2-legacy-of-kain"
+  },
+  {
+   "from": "blood-omen-legacy-of-kain",
+   "to": "blood-omen-legacy-of-kain-1996"
+  },
+  {
+   "from": "call-of-duty-2",
+   "to": "call-of-duty-2-2005"
+  },
+  {
+   "from": "call-of-duty",
+   "to": "call-of-duty-2003"
+  },
+  {
+   "from": "colin-mcrae-dirt-2008",
+   "to": "colin-mcrae-dirt"
+  },
+  {
+   "from": "colin-mcrae-rally-04-2004",
+   "to": "colin-mcrae-rally-04"
+  },
+  {
+   "from": "colin-mcrae-rally-2-0-2002",
+   "to": "colin-mcrae-rally-2-0"
+  },
+  {
+   "from": "colin-mcrae-rally-2005-2005",
+   "to": "colin-mcrae-rally-2005-2004"
+  },
+  {
+   "from": "colin-mcrae-rally-2001",
+   "to": "colin-mcrae-rally-1998"
+  },
+  {
+   "from": "dead-space-2-1",
+   "to": "dead-space-2"
+  },
+  {
+   "from": "dead-space-2008",
+   "to": "dead-space-2008-2"
+  },
+  {
+   "from": "diablo",
+   "to": "diablo-1996"
+  },
+  {
+   "from": "donkey-kong-1983",
+   "to": "donkey-kong"
+  },
+  {
+   "from": "doom-1995",
+   "to": "doom"
+  },
+  {
+   "from": "doom-1996",
+   "to": "doom"
+  },
+  {
+   "from": "doom-1997",
+   "to": "doom"
+  },
+  {
+   "from": "doom-2001",
+   "to": "doom"
+  },
+  {
+   "from": "doom-2006",
+   "to": "doom"
+  },
+  {
+   "from": "doom-2019",
+   "to": "doom"
+  },
+  {
+   "from": "doom-2024",
+   "to": "doom"
+  },
+  {
+   "from": "doom-2017",
+   "to": "doom-2016"
+  },
+  {
+   "from": "doom-3",
+   "to": "doom-3-2004"
+  },
+  {
+   "from": "doom-3-2019",
+   "to": "doom-3-2004"
+  },
+  {
+   "from": "doom-3-resurrection-of-evil-2012",
+   "to": "doom-3-resurrection-of-evil"
+  },
+  {
+   "from": "doom-64-2020",
+   "to": "doom-64"
+  },
+  {
+   "from": "drakengard",
+   "to": "drakengard-2003"
+  },
+  {
+   "from": "final-doom-2019",
+   "to": "final-doom"
+  },
+  {
+   "from": "final-fantasy-ii-1991",
+   "to": "final-fantasy-iv-1991"
+  },
+  {
+   "from": "final-fantasy",
+   "to": "final-fantasy-1987"
+  },
+  {
+   "from": "final-fantasy-vii",
+   "to": "final-fantasy-vii-1997"
+  },
+  {
+   "from": "gears-of-war-2007",
+   "to": "gears-of-war"
+  },
+  {
+   "from": "god-of-war-ghost-of-sparta",
+   "to": "god-of-war-ghost-of-sparta-2010"
+  },
+  {
+   "from": "god-of-war-ii",
+   "to": "god-of-war-ii-2007"
+  },
+  {
+   "from": "god-of-war-2009",
+   "to": "god-of-war"
+  },
+  {
+   "from": "grand-theft-auto-liberty-city-stories-2006",
+   "to": "grand-theft-auto-liberty-city-stories"
+  },
+  {
+   "from": "grand-theft-auto-v-2022",
+   "to": "grand-theft-auto-v"
+  },
+  {
+   "from": "grand-theft-auto-v-enhanced-2025",
+   "to": "grand-theft-auto-v-enhanced"
+  },
+  {
+   "from": "grand-theft-auto-vice-city-1",
+   "to": "grand-theft-auto-vice-city"
+  },
+  {
+   "from": "grand-theft-auto-1999",
+   "to": "grand-theft-auto"
+  },
+  {
+   "from": "half-life-2001",
+   "to": "half-life"
+  },
+  {
+   "from": "half-life-1",
+   "to": "half-life"
+  },
+  {
+   "from": "indiana-jones-and-the-staff-of-kings-2025",
+   "to": "indiana-jones-and-the-staff-of-kings"
+  },
+  {
+   "from": "j-stars-victory-vs",
+   "to": "j-stars-victory-vs-2014"
+  },
+  {
+   "from": "james-bond-007-the-world-is-not-enough",
+   "to": "james-bond-007-the-world-is-not-enough-2000"
+  },
+  {
+   "from": "judgment-2021",
+   "to": "judgment"
+  },
+  {
+   "from": "legacy-of-kain-defiance",
+   "to": "legacy-of-kain-defiance-2003"
+  },
+  {
+   "from": "lego-harry-potter-collection",
+   "to": "lego-harry-potter-collection-2016"
+  },
+  {
+   "from": "need-for-speed-prostreet",
+   "to": "need-for-speed-prostreet-2007-2"
+  },
+  {
+   "from": "onimusha-dawn-of-dreams-2026",
+   "to": "onimusha-dawn-of-dreams"
+  },
+  {
+   "from": "poker-night-at-the-inventory",
+   "to": "poker-night-at-the-inventory-2010"
+  },
+  {
+   "from": "prince-of-persia-the-sands-of-time-2003",
+   "to": "prince-of-persia-the-sands-of-time"
+  },
+  {
+   "from": "prince-of-persia-1990",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "from": "prince-of-persia-1992",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "from": "prince-of-persia-1999",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "from": "ratchet-clank-going-commando",
+   "to": "ratchet-clank-going-commando-2003"
+  },
+  {
+   "from": "ratchet-clank-size-matters",
+   "to": "ratchet-clank-size-matters-2007"
+  },
+  {
+   "from": "ratchet-clank-up-your-arsenal-2012",
+   "to": "ratchet-clank-up-your-arsenal"
+  },
+  {
+   "from": "ratchet-deadlocked",
+   "to": "ratchet-deadlocked-2005"
+  },
+  {
+   "from": "rayman-2-the-great-escape",
+   "to": "rayman-2-the-great-escape-1999-2"
+  },
+  {
+   "from": "rayman-raving-rabbids-2007",
+   "to": "rayman-raving-rabbids-2006"
+  },
+  {
+   "from": "rayman-2000",
+   "to": "rayman-1995"
+  },
+  {
+   "from": "resident-evil-4-2005-2",
+   "to": "resident-evil-4-2005"
+  },
+  {
+   "from": "resident-evil-4",
+   "to": "resident-evil-4-2005"
+  },
+  {
+   "from": "resident-evil",
+   "to": "resident-evil-2002"
+  },
+  {
+   "from": "sam-max-beyond-time-and-space-2021",
+   "to": "sam-max-beyond-time-and-space"
+  },
+  {
+   "from": "sam-max-save-the-world-2020",
+   "to": "sam-max-save-the-world"
+  },
+  {
+   "from": "sam-max-the-devils-playhouse-2024",
+   "to": "sam-max-the-devils-playhouse"
+  },
+  {
+   "from": "secret-agent-clank-2024",
+   "to": "secret-agent-clank"
+  },
+  {
+   "from": "sid-meiers-civilization-revolution-2009",
+   "to": "sid-meiers-civilization-revolution"
+  },
+  {
+   "from": "sid-meiers-civilization-revolution-1",
+   "to": "sid-meiers-civilization-revolution"
+  },
+  {
+   "from": "sid-meiers-pirates-2005",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "from": "sid-meiers-pirates-2007",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "from": "sid-meiers-pirates",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "from": "soul-hackers-2-2022",
+   "to": "soul-hackers-2"
+  },
+  {
+   "from": "south-park-1",
+   "to": "south-park"
+  },
+  {
+   "from": "spear-of-destiny-2007",
+   "to": "spear-of-destiny"
+  },
+  {
+   "from": "teenage-mutant-ninja-turtles-tournament-fighters",
+   "to": "teenage-mutant-ninja-turtles-tournament-fighters-1993-2"
+  },
+  {
+   "from": "tekken-2",
+   "to": "tekken-2-1995"
+  },
+  {
+   "from": "tekken-4",
+   "to": "tekken-4-2001"
+  },
+  {
+   "from": "tekken-6-2009",
+   "to": "tekken-6"
+  },
+  {
+   "from": "tekken-dark-resurrection",
+   "to": "tekken-dark-resurrection-2006"
+  },
+  {
+   "from": "the-elder-scrolls-v-skyrim-2017",
+   "to": "the-elder-scrolls-v-skyrim"
+  },
+  {
+   "from": "tony-hawks-pro-skater-2-2006",
+   "to": "tony-hawks-pro-skater-2-2000"
+  },
+  {
+   "from": "tony-hawks-pro-skater",
+   "to": "tony-hawks-pro-skater-1999"
+  },
+  {
+   "from": "tony-hawks-pro-skater-4-2002-2",
+   "to": "tony-hawks-pro-skater-4-2002"
+  },
+  {
+   "from": "wolfenstein-3d-1992-2",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "from": "wolfenstein-3d",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "from": "wolfenstein-3d-1998",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "from": "wolfenstein-3d-2007",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "from": "wolfenstein-3d-2012",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "from": "worms-2023",
+   "to": "worms"
+  },
+  {
+   "from": "worms-1",
+   "to": "worms"
+  },
+  {
+   "from": "worms-armageddon-2000",
+   "to": "worms-armageddon"
+  },
+  {
+   "from": "worms-armageddon-2022",
+   "to": "worms-armageddon"
+  },
+  {
+   "from": "baldurs-gate-3",
+   "to": "baldurs-gate-iii"
+  },
+  {
+   "from": "black-myth-wu-kong",
+   "to": "black-myth-wukong"
+  },
+  {
+   "from": "kane-and-lynch-dead-men",
+   "to": "kane-lynch-dead-men"
+  },
+  {
+   "from": "pokemon-red-blue-yellow",
+   "to": "pokemon-red-version"
+  }
+ ],
+ "deletes": [
+  {
+   "slug": "dead-space",
+   "redirectTo": "dead-space-2008-2"
+  }
+ ]
+}

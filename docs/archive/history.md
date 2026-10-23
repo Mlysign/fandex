@@ -69,6 +69,18 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   every screen (Search lost its query, the arrow went Home). Checked on the local stack: the RV24
   path, Back/Forward/arrow in any mix, title → title, `/open/…` from Home and a failed one, a
   direct load.
+- **Duplicate and mis-merged games (RV11), fixed later the same night.** 105 game titles removed
+  and 13 re-derived on live D1 by a new `worker/scripts/regroup-items.mjs`, which moves links
+  between titles where `fold-items.mjs` could only delete them. The rule came from IGDB's
+  `game_type`: ports and same-title remasters fold into their main game, remakes stay apart. Three
+  titles were chimeras, links of two works on one row: `/game/final-fantasy-vii` (a cancelled
+  Super Famicom concept with the Remake's RAWG link), `/game/dead-space` (a 2011 mobile game with
+  the remake's links), `system-shock` (the 1994 IGDB entry with the 2023 remake's Steam and RAWG).
+  Rehearsed on a local D1 holding the same 193 titles, undone and compared there. His library:
+  no rating lost, 9 rows moved, 2 dropped as the same fact twice; 1,961 → 1,956 library and
+  1,707 → 1,705 rated, because five games had been counted twice. 104 old addresses 301 through
+  `mobile/web/folded.json`. The cases, the counts and the undo command:
+  [rv11-game-twins-2026-10-23.md](rv11-game-twins-2026-10-23.md).
 
 ## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
 

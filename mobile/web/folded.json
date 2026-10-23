@@ -356,23 +356,615 @@
    "from": "warhammer-40-000-space-marine-ii-2024",
    "to": "warhammer-40-000-space-marine-ii"
   },
-  { "type": "game", "from": "playerunknowns-battlegrounds", "to": "pubg-battlegrounds" },
-  { "type": "game", "from": "abzu", "to": "abzu-2016" },
-  { "type": "game", "from": "blocks-by-google", "to": "google-blocks" },
-  { "type": "game", "from": "mortal-shell-ii-open-beta", "to": "mortal-shell-ii" },
-  { "type": "game", "from": "onimusha-way-of-the-sword-demo", "to": "onimusha-way-of-the-sword" },
-  { "type": "game", "from": "pathogenic-demo", "to": "pathogenic" },
-  { "type": "game", "from": "lost-ark-closed-technical-beta", "to": "lost-ark" },
-  { "type": "game", "from": "waltz-of-the-wizard-legacy-demo", "to": "waltz-of-the-wizard" },
-  { "type": "game", "from": "fallout-76-public-test-server", "to": "fallout-76" },
-  { "type": "game", "from": "tom-clancys-rainbow-six-siege-test-server", "to": "tom-clancys-rainbow-six-siege-operation-skull-rain" },
-  { "type": "game", "from": "danganronpa-v3-killing-harmony-demo-ver", "to": "danganronpa-v3-killing-harmony" },
-  { "type": "game", "from": "nightingale-playtest", "to": "nightingale" },
-  { "type": "game", "from": "arc-raiders-playtest", "to": "arc-raiders" },
-  { "type": "game", "from": "h1z1-test-server", "to": "h1z1" },
-  { "type": "game", "from": "veiled-experts-final-beta", "to": "veiled-experts" },
-  { "type": "game", "from": "mechabellum-playtest-server", "to": "mechabellum" },
-  { "type": "game", "from": "park-beyond-open-beta-test", "to": "park-beyond" },
-  { "type": "game", "from": "the-finals-playtest", "to": "the-finals" }
+  {
+   "type": "game",
+   "from": "playerunknowns-battlegrounds",
+   "to": "pubg-battlegrounds"
+  },
+  {
+   "type": "game",
+   "from": "abzu",
+   "to": "abzu-2016"
+  },
+  {
+   "type": "game",
+   "from": "blocks-by-google",
+   "to": "google-blocks"
+  },
+  {
+   "type": "game",
+   "from": "mortal-shell-ii-open-beta",
+   "to": "mortal-shell-ii"
+  },
+  {
+   "type": "game",
+   "from": "onimusha-way-of-the-sword-demo",
+   "to": "onimusha-way-of-the-sword"
+  },
+  {
+   "type": "game",
+   "from": "pathogenic-demo",
+   "to": "pathogenic"
+  },
+  {
+   "type": "game",
+   "from": "lost-ark-closed-technical-beta",
+   "to": "lost-ark"
+  },
+  {
+   "type": "game",
+   "from": "waltz-of-the-wizard-legacy-demo",
+   "to": "waltz-of-the-wizard"
+  },
+  {
+   "type": "game",
+   "from": "fallout-76-public-test-server",
+   "to": "fallout-76"
+  },
+  {
+   "type": "game",
+   "from": "tom-clancys-rainbow-six-siege-test-server",
+   "to": "tom-clancys-rainbow-six-siege-operation-skull-rain"
+  },
+  {
+   "type": "game",
+   "from": "danganronpa-v3-killing-harmony-demo-ver",
+   "to": "danganronpa-v3-killing-harmony"
+  },
+  {
+   "type": "game",
+   "from": "nightingale-playtest",
+   "to": "nightingale"
+  },
+  {
+   "type": "game",
+   "from": "arc-raiders-playtest",
+   "to": "arc-raiders"
+  },
+  {
+   "type": "game",
+   "from": "h1z1-test-server",
+   "to": "h1z1"
+  },
+  {
+   "type": "game",
+   "from": "veiled-experts-final-beta",
+   "to": "veiled-experts"
+  },
+  {
+   "type": "game",
+   "from": "mechabellum-playtest-server",
+   "to": "mechabellum"
+  },
+  {
+   "type": "game",
+   "from": "park-beyond-open-beta-test",
+   "to": "park-beyond"
+  },
+  {
+   "type": "game",
+   "from": "the-finals-playtest",
+   "to": "the-finals"
+  },
+  {
+   "type": "game",
+   "from": "batman-the-video-game-1990",
+   "to": "batman-the-video-game"
+  },
+  {
+   "type": "game",
+   "from": "bayonetta-2-2018",
+   "to": "bayonetta-2"
+  },
+  {
+   "type": "game",
+   "from": "beyond-castle-wolfenstein",
+   "to": "beyond-castle-wolfenstein-1984-3"
+  },
+  {
+   "type": "game",
+   "from": "bioshock-2008",
+   "to": "bioshock"
+  },
+  {
+   "type": "game",
+   "from": "bioshock-2010",
+   "to": "bioshock"
+  },
+  {
+   "type": "game",
+   "from": "bioshock-2014",
+   "to": "bioshock"
+  },
+  {
+   "type": "game",
+   "from": "blood-omen-2-legacy-of-kain-2024",
+   "to": "blood-omen-2-legacy-of-kain"
+  },
+  {
+   "type": "game",
+   "from": "blood-omen-legacy-of-kain",
+   "to": "blood-omen-legacy-of-kain-1996"
+  },
+  {
+   "type": "game",
+   "from": "call-of-duty-2",
+   "to": "call-of-duty-2-2005"
+  },
+  {
+   "type": "game",
+   "from": "call-of-duty",
+   "to": "call-of-duty-2003"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-dirt-2008",
+   "to": "colin-mcrae-dirt"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-rally-04-2004",
+   "to": "colin-mcrae-rally-04"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-rally-2-0-2002",
+   "to": "colin-mcrae-rally-2-0"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-rally-2005-2005",
+   "to": "colin-mcrae-rally-2005-2004"
+  },
+  {
+   "type": "game",
+   "from": "colin-mcrae-rally-2001",
+   "to": "colin-mcrae-rally-1998"
+  },
+  {
+   "type": "game",
+   "from": "dead-space-2-1",
+   "to": "dead-space-2"
+  },
+  {
+   "type": "game",
+   "from": "dead-space-2008",
+   "to": "dead-space-2008-2"
+  },
+  {
+   "type": "game",
+   "from": "diablo",
+   "to": "diablo-1996"
+  },
+  {
+   "type": "game",
+   "from": "donkey-kong-1983",
+   "to": "donkey-kong"
+  },
+  {
+   "type": "game",
+   "from": "doom-1995",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-1996",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-1997",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-2001",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-2006",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-2019",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-2024",
+   "to": "doom"
+  },
+  {
+   "type": "game",
+   "from": "doom-2017",
+   "to": "doom-2016"
+  },
+  {
+   "type": "game",
+   "from": "doom-3",
+   "to": "doom-3-2004"
+  },
+  {
+   "type": "game",
+   "from": "doom-3-2019",
+   "to": "doom-3-2004"
+  },
+  {
+   "type": "game",
+   "from": "doom-3-resurrection-of-evil-2012",
+   "to": "doom-3-resurrection-of-evil"
+  },
+  {
+   "type": "game",
+   "from": "doom-64-2020",
+   "to": "doom-64"
+  },
+  {
+   "type": "game",
+   "from": "drakengard",
+   "to": "drakengard-2003"
+  },
+  {
+   "type": "game",
+   "from": "final-doom-2019",
+   "to": "final-doom"
+  },
+  {
+   "type": "game",
+   "from": "final-fantasy-ii-1991",
+   "to": "final-fantasy-iv-1991"
+  },
+  {
+   "type": "game",
+   "from": "final-fantasy",
+   "to": "final-fantasy-1987"
+  },
+  {
+   "type": "game",
+   "from": "final-fantasy-vii",
+   "to": "final-fantasy-vii-1997"
+  },
+  {
+   "type": "game",
+   "from": "gears-of-war-2007",
+   "to": "gears-of-war"
+  },
+  {
+   "type": "game",
+   "from": "god-of-war-ghost-of-sparta",
+   "to": "god-of-war-ghost-of-sparta-2010"
+  },
+  {
+   "type": "game",
+   "from": "god-of-war-ii",
+   "to": "god-of-war-ii-2007"
+  },
+  {
+   "type": "game",
+   "from": "god-of-war-2009",
+   "to": "god-of-war"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-liberty-city-stories-2006",
+   "to": "grand-theft-auto-liberty-city-stories"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-v-2022",
+   "to": "grand-theft-auto-v"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-v-enhanced-2025",
+   "to": "grand-theft-auto-v-enhanced"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-vice-city-1",
+   "to": "grand-theft-auto-vice-city"
+  },
+  {
+   "type": "game",
+   "from": "grand-theft-auto-1999",
+   "to": "grand-theft-auto"
+  },
+  {
+   "type": "game",
+   "from": "half-life-2001",
+   "to": "half-life"
+  },
+  {
+   "type": "game",
+   "from": "half-life-1",
+   "to": "half-life"
+  },
+  {
+   "type": "game",
+   "from": "indiana-jones-and-the-staff-of-kings-2025",
+   "to": "indiana-jones-and-the-staff-of-kings"
+  },
+  {
+   "type": "game",
+   "from": "j-stars-victory-vs",
+   "to": "j-stars-victory-vs-2014"
+  },
+  {
+   "type": "game",
+   "from": "james-bond-007-the-world-is-not-enough",
+   "to": "james-bond-007-the-world-is-not-enough-2000"
+  },
+  {
+   "type": "game",
+   "from": "judgment-2021",
+   "to": "judgment"
+  },
+  {
+   "type": "game",
+   "from": "legacy-of-kain-defiance",
+   "to": "legacy-of-kain-defiance-2003"
+  },
+  {
+   "type": "game",
+   "from": "lego-harry-potter-collection",
+   "to": "lego-harry-potter-collection-2016"
+  },
+  {
+   "type": "game",
+   "from": "need-for-speed-prostreet",
+   "to": "need-for-speed-prostreet-2007-2"
+  },
+  {
+   "type": "game",
+   "from": "onimusha-dawn-of-dreams-2026",
+   "to": "onimusha-dawn-of-dreams"
+  },
+  {
+   "type": "game",
+   "from": "poker-night-at-the-inventory",
+   "to": "poker-night-at-the-inventory-2010"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-the-sands-of-time-2003",
+   "to": "prince-of-persia-the-sands-of-time"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-1990",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-1992",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "type": "game",
+   "from": "prince-of-persia-1999",
+   "to": "prince-of-persia-1989"
+  },
+  {
+   "type": "game",
+   "from": "ratchet-clank-going-commando",
+   "to": "ratchet-clank-going-commando-2003"
+  },
+  {
+   "type": "game",
+   "from": "ratchet-clank-size-matters",
+   "to": "ratchet-clank-size-matters-2007"
+  },
+  {
+   "type": "game",
+   "from": "ratchet-clank-up-your-arsenal-2012",
+   "to": "ratchet-clank-up-your-arsenal"
+  },
+  {
+   "type": "game",
+   "from": "ratchet-deadlocked",
+   "to": "ratchet-deadlocked-2005"
+  },
+  {
+   "type": "game",
+   "from": "rayman-2-the-great-escape",
+   "to": "rayman-2-the-great-escape-1999-2"
+  },
+  {
+   "type": "game",
+   "from": "rayman-raving-rabbids-2007",
+   "to": "rayman-raving-rabbids-2006"
+  },
+  {
+   "type": "game",
+   "from": "rayman-2000",
+   "to": "rayman-1995"
+  },
+  {
+   "type": "game",
+   "from": "resident-evil-4-2005-2",
+   "to": "resident-evil-4-2005"
+  },
+  {
+   "type": "game",
+   "from": "resident-evil-4",
+   "to": "resident-evil-4-2005"
+  },
+  {
+   "type": "game",
+   "from": "resident-evil",
+   "to": "resident-evil-2002"
+  },
+  {
+   "type": "game",
+   "from": "sam-max-beyond-time-and-space-2021",
+   "to": "sam-max-beyond-time-and-space"
+  },
+  {
+   "type": "game",
+   "from": "sam-max-save-the-world-2020",
+   "to": "sam-max-save-the-world"
+  },
+  {
+   "type": "game",
+   "from": "sam-max-the-devils-playhouse-2024",
+   "to": "sam-max-the-devils-playhouse"
+  },
+  {
+   "type": "game",
+   "from": "secret-agent-clank-2024",
+   "to": "secret-agent-clank"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-civilization-revolution-2009",
+   "to": "sid-meiers-civilization-revolution"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-civilization-revolution-1",
+   "to": "sid-meiers-civilization-revolution"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-pirates-2005",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-pirates-2007",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "type": "game",
+   "from": "sid-meiers-pirates",
+   "to": "sid-meiers-pirates-2004"
+  },
+  {
+   "type": "game",
+   "from": "soul-hackers-2-2022",
+   "to": "soul-hackers-2"
+  },
+  {
+   "type": "game",
+   "from": "south-park-1",
+   "to": "south-park"
+  },
+  {
+   "type": "game",
+   "from": "spear-of-destiny-2007",
+   "to": "spear-of-destiny"
+  },
+  {
+   "type": "game",
+   "from": "teenage-mutant-ninja-turtles-tournament-fighters",
+   "to": "teenage-mutant-ninja-turtles-tournament-fighters-1993-2"
+  },
+  {
+   "type": "game",
+   "from": "tekken-2",
+   "to": "tekken-2-1995"
+  },
+  {
+   "type": "game",
+   "from": "tekken-4",
+   "to": "tekken-4-2001"
+  },
+  {
+   "type": "game",
+   "from": "tekken-6-2009",
+   "to": "tekken-6"
+  },
+  {
+   "type": "game",
+   "from": "tekken-dark-resurrection",
+   "to": "tekken-dark-resurrection-2006"
+  },
+  {
+   "type": "game",
+   "from": "the-elder-scrolls-v-skyrim-2017",
+   "to": "the-elder-scrolls-v-skyrim"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater-2-2006",
+   "to": "tony-hawks-pro-skater-2-2000"
+  },
+  {
+   "type": "game",
+   "from": "tony-hawks-pro-skater",
+   "to": "tony-hawks-pro-skater-1999"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-1992-2",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-1998",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-2007",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "wolfenstein-3d-2012",
+   "to": "wolfenstein-3d-1992"
+  },
+  {
+   "type": "game",
+   "from": "worms-2023",
+   "to": "worms"
+  },
+  {
+   "type": "game",
+   "from": "worms-1",
+   "to": "worms"
+  },
+  {
+   "type": "game",
+   "from": "worms-armageddon-2000",
+   "to": "worms-armageddon"
+  },
+  {
+   "type": "game",
+   "from": "worms-armageddon-2022",
+   "to": "worms-armageddon"
+  },
+  {
+   "type": "game",
+   "from": "baldurs-gate-3",
+   "to": "baldurs-gate-iii"
+  },
+  {
+   "type": "game",
+   "from": "black-myth-wu-kong",
+   "to": "black-myth-wukong"
+  },
+  {
+   "type": "game",
+   "from": "kane-and-lynch-dead-men",
+   "to": "kane-lynch-dead-men"
+  },
+  {
+   "type": "game",
+   "from": "pokemon-red-blue-yellow",
+   "to": "pokemon-red-version"
+  },
+  {
+   "type": "game",
+   "from": "dead-space",
+   "to": "dead-space-2008-2"
+  }
  ]
 }
