@@ -16,6 +16,7 @@ import { NavSearch } from '~/components/NavSearch';
 import { useAuth } from '~/lib/AuthProvider';
 import { sendPageview } from '~/lib/pageview';
 import { takeReturnTo } from '~/lib/returnTo';
+import { browserLikeHistory } from '~/lib/tabHistory';
 import { breakpoint, color } from '~/theme';
 
 export default function TabsLayout() {
@@ -41,8 +42,10 @@ export default function TabsLayout() {
       {desktop ? <AppNav variant="top" pathname={pathname} onNavigate={go} search={<NavSearch />} /> : null}
       <View style={{ flex: 1 }}>
         <Tabs
-          // Back returns to the screen you came from, not to the first tab.
-          backBehavior="history"
+          // Back returns to the screen you came from, every step of the way, as
+          // a browser's does; the web's history is written from this one.
+          backBehavior="fullHistory"
+          UNSTABLE_router={browserLikeHistory}
           tabBar={() => null}
           screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: color.surface } }}
         />

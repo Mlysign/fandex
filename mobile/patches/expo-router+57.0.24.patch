@@ -1,0 +1,15 @@
+diff --git a/node_modules/expo-router/build/fork/createMemoryHistory.js b/node_modules/expo-router/build/fork/createMemoryHistory.js
+index c26fcb9..29d6898 100644
+--- a/node_modules/expo-router/build/fork/createMemoryHistory.js
++++ b/node_modules/expo-router/build/fork/createMemoryHistory.js
+@@ -169,6 +169,10 @@ function createMemoryHistory() {
+         // Here we normalize it so that only external changes (e.g. user pressing back/forward) trigger the listener
+         listen(listener) {
+             const onPopState = () => {
++                // FANDEX PATCH (RV24): the browser's own Back and Forward move the
++                // entry without telling `index`, so the `replace` that follows wrote
++                // the page landed on over the entry Forward needed.
++                index = Math.max(items.findIndex((item) => item.id === window.history.state?.id), 0);
+                 if (pending.length) {
+                     // This was triggered by `history.go(n)`, we shouldn't call the listener
+                     return;

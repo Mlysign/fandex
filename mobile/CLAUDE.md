@@ -26,7 +26,7 @@ Screens, data sources and the APK build are in `docs/app.md`; what the app still
 
 ## Navigation and scrolling
 
-- **`router.replace` does not take a screen out of Back history.** Every screen is a tab of one navigator with `backBehavior="history"`. One that must vanish removes itself on `blur`, as `open/[source]/[type]/[id].tsx` does.
+- **Back history is kept as a browser keeps it, and on the web it IS the browser's.** Every screen is a tab of one navigator (`backBehavior="fullHistory"` + `lib/tabHistory.ts`): each visit, title → title included, must lengthen its history, or expo-router replaces the browser entry instead of pushing (RV24). `router.replace` drops the screen it replaces. A screen that must vanish whenever it is left (a failed `/open/…`) also removes itself on `blur`. `patches/expo-router+…` keeps browser Forward working; re-check it on an expo-router upgrade.
 - **A screen that re-reads on `catalog.revision` or `rowsRevision` keeps what is on screen until the new answer lands.** Setting the list to null redraws the grid at the top: rating a card threw the reader back up the page.
 - **A header that hides on scroll FLOATS over its list and slides; it never changes the list's layout.** Moving a list under a held thumb reads as a drag and the bar flickers. A list under `SubBar` takes `useBarList()` (`lib/barScroll.tsx`) for its scroll handler and top inset together.
 

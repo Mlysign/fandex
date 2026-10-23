@@ -6,12 +6,13 @@
 // it yet), then replaces itself with the item page, so Back returns to the list
 // and not to a spinner.
 //
-// ⚠️ "Replaces itself" takes more than router.replace. Every screen is a tab of
-// one navigator (backBehavior "history"), and there a replace only jumps: this
-// screen stayed in the Back history, so Android's Back came back to it, where
-// nothing ran again and "Opening…" stayed forever (SM76). So it takes itself
-// out of that history whenever it loses focus, and resolves on every focus,
-// because a tab that is jumped to with the same title again is not remounted.
+// ⚠️ Every screen is a tab of one navigator. expo-router's own replace only
+// jumped there, so this screen stayed in the Back history, Android's Back came
+// back to it, nothing ran again and "Opening…" stayed forever (SM76). The
+// navigator's replace drops it now (lib/tabHistory.ts), and it still takes
+// itself out whenever it loses focus, for the case where it failed and the
+// reader went elsewhere. It resolves on every focus, because a tab that is
+// jumped to with the same title again is not remounted.
 
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { CommonActions } from 'expo-router/react-navigation';

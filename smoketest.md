@@ -105,7 +105,7 @@ Nils's, here and on fandex.org.
 **N-C. The app, signed out (pane).**
 12. Home: guest panel, Popular and Upcoming, 30 cards, each with "Sign in to rate this" and "Sign in to add this to your wishlist". No Up next, no Recommended.
 13. Discover: with nothing typed, `titles · N` is the pool PLUS the upcoming titles from the providers that the catalog does not hold (about 65 on 2026-10-16), so it is larger than Settings' "Titles" on purpose; the type chips must still sum to it; search a title (count = cards), a nonsense string ("Nothing found"), one character; each type chip and two together (the counts must add up); each sort; Filters: a streaming service (`Netflix N` → `Show N titles`), a person (the count must equal the cards), both together, Reset all.
-14. Open a result, press Back: the query and the results must still be there.
+14. Open a result, press Back: the query and the results must still be there. Then RV24's path: Home → a title → Search (type a query) → another title → Back is Search with its query, Back again the first title; Forward, Forward, then the in-app arrow must agree with them, and the query must survive all of it. A title opened from a title's rail is its own step back.
 15. Calendar: Next twice, Previous four times, Today; a busy day (the rail's cards = the day's label), an empty day ("Nothing releasing on this day."), the list view; `scrollHeight - innerHeight` is 0 throughout.
 16. Gates: `/wishlist`, `/library`, `/profile`, `/settings`, `/insights` stay on their address and ask; `/dev/scoring` says "Nothing here".
 17. `/person/ridley-scott`, `/tag/space`, `/studio/cd-projekt-red`, an unknown person; an unknown title; `/open/tmdb/movie/603`; `/open/tmdb/movie/abc`.

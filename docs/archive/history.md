@@ -56,6 +56,19 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   days stale rebuilt after answering; 404 for a non-UUID show, HEAD on GET routes, 413 named.
   RV33 needed nothing: the second `User-agent: *` group is Cloudflare's managed AI-crawler block,
   and same-agent groups merge (RFC 9309).
+- **Browser Back (RV24), fixed later the same night.** On the web expo-router pushes a browser
+  entry only when the tab navigator's history grows (`fork/useLinking.js`). `backBehavior
+  "history"` kept one entry per screen and every title shares one item screen, so Home → Valheim
+  → Search → Ocarina moved Valheim's entry instead of adding one, the browser REPLACED Search, and
+  Back went to Valheim. Now `fullHistory` plus `lib/tabHistory.ts` (`UNSTABLE_router`): every
+  visit is a step with its params, title → title too, and `router.replace` really drops the
+  screen it replaces (expo-router's own sliced the history by the route's index, so it only
+  jumped: the old SM76 trap). Second bug found on the way, patched in
+  `mobile/patches/expo-router+57.0.24.patch`: the browser's own Back did not move the memory
+  history's `index`, so the next replace overwrote the entry Forward needed and Forward rebuilt
+  every screen (Search lost its query, the arrow went Home). Checked on the local stack: the RV24
+  path, Back/Forward/arrow in any mix, title → title, `/open/…` from Home and a failed one, a
+  direct load.
 
 ## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
 
