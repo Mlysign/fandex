@@ -13,6 +13,7 @@
     "web/*.ts",
     "web/*.tsx",
     "web/www/*.ts",
+    "plugins/*.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ]

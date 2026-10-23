@@ -407,6 +407,11 @@ builds for a phone only, which is faster and a quarter of the size. The APK land
 without a dev server. It is signed with the debug keystore Expo generates, which is fine for
 sideloading and is not a Play upload key.
 
+**The version lives in `mobile/app.json`** since 2026-10-23: `version` (`0.3.14`) and
+`android.versionCode` (`314`, minor times 100 plus patch). Raise both for every APK and name the
+file after `version`; before that, the APK's file name was the only version. A Play build is the
+same build with `bundleRelease -PfandexPlay` and the upload key → [play-store.md](play-store.md).
+
 ## Not built yet, in the order it should be built
 
 1. **Google sign-in on ANDROID.** It is built for a browser since 2026-10-11 (below). The phone
