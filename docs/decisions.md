@@ -91,11 +91,10 @@ is struck through rather than deleted, so the reversal stays visible.
 2. **~~Affiliate signups: GO, starting with GOG.~~ SUPERSEDED 2026-08-19 by Nils**: the plan
    is ads-first and affiliate is demoted. (GOG itself was then dropped outright, below.)
 3. **H3.0 is CLOSED as WON'T DO**, permanently. See the support-page constraint above.
-4. **Fandex Score range: RELABEL, not re-tune.** 0–100 is a target, not a rule. His
-   reasoning, worth keeping: *exceeding 100 is rare and makes an item stand out, which
-   promotes the score rather than making it unbelievable.* No re-tune, no top-N change, `ip`
-   stays at 3. ⚠️ Not violated by the 2026-08-22 selection fix, which changed no top-N count
-   and refitted no gain.
+4. **~~Fandex Score range: RELABEL, not re-tune.~~ The overflow half is SUPERSEDED 2026-10-23
+   by Nils** ("100 is the max score", normalized, not clamped; see "Added 2026-10-23, the
+   product review"). Still standing: no re-tune, no top-N change, `ip` stays at 3. ⚠️ Not
+   violated by the 2026-08-22 selection fix, which changed no top-N count and refitted no gain.
 5. **H3.8 thresholds: APPROVED.** Ads at **10,000 pageviews/mo**, freemium at **3,500
    sustained weekly actives**. These are real triggers, not placeholders.
 6. **`PRUNE_ON_BOOT` stays ON.** The guard has held in prod three times.
@@ -253,6 +252,26 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   `docs/play-store.md`. The account upgrade to a business account still comes first.
 - **The old site's docs, smoke-test plan and memory are archive, not reference.** They sit in
   `docs/archive/old-site/` and `memory/old-site/`, read only when porting that feature.
+
+### Added 2026-10-23, the product review (TASKS.md, RV#)
+
+- **The Fandex Score stays taste only: it never reads a crowd rating** (spec §4 stands). Measured and
+  turned down: the crowd's rating alone predicted his ratings better (rank correlation 0.42) than
+  the taste score (0.29), and the crowd plus taste learned as the difference from the crowd did
+  best (0.44).
+- **A title you rated is scored as if you had not rated it** (leave-one-out). It was reading its
+  own rating, which is how The Last of Us Part I scored 101.
+- **100 is the max score, by normalizing, not clamping.** A soft knee: unchanged up to halfway
+  between your average and 100 (or 0), then bending toward it. Supersedes the 2026-08-17 overflow.
+- **No re-tune.** Leave-one-out, no prior strength, `ip` weight, minimum count or top-N count beat
+  today's config, which confirms 2026-08-17's item 7.
+- **Remove from library undoes**: a toast with Undo, and the removal waits for it.
+- **Sign out is this device; "Sign out everywhere" is today's behaviour.**
+- **DLC, packs, seasons and bundles rank last in search and stay out of every rail**, Recommended
+  included. Their own pages stay.
+- **Recommended may show wishlisted titles, at most two per rail.**
+- **Kept as they are:** the Wishlist opens on "Recently added"; the calendar is a top-40 of the
+  month, on purpose; Search keeps the titles you already rated (the filters can hide them).
 
 ---
 
