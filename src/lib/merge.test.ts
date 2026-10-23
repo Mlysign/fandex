@@ -72,3 +72,22 @@ describe("mergeForCanonical", () => {
     expect(merged.posterUrl).toBeNull();
   });
 });
+
+describe("a game's release date (2026-10-23)", () => {
+  const at = (iso: string) => Date.parse(`${iso}T12:00:00Z`) / 1000;
+  it("is the earliest of its game sources, not Steam's PC date", () => {
+    // The Last of Us Part I: PS5 2 Sep 2022, PC 28 Mar 2023.
+    const links = [
+      { source: "steam" as const, data: { name: "The Last of Us Part I", release: { steam_release_date: at("2023-03-28") } } },
+      { source: "igdb" as const, data: { name: "The Last of Us Part I", first_release_date: at("2022-09-02") } },
+    ];
+    expect(mergeForCanonical(links).releaseDate).toBe("2022-09-02");
+  });
+  it("keeps Steam's when Steam came first (an early-access launch)", () => {
+    const links = [
+      { source: "steam" as const, data: { name: "Valheim", release: { steam_release_date: at("2021-02-02") } } },
+      { source: "igdb" as const, data: { name: "Valheim", first_release_date: at("2026-09-15") } },
+    ];
+    expect(mergeForCanonical(links).releaseDate).toBe("2021-02-02");
+  });
+});

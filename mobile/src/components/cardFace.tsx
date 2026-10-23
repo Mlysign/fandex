@@ -18,6 +18,9 @@ import type { CardItem } from '~/lib/cards';
 import { monthYear } from '~/lib/dates';
 import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 
+/** Fewer crowd votes than this is no crowd rating on a card: an unreleased film read 9.0 off a handful of festival votes (2026-10-23). */
+const MIN_CROWD_VOTES = 20;
+
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
 export function CardFace({ item, score, center, link, bar, style, dateText, explain }: {
   item: CardItem;
@@ -73,7 +76,7 @@ export function CardFace({ item, score, center, link, bar, style, dateText, expl
           <View style={cardStyles.metaRow}>
             <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
             {score != null ? <FandexScore score={score} center={center} />
-              : item.communityScore != null ? <CommunityScore score={item.communityScore} /> : null}
+              : item.communityScore != null && (item.communityVotes == null || item.communityVotes >= MIN_CROWD_VOTES) ? <CommunityScore score={item.communityScore} /> : null}
           </View>
         </View>
       </Pressable>

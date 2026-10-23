@@ -72,3 +72,23 @@ const TRANSLIT_RE = new RegExp(`[${Object.keys(TRANSLITERATIONS).join("")}]`, "g
 export function transliterate(s: string): string {
   return s.replace(TRANSLIT_RE, (ch) => TRANSLITERATIONS[ch] ?? ch);
 }
+
+// Cyrillic and Greek, lowercase, for an ADDRESS only (`slugify`): "Преступление
+// и наказание" was /book/untitled-1866 (2026-10-23). Not for `personKey`, whose
+// keys are stored inside every derived item's facets: changing them would split
+// a Cyrillic name's facet in two until every item is derived again. A script
+// with no letter-for-letter romanization (Japanese, Chinese, Devanagari) is
+// left alone and still slugs to "untitled".
+const SCRIPTS: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", ґ: "g", д: "d", е: "e", ё: "yo", є: "ye", ж: "zh", з: "z", и: "i", і: "i", ї: "yi", й: "y",
+  к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "kh", ц: "ts", ч: "ch",
+  ш: "sh", щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya", ђ: "dj", ј: "j", љ: "lj", њ: "nj", ћ: "c", џ: "dz",
+  α: "a", β: "v", γ: "g", δ: "d", ε: "e", ζ: "z", η: "i", θ: "th", ι: "i", κ: "k", λ: "l", μ: "m", ν: "n", ξ: "x",
+  ο: "o", π: "p", ρ: "r", σ: "s", ς: "s", τ: "t", υ: "y", φ: "f", χ: "ch", ψ: "ps", ω: "o",
+};
+const SCRIPTS_RE = new RegExp(`[${Object.keys(SCRIPTS).join("")}]`, "g");
+
+/** Cyrillic and Greek letters to Latin, for an address. Expects lowercase, after NFKD has split off the accents. */
+export function romanizeForAddress(s: string): string {
+  return s.replace(SCRIPTS_RE, (ch) => SCRIPTS[ch] ?? ch);
+}

@@ -1,5 +1,6 @@
 import type { Source, MediaType, CommunityRating, EnrichedItem } from "@/types";
 import { bookDate, bookSubjects, coverUrl } from "@/lib/sources/bookPure";
+import { plainDescription } from "@/lib/plainText";
 import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
 
 // ── A1: per-source normalizers ────────────────────────────────────────────────
@@ -511,7 +512,9 @@ function normalizeIgdb(d: any): SourceNormalized {
 function normalizeOpenLibrary(d: any): SourceNormalized {
   const out: SourceNormalized = {};
   out.title = typeof d.title === "string" ? d.title : null;
-  out.description = typeof d.description === "string" ? d.description : null;
+  // Open Library writes descriptions in Markdown (2026-10-23). Stripped here so
+  // the longest-text rule (DESCRIPTION_PRIORITY) compares words, not link syntax.
+  out.description = typeof d.description === "string" ? plainDescription(d.description) || null : null;
   out.releaseDate = bookDate(d);
   out.poster = coverUrl(d.cover_i);
   out.images = out.poster ? [out.poster] : [];

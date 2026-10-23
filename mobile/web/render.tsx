@@ -33,6 +33,7 @@ import { type } from '~/theme';
 import { ipDisplayLabel, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import { buildEntityJsonLd, jsonLdScript } from '@/lib/jsonLd';
+import { cutAtWord, plainDescription } from '@/lib/plainText';
 import { everyLegalRoute, getLegalDocument } from '@/lib/legal/registry';
 
 export const SITE = 'https://fandex.org';
@@ -461,7 +462,8 @@ export function itemHead(item: ItemDetail, tagCrumb: { name: string; url: string
   };
   return {
     title: year ? `${m.title} (${year})` : m.title,
-    description: m.description?.slice(0, 200) ?? `${m.title}. Release date, ratings and where to watch, on Fandex.`,
+    // Cut at a word, not mid-word, and with the Markdown out (2026-10-23).
+    description: m.description ? cutAtWord(plainDescription(m.description), 200) : `${m.title}. Release date, ratings and details, on Fandex.`,
     canonical,
     image,
     jsonLd: jsonLdScript([entity, breadcrumb]),

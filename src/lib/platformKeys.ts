@@ -119,6 +119,10 @@ const PLATFORM_ALIAS: Record<string, string> = {
   "xbox series x & s": "Xbox Series X|S",
   "xbox series s & x": "Xbox Series X|S",
   "xbox series x and s": "Xbox Series X|S",
+  // IGDB and Steam spell the one handheld two ways ("PS Vita 42", "PlayStation Vita 24" in Settings, 2026-10-23).
+  "ps vita": "PlayStation Vita",
+  "playstation vita": "PlayStation Vita",
+  "psvita": "PlayStation Vita",
 };
 
 /** Display label for a raw provider name: service tiers folded, platform aliases canonicalised. */

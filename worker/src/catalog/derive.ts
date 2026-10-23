@@ -28,8 +28,12 @@ import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
  *
  * 2 (2026-10-10): a country's release date is its cinema date, not the earliest
  * of any kind. Only `merged.releaseDate` of a film moves.
+ * 3 (2026-10-23): a game's date is the earliest of its game sources, Open
+ * Library's description loses its Markdown, an impossible book year is none,
+ * and the vector carries `addon`. The merged doc heals on read; the vector's
+ * date and `addon` only on the next write (mark-addons.sql did the flag).
  */
-export const DERIVE_VERSION = 2;
+export const DERIVE_VERSION = 3;
 
 /** One media_links row as the write path holds it: the blob already parsed. */
 export interface ParsedLink {

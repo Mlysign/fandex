@@ -108,6 +108,14 @@ const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? 
  * on New Year's Day.
  */
 export function hardcoverDate(date: unknown, year: unknown): string | null {
+  const out = hardcoverDateAsGiven(date, year);
+  // "0030" for Der Kanon mechanischer Seelen (2026-10-23): no date rather than a
+  // wrong one. bookPure's plausibleBookYear, written out: this file imports nothing.
+  const y = out ? Number(out.slice(0, 4)) : NaN;
+  return out && y >= 1450 && y <= new Date().getUTCFullYear() + 5 ? out : null;
+}
+
+function hardcoverDateAsGiven(date: unknown, year: unknown): string | null {
   if (typeof date === "string") {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date.trim());
     if (m) return m[2] === "01" && m[3] === "01" ? m[1] : `${m[1]}-${m[2]}-${m[3]}`;

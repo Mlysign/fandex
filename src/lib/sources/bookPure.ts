@@ -26,6 +26,15 @@ const MONTHS: Record<string, string> = {
 };
 
 /**
+ * A year a book can have been published in: from printing (1450) to five years
+ * out. Open Library and Hardcover both hold typos ("Der Kanon mechanischer
+ * Seelen", year 30), and a year outside this is no date rather than a wrong one.
+ */
+export function plausibleBookYear(year: number, now = new Date()): boolean {
+  return Number.isInteger(year) && year >= 1450 && year <= now.getUTCFullYear() + 5;
+}
+
+/**
  * A book's date as the catalog keeps dates: the earliest full edition date in
  * its first year of publication (the first printing, as near as Open Library
  * gets), else the year alone ("1965").
@@ -34,7 +43,7 @@ const MONTHS: Record<string, string> = {
  */
 export function bookDate(doc: any): string | null {
   const year = Number(doc?.first_publish_year);
-  if (!Number.isInteger(year) || year <= 0) return null;
+  if (!plausibleBookYear(year)) return null;
   // ⚠️ January 1st is how Open Library writes "some time that year" (Dune's 1965
   // editions read "January 1, 1965"), so it counts as the year alone, not a day.
   const days = ((doc?.publish_date ?? []) as unknown[]).map(parseDay)

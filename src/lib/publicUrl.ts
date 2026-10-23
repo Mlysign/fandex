@@ -1,5 +1,5 @@
 import type { MediaType } from "@/types";
-import { transliterate } from "@/lib/translit";
+import { romanizeForAddress, transliterate } from "@/lib/translit";
 
 // P13 — public, shareable, crawlable item URLs: `/{type}/{uuid}/{slug}`
 //
@@ -58,12 +58,12 @@ const COMBINING_MARKS = new RegExp("[\\u0300-\\u036f]", "g");
 // a `//` path that no longer matches the 3-segment route. The slug is cosmetic
 // — the UUID resolves the page — so "untitled" is a safe floor.
 export function slugify(title: string): string {
-  const s = transliterate(
+  const s = romanizeForAddress(transliterate(
     title
       .normalize("NFKD")
       .replace(COMBINING_MARKS, "")
       .toLowerCase(),
-  )
+  ))
     .replace(/['’]/g, "")  // keep contractions whole: "don't" → "dont"
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")

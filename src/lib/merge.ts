@@ -67,7 +67,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   // re-releases/restorations decades later, so an unbounded override turns a 1985
   // classic into its 2026 restoration date (the "Angel's Egg" bug). The 3-year
   // window covers genuine staggered international releases while excluding those.
-  const primaryReleaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  const primaryReleaseDate = earliestGameDate(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
   const regionDate = norm.get("tmdb")?.releaseDatesByRegion?.[region] ?? null;
   const releaseDate = regionalReleaseDate(primaryReleaseDate, regionDate);
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
@@ -375,9 +375,24 @@ export function mergeForCanonical(links: { source: Source; data: any }[]): {
   }
   return {
     title: pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown",
-    releaseDate: pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate"),
+    releaseDate: earliestGameDate(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate"),
     posterUrl: pickField(POSTER_PRIORITY, norm, "poster"),
   };
+}
+
+/**
+ * A game's release date: the EARLIEST full date its game sources hold, not
+ * Steam's. Steam's is the PC date, so The Last of Us Part I read 2023 over its
+ * 2022 PS5 launch (2026-10-23); where Steam is first (an early-access launch),
+ * the earliest is Steam's anyway. Null for anything without a game source, and
+ * when no game source has a full date, which leaves the priority order to decide.
+ */
+function earliestGameDate(norm: Map<Source, SourceNormalized>): string | null {
+  const full = (["steam", "igdb", "rawg"] as Source[])
+    .map((s) => norm.get(s)?.releaseDate)
+    .filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort();
+  return full[0] ?? null;
 }
 
 // ── Normalization for matching ────────────────────────────────────

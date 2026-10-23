@@ -24,6 +24,14 @@ describe("slugify", () => {
     expect(slugify("Mænd & Høns")).toBe("maend-hons");
   });
 
+  it("romanizes Cyrillic and Greek, and leaves a script with no letter mapping to the floor", () => {
+    // Crime and Punishment was /book/untitled-1866 (2026-10-23).
+    expect(slugify("Преступление и наказание")).toBe("prestuplenie-i-nakazanie");
+    expect(slugify("Братья Карамазовы")).toBe("bratya-karamazovy");
+    expect(slugify("Οδύσσεια")).toBe("odysseia");
+    expect(slugify("嫌われる勇気")).toBe("untitled");
+  });
+
   it("keeps contractions whole", () => {
     expect(slugify("Don't Look Up")).toBe("dont-look-up");
     expect(slugify("Don’t Look Up")).toBe("dont-look-up"); // typographic apostrophe

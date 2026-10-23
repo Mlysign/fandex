@@ -18,6 +18,8 @@ import { createContext, useContext, useRef, useState, type ReactNode } from 'rea
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { companyKey, ipDisplayLabel, ipKey, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
+import { plainDescription } from '@/lib/plainText';
+import { platformLabel } from '@/lib/platformKeys';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { BrandGlyph, hasBrandMark } from '~/components/BrandGlyph';
 import { ExtLink } from '~/components/ExtLink';
@@ -311,6 +313,15 @@ function scoreText(r: CommunityRating): string {
   return r.score % 1 === 0 ? String(r.score) : r.score.toFixed(1);
 }
 
+/** Whether the per-source dates are worth a list: two full dates more than a week apart, or a year against a day elsewhere. */
+export function datesDisagree(dates: { date: string }[]): boolean {
+  const distinct = [...new Set(dates.map((d) => d.date))];
+  if (distinct.length < 2) return false;
+  const days = distinct.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).map((d) => Date.parse(`${d}T00:00:00Z`) / 86_400_000);
+  if (days.length < distinct.length) return true;
+  return Math.max(...days) - Math.min(...days) > 7;
+}
+
 function ScorePill({ label, value, href, hint }: { label: string; value: string; href?: string | null; hint?: string }) {
   const inner = (
     <>
@@ -373,6 +384,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
   const dlc = m.dlc ?? [];
   const offer = offerLabel(m.streamingOfferType);
   const sources = [...new Set(m.dates.map((d) => d.source))];
+  // RAWG was retired in 2026-09: its stored number is frozen, so it is not shown as a live rating.
+  const ratings = m.communityRatings.filter((r) => r.source !== 'rawg');
 
   // The hero runs under the status bar on purpose. Once it has scrolled away the
   // page's text would run under the clock too (seen on the phone, 2026-10-05), so
@@ -420,8 +433,9 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           </T>
         ) : null}
 
-        {/* Per-source dates, only when the sources disagree: otherwise it is the line above, repeated. */}
-        {new Set(m.dates.map((d) => d.date)).size > 1 ? (
+        {/* Per-source dates, only when the sources disagree by more than a week:
+            TMDB and Trakt a day apart (15 and 16 Jul 2010) is a time zone, not news (2026-10-23). */}
+        {datesDisagree(m.dates) ? (
           <View style={styles.dateBlock}>
             {m.dates.map((d) => (
               <View key={d.source} style={styles.dateRow}>
@@ -433,25 +447,30 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           </View>
         ) : null}
 
-        {m.communityRatings.length || m.steamReviewLabel ? (
+        {ratings.length || m.steamReviewLabel ? (
           <View style={styles.pills}>
-            {m.communityRatings.map((r) => (
-              <ScorePill
-                key={r.source}
-                label={r.label}
-                value={scoreText(r)}
-                href={r.url}
-                hint={`${r.label} ${scoreText(r)}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
-              />
-            ))}
-            {m.steamReviewLabel ? <ScorePill label="Steam" value={m.steamReviewLabel} /> : null}
+            {ratings.map((r) => {
+              // Steam's percentage and its words are one fact, so one pill: "84% · Very Positive".
+              const value = r.source === 'steam' && m.steamReviewLabel ? `${scoreText(r)} · ${m.steamReviewLabel}` : scoreText(r);
+              return (
+                <ScorePill
+                  key={r.source}
+                  label={r.label}
+                  value={value}
+                  href={r.url}
+                  hint={`${r.label} ${value}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
+                />
+              );
+            })}
+            {m.steamReviewLabel && !ratings.some((r) => r.source === 'steam') ? <ScorePill label="Steam" value={m.steamReviewLabel} /> : null}
           </View>
         ) : null}
 
         {personal}
 
         {m.tagline ? <Text {...part('prose')} style={styles.tagline}>{m.tagline}</Text> : null}
-        {m.description ? <Text {...part('prose')} style={styles.description}>{m.description}</Text> : null}
+        {/* Cleaned here too: a stored description predates the normalizer's clean-up until its title is derived again. */}
+        {m.description ? <Text {...part('prose')} style={styles.description}>{plainDescription(m.description)}</Text> : null}
 
         <View>
           <Fact label={item.type === 'show' ? 'Creator' : 'Director'} value={m.director} linkTo="person" />
@@ -615,7 +634,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
                   </View>
                 );
               })}
-              {[['Platforms', m.platforms], ['Modes & perspective', gameModes]].map(([label, list]) =>
+              {/* Platforms by their display name, once each: "PC" and "PC (Microsoft Windows)" were two chips (2026-10-23). */}
+              {[['Platforms', [...new Set(m.platforms.map(platformLabel))]], ['Modes & perspective', gameModes]].map(([label, list]) =>
                 (list as string[]).length ? (
                   <View key={label as string} style={styles.chips}>
                     <Text style={styles.groupLabel}>{label as string}</Text>
