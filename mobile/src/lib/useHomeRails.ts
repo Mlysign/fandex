@@ -9,6 +9,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { todayIso } from '~/lib/dates';
 import { catalogCandidates } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
+import { jsHeapMB } from '~/lib/jsHeap';
 import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type HomeFeed } from '~/lib/homeFeed';
 import { useScores } from '~/lib/ScoreProvider';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -54,10 +55,17 @@ export function useHomeRails() {
       setPool(null);
       return;
     }
+    // A start rebuilds the profile two or three times (the stored taxonomy, the
+    // fresh one, your rows arriving), and each rebuild starts this again. A run
+    // it replaced stops between chunks: it used to score the whole catalog anyway,
+    // on the same thread as the run whose answer the rail is waiting for (RV31).
     (async () => {
+      const started = Date.now();
       const cards = (await catalogCandidates(db)).map(cardFromCatalog);
-      const found = await scoresFor(cards.map((c) => c.id as string));
-      if (live) setPool({ cards, scores: found });
+      const found = await scoresFor(cards.map((c) => c.id as string), () => live);
+      if (!live) return;
+      setPool({ cards, scores: found });
+      console.log('fandex_pool', JSON.stringify({ titles: cards.length, ms: Date.now() - started, js: jsHeapMB() }));
     })();
     return () => { live = false; };
   }, [db, signedIn, center, scoresFor, revision, catalog.revision, auth.rowsRevision]);

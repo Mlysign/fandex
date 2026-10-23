@@ -8,8 +8,8 @@
 // anything that reaches expo-router here breaks the site's build.
 
 import { Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
-import { useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Children, isValidElement, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Img } from '~/components/Img';
 import { CommunityScore, FandexScore } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
@@ -107,19 +107,43 @@ export function RailFrame({ title, forYou, action, children }: { title: string; 
   const wide = width >= breakpoint.md;
   const [hovering, setHovering] = useState(false);
   const scroller = useRef<ScrollView>(null);
+  const list = useRef<FlatList<ReactNode>>(null);
   const x = useRef(0);
-  const step = (dir: 1 | -1) => scroller.current?.scrollTo({ x: Math.max(0, x.current + dir * 320), animated: true });
+  const step = (dir: 1 | -1) => {
+    const to = Math.max(0, x.current + dir * 320);
+    if (list.current) list.current.scrollToOffset({ offset: to, animated: true });
+    else scroller.current?.scrollTo({ x: to, animated: true });
+  };
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { x.current = e.nativeEvent.contentOffset.x; };
+  // On a device a rail is a windowed list: only the cards near the screen are
+  // mounted and hold a decoded poster. Home drew 65 cards at once, three a
+  // rail in view, and their posters queued ahead of the ones on screen (RV31,
+  // 2026-10-23). A browser and a server render every card: the static page's
+  // HTML needs them all, and a browser loads an image only when it is near.
+  const cells = Platform.OS === 'web' ? null : Children.toArray(children);
   return (
     <View>
       <RailTitle title={title} forYou={forYou} action={action} />
       <View
         style={{ position: 'relative' }}
         {...(wide ? ({ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) } as object) : null)}>
-        <ScrollView
-          ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={cardStyles.railRow}
-          onScroll={(e) => { x.current = e.nativeEvent.contentOffset.x; }} scrollEventThrottle={64}>
-          {children}
-        </ScrollView>
+        {cells ? (
+          <FlatList
+            ref={list} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={cardStyles.railList}
+            data={cells} keyExtractor={(cell, i) => (isValidElement(cell) && cell.key != null ? String(cell.key) : String(i))}
+            renderItem={({ item }) => item as ReactElement}
+            // A spacer, not the row's gap: the list's stand-ins for unmounted cards would take a gap too.
+            ItemSeparatorComponent={RailGap}
+            initialNumToRender={4} maxToRenderPerBatch={4} windowSize={3}
+            onScroll={onScroll} scrollEventThrottle={64}
+          />
+        ) : (
+          <ScrollView
+            ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={cardStyles.railRow}
+            onScroll={onScroll} scrollEventThrottle={64}>
+            {children}
+          </ScrollView>
+        )}
         {wide ? (
           <>
             <RailArrow dir={-1} title={title} shown={hovering} onPress={() => step(-1)} />
@@ -129,6 +153,10 @@ export function RailFrame({ title, forYou, action, children }: { title: string; 
       </View>
     </View>
   );
+}
+
+function RailGap() {
+  return <View style={{ width: cardStyles.railRow.gap }} />;
 }
 
 function RailArrow({ dir, title, shown, onPress }: { dir: 1 | -1; title: string; shown: boolean; onPress: () => void }) {
@@ -226,6 +254,7 @@ export const cardStyles = StyleSheet.create({
   railTitle: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   forYou: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.accentSubtle },
   railRow: { gap: 12, paddingBottom: 4 },
+  railList: { paddingBottom: 4 },
   railArrow: {
     position: 'absolute', top: '50%', marginTop: -18, width: 36, height: 36, borderRadius: radius.full, zIndex: 2,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceOverlay, borderWidth: 1, borderColor: color.border,

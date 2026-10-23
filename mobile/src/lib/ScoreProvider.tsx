@@ -48,8 +48,12 @@ interface Scores {
   taxonomy: Taxonomy | null;
   /** Score one title from its raw facets. Null when there is no profile or nothing matches. */
   score: (id: string, facets: ScoreFacet[]) => FandexScore | null;
-  /** Scores for catalog titles by id, read off the device. Titles with no score are absent. */
-  scoresFor: (ids: string[]) => Promise<Map<string, number>>;
+  /**
+   * Scores for catalog titles by id, read off the device. Titles with no score are absent.
+   * `alive` is asked between chunks: a caller whose answer is no longer wanted stops the work
+   * there, and gets what was scored so far.
+   */
+  scoresFor: (ids: string[], alive?: () => boolean) => Promise<Map<string, number>>;
   /** What a tag, person, studio or franchise does to your score, for its page. `key` as the address spells it. Empty when it does nothing. */
   impactsFor: (kind: ImpactKind, key: string) => PageImpact[];
   /** Why `impactsFor` is empty, in words, or null when it is not (or nobody is signed in). */
@@ -151,8 +155,11 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // (0, 197, 796, 1517, 1707 titles) and every score moved under the reader.
   // The last whole profile stands until the fill ends; a device with none shows
   // no score until then, rather than one built on a fraction of its ratings.
+  // Only a fill waits: the delta every start asks for runs on a whole copy, and
+  // waiting for it kept Home's Recommended rail on its skeleton for as long as
+  // the request took (RV31, 2026-10-23).
   const signedIn = auth.status === 'signedIn';
-  const filling = catalog.state === 'syncing';
+  const filling = catalog.filling;
   useEffect(() => {
     let live = true;
     if (!signedIn || !taxonomy) {
@@ -177,10 +184,11 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   const score = useCallback((id: string, facets: ScoreFacet[]) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy) : null), [profile, taxonomy]);
 
-  const scoresFor = useCallback(async (ids: string[]) => {
+  const scoresFor = useCallback(async (ids: string[], alive?: () => boolean) => {
     const out = new Map<string, number>();
     if (!profile || !taxonomy || !ids.length) return out;
     for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      if (alive && !alive()) break;
       const chunk = ids.slice(i, i + ID_CHUNK);
       const rows = await db.getAllAsync<{ id: string; facets: string }>(
         `SELECT id, facets FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk,

@@ -216,6 +216,22 @@ describe('a title removed upstream', () => {
     expect(result.total).toBe(2);
   });
 
+  // The score profile waits while the copy is partial, and only then (RV31).
+  it('says the start-over is a refill, and the delta before it is not', async () => {
+    const rows = ['a', 'b', 'c'].map((id, i) => item(id, 100 + i));
+    serve(rows, 10);
+    const f = fakeDb();
+    const first: boolean[] = [];
+    await syncCatalog(f.db, (p) => first.push(p.refill));
+    expect(first).toEqual([true]);
+
+    serve([rows[0], rows[2]], 10);
+    const later: boolean[] = [];
+    await syncCatalog(f.db, (p) => later.push(p.refill));
+    // The delta on the whole copy, then the download after the start-over.
+    expect(later).toEqual([false, true]);
+  });
+
   it('does not loop when the counts agree', async () => {
     serve([item('a', 100)], 10);
     const f = fakeDb();

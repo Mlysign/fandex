@@ -11,6 +11,7 @@ Screens, data sources and the APK build are in `docs/app.md`; what the app still
 - **A component that renders nothing when empty must know WHY it is empty.** "No data yet", "the pull is failing", "still filling" and "caught up" all look like a broken feature; show which one.
 - **One outcome per tap target.** Two pressable layers in one cell means thumb placement decides what happens, and a hover affordance only a thumb can reach is a defect.
 - **A provider is identified by its logo (`BrandGlyph`), never its colour.** No brand hue in any state. The one exception is the Google "G", which Google's guidelines require in colour: drawn by `components/GoogleMark.tsx` with four literal fills, never through `src/lib/brandMarks.ts` (`brandMarksNoGoogle.test.ts` guards it). Read Google's guidelines in English; the German translation inverts the background rule. → [[platform-brand-marks-not-colours]]
+- **On a device, a row or pager of pictures mounts only what is near the screen.** A rail is `RailFrame` (a windowed list), the hero keeps three slides; a game screenshot decodes at 8 MB plus its texture. Quote memory with the app in front: a third of `dumpsys meminfo` is a GPU cache Android frees. → `docs/app.md` ("Memory is pictures")
 - **A `//` comment in JSX children renders on the page.** Wrapping a `return ( … )` in a fragment moves comments into that position and every check stays green. → [[jsx-comment-in-children-renders]]
 
 ## Data on the device

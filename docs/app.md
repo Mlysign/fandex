@@ -125,6 +125,19 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   session counter, rows edited during the run are left alone, and a run deleting more than a tenth
   of the Steam rows is refused. It runs with the Trakt sync (start, return to the app when six hours
   old) and from Settings' Steam Sync button; a private Steam profile shows how to make it public.
+- **Memory is pictures, not data** (measured 2026-10-23, RV31, 0.3.16 on the Pixel 8). The
+  Hermes heap is 38 MB with the catalog copy, the profile and Home's rail pool loaded
+  (`fandex_pool` and `fandex_index` in `adb logcat -s ReactNativeJS` carry it). `dumpsys meminfo`
+  reads about 310 MB on a cold Home and 600 MB after Search and ten titles, and about 190 MB of
+  that is the GPU's cache (`Graphics`), which falls to 93 MB once the app is hidden and to 0 under
+  `adb shell am send-trim-memory org.fandex.app COMPLETE`. So quote PSS with the app in front
+  and say so. What is held for real is the decoded posters of every mounted screen (about 80 MB:
+  the tabs stay mounted) and the native views. A rail on a device is a windowed `FlatList`
+  (`RailFrame`), the title page's hero holds three slides, and `Img` uses Glide's memory cache
+  (`cachePolicy="memory-disk"`).
+- **The score profile waits only for a FILL of the catalog copy** (`CatalogSync.filling`), not for
+  the delta every start asks for: waiting on that kept Home's Recommended rail on its skeleton
+  for a network round trip, 17 s on the start that hit a start-over.
 - **The API address** is `https://api.fandex.org` (`lib/config.ts`) unless a build sets
   `EXPO_PUBLIC_API_URL`; the website's build sets `/`.
 
@@ -407,8 +420,10 @@ builds for a phone only, which is faster and a quarter of the size. The APK land
 without a dev server. It is signed with the debug keystore Expo generates, which is fine for
 sideloading and is not a Play upload key.
 
-**The version lives in `mobile/app.json`** since 2026-10-23: `version` (`0.3.14`) and
-`android.versionCode` (`314`, minor times 100 plus patch). Raise both for every APK and name the
+**The version lives in `mobile/app.json`** since 2026-10-23: `version` (`0.3.16`) and
+`android.versionCode` (`316`, minor times 100 plus patch). Gradle reads it from
+`android/app/build.gradle`, which only `npx expo prebuild --platform android --no-install` rewrites
+(a cold build after it: 4 min for arm64 on 2026-10-23). Raise both for every APK and name the
 file after `version`; before that, the APK's file name was the only version. A Play build is the
 same build with `bundleRelease -PfandexPlay` and the upload key → [play-store.md](play-store.md).
 

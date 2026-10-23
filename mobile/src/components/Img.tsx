@@ -23,6 +23,10 @@ export function Img({ uri, width, style, alt, priority, onError }: ImgProps) {
       source={{ uri: cdnImageUrl(uri, width * 2) }}
       style={style}
       contentFit="cover"
+      // expo-image's default, 'disk', skips Glide's memory cache on Android: a poster on
+      // two screens was two bitmaps, and one that scrolled back into a rail decoded again.
+      // The cache holds about two screens of pictures not on screen (RV31, 2026-10-23).
+      cachePolicy="memory-disk"
       transition={120}
       priority={priority ? 'high' : 'normal'}
       accessibilityLabel={alt}

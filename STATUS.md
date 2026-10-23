@@ -48,7 +48,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | Hosting + deploy | ✅ Cloudflare since 2026-10-10, deployed by hand. → [docs/website.md](docs/website.md) |
 | Backups | ✅ D1 Time Travel (7 days) and a nightly export to R2 in the EU; exports under `d1/` expire after 30 days. |
 | **Cloudflare Worker + D1** (phase 1) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, export. Books (Open Library, Hardcover facts only) and board games (BGG, behind its token) since 2026-10-17. Hardened 2026-10-23. |
-| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.13.apk` installed 2026-10-23 19:04 (Steam sync). **`C:\fx\fandex-0.3.15.apk` built 2026-10-23 21:18 and NOT installed** (the phone left adb): the product review's fixes (score left-out and 0 to 100, add-ons out of rails, undo on remove, sign out this device). |
+| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.16.apk` installed 2026-10-23 22:32: the product review's fixes, browser Back (RV24) and the memory and blank-rail fixes (RV31). |
 | **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,713 static item pages with their rails, facet pages, calendar months and the legal pages (publish of 2026-10-23). |
 | **H5** Fandex Score | ✅ → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** legal & compliance | ✅ |

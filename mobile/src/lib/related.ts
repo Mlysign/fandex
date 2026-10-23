@@ -21,6 +21,7 @@ import type { CardItem } from '~/lib/cards';
 import type { CatalogRow } from '~/lib/db';
 import { seriesOfFacet } from '~/lib/franchiseSeries';
 import { facetId, resolveFacets, type ScoreFacet, type Taxonomy } from '~/lib/fandexScore';
+import { jsHeapMB } from '~/lib/jsHeap';
 
 /** How many cards "More like this" holds. The site's RAIL_CAP. */
 export const RAIL_CAP = 12;
@@ -340,6 +341,8 @@ function parse(json: string): ScoreFacet[] {
 }
 
 async function buildIndex(db: SQLiteDatabase, tax: Taxonomy): Promise<FacetIndex> {
+  const started = Date.now();
+  const before = jsHeapMB();
   const rows = await db.getAllAsync<{ id: string; type: string; community_votes: number; addon: number | null; facets: string }>(
     "SELECT id, type, community_votes, json_extract(vector, '$.addon') AS addon, facets FROM catalog",
   );
@@ -348,6 +351,7 @@ async function buildIndex(db: SQLiteDatabase, tax: Taxonomy): Promise<FacetIndex
     indexFacets(rows.slice(i, i + PARSE_CHUNK).map((r) => ({ id: r.id, type: r.type, votes: r.community_votes ?? 0, addon: !!r.addon, facets: parse(r.facets) })), tax, index);
     await new Promise<void>((done) => setTimeout(done, 0));
   }
+  console.log('fandex_index', JSON.stringify({ titles: index.size, ms: Date.now() - started, before, after: jsHeapMB() }));
   return index;
 }
 

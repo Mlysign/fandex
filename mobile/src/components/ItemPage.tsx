@@ -163,7 +163,10 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
           accessibilityLabel={`${title}, images`}>
           {images.map((uri, i) => (
             <View key={`${uri}-${i}`} style={{ width: box.w, height: box.h }} accessibilityLabel={`Image ${i + 1} of ${images.length}`}>
-              {slide(uri, i)}
+              {/* On a device only the slide on screen and its two neighbours hold a picture. A
+                  screenshot decodes at 1920 by 1080, 8 MB and again as a texture, and a game with
+                  ten of them took the app from 650 to 950 MB (RV31, 2026-10-23). */}
+              {Platform.OS === 'web' || Math.abs(i - active) <= 1 ? slide(uri, i) : null}
             </View>
           ))}
         </ScrollView>

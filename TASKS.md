@@ -35,10 +35,9 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Product review, 2026-10-23 (ids RV#)
 
-A journalist-style pass over fandex.org and the native app; Nils's calls on it are in [docs/decisions.md](docs/decisions.md) ("Added 2026-10-23, the product review"). **33 of 35 are fixed and live** (RV24, browser Back, and RV11, the duplicate games, the same night) (Worker, D1, website, APK 0.3.15): grep `docs/archive/history.md` for "Product review, 2026-10-23". Not fixed, by his call: the calendar is a top-40 on purpose, and Search keeps titles you already rated. Open:
+A journalist-style pass over fandex.org and the native app; Nils's calls on it are in [docs/decisions.md](docs/decisions.md) ("Added 2026-10-23, the product review"). **34 of 35 are fixed and live** (RV24, browser Back, RV11, the duplicate games, and RV31, the app's memory, the same night) (Worker, D1, website, APK 0.3.16): grep `docs/archive/history.md` for "Product review, 2026-10-23". Not fixed, by his call: the calendar is a top-40 on purpose, and Search keeps titles you already rated. Open:
 
 - ⬜ **RV9** No typo tolerance on the device ("witchr", "cyberpnk"). Fix: when a query of four letters or more finds under five titles, also match titles one edit away.
-- ⬜ **RV31** The phone app holds about 945 MB (PSS), and posters come back blank after a cold start. Fix: measure with `dumpsys meminfo` what holds it (the catalog copy, the facet index, expo-image's cache) before changing anything.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 

@@ -32,6 +32,8 @@ export interface SyncProgress {
   pages: number;
   written: number;
   total: number;
+  /** This sync is filling an empty copy (the first one, or a start-over), so the device holds part of the pool. */
+  refill: boolean;
 }
 
 export interface SyncResult {
@@ -134,7 +136,7 @@ async function startFromFiles(
       if (!Array.isArray(page?.items) || !isCursor(page.next)) break;
       await storePage(db, page.items, page.next);
       written += page.items.length;
-      onProgress?.({ pages: ++n, written, total: await catalogCount(db) });
+      onProgress?.({ pages: ++n, written, total: await catalogCount(db), refill: true });
     }
   } catch (e) {
     console.warn('catalog_files_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
@@ -151,6 +153,7 @@ export async function syncCatalog(
   let cursor = await readCursor(db);
   let written = 0;
   let poolCount: number | null = null;
+  const refill = afterReset || (cursor.since === 0 && cursor.after === '');
 
   // An empty device starts from the files. ⚠️ Not after a start-over: that one
   // happened because the device held a title the pool no longer has, and the
@@ -169,7 +172,7 @@ export async function syncCatalog(
     written += res.items.length;
 
     cursor = res.next;
-    onProgress?.({ pages: page, written, total: await catalogCount(db) });
+    onProgress?.({ pages: page, written, total: await catalogCount(db), refill });
     if (res.done) {
       poolCount = res.poolCount;
       break;

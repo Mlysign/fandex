@@ -14,6 +14,12 @@ export type SyncState = 'idle' | 'syncing' | 'done' | 'error';
 
 interface CatalogSync {
   state: SyncState;
+  /**
+   * A sync is filling an empty copy (the first one, a start-over): what is on
+   * the device is part of the pool. False during the delta every start asks
+   * for, when the copy is whole and only changes are coming.
+   */
+  filling: boolean;
   /** Titles on the device right now. */
   total: number;
   /** Titles written by the sync in progress (or the last one). */
@@ -44,6 +50,7 @@ function describe(e: unknown): string {
 export function CatalogSyncProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
   const [state, setState] = useState<SyncState>('idle');
+  const [filling, setFilling] = useState(false);
   const [total, setTotal] = useState(0);
   const [written, setWritten] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +75,8 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
         setTotal(0);
         setRevision((r) => r + 1);
       }
+      // No finished sync on record: a first download, or one a start-over cut short.
+      if ((await lastSyncedAt(db)) === null) setFilling(true);
       // Lists refresh as pages land, so a first sync fills in as it goes. Not on
       // EVERY page: each bump re-runs whatever reads the catalog (Up next asks
       // Trakt, the score profile rebuilds, every list re-scores), and a first
@@ -77,6 +86,7 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
       const result = await syncCatalog(db, (p) => {
         setWritten(p.written);
         setTotal(p.total);
+        if (p.refill) setFilling(true);
         if (!p.written) return;
         pending = true;
         if (Date.now() - bumpedAt >= REVISION_EVERY_MS) {
@@ -96,6 +106,7 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
       setError(describe(e));
       setState('error');
     } finally {
+      setFilling(false);
       running.current = false;
       const again = runAgain.current;
       runAgain.current = null;
@@ -159,7 +170,7 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
   const resync = useCallback(() => void run(true), [run]);
 
   return (
-    <Ctx.Provider value={{ state, total, written, error, syncedAt, revision, sync, resync }}>
+    <Ctx.Provider value={{ state, filling, total, written, error, syncedAt, revision, sync, resync }}>
       {children}
     </Ctx.Provider>
   );

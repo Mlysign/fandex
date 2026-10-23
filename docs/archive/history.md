@@ -81,6 +81,26 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   1,707 → 1,705 rated, because five games had been counted twice. 104 old addresses 301 through
   `mobile/web/folded.json`. The cases, the counts and the undo command:
   [rv11-game-twins-2026-10-23.md](rv11-game-twins-2026-10-23.md).
+- **The app's memory and the blank Recommended rail (RV31), fixed later the same night, APK
+  0.3.16.** Measured with `dumpsys meminfo` on the Pixel 8, the same script before and after
+  (cold start, 30 flings through Search, ten title pages each scrolled and its hero swiped, back
+  Home). The JS side is small: the Hermes heap is 38 MB with the catalog copy, the profile and the
+  rail's pool loaded. What held the memory was pictures. (1) The title page's hero mounted every
+  slide: a game screenshot is IGDB `t_1080p`, decoded at 1920 × 1080 (8 MB) and again as a GPU
+  texture, so a game with ten took the app from 671 to 952 MB (Gothic 1 Remake). Now only the slide
+  on screen and its neighbours. (2) Every rail mounted every card, 65 posters on Home with three in
+  view per rail, and their decodes queued ahead of the ones on screen. A rail on a device is now a
+  windowed `FlatList` (`RailFrame`). (3) expo-image's default `cachePolicy` ('disk') skips Glide's
+  memory cache on Android, so a poster on two screens was two bitmaps; now `memory-disk`.
+  Results, 0.3.15 → 0.3.16: Home cold 404 → 309 MB; Search after scrolling 623 → 565; ten title
+  pages mean 674 → 615, peak 744 → 699; back on Home 697 → 603. About 190 MB of what remains is
+  the GPU's cache: 93 MB once the app is hidden, 0 after `send-trim-memory … COMPLETE`.
+  The blank rail was its skeleton, not missing posters. The profile waited while the catalog sync
+  was "syncing", and every start runs a delta sync, so the rail waited for a network round trip
+  (0.9 s on Wi-Fi, 17 s on the start that hit RV11's start-over). Only a real fill waits now
+  (`CatalogSync.filling`: no finished sync on record, or `SyncProgress.refill`); the profile is
+  ready 0.7 s after the JS starts and the rail's 2,050 titles are scored 0.5 s later. A pool run
+  a newer profile replaced also kept scoring the whole catalog; it now stops between chunks.
 
 ## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
 
