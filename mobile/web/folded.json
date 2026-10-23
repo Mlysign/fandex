@@ -372,6 +372,7 @@
   { "type": "game", "from": "h1z1-test-server", "to": "h1z1" },
   { "type": "game", "from": "veiled-experts-final-beta", "to": "veiled-experts" },
   { "type": "game", "from": "mechabellum-playtest-server", "to": "mechabellum" },
-  { "type": "game", "from": "park-beyond-open-beta-test", "to": "park-beyond" }
+  { "type": "game", "from": "park-beyond-open-beta-test", "to": "park-beyond" },
+  { "type": "game", "from": "the-finals-playtest", "to": "the-finals" }
  ]
 }

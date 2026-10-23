@@ -597,7 +597,10 @@ fs.writeFileSync(path.join(STAGE, 'sitemap.xml'),
 const liveSlugs = new Set([...details.values()].map((d) => `${d.type}/${d.slug}`));
 const folded = JSON.parse(fs.readFileSync(path.join(here, 'folded.json'), 'utf8')).redirects
   .filter((r) => TYPES.includes(r.type) && SLUG.test(r.from) && SLUG.test(r.to) && !liveSlugs.has(`${r.type}/${r.from}`));
-fs.writeFileSync(path.join(STAGE, '_redirects'), folded.map((r) => `/${r.type}/${r.from} /${r.type}/${r.to} 301`).join('\n') + '\n');
+// The old site's own moved addresses, which bookmarks and old links still use:
+// /dashboard was the wishlist until the 2026-07 restructure, and 308'd there.
+const MOVED = ['/dashboard /wishlist 301'];
+fs.writeFileSync(path.join(STAGE, '_redirects'), [...MOVED, ...folded.map((r) => `/${r.type}/${r.from} /${r.type}/${r.to} 301`)].join('\n') + '\n');
 step(`${folded.length} folded addresses redirected`);
 
 // The security headers the old site sent (next.config.ts), on every file.

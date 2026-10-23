@@ -125,7 +125,15 @@ console.log(`backup: ${path.relative(ROOT, backupFile)} (${Object.entries(backup
 
 // ── 3. The statements ───────────────────────────────────────────────────────
 const sql = [...userSql];
+// A kept title that just gained somebody's row has been acted on, so it joins
+// the scoring pool (what a state write does: worker/src/me.ts, "promoted").
+const gained = new Set(userSql.filter((s) => s.startsWith("UPDATE")).map((s) => s.match(/media_item_id = '([0-9a-f-]{36})'/)?.[1]).filter(Boolean));
+for (const target of gained) sql.push(`UPDATE media_items SET browsed = 0, updated_at = unixepoch() WHERE id = '${target}' AND browsed = 1;`);
 for (const { port, target } of pairs) {
+  // Every provider id of the duplicate still names the kept title, so a later
+  // lookup or resolve of it lands there instead of creating it again
+  // (provider_aliases, migration 0004).
+  sql.push(`INSERT OR IGNORE INTO provider_aliases (source, source_id, media_type, media_item_id) SELECT source, source_id, media_type, '${target}' FROM media_links WHERE media_item_id = '${port}';`);
   sql.push(`UPDATE OR IGNORE item_ip_override SET media_item_id = '${target}' WHERE media_item_id = '${port}';`);
   for (const t of ["item_ip_override", "item_doc", "media_external_ids", "media_links"]) sql.push(`DELETE FROM ${t} WHERE media_item_id = '${port}';`);
   sql.push(`DELETE FROM media_items WHERE id = '${port}';`);
