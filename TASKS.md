@@ -13,143 +13,53 @@
 
 Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
-0. **🔵 APP + WEBSITE ON CLOUDFLARE: the website is online (2026-10-10). One thing needs Nils.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
-   - **(a) Keep using the app and the site, and say what is off.** Fixed from his three passes on 2026-10-10: the episode section on title pages (now with dates and a details sheet), Settings, "Available on", the filter button under Android's bar, the widget's look, Up next listing unscheduled episodes, facet pages with one title, the poster under the trailer. He confirmed a rating, an episode tick and a default-types change work. **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (PR #29, merged 2026-10-18: the bar now floats over the list; checked in Chromium only, never on Android, and in no APK yet), a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), and the episode sheet on the phone. Answered 2026-10-16: fandex.org/tag/steampunk reads "Fandex impact +4.3" for his account, and the CD PROJEKT RED studio page on his phone (27 titles) "looks fine". Download, Delete, a change of country or platforms, and Review's Accept and Deny were all run on a test account on 2026-10-11 and work (the smoke test section below). **Still never run by anybody: disconnecting one of two sign-ins, and Save weights, a category, an alias, a name or an attach on `/dev/scoring`.**
-   - **Next, mine:** his 2026-10-18 list is done and archived (grep "his fourth list"): series rail, franchise pages, facet-page filters and scores, type balance on Home, books in the calendar, Popular people rotation, the type filter, Monday weeks, the gallery's X, the widget heading, and the weekly taxonomy sweep (run twice by hand on 2026-10-18, emptying Other; next scheduled run Monday 2026-10-19, 08:08, from the "Scheduled" section of the app). **Not done from it:** THE FINALS PLAYTEST could not be folded (IGDB's search does not find THE FINALS; fold it by hand when its id is known), and the Stephen King gap has a root cause left open: the films he wrote carry no writer facet for him because TMDB's "Novel" credit is not in the stored crew (`src/lib/facets.ts` reads it, the Worker's stored blob does not carry it); a refetch of film credits with the full crew would fix every adapted author. The book series refetch runs on the cron by itself. The obvious next piece is still **Google sign-in on Android** (docs/app.md, "Not built yet"); it needs an Android OAuth client in Google Cloud, made through Nils's Chrome at his word. When the BGG token arrives: item 4 below.
-   - **(e) Google sign-in is live in the browser (2026-10-11).** Its privacy and terms paragraphs, and the 2026-10-16 export and deletion lines, were read and approved by Nils on 2026-10-16 ("privacy looks fine"). A real sign-in passed on fandex.org with his account. Never run: the button pressed signed out, and a Google account Fandex has not seen ([docs/app.md](docs/app.md), "Google sign-in, in a browser").
-   - **Not built:** Google sign-in on Android, at the bottom of docs/app.md. (Joining two accounts is built since 2026-10-17, docs/app.md.) (The widget: Nils, 2026-10-17, "works fine for now"; do not redesign it unasked.)
-   - **(g) ✅ The three franchise calls were answered and applied 2026-10-18** (Joker into Batman, the MCU into Marvel, the twins and test builds folded): `docs/archive/franchise-decisions-2026-10-18.sql` and the archive (grep "his fourth list"). Undo for the 2026-10-17 sweep: `docs/archive/franchise-sweep-2026-10-17-undo.sql`. **Asked of him now** (0.3.6 installed 2026-10-18 10:05): look at a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading.
-   - **(f) ✅ Hardcover is LIVE as the second book source since 2026-10-17 evening** (archive: grep "Hardcover"). The one date to keep: **the key expires 2027-10-17**; a new one is made at hardcover.app/account/api with the `read:catalog` scope and goes into `.env` and through `push-secrets.mjs`. → [PLATFORMS.md](PLATFORMS.md), [docs/worker.md](docs/worker.md)
+0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
+   - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
+   - **(b) Google sign-in on Android** is the obvious next piece (docs/app.md, "Not built yet"). It needs an Android OAuth client in Google Cloud, made through his Chrome at his word.
+   - **(e) Google sign-in in the browser** is live (2026-10-11). Never run: the button pressed signed out, and a Google account Fandex has not seen ([docs/app.md](docs/app.md), "Google sign-in, in a browser").
+   - **(f) Hardcover's key expires 2027-10-17.** A new one is made at hardcover.app/account/api with the `read:catalog` scope and goes into `.env` and through `push-secrets.mjs`. → [PLATFORMS.md](PLATFORMS.md)
 
 2. **Android TWA (P15/P16): ⏸️ PAUSED until the developer account is a BUSINESS account.** (Nils, 2026-08-23.) The package is built and sideloaded on the Pixel 8 with no address bar, and the Play Console entry exists (name `Fandex`, package `org.fandex.twa`, Free). ⚠️ **The 12-testers/14-days gate applies to PERSONAL accounts only**, so a closed test now is likely throwaway work: upgrade first, then re-check whether the gate applies at all. Remaining steps, and the trap that Google re-signs the store build so `TWA_CERT_FINGERPRINT` needs a SECOND fingerprint appended → [docs/twa-play-store.md](docs/twa-play-store.md).
 
-3. **🔵 Discord sign-in is ON since 2026-10-17** (the three redirect addresses added through his Chrome at his word, published, and in the 0.3.2 APK on the phone). Two things left, both his: (a) **reset the client secret** in the Discord developer portal (Fandex → OAuth2 → Reset Secret): it reached a session transcript on 2026-09-02, and the new stack does not use it at all, so nothing needs the new value except the old site's `.env`; (b) **sign in with Discord once**, on fandex.org and on the phone, since a real sign-in has never been run. → [docs/app.md](docs/app.md) ("Discord sign-in")
+3. **🔵 Discord sign-in is ON since 2026-10-17.** Two things left, both his: (a) **reset the client secret** in the Discord developer portal (Fandex → OAuth2 → Reset Secret): it reached a session transcript on 2026-09-02, and the new stack does not use it at all; (b) **sign in with Discord once**, on fandex.org and on the phone, since a real sign-in has never been run. → [docs/app.md](docs/app.md) ("Discord sign-in")
 
-4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). BGG's terms (2025-07-02) require a registered application and a Bearer token on every call, and a donation-funded site registers as commercial ("most likely free"). **Applied 2026-10-17, status "pending"** at boardgamegeek.com/applications (account Ramses3006; as Nils Mlynarek, Düsseldorf, hello@fandex.org, commercial through donations, 1 user). Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, find the official "Powered by BGG" logo and put it where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
+4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). **Applied 2026-10-17, status "pending"** at boardgamegeek.com/applications (account Ramses3006). Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, put the official "Powered by BGG" logo where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
 
 5. **🔵 Two checks from the 2026-10-23 codebase review**, both needing his session or his tools:
-   - **(a) Open fandex.org signed in and use it for a minute** (a title page with a trailer, Settings, a Trakt sync), then say so. The site sends its full Content-Security-Policy as report-only since 2026-10-23; signed-out pages showed no violation. Once a signed-in session is clean too, mine: move it to the enforced header in `mobile/web/build.mjs` (`docs/website.md`, "The Content-Security-Policy is report-only").
-   - **(b) If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app when our client id is in the header; nobody has proven it. Since 2026-10-23 a Trakt identity is keyed on Trakt's uuid (from `/users/settings`) and his old username row moves to it on his next Trakt sign-in.
+   - **(a) Open fandex.org signed in and use it for a minute** (a title page with a trailer, Settings, a Trakt sync), then say so. The site sends its full Content-Security-Policy as report-only; signed-out pages showed no violation. Once a signed-in session is clean too, mine: move it to the enforced header in `mobile/web/build.mjs` (`docs/website.md`, "The Content-Security-Policy is report-only").
+   - **(b) If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app; nobody has proven it. A Trakt identity is keyed on Trakt's uuid since 2026-10-23, and his old username row moves to it on his next Trakt sign-in.
 
-## The 2026-10-23 review: what is left (mine)
+## Mine, open
 
-Everything the review found is fixed, deployed and on the phone, except these:
-
-- ⬜ **Mark hand-made taxonomy rows in the table itself.** The sweep now never changes an existing alias, label or category row and its undo deletes only its own stamp, but `ip_alias`, `tag_alias`, `facet_label_override` and `tag_category_override` carry no `source` column, so "made by hand" is inferred. A migration adding `source` (default `'hand'`) makes it exact.
-- ⬜ **The five `exhaustive-deps` warnings** in `mobile/` (`discover.tsx` 208 and 250, `WeightsPanel.tsx` 35, `AuthProvider.tsx`): each is either a real stale value or wants a comment saying why not.
-- ⬜ **Docs written for the old site** (`docs/advanced-filters.md`, `catalog-growth.md`, `seo.md`, `scalability.md`, `optimization-plan.md`, and memory files about Railway, the old snapshots and `next dev`) describe deleted code. Move them to the archive in a hygiene pass.
-- **Decided, not done:** the list import does not ask TMDB for every IMDb row before matching titles: the matcher already refuses an ambiguous title and never matches an empty (non-Latin) key, and an exact lookup per row would cost a TMDB call each. `DELETE /v1/me` spends no write budget, on purpose: erasure must never be refused for a budget. Discord gets no server-checked nonce: since a join that would fold away an account holding titles always asks first, a login CSRF can no longer move a library.
+- ⬜ **Steam sync on the new stack.** Steam is listed as connected on his account and syncs nothing; the old site's adapter went with it (tag `old-site-final`, `src/lib/sources/adapters/steam.ts`). It needs a Worker route (the Steam key may not ship in an APK), a map from Steam app ids to IGDB games (IGDB's `external_games`, as THE FINALS was found on 2026-10-23), and the prune invariant on the device. A feature of its own, not a fix.
+- 🔵 **The TMDB projection walk** (2026-10-23): the cron refetches the 1,698 TMDB links stored before projection v4, four per run, so a film's novelist becomes a writer facet (Stephen King on his adaptations). About three days; watch `tmdb_projection_step` in the logs and `kv` key `tmdb_projection_cursor` reading `done:4`. Then check a King film's page shows him.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
 **Nothing to do until a gate is hit, and both gates are traffic.** Ads at **10,000 pageviews/mo**,
 freemium at **3,500 sustained weekly actives**; `/dev/analytics` measures both. Donations are
-live, affiliate is built and dark behind `MONETIZATION_ENABLED` and demoted rather than cancelled.
-
-⚠️ The economics, the two gates and the numbers behind them moved to
-[docs/decisions.md](docs/decisions.md) on 2026-09-03 — they are a decision record with no next
-action, and this file is for open work. Runbook →
-[docs/monetization-go-live.md](docs/monetization-go-live.md). The one thing to know before touching
-the code: only **GOG** of the catalog’s store rows is affiliate-capable, so `affiliate.ts` had
-two mechanisms. It went with the old site (2026-10-23, tag `old-site-final`); the app has no
-affiliate code yet. → [[monetization-h3]]
+live. The economics and the gates are in [docs/decisions.md](docs/decisions.md); the runbook is
+[docs/monetization-go-live.md](docs/monetization-go-live.md). Only **GOG** of the catalog's store
+rows is affiliate-capable. The old site's `affiliate.ts` went with it (tag `old-site-final`); the
+app has no affiliate code yet. → [[monetization-h3]]
 
 ---
 
-## Smoke tests, 2026-10-11 (13th and 14th run, the first two on the new stack)
+## ⚑ Flagged 2026-10-23: probably outdated, waiting for Nils to say "archive"
 
-The 13th run swept the live site, the 14th every write on a test account. All twenty-two findings are fixed and in the archive (grep "13th smoke test", "14th smoke test", "SM66"). Plan: [smoketest.md](smoketest.md), "The new stack".
+These were written for the old Next.js site or are overtaken by later work. Nothing was done on
+them; each says why it looks stale. One word from Nils and they move to the archive.
 
-**Never run by anybody**, and a test account cannot reach the first two: an episode tick or a rating's Trakt half on an account that is not Nils's; disconnecting one of two sign-ins; Add on a Review card; Save weights, a category, an alias, a name or an attach on `/dev/scoring`.
-
-**Not re-logged, still true:** `/dashboard` is 404; Profile's "Coming up" uses the worldwide date (Street Fighter 13 Oct, the calendar says 15); Steam is listed as connected and does not sync; a title removed from the pool between two site builds sends new visitors back to the API for their first sync until the next publish.
-
-## Smoke test, 2026-10-16 (15th run): all fixed
-
-SM76 to SM84 are fixed and in the archive (grep "15th smoke test" and "2026-10-17, his list").
-
----
-
-## Still open elsewhere
-
-### Added 2026-09-02 (Nils)
-
-- **🔵 Search Console: 4,089 of 4,090 sitemap URLs are "Discovered – currently not indexed", 1 is
-  indexed.** (Breakdown from Nils, 2026-09-02.) **ONE reason, and it is the crawl-priority bucket,
-  not the quality one**: Google has found these URLs and has not fetched them. So there is nothing
-  in the pages to fix — verified independently against live prod, where `sitemap.xml` answers 200
-  with 4,341 URLs (4,334 in the canonical 2-segment shape, so no redirect chains) and a Googlebot-UA
-  fetch of `/movie/the-innocents` returns 200, `index, follow`, a self-referencing canonical and 29
-  internal links. ⚠️ **"Crawled – currently not indexed" is the bucket that would mean thin content,
-  and it is EMPTY.** Do not go thickening pages; that is answering a question nobody asked.
-  What actually moves this: **external links** (the domain is ~2 weeks old with near-zero authority,
-  and crawl budget is rationed to unproven sites), then internal link depth. ⚠️ Dumping several
-  thousand URLs at once on a new domain is itself part of the signal. **Mostly it is time.** →
-  [docs/seo.md](docs/seo.md). ⚠️ The sitemap total moves daily with the catalog (2,037 → 4,341 →
-  4,507 in a month), so count it rather than quoting one: `curl -s https://fandex.org/sitemap.xml
-  | grep -c '<loc>'`.
-
-  **The ranked plan, after Nils asked "would a link from nilsmlynarek.eu be enough?" (2026-09-02).**
-  Short answer no, and the goal itself is wrong: ⚠️ **"all 4,341 indexed" is not achievable and not
-  worth chasing.** Item pages are provider-derived metadata that appears on dozens of other sites,
-  so once Google does crawl them many will land in "Crawled – currently not indexed" on merit. The
-  target is the pages that can actually rank: calendar months, facet pages, and items where we add
-  something. In order of what actually moves the needle:
-  1. **External links.** nilsmlynarek.eu is real, live and topically relevant (a game developer's
-     portfolio), so it is worth adding and costs nothing. But it is a small static site with **no
-     robots.txt, no sitemap.xml and one outbound link (LinkedIn)**, so its own authority is thin.
-     Treat it as one nudge, not a fix.
-  2. **Places with real traffic**: Show HN, Product Hunt, the subreddits for the trackers we import
-     from. Mostly `nofollow`, so no PageRank, but they get the domain crawled and can earn real
-     editorial links, which is the thing that compounds.
-  3. **Internal link depth**, the only lever that is ours. "Discovered, not crawled" usually means a
-     URL is known ONLY from the sitemap with little pointing at it. Fixing the facet under-linking
-     (open, below) and then putting facet pages in the sitemap deepens the graph into the item
-     pages, which is exactly the shape that raises crawl priority.
-  4. **A smaller sitemap.** 4,341 URLs at a uniform 0.7 priority tells Google nothing about which
-     matter. Speculative, cheap, reversible.
-
-
-### Added 2026-09-03
-
-- **⬜ The tag tail: ~9,000 tags in Other appearing three times or fewer.** The Review tab's rules
-  deliberately stop at the head (91% of everything appearing 20+ times). The tail is not worth a
-  card each and is not worth hand-triage either; if it is ever worth doing, it is a bulk-select
-  pass in the Tags table against a search, not more rules. ⚠️ **Do not judge coverage by tag COUNT**
-  — a rule claiming 12 tags seen 900 times changes more of the site than one claiming 80 nobody
-  carries twice.
-
-### Older
-
-- **⬜ Desktop mockups for the filter panel**, once the mobile one has been used in anger.
-
-- **⬜ Nothing uses the media-type setting to SPEND less.** Three places could, in value order:
-  `/api/discover?q=` still fetches disabled types (the only real provider-call saving, since search
-  is uncached and games are 2 of its 4 calls); `/api/library` and `/api/calendar` already take
-  `?type=` and could default it from the setting, cutting a 1,942-item payload instead of filtering
-  it in the browser; and the Discover fan-out could skip a disabled section. ⚠️ Only the first saves
-  QUOTA — `_pageCache` keys carry no userId, so another visitor's games request in the same
-  15-minute window pays anyway.
-
-- **⬜ The list payload carries ~4.7 MB that only the DETAIL page reads.** `/api/library`, 1,943
-  items: `cast` 1,183 KB · `description` 1,014 KB · `images` 966 KB · `storeLinks` 853 KB ·
-  `links` 697 KB — 54%, and `MediaCardItem` names none of them. `tags` + `keywords` (552 KB) lost
-  their last client reader when `itemFacetIds` went. ⚠️ **Below compression, and riskier**: the
-  2026-07-30 audit kept cast/images/description deliberately, and dropping a field from a payload
-  two routes and one component share is the exact shape of the bug this list keeps recording.
-  Verify every consumer on BOTH routes first.
-
-- **`/library` + `/wishlist` + `/settings` dead under `next dev`: DEV ONLY, and the fix is DECIDED.** ⚠️ **`/settings` joined the list 2026-08-27**, with a worse symptom: it has no loading state, so the dead tree renders the SIGNED-IN chrome with every field empty (four "Connect" buttons, "Watchlist items 0") for an account that has all four connected. That reads as data loss, not as a dead page. **Nils decided 2026-08-17: option 1, leave it.** Do not restructure `MyStuffView`. **Re-test on the next `next` bump**; a Dependabot PR is the moment. Diagnostic: `Object.keys(document.querySelector("main")).some(k => k.startsWith("__reactFiber"))` false on `<main>` but true on `body` means an unhydrated subtree, not a slow fetch. ⚠️ **Re-check first**: `/wishlist` hydrated normally under `next dev` on 2026-08-18, and `MyStuffView` changed that session, so it may be fixed or intermittent. → grep the archive for `library + wishlist dead under next dev`.
-
-- **Fandex Score `priorStrength` (C=5) + per-role class weights may want re-tuning** now the aggregate is a raw sum rather than a damped mean. **Time-gated**: revisit after a few weeks of real scores under the new formula. ⚠️ **Re-read this after 2026-08-22.** The class weights now decide WHICH facets are selected, not just how much a selected one counts, so a re-tune is a bigger lever than when this was written, and **any measurement taken before that date describes the old selection**.
-
-- **The 2026-08-23 optimization sweep is DONE, all six items.** What is left, and why the WAL is deliberately NOT being reclaimed → [docs/optimization-plan.md](docs/optimization-plan.md) §5.
-
-- **Platform integrations: the open questions were answered 2026-08-23.** What survives as standing context: AniList is **connector-blocked** on a terms clause barring "competing non-complementary services… anime and manga list or tracker services", while its metadata half is unaffected and could ship alone; books (Hardcover + Open Library) stay ⏸️ **postponed as a media type, 2026-08-03**. Capability reference → [PLATFORMS.md](PLATFORMS.md).
-  - **Hardcover: superseded 2026-10-17, now LIVE as a facts-only book source** (item 0 (f) above; its API Rules changed). What follows is the 2026-08-03 record. **Hardcover ⏸️ PARKED**, same call as Backloggd (Nils, 2026-08-03). The deciding fact was the usage terms, not OAuth: the docs call the API *"only for offline use at this time"*, reachable *"from localhost or APIs"*, with site allowlisting *"a way down the line"*. A hosted multi-user site is the case they haven't provided for. Secondary: no third-party OAuth (promised, not shipped), tokens expire on a **shared Jan 1 reset** so every user breaks the same day, no app-level credential, and the write mutations are undocumented. → grep the archive for `platform deep dives`.
-  - **The media-type cost is measured** and lives in the archive under `What adding a media type actually costs`. Two things worth knowing before any future type proposal: **no migration is needed** (`media_items.type` is plain TEXT, no CHECK constraint), and **`tsc` won't help you**: only one `Record<MediaType, …>` exists, so adding a union member compiles clean while silently doing nothing at the other ~9 enumeration points.
-
-- **Two light-theme contrast gaps stay deliberately unfixed and are Nils's to call** (they change the design, not a value): `--color-accent-hover` is **3.47:1**, accent text on `--color-surface-inset` is **4.32:1**. No light-theme toggle is wired, so neither is user-visible yet.
+- **Search Console, 4,089 of 4,090 URLs "Discovered – currently not indexed"** (2026-09-02). Written against the old site's 4,341-URL sitemap. Since then the sitemap is the static site's (10,132 URLs, facet pages included, which was the internal-depth step the plan asked for). What is left is his: external links (nilsmlynarek.eu, Show HN, Product Hunt, subreddits). The reasoning is in [docs/archive/old-site/seo.md](docs/archive/old-site/seo.md).
+- **The tag tail: ~9,000 tags in Other appearing three times or fewer** (2026-09-03). Other was emptied on 2026-10-18 by the AI sweep, and the weekly sweep keeps placing new tags.
+- **Desktop mockups for the filter panel** (older). The old site's `FilterPanel.tsx`; the app has its own Filters sheet.
+- **Nothing uses the media-type setting to SPEND less** (older). About the old site's `/api/discover`, `/api/library` and `/api/calendar`, which no longer exist.
+- **The list payload carries ~4.7 MB only the detail page reads** (older). The old site's `/api/library`.
+- **`/library`, `/wishlist`, `/settings` dead under `next dev`** (2026-08-17). The old site is deleted.
+- **Fandex Score `priorStrength` (C=5) and class weights may want re-tuning** (2026-08). Time-gated to "after a few weeks of real scores"; the live config already reads C=2 since then, and a re-tune is a design call for him, not a cleanup. Keep if he wants it looked at.
+- **The 2026-08-23 optimization sweep pointer** and **the platform-integrations standing context** (AniList blocked on its terms, books postponed then shipped 2026-10-17). Neither has a next action; the first is about the old site, the second belongs in [docs/decisions.md](docs/decisions.md) and [PLATFORMS.md](PLATFORMS.md).
+- **Two light-theme contrast gaps** (`--color-accent-hover` 3.47:1, accent on `--color-surface-inset` 4.32:1). Old-site tokens; the app has one dark theme.
+- **From the 2026-10-11 smoke test, "not re-logged":** `/dashboard` 404 is fixed (a 301 to `/wishlist` since 2026-10-23), Profile's "Coming up" no longer exists (Profile was made lighter on 2026-10-17), Steam is now the task above, and "a title removed from the pool between two site builds sends new visitors to the API" is how a static site works, not a bug.
 
 ---
 
@@ -157,13 +67,8 @@ SM76 to SM84 are fixed and in the archive (grep "15th smoke test" and "2026-10-1
 
 Fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
 
-- **Backups** ✅ proven restorable twice (2026-08-20, 2026-08-23), `ALL TABLES MATCH` on all eight tables. The two live rules are in [STATUS.md](STATUS.md) and [AGENTS.md](AGENTS.md). → grep `restore drill`.
-- **PL: the platform capability sweep** ✅ all six shipped 2026-08-23. The import's design → [docs/letterboxd-import.md](docs/letterboxd-import.md) (read it before touching `src/lib/import/`); the games two-provider scope split → [AGENTS.md](AGENTS.md). → grep `PL: the platform capability sweep`.
-- **Legal pages, all `TODO(...)` resolved** ✅ 2026-08-17. **The rule that outlives it: strings in `src/lib/legal/content/{de,en}/*.ts` `body:` arrays RENDER to users; they are not code comments.** → grep `TODO(H4.3)`.
-- **Cache tables dropped** ✅ 2026-08-17, migration 16. `user_library` / `user_watchlist` are VIEWS now. **Two traps live on in migration 16's comment and in `src/lib/cacheViews.ts`.** → grep `migration 16` · [[cache-tables-are-views]]
-- **SM39, the Fandex Score range** ✅ CLOSED 2026-08-17, relabelled rather than re-tuned. → grep `SM39`.
-- **Franchise / IP as a scoring factor** ✅ CLOSED 2026-08-17. `ip` stays at **3**. → grep `Franchise / IP`.
-- **Advanced search's Fandex Score (SM43–SM48)** ✅ FULLY CLOSED 2026-08-17. → grep `SM44 heal budget`.
-- **PR17 post-outage verification** ✅ 2026-08-12. Two corrected beliefs before touching backups: an **unchanged** Litestream generation is the HEALTHY signal, and `wal-truncate` reclaims nothing while Litestream runs. → grep `PR17`.
-- **Smoke test 2026-08-12 (11th run)** ✅ SM38–SM42 fixed. → grep `Smoke test 2026-08-12 11th run`.
-- Earlier sessions (G#/SM34–37, the eight closed questions, `P18 streaming links`, `H3 monetization v1`) are archived too.
+- **The 2026-10-23 review and the open tasks after it** ✅: hand-made taxonomy rows marked (`source`, migration 0005), the `exhaustive-deps` warnings, the old-site docs moved to `docs/archive/old-site/`, THE FINALS PLAYTEST folded, the TMDB writer jobs, the never-run admin checks. → grep `2026-10-23`.
+- **Smoke tests 13 to 15** ✅ (2026-10-11 to 10-17). → grep `13th smoke test`, `14th smoke test`, `15th smoke test`.
+- **Backups** ✅ proven restorable (2026-10-05 on D1). → grep `restore drill`.
+- **Legal pages** ✅. **The rule that outlives it: strings in `src/lib/legal/content/{de,en}/*.ts` `body:` arrays RENDER to users; they are not code comments.**
+- Earlier work (the old site's phases, smoke tests 1 to 12, monetization v1) is archived too.

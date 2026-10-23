@@ -6088,3 +6088,29 @@ was wrong (non-Latin titles already slug to `untitled`).
   files, the Dockerfile, Litestream, the probes), at the tag `old-site-final`. The root keeps the
   shared modules, now linted together with the Worker and the app. AGENTS.md 80 → 47 KB; its 64
   site-only rules are in `docs/archive/old-site-invariants.md`.
+
+## 2026-10-23 evening, the open tasks
+
+Nils: "do all open tasks in tasks.md". Done the same evening:
+
+- **The never-run checks**, on the local stack with the test accounts: Save weights (config
+  version 9 → 10), a Review tag card accepted, Review's **Add** on a missing-members card (an
+  attach row, `source = manual`), a category created and deleted, a tag name chosen and reset,
+  an alias added and removed, and **disconnecting one of two sign-ins** (identity gone, session
+  epoch moved, the app stayed signed in). Each read back from the local D1. On the way:
+  `wrangler dev` sends every request under the first `routes` host (`api.fandex.org` since that
+  morning), so the test login's loopback gate refused; `dev:local` now passes
+  `--local-upstream localhost:8787`.
+- **Hand-made taxonomy rows are marked** (migration 0005): `source` on `tag_category`,
+  `tag_category_override`, `tag_alias`, `ip_alias`, `facet_label_override`, `'hand'` by default and
+  for every admin write, `'sweep'` for the sweep, whose undo deletes only those.
+- **TMDB writer jobs** (the Stephen King gap): the stored blob kept four crew jobs while
+  `facets.ts` read twelve. One list in `src/lib/crewJobs.ts`, `PROJECTION_VERSION` 4, and a cron
+  walk refetching the 1,698 TMDB links stored before it, four a run.
+- **THE FINALS PLAYTEST** folded into THE FINALS (IGDB 214417, found through IGDB's
+  `external_games` by Steam app id 2073850, which its search does not surface). `fold-items.mjs`
+  now promotes a target that gains a user row into the pool and keeps the duplicate's provider ids
+  in `provider_aliases`. Its address 301s.
+- **`/dashboard`** 301s to `/wishlist` again, as on the old site.
+- **Lint at 0 warnings**, and the old site's five reference docs moved to `docs/archive/old-site/`.
+- Ten TASKS.md items flagged as outdated rather than done; they wait for Nils's word.

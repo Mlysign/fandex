@@ -9,7 +9,7 @@ Every platform Fandex uses or has considered, in three tables: **metadata**, **t
 **Status** ✅ live · 🔵 built, hidden · ⏸️ parked · ❔ unevaluated · ❌ rejected  **·  Score value** ●●● high · ●● medium · ● narrow · – none
 **R** read · **W** write · **`*`** exists in their data model but not via a supported official API
 
-⚠️ **Scale rule before adding any provider call:** cost is driven by **catalog breadth × crawler appetite**, not pageviews. A cold `/tag/` page cost **14 provider calls** when that was measured. **Price new calls in cold-facet-page units.** ⚠️ The worked example used to be RAWG's 20k/mo quota, which **retired 2026-09-02**; the tightest remaining ceiling is IGDB's, and IGDB is now the ONLY games provider, so a new games call has no second source to fall back on. → [docs/scalability.md](docs/scalability.md)
+⚠️ **Scale rule before adding any provider call:** cost is driven by **catalog breadth × crawler appetite**, not pageviews. A cold `/tag/` page cost **14 provider calls** when that was measured. **Price new calls in cold-facet-page units.** ⚠️ The worked example used to be RAWG's 20k/mo quota, which **retired 2026-09-02**; the tightest remaining ceiling is IGDB's, and IGDB is now the ONLY games provider, so a new games call has no second source to fall back on. → [docs/archive/old-site/scalability.md](docs/archive/old-site/scalability.md)
 
 ---
 

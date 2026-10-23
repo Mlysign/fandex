@@ -69,7 +69,7 @@ function Page({ item, taxonomy, rails }: { item: ItemDetail; taxonomy: Taxonomy 
               // The app's two rails, picked by the build from the whole pool with the
               // app's own ranker (lib/related.ts). They are the page's links to other
               // titles: what a crawler follows, and the one lever on crawl priority
-              // that is ours (docs/seo.md).
+              // that is ours (docs/archive/old-site/seo.md).
               related={rails && (rails.series?.items.length || rails.franchise?.items.length || rails.similar.length) ? (
                 <>
                   {rails.series?.items.length ? <StaticRail title={rails.series.label} items={rails.series.items} /> : null}

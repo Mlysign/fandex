@@ -62,7 +62,7 @@ Legend: **yes** at parity · **partial** exists, differs as noted · **no** not 
 | # | Stage | Why here |
 |--:|---|---|
 | 1 | ~~Settings' rest~~ (2026-10-15): Import and the download on a phone. A second login method on Android waits on Nils (app.md). | |
-| 2 | ~~Static facet pages, the related rails on static item pages, games on a studio's or tag's page~~ (done 2026-10-15). Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. The rails are the site's own internal links, which is the one lever on crawl priority that is ours ([seo.md](seo.md)); the build holds every title and can pick them with `lib/related.ts`. |
+| 2 | ~~Static facet pages, the related rails on static item pages, games on a studio's or tag's page~~ (done 2026-10-15). Popular people on Home. | The screens ask TMDB from the device now; a crawler still gets the app's shell. New Worker routes. Also what Google already holds addresses for. The rails are the site's own internal links, which is the one lever on crawl priority that is ours ([seo.md](archive/old-site/seo.md)); the build holds every title and can pick them with `lib/related.ts`. |
 | 3 | ~~The provider-fed Discover feed, trending on Home~~ (done 2026-10-15). | Makes two "partial" rows honest. Price each in row writes and CPU first (docs/worker.md). |
 | 4 | **Import, sign-in beyond Trakt, and the rest of Insights.** | Insights is computed on the device and needs no route. |
 

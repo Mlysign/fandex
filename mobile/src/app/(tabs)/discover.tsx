@@ -200,12 +200,13 @@ export default function DiscoverScreen() {
   const hidden = useHiddenIds();
   // The catalog's people and tags, read once the first time somebody types.
   const [vocab, setVocab] = useState<VocabEntry[] | null>(null);
+  const typing = norm.length >= 2;
   useEffect(() => {
-    if (norm.length < 2) return;
+    if (!typing) return;
     let live = true;
     void facetVocab(db, sync.revision).then((v) => { if (live) setVocab(v); }, () => undefined);
     return () => { live = false; };
-  }, [db, sync.revision, norm.length >= 2]);
+  }, [db, sync.revision, typing]);
   const vocabMatches = useMemo(() => (vocab ? matchVocab(vocab, norm) : { people: [], tags: [] }), [vocab, norm]);
   useEffect(() => { if (!norm && pool !== null && feed.page === 0 && !feed.loading) loadFeed(1); }, [norm, pool, feed.page, feed.loading, loadFeed]);
   // Each title's key once per pool, not once per keystroke.
@@ -247,7 +248,8 @@ export default function DiscoverScreen() {
   }, [visible, sort, allScores, norm]);
 
   // A new question starts at the top of its own answer.
-  useEffect(() => setShown(STEP), [norm, sort, types.shown.join(','), filters]);
+  const shownKey = types.shown.join(',');
+  useEffect(() => setShown(STEP), [norm, sort, shownKey, filters]);
   const page = useMemo(() => sorted.slice(0, shown), [sorted, shown]);
   const more = useCallback(() => {
     if (shown < sorted.length) setShown((n) => n + STEP);

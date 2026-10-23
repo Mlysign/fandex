@@ -14,9 +14,9 @@ measured on fandex.org rather than reasoned about. Ranked by leverage.
 > to any other item page to **3–14** on most; and the franchise rail now shows
 > what a franchise actually contains rather than the slice we happened to hold.
 
-**Companion docs.** `docs/scalability.md` holds the per-surface provider-cost
+**Companion docs.** `docs/archive/old-site/scalability.md` holds the per-surface provider-cost
 model and is still correct; this file extends its §4 list with three levers it
-did not have. `docs/seo.md` holds the crawl picture. Neither is superseded.
+did not have. `docs/archive/old-site/seo.md` holds the crawl picture. Neither is superseded.
 
 ---
 
@@ -45,7 +45,7 @@ a **7,629 MB limit**. Memory is nowhere near a ceiling. DB 81.3 MB, WAL 340.8 MB
 
 Provider volume over 13.7 h, projected per month: TMDB **158,257**, IGDB 9,341,
 Trakt 2,242, Steam 1,441, with RAWG, OMDb and Letterboxd latched off at 401. For
-contrast, `docs/scalability.md` §1a measured TMDB at 2,793,323/month before the
+contrast, `docs/archive/old-site/scalability.md` §1a measured TMDB at 2,793,323/month before the
 401 latch shipped, so the latch alone already cut provider traffic about 17x.
 
 ---
@@ -119,7 +119,7 @@ the query asks for `franchises.name` and never for the franchise's game list. So
 a franchise rail can only ever list titles that already happen to be in the
 catalog, and `franchise.ts`'s own header is honest that coverage is thin.
 
-**Do not fetch on the request path.** `docs/scalability.md` §4.2 is right that
+**Do not fetch on the request path.** `docs/archive/old-site/scalability.md` §4.2 is right that
 lowering provider calls on crawlable pages is worth more than everything else,
 and a per-render collection fetch pushes that number the wrong way.
 
@@ -143,7 +143,7 @@ cannot join a film collection, because neither provider models that, so
 ### 2.3 IGDB is failing a third of its calls, and it is currently the only games source
 
 `api.igdb.com`: **64 network errors out of 175 requests**, plus 230 further calls
-blocked by the breaker those failures opened. `docs/scalability.md` §1a recorded
+blocked by the breaker those failures opened. `docs/archive/old-site/scalability.md` §1a recorded
 the same shape earlier and worse, at 190 of 232.
 
 IGDB's documented limit is **4 requests per second**. `liveDiscover` fans out
@@ -200,7 +200,7 @@ evidence that separates the two cases.
 
 ### 2.6 Pin the remaining module-level caches, after measuring
 
-`docs/scalability.md` §3.4 flags roughly 20 module-level `BoundedCache`s that may
+`docs/archive/old-site/scalability.md` §3.4 flags roughly 20 module-level `BoundedCache`s that may
 be duplicated per Next bundle. Still true today: `/api/home`'s `_publicCache` is
 a bare module-scope `new BoundedCache`. If they are duplicated, retained memory
 is a multiple of the budgeted figure and hit rates are below assumption.
@@ -214,7 +214,7 @@ of this.
 ## 3. Standing items this sweep did not change
 
 - **RAWG's metadata role.** Quota exhausted, latched off, and its $149/mo tier is
-  only 2.5x the free quota. `docs/scalability.md` §4.3 already says to decide
+  only 2.5x the free quota. `docs/archive/old-site/scalability.md` §4.3 already says to decide
   this. Today's cache reduces RAWG browse volume, which buys time rather than
   making the decision.
 - **OMDb must be removed before ads, not paid for.** CC BY-NC 4.0. It contributes
@@ -245,7 +245,7 @@ of this.
 
 Short, and none of it is a leftover from §2.
 
-1. ✅ **Cache and pool weights are measured** (2026-08-23, `docs/scalability.md` §6).
+1. ✅ **Cache and pool weights are measured** (2026-08-23, `docs/archive/old-site/scalability.md` §6).
    `GET /api/dev/dbsize?caches=1` samples them. The result inverted the
    assumption: the discovery pool, the one thing that cannot be capped, is
    **5.2 MB**, while `facetCache.derived` is **33 MB** and the three big caches

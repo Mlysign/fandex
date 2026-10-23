@@ -33,7 +33,7 @@ const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 //
 // ⚠️ If the answer is NO, flipping this stops the flow but does NOT remove what
 // is already stored. That is `scripts/purge-igdb.mjs`, deliberately a separate
-// and explicit step. → docs/catalog-growth.md §17
+// and explicit step. → docs/archive/old-site/catalog-growth.md §17
 //
 // ⚠️ Default ON is the deliberate choice for a KILL switch: a typo in the env
 // var leaves the site working rather than silently dropping a third of the

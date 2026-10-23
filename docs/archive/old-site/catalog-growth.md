@@ -1,7 +1,7 @@
 # Catalog growth: the running jobs
 
 **All five phases shipped 2026-08-27/28.** The design, every measurement and the
-phase-by-phase history are in [docs/archive/history.md](archive/history.md) — grep it
+phase-by-phase history are in [docs/archive/history.md](../../archive/history.md) — grep it
 for `media_item_projection`, `unfoldEntry`, `retention`, `backfill` or any number you
 are about to quote. This file is only what is still live.
 

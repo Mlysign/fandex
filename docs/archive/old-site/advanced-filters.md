@@ -35,7 +35,7 @@ as `{}`, so the derivation sees tag facets and nothing else, and a person, studi
 matches zero items while looking exactly like a genuine zero result. That shipped and survived a
 month. ⚠️ The pill's own count comes from the CATALOG vocab (`searchFacets`), not from the visible
 tab, so a count above the tab's hit count is correct, not a bug.
-→ [the archive](archive/history.md), "The facet pills that matched nothing"
+→ [the archive](../../archive/history.md), "The facet pills that matched nothing"
 
 **State** (`discovery/types.ts:102-111`): `UiFilters` carries `types, sources, yearRange, commRange,
 runtimeRange, membership, includeFacets, excludeFacets`. ⚠️ **`sources`, `commRange` and

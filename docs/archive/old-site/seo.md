@@ -3,7 +3,7 @@
 > ⚠️ **The crawl surface is SWITCHED OFF as of 2026-10-04** (`PUBLIC_CATALOG=0` on Railway:
 > robots.txt disallows everything but `/legal/`, the sitemap lists the legal pages only, item,
 > facet and calendar pages send `noindex`). The Next.js site is a private tool until the Expo
-> app and the Cloudflare site replace it → [app-plan.md](app-plan.md). Everything below
+> app and the Cloudflare site replace it → [app-plan.md](../../app-plan.md). Everything below
 > describes the surface as it behaves when the switch is on, and is the reference for
 > rebuilding it on the Worker.
 
@@ -262,7 +262,7 @@ tries them in order:
 3. the provider fan-out: the only layer that costs quota.
 
 The table did not make the cache redundant and the cache did not make the table
-unnecessary. The cache dies on every deploy (`docs/scalability.md` §3.6) and prod
+unnecessary. The cache dies on every deploy (`docs/archive/old-site/scalability.md` §3.6) and prod
 deploys often; the table survives that. But a stored month is ~103 KB of JSON, so
 reading it on every request would trade a network call for a parse on the request
 path.

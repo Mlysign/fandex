@@ -231,6 +231,17 @@ Each of these is a way the Worker differs from the site, and each has a test.
 - **Sign-in:** a Trakt identity is keyed on Trakt's `ids.uuid` from `/users/settings`, and a row
   still keyed by username moves to it on its owner's next sign-in. A join that would fold away an
   account holding any titles always answers `merge-required`, overlap or not.
+- **Taxonomy rows say who made them** (migration 0005): `source` is `'hand'` on every admin
+  write and by default, `'sweep'` on the weekly sweep's inserts, and the sweep's undo deletes
+  only `'sweep'` rows carrying its run's stamp.
+- **A projection bump is walked by the cron** (`runProjectionRefreshStep`): v4 (2026-10-23) keeps
+  every TMDB writer job (`src/lib/crewJobs.ts`), and the TMDB links stored before it are refetched
+  four a run in key order until `kv` `tmdb_projection_cursor` reads `done:4`. A future bump that
+  changes what TMDB blobs keep needs only the version raised: the cursor carries its version, so
+  the walk starts over by itself.
+- **`wrangler dev` sends every request under the first `routes` host** (`api.fandex.org`), which
+  the test login's loopback gate refuses; `npm run dev:local` passes `--local-upstream
+  localhost:8787` for that reason.
 - **The cron's housekeeping** drops `daily_budget` rows older than 30 days and calendar months
   outside what a request may ask for, once a UTC day. A failed TMDB refresh no longer moves
   `last_synced` (the stored copy's age, which TMDB's six-month cap counts from); the link is set

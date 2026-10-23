@@ -100,7 +100,7 @@ export class BoundedCache<K, V> {
 // breaker since 2026-08-02, and `http.ts` pins `_breakers` and `_calls` to
 // globalThis for exactly this reason.
 //
-// `docs/scalability.md` §3.4 flagged that roughly 20 other module-level caches
+// `docs/archive/old-site/scalability.md` §3.4 flagged that roughly 20 other module-level caches
 // have the same shape and were NOT measured. The honest problem with measuring
 // first is that **duplication is not observable from inside one bundle** — the
 // 2026-08-20 proof worked only because the counters it watched were already
@@ -147,7 +147,7 @@ export function __clearSharedCaches(): void {
 //
 // ⚠️ EVERY CACHE HERE IS BOUNDED BY ENTRY COUNT, NOT BY BYTES, and those are
 // very different budgets when the entries are payloads rather than ids.
-// `docs/scalability.md` §3.5 has flagged this since the `facet_page_cache`
+// `docs/archive/old-site/scalability.md` §3.5 has flagged this since the `facet_page_cache`
 // incident, and it stayed open because nothing could answer "how many bytes is
 // `max: 3000` actually authorising?" — `cacheSnapshot()` reports 3000 either way.
 //

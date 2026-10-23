@@ -22,7 +22,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 
 **Railway is gone (deleted 2026-10-05). Cloudflare, free plan.** A push to `main` deploys nothing: the website goes out with `node mobile/web/publish.mjs` and the API with `npx wrangler deploy` from `worker/`.
 
-- **`fandex-api`** is the API and the cron, on D1, at `api.fandex.org` since 2026-10-23 (where the edge cache works) and still at `fandex-api.fandex-worker.workers.dev` for APKs from before. Deployed 2026-10-23 with migration 0004 (`provider_aliases`).
+- **`fandex-api`** is the API and the cron, on D1, at `api.fandex.org` since 2026-10-23 (where the edge cache works) and still at `fandex-api.fandex-worker.workers.dev` for APKs from before. Deployed 2026-10-23 with migrations 0004 (`provider_aliases`) and 0005 (`source` on the taxonomy tables). Its cron is walking the 1,698 TMDB links stored before projection v4, about three days from the evening of 2026-10-23.
 - **`fandex-web`** serves the site: files a build wrote, and a small Worker for what no file answers; `/v1/*` goes to the API through a service binding. **`fandex-www`** redirects www to the apex.
 - ⚠️ **D1's daily read allowance ran out once (2026-10-10).** The open routes that read many rows a call are rate limited and capped per day since 2026-10-23 (`DAILY_DELTA_CAP`, `DAILY_LOOKUP_CAP`); a normal day is far under both.
 - **A first-time visitor reads the catalog from files** (`/catalog/`, written by the site build) and then asks the API once.
@@ -39,7 +39,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 
 ## 🔎 Organic reach
 
-**Ads-first means the bottleneck is traffic.** Search Console is verified for `fandex.org` through a DNS TXT record on the apex (⚠️ deleting it un-verifies the property). The static site carries the old site's structured data, sitemap and robots rules. → [docs/seo.md](docs/seo.md) (written for the old site; the reasoning still holds).
+**Ads-first means the bottleneck is traffic.** Search Console is verified for `fandex.org` through a DNS TXT record on the apex (⚠️ deleting it un-verifies the property). The static site carries the old site's structured data, sitemap and robots rules. → [docs/archive/old-site/seo.md](docs/archive/old-site/seo.md) (written for the old site; the reasoning still holds).
 
 ## 🗺️ Roadmap
 

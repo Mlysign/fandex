@@ -9,7 +9,7 @@ import { httpFetch, __resetBreakers, __resetHostGates, hostGateSnapshot } from "
 // fans out PAGES_PER_SOURCE pages under one Promise.all, several surfaces can
 // do that at once, and the franchise sweep adds more. Measured on prod: **64
 // network errors out of 175 IGDB requests**, and an earlier reading of 190 of
-// 232 (docs/scalability.md §1a).
+// 232 (docs/archive/old-site/scalability.md §1a).
 //
 // It is a CATALOG COMPLETENESS problem, not a latency one — RAWG's monthly
 // quota is exhausted, so IGDB is the only games metadata source left.

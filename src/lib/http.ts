@@ -230,7 +230,7 @@ function callsFor(host: string): HostCalls {
 // at once, and the franchise sweep adds more — so we routinely exceed it.
 // Measured on prod: **64 network errors out of 175 IGDB requests**, plus 230
 // further calls blocked by the breaker those failures had opened. An earlier
-// reading in docs/scalability.md §1a was worse: 190 of 232.
+// reading in docs/archive/old-site/scalability.md §1a was worse: 190 of 232.
 //
 // That is a CATALOG COMPLETENESS problem, not just a latency one — with RAWG's
 // monthly quota exhausted, IGDB is the only games metadata source we have, so a

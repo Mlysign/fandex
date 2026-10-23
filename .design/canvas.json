@@ -38,7 +38,7 @@
       "x": 1485,
       "y": 0,
       "w": 330,
-      "text": "PLATFORM FILTER - read before building\n\nThe data is already derived per item (platforms / streamingProviders) and simply not copied onto the discovery vector. No migration, no provider re-fetch.\n\nFour things that change the design:\n1. Streaming data in the pool is resolved for DEFAULT_COUNTRY, not the viewer's region. Option C says this out loud; A and B do not yet.\n2. platforms is games-only, streamingProviders is movies/shows-only. Every option has to answer this - A shows both groups, B and C switch.\n3. storeLinks is a mixed bag (Steam, GOG, but also IMDb, Reddit) - not usable as a filter without an allowlist.\n4. Browsed rows may hold no provider data at all. Decide whether unknown is hidden or shown - a filter that silently drops them reads as broken.\n\nFull detail: docs/advanced-filters.md"
+      "text": "PLATFORM FILTER - read before building\n\nThe data is already derived per item (platforms / streamingProviders) and simply not copied onto the discovery vector. No migration, no provider re-fetch.\n\nFour things that change the design:\n1. Streaming data in the pool is resolved for DEFAULT_COUNTRY, not the viewer's region. Option C says this out loud; A and B do not yet.\n2. platforms is games-only, streamingProviders is movies/shows-only. Every option has to answer this - A shows both groups, B and C switch.\n3. storeLinks is a mixed bag (Steam, GOG, but also IMDb, Reddit) - not usable as a filter without an allowlist.\n4. Browsed rows may hold no provider data at all. Decide whether unknown is hidden or shown - a filter that silently drops them reads as broken.\n\nFull detail: docs/archive/old-site/advanced-filters.md"
     }
   ],
   "launch": { "view": "canvas" }

@@ -32,7 +32,12 @@ interface Preview { itemId: string; itemTitle: string; score: number | null; rea
 /** A number field that lets you type "0." on the way to "0.5" without snapping back. */
 export function NumField({ value, onChange, disabled, label }: { value: number; onChange: (n: number) => void; disabled?: boolean; label: string }) {
   const [text, setText] = useState(String(value));
-  useEffect(() => { if (Number(text) !== value) setText(String(value)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [value]);
+  useEffect(() => {
+    if (Number(text) !== value) setText(String(value));
+    // Only a new value from outside resets the field. `text` is left out on
+    // purpose: with it, "0." would snap back to "0" on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <TextInput
       value={text} editable={!disabled} keyboardType="decimal-pad" accessibilityLabel={label}

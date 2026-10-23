@@ -687,7 +687,7 @@ export function dedupeGames(cands: FeedCandidate[]): FeedCandidate[] {
  * Flipping that switch now takes games' browse feed to nothing rather than
  * halving it. `withCatalogFallback` covers the outage case from our own rows,
  * which is what makes this survivable — but do not add a third games surface
- * without re-reading that. → `docs/catalog-growth.md`, [[provider-latency-isolation]]
+ * without re-reading that. → `docs/archive/old-site/catalog-growth.md`, [[provider-latency-isolation]]
  *
  * The name and the dedupe stay: the moment a second source returns, it plugs in
  * here and nothing else has to change.

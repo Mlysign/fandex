@@ -151,7 +151,7 @@ describe("dedupeGames", () => {
 // Measured on prod that day: `/api/discover` answered in 930 ms WARM and 955 ms
 // cold — i.e. it re-ran the whole provider fan-out on every request — while the
 // cached `/api/home` served the same shape in 37 ms. TMDB was on track for
-// 158,257 calls/month at pre-launch traffic, and `docs/scalability.md` is
+// 158,257 calls/month at pre-launch traffic, and `docs/archive/old-site/scalability.md` is
 // explicit that provider quota, not compute, is the ceiling here.
 //
 // These assert a CALL COUNT rather than a payload, deliberately. The repo has
