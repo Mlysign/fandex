@@ -52,12 +52,17 @@ fs.writeFileSync(path.join(OUT, "taxonomy.json"), JSON.stringify(tax));
 
 // ── 2. The no's: dismissed in Review, and this sweep's own earlier decisions ──
 const WRANGLER = path.join(REPO, "worker", "node_modules", "wrangler", "bin", "wrangler.js");
-let dismissed = [];
+// ⚠️ A failed read STOPS the sweep. An empty dismissed.json would read as "nobody
+// ever said no", and an unattended apply would redo what Nils rejected in Review.
+// The file is removed too, so apply.mjs refuses rather than reading an old one.
+let dismissed;
 try {
   const out = execFileSync(process.execPath, [WRANGLER, "d1", "execute", "fandex", "--remote", "--json", "--command", "SELECT kind, ref FROM taxonomy_suggestion_dismissed"], { cwd: path.join(REPO, "worker"), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   dismissed = JSON.parse(out.slice(out.indexOf("[")))[0].results.map((r) => [r.kind, r.ref]);
 } catch (e) {
-  console.error(`could not read the dismissals from D1 (${e.message.split("\n")[0]}); the worklist carries none`);
+  fs.rmSync(path.join(OUT, "dismissed.json"), { force: true });
+  console.error(`could not read the dismissals from D1 (${e.message.split("\n")[0]}); stopping, so no sweep runs without them`);
+  process.exit(1);
 }
 fs.writeFileSync(path.join(OUT, "dismissed.json"), JSON.stringify(dismissed));
 const decidedFile = path.join(here, "decided.json");
@@ -162,7 +167,7 @@ fs.writeFileSync(path.join(OUT, "actions.example.json"), JSON.stringify({
     { kind: "tag-category", tagKeys: ["deckbuilding", "roguelike deckbuilder"], categoryId: "mechanics", why: "How a game plays, not what it is about." },
     { kind: "tag-alias", members: ["sci fi", "scifi"], canonical: "science fiction", why: "One tag spelled three ways." },
     { kind: "category-create", id: "setting-era", label: "Era", weight: 1, why: "Forty tags name a period and no category holds them." },
-    { kind: "category-merge", from: "modes", into: "mode", why: "Two hand-made categories with one meaning." },
+    { kind: "category-merge", from: "modes", into: "mode", why: "Two hand-made categories with one meaning. Runs only with apply.mjs --allow-category-merge, which the scheduled sweep never passes." },
     { kind: "skip", ref: "franchise-new|limbo", why: "The game and the film share a word and nothing else." },
   ],
 }, null, 2));

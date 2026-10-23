@@ -35,6 +35,11 @@ export interface MatchSummary {
  *      is worse than reporting one unmatched row.
  *
  * `byTitle` is keyed by `normalizeName(title)`.
+ *
+ * ⚠️ Never on an EMPTY key. `normalizeName` keeps a to z only, so every title
+ * in another script ("七人の侍", "Сталкер") normalises to "", and they all
+ * matched each other: an import could rate the wrong film, a real Trakt write.
+ * A row with no key goes to the provider lookup, which searches the raw title.
  */
 export function matchAgainst(
   rows: ImportRow[],
@@ -52,8 +57,9 @@ export function matchAgainst(
       if (hit) { id = hit; how = "imdb-id"; }
     }
 
-    if (!id) {
-      const candidates = byTitle.get(normalizeName(row.title)) ?? [];
+    const key = normalizeName(row.title);
+    if (!id && key) {
+      const candidates = byTitle.get(key) ?? [];
       if (row.year != null) {
         const near = candidates.filter((c) => c.year != null && Math.abs(c.year - row.year!) <= 1);
         if (near.length === 1) { id = near[0].id; how = "title-year"; }

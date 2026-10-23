@@ -58,10 +58,14 @@ async function getXml(path: string, budgetMs?: number): Promise<string | null> {
 // ── The XML reader ──────────────────────────────────────────────────────────
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#10": "\n", "#13": "", "#039": "'", "#39": "'", mdash: "-", ndash: "-", hellip: "…", rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"' };
+// `String.fromCodePoint` THROWS past U+10FFFF, so one bad entity in one
+// description (`&#99999999;`) failed the whole batch. An entity that names no
+// character is left as written.
+const codePoint = (n: number, m: string) => (Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m);
 export function decode(s: string): string {
   return s
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (m, d: string) => (ENTITIES[`#${d}`] ?? String.fromCodePoint(Number(d))))
+    .replace(/&#x([0-9a-f]+);/gi, (m, h: string) => codePoint(parseInt(h, 16), m))
+    .replace(/&#(\d+);/g, (m, d: string) => (ENTITIES[`#${d}`] ?? codePoint(Number(d), m)))
     .replace(/&([a-z]+);/gi, (m, n: string) => ENTITIES[n.toLowerCase()] ?? m);
 }
 

@@ -212,6 +212,30 @@ describe("provider circuit breaker", () => {
     expect(isProviderCircuitOpen("other.test")).toBe(false);
   });
 
+  // A Worker isolate can drop a request without running its `finally`. A probe
+  // flag nobody clears would block the host until the isolate died.
+  it("a probe whose request never finishes stops blocking the host after its bound", async () => {
+    vi.useFakeTimers();
+    try {
+      const opts = { retries: 0, timeoutMs: 1_000 };
+      const f = vi.fn().mockResolvedValue(resp(500));
+      vi.stubGlobal("fetch", f);
+      for (let i = 0; i < 3; i++) await httpFetch("https://dropped.test", opts);
+      vi.advanceTimersByTime(31_000); // past the open window: half-open
+
+      f.mockImplementation(() => new Promise(() => {})); // the probe: never answers, never cleans up
+      void httpFetch("https://dropped.test", opts).catch(() => {});
+      await expect(httpFetch("https://dropped.test", opts)).rejects.toBeInstanceOf(ProviderUnavailableError);
+
+      vi.advanceTimersByTime(31_000); // past the probe's bound (30 s floor)
+      f.mockResolvedValue(resp(200));
+      expect((await httpFetch("https://dropped.test", opts)).status).toBe(200);
+      expect(isProviderCircuitOpen("dropped.test")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports open circuits for /api/health, and closes them on recovery", async () => {
     const f = vi.fn().mockResolvedValue(resp(500));
     vi.stubGlobal("fetch", f);

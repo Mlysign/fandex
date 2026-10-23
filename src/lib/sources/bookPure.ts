@@ -1,5 +1,8 @@
-// Open Library helpers with no imports, so the app and the facet code can use
-// them without pulling the fetch module in (sources/openlibrary.ts fetches).
+// Open Library helpers with no imports but normalize.ts (itself import-free),
+// so the app and the facet code can use them without pulling the fetch module
+// in (sources/openlibrary.ts fetches).
+
+import { searchKey } from "@/lib/normalize";
 
 /** A work id as Open Library writes it: OL, digits, W. */
 export const OL_WORK_ID = /^OL\d{1,12}W$/;
@@ -173,16 +176,29 @@ export interface BookCard {
   isbns?: string[];
 }
 
-const foldKey = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+// a to z only, so a title in another script folds to "" ("東京 2" to "2").
+// `searchKey` keeps those letters, and is the key whenever it holds any:
+// Greek through the CJK and Hangul blocks, leaving out the symbol blocks in
+// between, so a "™" does not move a Latin title off the Latin key.
+const OTHER_SCRIPT = /[Ͱ-῿Ⰰ-퟿豈-﫿ｦ-ￜ]/;
+const foldKey = (s: string) => {
+  const kept = searchKey(s);
+  if (OTHER_SCRIPT.test(kept)) return kept;
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+};
 
 /**
  * What one book looks like whichever provider names it: the title before any
  * subtitle, without a leading article, plus the first author's surname. "The
  * Doors of Stone" at Hardcover and "Doors of Stone" at Open Library are one key.
+ * ⚠️ Never an empty title: every title in another script once keyed "|", and
+ * `mergeBookCards` folded them all into the first. A title nothing can key is
+ * its own book, keyed by the provider's id.
  */
-export function bookIdentityKey(card: { title: string; authors?: string[] }): string {
+export function bookIdentityKey(card: { title: string; authors?: string[]; source?: string; sourceId?: string }): string {
   const title = foldKey(card.title.split(/[:(]/)[0]).replace(/^(the|a|an) /, "");
   const author = card.authors?.[0] ? foldKey(card.authors[0]).split(" ").pop() ?? "" : "";
+  if (!title) return `id:${card.source ?? ""}:${card.sourceId ?? card.title}`;
   return `${title}|${author}`;
 }
 

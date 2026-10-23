@@ -6,13 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+# Read the code and nothing else. A job that needs more asks for it itself.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Typecheck · Lint · Test · Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22 # matches the Dockerfile (node:22-bookworm-slim)
           cache: npm
@@ -57,8 +61,8 @@ jobs:
       run:
         working-directory: worker
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -72,6 +76,11 @@ jobs:
       - name: Test
         # Runs inside workerd against a local D1: the same SQLite build as prod.
         run: npm test
+      - name: Bundle (dry run)
+        # The bundle is what refuses a Node-only module the Worker reached
+        # through ../src (AGENTS.md); tsc does not. A dry run builds without
+        # deploying and needs no Cloudflare login or secret.
+        run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/worker-bundle"
 
   app:
     # The Expo app (mobile/), its own package. Typecheck and the logic tests
@@ -84,8 +93,8 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -97,15 +106,33 @@ jobs:
         run: npm test
 
   audit:
-    name: npm audit
+    # One run per package: the site (root), the Worker and the app each have
+    # their own lockfile, and the last two are what ships. Not fail-fast, so a
+    # red root audit does not hide the other two.
+    name: npm audit (${{ matrix.package }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [".", worker, mobile]
+        include:
+          - level: high
+          # The app's high advisories (2026-10-23: node-forge, xcode, uuid) all
+          # come through Expo's build CLI (@expo/cli), a runtime dependency on
+          # paper that never reaches the bundle, and npm's only fix is a breaking
+          # Expo downgrade. A critical one still fails the job.
+          - package: mobile
+            level: critical
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      # npm audit reads the lockfile, so nothing is installed and no install
+      # script runs.
       # --omit=dev: the only remaining high-severity advisory (2026-07-29) is
       # brace-expansion's DoS-via-glob-expansion, reachable only through eslint's
       # own minimatch@3.1.5 chain (eslint/eslint-plugin-import/jsx-a11y/react,
@@ -114,5 +141,5 @@ jobs:
       # exists for minimatch@3.x's API). It only ever matches this repo's own static
       # lint globs, never attacker input, so there's nothing here to exploit.
       # Runtime deps (next, postcss, etc.) are still fully audited.
-      - name: Audit (high or above, runtime deps)
-        run: npm audit --audit-level=high --omit=dev
+      - name: Audit (runtime deps)
+        run: npm audit --audit-level=${{ matrix.level }} --omit=dev

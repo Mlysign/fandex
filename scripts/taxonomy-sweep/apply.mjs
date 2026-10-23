@@ -1,6 +1,6 @@
 // The weekly taxonomy sweep, step two: apply a list of decisions to live D1.
 //
-//   node scripts/taxonomy-sweep/apply.mjs <workdir>/actions.json [--apply]
+//   node scripts/taxonomy-sweep/apply.mjs <workdir>/actions.json [--apply] [--allow-category-merge]
 //
 // Reads the work folder prepare.mjs wrote (catalog.json, taxonomy.json,
 // dismissed.json beside the actions file), checks every action against it,
@@ -16,6 +16,18 @@
 // the sweep's rows from Nils's. The taxonomy is read live by every device
 // (/v1/taxonomy, asked on every app start and return), so nothing needs a deploy or a publish;
 // the SQL it writes ends by dropping the Worker's kept copy, so the next ask sees the change.
+//
+// ⚠️ Only item_ip_override has a `source` column. ip_alias, tag_alias,
+// facet_label_override and tag_category_override do not, so an existing row
+// there cannot be told apart as hand-made and is never changed: a bundle or a
+// spelling that would have to re-point existing aliases is skipped, not
+// flattened. Every row the sweep writes carries one fixed `updated_at` (STAMP),
+// and the undo deletes only rows still holding it: never a row that was there
+// before, and never one edited by hand since.
+//
+// category-merge rewrites hand-placed overrides and deletes a hand-made
+// category, so it runs only with --allow-category-merge, which the scheduled
+// sweep never passes. Without the flag it is skipped and reported.
 //
 // Actions (every one carries a one-line `why`, kept in the report):
 //   franchise-attach  { mediaItemId, franchise }         the title joins the franchise, made if new
@@ -41,10 +53,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, "..", "..");
 const [actionsFile, ...flags] = process.argv.slice(2);
 if (!actionsFile) {
-  console.error("usage: node scripts/taxonomy-sweep/apply.mjs <workdir>/actions.json [--apply]");
+  console.error("usage: node scripts/taxonomy-sweep/apply.mjs <workdir>/actions.json [--apply] [--allow-category-merge]");
   process.exit(2);
 }
 const apply = flags.includes("--apply");
+const allowCategoryMerge = flags.includes("--allow-category-merge");
+/** The `updated_at` of every row this run writes: what lets the undo tell them from anybody else's. */
+const STAMP = Math.floor(Date.now() / 1000);
 const WORK = path.dirname(path.resolve(actionsFile));
 const day = path.basename(WORK).match(/^\d{4}-\d{2}-\d{2}$/) ? path.basename(WORK) : new Date().toISOString().slice(0, 10);
 
@@ -55,6 +70,12 @@ const { tagCategoryHex } = await import("@/lib/facetPalette");
 const read = (name) => JSON.parse(fs.readFileSync(path.join(WORK, name), "utf8"));
 const { items } = read("catalog.json");
 const tax = read("taxonomy.json");
+// prepare.mjs writes no dismissed.json when it could not read them. Without
+// the no's, a sweep would redo what was rejected in Review: refuse.
+if (!fs.existsSync(path.join(WORK, "dismissed.json"))) {
+  console.error(`no dismissed.json in ${WORK}: prepare.mjs could not read the dismissals, so nothing is applied`);
+  process.exit(1);
+}
 const dismissed = new Set(read("dismissed.json").map(([k, r]) => `${k}|${r}`));
 const decidedFile = path.join(here, "decided.json");
 const decided = fs.existsSync(decidedFile) ? JSON.parse(fs.readFileSync(decidedFile, "utf8")) : [];
@@ -98,8 +119,8 @@ for (const [n, a] of actions.entries()) {
       const mode = a.kind === "franchise-attach" ? "add" : "remove";
       if (dismissed.has(`franchise-member|${a.mediaItemId}>${key}`)) throw new Error(`denied in Review: ${v.title} → ${key}`);
       const label = (a.label ?? a.franchise).trim();
-      sql.push(`INSERT INTO item_ip_override (media_item_id, ip_key, label, mode, source, updated_at) VALUES (${q(a.mediaItemId)}, ${q(key)}, ${q(label)}, '${mode}', 'sweep', unixepoch()) ON CONFLICT (media_item_id, ip_key) DO NOTHING;`);
-      undo.push(`DELETE FROM item_ip_override WHERE media_item_id = ${q(a.mediaItemId)} AND ip_key = ${q(key)} AND source = 'sweep';`);
+      sql.push(`INSERT INTO item_ip_override (media_item_id, ip_key, label, mode, source, updated_at) VALUES (${q(a.mediaItemId)}, ${q(key)}, ${q(label)}, '${mode}', 'sweep', ${STAMP}) ON CONFLICT (media_item_id, ip_key) DO NOTHING;`);
+      undo.push(`DELETE FROM item_ip_override WHERE media_item_id = ${q(a.mediaItemId)} AND ip_key = ${q(key)} AND source = 'sweep' AND updated_at = ${STAMP};`);
       touched.item_ip_override.push([a.mediaItemId, key]);
       report[a.kind].push(`${v.title} (${v.type}, ${v.year ?? "----"}) ${mode === "add" ? "→" : "out of"} ${label} [${key}]: ${a.why}`);
     } else if (a.kind === "franchise-bundle") {
@@ -107,13 +128,18 @@ for (const [n, a] of actions.entries()) {
       const target = canonicalIp(a.canonical);
       if (!alias || alias === target) throw new Error("alias and canonical are one key");
       if (dismissed.has(`franchise-merge|${alias}>${target}`)) throw new Error(`denied in Review: ${alias} → ${target}`);
-      sql.push(`UPDATE ip_alias SET canonical_key = ${q(target)}, updated_at = unixepoch() WHERE canonical_key = ${q(alias)};`);
-      sql.push(`INSERT INTO ip_alias (alias_key, canonical_key, updated_at) VALUES (${q(alias)}, ${q(target)}, unixepoch()) ON CONFLICT (alias_key) DO NOTHING;`);
-      undo.push(`DELETE FROM ip_alias WHERE alias_key = ${q(alias)} AND canonical_key = ${q(target)};`);
+      // An existing alias row is never changed (see the header), so a bundle that
+      // would need one moved is left for the Scoring admin. Aliases resolve in one
+      // hop, so adding alias → target while others still point at alias would split it.
+      if (ipAlias.has(alias)) throw new Error(`${alias} is already bundled into ${ipAlias.get(alias)}; the sweep never changes an existing alias (skipped)`);
+      const pointing = [...ipAlias].filter(([, c]) => c === alias).map(([k]) => k);
+      if (pointing.length) throw new Error(`${pointing.length} alias(es) point at ${alias} (${pointing.slice(0, 5).join(", ")}); moving them is the Scoring admin's job (skipped)`);
+      sql.push(`INSERT INTO ip_alias (alias_key, canonical_key, updated_at) VALUES (${q(alias)}, ${q(target)}, ${STAMP}) ON CONFLICT (alias_key) DO NOTHING;`);
+      undo.push(`DELETE FROM ip_alias WHERE alias_key = ${q(alias)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP};`);
       touched.ip_alias.push(alias);
       if (a.label) {
-        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(target)}, ${q(a.label.trim())}, unixepoch()) ON CONFLICT (kind, key) DO NOTHING;`);
-        undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(target)} AND label = ${q(a.label.trim())};`);
+        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(target)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
+        undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
         touched.facet_label_override.push(["ip", target]);
       }
       ipAlias.set(alias, target);
@@ -121,8 +147,8 @@ for (const [n, a] of actions.entries()) {
     } else if (a.kind === "franchise-name") {
       const key = canonicalIp(a.franchise);
       if (typeof a.label !== "string" || !a.label.trim()) throw new Error("label required");
-      sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(key)}, ${q(a.label.trim())}, unixepoch()) ON CONFLICT (kind, key) DO NOTHING;`);
-      undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(key)} AND label = ${q(a.label.trim())};`);
+      sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('ip', ${q(key)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
+      undo.push(`DELETE FROM facet_label_override WHERE kind = 'ip' AND key = ${q(key)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
       touched.facet_label_override.push(["ip", key]);
       report[a.kind].push(`${key} shown as "${a.label.trim()}": ${a.why}`);
     } else if (a.kind === "tag-category") {
@@ -137,26 +163,34 @@ for (const [n, a] of actions.entries()) {
       }
       if (!keys.length) throw new Error("every tag was placed by hand or unknown, nothing moved (skipped)");
       for (const k of keys) {
-        sql.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (${q(k)}, ${q(a.categoryId)}, unixepoch()) ON CONFLICT (tag_key) DO NOTHING;`);
-        undo.push(`DELETE FROM tag_category_override WHERE tag_key = ${q(k)} AND category_id = ${q(a.categoryId)};`);
+        sql.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (${q(k)}, ${q(a.categoryId)}, ${STAMP}) ON CONFLICT (tag_key) DO NOTHING;`);
+        undo.push(`DELETE FROM tag_category_override WHERE tag_key = ${q(k)} AND category_id = ${q(a.categoryId)} AND updated_at = ${STAMP};`);
         touched.tag_category_override.push(k);
       }
       report[a.kind].push(`${keys.length} tags → ${a.categoryId} (${keys.slice(0, 12).join(", ")}${keys.length > 12 ? ", …" : ""}): ${a.why}`);
     } else if (a.kind === "tag-alias") {
       if (!Array.isArray(a.members) || !a.members.length) throw new Error("members required");
       const target = canonicalTag(a.canonical);
-      const members = [...new Set(a.members.map((m) => tagKey(m)))].filter((m) => m && m !== target);
-      if (!members.length) throw new Error("no member differs from the canonical");
+      const candidates = [...new Set(a.members.map((m) => tagKey(m)))].filter((m) => m && m !== target);
+      if (!candidates.length) throw new Error("no member differs from the canonical");
+      // As for franchise-bundle: an existing alias row is never changed, so a
+      // spelling already aliased, or one other spellings point at, is skipped.
+      const members = [];
+      for (const m of candidates) {
+        if (tagAlias.has(m)) { problems.push(`${at}: ${m} is already an alias of ${tagAlias.get(m)} (skipped)`); continue; }
+        if ([...tagAlias.values()].includes(m)) { problems.push(`${at}: other spellings point at ${m}; moving them is the Scoring admin's job (skipped)`); continue; }
+        members.push(m);
+      }
+      if (!members.length) throw new Error("every member was already aliased, nothing folded (skipped)");
       for (const m of members) {
-        sql.push(`UPDATE tag_alias SET canonical_key = ${q(target)}, updated_at = unixepoch() WHERE canonical_key = ${q(m)};`);
-        sql.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at) VALUES (${q(m)}, ${q(target)}, unixepoch()) ON CONFLICT (alias_key) DO NOTHING;`);
-        undo.push(`DELETE FROM tag_alias WHERE alias_key = ${q(m)} AND canonical_key = ${q(target)};`);
+        sql.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at) VALUES (${q(m)}, ${q(target)}, ${STAMP}) ON CONFLICT (alias_key) DO NOTHING;`);
+        undo.push(`DELETE FROM tag_alias WHERE alias_key = ${q(m)} AND canonical_key = ${q(target)} AND updated_at = ${STAMP};`);
         touched.tag_alias.push(m);
         tagAlias.set(m, target);
       }
       if (a.label) {
-        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('tag', ${q(target)}, ${q(a.label.trim())}, unixepoch()) ON CONFLICT (kind, key) DO NOTHING;`);
-        undo.push(`DELETE FROM facet_label_override WHERE kind = 'tag' AND key = ${q(target)} AND label = ${q(a.label.trim())};`);
+        sql.push(`INSERT INTO facet_label_override (kind, key, label, updated_at) VALUES ('tag', ${q(target)}, ${q(a.label.trim())}, ${STAMP}) ON CONFLICT (kind, key) DO NOTHING;`);
+        undo.push(`DELETE FROM facet_label_override WHERE kind = 'tag' AND key = ${q(target)} AND label = ${q(a.label.trim())} AND updated_at = ${STAMP};`);
         touched.facet_label_override.push(["tag", target]);
       }
       report[a.kind].push(`${members.join(", ")} → ${target}${a.label ? ` as "${a.label}"` : ""}: ${a.why}`);
@@ -166,16 +200,17 @@ for (const [n, a] of actions.entries()) {
       if (typeof a.label !== "string" || !a.label.trim()) throw new Error("label required");
       const weight = a.weight ?? 1;
       if (typeof weight !== "number" || weight < 0) throw new Error("weight must be a number of zero or more");
-      sql.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at) VALUES (${q(a.id)}, ${q(a.label.trim())}, ${q(tagCategoryHex(a.id))}, ${weight}, ${a.ignored ? 1 : 0}, (SELECT COUNT(*) FROM tag_category), unixepoch()) ON CONFLICT (id) DO NOTHING;`);
-      undo.push(`DELETE FROM tag_category WHERE id = ${q(a.id)};`);
+      sql.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at) VALUES (${q(a.id)}, ${q(a.label.trim())}, ${q(tagCategoryHex(a.id))}, ${weight}, ${a.ignored ? 1 : 0}, (SELECT COUNT(*) FROM tag_category), ${STAMP}) ON CONFLICT (id) DO NOTHING;`);
+      undo.push(`DELETE FROM tag_category WHERE id = ${q(a.id)} AND updated_at = ${STAMP};`);
       touched.tag_category.push(a.id);
       createdCategories.add(a.id);
       report[a.kind].push(`${a.id} "${a.label.trim()}" (weight ${weight}${a.ignored ? ", ignored" : ""}): ${a.why}`);
     } else if (a.kind === "category-merge") {
+      if (!allowCategoryMerge) throw new Error(`${a.from} into ${a.into} rewrites hand-placed tags and deletes a hand-made category; run with --allow-category-merge to do it (skipped)`);
       if (!categories.has(a.from) || !(categories.has(a.into) || createdCategories.has(a.into))) throw new Error("from and into must be categories");
       if (codeCategories.has(a.from)) throw new Error(`${a.from} is a category the code places tags in; it cannot be merged away`);
       // The override rows move first (the delete would cascade them away), then the category goes.
-      sql.push(`UPDATE OR REPLACE tag_category_override SET category_id = ${q(a.into)}, updated_at = unixepoch() WHERE category_id = ${q(a.from)};`);
+      sql.push(`UPDATE OR REPLACE tag_category_override SET category_id = ${q(a.into)}, updated_at = ${STAMP} WHERE category_id = ${q(a.from)};`);
       sql.push(`DELETE FROM tag_category WHERE id = ${q(a.from)};`);
       touched.tag_category.push(a.from);
       report[a.kind].push(`${a.from} into ${a.into}: ${a.why}`);
@@ -238,9 +273,10 @@ if (touched.tag_category.length) {
   backup.tag_category = query(`SELECT * FROM tag_category WHERE id IN (${touched.tag_category.map(q).join(",")})`);
   backup.tag_category_override_by_category = query(`SELECT * FROM tag_category_override WHERE category_id IN (${touched.tag_category.map(q).join(",")})`);
 }
+// The alias backups are kept for the record only: the sweep no longer changes an
+// existing alias row, so putting one "back" could only undo a later hand edit.
+// Only a category-merge (--allow-category-merge) changes rows that were there.
 const restore = [];
-for (const r of backup.ip_alias ?? []) restore.push(`INSERT INTO ip_alias (alias_key, canonical_key, updated_at) VALUES (${q(r.alias_key)}, ${q(r.canonical_key)}, ${r.updated_at}) ON CONFLICT (alias_key) DO UPDATE SET canonical_key = excluded.canonical_key;`);
-for (const r of backup.tag_alias ?? []) restore.push(`INSERT INTO tag_alias (alias_key, canonical_key, updated_at) VALUES (${q(r.alias_key)}, ${q(r.canonical_key)}, ${r.updated_at}) ON CONFLICT (alias_key) DO UPDATE SET canonical_key = excluded.canonical_key;`);
 for (const r of backup.tag_category ?? []) restore.push(`INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at) VALUES (${q(r.id)}, ${q(r.label)}, ${q(r.color)}, ${r.weight}, ${r.ignored}, ${r.sort_order}, ${r.updated_at}) ON CONFLICT (id) DO NOTHING;`);
 for (const r of backup.tag_category_override_by_category ?? []) restore.push(`INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (${q(r.tag_key)}, ${q(r.category_id)}, ${r.updated_at}) ON CONFLICT (tag_key) DO UPDATE SET category_id = excluded.category_id;`);
 // The Worker keeps the built taxonomy in kv (worker/src/catalog/read.ts, DROP_TAXONOMY_SQL).

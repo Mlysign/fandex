@@ -191,3 +191,29 @@ describe("book search relevance", () => {
     expect(relevantBooks(docs, "andy weir").map((d) => d.title)).toEqual(["Project Hail Mary"]);
   });
 });
+
+describe("BGG entities", () => {
+  it("leaves an entity that names no character as written, rather than failing the batch", async () => {
+    const { decode } = await import("@/lib/sources/bgg");
+    expect(decode("a &#99999999; b &#xFFFFFFF; c &#233;")).toBe("a &#99999999; b &#xFFFFFFF; c é");
+  });
+});
+
+describe("a book's identity in another script", () => {
+  it("keeps two non-Latin books apart, and one book from two providers together", async () => {
+    const { bookIdentityKey, mergeBookCards } = await import("@/lib/sources/bookPure");
+    const card = (source: "openlibrary" | "hardcover", sourceId: string, title: string, author: string) => ({
+      source, sourceId, type: "book" as const, title, releaseDate: null, posterUrl: null,
+      votes: 0, rating: null, popularity: 0, genres: [], authors: [author],
+    });
+    const a = card("openlibrary", "OL1W", "ノルウェイの森", "村上春樹");
+    const b = card("openlibrary", "OL2W", "海辺のカフカ", "村上春樹");
+    const c = card("openlibrary", "OL3W", "Мастер и Маргарита", "Михаил Булгаков");
+    expect(new Set([a, b, c].map(bookIdentityKey)).size).toBe(3);
+    expect(mergeBookCards([a, b], [c])).toHaveLength(3);
+    // The same book at Hardcover is still one card.
+    expect(mergeBookCards([a], [card("hardcover", "9", "ノルウェイの森", "村上春樹")])).toHaveLength(1);
+    // A title nothing can key falls back to its provider id.
+    expect(bookIdentityKey(card("openlibrary", "OL4W", "!!!", "x"))).not.toBe(bookIdentityKey(card("openlibrary", "OL5W", "???", "x")));
+  });
+});

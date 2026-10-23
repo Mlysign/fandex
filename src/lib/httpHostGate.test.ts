@@ -94,6 +94,58 @@ describe("per-host concurrency gate", () => {
     expect(hostGateSnapshot()["api.igdb.com"].inFlight).toBe(0);
   });
 
+  // A Worker isolate can drop a request without running its `finally`, so a
+  // slot must expire on its own or four dropped calls stop IGDB for good.
+  it("reaps a slot whose request never finished, and a late release does not overfill the gate", async () => {
+    vi.useFakeTimers();
+    try {
+      const hung: ((r: Response) => void)[] = [];
+      const f = vi.fn(() => new Promise<Response>((r) => hung.push(r)));
+      vi.stubGlobal("fetch", f);
+      const opts = { method: "POST", body: "x", timeoutMs: 1_000 };
+      for (let i = 0; i < 4; i++) void httpFetch(IGDB, opts).catch(() => null);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(hostGateSnapshot()["api.igdb.com"].inFlight).toBe(4);
+
+      f.mockImplementation(async () => new Response("{}", { status: 200 }));
+      const fifth = httpFetch(IGDB, opts);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(f).toHaveBeenCalledTimes(4); // still queued: nothing has expired yet
+
+      await vi.advanceTimersByTimeAsync(30_000); // past the 30 s floor
+      expect((await fifth).status).toBe(200);
+
+      // The dropped calls come back after all. Their slots were already reaped,
+      // so handing them on again would put the gate over its limit.
+      for (const r of hung) r(new Response("{}", { status: 200 }));
+      await vi.advanceTimersByTimeAsync(0);
+      const snap = hostGateSnapshot()["api.igdb.com"];
+      expect(snap.inFlight).toBe(0);
+      expect(snap.maxInFlight).toBeLessThanOrEqual(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up waiting for a slot once the caller's budget is spent", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = vi.fn(() => new Promise<Response>(() => {}));
+      vi.stubGlobal("fetch", f);
+      for (let i = 0; i < 4; i++) void httpFetch(IGDB, { method: "POST", body: "x" }).catch(() => null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const late = httpFetch(IGDB, { method: "POST", body: "x", budgetMs: 500 });
+      const settled = expect(late).rejects.toThrow(/slot/);
+      await vi.advanceTimersByTimeAsync(600);
+      await settled;
+      expect(f).toHaveBeenCalledTimes(4);
+      expect(hostGateSnapshot()["api.igdb.com"].queued).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports whether the gate actually BOUND, so the next reading can settle it", async () => {
     const t = trackingFetch(10);
     vi.stubGlobal("fetch", t.fn);

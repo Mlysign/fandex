@@ -123,8 +123,29 @@ interface Breaker {
   maxOpenMs: number;
   /** Why this breaker is open: an outage, or a credential the provider rejects. */
   latchedOnAuth: boolean;
-  probing: boolean;
+  /**
+   * The half-open probe in flight: its id, and when it stops counting. 0 = none.
+   * An expiry rather than a flag because a Worker isolate can drop a request
+   * without running its `finally`, and a flag nobody clears blocks the host
+   * until the isolate dies. See `callBoundMs`.
+   */
+  probeId: number;
+  probeExpiresAt: number;
 }
+
+/**
+ * The longest one httpFetch call can legitimately run: every attempt timing
+ * out, plus a 429 wait between each, capped by its budget. A probe or a gate
+ * slot held past this (plus a floor) belongs to a call that will never finish,
+ * so it stops counting. Releasing one early lets one extra request through,
+ * which is the cheap direction; holding it forever stops the provider.
+ */
+const STALE_FLOOR_MS = 30_000;
+function callBoundMs(timeoutMs: number, maxRetries: number, budgetMs: number | undefined): number {
+  const ladder = (maxRetries + 1) * timeoutMs + maxRetries * MAX_429_WAIT_MS;
+  return Math.max(STALE_FLOOR_MS, (budgetMs != null ? Math.min(budgetMs, ladder) : ladder) + 1_000);
+}
+let _nextId = 0;
 
 // ⚠️ PINNED TO globalThis, AND THAT IS LOAD-BEARING (2026-08-20).
 //
@@ -236,8 +257,14 @@ const HOST_CONCURRENCY: Record<string, number> = {
 
 interface Gate {
   limit: number;
-  inFlight: number;
-  waiters: (() => void)[];
+  /**
+   * Slots held, by id, with when each stops counting (`callBoundMs`). A slot is
+   * handed back in httpFetch's `finally`; one whose `finally` never ran (a
+   * Worker request dropped mid-flight) is reaped once it expires, or the gate
+   * would run a permit short until the isolate died.
+   */
+  held: Map<number, number>;
+  waiters: { holdMs: number; grant: (slot: number) => void }[];
   /** High-water marks since boot, for the health snapshot. */
   maxInFlight: number;
   maxQueued: number;
@@ -253,32 +280,71 @@ function gateFor(host: string): Gate | null {
   if (!limit) return null;
   let g = _gates.get(host);
   if (!g) {
-    g = { limit, inFlight: 0, waiters: [], maxInFlight: 0, maxQueued: 0, queuedTotal: 0 };
+    g = { limit, held: new Map(), waiters: [], maxInFlight: 0, maxQueued: 0, queuedTotal: 0 };
     _gates.set(host, g);
   }
   return g;
 }
 
-async function acquire(g: Gate): Promise<void> {
-  if (g.inFlight < g.limit) {
-    g.inFlight++;
-    if (g.inFlight > g.maxInFlight) g.maxInFlight = g.inFlight;
-    return;
-  }
-  g.queuedTotal++;
-  if (g.waiters.length + 1 > g.maxQueued) g.maxQueued = g.waiters.length + 1;
-  await new Promise<void>((res) => g.waiters.push(res));
-  g.inFlight++;
-  if (g.inFlight > g.maxInFlight) g.maxInFlight = g.inFlight;
+function takeSlot(g: Gate, holdMs: number): number {
+  const id = ++_nextId;
+  g.held.set(id, Date.now() + holdMs);
+  if (g.held.size > g.maxInFlight) g.maxInFlight = g.held.size;
+  return id;
 }
 
-function release(g: Gate): void {
-  g.inFlight--;
-  const next = g.waiters.shift();
-  // The waiter increments inFlight itself when it resumes, so this only hands
-  // over the right to do so. Releasing in a `finally` is what makes a throw
-  // (timeout, breaker, budget) unable to leak a permanently-held slot.
-  if (next) next();
+/** Drop expired slots, then hand free ones to the queue in order. */
+function pump(g: Gate): void {
+  const now = Date.now();
+  for (const [id, expiresAt] of g.held) if (expiresAt <= now) g.held.delete(id);
+  while (g.held.size < g.limit && g.waiters.length) {
+    const w = g.waiters.shift()!;
+    w.grant(takeSlot(g, w.holdMs));
+  }
+}
+
+/**
+ * A slot, or a throw once `waitMs` has passed without one. The wait is bounded
+ * by the caller's remaining budget, and a slot is GRANTED to the next waiter
+ * on release (never left for whoever asks first), so the limit holds exactly.
+ */
+async function acquire(g: Gate, holdMs: number, waitMs: number): Promise<number> {
+  pump(g);
+  if (g.held.size < g.limit && g.waiters.length === 0) return takeSlot(g, holdMs);
+  g.queuedTotal++;
+  if (g.waiters.length + 1 > g.maxQueued) g.maxQueued = g.waiters.length + 1;
+  const deadline = Date.now() + waitMs;
+  return new Promise<number>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waiter = { holdMs, grant: (slot: number) => { clearTimeout(timer); resolve(slot); } };
+    g.waiters.push(waiter);
+    // Wake at the earlier of the deadline and the oldest slot's expiry: a slot
+    // whose request died is only reaped when somebody looks.
+    const arm = () => {
+      const oldest = Math.min(...g.held.values());
+      const at = Math.min(deadline, Number.isFinite(oldest) ? oldest : Date.now());
+      timer = setTimeout(() => {
+        pump(g);
+        if (!g.waiters.includes(waiter)) return; // granted
+        if (Date.now() >= deadline) {
+          g.waiters.splice(g.waiters.indexOf(waiter), 1);
+          reject(new Error(`httpFetch budget exhausted waiting for a slot (${waitMs}ms)`));
+          return;
+        }
+        arm();
+      }, Math.max(0, at - Date.now()) + 1);
+    };
+    arm();
+  });
+}
+
+function release(g: Gate, slot: number): void {
+  // Already reaped: its permit went to somebody else, so handing it on again
+  // would put the gate one over its limit.
+  if (!g.held.delete(slot)) return;
+  // Releasing in a `finally` is what makes a throw (timeout, breaker, budget)
+  // unable to leak a slot; the expiry covers a `finally` that never runs.
+  pump(g);
 }
 
 /** Test seam: forget every gate. */
@@ -290,7 +356,7 @@ export function hostGateSnapshot(): Record<string, { limit: number; inFlight: nu
   const out: Record<string, { limit: number; inFlight: number; queued: number; maxInFlight: number; maxQueued: number; queuedTotal: number }> = {};
   for (const [host, g] of _gates) {
     out[host] = {
-      limit: g.limit, inFlight: g.inFlight, queued: g.waiters.length,
+      limit: g.limit, inFlight: g.held.size, queued: g.waiters.length,
       maxInFlight: g.maxInFlight, maxQueued: g.maxQueued, queuedTotal: g.queuedTotal,
     };
   }
@@ -349,20 +415,20 @@ function hostOf(input: string | URL): string | null {
 function breakerFor(host: string): Breaker {
   let b = _breakers.get(host);
   if (!b) {
-    b = { failures: 0, authFailures: 0, openUntil: 0, openMs: BASE_OPEN_MS, maxOpenMs: MAX_OPEN_MS, latchedOnAuth: false, probing: false };
+    b = { failures: 0, authFailures: 0, openUntil: 0, openMs: BASE_OPEN_MS, maxOpenMs: MAX_OPEN_MS, latchedOnAuth: false, probeId: 0, probeExpiresAt: 0 };
     _breakers.set(host, b);
   }
   return b;
 }
 
 /**
- * Gate a request. Returns true when this call is the half-open PROBE (its
- * outcome decides whether the breaker closes), false for a normal call.
+ * Gate a request. Returns the probe's id when this call is the half-open PROBE
+ * (its outcome decides whether the breaker closes), 0 for a normal call.
  * Throws ProviderUnavailableError while the breaker is open.
  */
-function enterBreaker(host: string): boolean {
+function enterBreaker(host: string, boundMs: number): number {
   const b = breakerFor(host);
-  if (b.openUntil === 0) return false;
+  if (b.openUntil === 0) return 0;
 
   const now = Date.now();
   if (now < b.openUntil) {
@@ -372,15 +438,23 @@ function enterBreaker(host: string): boolean {
 
   // Half-open: let exactly ONE probe through; everyone else still fails fast,
   // so a burst of parallel callers can't re-flood a host that's still down.
-  if (b.probing) {
+  // A probe past its bound never finished (its `finally` did not run), so it
+  // stops counting and the next caller probes instead.
+  if (b.probeId !== 0 && now < b.probeExpiresAt) {
     callsFor(host).blocked++;
     throw new ProviderUnavailableError(host, b.openMs, b.latchedOnAuth ? "auth" : "circuit");
   }
-  b.probing = true;
-  return true;
+  b.probeId = ++_nextId;
+  b.probeExpiresAt = now + boundMs;
+  return b.probeId;
 }
 
-function recordSuccess(host: string, wasProbe: boolean) {
+/** Clear the half-open probe, but only if it is still this call's: a stale one may have been replaced. */
+function endProbe(b: Breaker, probe: number) {
+  if (probe !== 0 && b.probeId === probe) { b.probeId = 0; b.probeExpiresAt = 0; }
+}
+
+function recordSuccess(host: string, probe: number) {
   const b = breakerFor(host);
   if (b.openUntil !== 0 || b.failures !== 0) {
     log.info("provider_circuit_closed", { host, afterFailures: b.failures });
@@ -391,14 +465,14 @@ function recordSuccess(host: string, wasProbe: boolean) {
   b.openMs = BASE_OPEN_MS;
   b.maxOpenMs = MAX_OPEN_MS;
   b.latchedOnAuth = false;
-  if (wasProbe) b.probing = false;
+  endProbe(b, probe);
 }
 
-function recordFailure(host: string, wasProbe: boolean, reason: string) {
+function recordFailure(host: string, probe: number, reason: string) {
   const b = breakerFor(host);
-  if (wasProbe) {
+  if (probe !== 0) {
     // The probe failed — still down. Back off harder, up to the ceiling.
-    b.probing = false;
+    endProbe(b, probe);
     b.openMs = Math.min(b.openMs * 2, b.maxOpenMs);
     b.openUntil = Date.now() + b.openMs;
     log.warn("provider_circuit_reopened", { host, openMs: b.openMs, reason });
@@ -416,12 +490,12 @@ function recordFailure(host: string, wasProbe: boolean, reason: string) {
  * credential. Counted separately from an outage and latched on a much longer
  * schedule - see AUTH_FAILURE_THRESHOLD above for why.
  */
-function recordAuthFailure(host: string, wasProbe: boolean, status: number) {
+function recordAuthFailure(host: string, probe: number, status: number) {
   const b = breakerFor(host);
-  if (wasProbe) {
+  if (probe !== 0) {
     // The probe was rejected too, so the credential is still dead. Back off
     // harder, up to the auth ceiling.
-    b.probing = false;
+    endProbe(b, probe);
     b.openMs = Math.min(b.openMs * 2, b.maxOpenMs);
     b.openUntil = Date.now() + b.openMs;
     log.warn("provider_auth_latch_held", { host, status, openMs: b.openMs });
@@ -513,16 +587,17 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
   const maxRetries = retries ?? (idempotent ? 2 : 0);
 
   const host = hostOf(input);
-  const isProbe = host ? enterBreaker(host) : false;
+  const boundMs = callBoundMs(timeoutMs, maxRetries, budgetMs);
+  const probe = host ? enterBreaker(host, boundMs) : 0;
 
   const startedAt = Date.now();
   // Infinity when no budget was given — every comparison below then behaves
   // exactly as it did before budgets existed.
   const remaining = () => (budgetMs == null ? Infinity : budgetMs - (Date.now() - startedAt));
 
-  const fail = (reason: string) => { if (host) recordFailure(host, isProbe, reason); };
-  const failAuth = (status: number) => { if (host) recordAuthFailure(host, isProbe, status); };
-  const ok = () => { if (host) recordSuccess(host, isProbe); };
+  const fail = (reason: string) => { if (host) recordFailure(host, probe, reason); };
+  const failAuth = (status: number) => { if (host) recordAuthFailure(host, probe, status); };
+  const ok = () => { if (host) recordSuccess(host, probe); };
 
   // Rate gate, for hosts that publish one (IGDB: 4 req/s). Taken around the
   // WHOLE retry loop and released in the finally below, so a throw anywhere —
@@ -531,11 +606,14 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
   //
   // Acquired AFTER the breaker check above on purpose: a host whose breaker is
   // open should be refused immediately, not made to queue for a slot it is
-  // about to be denied anyway.
+  // about to be denied anyway. Acquired INSIDE the try, so a wait that runs out
+  // of budget still clears a probe in the finally. A queue timeout records no
+  // breaker failure: it is our own queue, not the provider.
   const gate = host ? gateFor(host) : null;
-  if (gate) await acquire(gate);
+  let slot = 0;
 
   try {
+    if (gate) slot = await acquire(gate, boundMs, remaining());
     for (let attempt = 0; ; attempt++) {
       // A budget that's already spent means we never even start this attempt.
       const perAttempt = Math.min(timeoutMs, remaining());
@@ -596,13 +674,11 @@ export async function httpFetch(input: string | URL, init: HttpFetchInit = {}): 
     // is unrecoverable without a restart: the gate would run one permit short
     // for the life of the process, and at limit 4 that is a 25% throughput cut
     // nothing reports.
-    if (gate) release(gate);
-    // A probe that threw before reaching recordFailure/recordSuccess (only
-    // possible on a programming error) must not pin the breaker half-open
-    // forever, blocking every future probe.
-    if (isProbe && host) {
-      const b = breakerFor(host);
-      if (b.probing) b.probing = false;
-    }
+    if (gate && slot) release(gate, slot);
+    // A probe that threw before reaching recordFailure/recordSuccess (a queue
+    // timeout, or a programming error) must not pin the breaker half-open,
+    // blocking every future probe. The probe's expiry covers a finally that
+    // never runs at all.
+    if (probe && host) endProbe(breakerFor(host), probe);
   }
 }

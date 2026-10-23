@@ -74,6 +74,18 @@ export function setIgdbTokenStore(store: IgdbTokenStore | null): void {
   tokenStore = store;
 }
 
+// The last token IGDB answered 401 to. A token Twitch revoked early (a secret
+// rotated, the per-client cap passed) still reads as unexpired, so without
+// this the cache and the shared store would hand it back until its 60 days
+// ran out. Minting a new one overwrites the shared copy through `set`.
+let rejectedToken: string | null = null;
+
+/** Forget a token IGDB refused, so the next call mints (or picks up a newer shared one). */
+function dropToken(token: string): void {
+  rejectedToken = token;
+  if (cachedToken?.token === token) cachedToken = null;
+}
+
 async function getToken(): Promise<string> {
   if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("IGDB not configured");
   const now = Date.now();
@@ -81,7 +93,7 @@ async function getToken(): Promise<string> {
   if (tokenStore) {
     try {
       const shared = await tokenStore.get();
-      if (shared && shared.expiresAt > now + 60_000) {
+      if (shared && shared.expiresAt > now + 60_000 && shared.token !== rejectedToken) {
         cachedToken = shared;
         return shared.token;
       }
@@ -111,9 +123,12 @@ async function getToken(): Promise<string> {
 // NOTE the budget does NOT cover getToken() below: a token mint is a separate
 // request with its own timeout, and starving it would break the query outright
 // rather than bound it. Worst case is one token timeout plus the budget.
+//
+// A 401 means the token, not the query: it is dropped and the query asked once
+// more with a fresh one. Once only, so a client id Twitch no longer accepts
+// costs one extra mint per call, not a loop.
 async function igdbQuery(endpoint: string, body: string, budgetMs?: number): Promise<any[]> {
-  const token = await getToken();
-  const res = await httpFetch(`${IGDB_BASE}/${endpoint}`, {
+  const ask = async (token: string) => httpFetch(`${IGDB_BASE}/${endpoint}`, {
     method: "POST",
     headers: {
       "Client-ID": CLIENT_ID!,
@@ -125,6 +140,12 @@ async function igdbQuery(endpoint: string, body: string, budgetMs?: number): Pro
     appScopedAuth: true,
     ...(budgetMs != null ? { budgetMs } : {}),
   });
+  const token = await getToken();
+  let res = await ask(token);
+  if (res.status === 401) {
+    dropToken(token);
+    res = await ask(await getToken());
+  }
   if (!res.ok) throw new Error(`IGDB ${endpoint}: ${res.status}`);
   return res.json();
 }
