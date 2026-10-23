@@ -32,8 +32,9 @@ const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 // is what makes the answer cheap to act on.
 //
 // ⚠️ If the answer is NO, flipping this stops the flow but does NOT remove what
-// is already stored. That is `scripts/purge-igdb.mjs`, deliberately a separate
-// and explicit step. → docs/archive/old-site/catalog-growth.md §17
+// is already stored. Removing that is a separate, explicit step: the old site's
+// `scripts/purge-igdb.mjs` (tag `old-site-final`) did it on SQLite, and nothing
+// does it on D1 yet. → docs/archive/old-site/catalog-growth.md §17
 //
 // ⚠️ Default ON is the deliberate choice for a KILL switch: a typo in the env
 // var leaves the site working rather than silently dropping a third of the

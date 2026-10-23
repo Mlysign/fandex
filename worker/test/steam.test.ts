@@ -81,7 +81,8 @@ describe("GET /v1/me/steam", () => {
   });
 
   it("says why when it cannot ask at all", async () => {
-    expect((await call("/v1/me/steam", env)).status).toBe(503);
+    // The pool reads .dev.vars, which may carry a real key: take it out here.
+    expect((await call("/v1/me/steam", { ...env, STEAM_API_KEY: undefined })).status).toBe(503);
     await db.prepare("DELETE FROM user_identities WHERE provider = 'steam'").run();
     expect((await call("/v1/me/steam")).status).toBe(404);
   });

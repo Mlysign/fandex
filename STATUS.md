@@ -1,6 +1,6 @@
 # Fandex: Status
 
-_Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Every load-bearing rule → [AGENTS.md](AGENTS.md).
+_Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
 
 _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
 
@@ -35,7 +35,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 
 ## 🧭 Monetization: ads-first since 2026-08-19
 
-**Nils's call: go live → wait for traction → ads → premium (ad-free + extras).** Affiliate is demoted, not cancelled, and nothing is live. Per 1,000 monthly active users the model said: ads ~€150 · premium ~€60 · donations ~€14 · affiliate ~€3. Going commercial costs at least TMDB's ~$149/mo tier. → [docs/monetization-go-live.md](docs/monetization-go-live.md). `/dev/analytics` counts the website's pageviews (no identifier, no cookie).
+**Nils's call: go live → wait for traction → ads → premium (ad-free + extras).** Affiliate is demoted, not cancelled, and nothing is live. Per 1,000 monthly active users the model said: ads ~€150 · premium ~€60 · donations ~€14 · affiliate ~€3. Going commercial costs at least TMDB's ~$149/mo tier. → [docs/archive/old-site/monetization-go-live.md](docs/archive/old-site/monetization-go-live.md). `/dev/analytics` counts the website's pageviews (no identifier, no cookie).
 
 ## 🔎 Organic reach
 
@@ -53,16 +53,16 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | **H5** Fandex Score | ✅ → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** legal & compliance | ✅ |
 | **H3** monetization | 🔵 ads-first; donations live, affiliate dark |
-| Android TWA (P15/P16) | ⏸️ paused on the account upgrade → [docs/twa-play-store.md](docs/twa-play-store.md) |
-| The old Next.js site | 🗑️ Deleted 2026-10-23 after running nowhere since 2026-10-05. At the tag `old-site-final`, the visual reference for the app. Its rules: [docs/archive/old-site-invariants.md](docs/archive/old-site-invariants.md). |
+| Android in Play (P15/P16) | ⏸️ paused on the account upgrade, and open whether the TWA or the native app goes in (TASKS.md item 2) → [docs/twa-play-store.md](docs/twa-play-store.md) |
+| The old Next.js site | 🗑️ Deleted 2026-10-23 after running nowhere since 2026-10-05. At the tag `old-site-final`, the visual reference for the app. Its rules: [docs/archive/old-site/invariants.md](docs/archive/old-site/invariants.md). |
 
 ## ✅ Quality bar (re-run 2026-10-23)
 
 Three packages, each with its own bar, plus one lint over all of them:
 
-- **root** (`src/lib`, the shared modules): **355 tests** (34 files) · `tsc` clean · `npm run lint` **0 errors** across root, `worker/` and `mobile/` (5 warnings, `exhaustive-deps`).
-- **`worker/`**: **285 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
-- **`mobile/`**: **245 tests** · `tsc` clean.
+- **root** (`src/lib`, the shared modules): **355 tests** (34 files) · `tsc` clean · `npm run lint` **0 errors** and 0 warnings across root, `worker/` and `mobile/`.
+- **`worker/`**: **293 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
+- **`mobile/`**: **250 tests** · `tsc` clean.
 - **`npm audit --omit=dev`**: root and `worker/` clean; `mobile/` has high advisories only through Expo's build CLI, which never reaches the bundle, so CI fails it on critical only.
 
 ---

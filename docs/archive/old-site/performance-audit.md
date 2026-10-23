@@ -3,7 +3,7 @@
 > **Every item in this audit is resolved.** §A (the catalog pool rebuild) shipped 2026-08-02 and was
 > the last one; §B's prod half moved to PR17's checklist, since it can't be measured while prod is
 > down. **Archived — nothing here is open work.** The perf rules that outlived it live in
-> `AGENTS.md` and [[perf-audit-2026-07-30]]; the probes (`scripts/perf-probe.mjs`,
+> `AGENTS.md` and memory `old-site/perf-audit-2026-07-30.md`; the probes (`scripts/perf-probe.mjs`,
 > `scripts/probe-pool.mjs`) stay in the repo and are the right starting point for any future pass.
 
 Measured against the real local `data/rr.db` (1,921 library items · 95 wishlist · 1,635 rated ·
@@ -279,7 +279,7 @@ Discover is ever hit — the probe's "cold" is an artificial worst case where no
 | local `rr.db-wal` | 48.4 MB → **closed as a dev artifact**, see below |
 | `media_links` | 6,054 rows / 44.8 MB `raw_data` (**7.4 KB avg**) |
 | `media_items` | 4,405 rows, **1,879 of them `browsed`** |
-| prod `rr.db` | ~2.5 GB (memory: [[prod-incidents]]) |
+| prod `rr.db` | ~2.5 GB (memory: memory `old-site/prod-incidents.md`) |
 
 **Both halves of §B are resolved as far as they can be here.** The local WAL is a dev-process
 artifact, not a bug (full investigation below). **The prod 2.5 GB question is unanswerable while
@@ -369,7 +369,7 @@ rows, `integrity_check: ok`) plus its `-wal`/`-shm` sidecars — the rehearsal s
 deliberately, since without the `-wal` any un-checkpointed commits are simply missing from the
 rehearsal. It's both the newest and the most useful: the live DB is at `user_version = 11`, so this
 one exercises the widest upgrade span (5 → 11) against a real production-shaped database, which is
-exactly the path [[db-migrations-and-testing]] warns green tests never take.
+exactly the path memory `old-site/db-migrations-and-testing.md` warns green tests never take.
 
 Deleted (all superseded, each strictly older AND at an equal-or-lower schema version): `rr.db`
 (uv 0), `.bak-pre-d8` (uv 0), `.bak-pre-d1d5-20260614` (uv 3), `.bak-pre-d9-20260616` (uv 4),

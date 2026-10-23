@@ -42,7 +42,7 @@ Not tasks. Not decisions to be revisited. Things that must stay true.
 Affiliate is **demoted, not cancelled**; the code stays built and dark behind
 `MONETIZATION_ENABLED`. Moved here from TASKS.md on 2026-09-03: it is a decision record with
 no next action, and that file is for open work. Runbook →
-[monetization-go-live.md](monetization-go-live.md).
+[monetization-go-live.md](archive/old-site/monetization-go-live.md).
 
 The three findings that decided it, so nobody re-derives them:
 
@@ -76,11 +76,9 @@ both directly):
   margin): 2%/1€ → 6,850 · 2%/2€ → 3,425 · 5%/1€ → 2,740 · 5%/2€ → 1,370. Even the best-case
   corner is above 1k. 3,500 clears it with real margin at a conservative 3%/1.50€.
 
-⚠️ **The WAU meter is `users.last_seen_at`**, stamped in `getSession()` once per user per UTC
-day. The action-based union over `user_library`/`user_watchlist`/`user_item_state` stays as the
-conservative cross-check; it counts only users who took a WRITE action, so a pure browser is
-captured by nothing in this schema. Both live in `src/lib/telemetry.ts` (`userMetrics`) and
-`src/lib/userAnalytics.ts` — read them there rather than from a copy. → [[telemetry-self-hosted]]
+⚠️ **The WAU meter is `users.last_seen_at`**, stamped by the Worker at most once per user per
+UTC day and counted in `worker/src/telemetry.ts`. A visitor who never signs in is in no user
+count at all; the pageview counters are the only measure of them. → [[telemetry-self-hosted]]
 
 ---
 
@@ -241,6 +239,17 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   site's "ip is not a linkable kind" (`src/lib/facetUrl.ts`) was about that site's lint gate
   and is left as it is.
 
+### Added 2026-10-23 (a hygiene pass Nils asked for)
+
+- **Agent rules live in a `CLAUDE.md` per package** (`worker/`, `mobile/`, `mobile/web/`,
+  `src/`, `scripts/taxonomy-sweep/`), and the root `AGENTS.md` keeps only what spans packages.
+  This supersedes 2026-09-02's "keep every invariant inline": Claude Code loads a folder's
+  file as soon as a file there is read, so the reader who doesn't know which subsystem they
+  are in still gets its rules, which was the reason for keeping them inline. Always-loaded
+  context went 61.4 to 16.6 KB with no live rule dropped.
+- **The old site's docs, smoke-test plan and memory are archive, not reference.** They sit in
+  `docs/archive/old-site/` and `memory/old-site/`, read only when porting that feature.
+
 ---
 
 ## Decided 2026-09-02
@@ -289,5 +298,6 @@ Answered in one rapid-fire pass.
   non-complementary services… anime and manga list or tracker services". Its metadata half is
   unaffected and could ship alone.
 - **2026-08-28: IGDB continues, behind a kill switch.** `IGDB_ENABLED=0` stops every call;
-  `scripts/purge-igdb.mjs` removes what is stored. Default ON, because a typo must leave the
-  site working.
+  removing what is stored is a separate step (the old site's `scripts/purge-igdb.mjs`, at
+  the tag `old-site-final`; nothing does it on D1 yet). Default ON, because a typo must leave
+  the site working.

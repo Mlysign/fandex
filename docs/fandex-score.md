@@ -1,4 +1,6 @@
-# Fandex Score — Scope & Design
+# Fandex Score: scope and design
+
+> **Since 2026-10-23 the score runs only in the app**, `mobile/src/lib/fandexScore.ts`, a port that gave the old site's exact numbers. The design below holds; the file names it cites (`libraryAnalysis.ts`, `discovery.ts`, `MatchReasons.tsx`, the calibration scripts) are the old site's, at the tag `old-site-final`.
 
 > Per-user, per-item **taste-match score** shown on every media item, click-to-expand into a full "why". Deterministic and tunable. Status: scoping (drafted 2026-07-18). Epic **H5**.
 

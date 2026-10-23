@@ -204,12 +204,12 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   imported here must not reach `@/lib/db` or anything Node-only: the Worker's rule.
 - **The item page is two files, and the split is the website's.** `src/components/ItemPage.tsx`
   is the title as everybody sees it and knows nothing about who is looking: no database, no
-  session, no router. `src/app/item/[id].tsx` loads the item and passes what is yours (your state,
+  session, no router. `src/app/(tabs)/item/[id].tsx` loads the item and passes what is yours (your state,
   your score, the rating row) in as `personal`. The website renders `ItemPage` alone to HTML, so
   anything device-only imported there breaks that build. `mobile/ssr-probe/` is the proof it
   renders on a server, and where its CPU cost was measured (docs/app-plan.md, "The website").
   The screen answers two addresses: `/item/{id}`, the app's own, and `/{type}/{slug}`, the public
-  one (`src/app/[type]/[slug].tsx` re-exports it). On the website it may start under a static
+  one (`src/app/(tabs)/[type]/[slug].tsx` re-exports it). On the website it may start under a static
   copy of the same page and removes that copy once the item is on screen (`src/lib/prerender.ts`).
 - **The device holds a copy of the scoring pool** in SQLite (`expo-sqlite`, also on the web).
   `catalogSync.ts` pulls the Worker's delta a page at a time and advances its cursor in the same
@@ -334,10 +334,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   functions of the titles you rated (with the catalog copy's raw facets), the taxonomy from
   `/v1/taxonomy` (kept in SQLite, re-asked with its ETag on every start and every return to the app, at most once a minute; the Worker answers an unchanged one with a 304 off one kept row) and the facets of the title
   being scored. The profile is rebuilt when your rows, the catalog copy or the taxonomy change.
-  ⚠️ **The port and the site must give the same number**, and nothing but
-  `scripts/probe-app-score.mjs` checks that. Run it after touching either side's scoring:
-  `BENCH_DB=<a COPY of a snapshot> node scripts/probe-app-score.mjs`. It loads `fandexScore.ts`
-  under plain Node, so that file stays erasable TypeScript and imports through `@/` only.
+  The port was proven to give the old site's exact numbers by `scripts/probe-app-score.mjs`,
+  which went with the site on 2026-10-23 (tag `old-site-final`). `fandexScore.test.ts` is
+  what guards it now. Keep `fandexScore.ts` erasable TypeScript importing through `@/` only, so
+  that probe can be brought back from the tag and run under plain Node.
   A title that is not a catalog row (a calendar card, a search result) has no facets on the
   device and so no score until it is opened.
 - **The Trakt token is refreshed on the device**, without a secret. The redirect sent with the

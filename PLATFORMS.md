@@ -1,6 +1,6 @@
 # Platform Reference
 
-Every platform Fandex uses or has considered, in three tables: **metadata**, **two-way sync**, **one-time import**. Capability rows are authoritative from code (`src/lib/sources/catalog.ts`); **cost, licence and scale re-researched 2026-08-20** against published terms. Prose and deep dives → grep the [archive](docs/archive/history.md) for `platform deep dives`.
+Every platform Fandex uses or has considered, in three tables: **metadata**, **two-way sync**, **one-time import**. Capability rows were taken from the old site's `src/lib/sources/catalog.ts` (tag `old-site-final`); on the new stack the code that calls each provider (`src/lib/sources/`, `worker/src/`, `mobile/src/lib/*Sync.ts`) is the authority, so check a cell against it before relying on it. **Cost, licence and scale re-researched 2026-08-20** against published terms. Prose and deep dives → grep the [archive](docs/archive/history.md) for `platform deep dives`.
 
 **Decisions taken 2026-08-23** (Nils): remove OMDb now · drop RAWG’s metadata role now, keeping it as a connector · build the IMDb CSV import next · open neither GiantBomb nor anime. The work is the `PL` section of [TASKS.md](TASKS.md).
 

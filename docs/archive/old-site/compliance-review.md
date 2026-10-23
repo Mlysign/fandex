@@ -118,7 +118,7 @@ Ran the same query against `data/rr.db`:
 All 5 match a described category (`src/lib/legal/content/en/privacy.ts:23-33`); nothing in
 the schema is undisclosed, and nothing disclosed is absent from the schema. **Pass.**
 
-### 2.2 Cookie count vs. `docs/cookie-assessment.md`'s "exactly three"
+### 2.2 Cookie count vs. `docs/archive/old-site/cookie-assessment.md`'s "exactly three"
 
 Re-grepped every `.cookies.set(` call in `src/` from scratch (not trusting the existing
 assessment's own list): `src/lib/session.ts:89` (`rr2_session`), `src/lib/oauthState.ts:34`

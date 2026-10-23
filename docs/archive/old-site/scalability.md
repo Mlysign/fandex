@@ -234,7 +234,7 @@ because it fails silently.
 
 ## 5. What this means for monetization
 
-`docs/monetization-go-live.md` models revenue per 1,000 monthly actives at ~€150
+`docs/archive/old-site/monetization-go-live.md` models revenue per 1,000 monthly actives at ~€150
 for ads. Against that:
 
 - Going commercial triggers **TMDB $149/mo + RAWG $149/mo**, and RAWG's paid tier

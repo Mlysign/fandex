@@ -12,10 +12,10 @@
 > that item stays open until signup, by necessity. §1's remaining question (is
 > the page-level notice legally required, or just good practice?) still needs
 > H4.0 — but both are shipped, so the answer can only relax the requirement.
-> Operational sequence → [monetization-go-live.md](monetization-go-live.md).
+> Operational sequence → [monetization-go-live.md](archive/old-site/monetization-go-live.md).
 
 **A document, not a page** — same convention as `cookie-assessment.md` (H4.4) and
-`docs/compliance-review.md` (H4.10). This is checklist-level research to make H3.4
+`docs/archive/old-site/compliance-review.md` (H4.10). This is checklist-level research to make H3.4
 (affiliate implementation) decision-ready, not legal advice, and not a substitute for
 H4.0's professional review. **Scoped strictly to the locked v1 model** — donations +
 affiliate links only, decided 2026-07-18 (`TASKS.md`, H3) — this document does not propose
@@ -64,7 +64,7 @@ confirm rather than this document deciding unilaterally.
 **Defensible minimum, pending H4.0's confirmation:**
 - **A small, persistent per-link marker** next to every affiliate store row (e.g. an
   "Affiliate" or "Werbung" tag rendered inline, not just in a tooltip or footnote) —
-  matches how the existing `docs/cookie-assessment.md` and legal-doc conventions favor
+  matches how the existing `docs/archive/old-site/cookie-assessment.md` and legal-doc conventions favor
   visible-by-default disclosure over buried text.
 - **A one-line page-level notice** stating that some outbound store links are affiliate
   links and Fandex may earn a commission — this is the standard pattern most sites use in
@@ -84,7 +84,7 @@ to just good practice) for a UI as small as a store-link row.
 
 **The core technical question:** does an affiliate click set a cookie on **Fandex's own
 domain**, or only on the destination's? This is what decides whether H4.4's `§25 TDDDG`
-strictly-necessary exemption survives H3.4 — `docs/cookie-assessment.md`'s standing guard
+strictly-necessary exemption survives H3.4 — `docs/archive/old-site/cookie-assessment.md`'s standing guard
 names this exact question.
 
 **How standard affiliate tracking actually works:** the click carries an affiliate ID as a
@@ -133,7 +133,7 @@ the failure mode that would silently break the `§25 TDDDG` exemption. Marked
 affiliate integration) sets, reads, or requires a cookie/localStorage value on
 **fandex.org itself** for attribution — e.g. a Fandex-hosted `/out?url=...` redirect that
 stamps a click record before forwarding. If H3.4's implementation ever needs that pattern
-(some networks require it for accurate attribution), `docs/cookie-assessment.md` must be
+(some networks require it for accurate attribution), `docs/archive/old-site/cookie-assessment.md` must be
 revisited and H4.4's parked real consent-banner build gets un-parked at that point, not
 after.
 
@@ -237,7 +237,7 @@ Ordered, with the two hard gates first:
    §2's cookie-exemption argument intact and matches Amazon's own anti-redirect policy.
 5. Ship the per-link "Affiliate"/"Werbung" marker (§1) on every store row it produces,
    applied identically to the gray-market shops.
-6. Re-run `docs/cookie-assessment.md`'s check after the above — confirm no new cookie
+6. Re-run `docs/archive/old-site/cookie-assessment.md`'s check after the above — confirm no new cookie
    actually appeared on fandex.org once real affiliate links are live, not just in theory.
 7. **H4.9's own open item, carried to H4.0:** confirm whether the per-link marker alone
    satisfies `§5a UWG`'s recognizability duty for Fandex's specific UI, or whether the

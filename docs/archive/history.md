@@ -6132,3 +6132,25 @@ the old site went.
   rows (241 owned, 238 played, 22 wishlist), four apps resolved through IGDB, one app has no game;
   a second sync changed nothing.
 - **The privacy policy** names what is asked of Steam, in both languages (updated 2026-10-23).
+
+## 2026-10-23 night, a hygiene pass, and the stale tasks archived
+
+Nils asked for a hygiene pass that questions whether each file is still needed. The ten tasks
+flagged earlier the same day as outdated were archived with it, as they stood:
+
+- **Search Console, 4,089 of 4,090 URLs "Discovered – currently not indexed"** (2026-09-02). Written against the old site's 4,341-URL sitemap. Since then the sitemap is the static site's (10,132 URLs, facet pages included, which was the internal-depth step the plan asked for). What is left is his: external links (nilsmlynarek.eu, Show HN, Product Hunt, subreddits). The reasoning is in [docs/archive/old-site/seo.md](docs/archive/old-site/seo.md).
+- **The tag tail: ~9,000 tags in Other appearing three times or fewer** (2026-09-03). Other was emptied on 2026-10-18 by the AI sweep, and the weekly sweep keeps placing new tags.
+- **Desktop mockups for the filter panel** (older). The old site's `FilterPanel.tsx`; the app has its own Filters sheet.
+- **Nothing uses the media-type setting to SPEND less** (older). About the old site's `/api/discover`, `/api/library` and `/api/calendar`, which no longer exist.
+- **The list payload carries ~4.7 MB only the detail page reads** (older). The old site's `/api/library`.
+- **`/library`, `/wishlist`, `/settings` dead under `next dev`** (2026-08-17). The old site is deleted.
+- **Fandex Score `priorStrength` (C=5) and class weights may want re-tuning** (2026-08). Time-gated to "after a few weeks of real scores"; the live config already reads C=2 since then, and a re-tune is a design call for him, not a cleanup. Keep if he wants it looked at.
+- **The 2026-08-23 optimization sweep pointer** and **the platform-integrations standing context** (AniList blocked on its terms, books postponed then shipped 2026-10-17). Neither has a next action; the first is about the old site, the second belongs in [docs/decisions.md](docs/decisions.md) and [PLATFORMS.md](PLATFORMS.md).
+- **Two light-theme contrast gaps** (`--color-accent-hover` 3.47:1, accent on `--color-surface-inset` 4.32:1). Old-site tokens; the app has one dark theme.
+- **From the 2026-10-11 smoke test, "not re-logged":** `/dashboard` 404 is fixed (a 301 to `/wishlist` since 2026-10-23), Profile's "Coming up" no longer exists (Profile was made lighter on 2026-10-17), Steam syncs again since 2026-10-23, and "a title removed from the pool between two site builds sends new visitors to the API" is how a static site works, not a bug.
+
+
+The pass itself: AGENTS.md split into a CLAUDE.md per package (always-loaded 61.4 to 16.6 KB),
+the old site memory moved to `memory/old-site/`, `.claude/plans/` and `.design/` deleted, the old
+half of `smoketest.md` and eight old-site docs moved to `docs/archive/old-site/`, about twenty
+rules that named deleted code rewritten against the Worker and the app.
