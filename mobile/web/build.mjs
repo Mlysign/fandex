@@ -3,6 +3,8 @@
 //   node mobile/web/build.mjs                 the whole build
 //   node mobile/web/build.mjs --skip-export   reuse the last app export (dist/app)
 //   node mobile/web/build.mjs --limit=40      render only the first 40 titles (a try-out; never deploy it)
+//   node mobile/web/build.mjs --accept-shrink build even with fewer facet pages or rails than the
+//                                             last full build (when the drop is known to be right)
 //
 // To build AND publish, use publish.mjs. Do not run `wrangler deploy` on this
 // folder by hand: it uploads whatever is there, a half-built site included.
@@ -22,13 +24,14 @@
 // ⚠️ A build that fails must leave nothing to deploy. Publishing replaces the
 // whole site, so a build that lost half its pages would delete them from the
 // web. Every step below throws instead of carrying on short, the page count is
-// checked against the pool, and the output folder is only moved into place at
-// the very end.
+// checked against the pool, the facet pages and rails against the last full
+// build, and the output folder is only moved into place at the very end.
 
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { baselineOf, contentSecurityPolicy, CSP_ENFORCED, inlineScripts, scriptHash, shrinkProblems } from './buildChecks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mobile = path.join(here, '..');
@@ -39,7 +42,7 @@ const STAGE = path.join(DIST, 'site.next');
 const OUT = path.join(DIST, 'site');
 const CACHE = path.join(DIST, 'cache', 'items');
 
-const API = (process.env.FANDEX_API ?? 'https://fandex-api.fandex-worker.workers.dev').replace(/\/+$/, '');
+const API = (process.env.FANDEX_API ?? 'https://api.fandex.org').replace(/\/+$/, '');
 const SITE = 'https://fandex.org';
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
@@ -53,6 +56,10 @@ const DESCRIPTION = "One index for every game, movie and show. Fandex tracks you
 const started = Date.now();
 const step = (msg) => console.log(`[${((Date.now() - started) / 1000).toFixed(0).padStart(3)}s] ${msg}`);
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Every inline script a page carries goes through this, so the CSP in _headers
+// allows exactly the scripts the build wrote, by their hash (buildChecks.mjs).
+const inlineHashes = new Set();
+const inline = (js) => { inlineHashes.add(scriptHash(js)); return `<script>${js}</script>`; };
 
 // ── 1. The app ───────────────────────────────────────────────────────────────
 
@@ -79,9 +86,13 @@ const shell = fs.readFileSync(path.join(APP, 'index.html'), 'utf8').replace('htt
 const bundle = shell.match(/<script src="(\/_expo\/static\/js\/web\/index-[0-9a-f]+\.js)" defer><\/script>/)?.[1];
 if (!bundle) throw new Error('The export has no app bundle in its index.html');
 const bundleText = fs.readFileSync(path.join(APP, bundle), 'utf8');
-if (bundleText.includes('fandex-api.fandex-worker.workers.dev') || /Program Files/.test(bundleText)) {
+// Either address of the API in the bundle means the app's default won over "/".
+if (['fandex-api.fandex-worker.workers.dev', 'api.fandex.org'].some((a) => bundleText.includes(a)) || /Program Files/.test(bundleText)) {
   throw new Error('The app bundle was not built for the website: it does not call /v1 on its own origin');
 }
+// The export's own page has no inline script today. If Expo adds one, the home
+// page and the app shell carry it, and the CSP has to allow it.
+for (const js of inlineScripts(shell)) inlineHashes.add(scriptHash(js));
 
 // ── 2. The renderer ──────────────────────────────────────────────────────────
 
@@ -303,7 +314,7 @@ for (const item of details.values()) {
   const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
     + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical, image: head.image, alt: item.merged.title })}`
     + `<style>${fontCss}${FRAME_CSS}</style>${css}<style id="fandex-item-layout">${ITEM_PAGE_CSS}</style><script type="application/ld+json">${head.jsonLd}</script></head>`
-    + `<body><div id="prerender" data-page="item">${body}</div><div id="root"></div><script>${PV_SCRIPT}${ITEM_SCRIPT}</script></body></html>`;
+    + `<body><div id="prerender" data-page="item">${body}</div><div id="root"></div>${inline(PV_SCRIPT + ITEM_SCRIPT)}</body></html>`;
   const dir = path.join(STAGE, item.type);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${item.slug}.html`), html);
@@ -327,7 +338,7 @@ for (const facet of facets) {
   const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
     + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical })}`
     + `<style>${fontCss}${FRAME_CSS}${STATIC_GRID_CSS}</style>${css}</head>`
-    + `<body><div id="prerender" data-page="facet">${body}</div><div id="root"></div><script>${PV_SCRIPT}${ITEM_SCRIPT}</script></body></html>`;
+    + `<body><div id="prerender" data-page="facet">${body}</div><div id="root"></div>${inline(PV_SCRIPT + ITEM_SCRIPT)}</body></html>`;
   const dir = path.join(STAGE, facet.kind);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${facet.slug}.html`), html);
@@ -374,7 +385,7 @@ for (const month of monthsShown) {
     + `<link rel="canonical" href="${esc(head.canonical)}">${cards.length < 3 ? '<meta name="robots" content="noindex, follow">' : ''}`
     + `${social({ title: head.title, description: head.description, url: head.canonical })}`
     + `<style>${fontCss}${FRAME_CSS}${STATIC_GRID_CSS}</style>${css}<script type="application/ld+json">${head.jsonLd}</script></head>`
-    + `<body><div id="prerender" data-page="calendar">${body}</div><script>${PV_SCRIPT}</script></body></html>`;
+    + `<body><div id="prerender" data-page="calendar">${body}</div>${inline(PV_SCRIPT)}</body></html>`;
   fs.mkdirSync(path.join(STAGE, 'calendar'), { recursive: true });
   fs.writeFileSync(path.join(STAGE, 'calendar', `${month}.html`), html);
   if (cards.length >= 3) urls.push({ loc: head.canonical, lastmod: new Date().toISOString().slice(0, 10) });
@@ -392,13 +403,14 @@ fs.writeFileSync(path.join(STAGE, 'app-shell.html'),
 // The home page is the app too, with something to read until it is up and for
 // whoever never runs it: the name, the line under it, and the most-voted titles
 // as links. Those links are how a crawler gets from the front door to a title.
+// The same address test as the item pages: a link here goes only where a page was written.
 const popular = (type) => [...details.values()]
-  .filter((i) => i.type === type && i.slug)
+  .filter((i) => i.type === type && i.slug && SLUG.test(i.slug))
   .sort((a, b) => (b.vector.communityVotes ?? 0) - (a.vector.communityVotes ?? 0))
   .slice(0, 30);
 // A type with no titles in the pool yet has no section, rather than an empty one.
 const homeList = (type, label) => !popular(type).length ? '' : `<section><h2>${label}</h2><ul>${popular(type).map((i) =>
-  `<li><a href="/${i.type}/${i.slug}">${esc(i.merged.title)}${i.merged.releaseDate ? ` <span>${i.merged.releaseDate.slice(0, 4)}</span>` : ''}</a></li>`).join('')}</ul></section>`;
+  `<li><a href="/${esc(i.type)}/${esc(i.slug)}">${esc(i.merged.title)}${i.merged.releaseDate ? ` <span>${esc(i.merged.releaseDate.slice(0, 4))}</span>` : ''}</a></li>`).join('')}</ul></section>`;
 const HOME_CSS = `.ph{flex:1;overflow-y:auto;color:${C.text};font-family:${SANS}}`
   + `.ph header{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 20px;text-align:center}`
   + `.ph .mark{margin:0;font-family:${SERIF};font-size:34px;line-height:35px}`
@@ -471,7 +483,7 @@ for (const { locale, doc, content } of legal) {
       `<a href="/legal/${l}/${doc}"${l === locale ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav></div>`
     + `<h1>${esc(content.title)}</h1><p class="updated">${locale === 'de' ? 'Zuletzt aktualisiert' : 'Last updated'}: ${esc(content.updated)}</p>`
     + (content.intro ?? []).map((p) => `<p>${esc(p)}</p>`).join('') + body + legalNav(locale)
-    + `</main><script>${PV_SCRIPT}</script>${usesProtected ? `<script>${PROTECTED_SCRIPT}</script>` : ''}</body></html>`;
+    + `</main>${inline(PV_SCRIPT)}${usesProtected ? inline(PROTECTED_SCRIPT) : ''}</body></html>`;
   const dir = path.join(STAGE, 'legal', locale);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${doc}.html`), html);
@@ -588,6 +600,14 @@ fs.writeFileSync(path.join(STAGE, '_redirects'), folded.map((r) => `/${r.type}/$
 step(`${folded.length} folded addresses redirected`);
 
 // The security headers the old site sent (next.config.ts), on every file.
+// The full Content-Security-Policy is report-only until a browser's console
+// shows nothing it would block (docs/website.md); a wrong one would break the
+// live site. The enforced one holds the three directives nothing here relies on.
+// The worker.ts responses (the app shell, the 404) are files fetched through
+// ASSETS, so they carry these too.
+const cspReportOnly = contentSecurityPolicy([...inlineHashes]);
+// Cloudflare reads a _headers line of at most 2,000 characters.
+if (cspReportOnly.length > 1900) throw new Error(`The CSP is ${cspReportOnly.length} characters: too long for one _headers line`);
 fs.writeFileSync(path.join(STAGE, '_headers'), [
   '/*',
   '  X-Content-Type-Options: nosniff',
@@ -595,7 +615,8 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
   '  Referrer-Policy: strict-origin-when-cross-origin',
   '  Strict-Transport-Security: max-age=63072000; includeSubDomains',
   '  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()',
-  "  Content-Security-Policy: frame-ancestors 'none'",
+  `  Content-Security-Policy: ${CSP_ENFORCED}`,
+  `  Content-Security-Policy-Report-Only: ${cspReportOnly}`,
   // Both folders hold files named by their content hash.
   '/_expo/static/*',
   '  Cache-Control: public, max-age=31536000, immutable',
@@ -624,6 +645,26 @@ const expected = (poolCount ?? byId.size) - unaddressed;
 if (!limit && itemPages < expected * 0.98) {
   throw new Error(`Only ${itemPages} item pages for a pool of ${expected} addressed titles. Not publishing a short site.`);
 }
+// The item count above is held to the pool. Facet pages and rails have nothing
+// to be held to but the last full build. Until 2026-10-23 only items were
+// counted, so a build could lose every rail or every facet page and still pass.
+// --accept-shrink lets a known, wanted drop through (a sweep that folded many
+// tags); a delta with titles and no facet page at all is never let through.
+const BUILD_JSON = path.join(DIST, 'build.json');
+let previousRaw = null;
+try { previousRaw = fs.readFileSync(BUILD_JSON, 'utf8'); } catch { /* the first build */ }
+let previous = null;
+try { previous = previousRaw ? JSON.parse(previousRaw) : null; } catch { /* half written: compare nothing */ }
+const baseline = baselineOf(previous);
+const facetKinds = Object.fromEntries(['tag', 'person', 'studio', 'franchise'].map((k) => [k, facetCount(k)]));
+const counts = { itemPages, facetPages: facets.length, facetKinds, withRails };
+const shortBy = shrinkProblems(limit ? null : baseline, counts);
+if (!allFacets.length) throw new Error(`The catalog delta returned ${byId.size} titles and they make no facet page at all. Not publishing a site without them.`);
+if (shortBy.length) {
+  if (!flag('accept-shrink')) throw new Error(`Short build: ${shortBy.join('; ')}. Not publishing it. If the drop is right, build with --accept-shrink.`);
+  step(`accepted a short build (--accept-shrink): ${shortBy.join('; ')}`);
+}
+
 const files = walk(STAGE).length;
 // Cloudflare's limit on a free plan is 20,000 files per deploy.
 if (files > 19000) throw new Error(`${files} files: over what one deploy may hold`);
@@ -635,10 +676,12 @@ if (files > 19000) throw new Error(`${files} files: over what one deploy may hol
 const OLD = path.join(DIST, 'site.old');
 const sweep = { recursive: true, force: true, maxRetries: 5, retryDelay: 300 };
 fs.rmSync(OLD, sweep);
-fs.rmSync(path.join(DIST, 'build.json'), { force: true });
+fs.rmSync(BUILD_JSON, { force: true });
 // This folder is inside OneDrive on the machine it is built on, and OneDrive
 // holds a folder it is still scanning: a rename then fails with EPERM for a few
-// seconds. Wait and try again; a failure after that leaves the old site as it was.
+// seconds. Wait and try again. If the second rename still fails, the first is
+// undone and the old build.json written back, so the last good build is where
+// it was and `publish.mjs --skip-build` can still deploy it.
 async function rename(from, to) {
   for (let attempt = 1; ; attempt++) {
     try { fs.renameSync(from, to); return; } catch (e) {
@@ -647,8 +690,25 @@ async function rename(from, to) {
     }
   }
 }
-if (fs.existsSync(OUT)) await rename(OUT, OLD);
-await rename(STAGE, OUT);
-fs.writeFileSync(path.join(DIST, 'build.json'), JSON.stringify({ builtAt: new Date().toISOString(), itemPages, files, poolCount, limited: !!limit }, null, 2));
+const hadSite = fs.existsSync(OUT);
+if (hadSite) await rename(OUT, OLD);
+try {
+  await rename(STAGE, OUT);
+} catch (e) {
+  if (hadSite) {
+    try {
+      await rename(OLD, OUT);
+      if (previousRaw) fs.writeFileSync(BUILD_JSON, previousRaw);
+    } catch (back) {
+      throw new Error(`The new site could not be moved into place (${e.message}), and the last one could not be moved back either (${back.message}). It is in ${path.relative(repo, OLD)}.`);
+    }
+  }
+  throw e;
+}
+fs.writeFileSync(BUILD_JSON, JSON.stringify({
+  builtAt: new Date().toISOString(), ...counts, files, poolCount, limited: !!limit,
+  // A try-out carries the last full build's counts on, for the next full build to be held to.
+  ...(limit && baseline ? { baseline } : {}),
+}, null, 2));
 try { fs.rmSync(OLD, sweep); } catch { /* the next build clears it */ }
-step(`done: ${itemPages} item pages, ${files} files in ${path.relative(repo, OUT)}${limit ? '  (LIMITED BUILD, do not deploy)' : ''}`);
+step(`done: ${itemPages} item pages, ${facets.length} facet pages, ${withRails} with rails, ${files} files in ${path.relative(repo, OUT)}${limit ? '  (LIMITED BUILD, do not deploy)' : ''}`);

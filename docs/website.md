@@ -84,6 +84,7 @@ From the repo root.
 | Build and run every check, and stop before deploying | `node mobile/web/publish.mjs --check` |
 | Build only | `node mobile/web/build.mjs` |
 | A quick try-out, never deployed | `node mobile/web/build.mjs --limit=40` |
+| Publish although facet pages or rails dropped more than 10% (a drop known to be right) | `node mobile/web/publish.mjs --accept-shrink` (or `nightly.mjs --accept-shrink`) |
 | The www redirect (rarely) | `cd worker && npx wrangler deploy --config ../mobile/web/www/wrangler.jsonc` |
 
 A full build takes about a minute: 8 to 40 s for the Expo export, 30 s to fetch 4,561 titles the
@@ -94,16 +95,27 @@ render. The first upload was 4,607 files in 77 s; later ones send only files tha
 file, so that deploy uploads all of them again.
 
 Output is `mobile/web/dist/` (ignored by git): `app/` the Expo export, `site/` what is published,
-`cache/items/` the fetched titles, `build.json` what the last build counted.
+`cache/items/` the fetched titles, `build.json` what the last build counted (item pages, facet
+pages per kind, item pages with rails, files). A `--limit` try-out carries the last full build's
+counts on in `baseline`, so it does not reset what the next full build is held to.
 
 ### The nightly rebuild (since 2026-10-16)
 
 The Windows task **"Fandex nightly site"** on Nils's PC runs `node mobile/web/nightly.mjs` daily at
 06:30 local time, after the D1 export, or as soon as the PC is on if it was off then. It builds a
 worktree of `origin/main` of its own at `C:\fx\site`, never this checkout (other sessions'
-half-finished edits live here), runs `npm ci` only when a lockfile changed, copies `mobile/.env`
-in, and runs `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`; a failed run
-also leaves `LAST-RUN-FAILED.txt` there, because the task's own result reads 0 either way. Wrangler's
+half-finished edits live here), runs `git clean -fd` there so no untracked file reaches the
+bundle, runs `npm ci` only when a lockfile changed, copies `mobile/.env` in, and runs
+`publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`; a failed run, a thrown
+error included, also leaves `LAST-RUN-FAILED.txt` there, because the task's own result reads 0
+either way.
+
+**It publishes the newest commit on main whose CI passed** (since 2026-10-23). It asks
+`gh run list --workflow=ci.yml --branch main`; when the head commit failed CI, is still in it, or
+has no run yet, the log says so and the night builds the newest earlier commit that passed. When
+`gh` cannot be asked (not installed, or logged in only inside the Claude app, the same trap as
+Wrangler's login below), the log warns and the head is built unchecked. When `gh` answers and
+none of main's last 30 commits passed, nothing is built and the run fails. Wrangler's
 browser login does the deploy, so no Cloudflare token exists; when that login lapses, the log says
 so and `npx wrangler login` in `worker/` fixes it.
 
@@ -117,8 +129,8 @@ refresh replaces the refresh token, so two copies means one stops working.
 
 - Run it now: `node mobile/web/nightly.mjs` (or `--check` to stop before the deploy), or start the
   task: `Start-ScheduledTask "Fandex nightly site"` in PowerShell.
-- ⚠️ It publishes only what is on `origin/main`. A fix that is committed and not pushed is not on
-  the next night's site.
+- ⚠️ It publishes only what is on `origin/main` and green in CI. A fix that is committed and not
+  pushed, or pushed with CI red, is not on the next night's site.
 - `.github/workflows/site.yml` is the same job for GitHub, by hand only now. Giving it a timer
   again without removing the task would publish twice a day.
 
@@ -130,8 +142,15 @@ refresh replaces the refresh token, so two copies means one stops working.
   step and a chained shell command deployed anyway (`node build.mjs | tail && wrangler deploy`:
   the pipe's exit code is `tail`'s). It went to the test address and changed nothing, by luck.
 - **A build that fails leaves nothing to deploy.** Every step throws instead of carrying on short,
-  the page count is checked against the pool (98% or it stops), the new folder is swapped in with
-  two renames, and `build.json` is written last.
+  the item page count is checked against the pool (98% or it stops), the new folder is swapped in
+  with two renames, and `build.json` is written last. If the second rename fails, the first is
+  undone and the old `build.json` written back, so `--skip-build` still has the last good build.
+- **Facet pages and rails are held to the last full build** (since 2026-10-23): below 90% of its
+  facet pages, or of its item pages with rails, or a kind of facet page (tag, person, studio,
+  franchise) gone entirely, and the build stops. `--accept-shrink` lets a drop that is right
+  through, such as a sweep that folded many tags. A delta with titles and no facet page at all
+  always stops. The checks are `mobile/web/buildChecks.mjs`, tested in
+  `mobile/src/lib/webBuildChecks.test.ts`.
 - **No `not_found_handling` in `wrangler.jsonc`.** With `"404-page"` set, Cloudflare answers a
   browser's navigation to an unknown address itself and never runs `worker.ts`: `/search`,
   `/library` and every old item link were a 404 in a browser while curl got the right answer,
@@ -143,6 +162,22 @@ refresh replaces the refresh token, so two copies means one stops working.
 - **The app's API address for the website is `/`**, set inside `build.mjs`. Not on a command line:
   Git Bash rewrites a lone `/` in an environment variable to `C:/Program Files/Git/`, and the
   bundle then calls that. The build throws if the bundle names any other API address.
+- **The Content-Security-Policy is report-only, for now** (since 2026-10-23). `_headers` sends two:
+  an enforced `Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'`,
+  which nothing on the site relies on, and the whole policy as
+  `Content-Security-Policy-Report-Only` (`contentSecurityPolicy` in `mobile/web/buildChecks.mjs`
+  lists why each source is there). The build's inline scripts (the pageview beacon, the item
+  page's boot check, the imprint's address) are allowed by their sha256, computed by the build
+  from the exact text it writes, so editing one needs no change here. It has no `report-uri`:
+  violations show only in a browser's console. Checked 2026-10-23 against the last build served
+  locally with the policy ENFORCED: an item page with its trailer and 33 TMDB images, the imprint,
+  `/discover` with the SQLite worker storing the catalog files, and the app booting on an item
+  page. No violation, and a control script injected by hand was blocked. Not checked: a real
+  sign-in (Trakt, Google, Discord), the Library, a book or board game page.
+  ⚠️ **To enforce it:** on fandex.org open those pages and a sign-in in Chrome with the console
+  open, and look for lines starting `[Report Only] Refused`. With none, rename the header in
+  `build.mjs` from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`, drop the
+  `CSP_ENFORCED` line, put `frame-ancestors 'none'` into the full policy, and publish.
 - **The site sends no COOP or COEP header, on purpose.** The app's SQLite works without
   cross-origin isolation (checked on the live build: catalog synced, 4,561 titles), Safari has no
   `COEP: credentialless` at all, and an isolated page blocks the YouTube trailer in Firefox.

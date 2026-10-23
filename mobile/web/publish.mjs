@@ -3,6 +3,8 @@
 //   node mobile/web/publish.mjs                build, check, deploy
 //   node mobile/web/publish.mjs --skip-build   check and deploy what the last build wrote
 //   node mobile/web/publish.mjs --skip-export  passed on to build.mjs
+//   node mobile/web/publish.mjs --accept-shrink passed on: publish fewer facet pages or rails than
+//                                              the last full build, when the drop is known to be right
 //   node mobile/web/publish.mjs --check        build and check, and stop before deploying
 //
 // A deploy replaces every file on the site with what is in dist/site. So this
