@@ -201,7 +201,18 @@ async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now
  * and asked again next time; the failure is thrown only if every request of the
  * run failed, which is what "Trakt is down" or "sign in again" looks like.
  */
-export async function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: number; waiting: number }> {
+export function refreshUpNext(db: SQLiteDatabase): Promise<{ checked: number; waiting: number }> {
+  // One run at a time, app-wide. Home and the Progress tab each run this, and
+  // every catalog or rows change restarts both: overlapping runs each read
+  // `up_next` before the others stored and asked Trakt about the same shows,
+  // until Trakt answered 429.
+  refreshing ??= refreshUpNextOnce(db).finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+let refreshing: Promise<{ checked: number; waiting: number }> | null = null;
+
+async function refreshUpNextOnce(db: SQLiteDatabase): Promise<{ checked: number; waiting: number }> {
   const now = Math.floor(Date.now() / 1000);
   const shows = await watchedShows(db);
   const stored = await db.getAllAsync<StoredRow>('SELECT media_item_id, watched_count, checked_at, next_air_at FROM up_next');
@@ -302,8 +313,8 @@ export async function setEpisodesWatched(
   const write = watched
     ? { episodes: { upsert: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode, watchedAt: now, sources: ['trakt'] })) } }
     : { episodes: { delete: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode })) } };
-  await api.writeState(write);
-  await applyLocalWrite(db, write);
+  const saved = await api.writeState(write);
+  await applyLocalWrite(db, write, saved?.skipped);
 
   const left = await db.getFirstAsync<{ n: number; last: number | null }>(
     'SELECT COUNT(*) n, MAX(watched_at) last FROM episode_state WHERE media_item_id = ?', [mediaItemId],

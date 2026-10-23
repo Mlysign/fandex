@@ -196,3 +196,38 @@ describe('wishlist rows of rated titles from other sources', () => {
     ]);
   });
 });
+
+describe('an edit made on this device while Trakt was being read', () => {
+  it('is left out of the plan, whichever way the plan would have moved it', async () => {
+    const { withoutRowsChangedDuringRun } = await import('./traktSync');
+    const row = (id: string, rating: number | null): LocalItemRow => ({ mediaItemId: id, relation: 'library', status: 'watched', rating, review: null, reviewedAt: 1 });
+    const before = { items: [row(A, 7), row(B, 5)], episodes: [] as LocalEpisodeRow[] };
+    // During the run: A was re-rated, and C was ticked.
+    const after = { items: [row(A, 9), row(B, 5), row(C, null)], episodes: [] as LocalEpisodeRow[] };
+    const plan = {
+      itemUpserts: [{ mediaItemId: A, source: 'trakt', relation: 'library' as const, status: 'watched', rating: 7, review: null, reviewedAt: 1 },
+        { mediaItemId: B, source: 'trakt', relation: 'library' as const, status: 'watched', rating: 6, review: null, reviewedAt: 1 }],
+      itemDeletes: [{ mediaItemId: C, source: 'trakt', relation: 'library' as const }],
+      episodeUpserts: [], episodeDeletes: [], unmatched: 0,
+    };
+    const out = withoutRowsChangedDuringRun(plan, before, after);
+    expect(out.itemUpserts.map((u) => u.mediaItemId)).toEqual([B]);
+    expect(out.itemDeletes).toEqual([]);
+  });
+
+  it('changes nothing when nothing moved', async () => {
+    const { withoutRowsChangedDuringRun } = await import('./traktSync');
+    const plan = { itemUpserts: [], itemDeletes: [{ mediaItemId: A, source: 'trakt', relation: 'library' as const }], episodeUpserts: [], episodeDeletes: [], unmatched: 0 };
+    const same = { items: [], episodes: [] as LocalEpisodeRow[] };
+    expect(withoutRowsChangedDuringRun(plan, same, same)).toBe(plan);
+  });
+});
+
+describe("Trakt's last activity", () => {
+  it('is the "all" stamp, or nothing', async () => {
+    const { lastActivity } = await import('./traktSync');
+    expect(lastActivity({ all: '2026-10-23T10:00:00.000Z', movies: {} })).toBe('2026-10-23T10:00:00.000Z');
+    expect(lastActivity({})).toBeNull();
+    expect(lastActivity(null)).toBeNull();
+  });
+});

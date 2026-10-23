@@ -212,3 +212,35 @@ describe('signing out', () => {
     expect((await syncState(f.db)).changed).toBe(true);
   });
 });
+
+describe('a change to one kind of row', () => {
+  it('pulls that kind only, and leaves the others where they are', async () => {
+    serve([item('a')], [episode('s', 1, 1), episode('s', 1, 2)], []);
+    const f = fakeDb();
+    await syncState(f.db);
+    worker.stateItems.mockClear();
+    worker.stateEpisodes.mockClear();
+
+    // A rating moves the items' count and stamp; the episodes' stay.
+    const counts = await worker.stateCounts();
+    worker.stateCounts.mockResolvedValue({ ...counts, items: 2, itemsUpdatedAt: 9 });
+    worker.stateItems.mockResolvedValue({ rows: [item('a'), item('b')], limit: 3000, done: true });
+    expect((await syncState(f.db)).changed).toBe(true);
+    expect(worker.stateItems).toHaveBeenCalled();
+    expect(worker.stateEpisodes).not.toHaveBeenCalled();
+    expect(f.count('item_state')).toBe(2);
+    expect(f.count('episode_state')).toBe(2);
+  });
+});
+
+describe('a pull that outlived its session', () => {
+  it('writes nothing once the session changed, and says so', async () => {
+    serve([item('a')], [], []);
+    const f = fakeDb();
+    await syncState(f.db);
+    serve([item('x'), item('y')], [], [], 2, 2);
+    const { StaleSync } = await import('./stateSync');
+    await expect(syncState(f.db, false, () => false)).rejects.toBeInstanceOf(StaleSync);
+    expect(f.keys('item_state')).toEqual(['a|trakt|library']);
+  });
+});

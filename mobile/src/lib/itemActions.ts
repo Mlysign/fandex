@@ -20,7 +20,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api, type ItemStateKey, type ItemStateUpsert, type MediaType, type StateWrite } from '~/lib/api';
 import { applyLocalWrite } from '~/lib/stateSync';
-import { loadTraktTokens, traktAccessToken, traktPost } from '~/lib/trakt';
+import { loadTraktTokens, traktAccessToken, traktMissed, traktPost } from '~/lib/trakt';
 
 export interface ActionTarget {
   id: string;
@@ -119,8 +119,8 @@ async function traktFor(target: ActionTarget): Promise<{ token: string; ids: { t
 async function commit(db: SQLiteDatabase, write: StateWrite): Promise<void> {
   const items = write.items;
   if (!items?.upsert?.length && !items?.delete?.length) return;
-  await api.writeState(write);
-  await applyLocalWrite(db, write);
+  const saved = await api.writeState(write);
+  await applyLocalWrite(db, write, saved?.skipped);
 }
 
 /** Set a rating (1-10), or clear it with null. */
@@ -129,15 +129,19 @@ export async function rateItem(db: SQLiteDatabase, target: ActionTarget, rating:
   const trakt = await traktFor(target);
   const key = traktKey(target.type);
 
+  // Whether Trakt really holds the rating: it answers 201 with the title under
+  // `not_found` when it cannot match the id, and a "trakt" row for that would
+  // be deleted by the next sync.
+  let onTraktNow = !!trakt;
   if (trakt) {
     if (rating === null) {
       await traktPost('/sync/ratings/remove', trakt.token, { [key]: [{ ids: trakt.ids }] });
     } else {
-      await traktPost('/sync/ratings', trakt.token, { [key]: [{ rating, ids: trakt.ids }] });
+      if (traktMissed(await traktPost('/sync/ratings', trakt.token, { [key]: [{ rating, ids: trakt.ids }] }))) onTraktNow = false;
       // Trakt keeps "rated" and "watched" apart, and the library is what was
       // watched. Only when Trakt does not already have it: a second post would
       // log a second play.
-      if (!rows.some((r) => r.source === 'trakt' && r.relation === 'library')) {
+      if (onTraktNow && !rows.some((r) => r.source === 'trakt' && r.relation === 'library')) {
         await traktPost('/sync/history', trakt.token, { [key]: [{ ids: trakt.ids }] });
       }
       if (rows.some((r) => r.source === 'trakt' && r.relation === 'wishlist')) {
@@ -145,7 +149,7 @@ export async function rateItem(db: SQLiteDatabase, target: ActionTarget, rating:
       }
     }
   }
-  await commit(db, ratingWrite({ target, rows, rating, home: trakt ? 'trakt' : 'local', now: Math.floor(Date.now() / 1000) }));
+  await commit(db, ratingWrite({ target, rows, rating, home: onTraktNow ? 'trakt' : 'local', now: Math.floor(Date.now() / 1000) }));
 }
 
 /** Put a title on the wishlist, or take it off. */
@@ -155,11 +159,11 @@ export async function setWishlist(db: SQLiteDatabase, target: ActionTarget, on: 
   const key = traktKey(target.type);
 
   if (on) {
-    if (trakt) await traktPost('/sync/watchlist', trakt.token, { [key]: [{ ids: trakt.ids }] });
+    const onTraktNow = !!trakt && !traktMissed(await traktPost('/sync/watchlist', trakt.token, { [key]: [{ ids: trakt.ids }] }));
     await commit(db, {
       items: {
         upsert: [{
-          mediaItemId: target.id, source: trakt ? 'trakt' : 'local', relation: 'wishlist',
+          mediaItemId: target.id, source: onTraktNow ? 'trakt' : 'local', relation: 'wishlist',
           status: null, rating: null, review: null, reviewedAt: null,
         }],
       },
@@ -207,6 +211,6 @@ export async function removeFromLibrary(db: SQLiteDatabase, target: ActionTarget
  */
 export async function setHidden(db: SQLiteDatabase, mediaItemId: string, hidden: boolean): Promise<void> {
   const write: StateWrite = { hidden: hidden ? { add: [mediaItemId] } : { remove: [mediaItemId] } };
-  await api.writeState(write);
-  await applyLocalWrite(db, write);
+  const saved = await api.writeState(write);
+  await applyLocalWrite(db, write, saved?.skipped);
 }

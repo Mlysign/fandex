@@ -31,16 +31,22 @@ function useReasons(id: string | null, enabled: boolean): ScoreReason[] | null {
   const db = useSQLiteContext();
   const { score } = useScores();
   const [reasons, setReasons] = useState<ScoreReason[] | null>(null);
+  // Whose reasons are held, so another title's never show while this one's load.
+  const [reasonsFor, setReasonsFor] = useState<string | null>(null);
   useEffect(() => {
     if (!enabled || !id) return;
     let live = true;
     void db.getFirstAsync<{ facets: string }>('SELECT facets FROM catalog WHERE id = ?', [id]).then((row) => {
       if (!live || !row) return;
       setReasons(score(id, parseFacets(row.facets))?.reasons ?? []);
+      setReasonsFor(id);
+    }, (e: unknown) => {
+      console.warn('score_reasons_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      if (live) { setReasons([]); setReasonsFor(id); }
     });
     return () => { live = false; };
   }, [db, id, enabled, score]);
-  return reasons;
+  return reasonsFor === id ? reasons : null;
 }
 
 export function ScoreExplainerBody({ item, score, center, state }: { item: CardItem; score: number | null; center: number | null; state: CardState }) {

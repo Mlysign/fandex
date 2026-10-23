@@ -46,3 +46,31 @@ describe('telling a device with no Trakt sign-in from one Trakt dropped', () => 
     expect(traktSignInMessage(new TraktAuthError(), '')).toBe('Trakt needs you to sign in again.');
   });
 });
+
+describe('what Trakt did not take', () => {
+  it('reads not_found out of a 201 answer', async () => {
+    const { traktMissed, missedTmdbIds } = await import('./trakt');
+    expect(traktMissed({ added: { movies: 1 }, not_found: { movies: [], shows: [] } })).toBe(false);
+    expect(traktMissed(null)).toBe(false);
+    const answer = { added: { movies: 0 }, not_found: { movies: [{ ids: { tmdb: 603 } }], shows: [{ ids: { tmdb: 1399 } }] } };
+    expect(traktMissed(answer)).toBe(true);
+    expect(missedTmdbIds(answer)).toEqual([603, 1399]);
+  });
+});
+
+describe('refreshing the Trakt sign-in', () => {
+  it('refreshes ONCE when many callers ask at the same moment', async () => {
+    const { secretSet } = await import('~/lib/storage');
+    let stored = JSON.stringify({ accessToken: 'old', refreshToken: 'r1', expiresAt: 1 });
+    vi.mocked(secretGet).mockImplementation(async () => stored);
+    vi.mocked(secretSet).mockImplementation(async (_k: string, v: string) => { stored = v; });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      return new Response(JSON.stringify({ access_token: 'new', refresh_token: 'r2', expires_in: 86_400, created_at: Math.floor(Date.now() / 1000) }));
+    });
+    const tokens = await Promise.all([traktAccessToken(), traktAccessToken(), traktAccessToken()]);
+    expect(tokens).toEqual(['new', 'new', 'new']);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+});

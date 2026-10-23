@@ -12,7 +12,7 @@
 // own target at the end of the row, so one tap has one outcome.
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Img } from '~/components/Img';
 import { Button, Sheet, Skeleton } from '~/components/kit';
@@ -74,10 +74,14 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
     return () => { live = false; };
   }, [mediaItemId]);
 
+  // Each read's number: a slower read for the show this screen showed before must not land on this one.
+  const watchedSeq = useRef(0);
   const loadWatched = useCallback(async () => {
+    const mine = ++watchedSeq.current;
     const rows = await db.getAllAsync<{ season: number; episode: number }>(
       'SELECT season, episode FROM episode_state WHERE media_item_id = ?', [mediaItemId],
     );
+    if (mine !== watchedSeq.current) return;
     setWatched(new Set(rows.map((r) => `${r.season}:${r.episode}`)));
     const counts: Record<number, number> = {};
     for (const r of rows) counts[r.season] = (counts[r.season] ?? 0) + 1;
@@ -85,7 +89,7 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
   }, [db, mediaItemId]);
 
   useEffect(() => {
-    if (signedIn) void loadWatched();
+    if (signedIn) void loadWatched().catch(() => undefined);
     else { setWatched(new Set()); setWatchedCount({}); }
   }, [signedIn, loadWatched, auth.rowsRevision]);
 

@@ -10,7 +10,13 @@
 // The website's build sets EXPO_PUBLIC_API_URL to "/", which leaves this empty:
 // every request is then relative, and fandex.org hands /v1/* to the API Worker
 // itself (mobile/web/worker.ts). Same origin, so no preflight per request.
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://fandex-api.fandex-worker.workers.dev').replace(/\/+$/, '');
+//
+// The Android app's default is the API's own domain, not its workers.dev
+// address: Cloudflare's edge cache (caches.default) does nothing on workers.dev,
+// so every cached route (game facets, browse, search, shelves) went to the
+// provider on every call from the app (2026-10-23). The workers.dev address
+// still answers, for the APKs already installed.
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://api.fandex.org').replace(/\/+$/, '');
 
 /**
  * Where the catalog is kept as files, or null where it is not: the website the

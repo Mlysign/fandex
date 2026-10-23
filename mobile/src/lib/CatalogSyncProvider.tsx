@@ -30,6 +30,9 @@ interface CatalogSync {
 
 const Ctx = createContext<CatalogSync | null>(null);
 
+/** How often a sync in progress tells the lists to re-read. The last page always does. */
+const REVISION_EVERY_MS = 2500;
+
 function describe(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.code === 'offline') return 'No connection. Showing what is already on this device.';
@@ -47,9 +50,14 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   const running = useRef(false);
+  /** A sync asked for while one ran (a rating, say): run again after it, from scratch if any caller asked. */
+  const runAgain = useRef<null | { fromScratch: boolean }>(null);
 
-  const run = useCallback(async (fromScratch: boolean) => {
-    if (running.current) return;
+  const run = useCallback(async (fromScratch: boolean): Promise<void> => {
+    if (running.current) {
+      runAgain.current = { fromScratch: fromScratch || !!runAgain.current?.fromScratch };
+      return;
+    }
     running.current = true;
     setState('syncing');
     setError(null);
@@ -60,12 +68,24 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
         setTotal(0);
         setRevision((r) => r + 1);
       }
+      // Lists refresh as pages land, so a first sync fills in as it goes. Not on
+      // EVERY page: each bump re-runs whatever reads the catalog (Up next asks
+      // Trakt, the score profile rebuilds, every list re-scores), and a first
+      // sync is about thirty pages in a row.
+      let bumpedAt = 0;
+      let pending = false;
       const result = await syncCatalog(db, (p) => {
         setWritten(p.written);
         setTotal(p.total);
-        // Lists refresh as pages land, so a first sync fills in as it goes.
-        if (p.written) setRevision((r) => r + 1);
+        if (!p.written) return;
+        pending = true;
+        if (Date.now() - bumpedAt >= REVISION_EVERY_MS) {
+          bumpedAt = Date.now();
+          pending = false;
+          setRevision((r) => r + 1);
+        }
       });
+      if (pending) setRevision((r) => r + 1);
       setTotal(result.total);
       setSyncedAt(await lastSyncedAt(db));
       setState('done');
@@ -77,6 +97,9 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
       setState('error');
     } finally {
       running.current = false;
+      const again = runAgain.current;
+      runAgain.current = null;
+      if (again) void run(again.fromScratch);
     }
   }, [db]);
 

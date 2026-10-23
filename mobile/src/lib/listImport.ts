@@ -26,7 +26,7 @@ import { ImportParseError, parseImportTexts, WANTED, type ParsedImport } from '@
 import { api, ApiError, type ItemStateKey, type ItemStateUpsert, type MediaType, type ProviderRef } from '~/lib/api';
 import { applyLocalWrite } from '~/lib/stateSync';
 import { searchTmdbMovieId, tmdbFindImdb } from '~/lib/tmdb';
-import { loadTraktTokens, traktAccessToken, traktPost } from '~/lib/trakt';
+import { loadTraktTokens, missedTmdbIds, traktAccessToken, traktMissed, traktPost } from '~/lib/trakt';
 import { onTrakt, statusFor } from '~/lib/itemActions';
 
 export { ImportParseError };
@@ -325,17 +325,27 @@ export async function applyImport(
   const plan = planImportWrites({ rows: toWrite, held: heldRows, traktOn, now: Math.floor(Date.now() / 1000) });
 
   // 4. Trakt first, as a single rating is: a row Fandex holds and Trakt does not would be undone by the next sync.
+  // So a title Trakt did not take is saved as Fandex's own ("local"), never as "trakt".
+  const notOnTrakt = new Set<string>();
   if (traktOn) {
     const tmdbOf = await tmdbIds(db, [...plan.trakt.ratings, ...plan.trakt.history, ...plan.trakt.watchlistAdd, ...plan.trakt.watchlistRemove], rows);
     const token = await traktAccessToken();
     const send = async (endpoint: string, list: ImportRowToWrite[], extra: (r: ImportRowToWrite) => object) => {
+      // A title with no TMDB id on the device cannot be sent, so Trakt will not hold it.
+      for (const r of list) if (!tmdbOf.has(r.mediaItemId)) notOnTrakt.add(r.mediaItemId);
       const usable = list.filter((r) => tmdbOf.has(r.mediaItemId));
       for (let i = 0; i < usable.length; i += TRAKT_CHUNK) {
+        const chunk = usable.slice(i, i + TRAKT_CHUNK);
         const body: Record<string, object[]> = {};
-        for (const r of usable.slice(i, i + TRAKT_CHUNK)) {
+        for (const r of chunk) {
           (body[r.type === 'movie' ? 'movies' : 'shows'] ??= []).push({ ids: { tmdb: tmdbOf.get(r.mediaItemId) }, ...extra(r) });
         }
-        await traktPost(endpoint, token, body);
+        const answer = await traktPost(endpoint, token, body);
+        // Trakt says 201 and lists what it could not match under not_found.
+        if (traktMissed(answer)) {
+          const missed = new Set(missedTmdbIds(answer));
+          for (const r of chunk) if (missed.has(tmdbOf.get(r.mediaItemId)!)) notOnTrakt.add(r.mediaItemId);
+        }
       }
     };
     const iso = (s: number | null) => (s ? new Date(s * 1000).toISOString() : undefined);
@@ -349,18 +359,19 @@ export async function applyImport(
   }
 
   // 5. The account, then the device's copy of it.
+  if (notOnTrakt.size) plan.upsert = plan.upsert.map((u) => (u.source === 'trakt' && notOnTrakt.has(u.mediaItemId) ? { ...u, source: 'local' } : u));
   const writes = plan.upsert.length + plan.del.length;
   onProgress?.('saving', 0, writes);
   for (let i = 0; i < plan.upsert.length; i += WRITE_CHUNK) {
     const write = { items: { upsert: plan.upsert.slice(i, i + WRITE_CHUNK) } };
-    await api.writeState(write);
-    await applyLocalWrite(db, write);
+    const saved = await api.writeState(write);
+    await applyLocalWrite(db, write, saved?.skipped);
     onProgress?.('saving', Math.min(i + WRITE_CHUNK, plan.upsert.length), writes);
   }
   if (plan.del.length) {
     const write = { items: { delete: plan.del } };
-    await api.writeState(write);
-    await applyLocalWrite(db, write);
+    const saved = await api.writeState(write);
+    await applyLocalWrite(db, write, saved?.skipped);
   }
   onProgress?.('saving', writes, writes);
 

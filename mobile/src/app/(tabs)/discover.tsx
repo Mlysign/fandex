@@ -153,7 +153,11 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     let live = true;
-    void catalogCards(db).then((rows) => { if (live) setPool(rows.map(cardFromCatalog)); });
+    void catalogCards(db).then((rows) => { if (live) setPool(rows.map(cardFromCatalog)); }, (e: unknown) => {
+      // A failed read must end the spinner: what was on screen stays, or nothing.
+      console.warn('catalog_cards_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      if (live) setPool((p) => p ?? []);
+    });
     return () => { live = false; };
   }, [db, sync.revision]);
 

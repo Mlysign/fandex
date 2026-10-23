@@ -21,7 +21,7 @@ import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution,
 import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, traktConfigured } from '~/lib/config';
 import { DISCORD_APP_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
-import { clearState, syncState } from '~/lib/stateSync';
+import { clearState, StaleSync, syncState } from '~/lib/stateSync';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
 import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
 import { publishWidget } from '~/lib/widget';
@@ -154,10 +154,26 @@ function signInMessage(e: unknown, provider: 'Trakt' | 'Google' | 'Discord' = 'T
   return e instanceof Error ? e.message : 'The sign-in did not finish.';
 }
 
+/**
+ * Bumped whenever the session token changes: a sign-in, a sign-out, a join, a
+ * disconnect (which replaces the token). A pull or a Trakt sync captures it
+ * when it starts and checks it before every write and before acting on a 401.
+ * Without it, a disconnect's own pull in flight came back 401 with the old
+ * token and signed the person out, and a pull outliving a sign-out put the
+ * last account's rows back on the device. Module-level: there is one provider.
+ */
+const session = { current: 0 };
+function setSession(token: string | null): void {
+  session.current++;
+  setSessionToken(token);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [profile, setProfile] = useState<Profile | null>(null);
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
   const [trakt, setTrakt] = useState<TraktFlow>({ phase: 'idle' });
   const [rowsSyncing, setRowsSyncing] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
@@ -179,6 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** Bumped to abandon a sign-in in progress: a poll that wakes up later sees it and stops. */
   const flow = useRef(0);
   const pulling = useRef(false);
+  /** A pull asked for while one ran: run again after it, forced if any caller forced. */
+  const pullAgain = useRef<null | { force: boolean }>(null);
   /** When the last pull started, so coming back to the app does not ask every few seconds. */
   const lastPull = useRef(0);
   // Set once `forget` exists, below. A pull the Worker answers 401 means this
@@ -186,16 +204,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // device, and until this a running app only found out on its next start (SM77).
   const onRevoked = useRef<() => void>(() => undefined);
 
-  const pullRows = useCallback(async (force = false) => {
-    if (pulling.current) return;
+  const pullRows = useCallback(async (force = false): Promise<void> => {
+    if (pulling.current) {
+      // Not dropped: a disconnect's forced pull must still run after the one in flight.
+      pullAgain.current = { force: force || !!pullAgain.current?.force };
+      return;
+    }
     pulling.current = true;
     lastPull.current = Date.now();
     setRowsSyncing(true);
     setRowsError(null);
+    const mine = session.current;
+    const stillCurrent = () => session.current === mine;
     try {
-      const res = await syncState(db, force);
+      const res = await syncState(db, force, stillCurrent);
       if (res.changed) setRowsRevision((r) => r + 1);
     } catch (e) {
+      if (e instanceof StaleSync || !stillCurrent()) return;
       if (e instanceof ApiError && e.status === 401) {
         onRevoked.current();
         return;
@@ -208,6 +233,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       pulling.current = false;
       setRowsSyncing(false);
+      const again = pullAgain.current;
+      pullAgain.current = null;
+      if (again) void pullRows(again.force);
     }
   }, [db]);
 
@@ -231,14 +259,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     syncingTrakt.current = true;
     setTraktSync((s) => ({ ...s, running: true, error: null, needsSignIn: false, onDevice: true }));
+    const mine = session.current;
+    const stillCurrent = () => session.current === mine;
     try {
-      const last = await syncTrakt(db, { dryRun: TRAKT_SYNC_DRY_RUN });
+      // An automatic run may skip the pull when Trakt says nothing moved; the Sync button never does.
+      const last = await syncTrakt(db, { dryRun: TRAKT_SYNC_DRY_RUN, stillCurrent, skipIfUnchanged: onlyIfStale });
+      if (!stillCurrent()) return true;
       setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: true, last, syncedAt: await traktSyncedAt(db) });
       // The rows on the device changed, and a title new to the catalog is now in
       // the pool. Rows pulled from the Worker first count too: a rating made on
       // another device, when Trakt itself had nothing new.
       if (last.rowsPulled || last.itemsChanged + last.itemsRemoved + last.episodesChanged + last.episodesRemoved > 0) setRowsRevision((r) => r + 1);
     } catch (e) {
+      // Started for a session that has since gone: nothing of it is this one's to report.
+      if (e instanceof StaleSync || !stillCurrent()) {
+        setTraktSync((s) => ({ ...s, running: false }));
+        return true;
+      }
       if (e instanceof ApiError && e.status === 401) {
         setTraktSync((s) => ({ ...s, running: false }));
         onRevoked.current();
@@ -261,7 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   const forget = useCallback(async () => {
-    setSessionToken(null);
+    setSession(null);
     await Promise.all([secretDelete(SESSION_KEY), clearTraktTokens(), clearState(db), clearTraktSync(db), clearUpNext(db)]);
     setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
     setProfile(null);
@@ -281,7 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus('signedOut');
         return;
       }
-      setSessionToken(token);
+      setSession(token);
       try {
         const me = await api.me();
         if (!live) return;
@@ -330,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!alive()) return;
     await saveTraktTokens(tokens);
     await secretSet(SESSION_KEY, result.token);
-    setSessionToken(result.token);
+    setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     setTrakt({ phase: 'idle' });
@@ -420,7 +457,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(signInMessage(e, 'Google'));
     }
     await secretSet(SESSION_KEY, result.token);
-    setSessionToken(result.token);
+    setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     // An account that also has Trakt on this device keeps syncing it; one that does not has nothing to sync.
@@ -436,7 +473,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(signInMessage(e, 'Discord'));
     }
     await secretSet(SESSION_KEY, result.token);
-    setSessionToken(result.token);
+    setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
     // Discord brings no library. An account that has Trakt on this device keeps syncing it.
@@ -473,7 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearTraktTokens();
       const result = await api.devSignIn(account);
       await secretSet(SESSION_KEY, result.token);
-      setSessionToken(result.token);
+      setSession(result.token);
       setProfile(await api.me().catch(() => null));
       setStatus('signedIn');
       setTrakt({ phase: 'idle' });
@@ -494,7 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(signInMessage(e, 'Discord'));
     }
     await secretSet(SESSION_KEY, result.token);
-    setSessionToken(result.token);
+    setSession(result.token);
     setProfile(await api.me().catch(() => null));
     void pullRows(true);
   }, [adoptMerge, pullRows]);
@@ -517,10 +554,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(async (provider: string) => {
+    // The old token dies on the Worker the moment it handles this, so a pull in
+    // flight can come back 401 before this answer does. Moving the session on
+    // first makes that pull stale instead of a sign-out.
+    session.current++;
     const out = await api.disconnect(provider);
     // The old token died with the disconnect. The answer carries its replacement.
     await secretSet(SESSION_KEY, out.token);
-    setSessionToken(out.token);
+    setSession(out.token);
     if (provider === 'trakt') {
       await Promise.all([clearTraktTokens(), clearTraktSync(db), clearUpNext(db)]);
       setTraktSync({ running: false, error: null, needsSignIn: false, onDevice: false, last: null, syncedAt: null });
@@ -540,6 +581,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const pending = pendingMerge;
     if (!pending) return;
     let result;
+    // The join deletes the account the old token names (see disconnect).
+    session.current++;
     try {
       result = await api.merge(pending.mergeToken, resolution);
     } catch (e) {
@@ -553,7 +596,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // that no longer exists. Then this device's copy of the rows is replaced
     // whole by the joined account's (a forced pull replaces, never mixes).
     await secretSet(SESSION_KEY, result.token);
-    setSessionToken(result.token);
+    setSession(result.token);
     if (pending.traktTokens) {
       await saveTraktTokens(pending.traktTokens);
       setTraktSync((t) => ({ ...t, onDevice: true }));
@@ -589,6 +632,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (status !== 'signedIn') return;
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active' || Date.now() - lastPull.current < FOREGROUND_PULL_MS) return;
+      // A start without a connection never learned the profile, so the country
+      // fell back to the device's for the whole session. Ask again here.
+      if (!profileRef.current) void api.me().then(setProfile).catch(() => undefined);
       void pullRows().then(() => runTraktSync(true));
     });
     return () => sub.remove();

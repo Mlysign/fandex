@@ -26,8 +26,8 @@ import {
   type EpisodeStateKey, type EpisodeStateUpsert, type ItemStateKey, type ItemStateUpsert, type ProviderRef,
 } from '~/lib/api';
 import { getMeta, setMeta } from '~/lib/db';
-import { syncState } from '~/lib/stateSync';
-import { traktAccessToken, traktList, traktPost } from '~/lib/trakt';
+import { StaleSync, syncState } from '~/lib/stateSync';
+import { TraktAuthError, traktAccessToken, traktGet, traktList, traktPost } from '~/lib/trakt';
 
 const SYNCED_AT_KEY = 'trakt_synced_at';
 /** Rows per write. The Worker takes 2,000; this leaves room. */
@@ -307,6 +307,8 @@ export interface TraktSyncResult {
    * then even if Trakt itself changed nothing (SM77).
    */
   rowsPulled?: boolean;
+  /** Trakt said nothing moved since the last full run, so nothing was pulled. */
+  unchanged?: boolean;
 }
 
 async function pullTrakt(accessToken: string): Promise<TraktPull> {
@@ -393,18 +395,20 @@ async function localTraktRows(db: SQLiteDatabase): Promise<{ items: LocalItemRow
   };
 }
 
-async function writePlan(plan: TraktPlan): Promise<void> {
+/** `current` throws once the session changed: the writes go out under whichever session `api` holds NOW. */
+async function writePlan(plan: TraktPlan, current: () => void): Promise<void> {
   const chunks = <T,>(rows: T[]): T[][] => {
     const out: T[][] = [];
     for (let i = 0; i < rows.length; i += WRITE_CHUNK) out.push(rows.slice(i, i + WRITE_CHUNK));
     return out;
   };
+  const write = async (w: Parameters<typeof api.writeState>[0]) => { current(); await api.writeState(w); };
   // Upserts before deletes: if the run dies half way, the account has gained
   // rows it should have, and lost none it should keep.
-  for (const upsert of chunks(plan.itemUpserts)) await api.writeState({ items: { upsert } });
-  for (const upsert of chunks(plan.episodeUpserts)) await api.writeState({ episodes: { upsert } });
-  for (const del of chunks(plan.itemDeletes)) await api.writeState({ items: { delete: del } });
-  for (const del of chunks(plan.episodeDeletes)) await api.writeState({ episodes: { delete: del } });
+  for (const upsert of chunks(plan.itemUpserts)) await write({ items: { upsert } });
+  for (const upsert of chunks(plan.episodeUpserts)) await write({ episodes: { upsert } });
+  for (const del of chunks(plan.itemDeletes)) await write({ items: { delete: del } });
+  for (const del of chunks(plan.episodeDeletes)) await write({ episodes: { delete: del } });
 }
 
 /**
@@ -412,16 +416,50 @@ async function writePlan(plan: TraktPlan): Promise<void> {
  * TraktSyncRefused when the run would delete too much, and whatever the network
  * threw otherwise. In every one of those cases nothing was deleted.
  */
-export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } = {}): Promise<TraktSyncResult> {
+export async function syncTrakt(
+  db: SQLiteDatabase,
+  opts: {
+    dryRun?: boolean;
+    /** False once the session this run started for is gone (a sign-out, another account). Checked before every write. */
+    stillCurrent?: () => boolean;
+    /** An automatic run: skip the pull when Trakt says nothing moved since the last full run. */
+    skipIfUnchanged?: boolean;
+  } = {},
+): Promise<TraktSyncResult> {
+  const current = () => { if (opts.stillCurrent && !opts.stillCurrent()) throw new StaleSync(); };
   const accessToken = await traktAccessToken();
   // The comparison is against the Worker's rows, so the device's copy of them
   // has to be current first.
-  const rowsPulled = (await syncState(db)).changed;
+  const rowsPulled = (await syncState(db, false, opts.stillCurrent)).changed;
 
+  // Trakt's own "when did anything last change". The full pull is seven lists
+  // read to their last page, the episode history included, and on most runs
+  // nothing moved. Asked on every run, compared only on an automatic one.
+  let activity: string | null = null;
+  try {
+    activity = lastActivity(await traktGet('/sync/last_activities', accessToken));
+  } catch (e) {
+    if (e instanceof TraktAuthError) throw e;
+    // Unknown: run the full pull, which says what is wrong if anything is.
+  }
+  if (opts.skipIfUnchanged && activity && !rowsPulled && activity === (await getMeta(db, ACTIVITY_KEY))) {
+    current();
+    await setMeta(db, SYNCED_AT_KEY, String(Date.now()));
+    return { ...EMPTY_RESULT, dryRun: !!opts.dryRun, unchanged: true };
+  }
+
+  // The rows as they were before the slow part. An edit made on this device
+  // while Trakt is read (a rating, a tick) is not in Trakt's answer yet, and
+  // the plan would undo it. Any row that moved during the run is left alone
+  // and settled by the next one.
+  const before = await localTraktRows(db);
   const pull = await pullTrakt(accessToken);
   const { ids, newTitles, deferred } = await matchTitles([...pull.library, ...pull.wishlist]);
   const local = await localTraktRows(db);
-  const plan = planTraktSync({ pull, ids, deferred, localItems: local.items, localEpisodes: local.episodes });
+  const plan = withoutRowsChangedDuringRun(
+    planTraktSync({ pull, ids, deferred, localItems: local.items, localEpisodes: local.episodes }),
+    before, local,
+  );
   const tidy = ratedButWishlisted(pull);
 
   const result: TraktSyncResult = {
@@ -444,6 +482,7 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
     return result;
   }
 
+  current();
   // Take rated titles off Trakt's watchlist. A failure here is left for the next
   // run: the plan already keeps them off the Fandex wishlist either way.
   if (tidy.length) {
@@ -461,19 +500,72 @@ export async function syncTrakt(db: SQLiteDatabase, opts: { dryRun?: boolean } =
 
   const changes = result.itemsChanged + result.itemsRemoved + result.episodesChanged + result.episodesRemoved;
   if (changes > 0) {
-    await writePlan(plan);
-    await syncState(db, true);
+    await writePlan(plan, current);
   }
   // A rated title on the wishlist from another source: an old TMDB row from the
   // site, or one made here before rating it elsewhere. Same rule (SM63).
   const leftovers = ratedWishlistLeftovers(await db.getAllAsync<HeldRow>('SELECT media_item_id, source, relation, rating FROM item_state'));
   if (leftovers.length) {
+    current();
     await api.writeState({ items: { delete: leftovers } });
-    await syncState(db, true);
     result.wishlistTidied = leftovers.length;
   }
+  // One pull after all the writes, of the kinds they touched, where there were two full ones.
+  if (changes > 0 || leftovers.length) await syncState(db, false, opts.stillCurrent);
+  current();
   await setMeta(db, SYNCED_AT_KEY, String(Date.now()));
+  // Kept only after a run that matched everything: a run that left titles for
+  // later must not let the next one skip because Trakt itself did not move.
+  if (activity && deferred === 0) await setMeta(db, ACTIVITY_KEY, activity);
   return result;
+}
+
+const ACTIVITY_KEY = 'trakt_last_activity';
+
+const EMPTY_RESULT: TraktSyncResult = {
+  dryRun: false, library: 0, wishlist: 0, episodes: 0, itemsChanged: 0, itemsRemoved: 0, episodesChanged: 0,
+  episodesRemoved: 0, newTitles: 0, deferred: 0, unmatched: 0, watchlistTidied: 0, rowsPulled: false,
+};
+
+/** The stamp of Trakt's last change to anything, from /sync/last_activities, or null. */
+export function lastActivity(answer: unknown): string | null {
+  const all = (answer as { all?: unknown } | null)?.all;
+  return typeof all === 'string' && all ? all : null;
+}
+
+/** The run outlived the session it was started for. Nothing more was written. */
+export { StaleSync };
+
+/**
+ * The plan without any row that changed on this device between `before` and
+ * `after`: an edit made while Trakt was being read is newer than Trakt's
+ * answer, and acting on the answer would undo it. Pure, for its test.
+ */
+export function withoutRowsChangedDuringRun(
+  plan: TraktPlan,
+  before: { items: LocalItemRow[]; episodes: LocalEpisodeRow[] },
+  after: { items: LocalItemRow[]; episodes: LocalEpisodeRow[] },
+): TraktPlan {
+  const changed = <T,>(a: T[], b: T[], key: (r: T) => string): Set<string> => {
+    const was = new Map(a.map((r) => [key(r), JSON.stringify(r)]));
+    const now = new Map(b.map((r) => [key(r), JSON.stringify(r)]));
+    const out = new Set<string>();
+    for (const [k, v] of was) if (now.get(k) !== v) out.add(k);
+    for (const k of now.keys()) if (!was.has(k)) out.add(k);
+    return out;
+  };
+  const itemKey = (r: { mediaItemId: string; relation: string }) => `${r.mediaItemId}|${r.relation}`;
+  const episodeKey = (r: { mediaItemId: string; season: number; episode: number }) => `${r.mediaItemId}|${r.season}|${r.episode}`;
+  const items = changed(before.items, after.items, itemKey);
+  const episodes = changed(before.episodes, after.episodes, episodeKey);
+  if (!items.size && !episodes.size) return plan;
+  return {
+    ...plan,
+    itemUpserts: plan.itemUpserts.filter((r) => !items.has(itemKey(r))),
+    itemDeletes: plan.itemDeletes.filter((r) => !items.has(itemKey(r))),
+    episodeUpserts: plan.episodeUpserts.filter((r) => !episodes.has(episodeKey(r))),
+    episodeDeletes: plan.episodeDeletes.filter((r) => !episodes.has(episodeKey(r))),
+  };
 }
 
 interface HeldRow { media_item_id: string; source: string; relation: string; rating: number | null }

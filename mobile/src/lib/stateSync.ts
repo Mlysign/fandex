@@ -17,7 +17,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { api, type EpisodeStateRow, type ItemStateRow, type StateCounts, type StateWrite } from '~/lib/api';
 import { getMeta, setMeta, inTransaction } from '~/lib/db';
 
-const SIGNATURE_KEY = 'state_signature';
+/**
+ * One signature per kind of row, so a change to one kind pulls that kind only.
+ * A single signature over all three made every rating re-download every
+ * episode row the account holds (12,000 and more for a Trakt library).
+ */
+const KINDS = ['items', 'episodes', 'hidden'] as const;
+type Kind = (typeof KINDS)[number];
+const signatureKey = (k: Kind) => `state_signature_${k}`;
+/** The single signature used before 2026-10-23. Cleared on sign-out with the others. */
+const OLD_SIGNATURE_KEY = 'state_signature';
 /** A runaway guard. The Worker pages at 3,000 rows; no account is this many pages. */
 const MAX_PAGES = 200;
 
@@ -29,8 +38,16 @@ export interface StateSyncResult {
   hidden: number;
 }
 
-function signature(c: StateCounts): string {
-  return [c.items, c.itemsUpdatedAt, c.episodes, c.episodesUpdatedAt, c.hidden, c.hiddenUpdatedAt].join(':');
+/** The pull outlived the session it was started for (a sign-out, another account). Nothing was written. */
+export class StaleSync extends Error {
+  constructor() {
+    super('The session changed while syncing');
+    this.name = 'StaleSync';
+  }
+}
+
+function signature(c: StateCounts, k: Kind): string {
+  return `${c[k]}:${c[`${k}UpdatedAt`]}`;
 }
 
 async function allItems(): Promise<ItemStateRow[]> {
@@ -59,20 +76,31 @@ async function allEpisodes(): Promise<EpisodeStateRow[]> {
   throw new Error('state pull did not finish');
 }
 
-export async function syncState(db: SQLiteDatabase, force = false): Promise<StateSyncResult> {
+/**
+ * `stillCurrent` is asked before anything local is written, inside the
+ * transaction: a pull started for one session must not land after a sign-out
+ * cleared the device, or after another account signed in. It throws StaleSync.
+ */
+export async function syncState(db: SQLiteDatabase, force = false, stillCurrent?: () => boolean): Promise<StateSyncResult> {
   const counts = await api.stateCounts();
-  const sig = signature(counts);
-  if (!force && (await getMeta(db, SIGNATURE_KEY)) === sig) {
+  const due: Kind[] = [];
+  for (const k of KINDS) if (force || (await getMeta(db, signatureKey(k))) !== signature(counts, k)) due.push(k);
+  if (!due.length) {
     return { changed: false, items: counts.items, episodes: counts.episodes, hidden: counts.hidden };
   }
 
-  // Everything, in memory, BEFORE the first local write. See the header.
-  const [items, episodes, hidden] = await Promise.all([allItems(), allEpisodes(), api.stateHidden()]);
+  // Every kind that changed, in memory, BEFORE the first local write. See the header.
+  const [items, episodes, hidden] = await Promise.all([
+    due.includes('items') ? allItems() : null,
+    due.includes('episodes') ? allEpisodes() : null,
+    due.includes('hidden') ? api.stateHidden() : null,
+  ]);
 
   await inTransaction(db, async () => {
-    await db.runAsync('DELETE FROM item_state');
-    await db.runAsync('DELETE FROM episode_state');
-    await db.runAsync('DELETE FROM hidden_item');
+    if (stillCurrent && !stillCurrent()) throw new StaleSync();
+    if (items) await db.runAsync('DELETE FROM item_state');
+    if (episodes) await db.runAsync('DELETE FROM episode_state');
+    if (hidden) await db.runAsync('DELETE FROM hidden_item');
 
     const putItem = await db.prepareAsync(
       `INSERT OR REPLACE INTO item_state
@@ -80,7 +108,7 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     try {
-      for (const r of items) {
+      for (const r of items ?? []) {
         await putItem.executeAsync([
           r.mediaItemId, r.source, r.relation, r.status, r.rating, r.review, r.reviewedAt, r.addedAt, r.updatedAt,
         ]);
@@ -93,34 +121,45 @@ export async function syncState(db: SQLiteDatabase, force = false): Promise<Stat
       'INSERT OR REPLACE INTO episode_state (media_item_id, season, episode, watched_at, sources) VALUES (?, ?, ?, ?, ?)',
     );
     try {
-      for (const e of episodes) {
+      for (const e of episodes ?? []) {
         await putEpisode.executeAsync([e.mediaItemId, e.season, e.episode, e.watchedAt, JSON.stringify(e.sources ?? [])]);
       }
     } finally {
       await putEpisode.finalizeAsync();
     }
 
-    for (const h of hidden.rows) {
+    for (const h of hidden?.rows ?? []) {
       await db.runAsync('INSERT OR REPLACE INTO hidden_item (media_item_id, hidden_at) VALUES (?, ?)', [h.mediaItemId, h.hiddenAt]);
     }
 
     // Stored with the rows, in the same transaction. A signature that landed
     // without its rows would tell every later sync there was nothing to do.
-    await setMeta(db, SIGNATURE_KEY, sig);
+    for (const k of due) await setMeta(db, signatureKey(k), signature(counts, k));
   });
 
-  return { changed: true, items: items.length, episodes: episodes.length, hidden: hidden.rows.length };
+  return {
+    changed: true,
+    items: items?.length ?? counts.items,
+    episodes: episodes?.length ?? counts.episodes,
+    hidden: hidden?.rows.length ?? counts.hidden,
+  };
 }
 
 /**
  * Mirror a write the Worker has ACCEPTED into the device's copy, so the
  * screen shows it without pulling everything again.
  *
- * The stored signature is left alone on purpose. It no longer matches the
- * Worker, so the next sync pulls the lot and replaces this approximation with
- * the truth (the Worker's own timestamps, and anything another device wrote).
+ * The stored signatures are left alone on purpose. The written kinds' no longer
+ * match the Worker, so the next sync pulls those kinds and replaces this
+ * approximation with the truth (the Worker's own timestamps, and anything
+ * another device wrote). A kind the write did not touch is not pulled again.
+ *
+ * `skipped` is the Worker's count of upserts it did not store (a title it does
+ * not hold). Those rows are left out here, so the screen does not show what
+ * the account does not have.
  */
-export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Promise<void> {
+export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite, skipped = 0): Promise<void> {
+  if (skipped > 0) return applySkippedWrite(db, write);
   const now = Math.floor(Date.now() / 1000);
   await inTransaction(db, async () => {
     for (const k of write.items?.delete ?? []) {
@@ -158,12 +197,26 @@ export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite): Pr
   });
 }
 
+/**
+ * A write the Worker stored only in part. It does not say WHICH upserts it
+ * skipped, so none are mirrored: the deletes and the hidden changes are, and
+ * the next pull (the written kinds' signatures no longer match) brings the
+ * upserts it did keep.
+ */
+async function applySkippedWrite(db: SQLiteDatabase, write: StateWrite): Promise<void> {
+  await applyLocalWrite(db, {
+    ...write,
+    items: write.items?.delete ? { delete: write.items.delete } : undefined,
+    episodes: write.episodes?.delete ? { delete: write.episodes.delete } : undefined,
+  });
+}
+
 /** Signing out: the device forgets the account's rows. The Worker's copy is untouched. */
 export async function clearState(db: SQLiteDatabase): Promise<void> {
   await inTransaction(db, async () => {
     await db.runAsync('DELETE FROM item_state');
     await db.runAsync('DELETE FROM episode_state');
     await db.runAsync('DELETE FROM hidden_item');
-    await db.runAsync('DELETE FROM meta WHERE key = ?', [SIGNATURE_KEY]);
+    for (const key of [OLD_SIGNATURE_KEY, ...KINDS.map(signatureKey)]) await db.runAsync('DELETE FROM meta WHERE key = ?', [key]);
   });
 }

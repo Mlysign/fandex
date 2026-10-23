@@ -270,6 +270,35 @@ function MergePanel({ onNotice }: { onNotice: (n: Notice) => void }) {
       .finally(() => setBusy(null));
   };
 
+  // The Worker asks before folding away an account that holds titles, even when
+  // nothing overlaps: then there is nothing to pick, only a yes to give.
+  if (overlap === 0) {
+    return (
+      <Section
+        eyebrow="Join these accounts"
+        hint={`The ${provider} account you just connected belongs to another Fandex account. Join them to have everything in one.`}
+      >
+        <View style={[styles.card, styles.cardWarning]}>
+          <View style={styles.sides}>
+            <SideCard side={mine} label="Signed in as" />
+            <SideCard side={theirs} label="The other account" />
+          </View>
+          <T variant="bodySm">
+            <T variant="bodySm" style={styles.strong}>{conflicts.cleanRows.toLocaleString('en')}</T>
+            {conflicts.cleanRows === 1 ? ' entry moves' : ' entries move'} across. Nothing exists on both, so nothing is lost.
+          </T>
+          {error ? <T variant="bodySm" style={{ color: color.danger }}>{error}</T> : null}
+          <View style={styles.actions}>
+            <Button label="Join the accounts" size="md" onPress={() => choose('keep-theirs')} loading={busy === 'keep-theirs'} disabled={!!busy} />
+          </View>
+          <Pressable onPress={auth.cancelMerge} disabled={!!busy} accessibilityRole="button" style={styles.textButton}>
+            <T variant="bodySm" style={{ color: color.textSecondary }}>Not now, keep them separate</T>
+          </Pressable>
+        </View>
+      </Section>
+    );
+  }
+
   return (
     <Section
       eyebrow="Join these accounts"
@@ -852,8 +881,12 @@ export default function SettingsScreen() {
   const [notice, setNotice] = useState<Notice>(null);
   const [counts, setCounts] = useState({ library: 0, wishlist: 0, missing: 0 });
   useEffect(() => {
-    void shelfCounts(db).then(setCounts);
+    let live = true;
+    void shelfCounts(db).then((c) => { if (live) setCounts(c); }, (e: unknown) => {
+      console.warn('shelf_counts_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    });
     // The count is of titles the catalog copy holds, so it also moves while that downloads.
+    return () => { live = false; };
   }, [db, auth.rowsRevision, catalog.revision, catalog.state]);
 
   const identities = auth.profile?.identities ?? [];

@@ -149,6 +149,10 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
       if (!live) return;
       setRows(all);
       setMissing(counts.missing);
+    }, (e: unknown) => {
+      // A failed read must end the spinner: what was on screen stays, or nothing.
+      console.warn('shelf_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      if (live) setRows((r) => r ?? []);
     });
     return () => { live = false; };
   }, [db, relation, auth.rowsRevision, catalog.revision]);

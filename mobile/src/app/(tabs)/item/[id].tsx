@@ -58,16 +58,23 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
   // rails stay until the new ones are ready. Blanking them shrank the page under
   // a reader near its foot, and the browser threw them up it (2026-10-18).
   const railsFor = useRef<string | null>(null);
+  /** The title whose rails are on screen now, held-only or complete. */
+  const shownFor = useRef<string | null>(null);
   useEffect(() => {
     let live = true;
-    if (railsFor.current !== itemId) {
+    const fresh = railsFor.current !== itemId;
+    if (fresh) {
       railsFor.current = itemId;
       setRails(null);
     }
     if (!taxonomy) return;
     relatedRails(db, catalog.revision, taxonomy, itemId, facets)
       .then(async (r) => {
-        if (live) setRails(r);
+        // A new title shows what the device holds at once. The same title re-picked
+        // keeps its old rails until the provider extras are back too: setting the
+        // held-only rails first dropped "More from" for a moment on every rating,
+        // and the page jumped (2026-10-23 review).
+        if (live && shownFor.current !== itemId) { shownFor.current = itemId; setRails(r); }
         // The titles of its franchise the catalog does not hold, after the ones
         // it does: the site's franchise_members, which D1 does not have. A film's
         // TMDB collection; a game's IGDB franchise or collection, by its name.
@@ -99,9 +106,9 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
             releaseDate: g.releaseDate, posterUrl: g.posterUrl, communityScore: g.rating, communityVotes: g.votes,
           }));
         }
-        if (!live || !label) return;
-        const extra = parts.filter((p) => !have.has(ident(p)));
-        if (!extra.length) return;
+        if (!live) return;
+        const extra = label ? parts.filter((p) => !have.has(ident(p))) : [];
+        if (!label || !extra.length) { setRails(r); return; }
         try {
           const res = await api.lookup(extra.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
           const held = new Map(res.found.map((f) => [f.id, f]));
@@ -155,7 +162,10 @@ export default function ItemScreen() {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState<{ title: string; detail: string; gone?: boolean } | null>(null);
 
+  /** Each load's number. A slower answer for an earlier title (or region) is dropped, not shown under this address. */
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++loadSeq.current;
     setError(null);
     // This screen stays mounted between titles, so the last one must not show under the next one's address.
     setItem(null);
@@ -166,8 +176,10 @@ export default function ItemScreen() {
       return;
     }
     try {
-      setItem(await api.item(address, region));
+      const got = await api.item(address, region);
+      if (mine === loadSeq.current) setItem(got);
     } catch (e) {
+      if (mine !== loadSeq.current) return;
       const code = e instanceof ApiError ? e.code : '';
       setError(
         code === 'offline'

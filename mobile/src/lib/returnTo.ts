@@ -13,7 +13,9 @@ const KEY = 'fandex.returnTo';
 const TTL_MS = 15 * 60 * 1000;
 let held: string | null = null;
 
-const safe = (path: string | null | undefined) => (path && path.startsWith('/') && !path.startsWith('//') ? path : null);
+// A browser reads "/\" as "//", another host, so no backslash anywhere (as google.ts's safeReturnPath).
+const safe = (path: string | null | undefined) =>
+  (path && path.startsWith('/') && !path.startsWith('//') && !path.includes('\\') ? path : null);
 
 /** Remember an address inside the app (it must start with "/"). */
 export function setReturnTo(path: string): void {

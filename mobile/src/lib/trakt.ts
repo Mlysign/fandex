@@ -265,11 +265,36 @@ export async function traktAccessToken(now = Math.floor(Date.now() / 1000)): Pro
   const tokens = await loadTraktTokens();
   if (!tokens) throw new TraktAuthError('This device is not signed in to Trakt.', false);
   if (tokens.expiresAt - now > REFRESH_MARGIN_SECONDS) return tokens.accessToken;
+  // ONE refresh at a time. Trakt rotates the refresh token, so a second caller
+  // refreshing with the same old one is refused, and that reads as "sign in to
+  // Trakt again". On the first open after the token runs out, the sync, both
+  // Up next lists and the widget all ask at once.
+  refreshing ??= withRefreshLock(() => refreshOnce(now)).finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+let refreshing: Promise<string> | null = null;
+
+async function refreshOnce(now: number): Promise<string> {
+  // Read again inside the lock: another tab may have refreshed while this one waited.
+  const tokens = await loadTraktTokens();
+  if (!tokens) throw new TraktAuthError('This device is not signed in to Trakt.', false);
+  if (tokens.expiresAt - now > REFRESH_MARGIN_SECONDS) return tokens.accessToken;
   if (!tokens.refreshToken) throw new TraktAuthError();
   const fresh = await refreshTokens(tokens.refreshToken);
   // Trakt rotates the refresh token. Losing the new one strands the device.
   await saveTraktTokens({ ...fresh, refreshToken: fresh.refreshToken ?? tokens.refreshToken });
   return fresh.accessToken;
+}
+
+/**
+ * In a browser, two tabs share the stored tokens, so the refresh is also held
+ * behind a Web Lock for as long as it takes. Only that long: a lock held for a
+ * tab's lifetime is what deadlocked the database once (AGENTS.md).
+ */
+function withRefreshLock<T>(task: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: { request: (name: string, fn: () => Promise<T>) => Promise<T> } } }).navigator?.locks;
+  return locks ? locks.request('fandex-trakt-refresh', task) : task();
 }
 
 function apiHeaders(accessToken: string): Record<string, string> {
@@ -327,11 +352,42 @@ export async function traktGet(endpoint: string, accessToken: string): Promise<u
   return res.json();
 }
 
-/** A write to Trakt: a rating, the watchlist, the history. Throws with Trakt's status on failure. */
-export async function traktPost(endpoint: string, accessToken: string, body: unknown): Promise<void> {
+/**
+ * A write to Trakt: a rating, the watchlist, the history. Throws with Trakt's
+ * status on failure. Answers Trakt's body, whose `not_found` lists what it
+ * could not match (see traktMissed).
+ */
+export async function traktPost(endpoint: string, accessToken: string, body: unknown): Promise<unknown> {
   const res = await fetch(`${BASE}${endpoint}`, { method: 'POST', headers: apiHeaders(accessToken), body: JSON.stringify(body) });
   if (res.status === 401 || res.status === 403) throw new TraktAuthError();
   // 420 is Trakt's "this account is at its limit" (watchlist and rating caps on free accounts).
   if (res.status === 420) throw new Error('Your Trakt account is at its limit, so this did not save there.');
   if (!res.ok) throw new Error(`Trakt answered ${res.status}.`);
+  return res.json().catch(() => null);
+}
+
+/**
+ * Whether a Trakt write answered 201 and still stored nothing for some entry:
+ * Trakt lists ids it could not match under `not_found` and says OK anyway. A
+ * row saved as "trakt" for such a title is one Trakt does not hold, which the
+ * next sync then deletes.
+ */
+export function traktMissed(answer: unknown): boolean {
+  const nf = (answer as { not_found?: Record<string, unknown> } | null)?.not_found;
+  if (!nf || typeof nf !== 'object') return false;
+  return Object.values(nf).some((v) => Array.isArray(v) && v.length > 0);
+}
+
+/** The TMDB ids of the films and shows a Trakt write listed under `not_found`. */
+export function missedTmdbIds(answer: unknown): number[] {
+  const nf = (answer as { not_found?: { movies?: unknown; shows?: unknown } } | null)?.not_found;
+  const out: number[] = [];
+  for (const list of [nf?.movies, nf?.shows]) {
+    if (!Array.isArray(list)) continue;
+    for (const e of list) {
+      const id = Number((e as { ids?: { tmdb?: unknown } })?.ids?.tmdb);
+      if (Number.isInteger(id)) out.push(id);
+    }
+  }
+  return out;
 }

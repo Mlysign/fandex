@@ -210,9 +210,11 @@ export default function CalendarScreen() {
   const [popular, setPopular] = useState<CardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<string | null>(null);
-  const wanted = useRef(month);
+  // Month AND country: two answers for one month in different countries can land in either order.
+  const wanted = useRef(`${month}|${region}`);
   useEffect(() => {
-    wanted.current = month;
+    const key = `${month}|${region}`;
+    wanted.current = key;
     setLoading(true);
     setNote(null);
     (async () => {
@@ -220,15 +222,15 @@ export default function CalendarScreen() {
         const res = await api.calendar(month, region);
         const cards = res.data.items.filter((c) => c.releaseDate?.startsWith(month));
         const held = await lookupHeld(cards);
-        if (wanted.current !== month) return;
+        if (wanted.current !== key) return;
         setPopular(cards.map((c) => toCard(c, held)));
         if (res.data.partial) setNote('One of the databases did not answer, so this month may be missing titles.');
       } catch {
-        if (wanted.current !== month) return;
+        if (wanted.current !== key) return;
         setPopular([]);
         setNote('The release feed is not answering. Your own lists are still here.');
       } finally {
-        if (wanted.current === month) setLoading(false);
+        if (wanted.current === key) setLoading(false);
       }
     })();
   }, [month, region]);
@@ -254,7 +256,7 @@ export default function CalendarScreen() {
       const dates = await regionalDates(region, rows.filter((r) => r.type === 'movie').map((r) => r.id))
         .catch(() => new Map<string, string>());
       if (live) setMine(placeInMonth(rows, dates, month).map((r) => ({ card: cardFromCatalog(r), relation: r.relation })));
-    })();
+    })().catch((e: unknown) => console.warn('calendar_mine_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
   }, [db, month, region, signedIn, auth.rowsRevision, catalog.revision]);
 

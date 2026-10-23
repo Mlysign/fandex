@@ -23,3 +23,12 @@ describe('coming back to a title after signing in', () => {
     expect(takeReturnTo(Date.now() + 16 * 60 * 1000)).toBeNull();
   });
 });
+
+describe('an address a browser would read as another host', () => {
+  it('is not kept: a slash and a backslash is two slashes to a browser', () => {
+    setReturnTo('/\\evil.example');
+    expect(takeReturnTo()).toBeNull();
+    setReturnTo('/movie/alien\\..');
+    expect(takeReturnTo()).toBeNull();
+  });
+});
