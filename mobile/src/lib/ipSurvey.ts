@@ -212,7 +212,7 @@ function labelFor(key: string, titles: string[]): string {
   for (const title of [...titles].sort((a, b) => a.length - b.length)) {
     const words = title.split(/\s+/);
     for (let n = 1; n <= words.length; n++) {
-      if (ipKey(words.slice(0, n).join(' ')) === key) return words.slice(0, n).join(' ').replace(/[\s:,;\-–]+$/, '');
+      if (ipKey(words.slice(0, n).join(' ')) === key) return words.slice(0, n).join(' ').replace(/[\s:,;\-\u2013]+$/, '');
     }
   }
   return key.replace(/\b\w/g, (c) => c.toUpperCase());

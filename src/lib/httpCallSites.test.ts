@@ -63,7 +63,7 @@ function httpFetchCalls(src: string): string[] {
 describe("httpFetch call sites", () => {
   it("marks every request whose only credential is an app key in the URL", () => {
     const unmarked: string[] = [];
-    for (const file of tsFiles("src")) {
+    for (const file of [...tsFiles("src"), ...tsFiles("worker/src")]) {
       const src = readFileSync(file, "utf8");
       if (!src.includes("httpFetch(")) continue;
       for (const call of httpFetchCalls(src)) {
@@ -79,12 +79,13 @@ describe("httpFetch call sites", () => {
   });
 
   it("finds the call sites at all, so a rename cannot make this test vacuous", () => {
-    const withCalls = tsFiles("src").filter((f) => readFileSync(f, "utf8").includes("httpFetch("));
-    expect(withCalls.length).toBeGreaterThan(8);
+    const withCalls = [...tsFiles("src"), ...tsFiles("worker/src")].filter((f) => readFileSync(f, "utf8").includes("httpFetch("));
+    // Seven in src/lib and the Worker's cover route since the old site went (2026-10-23).
+    expect(withCalls.length).toBeGreaterThan(6);
 
     const marked = withCalls.flatMap((f) =>
       httpFetchCalls(readFileSync(f, "utf8")).filter((c) => APP_KEY_IN_URL.test(c) && !CARRIES_USER_CREDENTIAL.test(c))
     );
-    expect(marked.length).toBeGreaterThan(10);
+    expect(marked.length).toBeGreaterThan(3);
   });
 });

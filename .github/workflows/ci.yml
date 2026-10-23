@@ -12,13 +12,15 @@ permissions:
 
 jobs:
   verify:
-    name: Typecheck · Lint · Test · Build
+    # The shared modules in src/lib (the Worker and the app import them), their
+    # tests, and lint for all three packages (eslint.config.mjs).
+    name: Shared lib · Typecheck · Lint · Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22 # matches the Dockerfile (node:22-bookworm-slim)
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Doc-size guard (informational only, never fails the build)
@@ -38,20 +40,10 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
-      - name: Build
-        # Dummy values only satisfy boot-time config validation (P10); they are
-        # never used at runtime here. The site has no host since 2026-10-05.
-        env:
-          JWT_SECRET: ci-placeholder-not-used-at-runtime
-          TOKEN_ENCRYPTION_KEY: ci-placeholder-not-used-at-runtime
-          TMDB_API_KEY: ci-placeholder
-          RAWG_API_KEY: ci-placeholder
-          NEXT_PUBLIC_BASE_URL: http://localhost:3000
-        run: npm run build
 
   worker:
-    # The Cloudflare Worker (worker/), its own package. It compiles sixteen of
-    # the site's modules from ../src, so a change there can break it without
+    # The Cloudflare Worker (worker/), its own package. It compiles shared
+    # modules from ../src, so a change there can break it without
     # touching worker/ at all, which is why this runs on every push and not only
     # on changes under worker/.
     #
@@ -106,9 +98,9 @@ jobs:
         run: npm test
 
   audit:
-    # One run per package: the site (root), the Worker and the app each have
-    # their own lockfile, and the last two are what ships. Not fail-fast, so a
-    # red root audit does not hide the other two.
+    # One run per package: the root (dev tooling only since the old site went,
+    # 2026-10-23), the Worker and the app each have their own lockfile, and the
+    # last two are what ships. Not fail-fast, so one red audit does not hide another.
     name: npm audit (${{ matrix.package }})
     runs-on: ubuntu-latest
     strategy:
@@ -132,14 +124,7 @@ jobs:
         with:
           node-version: 22
       # npm audit reads the lockfile, so nothing is installed and no install
-      # script runs.
-      # --omit=dev: the only remaining high-severity advisory (2026-07-29) is
-      # brace-expansion's DoS-via-glob-expansion, reachable only through eslint's
-      # own minimatch@3.1.5 chain (eslint/eslint-plugin-import/jsx-a11y/react,
-      # @eslint/config-array, @eslint/eslintrc) — devDependencies, never shipped,
-      # and not fixable without a major eslint 9->10 bump (no patched brace-expansion
-      # exists for minimatch@3.x's API). It only ever matches this repo's own static
-      # lint globs, never attacker input, so there's nothing here to exploit.
-      # Runtime deps (next, postcss, etc.) are still fully audited.
+      # script runs. --omit=dev: build and test tooling never ships, and what
+      # ships is what this job is for.
       - name: Audit (runtime deps)
         run: npm audit --audit-level=${{ matrix.level }} --omit=dev

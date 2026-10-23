@@ -113,15 +113,21 @@ function findProseDashes(src: string): { line: number; text: string }[] {
 }
 
 describe("copy style", () => {
-  it("has no em-dash in any string literal or JSX text under src/", () => {
+  // The app's screens and the Worker's messages are where the copy a person
+  // reads lives since the old site went (2026-10-23), so they are scanned too.
+  it("has no em-dash in any string literal or JSX text under src/, mobile/src or worker/src", () => {
+    const repo = path.resolve(SRC, "..");
+    const roots = [SRC, path.join(repo, "mobile", "src"), path.join(repo, "worker", "src")];
     const hits: Hit[] = [];
-    for (const file of walk(SRC)) {
-      const rel = path.relative(SRC, file).split(path.sep).join("/");
-      for (const h of findProseDashes(fs.readFileSync(file, "utf8"))) {
-        hits.push({ file: rel, ...h });
+    for (const root of roots) {
+      for (const file of walk(root)) {
+        const rel = path.relative(repo, file).split(path.sep).join("/");
+        for (const h of findProseDashes(fs.readFileSync(file, "utf8"))) {
+          hits.push({ file: rel, ...h });
+        }
       }
     }
-    const report = hits.map((h) => `  src/lib/../${h.file}:${h.line}  ${h.text}`).join("\n");
+    const report = hits.map((h) => `  ${h.file}:${h.line}  ${h.text}`).join("\n");
     expect(hits, `Em-dash in user-visible copy:\n${report}\n\nSplit the sentence, or use a colon or comma.`).toEqual([]);
   });
 

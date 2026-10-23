@@ -6062,3 +6062,29 @@ Left for Nils, judgment rather than fact: the Joker films apart from Batman; mos
 - **2026-10-18 weekly taxonomy sweep, the first run by the scheduled task**: 43 attaches (18 of them forming 9 new franchises), 16 bundles, 30 detaches of publisher imprints from books, 46 tag aliases and 400 tag moves out of Other, no new categories. Most notable: Apocalypse Now joins Heart of Darkness, the Enola Holmes films join Sherlock Holmes, and Avowed joins Pillars of Eternity. Report and undo: `docs/archive/taxonomy-sweeps/2026-10-18.md`.
 - **2026-10-18 second sweep, Other emptied** (Nils asked for Other as small as possible): all 5,996 remaining Other tags placed by hand-checked AI classification, 0 left. 2,393 to theme, 1,303 character, 582 object, 578 setting, 403 meta, 300 genre, the rest to mechanics, mood, audience, artstyle, mode, source and perspective. The 400-per-sweep cap was lifted for this run on his ask (in practice nothing in `apply.mjs` changed: its limit counts actions, and this run was 26 actions of up to 500 tags each). Report and undo: `docs/archive/taxonomy-sweeps/2026-10-18-0822.md`.
 - **2026-10-20 weekly taxonomy sweep**: 49 attaches (4 forming one new franchise, Balatro), 0 bundles, 13 detaches of publisher imprints from books, 0 tag moves (Other was already empty), no new categories. Most notable: the Hobbit films join The Lord of the Rings, the Super Mario films join Mario, and Baldur's Gate, Civilization and Mario Kart finally hold their own games instead of one each. Report and undo: `docs/archive/taxonomy-sweeps/2026-10-20.md`.
+
+## 2026-10-23, a whole-codebase review, fixed the same day
+
+Nils asked for a review of the whole codebase and then for all of it to be done. Five reviewers
+(Worker security, Worker bugs and D1 cost, the app's data layer, the website and screens, shared
+code with CI and dependencies) reported; every finding was checked before it was fixed, and one
+was wrong (non-Latin titles already slug to `untitled`).
+
+- **Worker** (`8fbfd4e`): `/v1/lookup` and `/v1/catalog/delta` rate limited and capped per day;
+  a per-account share of the state writes; covers checked by bytes; `api.fandex.org`; the
+  `provider_aliases` table (migration 0004); a guarded link write; cron housekeeping and the TMDB
+  retention fix; Trakt identities keyed on the uuid; a join always asks when the account folded
+  away holds titles. Deployed with the migration at 17:47.
+- **App** (`14a2eaa`): the session counter, the Trakt sync's edit guard and last-activities skip,
+  per-kind state pulls, one token refresh at a time, `not_found` rows saved as local, re-runs
+  instead of dropped syncs, throttled catalog revisions, single-flight Up next. `0.3.11` installed
+  on the Pixel 8 at 17:59 and opened on Home with the library.
+- **Website** (`663b314`): facet-page and rails count checks, a report-only CSP, a nightly that
+  fails loudly and builds the newest commit whose CI passed. Published 17:52.
+- **Shared code, scripts, CI** (`a159be2`): empty title keys never match in the import, the
+  breaker's probe and the gate's slots expire, the taxonomy sweep never changes an existing row,
+  CI audits all three packages, Dependabot watches them, workflows read-only and SHA-pinned.
+- **The old site deleted**: 532 files (its routes, components, about 250 site-only `src/lib`
+  files, the Dockerfile, Litestream, the probes), at the tag `old-site-final`. The root keeps the
+  shared modules, now linted together with the Worker and the app. AGENTS.md 80 → 47 KB; its 64
+  site-only rules are in `docs/archive/old-site-invariants.md`.

@@ -211,9 +211,9 @@ step(`${details.size} titles loaded (${fetched} fetched, ${details.size - fetche
 fs.rmSync(STAGE, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 fs.cpSync(APP, STAGE, { recursive: true });
 fs.rmSync(path.join(STAGE, 'metadata.json'), { force: true });
-// The site's own icons, the ones the old site served (src/app/favicon.ico, icon.svg, public/icon-*.png).
-fs.copyFileSync(path.join(repo, 'src', 'app', 'favicon.ico'), path.join(STAGE, 'favicon.ico'));
-fs.copyFileSync(path.join(repo, 'src', 'app', 'icon.svg'), path.join(STAGE, 'icon.svg'));
+// The site's own icons, the ones the old site served. In public/ since the old site's src/app went (2026-10-23).
+fs.copyFileSync(path.join(repo, 'public', 'favicon.ico'), path.join(STAGE, 'favicon.ico'));
+fs.copyFileSync(path.join(repo, 'public', 'icon.svg'), path.join(STAGE, 'icon.svg'));
 fs.copyFileSync(path.join(repo, 'public', 'icon-192.png'), path.join(STAGE, 'icon-192.png'));
 
 // The app loads its fonts in JavaScript. A static page has to name them itself,
@@ -449,7 +449,8 @@ const DOC_CSS = `html,body{margin:0;background:${C.surface};color:${C.secondary}
 
 // The postal address is base64 in the page and decoded in the browser, so the
 // HTML carries no plain text for a harvester to match. The reasoning, and what
-// this does not protect against, is in src/components/legal/ProtectedText.tsx.
+// this does not protect against, is in the old site's src/components/legal/ProtectedText.tsx
+// (git tag old-site-final).
 const PROTECTED_SCRIPT = `document.querySelectorAll("[data-protected]").forEach(function(p){try{var b=Uint8Array.from(atob(p.dataset.protected),function(c){return c.charCodeAt(0)});`
   + `var a=document.createElement("address");new TextDecoder().decode(b).split("\\n").forEach(function(l){var s=document.createElement("span");s.style.display="block";s.textContent=l;a.appendChild(s)});p.replaceWith(a)}catch(e){}})`;
 

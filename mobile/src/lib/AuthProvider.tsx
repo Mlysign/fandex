@@ -342,7 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { live = false; };
-  }, [forget, pullRows, runTraktSync]);
+  }, [db, forget, pullRows, runTraktSync]);
 
   const cancelTraktSignIn = useCallback(() => {
     flow.current++;

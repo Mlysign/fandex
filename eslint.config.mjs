@@ -1,106 +1,71 @@
+// One lint run for the whole repo: the shared modules (src/), the Worker
+// (worker/) and the app (mobile/). Until 2026-10-23 this linted only the old
+// Next.js site, and the two packages that ship had no lint at all.
+//
+// Only rules that catch a real failure are errors. Style is not linted.
 import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import tseslint from "typescript-eslint";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
+export default defineConfig([
   globalIgnores([
     // Gitignored working data. The weekly taxonomy sweep writes a work folder
-    // under data/taxonomy-sweep/ and may leave a helper script in it; a local
-    // lint read one as an error that CI, which has no data/, never sees.
+    // under data/taxonomy-sweep/ and may leave a helper script in it.
     "data/**",
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    // 2026-07-30 — `npm run lint` runs plain `eslint` with no path filter, and
-    // flat config's ignores are the only thing standing between that and
-    // scanning EVERY nested directory under the repo root, gitignored or not.
-    // A `git worktree add` under .claude/worktrees/ (isolation:"worktree" agent
-    // runs use this) checks out a full second copy of the source tree there —
-    // found live when an abandoned worktree from an unrelated prior session
-    // (checked out at an old commit, predating this very rule) surfaced 200+
-    // stale "errors" against code nobody was editing. Ignoring it here doesn't
-    // touch or delete that worktree, which may be another session's own
-    // in-progress work — it just stops lint from scanning it.
+    // `npm run lint` scans every directory under the root, gitignored or not,
+    // and flat config's ignores are all that stops it. A `git worktree add`
+    // under .claude/worktrees/ is a whole second checkout, possibly another
+    // session's live work: never scanned, never deleted.
     ".claude/worktrees/**",
-    // 2026-08-02 — same class of bug, found by a doc-hygiene pass. `81493db`
-    // added `npm run dev:alt` (NEXT_DIST_DIR=.next-alt, port 3010) so two
-    // concurrent `next dev` processes stop corrupting each other's build, and
-    // gitignored the directory — but gitignoring is exactly what does NOT
-    // matter here, per the note above. The result: the moment anyone ran
-    // dev:alt, `npm run lint` scanned Turbopack's emitted chunks and reported
-    // ~735 errors (require() imports, @ts-ignore, module assignment,
-    // this-aliasing) against generated code, silently breaking the repo's
-    // standing "0 errors" bar. Any future alternate distDir needs a line here.
-    ".next-alt/**",
-    // 2026-08-27 — and the third one, for the same reason, found the same way:
-    // `npm run start:alt` serves a build made in `.next-prod`, which is how a
-    // client-rendered page (`/settings`, `/library`, `/wishlist`) gets verified
-    // while another session's `next dev` holds `.next`. Scanning it reported
-    // 1,236 errors against generated chunks. The glob covers whatever the next
-    // one is called; the two above stay for the history.
-    ".next-*/**",
-    // 2026-10-04: the Cloudflare Worker. Its own package with its own
-    // typecheck and tests (CI's `worker` job); this config's Next and React
-    // rules do not describe it, and its node_modules and .wrangler build output
-    // would be scanned otherwise, for the same reason as the three above.
-    "worker/**",
-    // The Expo app, for the same reason: its own package and its own rules.
-    "mobile/**",
+    "**/node_modules/**",
+    // The old site's build output, still on disk where it was built.
+    ".next*/**",
+    // Build output and generated code of the two packages.
+    "worker/.wrangler/**",
+    "worker/worker-configuration.d.ts",
+    "mobile/android/**",
+    "mobile/dist/**",
+    "mobile/web/dist/**",
+    "mobile/.expo/**",
+    "mobile/expo-env.d.ts",
   ]),
+  // The plugins are known to every file, so a disable comment naming one of
+  // their rules (there are hundreds, from when the old site linted with them)
+  // is not reported as a rule that does not exist.
   {
+    plugins: { "@typescript-eslint": tseslint.plugin, react, "react-hooks": reactHooks },
+  },
+  {
+    files: ["**/*.{ts,tsx,mts}"],
+    languageOptions: { parser: tseslint.parser },
     rules: {
-      // The app parses untyped third-party API JSON throughout (every source
-      // adapter / merge normalizer), so `any` is a deliberate, pervasive choice
-      // here, not a code-smell. Kept as a warning (visible, not blocking) so the
-      // genuinely actionable errors — react-hooks correctness, etc. — aren't
-      // drowned out in lint output.
-      "@typescript-eslint/no-explicit-any": "warn",
-      // 2026-08-03 — an ERROR, because this failure mode is invisible to every
-      // other check in the repo. A `// comment` in JSX CHILDREN position is not
-      // a comment; it is a text node, and it renders. It happened here for real:
-      // `LegalLinks` had a long `//` block sitting legally in `return ( … )`
-      // ahead of the root element, and wrapping that return in a fragment moved
-      // it into children position — the entire SM33 tap-target note rendered as
-      // a paragraph in the site footer. tsc passed, 540 tests passed, lint
-      // passed, `next build` passed; it took a human looking at the page.
-      // This is the SECOND JSX-comment incident here (see AGENTS.md on
-      // `eslint --fix` destroying three `{/* eslint-disable */}` directives in
-      // AuthOptions.tsx), which is what makes it worth a rule rather than care.
-      "react/jsx-no-comment-textnodes": "error",
       // An ERROR, not a style preference: it guards a real load-time crash.
-      // Node's native type-stripping (what scripts/alias-hooks.mjs relies on for
-      // every rehearse-*.mjs / calibrate-*.mjs) only erases syntactically
-      // type-only constructs. A plain `import { Foo } from "@/types"` where Foo
-      // is an interface therefore survives stripping and throws
-      //   SyntaxError: does not provide an export named 'Foo'
-      // the moment a standalone script reaches that module — while tsc, vitest,
-      // next dev and next build all elide it correctly and report nothing. Every
-      // export of src/types/index.ts is type-only, so this was latent in ~50
-      // files; it cost real debugging time writing calibrate-fandex.mjs
-      // (2026-07-29) and was recommended there. Enabled 2026-07-30.
-      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "separate-type-imports" }],
-      // usePersistedState's `normalize` (3rd arg) must be a STABLE reference —
-      // its own hydrate effect is keyed on it (see usePersistedState.ts's own
-      // comment). An inline arrow/function re-runs that effect every render,
-      // which clobbers each state update with the stored value a beat later.
-      // This bit MyStuffView.tsx for real (2026-07-28, fixed) — catch it at
-      // lint time instead of by browser-testing sort persistence.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            ":matches(CallExpression[callee.name='usePersistedState'][arguments.2.type='ArrowFunctionExpression'], CallExpression[callee.name='usePersistedState'][arguments.2.type='FunctionExpression'])",
-          message:
-            "usePersistedState's `normalize` (3rd arg) must be a stable reference, not an inline function — a fresh function every render re-runs the hook's hydrate effect and silently reverts state changes. Define it as a module-level function and pass that reference instead.",
-        },
-      ],
+      // Node's native type-stripping (what scripts/alias-hooks.mjs and the
+      // taxonomy sweep's hooks rely on) only erases syntactically type-only
+      // constructs. A plain `import { Foo } from "@/types"` where Foo is an
+      // interface survives stripping and throws "does not provide an export
+      // named 'Foo'" the moment a script reaches that module, while tsc,
+      // vitest and every bundler elide it and report nothing.
+      // `import("x").T` in a type position is erased like any type, so it is allowed.
+      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "separate-type-imports", disallowTypeAnnotations: false }],
+    },
+  },
+  {
+    files: ["mobile/**/*.tsx", "mobile/**/*.ts"],
+    languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } },
+    settings: { react: { version: "19.2" } },
+    rules: {
+      // An ERROR because nothing else catches it. A `// comment` in JSX
+      // CHILDREN position is a text node, and it renders: it happened on the
+      // old site, where wrapping a return in a fragment put a whole comment
+      // block on the page with tsc, every test and the build green.
+      "react/jsx-no-comment-textnodes": "error",
+      // A hook called conditionally is a crash on the render that skips it.
+      "react-hooks/rules-of-hooks": "error",
+      // Visible, not blocking: many effects here leave a dependency out on
+      // purpose (a ref, a stable setter), each with a reason in a comment.
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ]);
-
-export default eslintConfig;

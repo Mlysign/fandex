@@ -8,7 +8,7 @@ are in app-plan.md; the settled calls are in [decisions.md](decisions.md)._
 
 | Thing | Where | Notes |
 |---|---|---|
-| Worker `fandex-api` | `https://fandex-api.fandex-worker.workers.dev`, and `https://fandex.org/v1/*` | Free plan. The Android app uses the first address. The website's Worker hands `/v1/*` to this one through a service binding ([website.md](website.md)), so a browser on fandex.org calls its own origin. |
+| Worker `fandex-api` | `https://api.fandex.org` (custom domain, 2026-10-23), `https://fandex-api.fandex-worker.workers.dev`, and `https://fandex.org/v1/*` | Free plan. The Android app uses `api.fandex.org` from 0.3.11; older APKs use the workers.dev address, which stays on. ⚠️ `caches.default` does nothing on workers.dev, which is why the custom domain exists: every edge-cached route (game search, browse and facets, shelves, covers) went to the provider on every call from the app. The website's Worker hands `/v1/*` to this one through a service binding ([website.md](website.md)), so a browser on fandex.org calls its own origin. |
 | D1 database `fandex` | id `6daba7e4-ea55-4c72-b297-eb92ada8c581`, EU jurisdiction | 110 MB of a 500 MB cap after the seed. |
 | R2 `fandex-backups` (EU) | bound as `BACKUPS` | `railway/` holds snapshots of the old database, `d1/{day}/` the nightly export. |
 | R2 `fandex-covers` (EU) | bound as `COVERS` | Book covers copied from Hardcover (2026-10-17), under `hardcover/{path}`, served at `/v1/cover/hardcover/{path}`. Not exported: every object can be fetched again. R2's free tier is 10 GB, 1 million writes and 10 million reads a month; a cover is 50 to 150 KB, so about 100,000 of them fit. |
@@ -211,6 +211,30 @@ response. Lists are aggregated to JSON inside SQLite.
 ## Rules specific to the Worker
 
 Each of these is a way the Worker differs from the site, and each has a test.
+
+- **The open routes that read many rows have a limiter and a daily cap** (2026-10-23,
+  `test/hardening.test.ts`). `POST /v1/lookup` takes up to 2,000 refs with no sign-in and
+  `GET /v1/catalog/delta` up to ~400 rows a page; both sit behind `RL_READ` (120 a minute per IP,
+  an IPv6 caller keyed by its /64) and `spend()` (`DAILY_LOOKUP_CAP` 300,000 refs,
+  `DAILY_DELTA_CAP` 4,000 pages), together under half of D1's 5M reads. A signed-in state page is
+  limited per user. A refused budget is remembered in the isolate, so a burst past a cap costs
+  no row writes. **One account's share of the day's state writes** is
+  `DAILY_USER_WRITE_CAP_PER_USER` (15,000 of the shared 40,000).
+- **A provider id that answered as another is kept in `provider_aliases`** (migration 0004): an
+  Open Library work merged into another, a Hardcover duplicate, an IGDB port opened as its main
+  game. Resolve writes it, and resolve and lookup read it, so a library sync stops fetching it.
+- **A link write is guarded against a second writer** (`writeLinkAndRederive` in
+  `catalog/ingest.ts`): the write batch opens with a statement that fails it when the item's
+  links moved since they were read, and the read and derive run again (three tries).
+- **Covers are checked by their bytes** (JPEG, PNG, WebP) and served with a sandbox CSP; the
+  `users/` folder (member uploads) is refused.
+- **Sign-in:** a Trakt identity is keyed on Trakt's `ids.uuid` from `/users/settings`, and a row
+  still keyed by username moves to it on its owner's next sign-in. A join that would fold away an
+  account holding any titles always answers `merge-required`, overlap or not.
+- **The cron's housekeeping** drops `daily_budget` rows older than 30 days and calendar months
+  outside what a request may ask for, once a UTC day. A failed TMDB refresh no longer moves
+  `last_synced` (the stored copy's age, which TMDB's six-month cap counts from); the link is set
+  aside in `kv` for a week instead, and a failure past 180 days logs `tmdb_retention_overdue`.
 
 - **D1 has no interactive transaction.** A read followed by a write is two round trips. The guard
   is the schema: creating an item is one batch whose link insert is a plain `INSERT` on the

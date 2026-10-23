@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: the website is online (2026-10-10). One thing needs Nils.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** Fixed from his three passes on 2026-10-10: the episode section on title pages (now with dates and a details sheet), Settings, "Available on", the filter button under Android's bar, the widget's look, Up next listing unscheduled episodes, facet pages with one title, the poster under the trailer. He confirmed a rating, an episode tick and a default-types change work. **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (PR #29, merged 2026-10-18: the bar now floats over the list; checked in Chromium only, never on Android, and in no APK yet), a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), and the episode sheet on the phone. Answered 2026-10-16: fandex.org/tag/steampunk reads "Fandex impact +4.3" for his account, and the CD PROJEKT RED studio page on his phone (27 titles) "looks fine". Download, Delete, a change of country or platforms, and Review's Accept and Deny were all run on a test account on 2026-10-11 and work (the smoke test section below). **Still never run by anybody: disconnecting one of two sign-ins, and Save weights, a category, an alias, a name or an attach on `/dev/scoring`.**
@@ -27,6 +27,19 @@ Four items. Everything else in this file is work I can do without him, and every
 
 4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). BGG's terms (2025-07-02) require a registered application and a Bearer token on every call, and a donation-funded site registers as commercial ("most likely free"). **Applied 2026-10-17, status "pending"** at boardgamegeek.com/applications (account Ramses3006; as Nils Mlynarek, Düsseldorf, hello@fandex.org, commercial through donations, 1 user). Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, find the official "Powered by BGG" logo and put it where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
 
+5. **🔵 Two checks from the 2026-10-23 codebase review**, both needing his session or his tools:
+   - **(a) Open fandex.org signed in and use it for a minute** (a title page with a trailer, Settings, a Trakt sync), then say so. The site sends its full Content-Security-Policy as report-only since 2026-10-23; signed-out pages showed no violation. Once a signed-in session is clean too, mine: move it to the enforced header in `mobile/web/build.mjs` (`docs/website.md`, "The Content-Security-Policy is report-only").
+   - **(b) If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app when our client id is in the header; nobody has proven it. Since 2026-10-23 a Trakt identity is keyed on Trakt's uuid (from `/users/settings`) and his old username row moves to it on his next Trakt sign-in.
+
+## The 2026-10-23 review: what is left (mine)
+
+Everything the review found is fixed, deployed and on the phone, except these:
+
+- ⬜ **Mark hand-made taxonomy rows in the table itself.** The sweep now never changes an existing alias, label or category row and its undo deletes only its own stamp, but `ip_alias`, `tag_alias`, `facet_label_override` and `tag_category_override` carry no `source` column, so "made by hand" is inferred. A migration adding `source` (default `'hand'`) makes it exact.
+- ⬜ **The five `exhaustive-deps` warnings** in `mobile/` (`discover.tsx` 208 and 250, `WeightsPanel.tsx` 35, `AuthProvider.tsx`): each is either a real stale value or wants a comment saying why not.
+- ⬜ **Docs written for the old site** (`docs/advanced-filters.md`, `catalog-growth.md`, `seo.md`, `scalability.md`, `optimization-plan.md`, and memory files about Railway, the old snapshots and `next dev`) describe deleted code. Move them to the archive in a hygiene pass.
+- **Decided, not done:** the list import does not ask TMDB for every IMDb row before matching titles: the matcher already refuses an ambiguous title and never matches an empty (non-Latin) key, and an exact lookup per row would cost a TMDB call each. `DELETE /v1/me` spends no write budget, on purpose: erasure must never be refused for a budget. Discord gets no server-checked nonce: since a join that would fold away an account holding titles always asks first, a login CSRF can no longer move a library.
+
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
 **Nothing to do until a gate is hit, and both gates are traffic.** Ads at **10,000 pageviews/mo**,
@@ -37,8 +50,9 @@ live, affiliate is built and dark behind `MONETIZATION_ENABLED` and demoted rath
 [docs/decisions.md](docs/decisions.md) on 2026-09-03 — they are a decision record with no next
 action, and this file is for open work. Runbook →
 [docs/monetization-go-live.md](docs/monetization-go-live.md). The one thing to know before touching
-the code: only **GOG** of the catalog’s store rows is affiliate-capable, so `affiliate.ts` has
-two mechanisms. → [[monetization-h3]]
+the code: only **GOG** of the catalog’s store rows is affiliate-capable, so `affiliate.ts` had
+two mechanisms. It went with the old site (2026-10-23, tag `old-site-final`); the app has no
+affiliate code yet. → [[monetization-h3]]
 
 ---
 

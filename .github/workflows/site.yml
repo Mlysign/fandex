@@ -72,7 +72,7 @@ jobs:
             mobile/package-lock.json
             worker/package-lock.json
 
-      # The renderer compiles site modules from src/ (root packages), the app
+      # The renderer compiles shared modules from src/ (root packages), the app
       # export needs mobile/, and esbuild and wrangler come from worker/.
       - name: Install
         if: steps.token.outputs.ready == 'true'

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
-import Database from "better-sqlite3";
+// Node's own SQLite: better-sqlite3 went with the old site (2026-10-23).
+import { DatabaseSync } from "node:sqlite";
 import { normalizeSource } from "./normalize";
 import { projectRawData } from "./project";
 import { COUNTRIES } from "@/lib/countries";
@@ -48,7 +49,7 @@ const hasDb = fs.existsSync(DB);
 
 describe.skipIf(!hasDb)("H2a projection is lossless w.r.t. normalize()", () => {
   it("normalize(original) === normalize(projected) across the real catalog", () => {
-    const db = new Database(DB, { readonly: true });
+    const db = new DatabaseSync(DB, { readOnly: true });
     const rows = db
       .prepare(
         `SELECT ml.source, ml.raw_data, mi.type

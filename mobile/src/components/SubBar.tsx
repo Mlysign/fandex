@@ -6,7 +6,8 @@
 // The Filters sheet is components/Filters.tsx. Hiding the bar while a list
 // scrolls down is lib/barScroll.tsx.
 
-import { ChevronLeft, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
+import { ChevronLeft, Clapperboard, Tv } from 'lucide-react-native';
+import type { Gamepad2 } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';

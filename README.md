@@ -1,142 +1,52 @@
 # Fandex
 
-Track upcoming **games, movies, and shows** in one release calendar, synced from your
-connected accounts (Trakt, TMDB, Steam) with a personalized discover feed, taste-based
-recommendations, per-episode show tracking (two-way with Trakt), and an insights view.
+Track **games, movies, shows, books and board games** in one place: a release calendar, a
+wishlist and a library synced with Trakt, per-episode show tracking, and a Fandex Score that
+learns your taste.
 
-## Stack
+## What is in this repo
 
-- **Next.js 16** (App Router) + **React 19**, TypeScript, Tailwind CSS v4
-- **SQLite** via `better-sqlite3` (single-file DB, WAL) — see *Hosting model* below
-- Auth: JWT sessions (`jose`) over an httpOnly cookie; OAuth/OpenID per provider
-- Tests: Vitest (`npm test`)
+Three things run, and they share one folder of code.
 
-## Local development
+- `worker/`: **the API.** A Cloudflare Worker on D1 (the database) and R2 (backups, book
+  covers), at `api.fandex.org`. It holds the shared catalog and the accounts, and proxies the
+  providers whose keys must not ship in an app. → `docs/worker.md`
+- `mobile/`: **the app.** Expo / React Native, built as an Android APK. Each device keeps its own
+  copy of the catalog and of your rows, and talks to Trakt itself. → `docs/app.md`
+- `mobile/web/`: **the website, fandex.org.** The same app exported for the browser, plus a
+  static page for every title, tag, person and studio, served by Cloudflare. → `docs/website.md`
+- `src/lib/`: **the shared modules** the three import (merging a title's sources, facets, provider
+  clients, the legal pages). Tested from the root.
+
+The old Next.js site was deleted on 2026-10-23, after running nowhere since 2026-10-05. It is
+kept at the git tag `old-site-final` as the visual reference for the app:
 
 ```bash
-npm install
-npm run dev            # http://localhost:3000
+git worktree add ../fandex-old-site old-site-final
 ```
 
-Create a `.env` with the values from the table below. ⚠️ Note that **`.env.example` is not
-in the repo** — `.gitignore` excludes `.env*`, so a fresh clone has no sample file to copy.
-The table below is the authoritative list; boot-time validation will also name anything
-missing.
+## Commands
 
-`npm test` runs the suite. `npm run build` produces the production build.
+| What | Where | Command |
+|---|---|---|
+| Shared lib tests | root | `npm test` |
+| Lint all three packages | root | `npm run lint` |
+| Typecheck | root, `worker/`, `mobile/` | `npx tsc --noEmit` |
+| Worker tests | `worker/` | `npm test` |
+| Deploy the API | `worker/` | `npx wrangler d1 migrations apply fandex --remote`, then `npx wrangler deploy` |
+| App tests | `mobile/` | `npm test` |
+| Run the app in a browser | `mobile/` | `npm run web` |
+| Publish the website | root | `node mobile/web/publish.mjs` |
+| A local API and app with test accounts | root | `node worker/scripts/dev-stack.mjs` |
 
-## Environment variables
-
-| Variable | Required | Purpose |
-|---|:--:|---|
-| `JWT_SECRET` | ✅ (prod) | Session signing. Generate: `openssl rand -hex 32`. **The server refuses to start in production without it.** |
-| `TOKEN_ENCRYPTION_KEY` | ✅ (prod) | OAuth-token encryption at rest (S2). Generate: `openssl rand -hex 32`. **Must differ from `JWT_SECRET`.** |
-| `TMDB_API_KEY` | ✅ | Movies & TV (core data source) |
-| `RAWG_API_KEY` | ⚠️ | **RAWG was retired as a data provider 2026-09-02** and nothing calls it any more. `src/lib/config.ts` still marks this key `required: true`, so boot in production still demands it — set it to any non-empty value, or drop the `required` flag. See `docs/decisions.md`. |
-| `NEXT_PUBLIC_BASE_URL` | ✅ | Public origin, no trailing slash (e.g. `https://app.example.com`) — used for OAuth redirects |
-| `DB_PATH` | — | SQLite file path. Defaults to `./data/rr.db`; **set to the mounted volume in production** (e.g. `/app/data/rr.db`) |
-| `STEAM_API_KEY` | ⬚ | Steam integration |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | â¬ | Google sign-in (identity only, no library). Both halves or the button stays hidden. The id is `NEXT_PUBLIC_` deliberately and has a Dockerfile `ARG`; the secret must never be. Register `<origin>/api/auth/google/callback` in the Google console. |
-| `NEXT_PUBLIC_DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | ⬚ | Discord sign-in (identity only, no library). Both halves or the button stays hidden. The id is `NEXT_PUBLIC_` deliberately and has a Dockerfile `ARG`; the secret must never be. Register `<origin>/api/auth/discord/callback` in the Discord developer portal. |
-| `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | ⬚ | Trakt integration |
-| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | ⬚ | IGDB game metadata (skipped if unset) |
-| `HARDCOVER_TOKEN` | ⬚ | **The second book source** (`src/lib/sources/hardcover.ts`, used by the Worker). A Hardcover Personal Access Token from hardcover.app/account/api with read scopes only; it expires on the date picked there. Unset: books come from Open Library alone. Pushed to the Worker by `node worker/scripts/push-secrets.mjs`. |
-| `HARDCOVER_ENABLED` | ⬚ | **Hardcover kill switch. Default ON**; `0` stops every Hardcover call with the token in place. Covers already copied keep serving. |
-| `BACKFILL_ENABLED` | ⬚ | **Phase 4: the seeded backfill. Default OFF.** `1` starts paced ingest toward 30–50k titles (`BACKFILL_PAGES` per 30 min, default 2; stops at `BACKFILL_MAX_ITEMS`, default 50,000). ⚠️ **The pacing is the safety feature** — 30–50k titles is 60–120k provider calls and every row is WAL that Litestream ships. Check Railway spend before raising anything. |
-| `PUBLIC_CATALOG` | ⬚ | **The crawlable surface. Default ON; `0` takes it off** (set on Railway 2026-10-04): robots.txt disallows everything but `/legal/`, the sitemap lists only the legal pages, item/facet/calendar pages send `noindex`. Pages still render for a visitor. Pair with `BACKFILL_ENABLED=0` and `FACET_SWEEP_ENABLED=0` for the memory and provider spend to follow. → `docs/app-plan.md` |
-| `PAGE_RATE_LIMIT_PER_MIN` | ⬚ | Page requests allowed per IP per minute, enforced in `src/proxy.ts`. Default `120`; `0` turns it off. Does not count `/api/`, static assets, `robots.txt`, the sitemap or link prefetches. |
-| `R2_BUCKET` · `R2_ENDPOINT` · `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` | ⬚ | **A second Litestream replica on Cloudflare R2. Active only when all four are set** (the first two are, since 2026-10-04; the two secrets are Nils's to create). The entrypoint then uses `litestream-r2.yml`, which keeps the Railway bucket and adds R2 beside it. A config that does not parse falls back to the Railway bucket alone, so a typo here cannot stop the site booting. → `docs/app-plan.md` step 0 |
-| `CATALOG_BROWSE` | ⬚ | **Phase 2: serve Discover browse from our own database. Default OFF.** `1` lets a (type, window) go local once it holds `CATALOG_BROWSE_MIN` rows (default 200), per type, so a thin lane keeps asking the provider. A ready section costs **zero** provider calls. |
-| `HOUSEKEEPING_START_MB` | ⬚ | **Phase 5: reclaim `media_links.raw_data` above this file size** (default 1200 MB). Drops blobs, never rows, so pages and user data survive. A size trigger, not an age one. |
-| `IGDB_ENABLED` | ⬚ | **IGDB kill switch. Default ON** — set to `0` to stop every IGDB call at once. It exists because the Twitch Developer Services Agreement, which IGDB's own docs name as its licence, allows storing copies only with prior written authorization or a 24-hour cache, while IGDB's own product ships webhooks for maintaining your local mirror. Awaiting an answer from `partner@igdb.com`. Flipping it stops the flow; `scripts/purge-igdb.mjs` removes what is already stored. See [docs/catalog-growth.md](docs/catalog-growth.md). |
-| `TWA_PACKAGE_NAME` / `TWA_CERT_FINGERPRINT` | ⬚ | Android TWA Digital Asset Links (`/.well-known/assetlinks.json`) |
-| `SYNC_BUDGET_MS` | ⬚ | Per-request wall-clock budget for a sync pass |
-| `HEAL_BUDGET_MS` | ⬚ | Per-request wall-clock budget for `/api/discover/scores`' heal loop (default 10 000). Ids it can't heal in time come back as `deferred`, not scored |
-| `MONETIZATION_ENABLED` | ⬚ | **H3 master kill switch — leave UNSET.** `1`/`true` turns on every affiliate link on the site. The first one makes Fandex commercial under §5 DDG, so this must not be set until H4.2's Impressum is live. See [docs/monetization-go-live.md](docs/monetization-go-live.md). |
-| `AFFILIATE_AMAZON_TAG` / `AFFILIATE_AMAZON_HOST` | ⬚ | Amazon PartnerNet associate tag (marketplace-specific) and marketplace host (defaults `amazon.de`) |
-| `AFFILIATE_HUMBLE_PARTNER` | ⬚ | Humble Store partner id (a `?partner=` value) |
-| `AFFILIATE_GOG_LINK` / `AFFILIATE_GMG_LINK` / `AFFILIATE_FANATICAL_LINK` | ⬚ | Affiliate-network deep-link templates — paste the one your network gives you, with a destination placeholder. **`{url}`** substitutes percent-encoded (Partnerize/Impact); **`{urlRaw}`** substitutes verbatim (Adtraction, which is GOG's network, appends it last). A template with neither is ignored rather than sending traffic to a bare homepage. |
-| `AFFILIATE_ENEBA_LINK` / `AFFILIATE_INSTANT_GAMING_LINK` / `AFFILIATE_KINGUIN_LINK` | ⬚ | Same template format, for the gray-market key resellers (labeled "key reseller" in the UI) |
-| `NEXT_PUBLIC_SUPPORT_URL` / `NEXT_PUBLIC_SUPPORT_LABEL` | ⬚ | H3.3 donations link (Ko-fi / GitHub Sponsors) shown next to the legal links; label defaults to `Donate`. **Build-time inlined** — changing it needs a rebuild. Not gated by `MONETIZATION_ENABLED`; a donation link isn't a commercial communication. |
-| `SCORING_ADMIN_USER_IDS` | ⬚ | Comma-separated `users.id` allowlist for `/dev/scoring`. Unset = nobody (fails closed) |
-| `DEV_LOGIN_USER_ID` | ⬚ | **Local dev only.** A `users.id` that `GET /api/dev/login` mints a session for, so the logged-in pages are reachable without an OAuth round-trip. 404s unless `NODE_ENV !== "production"` *and* the host is loopback. Leave unset unless testing. |
-| `KPI_READ_KEY` | ⬚ | Shared secret for `GET /api/telemetry/kpi`, the aggregate KPI feed read by the portfolio hub at <https://nilsmlynarek.eu/analytics/>. Sent as the `X-BW-Admin` header and compared in constant time. Unset, or under 16 characters, = the route 404s for everybody. Generate with `openssl rand -hex 32`, and keep it distinct from every other secret so it can be rotated alone. Aggregates only: counts and totals, no user ids, no paths. |
-
-Required vars are validated once at boot ([`src/lib/config.ts`](src/lib/config.ts) via
-[`src/instrumentation.ts`](src/instrumentation.ts)) — a missing one fails fast in production with a
-list of what's missing.
-
-## Hosting model
-
-`better-sqlite3` is a synchronous, in-process, single-file database. The app therefore runs as
-**one always-on Node process with a persistent disk** — *not* serverless and *not* multi-instance.
-The chosen target is a **single-instance container on [Railway](https://railway.app)** with a mounted
-volume for the DB. (See `docs/archive/history.md` for the full rationale.)
-
-## Deploy to Railway
-
-The repo ships a multi-stage [`Dockerfile`](Dockerfile) that builds Next's `standalone` output.
-Railway auto-detects and builds it. ⚠️ The runner deliberately **runs as root**: Railway mounts
-volumes owned by root, so a non-root user can't create `rr.db` on the mounted volume. Acceptable
-for a single-tenant app; non-root is a known hardening follow-up (see the comment in `Dockerfile`).
-
-1. **Push to GitHub** (Railway deploys from the repo).
-2. **New Project → Deploy from GitHub repo** → select this repo. Railway detects the `Dockerfile`.
-3. **Add a Volume** and mount it at **`/app/data`**. ⚠️ Without this, the DB resets on every deploy.
-4. **Set environment variables** (table above). At minimum: `JWT_SECRET`, `TMDB_API_KEY`,
-   `RAWG_API_KEY`, `NEXT_PUBLIC_BASE_URL`, and `DB_PATH=/app/data/rr.db`. Plus any provider keys you use.
-5. Pick the **EU (Amsterdam)** region if available (data residency / latency).
-6. Deploy. The container serves on `$PORT` (Railway sets it; the standalone server honors it).
-7. **Custom domain:** add it in Railway, then create the shown **CNAME** at your domain's DNS.
-   Railway provisions HTTPS automatically.
-8. **OAuth redirect URIs:** in each provider's app settings, register the **production** callback URLs
-   (Trakt callback, TMDB, Steam return/realm, Letterboxd). Set `TRAKT_REDIRECT_URI` +
-   `NEXT_PUBLIC_BASE_URL` to the production origin. (The `localhost` defaults won't work in prod.)
-
-### Migrating existing data
-
-To carry over an existing local `data/rr.db` (library, wishlist, ratings), copy it into the Railway
-volume once via the Railway CLI (`railway run` / volume upload). Otherwise the instance starts empty
-and rebuilds from your connected accounts on first sync.
-
-### Backups
-
-✅ **Done.** The Railway volume is a single copy, so **[Litestream](https://litestream.io)**
-continuously replicates `rr.db` to object storage with auto-restore on a fresh container
-(config: [`litestream.yml`](litestream.yml)). `litestream.yml` sets no explicit `retention`, so
-the effective backup window is the default for the **v0.3.13** binary the `Dockerfile` installs:
-**24 hours** — confirmed during H4.3 against v0.3.13's own docs, not the current v0.5+ ones
-(different config schema entirely). The privacy policy quotes that same 24h figure as the true
-erasure horizon; if the pinned Litestream version ever changes, re-check both.
-
-⚠️ That replica lives in a bucket provisioned through Railway, so it does not survive losing the
-Railway plan. Two things cover that since 2026-10-04:
-
-- [`litestream-r2.yml`](litestream-r2.yml) adds a second replica on Cloudflare R2 beside the first.
-  The entrypoint uses it only when all four `R2_*` variables are set (see the table above).
-- `node scripts/snapshot-prod-to-r2.mjs` takes a consistent snapshot of the live database, keeps
-  a copy under `data/prod-snapshots/`, and uploads one to R2. It needs the `railway` and
-  `wrangler` CLIs logged in. Run it before changing anything on Railway.
+Secrets live in `.env` (never committed) and reach the Worker through
+`node worker/scripts/push-secrets.mjs`, which prints names and lengths only.
 
 ## Project docs
 
-- `STATUS.md` — short human-readable digest of live state + next actions (read this first)
-- `TASKS.md` — execution tracker (source of truth) for what's still open, incl. a one-paragraph summary of the (all-resolved) audit/review findings
-- `docs/archive/history.md` — everything finished: completed phases, resolved audit findings, closed bugs/QA findings (moved out of the working set 2026-07-18 to keep the active docs short — grep it, don't read it end to end)
-- `PLATFORMS.md` — platform integration capability reference
-- `smoketest.md` — the living exploratory-QA plan; findings land in `TASKS.md` as `SM#` entries
-- `.claude/plans/` — session plans written by one session and executed by another (the audit trail
-  of planned-vs-shipped); the only tracked path under `.claude/`
-- `AGENTS.md` — contributor/agent notes: this Next.js version has breaking changes (read the bundled docs), the project doc map, load-bearing data-model invariants, and model/agent-routing guidance
-- `docs/app-plan.md`: where the project is going, an Android app and a website on Cloudflare, with Railway gone. `docs/worker.md` and `docs/app.md` are the references for the two parts already built
-
-## Two more packages in this repo
-
-Since 2026-10-04 the repo also holds the first two pieces of that plan. Each is its own package
-with its own `package.json`, and neither is part of the Next.js build or the Docker image.
-
-- `worker/`: the Cloudflare Worker and its D1 schema. It holds the shared catalog, accounts and
-  the IGDB proxy. Live at `fandex-api.fandex-worker.workers.dev`. `npm test` and `npx wrangler deploy` from
-  that folder. → `docs/worker.md`
-- `mobile/`: the Expo app (Android, and the same code in a browser). `npm run web` from that
-  folder. → `docs/app.md`
+- `STATUS.md`: the live state in one screen. Read this first.
+- `TASKS.md`: what is still open.
+- `AGENTS.md`: the doc map and every rule the code depends on.
+- `docs/decisions.md`: settled calls. `docs/archive/history.md`: everything finished (grep it).
+- `PLATFORMS.md`: what each provider can do, and on what terms.
+- `smoketest.md`: the exploratory test plan.

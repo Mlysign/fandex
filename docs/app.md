@@ -106,6 +106,19 @@ write nothing; that is how the sync was proven before it was allowed to delete.
 
 ## How it is put together
 
+- **Sync guards, since 2026-10-23 (0.3.11).** Every change of session token (sign-in, sign-out,
+  join, disconnect) bumps a counter in `AuthProvider.tsx`; a row pull or Trakt sync captures it
+  and writes nothing, and signs nobody out, once it has moved. A Trakt sync reads the device's
+  rows before the slow Trakt download and leaves out any row that changed during it
+  (`withoutRowsChangedDuringRun`), and an automatic run skips the full download when
+  `/sync/last_activities` has not moved. Rows are pulled per kind (`stateSync.ts`): a rating no
+  longer re-downloads the episode rows. One Trakt token refresh at a time (a Web Lock across
+  browser tabs). A Trakt write's `not_found` makes the row `local`. A row pull or catalog sync
+  asked for while one runs runs again after it, and the catalog's progress bumps `revision` at
+  most every 2.5 s.
+- **The API address** is `https://api.fandex.org` (`lib/config.ts`) unless a build sets
+  `EXPO_PUBLIC_API_URL`; the website's build sets `/`.
+
 - **The screens are ports of the old site's components**, not designs of their own: `src/components/kit.tsx`, `cards.tsx`, `SubBar.tsx`, `AppNav.tsx` and `UpNext.tsx` each name the file they came from, and their numbers are that file's. What is and is not at parity is [app-parity.md](app-parity.md).
 - **Every screen is a child of `src/app/(tabs)/_layout.tsx`**, the item page and Settings too. That layout draws the navigation around the navigator (a bar at the bottom under 768 px, across the top from there) and switches the navigator's own tab bar off. A screen outside that folder has no navigation. ⚠️ These screens stay mounted, so one that takes an address parameter has to reset itself when the parameter changes: the item screen clears its item at the start of each load.
 - **A card's state is one query for the whole list** (`lib/cards.ts`, `useCardStates`), and its two buttons go through the item page's write path. A card for a title nobody holds yet (a calendar or search result) asks the Worker to find or fetch it first.

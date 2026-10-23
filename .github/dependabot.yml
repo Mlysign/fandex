@@ -1,7 +1,6 @@
-# S10 — automated dependency updates. Dependabot opens PRs for npm + GitHub
-# Actions bumps; CI (ci.yml) gates each one on typecheck/lint/test/build/audit.
-# This is how we pick up a patched Next (bundling postcss >= 8.5.10) without
-# downgrading Next by hand.
+# S10: automated dependency updates. Dependabot opens PRs for npm and GitHub
+# Actions bumps; CI (ci.yml) gates each one on typecheck, lint, test and audit.
+# The root holds dev tooling only since the old site was removed (2026-10-23).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -15,9 +14,8 @@ updates:
       #
       # This narrows the window; it does not close it. Dependabot **security**
       # updates (repo Settings → Code security) are the same-day reaction, and
-      # neither helps when the fix is an override rather than a version bump —
-      # sharp was pinned transitively by next, so no dependency PR could have
-      # fixed it. See the "overrides" block in package.json.
+      # neither helps when the fix is an override rather than a version bump.
+      # See the "overrides" block in package.json.
       interval: daily
     open-pull-requests-limit: 10
     groups:
@@ -29,8 +27,8 @@ updates:
       # Major bumps CI red-flagged as toolchain-incompatible — pin to the current
       # major so Dependabot stops re-proposing them. Minor/patch within the major
       # still flow. Remove an entry to revisit once the ecosystem catches up.
-      # - ESLint 10 needs eslint-config-next (peer-deps on ESLint 9) to support it.
-      # - TypeScript 7 is the new native compiler; too early for next/eslint/vitest.
+      # - ESLint 10: the lint plugins peer-depend on ESLint 9.
+      # - TypeScript 7 is the new native compiler; too early for eslint/vitest.
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
