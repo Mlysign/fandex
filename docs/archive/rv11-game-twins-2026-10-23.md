@@ -71,6 +71,10 @@ npx wrangler d1 execute fandex --remote --file ../data/backups/regroup-remote-20
 then take the 104 RV11 entries out of `mobile/web/folded.json` and publish the site. It puts every row of
 the 193 titles back, so a rating written on one of them after 2026-10-23 would be lost with it.
 
+`prince-of-persia-1989` was put in the pool by hand at 20:31 (`browsed = 0`, `pool_count` dropped): the
+first run left it out, because it absorbed its three ports through aliases alone and the script only
+promoted a target whose links changed. The script does both now. The undo above leaves it in the pool.
+
 ## Left alone
 
 - *God of War (2018)* is a RAWG-only title with the year in its name; IGDB's entry was never fetched.

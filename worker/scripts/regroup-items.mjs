@@ -262,6 +262,14 @@ for (const id of touched) {
   report.push({ slug: row.slug, before: `${row.title} (${row.release_date ?? "no date"}) [${before.media_links.filter((l) => l.media_item_id === id).map((l) => l.source).join(", ")}]${old.addon ? " addon" : ""}`,
     after: `${derived.canonical.title} (${derived.canonical.releaseDate ?? "no date"}) [${ls.map((l) => l.source).join(", ")}]${vector.addon ? " addon" : ""}${gained && row.browsed ? ", joins the pool" : ""}` });
 }
+// A fold target outside the pool (created by /v1/resolve for the fold) takes
+// the place of pool titles, so it joins the pool even when none of its own
+// links changed. On 2026-10-23 prince-of-persia-1989 missed this and had no page.
+for (const to of new Set(folds.map((f) => idOf(f.to)))) {
+  if (touched.has(to) || !itemById.get(to).browsed) continue;
+  sql.push(`UPDATE media_items SET browsed = 0, updated_at = unixepoch() WHERE id = ${q(to)};`);
+  report.push({ slug: slugOf(to), before: "outside the pool", after: "joins the pool, links unchanged" });
+}
 sql.push("DELETE FROM kv WHERE key = 'pool_count';");
 sql.push("UPDATE users SET counted_items = NULL, counted_episodes = NULL, counted_hidden = NULL WHERE counted_items IS NOT NULL OR counted_episodes IS NOT NULL OR counted_hidden IS NOT NULL;");
 
