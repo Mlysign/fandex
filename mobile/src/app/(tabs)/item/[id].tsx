@@ -11,6 +11,7 @@ import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScore
 import { ItemPage, SOURCE_LABEL } from '~/components/ItemPage';
 import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button } from '~/components/kit';
+import { useToast } from '~/components/Toast';
 import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -233,6 +234,9 @@ export default function ItemScreen() {
   const scores = useScores();
   const catalog = useCatalogSync();
   const [busy, setBusy] = useState(false);
+  /** Remove from library pressed, and its Undo still on screen: nothing is removed until the toast ends. */
+  const [removing, setRemoving] = useState(false);
+  const { toast } = useToast();
   const [picking, setPicking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
@@ -369,8 +373,21 @@ export default function ItemScreen() {
               as a state when it is on: the tinted pill with the crossed eye. */}
           <View style={styles.advanced}>
             {mine.inLibrary ? (
-              <Pressable onPress={() => act(() => removeFromLibrary(db, target))} disabled={busy} hitSlop={12} accessibilityRole="button" style={busy && { opacity: 0.4 }}>
-                <Text style={styles.quiet}>Remove from library</Text>
+              // One tap used to drop a rated title for good (2026-10-23). The removal now
+              // waits for the toast: Undo keeps everything, a timeout or the cross removes.
+              <Pressable
+                onPress={() => {
+                  setRemoving(true);
+                  toast(`Removed ${item.merged.title}${mine.rating != null ? ' and your rating' : ''} from your library.`, 'info', {
+                    action: { label: 'Undo' },
+                    onEnd: (how) => {
+                      if (how === 'action') { setRemoving(false); return; }
+                      act(() => removeFromLibrary(db, target).finally(() => setRemoving(false)));
+                    },
+                  });
+                }}
+                disabled={busy || removing} hitSlop={12} accessibilityRole="button" style={(busy || removing) && { opacity: 0.4 }}>
+                <Text style={styles.quiet}>{removing ? 'Removing…' : 'Remove from library'}</Text>
               </Pressable>
             ) : null}
             <Pressable

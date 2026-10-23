@@ -127,6 +127,9 @@ function Cell({ day, date, items, stateOf, today, selected, desktop, onOpen }: {
   day: number; date: string; items: CardItem[]; stateOf: (id: string | null) => CardState;
   today: boolean; selected: boolean; desktop: boolean; onOpen: (date: string) => void;
 }) {
+  // On a phone a busy day is its first title's poster and "+N": a seventh of a
+  // phone's width held two letters of each title next to its icons (2026-10-23).
+  const lead = items.length === 1 || (!desktop && items.length > 1) ? items[0] : null;
   const single = items.length === 1 ? items[0] : null;
   const visible = desktop ? 3 : 2;
   const label = `${longDay(date)}, ${items.length === 0 ? 'no releases' : single ? `1 release: ${single.title}` : `${items.length} releases`}`;
@@ -138,14 +141,14 @@ function Cell({ day, date, items, stateOf, today, selected, desktop, onOpen }: {
       accessibilityState={{ expanded: selected }}
       style={[
         styles.cell, { borderRadius: desktop ? radius.md : radius.sm },
-        single ? { borderColor: `${color.media[single.type] ?? '#888888'}44` }
+        lead ? { borderColor: `${color.media[lead.type] ?? '#888888'}44` }
           : items.length ? { borderColor: color.borderStrong, backgroundColor: 'rgba(24,21,18,0.4)' }
           : { borderColor: 'rgba(237,231,220,0.055)' },
         (today || selected) && { borderColor: color.accent, borderWidth: 2 },
       ]}>
-      {single?.posterUrl ? (
+      {lead?.posterUrl ? (
         <>
-          <Img uri={single.posterUrl} width={120} alt="" style={[styles.fill, { opacity: 0.4 }]} />
+          <Img uri={lead.posterUrl} width={120} alt="" style={[styles.fill, { opacity: 0.4 }]} />
           <Svg style={styles.fill} viewBox="0 0 1 1" preserveAspectRatio="none">
             <Defs>
               <LinearGradient id={`cell-${date}`} x1="0" y1="1" x2="0" y2="0">
@@ -162,10 +165,11 @@ function Cell({ day, date, items, stateOf, today, selected, desktop, onOpen }: {
         {today ? (
           <View style={[styles.todayDot, desktop && { width: 20, height: 20 }]}><Text style={styles.todayText}>{day}</Text></View>
         ) : <Text style={type.meta}>{day}</Text>}
-        {single ? (
+        {lead ? (
           <View style={{ flex: 1, justifyContent: 'flex-end', gap: 2 }}>
-            <Text numberOfLines={2} style={[styles.cellTitle, desktop && { fontSize: 13, lineHeight: 16 }]}>{single.title}</Text>
-            <ItemMeta item={single} state={stateOf(single.id)} />
+            <Text numberOfLines={2} style={[styles.cellTitle, desktop && { fontSize: 13, lineHeight: 16 }]}>{lead.title}</Text>
+            <ItemMeta item={lead} state={stateOf(lead.id)} />
+            {items.length > 1 ? <Text style={styles.cellRowText}>+{items.length - 1}</Text> : null}
           </View>
         ) : items.length ? (
           <View style={{ flex: 1, gap: 2, overflow: 'hidden', marginTop: 2 }}>

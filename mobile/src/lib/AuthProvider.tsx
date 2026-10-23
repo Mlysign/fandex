@@ -71,7 +71,8 @@ interface Auth {
   devSignIn: (account: string) => Promise<void>;
   /** Connect a test account to the signed-in one (a local Worker only), as connecting Discord would. Throws with the reason. */
   devConnect: (account: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  /** This device only; `everywhere` signs out every device on the account. */
+  signOut: (options?: { everywhere?: boolean }) => Promise<void>;
   /** Pulling your rows from the Worker. */
   rowsSyncing: boolean;
   rowsError: string | null;
@@ -591,12 +592,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void pullRows(true);
   }, [adoptMerge, pullRows]);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (options?: { everywhere?: boolean }) => {
     flow.current++;
     // Tell the Worker first, while the token still works. If that fails (no
     // connection) the device still forgets everything: signing out must not be
-    // something that can fail.
-    await api.logout().catch(() => undefined);
+    // something that can fail. Only "everywhere" ends the other devices'
+    // sessions (Nils, 2026-10-23); this device's is the token it forgets.
+    await api.logout(!!options?.everywhere).catch(() => undefined);
     await forget();
     setTrakt({ phase: 'idle' });
   }, [forget]);

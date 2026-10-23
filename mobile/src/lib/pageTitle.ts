@@ -10,7 +10,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 
-export const SITE_TITLE = 'Fandex: your index of every game, movie & show';
+export const SITE_TITLE = 'Fandex: your index of every game, movie, show & book';
 
 /** `name` is the screen's own part: "Calendar", "Alien (1979)". Null or empty means the site's own title. */
 export function titleFor(name: string | null | undefined): string {

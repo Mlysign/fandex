@@ -313,6 +313,17 @@ function scoreText(r: CommunityRating): string {
   return r.score % 1 === 0 ? String(r.score) : r.score.toFixed(1);
 }
 
+/**
+ * The age ratings with the viewer's own first. TMDB's certifications are the
+ * German FSK and the US rating (normalize.ts), stored in that order, so an
+ * American read "FSK 12 · PG-13" (2026-10-23).
+ */
+export function ratedInOrder(certs: string[], region: string | null | undefined): string[] {
+  const german = (c: string) => c.startsWith('FSK ');
+  const mine = region === 'DE' || region === 'AT' ? german : (c: string) => !german(c);
+  return [...certs.filter(mine), ...certs.filter((c) => !mine(c))];
+}
+
 /** Whether the per-source dates are worth a list: two full dates more than a week apart, or a year against a day elsewhere. */
 export function datesDisagree(dates: { date: string }[]): boolean {
   const distinct = [...new Set(dates.map((d) => d.date))];
@@ -479,7 +490,7 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="Developer" value={m.developer} linkTo="studio" />
           <Fact label="Publisher" value={m.publisher && m.publisher !== m.developer ? m.publisher : null} linkTo="studio" />
           <Fact label="Network" value={m.network} linkTo="studio" />
-          <Fact label="Rated" value={m.certification.length ? m.certification.join(' · ') : null} />
+          <Fact label="Rated" value={m.certification.length ? ratedInOrder(m.certification, item.region).join(' · ') : null} />
           <Fact label="Runtime" value={m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null} />
           <Fact label="Status" value={m.status} />
           <Fact

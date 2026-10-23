@@ -78,7 +78,8 @@ export default function HomeScreen() {
             <Eyebrow>Guest mode</Eyebrow>
             <Text style={[type.serifLg, { marginTop: 6, marginBottom: 12 }]}>Sign in to unlock your Fandex Score</Text>
             <View style={styles.guestActions}>
-              <Button label="Sign in with Trakt" variant="primary" pill onPress={() => router.push('/profile')} />
+              {/* "Sign in", not "with Trakt": the card it opens offers Trakt, Google and Discord (2026-10-23). */}
+              <Button label="Sign in" variant="primary" pill onPress={() => router.push('/profile')} />
               <Text accessibilityRole="link" onPress={() => router.push('/discover')} style={[type.label, { color: color.textSecondary }]}>
                 Browse without an account →
               </Text>

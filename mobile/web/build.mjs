@@ -50,8 +50,8 @@ const limit = Number(args.find((a) => a.startsWith('--limit='))?.slice(8) ?? 0);
 
 const TYPES = ['movie', 'show', 'game', 'book', 'boardgame'];
 const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
-const TITLE = 'Fandex: your index of every game, movie & show';
-const DESCRIPTION = "One index for every game, movie and show. Fandex tracks your wishlist and learns your taste, so you know what's out next.";
+const TITLE = 'Fandex: your index of every game, movie, show & book';
+const DESCRIPTION = "One index for every game, movie, show and book. Fandex tracks your wishlist and learns your taste, so you know what's out next.";
 
 const started = Date.now();
 const step = (msg) => console.log(`[${((Date.now() - started) / 1000).toFixed(0).padStart(3)}s] ${msg}`);
@@ -427,7 +427,7 @@ const home = shell
     + `<meta name="theme-color" content="${C.surface}">${social({ title: TITLE, description: DESCRIPTION, url: `${SITE}/` })}`
     + `<style>${fontCss}html,body{background:${C.surface}}#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}${HOME_CSS}</style>`)
   .replace('<div id="root"></div>',
-    `<div id="prerender"><div class="ph"><header><p class="mark">Fandex</p><h1>Your index of every game, movie &amp; show</h1></header>`
+    `<div id="prerender"><div class="ph"><header><p class="mark">Fandex</p><h1>Your index of every game, movie, show &amp; book</h1></header>`
     + `<main>${homeList('movie', 'Movies')}${homeList('show', 'Shows')}${homeList('game', 'Games')}${homeList('book', 'Books')}${homeList('boardgame', 'Board games')}${legalNav('en')}</main></div></div><div id="root"></div>`);
 if (!home.includes('id="prerender"') || !home.includes('rel="canonical"')) throw new Error('The export\'s index.html changed shape: the home page was not written');
 fs.writeFileSync(path.join(STAGE, 'index.html'), home);

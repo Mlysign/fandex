@@ -975,8 +975,9 @@ export default function SettingsScreen() {
                 <View style={styles.actions}>
                   <Button label="Refresh library" onPress={auth.syncRows} disabled={auth.rowsSyncing} />
                   <Button label="Sign out" onPress={() => void auth.signOut()} />
+                  <Button label="Sign out everywhere" onPress={() => void auth.signOut({ everywhere: true })} />
                 </View>
-                <T variant="meta" style={{ color: color.textMuted }}>Signing out signs out every device on this account.</T>
+                <T variant="meta" style={{ color: color.textMuted }}>Sign out ends this device only. Sign out everywhere ends every session on this account, on every device.</T>
               </Card>
             </Section>
 

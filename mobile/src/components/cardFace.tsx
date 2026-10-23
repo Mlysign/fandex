@@ -90,7 +90,8 @@ export function RailTitle({ title, forYou, action }: { title: string; forYou?: b
   return (
     <View style={cardStyles.railHead}>
       <View style={cardStyles.railTitle}>
-        <Text accessibilityRole="header" style={type.serifMd}>{title}</Text>
+        {/* An <h2> on the web: as a bare header it was a third <h1> on every title page (2026-10-23). */}
+        <Text accessibilityRole="header" {...({ 'aria-level': 2 } as object)} style={type.serifMd}>{title}</Text>
         {forYou ? <View style={cardStyles.forYou}><Text style={[type.micro, { color: color.accent }]}>For you</Text></View> : null}
       </View>
       {action}

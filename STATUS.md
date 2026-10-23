@@ -1,6 +1,6 @@
 # Fandex: Status
 
-_Your index of every game, movie & show._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
+_Your index of every game, movie, show & book._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
 
 _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
 

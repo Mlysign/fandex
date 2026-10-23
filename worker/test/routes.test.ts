@@ -198,6 +198,15 @@ describe("your rows", () => {
     expect((await call("/v1/me", { headers: auth(phone) })).status).toBe(401);
     expect((await call("/v1/me", { headers: auth(laptop) })).status).toBe(401);
   });
+
+  it("logs out only this device with scope=device, clearing its cookie", async () => {
+    const phone = await session();
+    const laptop = await createSession(env, { userId: USER, provider: "google", displayName: "Nils" });
+    const res = await call("/v1/auth/logout?scope=device", { method: "POST", headers: auth(phone) });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Set-Cookie")).toMatch(/Max-Age=0/);
+    expect((await call("/v1/me", { headers: auth(laptop) })).status).toBe(200);
+  });
 });
 
 describe("signing in over HTTP", () => {
@@ -582,6 +591,14 @@ describe("the small print of the API", () => {
 
   it("answers an admin route 404 whatever the verb, to anybody who is not an admin", async () => {
     for (const method of ["GET", "POST", "PUT", "DELETE"]) expect((await call("/v1/admin/users", { method })).status).toBe(404);
+  });
+
+  it("answers HEAD on any GET route as GET would, and a show id that is not one 404 (2026-10-23)", async () => {
+    const head = await call("/v1/taxonomy", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    expect((await call("/v1/items/movie/no-such-film", { method: "HEAD" })).status).toBe(404);
+    expect((await call("/v1/shows/abc/episodes")).status).toBe(404);
   });
 
   it("answers HEAD on health with the headers and no body", async () => {

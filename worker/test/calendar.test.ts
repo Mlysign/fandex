@@ -145,6 +145,20 @@ describe("serving a month", () => {
     expect(calls).toEqual([]);
   });
 
+  it("builds a month more than three days stale again after answering with it (2026-10-23)", async () => {
+    providers(full);
+    await calendarMonth(env, "2026-11", "FR", undefined, NOW);
+    await db.prepare("UPDATE calendar_month SET built_at = built_at - 4 * 86400").run();
+    const before = (await db.prepare("SELECT built_at FROM calendar_month WHERE region = 'FR'").first<{ built_at: number }>())!.built_at;
+    const deferred: Promise<unknown>[] = [];
+    const out = await calendarMonth(env, "2026-11", "FR", undefined, NOW, (p) => deferred.push(p));
+    expect(out.ok && JSON.parse(out.body).stale).toBe(true);
+    expect(deferred).toHaveLength(1);
+    await Promise.all(deferred);
+    const after = (await db.prepare("SELECT built_at FROM calendar_month WHERE region = 'FR'").first<{ built_at: number }>())!.built_at;
+    expect(after).toBeGreaterThan(before);
+  });
+
   it("stores nothing when every provider is down, so an outage is not cached as an empty month", async () => {
     providers({ movies: "down", shows: "down", games: "down" });
     expect(await calendarMonth(env, "2026-11", "US", undefined, NOW)).toEqual({ ok: false, reason: "provider" });

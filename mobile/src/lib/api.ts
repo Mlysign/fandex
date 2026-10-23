@@ -355,7 +355,8 @@ export const api = {
    */
   merge: (mergeToken: string, resolution: MergeResolution) => request<SignInResult>('/v1/auth/merge', json('POST', { mergeToken, resolution })),
   /** Signs out EVERY device: the Worker revokes all of the account's sessions. */
-  logout: () => request<{ ok: boolean }>('/v1/auth/logout', { method: 'POST' }),
+  /** `everywhere` ends every session on the account; without it only this device's (its cookie, on the web). */
+  logout: (everywhere = false) => request<{ ok: boolean }>(`/v1/auth/logout${everywhere ? '' : '?scope=device'}`, { method: 'POST' }),
 
   // ── Your rows ──
   me: () => request<Profile>('/v1/me'),

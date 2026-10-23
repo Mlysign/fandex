@@ -97,7 +97,7 @@ export default {
     try {
       response = await route(c);
     } catch (e) {
-      if (e instanceof BodyError) response = error(e.status, "bad-request", e.message);
+      if (e instanceof BodyError) response = error(e.status, e.status === 413 ? "payload-too-large" : "bad-request", e.message);
       else if (e instanceof BadRequest) response = error(400, "bad-request", e.message);
       else {
         console.error("unhandled", { path: c.url.pathname, error: e instanceof Error ? e.stack ?? e.message : String(e) });
@@ -123,6 +123,16 @@ async function route(c: Ctx): Promise<Response> {
   if (a === "health" && !b && (method === "GET" || method === "HEAD")) {
     const res = await health(c);
     return method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
+  }
+
+  // Any other route that answers GET answers HEAD as GET would, without the body
+  // (HEAD on an item was a 405, 2026-10-23). It runs the GET, limits and caps included.
+  if (method === "HEAD" && !(a === "cover")) {
+    const allowed = methodsFor(parts.slice(1).join("/"));
+    if (allowed?.split(", ").includes("GET")) {
+      const res = await route({ ...c, request: new Request(request, { method: "GET" }) });
+      return new Response(null, { status: res.status, headers: res.headers });
+    }
   }
 
   if (a === "catalog" && b === "delta" && method === "GET") {
@@ -196,7 +206,9 @@ async function route(c: Ctx): Promise<Response> {
     return json(await lookupRefsJson(c.env.DB, refs), 200, { "Cache-Control": "no-store" });
   }
 
-  if (a === "shows" && d === "episodes" && method === "GET" && b && UUID.test(b)) {
+  if (a === "shows" && d === "episodes" && method === "GET" && b) {
+    // Not a UUID is no such show, not a wrong verb: it fell through to the 405 table (2026-10-23).
+    if (!UUID.test(b)) return error(404, "not-found");
     const body = await showEpisodesJson(c.env.DB, b.toLowerCase());
     return body ? json(body, 200, CATALOG_CACHE) : error(404, "not-found");
   }
@@ -215,7 +227,7 @@ async function route(c: Ctx): Promise<Response> {
 
   if (a === "calendar" && b && !d && method === "GET") {
     const out = await calendarMonth(c.env, b, url.searchParams.get("region"),
-      () => allow(c.env.RL_RESOLVE, `calendar:${clientIp(request)}`));
+      () => allow(c.env.RL_RESOLVE, `calendar:${clientIp(request)}`), undefined, c.defer);
     if (out.ok) return json(out.body, 200, { "Cache-Control": "public, max-age=900" });
     switch (out.reason) {
       case "bad-request": return error(400, "bad-request", "Expected /v1/calendar/YYYY-MM within two years of today");
@@ -537,11 +549,16 @@ async function merge(c: Ctx): Promise<Response> {
 
 async function logout(c: Ctx): Promise<Response> {
   const session = await readSession(c.env, c.request, c.defer);
+  // `?scope=device` (2026-10-23, Nils: "Sign out" is this device) only clears
+  // this browser's cookie; the device forgets its own bearer token. Without it
+  // the call is "Sign out everywhere", what every app before 0.3.15 sends.
+  const everywhere = c.url.searchParams.get("scope") !== "device";
   if (session) {
     if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
-    // Bumping the epoch signs out EVERY device, which is what "log out" has to
-    // mean while a token cannot be individually revoked.
-    await bumpSessionEpoch(c.env.DB, session.user.userId);
+    // Bumping the epoch signs out EVERY device: a token cannot be revoked on its
+    // own, so one this device forgot stays valid until it expires (30 days),
+    // and "Sign out everywhere" is the answer to a token that may have leaked.
+    if (everywhere) await bumpSessionEpoch(c.env.DB, session.user.userId);
   }
   return json({ ok: true }, 200, { ...PRIVATE, "Set-Cookie": clearedSessionCookie() });
 }

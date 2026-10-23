@@ -212,8 +212,17 @@ function envelope(month: string, region: string, builtAt: number, payload: strin
 }
 
 /**
+ * A stored month older than this is built again in the background when asked
+ * for. The cron refreshes only the regions saved by signed-in users, so any
+ * other region was built once and then served as it was: France still had its
+ * 10 October build on the 23rd, without the books added on the 18th.
+ */
+const STALE_REBUILD_SECONDS = 3 * 24 * 3600;
+
+/**
  * One month for one region, as a JSON string. `mayFetch` is the caller's rate
  * limiter, asked only when a provider fetch is actually about to happen.
+ * `defer` (ctx.waitUntil) lets a long-stale month be rebuilt after the answer.
  */
 export async function calendarMonth(
   env: Env,
@@ -221,6 +230,7 @@ export async function calendarMonth(
   regionRaw: string | null,
   mayFetch?: () => Promise<boolean>,
   now = new Date(),
+  defer?: (p: Promise<unknown>) => void,
 ): Promise<MonthResult> {
   if (!validMonth(monthRaw, now)) return { ok: false, reason: "bad-request" };
   const region = normalizeCountry(regionRaw) ?? DEFAULT_COUNTRY;
@@ -235,6 +245,16 @@ export async function calendarMonth(
     // the cron refreshes the window, and a stale month beats a slow one.
     const partial = row.payload.startsWith('{"partial":true');
     const stale = seconds(now) - row.built_at > ttlFor(monthRaw, partial, now);
+    // Long stale: answer with what is stored, and build it again after the answer,
+    // under the same limiter and daily cap as a first build.
+    if (defer && seconds(now) - row.built_at > STALE_REBUILD_SECONDS) {
+      defer((async () => {
+        if (mayFetch && !(await mayFetch())) return;
+        if (!(await spend(env.DB, "calendar", capFrom(env.DAILY_CALENDAR_CAP, DEFAULT_DAILY_CALENDAR_CAP)))) return;
+        const built = await buildMonth(env, monthRaw, region);
+        if (built) await storeMonth(env.DB, region, monthRaw, built, new Date());
+      })().catch((e) => console.warn("calendar_rebuild_failed", { region, month: monthRaw, error: e instanceof Error ? e.message : String(e) })));
+    }
     return { ok: true, body: envelope(monthRaw, region, row.built_at, row.payload, stale) };
   }
 
