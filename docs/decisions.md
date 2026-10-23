@@ -247,6 +247,10 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   file as soon as a file there is read, so the reader who doesn't know which subsystem they
   are in still gets its rules, which was the reason for keeping them inline. Always-loaded
   context went 61.4 to 16.6 KB with no live rule dropped.
+- **Google Play gets the native app, not the TWA** (Nils). The TWA was planned when the only
+  app was the website in a wrapper; the native app has the offline catalog, the widget and
+  on-device sync. The TWA plan is archived (`docs/archive/twa-play-store.md`); the live one is
+  `docs/play-store.md`. The account upgrade to a business account still comes first.
 - **The old site's docs, smoke-test plan and memory are archive, not reference.** They sit in
   `docs/archive/old-site/` and `memory/old-site/`, read only when porting that feature.
 

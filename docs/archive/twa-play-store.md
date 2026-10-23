@@ -1,10 +1,10 @@
 # Putting Fandex in the Play Store (P15/P16)
 
-> **2026-10-23: read this with TASKS.md item 2.** A native APK exists since 2026-10-04, so the
-> open question is whether Play gets that instead of the TWA. The account, identity, listing
-> and data-safety steps below hold either way. The TWA-only parts (PWABuilder,
-> `assetlinks.json`) name the old site's files (`ServiceWorkerRegister.tsx`, the
-> `.well-known` route), which went with it; a TWA now would need both served by the static site.
+> **Archived 2026-10-23: Play gets the native app instead (Nils).** The live plan is
+> [../play-store.md](../play-store.md). This file stays for the click-by-click account, signing
+> and listing steps the two plans share. The TWA-only parts (PWABuilder, `assetlinks.json` for
+> `org.fandex.twa`) name the old site's files (`ServiceWorkerRegister.tsx`, the `.well-known`
+> route), which went with it.
 
 **Written 2026-08-22, for Nils, in plain steps.** Everything Claude can build is already
 built. What is left needs your identity, your money and your phone, which is why it has

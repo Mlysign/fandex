@@ -16,7 +16,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | 🟠 | **Games are IGDB-ONLY, and IGDB is the one with the open licence question.** RAWG was retired 2026-09-02, so `IGDB_ENABLED=0` takes games' browse to nothing. The question is with partner@igdb.com (Nils, 2026-10-04). → [docs/decisions.md](docs/decisions.md), [PLATFORMS.md](PLATFORMS.md) | **Nobody today, but know the shape.** |
 | 🟢 | **The 2026-10-23 codebase review is fixed and live.** Open routes that could spend D1's daily reads are rate limited and capped, each account has its own share of the daily writes, covers are checked by their bytes, the app's sync is guarded against session changes and against undoing an edit made during a Trakt sync, CI audits and lints all three packages, and the old Next.js site's code is deleted (tag `old-site-final`). Report: TASKS.md, "2026-10-23 review". | **Nils**, for the items listed there (the CSP switch, a Trakt test). |
 | 🟢 | **The taxonomy sweep runs weekly** (Mondays 08:08, "Fandex weekly taxonomy sweep" on this PC, `scripts/taxonomy-sweep/`). It never changes a row that was already there, and `category-merge` needs a flag the schedule does not pass (2026-10-23). → [[taxonomy-sweep-weekly]] | **Nobody.** |
-| ⏸️ | **P15/P16: Android TWA, built and installed, then PAUSED** until the developer account is upgraded Personal → Business. → [TASKS.md](TASKS.md) item 1 | **Nils.** |
+| ⏸️ | **The native app on Google Play** (decided 2026-10-23, in place of the TWA), PAUSED until the developer account is upgraded Personal → Business. → [docs/play-store.md](docs/play-store.md), [TASKS.md](TASKS.md) item 2 | **Nils.** |
 
 ## 🟢 Prod: fandex.org is three Cloudflare Workers and a database
 
@@ -53,7 +53,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | **H5** Fandex Score | ✅ → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** legal & compliance | ✅ |
 | **H3** monetization | 🔵 ads-first; donations live, affiliate dark |
-| Android in Play (P15/P16) | ⏸️ paused on the account upgrade, and open whether the TWA or the native app goes in (TASKS.md item 2) → [docs/twa-play-store.md](docs/twa-play-store.md) |
+| The native app on Play | ⏸️ paused on the account upgrade; the native app, not the TWA (2026-10-23) → [docs/play-store.md](docs/play-store.md) |
 | The old Next.js site | 🗑️ Deleted 2026-10-23 after running nowhere since 2026-10-05. At the tag `old-site-final`, the visual reference for the app. Its rules: [docs/archive/old-site/invariants.md](docs/archive/old-site/invariants.md). |
 
 ## ✅ Quality bar (re-run 2026-10-23)
