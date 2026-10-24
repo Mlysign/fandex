@@ -119,6 +119,24 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   ready 0.7 s after the JS starts and the rail's 2,050 titles are scored 0.5 s later. A pool run
   a newer profile replaced also kept scoring the whole catalog; it now stops between chunks.
 
+## The app verified on the Pixel 8 (2026-10-04, moved out of docs/app.md 2026-10-24)
+
+
+Everything below ran on Nils's Pixel 8 on 2026-10-04, from the release APK, against the live Worker
+and his real Trakt account. The signed-out screens were also run in a browser.
+
+| What | Result |
+|---|---|
+| First catalog sync, calendar, search, browse, item page, Back | Work. 4,559 titles on the device. |
+| Sign in through Trakt's page in a browser tab | Works: back in the app, signed in, library present. |
+| Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
+| Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
+| Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
+| The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. Nils then ticked real episodes on it: the first was marked, the next stuck at "Marking…" (the two faults under "How it is put together"), and after the fix two ticks in a row ran with the app open behind the launcher and the library untouched. |
+| Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
+
+**Real ticks were Nils's to run, and he ran them** (2026-10-04): in the app, and on the widget in the background, several in a row, with the row moving on and the ticked show moving to the top.
+
 ## The app plan, day one: a backup off Railway, the Cloudflare Worker and D1, and the start of the Expo app (2026-10-04)
 
 `644ddc2` `bc3f2d2` `6e2325b`. One session, phases 0 to 2 of `docs/app-plan.md`. The live

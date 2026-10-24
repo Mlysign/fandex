@@ -7,11 +7,12 @@
 // taxonomy the Worker serves, and the facets of the title being scored. The
 // spec is docs/fandex-score.md.
 //
-// ⚠️ This file and the site's code must give the same number for the same
-// inputs. `scripts/probe-app-score.mjs` runs both over a database snapshot and
-// compares every score; run it after changing either side. It loads this file
-// under plain Node, so keep it to erasable TypeScript and to imports that
-// resolve there (`@/` only, no `~/`).
+// It gave the old site's exact numbers until 2026-10-23 (4,559 of 4,559, by
+// `scripts/probe-app-score.mjs`, at the tag `old-site-final`), and departs from
+// them on purpose since: a rated title is scored without its own rating, and
+// `softRange` keeps the result in 0 to 100 (docs/fandex-score.md §1). Keep it
+// erasable TypeScript importing through `@/` only: scripts load it under plain
+// Node (`scripts/alias-hooks.mjs`) to backtest the score against real ratings.
 //
 // What the score must never read is unchanged (spec §4): community ratings,
 // popularity, release dates. Nothing here takes them as input.

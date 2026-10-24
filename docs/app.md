@@ -60,24 +60,11 @@ Opening a calendar card or a search result goes through `/open/{source}/{type}/{
 Worker to resolve the provider id (fetching the title if nobody holds it) and then replaces itself
 with the item page, so Back returns to the list.
 
-### What was verified, and what was not
+### Not run yet
 
-⚠️ **The screens were rebuilt on 2026-10-10 to match the old site, and nothing below has been re-run since.** That pass was looked at signed out, in a browser. No APK was built from it, and no signed-in screen was seen: [app-parity.md](app-parity.md), "Not checked".
-
-Everything below ran on Nils's Pixel 8 on 2026-10-04, from the release APK, against the live Worker
-and his real Trakt account. The signed-out screens were also run in a browser.
-
-| What | Result |
-|---|---|
-| First catalog sync, calendar, search, browse, item page, Back | Work. 4,559 titles on the device. |
-| Sign in through Trakt's page in a browser tab | Works: back in the app, signed in, library present. |
-| Trakt sync | First as a test run that writes nothing: 1,217 watched and 12,396 episodes matched the seeded rows exactly. The real run removed one watchlist row Trakt no longer had and updated 86 episodes with a later play. A second run found nothing to do. |
-| Wishlist, rate, clear the rating, remove from the library | Run on one unreleased game (Fandex only) and one unreleased film (written to Trakt), then undone. A Trakt sync afterwards found the account exactly as before. |
-| Up next | Lists the next episode per show, and agrees with Trakt's own home-screen widget. |
-| The widget | Added from the You tab through the launcher's own sheet. It shows the same shows as the Up next tab, and tapping one opens that show's page, including after a reinstall and a force-stop. The background tick was run from a killed process with a made-up show id: the task started, opened the database, read the session and failed where it should (no such show), in about a second, with the launcher still in front. Nils then ticked real episodes on it: the first was marked, the next stuck at "Marking…" (the two faults under "How it is put together"), and after the fix two ticks in a row ran with the app open behind the launcher and the library untouched. |
-| Fandex Score | The profile builds on the phone in 280 ms from 1,680 rated titles (15,243 facets with an opinion, the site's exact figure). Scores show on Browse, the wishlist and the item page with its breakdown. `scripts/probe-app-score.mjs` compared the app's maths with the site's over the same account: **4,559 of 4,559 titles identical**. |
-
-**Real ticks were Nils's to run, and he ran them** (2026-10-04): in the app, and on the widget in the background, several in a row, with the row moving on and the ticked show moving to the top.
+The first full run on the Pixel 8 (2026-10-04: catalog sync, Trakt sign-in and sync, rating,
+Up next, the widget and its background tick, the score) is in `docs/archive/history.md` (grep
+"verified on the Pixel 8"); the product review of 2026-10-23 covered the rest of the screens.
 ⚠️ **Not run:** the code sign-in
 since it was reworked ("Use a code instead", the prefilled link, tap to copy), "Sign in to Trakt
 again" after Trakt drops a token, and a Trakt token refresh (a token lasts a day; none had expired).
@@ -209,8 +196,9 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   item page asks TMDB from the device when a season is opened (`tmdbSeasonEpisodes`), which is
   when the site asked. How many you have watched is counted from your own rows, never from the
   episode list, so a season whose list is not loaded still reads right.
-- **`mobile/` is its own package.** Excluded from the site's `tsconfig.json`, eslint and Docker
-  context. CI runs `tsc` and the tests as the `app` job.
+- **`mobile/` is its own package.** Excluded from the root's `tsconfig.json`; the root's
+  `npm run lint` covers it (its generated folders are ignored in `eslint.config.mjs`). CI runs
+  `tsc` and the tests as the `app` job.
 - **Two import prefixes.** `~/…` is the app's own `mobile/src`. `@/…` is the SITE's `src`, one
   directory up, so the app can import the site's pure modules unchanged (`metro.config.js` and
   `tsconfig.json` both map it). Today that is `normalize.ts` and `countries.ts`. A site module
@@ -348,9 +336,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   `/v1/taxonomy` (kept in SQLite, re-asked with its ETag on every start and every return to the app, at most once a minute; the Worker answers an unchanged one with a 304 off one kept row) and the facets of the title
   being scored. The profile is rebuilt when your rows, the catalog copy or the taxonomy change.
   The port was proven to give the old site's exact numbers by `scripts/probe-app-score.mjs`,
-  which went with the site on 2026-10-23 (tag `old-site-final`). `fandexScore.test.ts` is
-  what guards it now. Keep `fandexScore.ts` erasable TypeScript importing through `@/` only, so
-  that probe can be brought back from the tag and run under plain Node.
+  which went with the site on 2026-10-23 (tag `old-site-final`); since the same day the app
+  departs from them on purpose (a rated title scored without its rating, `softRange`).
+  `fandexScore.test.ts` is what guards it now. Keep `fandexScore.ts` erasable TypeScript
+  importing through `@/` only, so a script can load it under plain Node to backtest it.
   A title that is not a catalog row (a calendar card, a search result) has no facets on the
   device and so no score until it is opened.
 - **The Trakt token is refreshed on the device**, without a secret. The redirect sent with the

@@ -131,8 +131,9 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   template.** Where it renders is decided by a measurement at the start of phase 3 (free
   Worker if the heaviest item page renders well under 10 ms; else the daily Pages build by
   default, $5 Workers Paid as the upgrade). Exactly one route gets built.
-- **IGDB licence email: SEND IT NOW** (reverses the 2026-09-02 hold). The Worker's design
-  differs depending on the answer.
+- **IGDB licence email: SEND IT NOW** (reverses the 2026-09-02 hold). Sent to partner@igdb.com
+  the same day. **Since 2026-10-17 not to be raised again** (see "Added 2026-10-17"): nobody chases
+  it, and IGDB stays behind its kill switch.
 - **Step 0, whatever else happens: the Litestream replica moves to R2 and the restore drill
   re-runs BEFORE the Railway plan is touched.** The only backup lives in a Railway-provisioned
   bucket.

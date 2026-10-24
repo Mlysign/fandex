@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildProfile, computeFandexScore, prepareTaxonomy, resolveFacets, softRange, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
-// Agreement with the site over a real library is scripts/probe-app-score.mjs's
-// job (4,559 of 4,559 identical on 2026-10-04). These pin the rules a change
-// here is most likely to break without that script being run.
+// The old site's agreement probe went with the site (tag `old-site-final`), and
+// since 2026-10-23 the app departs from it on purpose. These pin the rules a
+// change here is most likely to break.
 
 const json = (over: Partial<TaxonomyJson> = {}): TaxonomyJson => ({
   tagCategories: [
