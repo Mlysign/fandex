@@ -80,4 +80,42 @@ promoted a target whose links changed. The script does both now. The undo above 
 - *God of War (2018)* is a RAWG-only title with the year in its name; IGDB's entry was never fetched.
 - Same-title bundles that differ in content: the two *Destiny 2: Legacy Collection*s, *Monster Hunter
   Rise + Sunbreak* beside the expansion.
-- Why the chimeras formed (Steam and RAWG links matched to the wrong IGDB title) is not fixed here.
+- Same-title remasters stay folded into their originals: Nils's call, 2026-10-24 (docs/decisions.md).
+
+## The cause, and four more (2026-10-24)
+
+Every chimera was made on the old site (created 2026-06-25, its RAWG and Steam links synced in
+August), by two rules:
+
+1. **IGDB was attached to a RAWG or Steam title by a name search with no floor.** The old site's
+   `searchByTitle` (`src/lib/metadata/providers/igdb.ts` at the tag `old-site-final`) took the
+   best-scoring hit and never refused one: an exact title earned 100 and "no parent game" 50, while
+   a wrong year cost at most 15 and an UNDATED entry lost nothing. So "Final Fantasy VII" with the
+   Remake's 2020 date scored the undated Super Famicom concept at 180 against the 1997 game's 85,
+   and "Dead Space" 2023 scored the 2011 mobile game at 168 against the remake's 115 (having a
+   parent game cost it 50, being a remake 25).
+   That code went with the old site.
+2. **A title matched any same-title title when either side had no year.** The Worker inherited this
+   rule (`findMatchingItem` in `worker/src/catalog/ingest.ts`): an undated IGDB entry resolved today
+   would still have joined the Remake's RAWG title. Fixed: for a game both years must be there and
+   within one, and the nearest year wins instead of whichever row the index returned first
+   (`worker/test/ingest.test.ts`, the FF7 and Overwatch shapes). Films and shows keep the old rule,
+   since a Trakt or Letterboxd link carries the TMDB id and the cross ids settle them.
+
+A scan of every live title's IGDB entry against its RAWG and Steam links (type, status, year, name)
+found four more, fixed the same way with `worker/scripts/rv11-chimeras-2026-10-24.json` after a
+local rehearsal and undo (backup `data/backups/regroup-remote-2026-10-24T07-43-43-783Z.*`):
+
+- `pokemon-stadium-2` held RAWG's *Pokémon Gold, Silver* and his 10: both now on `pokemon-silver-version`.
+- `the-settlers-mobile` was IGDB's undated mobile game on RAWG's 1993 *The Settlers* and his 2: they
+  went to the 1993 game, which IGDB files under its US name, `serf-city-life-is-feudal`; the old
+  address 301s there.
+- `black-desert-online-explorers-package` held RAWG's *Black Desert Online* and his "owned" row, now
+  on `black-desert` beside his Steam row.
+- `deadlock` (Valve's) carried an old 2016 RAWG page called *Deadlock*, which gave it a 2016 date.
+  The RAWG link went; both of his rows stay, since RAWG's ownership came from the Steam app.
+
+His library after: 2,497 rows, 1,955 titles (Black Desert was counted twice), 1,705 rated,
+97 wishlist, the ratings' sum unchanged. Left: the rest of the scan's flags are early-access games
+that IGDB dates at 1.0 and RAWG at launch, and remasters whose RAWG and Steam pages are the
+remaster's own.

@@ -189,8 +189,23 @@ async function findMatchingItem(db: D1Database, item: SourceItem): Promise<strin
     }
   }
 
+  // A game's providers (IGDB, Steam, RAWG) share no cross id, so for a game the
+  // title and the year are the whole match, and both must be there: an undated
+  // IGDB entry is a cancelled or unannounced one, and it joined the Remake's
+  // RAWG link under "Final Fantasy VII" (RV11, 2026-10-23). Nearest year first,
+  // so of two same-title games in the window the right one wins, not the first
+  // row the index returns.
+  const strictYear = item.type === "game";
+  if (strictYear && !year) return null;
+  const distance = (c: { release_date: string | null }) => {
+    const y = extractYear(c.release_date);
+    return year && y ? Math.abs(year - y) : Infinity;
+  };
+  candidates.sort((a, b) => distance(a) - distance(b));
+
   for (const c of candidates) {
     const candidateYear = extractYear(c.release_date);
+    if (strictYear && !candidateYear) continue;
     if (year && candidateYear && Math.abs(year - candidateYear) > 1) continue;
     const cmap = idsByCandidate.get(c.id);
     if (cmap && incomingEntries.some(([ns, id]) => cmap.has(ns) && cmap.get(ns) !== id)) continue;

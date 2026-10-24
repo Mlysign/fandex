@@ -1,0 +1,16 @@
+{
+ "note": "RV11 follow-up (2026-10-24): four more titles carrying another work's RAWG link, found by comparing each title's IGDB entry with its RAWG and Steam links. Run with worker/scripts/regroup-items.mjs. Report: docs/archive/rv11-game-twins-2026-10-23.md, 'The cause'.",
+ "type": "game",
+ "moves": [
+  { "link": "rawg:27936", "to": "pokemon-silver-version" },
+  { "link": "rawg:32150", "to": "serf-city-life-is-feudal" },
+  { "link": "rawg:22571", "to": "black-desert" }
+ ],
+ "drops": [
+  { "link": "rawg:13086" }
+ ],
+ "folds": [],
+ "deletes": [
+  { "slug": "the-settlers-mobile", "redirectTo": "serf-city-life-is-feudal" }
+ ]
+}

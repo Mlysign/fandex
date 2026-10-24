@@ -121,6 +121,45 @@ describe("identity", () => {
     expect(lb.id).toBe(tmdb.id);
   });
 
+  // RV11 (2026-10-23): /game/final-fantasy-vii held the Remake's RAWG link, a
+  // Steam release and IGDB 381337, a cancelled Super Famicom concept with no
+  // date. A game's three providers share no cross id, so the title is all a
+  // match has, and a missing year let any same-title entry in.
+  const rawgGame = (id: number, name: string, released: string | null) => ({
+    source: "rawg" as const, sourceId: String(id), type: "game" as const, title: name, releaseDate: released,
+    rawData: { id, name, released, slug: name.toLowerCase().replace(/\W+/g, "-") },
+  });
+
+  it("does not join an undated game to a dated one on the title alone", async () => {
+    const remake = await upsertMediaItem(db, rawgGame(259801, "Final Fantasy VII", "2020-04-10"));
+    const concept = await upsertMediaItem(db, {
+      ...gameItem({ id: 381337, name: "Final Fantasy VII", first_release_date: undefined, status: 6 }),
+      releaseDate: null,
+    });
+    expect(concept.created).toBe(true);
+    expect(concept.id).not.toBe(remake.id);
+    expect(await count("media_links", "media_item_id = ?", [remake.id])).toBe(1);
+  });
+
+  it("joins a game to the same-title game of the nearest year, not the first one found", async () => {
+    // Two RAWG-only titles a year either side would both pass the window.
+    const earlier = await upsertMediaItem(db, rawgGame(22508, "Overwatch", "2022-10-04"));
+    const same = await upsertMediaItem(db, rawgGame(22509, "Overwatch", "2023-08-10"));
+    const later = await upsertMediaItem(db, rawgGame(22510, "Overwatch", "2024-02-01"));
+    expect(new Set([earlier.id, same.id, later.id]).size).toBe(3);
+    const igdb = await upsertMediaItem(db, {
+      ...gameItem({ id: 125174, name: "Overwatch", first_release_date: 1691625600 }), // 2023-08-10
+      releaseDate: "2023-08-10",
+    });
+    expect(igdb.id).toBe(same.id);
+  });
+
+  it("still joins a game's second provider on the title and the year", async () => {
+    const rawg = await upsertMediaItem(db, rawgGame(3328, "The Witcher 3: Wild Hunt", "2015-05-18"));
+    const igdb = await upsertMediaItem(db, gameItem());
+    expect(igdb).toEqual({ id: rawg.id, created: false });
+  });
+
   it("creates ONE item when two requests resolve the same new title at once", async () => {
     const results = await Promise.all([
       upsertMediaItem(db, movieItem()),

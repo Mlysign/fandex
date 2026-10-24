@@ -88,6 +88,16 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   1,707 → 1,705 rated, because five games had been counted twice. 104 old addresses 301 through
   `mobile/web/folded.json`. The cases, the counts and the undo command:
   [rv11-game-twins-2026-10-23.md](rv11-game-twins-2026-10-23.md).
+- **Why the chimeras formed (2026-10-24).** The old site attached IGDB to a RAWG or Steam title
+  by a name search that always took the best-scoring hit: exact title +100, no parent +50, a
+  wrong year at most -15, an undated entry nothing, so FF7's undated Super Famicom concept beat
+  the 1997 game. That code is gone. The Worker's `findMatchingItem` kept the other half, a title
+  match when either side has no year: for a game both years are now required, nearest year
+  first (`worker/test/ingest.test.ts`), Worker deployed. A scan of every title's IGDB entry
+  against its RAWG and Steam links found four more (Pokémon Gold/Silver on Stadium 2, The
+  Settlers on its mobile game, Black Desert Online on a bundle, a 2016 RAWG page on Valve's
+  Deadlock), fixed with `regroup-items.mjs` after a local rehearsal; his rows moved with their
+  links, 1,956 → 1,955 library titles, ratings unchanged.
 - **The app's memory and the blank Recommended rail (RV31), fixed later the same night, APK
   0.3.16.** Measured with `dumpsys meminfo` on the Pixel 8, the same script before and after
   (cold start, 30 flings through Search, ten title pages each scrolled and its hero swiped, back

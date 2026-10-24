@@ -965,6 +965,11 @@
    "type": "game",
    "from": "dead-space",
    "to": "dead-space-2008-2"
+  },
+  {
+   "type": "game",
+   "from": "the-settlers-mobile",
+   "to": "serf-city-life-is-feudal"
   }
  ]
 }
