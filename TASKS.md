@@ -21,7 +21,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 2. **The native app on Google Play: ⏸️ PAUSED until the developer account is a BUSINESS account.** Play gets the native app, not the TWA (Nils, 2026-10-23). His first step is the account upgrade, then re-reading whether the 12-testers/14-days rule still applies (it is for PERSONAL accounts only). The existing Play entry is for the TWA's package and cannot be reused: the app needs a new `org.fandex.app` entry. The signing plugin and the version are built (2026-10-23) and an `.aab` builds; **his next step is the upload key**, a `keytool` command and four lines in `~/.gradle/gradle.properties`, after which I build the real bundle. The plan, the command and its order → [docs/play-store.md](docs/play-store.md).
 
-3. **🔵 Discord sign-in is ON since 2026-10-17.** Two things left, both his: (a) **reset the client secret**: started 2026-10-24 (Fandex → OAuth2 → Reset Secret → "Yes, do it!"), and Discord then asks for HIS two-factor code, which a session may not enter. The secret reached a transcript on 2026-09-02, and the new stack does not use it at all. (b) **Sign in with Discord once on the phone** with APK 0.3.17: the phone's "Redirect URI is not supported by client" (2026-10-24) is fixed by returning through fandex.org. → [docs/app.md](docs/app.md) ("Discord sign-in")
+3. **🔵 Discord sign-in is ON since 2026-10-17.** The leaked client secret is reset (2026-10-24, Nils entered the two-factor code; the old one answers 401 at Discord, and its dead line left `.env`). Left, his: **sign in with Discord once**, on the phone (APK 0.3.17, where "Redirect URI is not supported by client" is fixed by returning through fandex.org) and on fandex.org. On 2026-10-24 no `discord` row existed in `user_identities` yet, so no real sign-in has reached the Worker. → [docs/app.md](docs/app.md) ("Discord sign-in")
 
 4. **🔵 Board games are built and switched off until a BoardGameGeek token exists** (2026-10-17). **Applied 2026-10-17, still "pending" on 2026-10-24** at boardgamegeek.com/applications (account Ramses3006). Nils: once BGG approves it, create the token there and add `BGG_TOKEN=` to the repo's `.env` (a token never passes through a session). Then mine: `node worker/scripts/push-secrets.mjs`, check `/v1/features` says `boardgames: true`, put the official "Powered by BGG" logo where the text credit is now (the terms require the logo), publish, build an APK. → [PLATFORMS.md](PLATFORMS.md)
 
@@ -31,12 +31,6 @@ Five items. Everything else in this file is work I can do without him, and every
 ## Mine, open
 
 - 🔵 **The TMDB projection walk** (2026-10-23): the cron refetches the 1,698 TMDB links stored before projection v4, four per run, so a film's novelist becomes a writer facet (Stephen King on his adaptations). About three days; watch `tmdb_projection_step` in the logs and `kv` key `tmdb_projection_cursor` reading `done:4`. Then check a King film's page shows him.
-
-## Product review, 2026-10-23 (ids RV#)
-
-A journalist-style pass over fandex.org and the native app; Nils's calls on it are in [docs/decisions.md](docs/decisions.md) ("Added 2026-10-23, the product review"). **All 35 are fixed and live** (the last, RV9's typo-tolerant search, on 2026-10-24 in APK 0.3.17): grep `docs/archive/history.md` for "Product review, 2026-10-23". Not fixed, by his call: the calendar is a top-40 on purpose, and Search keeps titles you already rated. Open:
-
-- 🔵 **Why Steam and RAWG links land on the wrong IGDB game**, the cause behind RV11's mixed-up titles (Final Fantasy VII, Dead Space, System Shock). With the RV11 session since 2026-10-24.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
@@ -53,6 +47,7 @@ app has no affiliate code yet. → [[monetization-h3]]
 
 Fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
 
+- **The product review, RV1 to RV35, and the cause behind RV11's mixed-up games** ✅ (2026-10-23 and 24, APK 0.3.17). By Nils's call: the calendar stays a top-40, Search keeps rated titles, remasters stay folded. → grep `Product review, 2026-10-23`.
 - **The 2026-10-23 review, the open tasks after it, and Steam sync** ✅: hand-made taxonomy rows marked (`source`, migration 0005), the `exhaustive-deps` warnings, the old-site docs moved to `docs/archive/old-site/`, THE FINALS PLAYTEST folded, the TMDB writer jobs, the never-run admin checks. → grep `2026-10-23`.
 - **Smoke tests 13 to 15** ✅ (2026-10-11 to 10-17). → grep `13th smoke test`, `14th smoke test`, `15th smoke test`.
 - **Backups** ✅ proven restorable (2026-10-05 on D1). → grep `restore drill`.
