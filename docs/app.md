@@ -420,8 +420,8 @@ builds for a phone only, which is faster and a quarter of the size. The APK land
 without a dev server. It is signed with the debug keystore Expo generates, which is fine for
 sideloading and is not a Play upload key.
 
-**The version lives in `mobile/app.json`** since 2026-10-23: `version` (`0.3.16`) and
-`android.versionCode` (`316`, minor times 100 plus patch). Gradle reads it from
+**The version lives in `mobile/app.json`** since 2026-10-23: `version` (`0.3.17`) and
+`android.versionCode` (`317`, minor times 100 plus patch). Gradle reads it from
 `android/app/build.gradle`, which only `npx expo prebuild --platform android --no-install` rewrites
 (a cold build after it: 4 min for arm64 on 2026-10-23). Raise both for every APK and name the
 file after `version`; before that, the APK's file name was the only version. A Play build is the
@@ -496,8 +496,8 @@ is shown no button. **Not checked: the button pressed by a signed-out visitor on
 and a first-time Google account** (it would create a new Fandex account).
 
 **Google signs you in to Fandex, never to Trakt.** Trakt's tokens stay on the device that got
-them (docs/decisions.md, 2026-10-04), and a sign-out anywhere signs out every device and deletes
-them there. So a browser signed in with Google holds no Trakt sign-in until one is made in it, and
+them (docs/decisions.md, 2026-10-04), and signing out deletes them there (Sign out ends that
+device's session; "Sign out everywhere" ends every device's, since 2026-10-23). So a browser signed in with Google holds no Trakt sign-in until one is made in it, and
 Up next, ratings and episode ticks, which go to Trakt from the device, answer `TraktAuthError`.
 Until 2026-10-15 that read "Trakt needs you to sign in again. You can do that under You", while
 Settings showed Trakt as Connected with a Sync button that did nothing: no way to act on it. Now

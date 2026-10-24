@@ -56,13 +56,13 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | The native app on Play | ⏸️ paused on the account upgrade; the native app, not the TWA (2026-10-23) → [docs/play-store.md](docs/play-store.md) |
 | The old Next.js site | 🗑️ Deleted 2026-10-23 after running nowhere since 2026-10-05. At the tag `old-site-final`, the visual reference for the app. Its rules: [docs/archive/old-site/invariants.md](docs/archive/old-site/invariants.md). |
 
-## ✅ Quality bar (re-run 2026-10-23, after the product review's fixes)
+## ✅ Quality bar (re-run 2026-10-24, after the product review closed)
 
 Three packages, each with its own bar, plus one lint over all of them:
 
 - **root** (`src/lib`, the shared modules): **368 tests** · `tsc` clean · `npm run lint` **0 errors** and 0 warnings across root, `worker/` and `mobile/`.
-- **`worker/`**: **296 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
-- **`mobile/`**: **262 tests** · `tsc` clean.
+- **`worker/`**: **299 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
+- **`mobile/`**: **273 tests** · `tsc` clean.
 - **`npm audit --omit=dev`**: root and `worker/` clean; `mobile/` has high advisories only through Expo's build CLI, which never reaches the bundle, so CI fails it on critical only.
 
 ---
