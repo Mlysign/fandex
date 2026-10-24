@@ -272,6 +272,9 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Recommended may show wishlisted titles, at most two per rail.**
 - **Kept as they are:** the Wishlist opens on "Recently added"; the calendar is a top-40 of the
   month, on purpose; Search keeps the titles you already rated (the filters can hide them).
+- **A same-title remaster stays folded into its original** (Nils, 2026-10-24, "keep them folded
+  for now"): God of War II 2009, Resident Evil 4 2011, the Ratchet HD versions (RV11). A remake
+  stays its own title; a port folds, as on 2026-10-18.
 
 ---
 

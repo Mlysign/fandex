@@ -3,7 +3,7 @@
 // nightly run publishes.
 
 import { describe, expect, it } from 'vitest';
-import { baselineOf, contentSecurityPolicy, CSP_ENFORCED, inlineScripts, pickCommit, scriptHash, shrinkProblems } from '../../web/buildChecks.mjs';
+import { baselineOf, contentSecurityPolicy, inlineScripts, pickCommit, scriptHash, shrinkProblems } from '../../web/buildChecks.mjs';
 
 describe('the CSP', () => {
   it('hashes a script the way a browser does: sha256 of the exact text, base64', () => {
@@ -20,13 +20,12 @@ describe('the CSP', () => {
     expect(inlineScripts(html)).toEqual(['a()', 'b()']);
   });
 
-  it('lists each hash once, and keeps the enforced part to what cannot break a page', () => {
+  it('lists each hash once, and forbids framing now that the whole policy is enforced (2026-10-24)', () => {
     const policy = contentSecurityPolicy(["'sha256-b'", "'sha256-a'", "'sha256-b'"]);
     expect(policy).toContain("script-src 'self' 'wasm-unsafe-eval' 'sha256-a' 'sha256-b';");
     expect(policy).toContain('frame-src https://www.youtube.com');
-    // A browser ignores frame-ancestors in a report-only policy and logs that it did.
-    expect(policy).not.toContain('frame-ancestors');
-    expect(CSP_ENFORCED).toBe("frame-ancestors 'none'; object-src 'none'; base-uri 'self'");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("object-src 'none'");
   });
 });
 

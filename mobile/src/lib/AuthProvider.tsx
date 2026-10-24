@@ -20,7 +20,7 @@ import { AppState, Platform } from 'react-native';
 import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution, type PendingMerge, type PrefsPatch, type Profile } from '~/lib/api';
 import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, traktConfigured } from '~/lib/config';
-import { DISCORD_APP_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
+import { DISCORD_APP_REDIRECT, DISCORD_APP_STATE_PREFIX, DISCORD_SITE_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
 import { clearState, StaleSync, syncState } from '~/lib/stateSync';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
 import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
@@ -541,9 +541,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       startDiscordWebSignIn(returnTo);
       return;
     }
-    // A browser sheet that comes back to fandex://auth/discord, as Trakt's does.
-    const state = newDiscordState();
-    const url = discordAuthorizeUrl({ clientId: DISCORD_CLIENT_ID, redirectUri: DISCORD_APP_REDIRECT, state });
+    // A browser sheet that goes to Discord, comes back to the site, and is handed
+    // on to fandex://auth/discord: Discord will not send a token to fandex:// itself.
+    const state = `${DISCORD_APP_STATE_PREFIX}${newDiscordState()}`;
+    const url = discordAuthorizeUrl({ clientId: DISCORD_CLIENT_ID, redirectUri: DISCORD_SITE_REDIRECT, state });
     const result = await WebBrowser.openAuthSessionAsync(url, DISCORD_APP_REDIRECT);
     // Closed without an answer: back where they started, not an error.
     if (result.type !== 'success') return;

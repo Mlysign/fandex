@@ -162,22 +162,19 @@ refresh replaces the refresh token, so two copies means one stops working.
 - **The app's API address for the website is `/`**, set inside `build.mjs`. Not on a command line:
   Git Bash rewrites a lone `/` in an environment variable to `C:/Program Files/Git/`, and the
   bundle then calls that. The build throws if the bundle names any other API address.
-- **The Content-Security-Policy is report-only, for now** (since 2026-10-23). `_headers` sends two:
-  an enforced `Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'`,
-  which nothing on the site relies on, and the whole policy as
-  `Content-Security-Policy-Report-Only` (`contentSecurityPolicy` in `mobile/web/buildChecks.mjs`
-  lists why each source is there). The build's inline scripts (the pageview beacon, the item
-  page's boot check, the imprint's address) are allowed by their sha256, computed by the build
-  from the exact text it writes, so editing one needs no change here. It has no `report-uri`:
-  violations show only in a browser's console. Checked 2026-10-23 against the last build served
-  locally with the policy ENFORCED: an item page with its trailer and 33 TMDB images, the imprint,
-  `/discover` with the SQLite worker storing the catalog files, and the app booting on an item
-  page. No violation, and a control script injected by hand was blocked. Not checked: a real
-  sign-in (Trakt, Google, Discord), the Library, a book or board game page.
-  ⚠️ **To enforce it:** on fandex.org open those pages and a sign-in in Chrome with the console
-  open, and look for lines starting `[Report Only] Refused`. With none, rename the header in
-  `build.mjs` from `Content-Security-Policy-Report-Only` to `Content-Security-Policy`, drop the
-  `CSP_ENFORCED` line, put `frame-ancestors 'none'` into the full policy, and publish.
+- **The Content-Security-Policy is ENFORCED since 2026-10-24** (report-only from 2026-10-23).
+  `_headers` sends one `Content-Security-Policy`, built by `contentSecurityPolicy` in
+  `mobile/web/buildChecks.mjs`, which lists why each source is there. The build's inline scripts
+  (the pageview beacon, the item page's boot check, the imprint's address) are allowed by their
+  sha256, computed by the build from the exact text it writes, so editing one needs no change
+  here. It has no `report-uri`: a violation shows only in a browser's console. Checked before the
+  switch: locally enforced on 2026-10-23 (an item page with its trailer, the imprint, `/discover`
+  storing the catalog, a control script blocked), and on fandex.org signed in on 2026-10-24 (Home
+  with the Trakt and Steam syncs, Search, a film with its trailer, the Library, a book page,
+  Profile and Settings) with no violation. Not checked: a sign-in itself, which is a page
+  navigation the policy does not cover, and a board game page (switched off).
+  ⚠️ A new third party the browser fetches from (not a page it navigates to) needs its origin in
+  `connect-src`, or it is blocked on the live site.
 - **The site sends no COOP or COEP header, on purpose.** The app's SQLite works without
   cross-origin isolation (checked on the live build: catalog synced, 4,561 titles), Safari has no
   `COEP: credentialless` at all, and an isolated page blocks the YouTube trailer in Firefox.

@@ -56,6 +56,13 @@ decided by Nils the same day (docs/decisions.md, "Added 2026-10-23, the product 
   days stale rebuilt after answering; 404 for a non-UUID show, HEAD on GET routes, 413 named.
   RV33 needed nothing: the second `User-agent: *` group is Cloudflare's managed AI-crawler block,
   and same-agent groups merge (RFC 9309).
+- **Typo-tolerant search (RV9), 2026-10-24, APK 0.3.17.** When an exact search of four letters
+  or more finds under five titles, Search adds the titles one slip per word away
+  (`mobile/src/lib/fuzzySearch.ts`: one insertion, deletion, substitution or swap; words under
+  four letters exact; a query word may be the start of a title word). Same day: the phone's
+  Discord sign-in returns through fandex.org (Discord refuses a token to `fandex://`), the site's
+  CSP is enforced after a clean signed-in check, the Hardcover key renewed (to 2027-10-24, old
+  one revoked), and remasters stay folded (decisions.md).
 - **Browser Back (RV24), fixed later the same night.** On the web expo-router pushes a browser
   entry only when the tab navigator's history grows (`fork/useLinking.js`). `backBehavior
   "history"` kept one entry per screen and every title shares one item screen, so Home → Valheim

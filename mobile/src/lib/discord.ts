@@ -22,8 +22,24 @@ import { DISCORD_CLIENT_ID } from '~/lib/config';
 import { safeReturnPath } from '~/lib/google';
 
 export const DISCORD_RETURN_PATH = '/auth/discord';
-/** Where the phone's browser sheet returns to. */
+/** Where the phone's browser sheet returns to in the end. */
 export const DISCORD_APP_REDIRECT = 'fandex://auth/discord';
+/**
+ * Where Discord sends the PHONE's sign-in: the site, which passes it on to the
+ * app. Discord gives an implicit-grant token only to an https address: sent to
+ * fandex://auth/discord it answered "Redirect URI is not supported by client"
+ * after the person had said yes (Nils, 2026-10-24), though the address is listed.
+ */
+export const DISCORD_SITE_REDIRECT = `https://fandex.org${DISCORD_RETURN_PATH}`;
+/** A phone's `state` starts with this, which is how the site knows to pass the answer on. */
+export const DISCORD_APP_STATE_PREFIX = 'app.';
+
+/** The app address a return to the site belongs to, fragment and all, or null when it is the site's own. */
+export function appReturnUrl(fragment: string): string | null {
+  const bare = fragment.replace(/^#/, '');
+  const state = new URLSearchParams(bare).get('state');
+  return state?.startsWith(DISCORD_APP_STATE_PREFIX) ? `${DISCORD_APP_REDIRECT}#${bare}` : null;
+}
 const AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
 const PENDING_KEY = 'fandex.discord.pending';
 
@@ -72,6 +88,14 @@ export function newState(): string {
 
 /** The fragment this page was opened with, read before anything else runs (as lib/google.ts does). */
 const OPENED_WITH = typeof window !== 'undefined' && window.location?.pathname === DISCORD_RETURN_PATH ? window.location.hash : '';
+
+/**
+ * A phone's sign-in that came back to the site: handed on to the app at once,
+ * before anything else runs, and kept for the page's "Open the app" button in
+ * case the browser wants a tap before it leaves for another app.
+ */
+export const APP_RETURN = OPENED_WITH ? appReturnUrl(OPENED_WITH) : null;
+if (APP_RETURN) window.location.replace(APP_RETURN);
 
 /** Leave for Discord. The page unloads, so this only returns if something went wrong first. */
 export function startDiscordWebSignIn(returnTo: string): void {

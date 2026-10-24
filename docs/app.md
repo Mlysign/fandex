@@ -32,7 +32,7 @@ and Home from asking. A rating of either is stored as source `local` with status
 `played` (`itemActions.ts`, `onTrakt`, `statusFor`): neither provider has a write-back. Every
 book page credits Open Library and every board-game page BoardGameGeek, which their terms ask
 for. **Hardcover is a second book source since 2026-10-17** (`src/lib/sources/hardcover.ts`,
-`docs/worker.md`), on the Worker only, live the same evening (`HARDCOVER_TOKEN`, a key that expires 2027-10-17): its cards come
+`docs/worker.md`), on the Worker only, live the same evening (`HARDCOVER_TOKEN`, a key that expires 2027-10-24): its cards come
 behind Open Library's in Search and in a book page's "More from" rail, and in the calendar's
 months, with a cover the Worker serves (`/v1/cover/hardcover/…`), no votes and no rating. A
 card's `source` is `hardcover` then, and the app opens it through `/open/hardcover/book/{id}`
@@ -513,8 +513,12 @@ Trakt identity row; published to fandex.org the same day. Not in an APK yet.
 (`worker/src/auth/verify.ts`, `verifyDiscordToken`).
 
 Discord's implicit grant, scope `identify`: the browser goes to Discord and comes back to
-`/auth/discord` with an access token after the `#`; on the phone a browser sheet comes back to
-`fandex://auth/discord`, as Trakt's does. The Worker asks Discord's `/oauth2/@me` whose token it
+`/auth/discord` with an access token after the `#`. **On the phone the browser sheet comes back
+to `https://fandex.org/auth/discord` too**, with a `state` starting `app.`, and that page hands
+the fragment on to `fandex://auth/discord` at once (`APP_RETURN` in `lib/discord.ts`, an "Open
+the app" button if the browser wants a tap). Discord gives an implicit-grant token only to an
+https address: sent to `fandex://auth/discord` directly it answered "Redirect URI is not
+supported by client" after the person said yes (Nils, 2026-10-24), though that address is listed. The Worker asks Discord's `/oauth2/@me` whose token it
 is and which application it was issued to, and refuses one issued to any other app. **No client
 secret is used anywhere**, which is why the leaked `DISCORD_CLIENT_SECRET` can be reset without
 touching the Worker. A `state` made before leaving and checked on return stops a planted token.

@@ -32,15 +32,8 @@ export function inlineScripts(html) {
 }
 
 /**
- * The part of the policy that is enforced. These three cannot break a page
- * that works today: nothing frames the site, nothing uses <object>, and no
- * page sets a <base>.
- */
-export const CSP_ENFORCED = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'";
-
-/**
- * The whole policy, sent as Content-Security-Policy-Report-Only until a check
- * in a browser's console shows nothing it would block (docs/website.md, "The
+ * The whole policy, ENFORCED since 2026-10-24: report-only from 2026-10-23,
+ * then a signed-in session showed nothing it would block (docs/website.md, "The
  * Content-Security-Policy"). Every source is here because something asks for it:
  *
  *   script-src   the bundle, app-boot.js and the SQLite worker are files on the
@@ -59,14 +52,12 @@ export const CSP_ENFORCED = "frame-ancestors 'none'; object-src 'none'; base-uri
  *   frame-src    the trailer (components/Trailer.web.tsx).
  *   worker-src   the SQLite worker is a file; a compression library in the
  *                bundle starts its own from a blob: URL.
- *
- * frame-ancestors is left out of this one: a browser ignores it in a
- * report-only policy and says so in the console, which would read as a
- * violation. It is in CSP_ENFORCED.
+ *   frame-ancestors  no site may frame this one (X-Frame-Options says so too).
  */
 export function contentSecurityPolicy(hashes) {
   return [
     "default-src 'self'",
+    "frame-ancestors 'none'",
     `script-src 'self' 'wasm-unsafe-eval' ${[...new Set(hashes)].sort().join(' ')}`.trim(),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' https: data: blob:",

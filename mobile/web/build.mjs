@@ -31,7 +31,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { baselineOf, contentSecurityPolicy, CSP_ENFORCED, inlineScripts, scriptHash, shrinkProblems } from './buildChecks.mjs';
+import { baselineOf, contentSecurityPolicy, inlineScripts, scriptHash, shrinkProblems } from './buildChecks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mobile = path.join(here, '..');
@@ -604,14 +604,13 @@ fs.writeFileSync(path.join(STAGE, '_redirects'), [...MOVED, ...folded.map((r) =>
 step(`${folded.length} folded addresses redirected`);
 
 // The security headers the old site sent (next.config.ts), on every file.
-// The full Content-Security-Policy is report-only until a browser's console
-// shows nothing it would block (docs/website.md); a wrong one would break the
-// live site. The enforced one holds the three directives nothing here relies on.
-// The worker.ts responses (the app shell, the 404) are files fetched through
+// The full Content-Security-Policy is ENFORCED since 2026-10-24, after a
+// signed-in session showed nothing it would block (docs/website.md). The
+// worker.ts responses (the app shell, the 404) are files fetched through
 // ASSETS, so they carry these too.
-const cspReportOnly = contentSecurityPolicy([...inlineHashes]);
+const csp = contentSecurityPolicy([...inlineHashes]);
 // Cloudflare reads a _headers line of at most 2,000 characters.
-if (cspReportOnly.length > 1900) throw new Error(`The CSP is ${cspReportOnly.length} characters: too long for one _headers line`);
+if (csp.length > 1900) throw new Error(`The CSP is ${csp.length} characters: too long for one _headers line`);
 fs.writeFileSync(path.join(STAGE, '_headers'), [
   '/*',
   '  X-Content-Type-Options: nosniff',
@@ -619,8 +618,7 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
   '  Referrer-Policy: strict-origin-when-cross-origin',
   '  Strict-Transport-Security: max-age=63072000; includeSubDomains',
   '  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()',
-  `  Content-Security-Policy: ${CSP_ENFORCED}`,
-  `  Content-Security-Policy-Report-Only: ${cspReportOnly}`,
+  `  Content-Security-Policy: ${csp}`,
   // Both folders hold files named by their content hash.
   '/_expo/static/*',
   '  Cache-Control: public, max-age=31536000, immutable',

@@ -39,3 +39,12 @@ describe("Discord's sign-in address", () => {
     });
   });
 });
+
+describe("a phone's sign-in, returned through the site (2026-10-24)", () => {
+  it('is handed on to the app only when its state is an app state', async () => {
+    const { appReturnUrl, DISCORD_APP_STATE_PREFIX } = await import('~/lib/discord');
+    expect(appReturnUrl(`#access_token=t&state=${DISCORD_APP_STATE_PREFIX}abc`)).toBe(`fandex://auth/discord#access_token=t&state=${DISCORD_APP_STATE_PREFIX}abc`);
+    expect(appReturnUrl('#access_token=t&state=abc')).toBeNull();
+    expect(appReturnUrl('#error=access_denied')).toBeNull();
+  });
+});

@@ -35,6 +35,7 @@ import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
+import { FUZZY_BELOW, fuzzyMatches } from '~/lib/fuzzySearch';
 import { facetVocab, matchVocab, type VocabEntry } from '~/lib/facetVocab';
 import { spokenKey } from '~/lib/facetImpact';
 import { color, radius, type } from '~/theme';
@@ -215,7 +216,12 @@ export default function DiscoverScreen() {
   // Each title's key once per pool, not once per keystroke.
   const keyed = useMemo(() => (pool ?? []).map((c) => ({ c, key: searchKey(c.title) })), [pool]);
   const matches = useMemo(() => {
-    const local = norm ? keyed.filter((k) => k.key.includes(norm)).map((k) => k.c) : (pool ?? []);
+    let local = norm ? keyed.filter((k) => k.key.includes(norm)).map((k) => k.c) : (pool ?? []);
+    // Next to nothing by that exact name: also what is one slip per word away ("witchr", "cyberpnk"), after the exact hits.
+    if (norm.length >= 4 && local.length < FUZZY_BELOW) {
+      const exact = new Set(local);
+      local = [...local, ...keyed.filter((k) => !exact.has(k.c) && fuzzyMatches(k.key, norm)).map((k) => k.c)];
+    }
     // With nothing typed this list chooses for you, so it leaves out what you
     // hid. A name still finds it: "It stays searchable" is what Hide promises.
     if (!norm) {

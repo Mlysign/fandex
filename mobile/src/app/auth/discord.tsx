@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
-import { takeDiscordReturn } from '~/lib/discord';
+import { APP_RETURN, takeDiscordReturn } from '~/lib/discord';
 import { usePageTitle } from '~/lib/pageTitle';
 import { color, space, type } from '~/theme';
 
@@ -31,6 +31,8 @@ export default function DiscordReturn() {
     if (!ready || taken.current) return;
     taken.current = true;
     if (Platform.OS !== 'web') { router.replace('/profile'); return; }
+    // A phone's sign-in, being handed on to the app (lib/discord.ts): not this tab's to finish.
+    if (APP_RETURN) return;
 
     const back = takeDiscordReturn();
     const returnTo = back.returnTo as Href;
@@ -48,7 +50,13 @@ export default function DiscordReturn() {
 
   return (
     <View style={styles.screen}>
-      {failed ? (
+      {APP_RETURN ? (
+        <View style={styles.box}>
+          <Text style={type.serifMd}>Back to the Fandex app</Text>
+          <Text style={type.bodySm}>Your Discord sign-in continues in the app. If it did not open, tap the button.</Text>
+          <Button label="Open the app" variant="primary" size="md" pill onPress={() => { window.location.href = APP_RETURN as string; }} />
+        </View>
+      ) : failed ? (
         <View style={styles.box}>
           <Text style={type.serifMd}>Discord sign-in did not finish</Text>
           <Text style={type.bodySm}>{failed.message}</Text>
