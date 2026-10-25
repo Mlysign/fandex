@@ -360,6 +360,18 @@ Each of these is a way the Worker differs from the site, and each has a test.
   2026-10-25, three row writes each, about a day and a half of runs. Past the last id the cursor
   reads `done`; delete the row to walk again. Needs `STEAM_API_KEY`; a failed Steam call leaves
   the cursor.
+- **A game's people come from Wikidata through a cron walk** (`runWikidataPeopleStep`,
+  2026-10-25). IGDB has no credits. Every pool IGDB game without a `wikidata` key yet is taken
+  six a run by `source_id` after the `wikidata_people_cursor` row in `kv`; one SPARQL request
+  joins the batch on the Steam app id (P1733) and the IGDB slug (P5794) and reads director (P57),
+  game designer (P287) and writer (P50, P58), four names a role at most; each game is stored
+  again with `wikidata` merged onto its IGDB payload (`src/lib/sources/wikidata.ts`), which
+  re-derives its facets (director, creator, writer). A game Wikidata does not know is stored with
+  empty lists, so the walk moves past it. Measured on the pool of 2026-10-25: Wikidata knows
+  1,998 of 2,675 games and lists a person for 418 of them (256 directors, 165 designers, 114
+  writers; Kojima 18 games, Miyamoto 9, Druckmann 8, Todd Howard 8). Three row writes a game,
+  about two days of runs; past the last id the cursor reads `done`. A failed request leaves the
+  cursor. After the Steam walk in a run, so a game asked here carries its app id already.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer unless
   asked.** `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges
   a doc with an older stamp from its blobs, whatever the region, and the next write of the item

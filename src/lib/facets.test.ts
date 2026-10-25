@@ -214,3 +214,23 @@ describe("extractFacets — anime (2026-10-25)", () => {
     expect(extractFacets([link("tmdb", { original_language: "en" })], "movie", { originalLanguage: "Japanese", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(false);
   });
 });
+
+describe("extractFacets — a game's people from Wikidata (2026-10-25)", () => {
+  const link = (source: string, rawData: unknown) =>
+    ({ id: "", mediaItemId: "m", source, sourceId: "1", title: null, releaseDate: null, rawData, lastSynced: 0 }) as never;
+
+  it("files Wikidata's director, designer and writers under the roles the score weighs", () => {
+    const people = extractFacets([link("igdb", {
+      name: "Metal Gear Solid",
+      wikidata: { qid: "Q1", directors: ["Hideo Kojima"], designers: ["Hideo Kojima", "Yoji Shinkawa"], writers: ["Tomokazu Fukushima", 7] },
+    })], "game", {}).filter((f) => f.kind === "person");
+    expect(people.map((f) => [f.role, f.key])).toEqual([
+      ["director", "hideo kojima"], ["creator", "hideo kojima"], ["creator", "yoji shinkawa"], ["writer", "tomokazu fukushima"],
+    ]);
+  });
+
+  it("gives a game nobody has asked about, or one Wikidata lists nobody for, no person at all", () => {
+    expect(extractFacets([link("igdb", { name: "A" })], "game", {}).filter((f) => f.kind === "person")).toEqual([]);
+    expect(extractFacets([link("igdb", { name: "A", wikidata: { qid: "Q2", directors: [], designers: [], writers: [] } })], "game", {}).filter((f) => f.kind === "person")).toEqual([]);
+  });
+});

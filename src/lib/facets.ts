@@ -234,6 +234,19 @@ export function extractFacets(
   const lb = bySource.get("letterboxd");
   if (lb) for (const d of lb.directors ?? []) addPerson(d?.name, "director");
 
+  // A game's people (2026-10-25, the score's data fix c): IGDB has no credits,
+  // so the Worker's cron asks Wikidata and writes the answer onto the IGDB
+  // payload as `wikidata` (sources/wikidata.ts, WikidataGamePeople). A designer
+  // is the CREATOR, the role a show's creator and a board game's designer share.
+  const igdb = bySource.get("igdb");
+  const wd = igdb?.wikidata;
+  if (wd && typeof wd === "object") {
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+    for (const d of list(wd.directors)) addPerson(d, "director");
+    for (const d of list(wd.designers)) addPerson(d, "creator");
+    for (const w of list(wd.writers)) addPerson(w, "writer");
+  }
+
   // Books and board games (2026-10-17). An author or a designer is the CREATOR:
   // the role a show's creator and a game's maker share, weighted the same in
   // the score. A board game's artist is left out, as a film's crew below the
@@ -258,7 +271,6 @@ export function extractFacets(
     for (const d of steam.basic_info?.developers ?? []) addCompany(d?.name, "developer");
     for (const p of steam.basic_info?.publishers ?? []) addCompany(p?.name, "publisher");
   }
-  const igdb = bySource.get("igdb");
   if (igdb) {
     for (const c of igdb.involved_companies ?? []) {
       if (c?.developer) addCompany(c?.company?.name, "developer");

@@ -25,6 +25,7 @@ import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { getSteamStoreTags, getSteamTagMap } from "@/lib/sources/steam";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
+import { peopleForGames, type WikidataGamePeople } from "@/lib/sources/wikidata";
 import { kvGet, kvSet } from "./budget";
 import { monthKey, runCalendarStep, SERVABLE_MONTHS, shiftMonth } from "./calendar";
 import { all, nowSeconds, utcDay } from "./d1";
@@ -580,6 +581,72 @@ export async function runSteamTagsStep(env: Env, batch = STEAM_TAGS_PER_RUN): Pr
   return out;
 }
 
+// ── 2g. A game's people from Wikidata ───────────────────────────────────────
+//
+// The score's data fix c (2026-10-25, docs/fandex-score.md §3.9): IGDB has no
+// credits, so no game had a person facet. This walks the pool's IGDB games
+// once, a few per run: one SPARQL request for the batch, joined on the Steam
+// app id (P1733, from `steamAppId` where the Steam walk stored one, else the
+// IGDB websites) and the IGDB slug (P5794), then each game stored again with
+// `wikidata` merged onto its IGDB payload (sources/wikidata.ts,
+// WikidataGamePeople), which re-derives its facets. A game Wikidata does not
+// know is stored with empty lists, so the walk moves past it. Self-terminating.
+// After the Steam walk in a run, so a game asked here already carries its app id.
+
+/** Games a run stores again. One SPARQL request answers them all; a re-derive each is the CPU. */
+export const WIKIDATA_PEOPLE_PER_RUN = 6;
+const WIKIDATA_PEOPLE_CURSOR_KEY = "wikidata_people_cursor";
+const WIKIDATA_PEOPLE_DONE = "done";
+
+export async function runWikidataPeopleStep(env: Env, batch = WIKIDATA_PEOPLE_PER_RUN): Promise<{ known: number; unknown: number; people: number }> {
+  const none = { known: 0, unknown: 0, people: 0 };
+  const cursor = await kvGet(env.DB, WIKIDATA_PEOPLE_CURSOR_KEY);
+  if (cursor === WIKIDATA_PEOPLE_DONE) return none;
+
+  // The app id and the slug are cut out of the blob in SQL, so no blob leaves the database.
+  const due = await all<{ source_id: string; title: string; release_date: string | null; slug_tail: string | null; app_tail: string | null; url_tail: string | null }>(
+    env.DB,
+    `SELECT g.source_id, g.title, g.release_date,
+            CASE WHEN instr(g.raw_data, '"slug":"') > 0 THEN substr(g.raw_data, instr(g.raw_data, '"slug":"') + 8, 120) END AS slug_tail,
+            CASE WHEN instr(g.raw_data, '"steamAppId":') > 0 THEN substr(g.raw_data, instr(g.raw_data, '"steamAppId":') + 13, 12) END AS app_tail,
+            CASE WHEN instr(g.raw_data, ?3) > 0 THEN substr(g.raw_data, instr(g.raw_data, ?3) + ?4, 12) END AS url_tail
+       FROM media_links g JOIN media_items mi ON mi.id = g.media_item_id
+      WHERE g.source = 'igdb' AND g.media_type = 'game' AND g.source_id > ?1 AND mi.browsed = 0
+        AND g.raw_data NOT LIKE '%"wikidata":%'
+      ORDER BY g.source_id LIMIT ?2`,
+    [cursor ?? "", batch, STEAM_APP_PATH, STEAM_APP_PATH.length],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, WIKIDATA_PEOPLE_CURSOR_KEY, WIKIDATA_PEOPLE_DONE);
+    return none;
+  }
+  const games = due.map((d) => {
+    const slug = /^[a-z0-9-]+/.exec(d.slug_tail ?? "")?.[0] ?? null;
+    const app = Number(/^\d+/.exec(d.app_tail ?? "")?.[0]) || Number(/^\d+/.exec(d.url_tail ?? "")?.[0]) || null;
+    return { ...d, slug, appId: app ? String(app) : null };
+  });
+
+  // A throw here leaves the cursor where it was: the batch is asked again next run.
+  const found = await peopleForGames({
+    appIds: games.map((g) => g.appId).filter((a): a is string => a !== null),
+    slugs: games.map((g) => g.slug).filter((s): s is string => s !== null),
+  });
+
+  const out = { ...none };
+  for (const g of games) {
+    const hit = (g.appId ? found.get(`steam:${g.appId}`) : undefined) ?? (g.slug ? found.get(`igdb:${g.slug}`) : undefined);
+    const wikidata: WikidataGamePeople = hit ?? { qid: null, directors: [], designers: [], writers: [] };
+    await upsertMediaItem(env.DB, {
+      source: "igdb", sourceId: g.source_id, type: "game", title: g.title, releaseDate: g.release_date,
+      // Merged over the stored payload (mergeRawData): only `wikidata` is new.
+      rawData: { id: Number(g.source_id), wikidata },
+    }, CRON_UPSERT);
+    if (hit) { out.known++; out.people += hit.directors.length + hit.designers.length + hit.writers.length; } else out.unknown++;
+  }
+  await kvSet(env.DB, WIKIDATA_PEOPLE_CURSOR_KEY, due[due.length - 1].source_id);
+  return out;
+}
+
 // ── 2f. The pool under an older DERIVE_VERSION ───────────────────────────────
 //
 // A doc is derived when its item is written and never again on its own
@@ -793,6 +860,13 @@ export async function runScheduled(env: Env): Promise<void> {
     if (st.tagged || st.empty || st.missing) console.log("steam_tags_step", st);
   } catch (e) {
     console.error("steam_tags_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The pool's games Wikidata has not been asked about, until none are left; then one kv read a run.
+  try {
+    const wp = await runWikidataPeopleStep(env);
+    if (wp.known || wp.unknown) console.log("wikidata_people_step", wp);
+  } catch (e) {
+    console.error("wikidata_people_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
   // The pool under an older derive version, once asked for (REDERIVE_GO_KEY); otherwise one kv read a run.
   try {

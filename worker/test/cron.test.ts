@@ -5,7 +5,7 @@ import { kvSet } from "../src/budget";
 import { DERIVE_VERSION } from "../src/catalog/derive";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
-  exportTables, OPENLIBRARY_REFETCH_BEFORE, REDERIVE_GO_KEY, runExportStep, runProjectionRefreshStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runRederiveStep, runSteamTagsStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
+  exportTables, OPENLIBRARY_REFETCH_BEFORE, REDERIVE_GO_KEY, runExportStep, runProjectionRefreshStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runRederiveStep, runSteamTagsStep, runTmdbRefreshStep, runWikidataPeopleStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
 } from "../src/cron";
 import { db, env, gameItem, movieItem, tmdbMovie, wipe } from "./helpers";
 
@@ -641,5 +641,64 @@ describe("the pool under an older derive version", () => {
     // A row nobody acted on heals on its next write, not here.
     expect(await docVersion(browsed.id)).toBe(1);
     expect(await runRederiveStep(env, 10)).toEqual({ rederived: 0, skipped: 0 });
+  });
+});
+
+describe("a game's people from Wikidata (2026-10-25)", () => {
+  const cursor = () => db.prepare("SELECT value FROM kv WHERE key = 'wikidata_people_cursor'").first<{ value: string }>();
+  const facetsOf = async (id: string) =>
+    JSON.parse((await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>())!.facets) as any[];
+  const P = (n: string) => `http://www.wikidata.org/prop/direct/${n}`;
+  const row = (key: string, qid: string, prop?: string, label?: string) => ({
+    key: { value: key }, item: { value: `http://www.wikidata.org/entity/${qid}` },
+    ...(prop ? { prop: { value: P(prop) }, personLabel: { value: label! } } : {}),
+  });
+
+  /** Wikidata's SPARQL answer: one binding per (game, property, person), and a game it knows but lists nobody for once, bare. */
+  function wikidata(bindings: unknown[]): string[] {
+    const queries: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (!url.includes("query.wikidata.org")) throw new Error(`unexpected provider call: ${url}`);
+      queries.push(decodeURIComponent(new URL(url).searchParams.get("query")!));
+      return Response.json({ results: { bindings } });
+    });
+    return queries;
+  }
+
+  it("stores each game again with its director, designer and writers, joined on the Steam app id or the IGDB slug", async () => {
+    const mgs = await upsertMediaItem(db, gameItem({ id: 101, name: "Metal Gear Solid", slug: "metal-gear-solid", steamAppId: 2131630 }));
+    const bare = await upsertMediaItem(db, gameItem({ id: 102, name: "Bare", slug: "bare" }));
+    const gone = await upsertMediaItem(db, gameItem({ id: 103, name: "Gone", slug: "gone" }));
+    const queries = wikidata([
+      row("steam:2131630", "Q1", "P57", "Hideo Kojima"), row("steam:2131630", "Q1", "P287", "Hideo Kojima"),
+      row("steam:2131630", "Q1", "P50", "Tomokazu Fukushima"), row("steam:2131630", "Q1", "P287", "Q99999"),
+      row("igdb:bare", "Q2"),
+    ]);
+
+    expect(await runWikidataPeopleStep(env, 10)).toEqual({ known: 2, unknown: 1, people: 3 });
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain('"2131630"');
+    expect(queries[0]).toContain('"metal-gear-solid"');
+    const people = (await facetsOf(mgs.id)).filter((f) => f.kind === "person");
+    expect(people.map((f) => [f.role, f.label])).toEqual([["director", "Hideo Kojima"], ["creator", "Hideo Kojima"], ["writer", "Tomokazu Fukushima"]]);
+    // The rest of the payload survives, and a bare QID is never a person.
+    expect((await facetsOf(mgs.id)).some((f) => f.kind === "company")).toBe(true);
+    for (const id of [bare.id, gone.id]) {
+      const raw = JSON.parse((await db.prepare("SELECT raw_data FROM media_links WHERE media_item_id = ? AND source = 'igdb'").bind(id).first<{ raw_data: string }>())!.raw_data);
+      expect(raw.wikidata).toEqual({ qid: id === bare.id ? "Q2" : null, directors: [], designers: [], writers: [] });
+      expect((await facetsOf(id)).filter((f) => f.kind === "person")).toEqual([]);
+    }
+    expect((await cursor())!.value).toBe("103");
+    expect(await runWikidataPeopleStep(env, 10)).toEqual({ known: 0, unknown: 0, people: 0 });
+    expect((await cursor())!.value).toBe("done");
+    expect(queries).toHaveLength(1);
+  });
+
+  it("leaves the cursor where it was when Wikidata fails", async () => {
+    await upsertMediaItem(db, gameItem({ id: 301, name: "A", slug: "a" }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("down", { status: 500 }));
+    await expect(runWikidataPeopleStep(env, 5)).rejects.toThrow();
+    expect(await cursor()).toBeNull();
   });
 });
