@@ -176,6 +176,21 @@ export function extractFacets(
     out.push(f);
   };
 
+  // Anime (2026-10-25, the score's data fix b): a film or show whose genres
+  // include Animation and whose original language is Japanese is anime, with
+  // the tier of a genre, whether or not TMDB's keywords say so (they did on 235
+  // of the pool's 239 on 2026-10-25, but the keyword tier is capped at eight and
+  // a keyword counts half). Pushed first, so the keyword's copy dedups into it.
+  if (type === "movie" || type === "show") {
+    const genres = merged.tagTiers ? merged.tagTiers.filter((t) => t.tier === "genre").map((t) => t.name) : (merged.tags ?? []);
+    // TMDB's own code first; the merged field is a display name ("Japanese", or "JA" when TMDB names no language).
+    const language = links.find((l) => l.source === "tmdb")?.rawData?.original_language ?? merged.originalLanguage;
+    const japanese = typeof language === "string" && /^(ja|japanese)$/i.test(language);
+    if (japanese && genres.some((g) => tagKey(g) === "animation")) {
+      push({ kind: "tag", key: "anime", label: "Anime", category: categorizeTag("anime"), tier: "genre", rank: genres.length + 1 });
+    }
+  }
+
   // Tags, with their tier and rank (since 2026-10-25). A caller from before
   // tiers hands the flat genres-plus-keywords union, which derives as it did.
   if (merged.tagTiers) {

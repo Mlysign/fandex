@@ -185,3 +185,32 @@ describe("extractFacets — tag tiers (2026-10-25)", () => {
     expect(facets.every((f) => f.tier === undefined && f.rank === undefined)).toBe(true);
   });
 });
+
+describe("extractFacets — anime (2026-10-25)", () => {
+  const link = (source: string, rawData: unknown) =>
+    ({ id: "", mediaItemId: "m", source, sourceId: "1", title: null, releaseDate: null, rawData, lastSynced: 0 }) as never;
+  const animation = (rank: number) => ({ name: "Animation", tier: "genre" as const, rank });
+
+  it("gives a Japanese animated film or show the anime tag with a genre's tier, once, over TMDB's keyword", () => {
+    const film = extractFacets([link("tmdb", { original_language: "ja" })], "movie", {
+      originalLanguage: "ja", tagTiers: [{ name: "Fantasy", tier: "genre", rank: 1 }, animation(2), { name: "anime", tier: "keyword", rank: 1 }],
+    }).filter((f) => f.kind === "tag");
+    expect(film.filter((f) => f.key === "anime")).toEqual([{ kind: "tag", key: "anime", label: "Anime", category: "artstyle", tier: "genre", rank: 3 }]);
+    const show = extractFacets([link("tmdb", { original_language: "ja" })], "show", { originalLanguage: "ja", tagTiers: [animation(1)] });
+    expect(show.some((f) => f.key === "anime")).toBe(true);
+  });
+
+  it("leaves a Western cartoon, a Japanese live-action film and a game alone", () => {
+    expect(extractFacets([link("tmdb", {})], "movie", { originalLanguage: "en", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(false);
+    expect(extractFacets([link("tmdb", {})], "movie", { originalLanguage: "ja", tagTiers: [{ name: "Drama", tier: "genre", rank: 1 }] }).some((f) => f.key === "anime")).toBe(false);
+    expect(extractFacets([link("igdb", {})], "game", { originalLanguage: "ja", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(false);
+  });
+
+  it("reads the language off the TMDB payload, or the merged display name", () => {
+    expect(extractFacets([link("tmdb", { original_language: "ja" })], "movie", { tags: ["Animation"] }).some((f) => f.key === "anime")).toBe(true);
+    // The merged field is what normalize.ts makes of it: "Japanese", or "JA" when TMDB names no language.
+    expect(extractFacets([link("trakt", {})], "movie", { originalLanguage: "Japanese", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(true);
+    expect(extractFacets([link("trakt", {})], "movie", { originalLanguage: "JA", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(true);
+    expect(extractFacets([link("tmdb", { original_language: "en" })], "movie", { originalLanguage: "Japanese", tagTiers: [animation(1)] }).some((f) => f.key === "anime")).toBe(false);
+  });
+});
