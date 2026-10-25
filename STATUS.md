@@ -48,7 +48,7 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | Hosting + deploy | ✅ Cloudflare since 2026-10-10, deployed by hand. → [docs/website.md](docs/website.md) |
 | Backups | ✅ D1 Time Travel (7 days) and a nightly export to R2 in the EU; exports under `d1/` expire after 30 days. |
 | **Cloudflare Worker + D1** (phase 1) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, export. Books (Open Library, Hardcover facts only) and board games (BGG, behind its token) since 2026-10-17. Hardened 2026-10-23. |
-| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.17.apk` installed 2026-10-24: every product-review fix (typo-tolerant search last), and Discord sign-in returning through fandex.org. |
+| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.18.apk` built 2026-10-25 (`C:\fx\`, not yet installed): the match labels, follows and the score report. 0.3.17 (installed 2026-10-24) still shows the number; it keeps working against the new Worker. |
 | **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,613 static item pages (fewer since 105 duplicate games were folded, 2026-10-23) with their rails, 5,417 facet pages, calendar months and the legal pages (publish of 2026-10-24). |
 | **H5** Fandex Score | ✅ Reworked 2026-10-25: a label from two axes (taste and pull), no number shown, follows, the goalpost on `/dev/score`. The data fixes behind it are open in TASKS.md. → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** legal & compliance | ✅ |
