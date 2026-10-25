@@ -28,7 +28,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // If the rule is ever removed, that sentence is false.
 const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "2026-10-23",
+  updated: "2026-10-25",
   intro: [
     "Fandex is a one-person hobby project, not a company. This policy is written to be plain and accurate about exactly what the app stores and why, rather than assembled from a template. It is not legal advice, and it is under review pending professional legal advice (see the note on the controller's address below).",
     "It covers the website at fandex.org and the Fandex app for Android. Both are the same app and work the same way.",
@@ -88,6 +88,7 @@ const privacy: LegalDocument = {
         "Because nothing is stored on or read from your device for this, it needs no consent banner under §25 TDDDG, and because no personal data is kept there is nothing here for the GDPR to attach to. Sending a count is an ordinary web request, and like every request to any website it briefly shows your IP address to the server; it is used only to apply a rate limit, exactly as it is on every other part of Fandex, and is never stored alongside the counts.",
         "Only pages opened in a web browser are counted. The Android app sends no counts.",
         "For signed-in accounts Fandex records the day each account was last seen, at most once per day, so the operator can tell how many accounts are still in use. That date is stored on your account and is removed when you delete it.",
+        "For signed-in accounts the app also sends, about once a day, a small set of counts about how well the Fandex match fits your own ratings: per kind of title (films, shows, games, books), how often the match was one, two or three points above or below the rating you gave, and how many titles with each match label you rated 8 or more. These are counts only. They name no title and contain no rating, they are stored on your account, they are included in your data export, and they are removed when you delete your account. The operator sums them over all accounts to check that the match still means what it says, and nothing else is done with them.",
       ],
     },
     {

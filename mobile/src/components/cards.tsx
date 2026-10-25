@@ -15,7 +15,7 @@ import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFac
 import { Popover, Sheet, useAnchor } from '~/components/kit';
 import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExplainer';
 import { useToast } from '~/components/Toast';
-import { cardHref, useCardActions, useCardStates, type CardItem, type CardState } from '~/lib/cards';
+import { cardHref, useCardActions, useCardStates, type CardItem, type CardMatch, type CardState } from '~/lib/cards';
 import { toggled } from '~/lib/a11y';
 import { useBarList } from '~/lib/barScroll';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
@@ -114,12 +114,11 @@ export function ActionBar({ item, state, actions, compact }: { item: CardItem; s
 
 // ── The card ─────────────────────────────────────────────────────────────────
 
-export const PosterCard = memo(function PosterCard({ item, state, score, center, actions, style }: {
+export const PosterCard = memo(function PosterCard({ item, state, match, actions, style }: {
   item: CardItem;
   state: CardState;
-  /** Your Fandex Score for it, when there is one. The crowd's rating is shown otherwise. */
-  score: number | null;
-  center: number | null;
+  /** Your match for it, when there is one. The crowd's rating is shown otherwise. */
+  match: CardMatch | null;
   actions: Actions;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -128,13 +127,13 @@ export const PosterCard = memo(function PosterCard({ item, state, score, center,
   return (
     <>
       <CardFace
-        item={item} score={score} center={center} link={link} style={style} explain={explainer.explain}
+        item={item} match={match} link={link} style={style} explain={explainer.explain}
         bar={<ActionBar item={item} state={state} actions={actions} />}
       />
-      {explainer.at ? <ScoreExplainerPopover item={item} score={score} center={center} state={state} anchor={explainer.at} /> : null}
+      {explainer.at ? <ScoreExplainerPopover item={item} match={match} state={state} anchor={explainer.at} /> : null}
       {explainer.sheet ? (
         <Sheet open onClose={explainer.close} title={item.title}>
-          <ScoreExplainerBody item={item} score={score} center={center} state={state} />
+          <ScoreExplainerBody item={item} match={match} state={state} />
         </Sheet>
       ) : null}
     </>
@@ -218,7 +217,7 @@ export function CardRail({ title, items, forYou, seeAllHref }: { title: string; 
       {items.map((item) => (
         <PosterCard
           key={item.key} item={item} style={{ width: 150 }}
-          state={kit.stateOf(item.id)} score={(item.id ? kit.scores.get(item.id) : null) ?? item.fandexScore ?? null} center={kit.center} actions={kit.actions}
+          state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
         />
       ))}
     </Rail>
@@ -311,7 +310,7 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
           {row.items.map((item) => (
             <PosterCard
               key={item.key} item={item} style={styles.gridCell}
-              state={kit.stateOf(item.id)} score={(item.id ? kit.scores.get(item.id) : null) ?? item.fandexScore ?? null} center={kit.center} actions={kit.actions}
+              state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
             />
           ))}
           {/* Empty cells, so a short last row keeps the column width. */}

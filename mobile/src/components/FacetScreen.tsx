@@ -46,6 +46,7 @@ import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
 import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
+import { setFollow } from '~/lib/itemActions';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
 import { TYPE_ICONS } from '~/lib/typeIcons';
@@ -67,16 +68,27 @@ const IMPACT_TONE = {
   neutral: { backgroundColor: color.surfaceElevated, color: color.textSecondary },
 } as const;
 
-/** The site's sentence for a tag. A person or a studio is scored per role, so theirs names the role. */
+/** The taste half, in a sentence. A person or a studio is scored per role, so theirs names the role. */
 function impactLine(kind: FacetKind, im: PageImpact): string {
   const who = kind === 'tag' ? 'titles with this tag'
     : kind === 'franchise' ? 'titles in this franchise'
     : im.role === 'cast' ? 'titles with them in the cast'
     : `titles with them as ${(ROLE_LABEL[im.role ?? ''] ?? KIND_LABEL[kind]).toLowerCase()}`;
-  const how = im.direction === 'up' ? 'typically score above your average'
-    : im.direction === 'down' ? 'typically score below your average'
-    : 'score about the same as your average';
+  const how = im.direction === 'up' ? 'you rate above your average'
+    : im.direction === 'down' ? 'you rate below your average'
+    : 'you rate about your average';
   return `${who} ${how} · ${im.ratedCount} rated`;
+}
+
+/** The pull half: how much of the catalog's titles with it you have been through, against your usual share. */
+function pullLine(kind: FacetKind, im: PageImpact): string | null {
+  const p = im.pull;
+  if (!p) return null;
+  const seen = Number.isInteger(p.consumed) ? String(p.consumed) : p.consumed.toFixed(1);
+  const what = kind === 'tag' ? 'with this tag' : kind === 'franchise' ? 'in this franchise' : 'with them';
+  const how = p.followed === 'follow' ? 'you follow this' : p.followed === 'avoid' ? 'you asked not to be shown this'
+    : p.lift >= 0.5 ? 'you seek this out' : p.lift <= -0.5 ? 'not your usual pick' : 'about your usual share';
+  return `you've been through ${seen} of the ${p.catalog} titles ${what} · ${how}`;
 }
 
 /** A row of media types under the numbers: tap one to keep that type, tap again to drop it, none kept shows every type. */
@@ -105,7 +117,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const db = useSQLiteContext();
   const auth = useAuth();
   const sync = useCatalogSync();
-  const { center, score, impactsFor, impactAbsenceFor, taxonomy } = useScores();
+  const { center, score, impactsFor, impactAbsenceFor, taxonomy, follows } = useScores();
   // The address says "christopher-nolan"; the catalog's key is "christopher nolan".
   // A franchise's address may spell a bundled name: its page is the franchise it is bundled into.
   const spoken = slugToKey(params.key ?? '');
@@ -115,6 +127,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const [bioOpen, setBioOpen] = useState(false);
   /** The photo the gallery is open on, or null while it is shut. */
   const [photoAt, setPhotoAt] = useState<number | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
   const [found, setFound] = useState<{
     label: string; category: string | null; roles: string[]; cards: CardItem[];
     /** A franchise page's: each held title's provider keys that belong to this page, which its series are made of. */
@@ -258,8 +271,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   // holds, an estimate from this page's facet for one it does not.
   const scored = useMemo(() => (cards ?? []).map((c) => {
     if (c.id && scores.has(c.id)) return c;
-    const estimate = center == null ? null : score(c.key, estimateFacets(kind, key, label || key, c.roles, c.genres))?.score ?? null;
-    return estimate == null ? c : { ...c, fandexScore: estimate };
+    const estimate = center == null ? null : score(c.key, estimateFacets(kind, key, label || key, c.roles, c.genres), c.type);
+    return estimate == null ? c : { ...c, fandexScore: estimate.score, match: { label: estimate.label, taste: estimate.taste.band, pull: estimate.pull?.band ?? null } };
   }), [cards, scores, center, score, kind, key, label]);
 
   // Narrowed: the kept types, then the sheet's filters.
@@ -269,7 +282,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const sorted = useMemo(() => {
     const list = [...filtered];
     const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
-    const fandexOf = (c: CardItem) => (c.id ? scores.get(c.id) : null) ?? c.fandexScore ?? -1;
+    const fandexOf = (c: CardItem) => (c.id ? scores.get(c.id)?.score : null) ?? c.fandexScore ?? -1;
     switch (sort) {
       case 'popularity': return byPopularity(list, crowdOf, true);
       case 'rating': return byRating(list, crowdOf);
@@ -330,12 +343,24 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     : []
     : [];
 
+  // What a follow of this page is keyed by: the profile's own ids when you have rated the facet, else the
+  // ids the catalog would file it under (one per role for a person or a studio).
+  const foundRoles = found?.roles;
+  const followIds = useMemo(() => {
+    if (impacts.length) return impacts.map((im) => im.facetId);
+    if (kind === 'tag') return [`tag||${key}`];
+    if (kind === 'franchise') return [`ip|ip|${key}`];
+    const roles = foundRoles?.length ? foundRoles : [kind === 'person' ? 'cast' : 'studio'];
+    return roles.map((role) => `${kind === 'person' ? 'person' : 'company'}|${role}|${key}`);
+  }, [impacts, kind, key, foundRoles]);
+
   if (!found) return <Screen wide><StateBlock loading /></Screen>;
 
   const person = more?.person ?? null;
   const name = found.label || person?.name || key.replace(/-/g, ' ');
   const life = person ? [person.birthday ? `Born ${longDate(person.birthday) ?? person.birthday}` : null, person.deathday ? `died ${longDate(person.deathday) ?? person.deathday}` : null, person.placeOfBirth].filter(Boolean).join(' · ') : '';
   const absence = impacts.length ? null : impactAbsenceFor(IMPACT_KIND[kind], key, name);
+  const followMode = followIds.every((id) => follows.get(id) === 'follow') ? 'follow' : followIds.every((id) => follows.get(id) === 'avoid') ? 'avoid' : null;
   const narrowed = kept.size > 0 || countActive(filters) > 0;
   const typesHere = offered.filter((t) => scored.some((c) => c.type === t));
   const header = (
@@ -378,14 +403,51 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
               {Math.abs(delta.d) < 0.05 ? 'the same as the crowd' : `${Math.abs(delta.d).toFixed(1)} ${delta.d > 0 ? 'higher' : 'lower'} than the crowd`}
             </Text>
           ) : null}
-          {impacts.map((im) => (
-            <View key={im.role ?? 'tag'} style={styles.impact}>
-              <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Fandex impact {signed(im.points)}</Text>
-              <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
-            </View>
-          ))}
+          {impacts.map((im) => {
+            const pull = pullLine(kind, im);
+            return (
+              <View key={im.role ?? 'tag'} style={{ gap: 6 }}>
+                <View style={styles.impact}>
+                  <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Taste {signed(im.points)}</Text>
+                  <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
+                </View>
+                {pull && im.pull ? (
+                  <View style={styles.impact}>
+                    <Text style={[styles.impactPill, IMPACT_TONE[im.pull.points >= 0.5 ? 'up' : im.pull.points <= -0.5 ? 'down' : 'neutral']]}>Pull {signed(im.pull.points)}</Text>
+                    <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{pull}</Text>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
           {/* No impact row has a reason, and the reason is said (AGENTS.md: a component that renders null must know why). */}
           {absence ? <Text style={[type.caption, { color: color.textSecondary, marginTop: 12 }]}>{absence}</Text> : null}
+          {auth.status === 'signedIn' && followIds.length ? (
+            // Follow: this counts as the most you could seek out, on every title that carries it. Not interested: the least. Neither touches how you rate it.
+            <View style={styles.followRow}>
+              {([['follow', 'Follow', 'Following'], ['avoid', 'Not interested', 'Avoiding']] as const).map(([mode, off, on]) => {
+                const active = followMode === mode;
+                return (
+                  <Pressable
+                    key={mode} disabled={followBusy} hitSlop={6} accessibilityRole="button" accessibilityState={{ selected: active }}
+                    accessibilityLabel={active ? `${on} ${name}, undo` : `${off}: ${name}`}
+                    onPress={() => {
+                      setFollowBusy(true);
+                      setFollow(db, followIds.map((id) => ({ facetId: id, label: name })), active ? null : mode)
+                        .then(() => auth.rowsChanged())
+                        .catch((e: unknown) => console.warn('follow_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)))
+                        .finally(() => setFollowBusy(false));
+                    }}
+                    style={({ pressed }) => [styles.followBtn, active && (mode === 'follow' ? styles.followOn : styles.avoidOn), (pressed || followBusy) && { opacity: 0.6 }]}>
+                    <Text style={[type.caption, { color: active ? color.textOnAccent : color.textSecondary }]}>{active ? on : off}</Text>
+                  </Pressable>
+                );
+              })}
+              <Text style={[type.caption, { flexShrink: 1 }]}>
+                {followMode === 'follow' ? 'Counts as the most you could seek out, on every title with it.' : followMode === 'avoid' ? 'Counts as the least, on every title with it.' : 'Tell the match you seek this out, or that you do not.'}
+              </Text>
+            </View>
+          ) : null}
         </>
       )}
       count={`titles · ${sorted.length}${narrowed && sorted.length !== (cards ?? []).length ? ` of ${(cards ?? []).length}` : ''}${asking ? ' · asking for more…' : ''}`}
@@ -442,6 +504,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden',
     backgroundColor: `${color.facet.tag}21`, color: color.textPrimary,
   },
+  followRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
+  followBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: color.border },
+  followOn: { backgroundColor: color.accent, borderColor: color.accent },
+  avoidOn: { backgroundColor: color.scoreLow, borderColor: color.scoreLow },
   impactPill: {
     fontFamily: font.sansBold, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'],
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, overflow: 'hidden',

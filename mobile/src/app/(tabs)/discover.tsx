@@ -251,7 +251,7 @@ export default function DiscoverScreen() {
       // Browsing mixes the types by each title's rank among its own; a search keeps the raw count (lib/sortCards.ts).
       case 'popularity': return norm ? addonsLast(byPopularity(list, crowdOf, false)) : byPopularity(list, crowdOf, true);
       case 'rating': return byRating(list, crowdOf);
-      case 'fandexScore': return list.sort((a, b) => ((b.id ? allScores.get(b.id) : null) ?? -1) - ((a.id ? allScores.get(a.id) : null) ?? -1));
+      case 'fandexScore': return list.sort((a, b) => ((b.id ? allScores.get(b.id)?.score : null) ?? -1) - ((a.id ? allScores.get(a.id)?.score : null) ?? -1));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
   }, [visible, sort, allScores, norm]);

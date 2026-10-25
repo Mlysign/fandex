@@ -215,6 +215,8 @@ fs.rmSync(path.join(STAGE, 'metadata.json'), { force: true });
 fs.copyFileSync(path.join(repo, 'public', 'favicon.ico'), path.join(STAGE, 'favicon.ico'));
 fs.copyFileSync(path.join(repo, 'public', 'icon.svg'), path.join(STAGE, 'icon.svg'));
 fs.copyFileSync(path.join(repo, 'public', 'icon-192.png'), path.join(STAGE, 'icon-192.png'));
+// How the match works, as one picture: the admin Score page shows it, and a public page may later (2026-10-25).
+fs.copyFileSync(path.join(repo, 'public', 'score-how-it-works.svg'), path.join(STAGE, 'score-how-it-works.svg'));
 
 // The app loads its fonts in JavaScript. A static page has to name them itself,
 // under the family names the app's styles use (src/theme.ts).

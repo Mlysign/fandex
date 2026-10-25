@@ -22,7 +22,7 @@ import { getMeta, setMeta, inTransaction } from '~/lib/db';
  * A single signature over all three made every rating re-download every
  * episode row the account holds (12,000 and more for a Trakt library).
  */
-const KINDS = ['items', 'episodes', 'hidden'] as const;
+const KINDS = ['items', 'episodes', 'hidden', 'follows'] as const;
 type Kind = (typeof KINDS)[number];
 const signatureKey = (k: Kind) => `state_signature_${k}`;
 /** The single signature used before 2026-10-23. Cleared on sign-out with the others. */
@@ -36,6 +36,7 @@ export interface StateSyncResult {
   items: number;
   episodes: number;
   hidden: number;
+  follows: number;
 }
 
 /** The pull outlived the session it was started for (a sign-out, another account). Nothing was written. */
@@ -86,14 +87,15 @@ export async function syncState(db: SQLiteDatabase, force = false, stillCurrent?
   const due: Kind[] = [];
   for (const k of KINDS) if (force || (await getMeta(db, signatureKey(k))) !== signature(counts, k)) due.push(k);
   if (!due.length) {
-    return { changed: false, items: counts.items, episodes: counts.episodes, hidden: counts.hidden };
+    return { changed: false, items: counts.items, episodes: counts.episodes, hidden: counts.hidden, follows: counts.follows ?? 0 };
   }
 
   // Every kind that changed, in memory, BEFORE the first local write. See the header.
-  const [items, episodes, hidden] = await Promise.all([
+  const [items, episodes, hidden, follows] = await Promise.all([
     due.includes('items') ? allItems() : null,
     due.includes('episodes') ? allEpisodes() : null,
     due.includes('hidden') ? api.stateHidden() : null,
+    due.includes('follows') ? api.stateFollows() : null,
   ]);
 
   await inTransaction(db, async () => {
@@ -101,6 +103,7 @@ export async function syncState(db: SQLiteDatabase, force = false, stillCurrent?
     if (items) await db.runAsync('DELETE FROM item_state');
     if (episodes) await db.runAsync('DELETE FROM episode_state');
     if (hidden) await db.runAsync('DELETE FROM hidden_item');
+    if (follows) await db.runAsync('DELETE FROM facet_follow');
 
     const putItem = await db.prepareAsync(
       `INSERT OR REPLACE INTO item_state
@@ -131,6 +134,9 @@ export async function syncState(db: SQLiteDatabase, force = false, stillCurrent?
     for (const h of hidden?.rows ?? []) {
       await db.runAsync('INSERT OR REPLACE INTO hidden_item (media_item_id, hidden_at) VALUES (?, ?)', [h.mediaItemId, h.hiddenAt]);
     }
+    for (const f of follows?.rows ?? []) {
+      await db.runAsync('INSERT OR REPLACE INTO facet_follow (facet_id, mode, label, followed_at) VALUES (?, ?, ?, ?)', [f.facetId, f.mode, f.label, f.followedAt]);
+    }
 
     // Stored with the rows, in the same transaction. A signature that landed
     // without its rows would tell every later sync there was nothing to do.
@@ -142,6 +148,7 @@ export async function syncState(db: SQLiteDatabase, force = false, stillCurrent?
     items: items?.length ?? counts.items,
     episodes: episodes?.length ?? counts.episodes,
     hidden: hidden?.rows.length ?? counts.hidden,
+    follows: follows?.rows.length ?? counts.follows ?? 0,
   };
 }
 
@@ -194,6 +201,16 @@ export async function applyLocalWrite(db: SQLiteDatabase, write: StateWrite, ski
       // Not REPLACE: hiding a hidden title again must not move when it was hidden.
       await db.runAsync('INSERT OR IGNORE INTO hidden_item (media_item_id, hidden_at) VALUES (?, ?)', [id, now]);
     }
+    for (const id of write.follows?.remove ?? []) {
+      await db.runAsync('DELETE FROM facet_follow WHERE facet_id = ?', [id]);
+    }
+    for (const f of write.follows?.set ?? []) {
+      await db.runAsync(
+        `INSERT INTO facet_follow (facet_id, mode, label, followed_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(facet_id) DO UPDATE SET mode = excluded.mode, label = excluded.label`,
+        [f.facetId, f.mode, f.label, now],
+      );
+    }
   });
 }
 
@@ -217,6 +234,7 @@ export async function clearState(db: SQLiteDatabase): Promise<void> {
     await db.runAsync('DELETE FROM item_state');
     await db.runAsync('DELETE FROM episode_state');
     await db.runAsync('DELETE FROM hidden_item');
+    await db.runAsync('DELETE FROM facet_follow');
     for (const key of [OLD_SIGNATURE_KEY, ...KINDS.map(signatureKey)]) await db.runAsync('DELETE FROM meta WHERE key = ?', [key]);
   });
 }

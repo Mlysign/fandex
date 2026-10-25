@@ -31,6 +31,23 @@ export interface ScoringConfigValues {
   // way to hold two is TMDB and IGDB naming the same one differently enough to
   // survive `ipKey` — in which case counting both would double-count one IP.
   topIps: number;          // top-N ip facets, by |dev| descending
+  // 2026-10-25: the second axis, "do you seek this out". A facet's pull is how
+  // much of the catalog's titles carrying it you have consumed, against your
+  // usual share of the catalog (docs/fandex-score.md §3.7). These are its knobs.
+  /** Pseudo-titles at your usual share, so a facet on three titles cannot read as "all of them". */
+  pullPrior: number;
+  /** Points per unit of pull, the same job `mappingConstantUp` does for taste. */
+  pullGain: number;
+  /** Per medium, how much the pull points count: a game you own is weaker evidence than a film you chose (measured 2026-10-25). Missing media count 1. */
+  pullWeight: Record<string, number>;
+  /** How many pull rows count per kind, by |value|: the same shape as the taste rows. */
+  pullTopTags: number;
+  pullTopPeople: number;
+  pullTopCompanies: number;
+  pullTopIps: number;
+  /** Points off your usual that make an axis read as high or low. The old BAND_MARGIN, now two. */
+  tasteBandMargin: number;
+  pullBandMargin: number;
 }
 
 // Mirrors discovery.ts's ROLE_WEIGHT + K_SHRINK verbatim, so seeding this table
@@ -66,6 +83,33 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   topPeople: 3,
   topCompanies: 2,
   topIps: 1,
+  // Pull defaults, from the 2026-10-25 backtest on the owner's library at the
+  // production taste config: a gain of 3.5 gives the pull rows the same spread
+  // as the taste rows over unseen titles; games at half, because what he plays
+  // and what he rates disagree there (memory: fandex-score-pull-vs-fit).
+  pullPrior: 5,
+  pullGain: 3.5,
+  pullWeight: { movie: 1, show: 1, game: 0.5, book: 1, boardgame: 1 },
+  pullTopTags: 5,
+  pullTopPeople: 3,
+  pullTopCompanies: 2,
+  pullTopIps: 1,
+  tasteBandMargin: 10,
+  pullBandMargin: 10,
+};
+
+/**
+ * The odds line under a label: how much more often than usual a title with
+ * that label was rated 8 or more, per medium, with `all` as the fallback for a
+ * medium or a label without enough titles. Seeded from the owner's 1,701
+ * ratings on 2026-10-25 (`scripts/score-backtest.mjs --ladder`); the admin
+ * goalpost summed over every user replaces it once there is one.
+ */
+export const DEFAULT_LABEL_ODDS: Record<string, Partial<Record<string, number>>> = {
+  all: { usual: 0.94, 'hidden-gem': 2.18, 'sure-thing': 1.17, bycatch: 0.47, 'not-for-you': 0.7 },
+  movie: { usual: 0.88, 'sure-thing': 1.44, bycatch: 0.54 },
+  show: { usual: 0.9, 'sure-thing': 1.47, bycatch: 0.96 },
+  game: { usual: 0.92, 'hidden-gem': 1.44, 'sure-thing': 1.53 },
 };
 
 export interface TagCategorySeed {

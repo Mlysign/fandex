@@ -132,7 +132,7 @@ export async function deleteAccount(db: D1Database, userId: string): Promise<Acc
 // itemState) and `syncLog` are gone with the server-side sync that produced
 // them; `itemState` is the same data, complete. Identities carry no metadata
 // because none is stored.
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 6;
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 7;
 
 function parseStringList(raw: string | null): string[] {
   if (!raw) return [];
@@ -158,7 +158,7 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
   }>(db, "SELECT id, created_at, last_seen_at, country, platforms, media_types FROM users WHERE id = ?", [userId]);
   if (!user) return null;
 
-  const [identities, itemState, episodes, hidden] = await db.batch<{ j: string | null }>([
+  const [identities, itemState, episodes, hidden, scoreReports, follows] = await db.batch<{ j: string | null }>([
     db.prepare(
       `SELECT json_group_array(json_object('provider', provider, 'providerUserId', provider_user_id,
               'displayName', display_name, 'avatarUrl', avatar_url, 'createdAt', created_at)) j
@@ -188,6 +188,17 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
                  FROM user_hidden_items h LEFT JOIN media_items m ON m.id = h.media_item_id
                 WHERE h.user_id = ? ORDER BY h.hidden_at DESC)`,
     ).bind(userId),
+    // The score's goalpost counts (migration 0006): per medium, how the match compared with your ratings.
+    db.prepare(
+      `SELECT json_group_array(json_object('medium', medium, 'rated', rated, 'bins', json(bins), 'labels', json(labels),
+              'scoreVersion', version, 'updatedAt', updated_at)) j
+         FROM (SELECT medium, rated, bins, labels, version, updated_at FROM score_report WHERE user_id = ? ORDER BY medium)`,
+    ).bind(userId),
+    // What you follow or avoid (migration 0007).
+    db.prepare(
+      `SELECT json_group_array(json_object('facetId', facet_id, 'mode', mode, 'label', label, 'followedAt', followed_at)) j
+         FROM (SELECT facet_id, mode, label, followed_at FROM user_facet_follows WHERE user_id = ? ORDER BY followed_at, facet_id)`,
+    ).bind(userId),
   ]);
   const list = (r: D1Result<{ j: string | null }>) => r.results?.[0]?.j ?? "[]";
 
@@ -201,6 +212,8 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
       "'itemState' is your library and wishlist, one entry per title and connected provider.",
       "'episodes' lists the individual show episodes you have marked as watched.",
       "'hidden' lists titles you asked Fandex to stop suggesting. They stay in the catalog and in your library.",
+      "'scoreReports' holds counts your device sent about how your match compared with your own ratings, per medium. No title and no rating is in them.",
+      "'follows' lists the tags, people, studios and franchises you asked Fandex to treat as something you seek out, or to keep away from you.",
       "Fandex stores no access tokens for your connected accounts. They stay on your device.",
       "Titles are shown for convenience; the catalog itself is shared and is not part of your personal data.",
     ],
@@ -216,7 +229,7 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
   const headJson = JSON.stringify(head);
   return (
     `${headJson.slice(0, -1)},"identities":${list(identities)},"itemState":${list(itemState)},` +
-    `"episodes":${list(episodes)},"hidden":${list(hidden)}}`
+    `"episodes":${list(episodes)},"hidden":${list(hidden)},"scoreReports":${list(scoreReports)},"follows":${list(follows)}}`
   );
 }
 

@@ -11,10 +11,10 @@ import { Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
 import { Children, isValidElement, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Img } from '~/components/Img';
-import { CommunityScore, FandexScore } from '~/components/kit';
+import { CommunityScore, MatchLabel } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
 import { cardHref } from '~/lib/cardHref';
-import type { CardItem } from '~/lib/cards';
+import type { CardItem, CardMatch } from '~/lib/cards';
 import { monthYear } from '~/lib/dates';
 import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 
@@ -22,12 +22,12 @@ import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 const MIN_CROWD_VOTES = 20;
 
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
-export function CardFace({ item, score, center, link, bar, style, dateText, explain }: {
+export function CardFace({ item, match, link, bar, style, dateText, explain }: {
   item: CardItem;
   /** In place of the month and year: a calendar page names the day. */
   dateText?: string;
-  score: number | null;
-  center: number | null;
+  /** Your match for it, when there is one. The crowd's rating is shown otherwise. */
+  match: CardMatch | null;
   link: { anchor: object | null; onPress?: (e?: GestureResponderEvent) => void };
   bar: ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -75,7 +75,7 @@ export function CardFace({ item, score, center, link, bar, style, dateText, expl
           {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role]}>{item.role}</Text> : null}
           <View style={cardStyles.metaRow}>
             <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
-            {score != null ? <FandexScore score={score} center={center} />
+            {match ? <MatchLabel label={match.label} taste={match.taste} pull={match.pull} />
               : item.communityScore != null && (item.communityVotes == null || item.communityVotes >= MIN_CROWD_VOTES) ? <CommunityScore score={item.communityScore} /> : null}
           </View>
         </View>
@@ -192,7 +192,7 @@ export function StaticPosterCard({ item, style, dateText }: { item: CardItem; st
       </Pressable>
     </View>
   );
-  return <CardFace item={item} score={null} center={null} link={{ anchor: { href: cardHref(item) } }} style={style} bar={bar} dateText={dateText} />;
+  return <CardFace item={item} match={null} link={{ anchor: { href: cardHref(item) } }} style={style} bar={bar} dateText={dateText} />;
 }
 
 /** A rail of static cards, 150 px each: the item page's two rails on the website's static pages. */

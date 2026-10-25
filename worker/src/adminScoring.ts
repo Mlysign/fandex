@@ -9,6 +9,7 @@
  */
 
 import { ipKey } from "@/lib/facets";
+import { DEFAULT_SCORING_CONFIG } from "@/lib/scoringDefaults";
 import { BadRequest } from "./me";
 import { first, run } from "./d1";
 
@@ -38,7 +39,21 @@ export interface ScoringConfig {
   topPeople: number;
   topCompanies: number;
   topIps: number;
+  // The pull axis (2026-10-25, docs/fandex-score.md §3.7). A body written by
+  // an admin panel from before the axis existed carries none of these, so each
+  // one falls back to the shipped default rather than refusing the save.
+  pullPrior: number;
+  pullGain: number;
+  pullWeight: Record<string, number>;
+  pullTopTags: number;
+  pullTopPeople: number;
+  pullTopCompanies: number;
+  pullTopIps: number;
+  tasteBandMargin: number;
+  pullBandMargin: number;
 }
+
+const MEDIA = new Set(["movie", "show", "game", "book", "boardgame"]);
 
 /** The whole config or a refusal: a save replaces the stored object, so a half one must not get through. */
 export function parseScoringConfig(body: unknown): ScoringConfig {
@@ -51,6 +66,18 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     if (!/^[a-z_]{1,32}$/.test(role)) throw new BadRequest("Unknown role");
     roleWeights[role] = num(weight, `roleWeights.${role}`);
   }
+  const d = DEFAULT_SCORING_CONFIG;
+  const orDefault = <T,>(v: unknown, fallback: T, check: (v: unknown) => T): T => (v === undefined ? fallback : check(v));
+  const pullWeight: Record<string, number> = { ...d.pullWeight };
+  if (body.pullWeight !== undefined) {
+    if (!isObj(body.pullWeight)) throw new BadRequest("pullWeight must be an object");
+    for (const [medium, weight] of Object.entries(body.pullWeight)) {
+      if (!MEDIA.has(medium)) throw new BadRequest("Unknown medium in pullWeight");
+      const n = num(weight, `pullWeight.${medium}`);
+      if (n < 0) throw new BadRequest(`pullWeight.${medium} must not be negative`);
+      pullWeight[medium] = n;
+    }
+  }
   return {
     roleWeights,
     priorStrength: positive(body.priorStrength, "priorStrength"),
@@ -61,6 +88,15 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     topPeople: count(body.topPeople, "topPeople"),
     topCompanies: count(body.topCompanies, "topCompanies"),
     topIps: count(body.topIps, "topIps"),
+    pullPrior: orDefault(body.pullPrior, d.pullPrior, (v) => positive(v, "pullPrior")),
+    pullGain: orDefault(body.pullGain, d.pullGain, (v) => { const n = num(v, "pullGain"); if (n < 0) throw new BadRequest("pullGain must not be negative"); return n; }),
+    pullWeight,
+    pullTopTags: orDefault(body.pullTopTags, d.pullTopTags, (v) => count(v, "pullTopTags")),
+    pullTopPeople: orDefault(body.pullTopPeople, d.pullTopPeople, (v) => count(v, "pullTopPeople")),
+    pullTopCompanies: orDefault(body.pullTopCompanies, d.pullTopCompanies, (v) => count(v, "pullTopCompanies")),
+    pullTopIps: orDefault(body.pullTopIps, d.pullTopIps, (v) => count(v, "pullTopIps")),
+    tasteBandMargin: orDefault(body.tasteBandMargin, d.tasteBandMargin, (v) => positive(v, "tasteBandMargin")),
+    pullBandMargin: orDefault(body.pullBandMargin, d.pullBandMargin, (v) => positive(v, "pullBandMargin")),
   };
 }
 

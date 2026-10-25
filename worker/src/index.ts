@@ -36,6 +36,7 @@ import { discoverIgdbFacetCards, discoverIgdbUpcoming, igdbConfigured, igdbImage
 import { buildAccountExportJson, deleteAccount, disconnectIdentity, type MergeResolution } from "./account";
 import { isAdmin, parseDays, usersSnapshot } from "./admin";
 import { analyticsSnapshot, countPageView } from "./telemetry";
+import { parseScoreReports, saveScoreReports, scoreSummary } from "./scoreReport";
 import {
   clearIpOverride, clearLabel, clearTagOverride, deleteAlias, deleteBundle, deleteCategory, parseAliases, parseCategory, parseCategoryWeights,
   parseIpOverride, parseLabel, parseScoringConfig, setIpOverride, parseTagOverrides, saveCategory, saveCategoryWeights, saveScoringConfig, setAlias, setLabel,
@@ -60,8 +61,8 @@ import { DEV_ACCOUNTS, devConnect, devLogin, devLoginAllowed } from "./devLogin"
 import type { Env } from "./env";
 import { allow, BodyError, cachedAnswer, clientIp, csrfOk, error, json, preflight, readJson, trustedOrigin, withCors } from "./http";
 import {
-  applyStateWrite, BadRequest, DEFAULT_DAILY_USER_WRITE_CAP, episodeStateJson, hiddenJson, itemStateJson, parsePrefs,
-  parseStateWrite, profileJson, writePrefs,
+  applyStateWrite, BadRequest, DEFAULT_DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER, episodeStateJson, followsCount, followsJson, hiddenJson,
+  itemStateJson, parsePrefs, parseStateWrite, profileJson, writePrefs,
 } from "./me";
 import { stateCounts } from "./keptCounts";
 
@@ -584,6 +585,10 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
   if (b === "users" && method === "GET") {
     return json(await usersSnapshot(c.env.DB, parseDays(c.url.searchParams.get("days"))), 200, PRIVATE);
   }
+  // The Score page: every user's score report summed (scoreReport.ts).
+  if (b === "score" && method === "GET" && !d) {
+    return json(await scoreSummary(c.env.DB), 200, PRIVATE);
+  }
 
   // The Scoring page's writes. Each answers with the taxonomy as it now is, so
   // the page redraws from what was stored and not from what it sent.
@@ -704,6 +709,19 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
     return json(body ? withAdminFlag(c.env, userId, body) : body, 200, PRIVATE);
   }
 
+  // The score's goalpost (scoreReport.ts): counts the device worked out, at
+  // most a row per medium, sent about once a day. Behind the write limiter
+  // and the account's share of the day's writes like any other write.
+  if (b === "score-report" && method === "PUT" && !d) {
+    if (!(await allow(c.env.RL_WRITE, `write:${userId}`))) return error(429, "rate-limited");
+    const reports = parseScoreReports(await readJson(c.request, AUTH_BODY_MAX));
+    if (!(await spend(db, `user_writes:${userId}`, capFrom(c.env.DAILY_USER_WRITE_CAP_PER_USER, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER), reports.length))) {
+      return error(503, "budget-exhausted", "Fandex cannot save more changes until tomorrow (UTC).");
+    }
+    await saveScoreReports(db, userId, reports);
+    return json({ ok: true, saved: reports.length }, 200, PRIVATE);
+  }
+
   if (b === "state") {
     if (method === "GET") {
       // A page is up to 4,000 rows read. A full pull is a handful of pages.
@@ -711,7 +729,8 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
       if (d === "items") return json(await itemStateJson(db, userId, c.url.searchParams), 200, PRIVATE);
       if (d === "episodes") return json(await episodeStateJson(db, userId, c.url.searchParams), 200, PRIVATE);
       if (d === "hidden") return json(await hiddenJson(db, userId), 200, PRIVATE);
-      if (d === "counts") return json(await stateCounts(db, userId), 200, PRIVATE);
+      if (d === "follows") return json(await followsJson(db, userId), 200, PRIVATE);
+      if (d === "counts") return json({ ...(await stateCounts(db, userId)), ...(await followsCount(db, userId)) }, 200, PRIVATE);
     }
     if (method === "PUT" && !d) {
       if (!(await allow(c.env.RL_WRITE, `write:${userId}`))) return error(429, "rate-limited");

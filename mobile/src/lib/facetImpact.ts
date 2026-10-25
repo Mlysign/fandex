@@ -7,7 +7,7 @@
 // one row per role you have rated them in.
 
 import { tagKey } from '@/lib/facets';
-import { facetImpact, facetId, MIN_RATED_FOR_FANDEX_SCORE, type Profile, type ScoreFacet, type Taxonomy } from './fandexScore';
+import { facetImpact, facetId, facetPull, MIN_RATED_FOR_FANDEX_SCORE, type FacetPull, type Profile, type ScoreFacet, type Taxonomy } from './fandexScore';
 
 /**
  * What a facet page knows of a title nobody holds, as the facets a Fandex Score
@@ -45,13 +45,17 @@ export const spokenKey = (key: string) => key.toLowerCase().replace(/-+/g, ' ').
 export type ImpactDirection = 'up' | 'down' | 'neutral';
 
 export interface PageImpact {
+  /** The profile's id for this entry (`kind|role|key`): what a follow is keyed by. */
+  facetId: string;
   /** Absent for a tag. */
   role?: string;
-  /** Points this adds to, or takes from, a title that carries it. */
+  /** Taste: points this adds to, or takes from, a title that carries it. */
   points: number;
   direction: ImpactDirection;
   /** How many of your rated titles carry it. */
   ratedCount: number;
+  /** Pull: how much of the catalog's titles carrying it you have been through, or null when the device has not counted its catalog. */
+  pull: FacetPull | null;
 }
 
 /** Under half a point either way reads as "about the same": the site's threshold. */
@@ -78,7 +82,8 @@ export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax
     if (m.kind !== kind || spokenKey(m.key) !== target) continue;
     const points = facetImpact(facetId(m), profile, tax);
     if (points == null) continue;
-    rows.push({ role: kind === 'tag' || kind === 'ip' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n });
+    const pull = facetPull({ kind: m.kind as ScoreFacet['kind'], role: m.role, key: m.key, label: m.label, category: m.category }, profile, tax);
+    rows.push({ facetId: facetId(m), role: kind === 'tag' || kind === 'ip' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n, pull });
   }
   // Two stored spellings of one tag can speak the same: the one you rated more is the tag.
   if (kind === 'tag' || kind === 'ip') return rows.sort((a, b) => b.ratedCount - a.ratedCount).slice(0, 1);

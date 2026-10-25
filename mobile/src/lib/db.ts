@@ -167,6 +167,21 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
     `);
     await stamp(db, (version = 7));
   }
+
+  if (version < 8) {
+    // What you follow or avoid, for the score's pull axis (lib/fandexScore.ts):
+    // a tag, person, studio or franchise by the score's facet id. Pulled from
+    // the Worker with your other rows (lib/stateSync.ts).
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS facet_follow (
+        facet_id TEXT PRIMARY KEY NOT NULL,
+        mode TEXT NOT NULL,
+        label TEXT NOT NULL,
+        followed_at INTEGER NOT NULL
+      );
+    `);
+    await stamp(db, (version = 8));
+  }
 }
 
 /**

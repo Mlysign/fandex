@@ -1,13 +1,12 @@
-// The poster card's score explainer. A port of the site's src/components/Tooltip.tsx
-// (TooltipBody and its hover popover): the title, your Fandex Score with its
-// band, your rating, and the three tags that lift it most and the two that pull
-// it down. Without a score, the date and the type, and why there is no score.
+// The poster card's explainer: the title, your match label with its sentence,
+// your rating, and the strongest row or two of each axis. Without a match, the
+// date and the type, and why there is none.
 //
 // On a mouse it opens after the pointer rests on a card (cards.tsx); on a
-// phone a long press opens it in a sheet. The reasons are worked out on the
+// phone a long press opens it in a sheet. The rows are worked out on the
 // device from the catalog copy, as the item page's panel does.
 //
-// ⚠️ The score shown is the one the CARD shows, passed in. The site once gave
+// ⚠️ The label shown is the one the CARD shows, passed in. The site once gave
 // its explainer the payload's score instead, and a card reading 78 opened an
 // explainer that said there was none (posterCardTooltipScore.test.ts there).
 
@@ -15,60 +14,55 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { createPortal } from '~/components/portal';
+import { AxisBars, labelColor } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
-import type { CardItem, CardState } from '~/lib/cards';
+import type { CardItem, CardMatch, CardState } from '~/lib/cards';
 import { shortDate } from '~/lib/dates';
-import type { ScoreReason } from '~/lib/fandexScore';
-import { scoreBand, signed } from '~/lib/scoreReasons';
+import type { FandexScore } from '~/lib/fandexScore';
+import { axisRows, LABEL_TEXT, labelSentence, pullSentence, signed, tasteSentence } from '~/lib/scoreReasons';
 import { parseFacets, useScores } from '~/lib/ScoreProvider';
 import { color, font, radius, type, TYPE_LABEL } from '~/theme';
-import { fandexScoreColor } from '~/components/kit';
 
-const BAND_WORD = { high: 'strong match', baseline: 'about your average', low: 'weak match' } as const;
-
-/** The reasons for one title, worked out once it is shown. */
-function useReasons(id: string | null, enabled: boolean): ScoreReason[] | null {
+/** The whole match for one title, worked out once it is shown. */
+function useMatch(item: CardItem, enabled: boolean): FandexScore | null {
   const db = useSQLiteContext();
   const { score } = useScores();
-  const [reasons, setReasons] = useState<ScoreReason[] | null>(null);
-  // Whose reasons are held, so another title's never show while this one's load.
-  const [reasonsFor, setReasonsFor] = useState<string | null>(null);
+  const [match, setMatch] = useState<FandexScore | null>(null);
+  // Whose match is held, so another title's never shows while this one's load.
+  const [matchFor, setMatchFor] = useState<string | null>(null);
+  const id = item.id;
   useEffect(() => {
     if (!enabled || !id) return;
     let live = true;
     void db.getFirstAsync<{ facets: string }>('SELECT facets FROM catalog WHERE id = ?', [id]).then((row) => {
       if (!live || !row) return;
-      setReasons(score(id, parseFacets(row.facets))?.reasons ?? []);
-      setReasonsFor(id);
+      setMatch(score(id, parseFacets(row.facets), item.type));
+      setMatchFor(id);
     }, (e: unknown) => {
       console.warn('score_reasons_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-      if (live) { setReasons([]); setReasonsFor(id); }
+      if (live) { setMatch(null); setMatchFor(id); }
     });
     return () => { live = false; };
-  }, [db, id, enabled, score]);
-  return reasonsFor === id ? reasons : null;
+  }, [db, id, item.type, enabled, score]);
+  return matchFor === id ? match : null;
 }
 
-export function ScoreExplainerBody({ item, score, center, state }: { item: CardItem; score: number | null; center: number | null; state: CardState }) {
+export function ScoreExplainerBody({ item, match: row, state }: { item: CardItem; match: CardMatch | null; state: CardState }) {
   const auth = useAuth();
-  const scored = score != null;
-  const reasons = useReasons(item.id, scored);
-  const tags = (reasons ?? []).filter((r) => r.kind === 'tag' && !r.capped);
-  const top = [
-    ...tags.filter((r) => r.contribution >= 0).sort((a, b) => b.contribution - a.contribution).slice(0, 3),
-    ...tags.filter((r) => r.contribution < 0).sort((a, b) => a.contribution - b.contribution).slice(0, 2),
-  ];
+  const match = useMatch(item, row != null);
   const rated = state.rating != null && state.rating > 0;
+  const top = match ? [...axisRows(match.reasons, 'pull').slice(0, 2), ...axisRows(match.reasons, 'taste').slice(0, 2)] : [];
 
   return (
     <View style={styles.body}>
       <Text style={type.serifSm}>{item.title}</Text>
-      {scored ? (
+      {row ? (
         <>
-          <View style={styles.scoreLine}>
-            <Text style={[styles.score, { color: fandexScoreColor(score, center) }]}>{Math.round(score)}</Text>
-            <Text style={type.caption}>{BAND_WORD[scoreBand(score, center)]}</Text>
+          <View style={styles.labelLine}>
+            <Text style={[styles.label, { color: labelColor(row.label) }]}>{LABEL_TEXT[row.label]}</Text>
+            <AxisBars taste={{ points: 0, band: row.taste }} pull={row.pull ? { points: 0, band: row.pull } : null} />
           </View>
+          {match ? <Text style={type.caption}>{labelSentence(match)}</Text> : null}
           {rated || state.wishlisted ? (
             <Text style={type.caption}>
               {rated ? `★ ${state.rating!.toFixed(1)}/10` : ''}{rated && state.wishlisted ? ' · ' : ''}{state.wishlisted ? 'On your wishlist' : ''}
@@ -77,8 +71,11 @@ export function ScoreExplainerBody({ item, score, center, state }: { item: CardI
           {top.length ? (
             <View style={styles.reasons}>
               {top.map((r) => (
-                <View key={`${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
-                  <Text style={[type.caption, { flex: 1 }]} numberOfLines={1}>{r.label}</Text>
+                <View key={`${r.axis}|${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={type.caption} numberOfLines={1}>{r.label}</Text>
+                    <Text style={styles.tiny} numberOfLines={1}>{r.axis === 'pull' ? pullSentence(r, item.type) : tasteSentence(r)}</Text>
+                  </View>
                   <Text style={[styles.impact, { color: r.contribution >= 0 ? color.success : color.danger }]}>{signed(r.contribution)}</Text>
                 </View>
               ))}
@@ -104,7 +101,7 @@ const WIDTH = 260;
 const MAX_H = 340;
 
 /** The desktop popover: beside the card, on the right unless the window ends first. Never takes the pointer. */
-export function ScoreExplainerPopover(props: { item: CardItem; score: number | null; center: number | null; state: CardState; anchor: { left: number; right: number; top: number } }) {
+export function ScoreExplainerPopover(props: { item: CardItem; match: CardMatch | null; state: CardState; anchor: { left: number; right: number; top: number } }) {
   if (Platform.OS !== 'web') return null;
   const { anchor } = props;
   let left = anchor.right + 12;
@@ -119,10 +116,11 @@ export function ScoreExplainerPopover(props: { item: CardItem; score: number | n
 
 const styles = StyleSheet.create({
   body: { padding: 12, gap: 8 },
-  scoreLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  score: { fontFamily: font.serif, fontSize: 24, lineHeight: 28 },
-  reasons: { gap: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: color.border },
+  labelLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: { fontFamily: font.serif, fontSize: 20, lineHeight: 24 },
+  reasons: { gap: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: color.border },
   reason: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tiny: { fontFamily: font.sans, fontSize: 11, lineHeight: 14, color: color.textMuted },
   impact: { fontFamily: font.sansBold, fontSize: 12 },
   popover: {
     position: 'fixed' as never, zIndex: 9999, width: WIDTH, maxHeight: MAX_H, overflow: 'hidden',

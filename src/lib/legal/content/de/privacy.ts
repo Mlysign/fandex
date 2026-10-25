@@ -10,7 +10,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 // Code. Entfällt die Regel, ist der Satz falsch.
 const privacy: LegalDocument = {
   title: "Datenschutzerklärung",
-  updated: "2026-10-23",
+  updated: "2026-10-25",
   intro: [
     "Fandex ist ein Hobbyprojekt einer Einzelperson, kein Unternehmen. Diese Erklärung ist bewusst einfach und exakt formuliert: Sie beschreibt genau, was die App speichert und warum, und ist kein Vorlagentext. Sie stellt keine Rechtsberatung dar und befindet sich in Überarbeitung, bis eine fachliche Rechtsberatung vorliegt (siehe Hinweis zur Anschrift des Verantwortlichen unten).",
     "Sie gilt für die Website fandex.org und für die Fandex-App für Android. Beide sind dieselbe App und funktionieren gleich.",
@@ -70,6 +70,7 @@ const privacy: LegalDocument = {
         "Da hierfür nichts auf Ihrem Endgerät gespeichert oder ausgelesen wird, ist kein Consent-Banner nach § 25 TDDDG erforderlich; und da keine personenbezogenen Daten aufbewahrt werden, gibt es hier auch keinen Anknüpfungspunkt für die DSGVO. Die Übermittlung einer Zählung ist ein gewöhnlicher Web-Request und macht wie jeder Request an jede Website kurzzeitig Ihre IP-Adresse gegenüber dem Server sichtbar; sie wird ausschließlich für die Rate-Begrenzung verwendet, genau wie in jedem anderen Teil von Fandex, und niemals zusammen mit den Zählungen gespeichert.",
         "Gezählt werden nur Seiten, die in einem Webbrowser geöffnet werden. Die Android-App übermittelt keine Zählungen.",
         "Für angemeldete Konten speichert Fandex den Tag, an dem das Konto zuletzt gesehen wurde, höchstens einmal pro Tag. So lässt sich erkennen, wie viele Konten noch genutzt werden. Dieses Datum liegt an Ihrem Konto und wird mit dessen Löschung entfernt.",
+        "Für angemeldete Konten übermittelt die App außerdem etwa einmal täglich einige wenige Zählwerte dazu, wie gut der Fandex-Match zu Ihren eigenen Bewertungen passt: je Art von Titel (Filme, Serien, Spiele, Bücher), wie oft der Match einen, zwei oder drei Punkte über oder unter Ihrer Bewertung lag, und wie viele Titel mit dem jeweiligen Match-Label Sie mit 8 oder besser bewertet haben. Es sind ausschließlich Zählwerte. Sie nennen keinen Titel und enthalten keine Bewertung, sie liegen an Ihrem Konto, sind Teil Ihres Datenexports und werden mit der Löschung Ihres Kontos entfernt. Der Betreiber summiert sie über alle Konten, um zu prüfen, dass der Match noch bedeutet, was er aussagt; etwas anderes geschieht damit nicht.",
       ],
     },
     {

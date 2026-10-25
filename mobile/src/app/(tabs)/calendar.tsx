@@ -427,7 +427,7 @@ export default function CalendarScreen() {
                             {railItems.map((item) => (
                               <PosterCard
                                 key={item.key} item={item} style={{ width: 150 }}
-                                state={kit.stateOf(item.id)} score={(item.id ? kit.scores.get(item.id) : null) ?? null} center={kit.center} actions={kit.actions}
+                                state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? null} actions={kit.actions}
                               />
                             ))}
                           </Rail>

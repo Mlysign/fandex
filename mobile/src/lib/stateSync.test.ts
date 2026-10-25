@@ -10,6 +10,7 @@ const worker = vi.hoisted(() => ({
   stateItems: vi.fn(),
   stateEpisodes: vi.fn(),
   stateHidden: vi.fn(),
+  stateFollows: vi.fn(),
 }));
 vi.mock('~/lib/api', () => ({ api: worker }));
 
@@ -17,7 +18,7 @@ const { syncState, clearState, applyLocalWrite } = await import('./stateSync');
 
 function fakeDb() {
   let tables: Record<string, Map<string, unknown[]>> = {
-    item_state: new Map(), episode_state: new Map(), hidden_item: new Map(), meta: new Map(),
+    item_state: new Map(), episode_state: new Map(), hidden_item: new Map(), facet_follow: new Map(), meta: new Map(),
   };
   let failWrites = false;
 
@@ -30,6 +31,7 @@ function fakeDb() {
     const table = tableIn(sql);
     if (sql.startsWith('DELETE FROM meta WHERE')) tables.meta.delete(String(params[0]));
     else if (sql.startsWith('DELETE FROM hidden_item WHERE')) tables.hidden_item.delete(String(params[0]));
+    else if (sql.startsWith('DELETE FROM facet_follow WHERE')) tables.facet_follow.delete(String(params[0]));
     else if (sql.startsWith('DELETE')) tables[table].clear();
     else if (sql.startsWith('INSERT OR IGNORE') && tables[table].has(keyFor(table, params))) return;
     else tables[table].set(keyFor(table, params), params);
@@ -67,7 +69,9 @@ const episode = (id: string, s: number, e: number) => ({ mediaItemId: id, season
 function serve(items: ReturnType<typeof item>[], episodes: ReturnType<typeof episode>[], hidden: string[], pageSize = 2, stamp = 1) {
   worker.stateCounts.mockResolvedValue({
     items: items.length, itemsUpdatedAt: stamp, episodes: episodes.length, episodesUpdatedAt: stamp, hidden: hidden.length, hiddenUpdatedAt: stamp,
+    follows: 0, followsUpdatedAt: 0,
   });
+  worker.stateFollows.mockResolvedValue({ rows: [] });
   const page = <T,>(rows: T[], after: unknown, key: (r: T) => string) => {
     const from = after ? rows.findIndex((r) => key(r) === key(after as T)) + 1 : 0;
     const slice = rows.slice(from, from + pageSize);
@@ -91,7 +95,7 @@ describe('a pull', () => {
     );
     const f = fakeDb();
     const res = await syncState(f.db);
-    expect(res).toEqual({ changed: true, items: 5, episodes: 3, hidden: 1 });
+    expect(res).toEqual({ changed: true, items: 5, episodes: 3, hidden: 1, follows: 0 });
     expect(f.count('item_state')).toBe(5);
     expect(f.count('episode_state')).toBe(3);
     expect(f.keys('hidden_item')).toEqual(['h1']);

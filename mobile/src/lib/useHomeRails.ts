@@ -11,11 +11,11 @@ import { catalogCandidates } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
 import { jsHeapMB } from '~/lib/jsHeap';
 import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type HomeFeed } from '~/lib/homeFeed';
-import { useScores } from '~/lib/ScoreProvider';
+import { useScores, type RowScore } from '~/lib/ScoreProvider';
 import { useTypeFilter } from '~/lib/typeFilter';
 
 /** The catalog copy's titles not in your library, each with the score its full facets earn. */
-interface Pool { cards: CardItem[]; scores: Map<string, number> }
+interface Pool { cards: CardItem[]; scores: Map<string, RowScore> }
 
 export function useHomeRails() {
   const auth = useAuth();
@@ -89,7 +89,11 @@ export function useHomeRails() {
     return recommend(
       tiers,
       // A catalog row's score from everything it carries; a calendar card carries its genres and nothing finer.
-      (c) => (c.id && pool.scores.has(c.id) ? (pool.scores.get(c.id) as number) : score(c.id ?? c.key, genreFacets(c.genres ?? []))?.score ?? null),
+      (c) => {
+        if (c.id && pool.scores.has(c.id)) return pool.scores.get(c.id) as RowScore;
+        const fx = score(c.id ?? c.key, genreFacets(c.genres ?? []), c.type);
+        return fx ? { score: fx.score, label: fx.label, taste: fx.taste.band, pull: fx.pull?.band ?? null } : null;
+      },
       // Not what you already watched or played, not what you asked not to be shown, and no DLC or pack.
       (c) => !!c.addon || (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
       center,

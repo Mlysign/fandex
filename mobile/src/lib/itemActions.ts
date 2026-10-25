@@ -214,3 +214,17 @@ export async function setHidden(db: SQLiteDatabase, mediaItemId: string, hidden:
   const saved = await api.writeState(write);
   await applyLocalWrite(db, write, saved?.skipped);
 }
+
+/**
+ * Follow or avoid a tag, person, studio or franchise, or take that back
+ * (`mode` null). A follow moves the score's pull axis for that facet to the
+ * most anyone can seek out, an avoid to the least; neither touches how you
+ * rate it (lib/fandexScore.ts). A score preference and nothing else: no
+ * provider hears of it, and it never reaches a sync pull.
+ */
+export async function setFollow(db: SQLiteDatabase, facets: { facetId: string; label: string }[], mode: 'follow' | 'avoid' | null): Promise<void> {
+  if (!facets.length) return;
+  const write: StateWrite = { follows: mode ? { set: facets.map((f) => ({ facetId: f.facetId, mode, label: f.label })) } : { remove: facets.map((f) => f.facetId) } };
+  const saved = await api.writeState(write);
+  await applyLocalWrite(db, write, saved?.skipped);
+}

@@ -1,12 +1,15 @@
-// What the item page's Fandex Score panel says, apart from how it is drawn
-// (components/FandexScorePanel.tsx). The rules are the site's: FandexScoreBadge's
-// bands and FandexScoreSection's one-line reason and row order.
+// What the score says, apart from how it is drawn: the label's words, the one
+// sentence that names both axes, the odds line, and where a row leads.
+// Components (FandexScorePanel, cards, ScoreExplainer, FacetScreen) read from
+// here so the wording lives in one place; the labels are placeholders Nils will
+// rename (2026-10-25).
 
 import { companyKey, ipKey, personKey, tagKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
-import type { ScoreReason } from '~/lib/fandexScore';
+import { DEFAULT_LABEL_ODDS } from '@/lib/scoringDefaults';
+import type { AxisBand, FandexScore, ScoreLabel, ScoreReason } from '~/lib/fandexScore';
 
-/** How far from your own average a score has to be to read as strong or weak. The site's BAND_MARGIN. */
+/** How far from your own average the combined score has to be to read as strong or weak: what the Recommended rail filters by. */
 export const BAND_MARGIN = 10;
 
 export type ScoreBand = 'high' | 'baseline' | 'low';
@@ -17,35 +20,90 @@ export function scoreBand(score: number, center: number | null): ScoreBand {
   return score >= c + BAND_MARGIN ? 'high' : score <= c - BAND_MARGIN ? 'low' : 'baseline';
 }
 
-const STRENGTH: Record<ScoreBand, string> = { high: 'Strong match', baseline: 'Typical match', low: 'Weak match' };
+/** The label as a person reads it. One place, so renaming is one edit. */
+export const LABEL_TEXT: Record<ScoreLabel, string> = {
+  'sure-thing': 'Sure thing',
+  'hidden-gem': 'Hidden gem',
+  bycatch: 'Bycatch',
+  'not-for-you': 'Not for you',
+  usual: 'Your usual',
+};
+
+/** Which of the theme's score colours a label wears. */
+export type LabelTone = 'high' | 'gold' | 'low' | 'mute' | 'base';
+export const LABEL_TONE: Record<ScoreLabel, LabelTone> = {
+  'sure-thing': 'high',
+  'hidden-gem': 'gold',
+  bycatch: 'low',
+  'not-for-you': 'mute',
+  usual: 'base',
+};
+
+/** An axis's band in a word, as the bar ends. */
+export function axisWord(axis: 'taste' | 'pull', band: AxisBand): string {
+  if (axis === 'taste') return band === 'high' ? 'above usual' : band === 'low' ? 'below usual' : 'usual';
+  return band === 'high' ? 'high' : band === 'low' ? 'low' : 'usual';
+}
+
+/** The one sentence under the label: both axes, in the order pull then taste. */
+export function labelSentence(fx: Pick<FandexScore, 'taste' | 'pull'>): string {
+  const t = fx.taste.band;
+  const p = fx.pull?.band ?? 'usual';
+  if (p === 'high' && t === 'high') return 'You seek this out, and you rate it well.';
+  if (p === 'low' && t === 'high') return 'Not your usual pick, but you rate this kind of thing well.';
+  if (p === 'high' && t === 'low') return 'You seek this out, but you tend not to love it.';
+  if (p === 'low' && t === 'low') return 'Not your kind of thing, and you tend not to love it.';
+  if (t === 'high') return 'You rate this kind of thing well.';
+  if (t === 'low') return 'You tend not to love this kind of thing.';
+  if (p === 'high') return 'You seek this out.';
+  if (p === 'low') return 'Not your usual pick.';
+  return 'About your usual, on both counts.';
+}
+
+const TYPE_PLURAL: Record<string, string> = { movie: 'Films', show: 'Shows', game: 'Games', book: 'Books', boardgame: 'Board games' };
 
 /**
- * The counted reason that agrees with the band: the biggest lift on a strong
- * match, the biggest drag on a weak one, the biggest either way on a typical
- * one. "Weak match. You rate X highly." named the top row whatever the band said.
+ * The odds line: for titles with this label, how much more often than usual
+ * people gave an 8 or more. `odds` is the Worker's summed ladder when it has
+ * one, else the shipped defaults. Null when neither knows this label.
  */
-export function leadReason(band: ScoreBand, reasons: ScoreReason[]): ScoreReason | undefined {
-  const counted = reasons.filter((r) => !r.capped && r.contribution !== 0);
-  const pick = (better: (a: ScoreReason, b: ScoreReason) => boolean) =>
-    counted.reduce<ScoreReason | undefined>((best, r) => (!best || better(r, best) ? r : best), undefined);
-  if (band === 'high') return pick((a, b) => a.contribution > b.contribution);
-  if (band === 'low') return pick((a, b) => a.contribution < b.contribution);
-  return pick((a, b) => Math.abs(a.contribution) > Math.abs(b.contribution));
+export function oddsLine(label: ScoreLabel, type: string | undefined, odds: Record<string, Partial<Record<string, number>>> = DEFAULT_LABEL_ODDS): string | null {
+  const ratio = (type ? odds[type]?.[label] : undefined) ?? odds.all?.[label];
+  if (ratio == null) return null;
+  const what = type && TYPE_PLURAL[type] ? `${TYPE_PLURAL[type]} like this` : 'Titles like this';
+  const howOften = ratio >= 1.15 ? `about ${(Math.round(ratio * 10) / 10).toFixed(1).replace(/\.0$/, '')}× as often as usual`
+    : ratio > 0.85 ? 'about as often as usual'
+    : ratio > 0.6 ? 'less often than usual'
+    : 'about half as often as usual';
+  return `${what}: an 8 or more ${howOften}.`;
 }
 
-/** The band in words, and the counted reason that agrees with it when there is one. */
-export function scoreReasonLine(score: number, center: number | null, reasons: ScoreReason[]): string {
-  const band = scoreBand(score, center);
-  const strength = STRENGTH[band];
-  const top = leadReason(band, reasons);
-  // A strong match whose every counted row pulls down (or the reverse) has no honest reason to name.
-  if (!top || (band === 'high' && top.contribution < 0) || (band === 'low' && top.contribution > 0)) return `${strength} for your taste.`;
-  return `${strength}. You rate ${top.label} ${top.contribution >= 0 ? 'highly' : 'lower than most'}.`;
-}
-
-/** Counted rows first, by what they add; rows that were left out sink to the end. */
+/** Counted rows first, by what they add; rows that were left out sink to the end. Within that, the axis order the sheet shows. */
 export function sortReasons(reasons: ScoreReason[]): ScoreReason[] {
   return [...reasons].sort((a, b) => (!!a.capped === !!b.capped ? b.contribution - a.contribution : a.capped ? 1 : -1));
+}
+
+/** The counted rows of one axis, biggest lift first. */
+export function axisRows(reasons: ScoreReason[], axis: 'taste' | 'pull'): ScoreReason[] {
+  return reasons.filter((r) => r.axis === axis && !r.capped).sort((a, b) => b.contribution - a.contribution);
+}
+
+/** The rows that matched but did not count, biggest would-be value first. */
+export function cappedRows(reasons: ScoreReason[]): ScoreReason[] {
+  return reasons.filter((r) => r.capped).sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+}
+
+/** A pull row in one sentence: "you've seen 46 of 64", a wishlisted title counting half. */
+export function pullSentence(r: ScoreReason, type?: string): string {
+  const verb = type === 'game' ? 'played' : type === 'book' ? 'read' : 'seen';
+  const seen = r.consumed ?? 0;
+  const shown = Number.isInteger(seen) ? String(seen) : seen.toFixed(1);
+  return `you've ${verb} ${shown} of ${r.catalog ?? 0}`;
+}
+
+/** A taste row in one sentence: "you rate it 7.6 over 41 titles". */
+export function tasteSentence(r: ScoreReason): string {
+  return `you rate ${r.kind === 'person' || r.kind === 'company' ? 'them' : 'it'} ${r.BA.toFixed(1)} over ${r.n} title${r.n === 1 ? '' : 's'}`;
 }
 
 /** Where a reason's chip leads, or null for one with no page of its own. A franchise has one since 2026-10-18. */

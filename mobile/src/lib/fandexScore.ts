@@ -1,21 +1,29 @@
 // The Fandex Score, computed on the device.
 //
-// A port of the site's maths (src/lib/discovery.ts → buildProfile and
-// computeFandexScore, and src/lib/libraryAnalysis.ts → analyzeLibraryFacets),
-// with the database taken out. Everything here is a pure function of three
-// inputs the device already holds: the titles you rated with their facets, the
-// taxonomy the Worker serves, and the facets of the title being scored. The
-// spec is docs/fandex-score.md.
+// Since 2026-10-25 the score answers one question, "how much more likely than
+// usual are you to love this?", from two axes (docs/fandex-score.md §3):
 //
-// It gave the old site's exact numbers until 2026-10-23 (4,559 of 4,559, by
-// `scripts/probe-app-score.mjs`, at the tag `old-site-final`), and departs from
-// them on purpose since: a rated title is scored without its own rating, and
-// `softRange` keeps the result in 0 to 100 (docs/fandex-score.md §1). Keep it
-// erasable TypeScript importing through `@/` only: scripts load it under plain
-// Node (`scripts/alias-hooks.mjs`) to backtest the score against real ratings.
+//   taste  "do you rate this kind of thing well?"   your ratings of titles
+//          carrying each facet, against your own average (the 2026-07 maths)
+//   pull   "do you seek this kind of thing out?"    how much of the catalog's
+//          titles carrying each facet you have consumed, against your usual
+//          share of the catalog
+//
+// Both are sums of named rows, so the breakdown IS the computation. The label
+// ("sure thing", "hidden gem", "bycatch", "not for you", "your usual") is where
+// the two axes land against your usual; the number underneath ranks rails and
+// feeds the admin goalpost chart, and is not shown as a number any more.
+//
+// Everything here is a pure function of what the device already holds: the
+// titles you rated and consumed, with the catalog copy's facets; the taxonomy
+// the Worker serves; the facets of the title being scored. Keep it erasable
+// TypeScript importing through `@/` only: scripts/score-backtest.mjs loads it
+// under plain Node to measure a change against real ratings before it ships.
 //
 // What the score must never read is unchanged (spec §4): community ratings,
-// popularity, release dates. Nothing here takes them as input.
+// popularity, release dates, episodes watched or playtime. A title you rated
+// is scored without its own rating, and without its own place in the pull
+// counts (leave-one-out, exact, since only this title's facets enter).
 
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from '@/lib/scoringDefaults';
 
@@ -55,12 +63,14 @@ export interface Taxonomy {
 
 export function prepareTaxonomy(json: TaxonomyJson): Taxonomy {
   const stored = json.scoring?.config ?? {};
-  // The site's merge: defaults, then what is stored, with roleWeights spread the
-  // same way so a role added after the row was written still has a weight.
+  // The site's merge: defaults, then what is stored, with the two per-key maps
+  // spread the same way so a role or medium added after the row was written
+  // still has a weight.
   const config: ScoringConfigValues = {
     ...DEFAULT_SCORING_CONFIG,
     ...stored,
     roleWeights: { ...DEFAULT_SCORING_CONFIG.roleWeights, ...(stored.roleWeights ?? {}) },
+    pullWeight: { ...DEFAULT_SCORING_CONFIG.pullWeight, ...(stored.pullWeight ?? {}) },
   };
   const ipOverrides: Taxonomy['ipOverrides'] = new Map();
   for (const o of json.itemIpOverrides) {
@@ -138,6 +148,21 @@ export function resolveFacets(raw: ScoreFacet[], itemId: string | null, tax: Tax
   return applyIpFacets(applyTagAliases(raw, tax), itemId, tax);
 }
 
+/**
+ * The weight a facet's class carries, or 0 for one the score ignores (a tag in
+ * an ignored category, or one whose category weighs nothing). The taxonomy's
+ * category wins over the facet's own; a role reads `roleWeights`.
+ */
+export function classWeightOf(f: ScoreFacet, tax: Taxonomy): { weight: number; category?: string } {
+  if (f.kind === 'tag') {
+    const category = tax.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other';
+    const cat = tax.categories.get(category);
+    if (cat?.ignored || cat?.weight === 0) return { weight: 0, category };
+    return { weight: cat?.weight ?? 1, category };
+  }
+  return { weight: tax.config.roleWeights[f.role ?? 'tag'] ?? 1, category: f.category };
+}
+
 // ── The taste profile ────────────────────────────────────────────────────────
 
 export interface RatedTitle {
@@ -146,7 +171,37 @@ export interface RatedTitle {
   rating: number;
   /** The catalog's raw facets for the title. */
   facets: ScoreFacet[];
+  /**
+   * The medium, for the rating offset (§3.1): you rate games 7.3 and films 6.4,
+   * and without the offset that gap leaks into every tag games carry. Absent
+   * means the rating is taken as it is.
+   */
+  type?: string;
 }
+
+/** A title you consumed: in your library, or on your wishlist at a lower weight. */
+export interface ConsumedTitle {
+  id: string;
+  facets: ScoreFacet[];
+  /** 1 for a title in your library, `WISHLIST_WEIGHT` for one you only wishlisted. */
+  weight: number;
+}
+
+/** What the catalog copy holds, as the pull's denominator (§3.7). */
+export interface CatalogCounts {
+  /** Titles in the catalog copy, every medium. */
+  total: number;
+  /** Facet id (after the taxonomy) → titles carrying it. */
+  byFacet: Map<string, number>;
+}
+
+/** What a follow does to a facet's pull: `follow` sets it to the maximum, `avoid` to the minimum. */
+export type FollowMode = 'follow' | 'avoid';
+
+/** A wishlisted title is half the evidence a consumed one is: you chose it, you have not been through it. */
+export const WISHLIST_WEIGHT = 0.5;
+/** A facet on fewer catalog titles than this says nothing about pull. */
+export const PULL_MIN_CATALOG = 3;
 
 interface FacetMeta {
   kind: string;
@@ -171,22 +226,71 @@ export interface Profile {
   /** Your mean rating, 0-10. */
   baseline: number;
   ratedItemCount: number;
-  /** Your rating per rated title id, so scoring one of them can leave it out. */
+  /** Your rating per rated title id (after the medium offset), so scoring one of them can leave it out. */
   ratings: Map<string, number>;
-  /** The sum of every rating, for the baseline without one title. */
+  /** The sum of every (offset) rating, for the baseline without one title. */
   ratingSum: number;
+  /** Your mean rating per medium, before the offset. Empty when the titles came without a medium. */
+  typeMeans: Map<string, number>;
+  /** Pull: facet id → the weight of the titles you consumed that carry it. */
+  consumed: Map<string, number>;
+  /** The weight of every title you consumed, so `consumedTotal / catalog.total` is your usual share. */
+  consumedTotal: number;
+  /** Consumed title id → its weight, so scoring one of them can leave it out. */
+  consumedIds: Map<string, number>;
+  /** The catalog's counts, or null when the device has not counted it: then there is no pull axis. */
+  catalog: CatalogCounts | null;
+  follows: Map<string, FollowMode>;
 }
 
 /** Below this many rated titles there is no score at all, rather than one built on two samples. */
 export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
-export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
+/** The catalog's facet counts, from its rows, with the taxonomy applied so a bundled tag is counted once. */
+export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[] }[], tax: Taxonomy): CatalogCounts {
+  const byFacet = new Map<string, number>();
+  for (const row of rows) {
+    const seen = new Set<string>();
+    for (const f of resolveFacets(row.facets, row.id, tax)) {
+      const id = facetId(f);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      byFacet.set(id, (byFacet.get(id) ?? 0) + 1);
+    }
+  }
+  return { total: rows.length, byFacet };
+}
+
+export function buildProfile(
+  rated: RatedTitle[],
+  tax: Taxonomy,
+  extras: { consumed?: ConsumedTitle[]; catalog?: CatalogCounts; follows?: Map<string, FollowMode> } = {},
+): Profile {
+  // The medium offset: each rating is moved by the gap between its medium's
+  // average and your overall average, so a facet's deviation is about the
+  // facet and not about the medium. The mean of the moved ratings is still
+  // your overall average, so the centre does not move.
+  const typeSums = new Map<string, { sum: number; n: number }>();
+  let rawSum = 0;
+  for (const item of rated) {
+    rawSum += item.rating;
+    if (!item.type) continue;
+    const t = typeSums.get(item.type) ?? { sum: 0, n: 0 };
+    t.sum += item.rating; t.n++;
+    typeSums.set(item.type, t);
+  }
+  const overall = rated.length ? rawSum / rated.length : 0;
+  const typeMeans = new Map<string, number>();
+  for (const [type, t] of typeSums) typeMeans.set(type, t.sum / t.n);
+  const adjusted = (item: RatedTitle) => (item.type && typeMeans.has(item.type) ? item.rating - (typeMeans.get(item.type) as number) + overall : item.rating);
+
   const stats = new Map<string, { kind: string; role?: string; key: string; label: string; category?: string; count: number; weightedCount: number; weightedSum: number }>();
   const ratings = new Map<string, number>();
   let ratingSum = 0;
   for (const item of rated) {
-    ratingSum += item.rating;
-    ratings.set(item.id, item.rating);
+    const rating = adjusted(item);
+    ratingSum += rating;
+    ratings.set(item.id, rating);
     for (const f of resolveFacets(item.facets, item.id, tax)) {
       const id = facetId(f);
       const prominence = f.prominence ?? 1;
@@ -194,10 +298,10 @@ export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
       if (st) {
         st.count++;
         st.weightedCount += prominence;
-        st.weightedSum += item.rating * prominence;
+        st.weightedSum += rating * prominence;
       } else {
         const category = f.kind === 'tag' ? (tax.tagCategoryOverrides.get(f.key) ?? f.category) : f.category;
-        stats.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, count: 1, weightedCount: prominence, weightedSum: item.rating * prominence });
+        stats.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, count: 1, weightedCount: prominence, weightedSum: rating * prominence });
       }
     }
   }
@@ -207,22 +311,35 @@ export function buildProfile(rated: RatedTitle[], tax: Taxonomy): Profile {
   const w = new Map<string, number>();
   const meta = new Map<string, FacetMeta>();
   for (const [id, f] of stats) {
-    let classWeight: number;
-    let category = f.category;
-    if (f.kind === 'tag') {
-      category = tax.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other';
-      const cat = tax.categories.get(category);
-      // An ignored category (platform and noise tags) is left out entirely.
-      if (cat?.ignored || cat?.weight === 0) continue;
-      classWeight = cat?.weight ?? 1;
-    } else {
-      classWeight = tax.config.roleWeights[f.role ?? 'tag'] ?? 1;
-    }
+    const { weight: classWeight, category } = classWeightOf({ kind: f.kind as ScoreFacet['kind'], role: f.role, key: f.key, label: f.label, category: f.category }, tax);
+    // An ignored category (platform and noise tags) is left out entirely.
+    if (!classWeight) continue;
     const BA = (C * baseline + f.weightedSum) / (C + f.weightedCount);
     w.set(id, (BA - baseline) * classWeight);
     meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, classWeight, BA, n: f.count, weightedSum: f.weightedSum, weightedCount: f.weightedCount });
   }
-  return { w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum };
+
+  // Pull: what you consumed, per facet, weighted.
+  const consumed = new Map<string, number>();
+  const consumedIds = new Map<string, number>();
+  let consumedTotal = 0;
+  for (const item of extras.consumed ?? []) {
+    if (consumedIds.has(item.id)) continue;
+    consumedIds.set(item.id, item.weight);
+    consumedTotal += item.weight;
+    const seen = new Set<string>();
+    for (const f of resolveFacets(item.facets, item.id, tax)) {
+      const id = facetId(f);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      consumed.set(id, (consumed.get(id) ?? 0) + item.weight);
+    }
+  }
+
+  return {
+    w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans,
+    consumed, consumedTotal, consumedIds, catalog: extras.catalog ?? null, follows: extras.follows ?? new Map(),
+  };
 }
 
 /**
@@ -235,6 +352,72 @@ export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number
   if (w == null) return null;
   const gain = w >= 0 ? tax.config.mappingConstantUp : tax.config.mappingConstantDown;
   return Math.round(gain * w * 10) / 10;
+}
+
+// ── Pull ─────────────────────────────────────────────────────────────────────
+
+/**
+ * How specific a facet is: 1 for one on ten catalog titles or fewer, down to
+ * a floor for one on most of them ("action"). A broad tag you have consumed
+ * all of says less about you than a narrow one.
+ */
+export function salienceOf(catalogCount: number, catalogTotal: number): number {
+  if (catalogTotal <= 10) return 1;
+  return Math.min(1, Math.max(0.15, Math.log(catalogTotal / Math.max(1, catalogCount)) / Math.log(catalogTotal / 10)));
+}
+
+/**
+ * A facet's pull: log2 of your share of the catalog titles carrying it over
+ * your usual share, with `prior` pseudo-titles at your usual share so three
+ * titles cannot read as "all of them". 0 is your usual; 1 is twice it.
+ */
+export function pullLift(consumed: number, catalogCount: number, usualShare: number, prior: number): number {
+  return Math.log2(((consumed + prior * usualShare) / (catalogCount + prior)) / usualShare);
+}
+
+export interface FacetPull {
+  /** The weight of your consumed titles carrying it (a wishlisted one counts `WISHLIST_WEIGHT`). */
+  consumed: number;
+  /** Catalog titles carrying it. */
+  catalog: number;
+  lift: number;
+  /** Points on a title of medium `type` (the pull weight of that medium applied), or on one of unknown medium. */
+  points: number;
+  followed?: FollowMode;
+}
+
+/** Your usual share of the catalog, or null when the device has not counted it. */
+function usualShare(profile: Profile): number | null {
+  if (!profile.catalog || profile.catalog.total <= 0 || profile.consumedTotal <= 0) return null;
+  return Math.min(0.95, profile.consumedTotal / profile.catalog.total);
+}
+
+/**
+ * A facet's pull as a facet page prints it, or null when the catalog has not
+ * been counted, the facet sits on too few catalog titles, or the score ignores
+ * its class. `leaveOut` takes one consumed title back out, for a title you hold.
+ */
+export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?: string, leaveOut?: { id: string }): FacetPull | null {
+  const share = usualShare(profile);
+  if (share == null) return null;
+  const { weight: classWeight } = classWeightOf(f, tax);
+  if (!classWeight) return null;
+  const id = facetId(f);
+  let catalog = profile.catalog!.byFacet.get(id) ?? 0;
+  let consumed = profile.consumed.get(id) ?? 0;
+  if (leaveOut) {
+    const own = profile.consumedIds.get(leaveOut.id);
+    if (own !== undefined) { catalog -= 1; consumed = Math.max(0, consumed - own); }
+  }
+  if (catalog < PULL_MIN_CATALOG) return null;
+  const cfg = tax.config;
+  const followed = profile.follows.get(id);
+  const maxLift = Math.log2(1 / share);
+  const lift = followed === 'follow' ? maxLift : followed === 'avoid' ? -maxLift : pullLift(consumed, catalog, share, cfg.pullPrior);
+  const roleWeight = f.kind === 'tag' ? 1 : (cfg.roleWeights[f.role ?? 'tag'] ?? 1);
+  const value = lift * salienceOf(catalog, profile.catalog!.total) * roleWeight;
+  const medium = type ? (cfg.pullWeight[type] ?? 1) : 1;
+  return { consumed, catalog, lift, points: Math.round(cfg.pullGain * medium * value * 10) / 10, ...(followed ? { followed } : {}) };
 }
 
 // ── Scoring one title ────────────────────────────────────────────────────────
@@ -256,39 +439,75 @@ export function softRange(center: number, offset: number): number {
   return Math.sign(offset) * (knee + (room - knee) * Math.tanh((size - knee) / (room - knee)));
 }
 
+export type ScoreAxis = 'taste' | 'pull';
+export type AxisBand = 'high' | 'usual' | 'low';
+export type ScoreLabel = 'sure-thing' | 'hidden-gem' | 'bycatch' | 'not-for-you' | 'usual';
+
 export interface ScoreReason {
+  axis: ScoreAxis;
   kind: string;
   role?: string;
+  /** The facet's key, so `facetId(reason)` is the id the profile and a follow use. */
+  key: string;
   label: string;
   category?: string;
   /** Points this facet added to or took from the score. 0 when it was not counted. */
   contribution: number;
-  /** What the facet is worth on any title, counted or not. */
+  /** What the facet is worth on any title of this medium, counted or not. */
   impact: number;
-  /** Your average rating for titles carrying it, and how many there are. */
+  /** Taste: your average rating for titles carrying it, and how many there are. 0 on a pull row. */
   BA: number;
   n: number;
   /** Outside the top few for this title: shown, not counted. */
   capped?: boolean;
+  /** Pull rows only: the titles behind the number. */
+  consumed?: number;
+  catalog?: number;
+  lift?: number;
+  followed?: FollowMode;
+}
+
+export interface AxisResult {
+  /** Points this axis moved the score by, after the bend. */
+  points: number;
+  band: AxisBand;
 }
 
 export interface FandexScore {
   score: number;
   /** Your own mean rating × 10: the score of a title you have no opinion about. */
   center: number;
+  taste: AxisResult;
+  /** Null when the device has not counted its catalog: then there is no pull axis. */
+  pull: AxisResult | null;
+  label: ScoreLabel;
   reasons: ScoreReason[];
   /** A title you rated, scored with your rating of it left out. */
   leftOut?: boolean;
 }
 
+const bandOf = (points: number, margin: number): AxisBand => (points >= margin ? 'high' : points <= -margin ? 'low' : 'usual');
+
+/** Where the two axes land is the label. Without a pull axis the taste axis alone names it. */
+export function labelFor(taste: AxisBand, pull: AxisBand | null): ScoreLabel {
+  if (pull === null) return taste === 'high' ? 'sure-thing' : taste === 'low' ? 'not-for-you' : 'usual';
+  if (taste === 'high' && pull === 'high') return 'sure-thing';
+  if (taste === 'high' && pull === 'low') return 'hidden-gem';
+  if (taste === 'low' && pull === 'high') return 'bycatch';
+  if (taste === 'low' && pull === 'low') return 'not-for-you';
+  return 'usual';
+}
+
 interface Contrib { f: ScoreFacet; dev: number; classWeight: number; meta: FacetMeta }
+interface PullContrib { f: ScoreFacet; pull: FacetPull; value: number }
 
 /**
  * Score one title. `facets` are the catalog's raw facets; the taxonomy is
  * applied here, as the site applies it inside computeFandexScore, so no caller
- * can score a title against keys the profile did not learn under.
+ * can score a title against keys the profile did not learn under. `type` is
+ * the title's medium, for the pull weight; without it pull counts in full.
  */
-export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, profile: Profile, tax: Taxonomy): FandexScore | null {
+export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, profile: Profile, tax: Taxonomy, type?: string): FandexScore | null {
   // A title you rated is scored as if you had not (decided 2026-10-23): its own
   // rating left out of the baseline and of every facet it carries. Read with
   // its own rating in, The Last of Us Part I scored 101, +11.3 of it from a
@@ -299,9 +518,10 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   if (profile.w.size === 0 || ratedCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
   const cfg = tax.config;
   const baseline = own === undefined ? profile.baseline : (profile.ratingSum - own) / ratedCount;
+  const resolved = resolveFacets(facets, itemId, tax);
 
   const matched: Contrib[] = [];
-  for (const f of resolveFacets(facets, itemId, tax)) {
+  for (const f of resolved) {
     const id = facetId(f);
     const stored = profile.meta.get(id);
     if (profile.w.get(id) == null || !stored?.classWeight) continue;
@@ -318,17 +538,28 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     // THIS title's cast billing scales what the facet is worth here.
     matched.push({ f, dev: meta.BA - baseline, classWeight: meta.classWeight * (f.prominence ?? 1), meta });
   }
-  if (!matched.length) return null;
+
+  // The pull rows: every facet with a catalog count, this title's own place in the counts left out.
+  const leaveOut = itemId != null && profile.consumedIds.has(itemId) ? { id: itemId } : undefined;
+  const pulls: PullContrib[] = [];
+  const hasPull = usualShare(profile) != null;
+  if (hasPull) {
+    for (const f of resolved) {
+      const pull = facetPull(f, profile, tax, type, leaveOut);
+      if (pull) pulls.push({ f, pull, value: pull.points });
+    }
+  }
+  if (!matched.length && !pulls.length) return null;
 
   // Selected by the same quantity the score is made of (spec §3.3).
   const weighted = (c: Contrib) => c.dev * c.classWeight;
-  const byMagnitude = (list: Contrib[]) => [...list].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a)));
+  const byMagnitude = <T,>(list: T[], value: (x: T) => number) => [...list].sort((a, b) => Math.abs(value(b)) - Math.abs(value(a)));
   const tags = matched.filter((c) => c.f.kind === 'tag');
   const tagsPositive = tags.filter((c) => c.dev > 0).sort((a, b) => weighted(b) - weighted(a));
   const tagsNegative = tags.filter((c) => c.dev < 0).sort((a, b) => weighted(a) - weighted(b));
-  const people = byMagnitude(matched.filter((c) => c.f.kind === 'person'));
-  const companies = byMagnitude(matched.filter((c) => c.f.kind === 'company'));
-  const ips = byMagnitude(matched.filter((c) => c.f.kind === 'ip'));
+  const people = byMagnitude(matched.filter((c) => c.f.kind === 'person'), weighted);
+  const companies = byMagnitude(matched.filter((c) => c.f.kind === 'company'), weighted);
+  const ips = byMagnitude(matched.filter((c) => c.f.kind === 'ip'), weighted);
 
   const kept = [
     ...tagsPositive.slice(0, cfg.topTagsPositive),
@@ -345,16 +576,31 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     ...ips.slice(cfg.topIps),
     ...tags.filter((c) => c.dev === 0),
   ];
-  if (!kept.length) return null;
 
-  // A raw sum, not a mean (spec §3.3), then bent so 100 is the max and 0 the
-  // min (decided 2026-10-23, superseding the unclamped range of 2026-08-17).
-  const rawSum = kept.reduce((acc, c) => acc + weighted(c), 0);
+  const pullValue = (p: PullContrib) => p.value;
+  const pullTags = byMagnitude(pulls.filter((p) => p.f.kind === 'tag'), pullValue);
+  const pullPeople = byMagnitude(pulls.filter((p) => p.f.kind === 'person'), pullValue);
+  const pullCompanies = byMagnitude(pulls.filter((p) => p.f.kind === 'company'), pullValue);
+  const pullIps = byMagnitude(pulls.filter((p) => p.f.kind === 'ip'), pullValue);
+  const pullKept = [
+    ...pullTags.slice(0, cfg.pullTopTags), ...pullPeople.slice(0, cfg.pullTopPeople),
+    ...pullCompanies.slice(0, cfg.pullTopCompanies), ...pullIps.slice(0, cfg.pullTopIps),
+  ];
+  const pullCapped = [
+    ...pullTags.slice(cfg.pullTopTags), ...pullPeople.slice(cfg.pullTopPeople),
+    ...pullCompanies.slice(cfg.pullTopCompanies), ...pullIps.slice(cfg.pullTopIps),
+  ];
+
+  // Two raw sums, not means (spec §3.3), then bent together so 100 is the max
+  // and 0 the min (decided 2026-10-23). Every counted row shrinks by the same
+  // share, so the breakdown still adds up to the score.
+  const tasteSum = kept.reduce((acc, c) => acc + weighted(c), 0);
   const center = baseline * 10;
-  const gain = rawSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
-  const raw = gain * rawSum;
+  const gain = tasteSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  const tasteRaw = gain * tasteSum;
+  const pullRaw = pullKept.reduce((acc, p) => acc + p.value, 0);
+  const raw = tasteRaw + pullRaw;
   const bent = softRange(center, raw);
-  // Every counted row shrinks by the same share, so the breakdown still adds up to the score.
   const share = raw === 0 ? 1 : bent / raw;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -362,20 +608,46 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   const impactOf = (c: Contrib) => (own === undefined
     ? facetImpact(facetId(c.f), profile, tax) ?? 0
     : round1((c.dev * c.meta.classWeight >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown) * c.dev * c.meta.classWeight));
-  const reason = (c: Contrib, counted: boolean): ScoreReason => ({
-    kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.meta.category ?? c.f.category,
+  const tasteReason = (c: Contrib, counted: boolean): ScoreReason => ({
+    axis: 'taste', kind: c.f.kind, role: c.f.role, key: c.f.key, label: c.f.label, category: c.meta.category ?? c.f.category,
     contribution: counted ? round1(gain * weighted(c) * share) : 0,
     impact: impactOf(c), BA: c.meta.BA, n: c.meta.n,
     ...(counted ? {} : { capped: true }),
   });
+  const pullReason = (p: PullContrib, counted: boolean): ScoreReason => ({
+    axis: 'pull', kind: p.f.kind, role: p.f.role, key: p.f.key, label: p.f.label, category: classWeightOf(p.f, tax).category ?? p.f.category,
+    contribution: counted ? round1(p.value * share) : 0,
+    impact: p.pull.points, BA: 0, n: Math.round(p.pull.consumed),
+    consumed: p.pull.consumed, catalog: p.pull.catalog, lift: p.pull.lift,
+    ...(p.pull.followed ? { followed: p.pull.followed } : {}),
+    ...(counted ? {} : { capped: true }),
+  });
+
+  // The bands read each axis BEFORE the bend: the bend shrinks both axes by
+  // the same share, so a strong pull could otherwise squeeze a strong taste
+  // under its margin and the label would change with the other axis. The
+  // points are after the bend, so the two add up to the score.
+  //
+  // The pull band also reads the axis before the medium's weight: that weight
+  // says how much pull counts in the NUMBER for a game, not whether you seek
+  // games out. With it applied, no game ever read as a sure thing.
+  const mediumWeight = type ? (cfg.pullWeight[type] ?? 1) : 1;
+  const taste: AxisResult = { points: round1(tasteRaw * share), band: bandOf(tasteRaw, cfg.tasteBandMargin) };
+  const pull: AxisResult | null = hasPull
+    ? { points: round1(pullRaw * share), band: mediumWeight > 0 ? bandOf(pullRaw / mediumWeight, cfg.pullBandMargin) : 'usual' }
+    : null;
 
   return {
     score: round1(center + bent),
     center: round1(center),
+    taste, pull,
+    label: labelFor(taste.band, pull?.band ?? null),
     ...(own === undefined ? {} : { leftOut: true }),
     reasons: [
-      ...[...kept].sort((a, b) => weighted(b) - weighted(a)).map((c) => reason(c, true)),
-      ...[...capped].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a))).map((c) => reason(c, false)),
+      ...[...kept].sort((a, b) => weighted(b) - weighted(a)).map((c) => tasteReason(c, true)),
+      ...[...pullKept].sort((a, b) => b.value - a.value).map((p) => pullReason(p, true)),
+      ...[...capped].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a))).map((c) => tasteReason(c, false)),
+      ...[...pullCapped].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).map((p) => pullReason(p, false)),
     ],
   };
 }

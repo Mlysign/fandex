@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfile, computeFandexScore, prepareTaxonomy, resolveFacets, softRange, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
+import { buildProfile, catalogCountsFrom, computeFandexScore, prepareTaxonomy, resolveFacets, softRange, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 // The old site's agreement probe went with the site (tag `old-site-final`), and
 // since 2026-10-23 the app departs from it on purpose. These pin the rules a
@@ -109,6 +109,105 @@ describe('the Fandex Score on the device', () => {
     expect(tax.config.roleWeights.director).toBe(2);
     expect(tax.config.roleWeights.ip).toBe(1.3);
     expect(buildProfile(library, tax).meta.get('person|director|villeneuve')?.classWeight).toBe(2);
+  });
+});
+
+describe('the pull axis', () => {
+  // A catalog of twenty titles: eight noir, four musicals, eight westerns. You
+  // have been through six of the noirs, every musical, and one western.
+  const catalogRows = [
+    ...Array.from({ length: 8 }, (_, i) => ({ id: `n${i}`, facets: [tag('noir')] })),
+    ...Array.from({ length: 4 }, (_, i) => ({ id: `m${i}`, facets: [tag('musical')] })),
+    ...Array.from({ length: 8 }, (_, i) => ({ id: `w${i}`, facets: [tag('western')] })),
+  ];
+  const consumed = [
+    ...Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, facets: [tag('noir')], weight: 1 })),
+    ...Array.from({ length: 4 }, (_, i) => ({ id: `m${i}`, facets: [tag('musical')], weight: 1 })),
+    { id: 'w0', facets: [tag('western')], weight: 1 },
+  ];
+  // A gain high enough for twenty titles to move a band; the shipped one is sized for thousands.
+  const strongPull = () => prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, pullGain: 40 } } }));
+  const lib: RatedTitle[] = [
+    rated('n0', 10, [tag('noir')]), rated('n1', 9, [tag('noir')]),
+    rated('m0', 3, [tag('musical')]), rated('m1', 2, [tag('musical')]),
+    rated('w0', 10, [tag('western')]), rated('w1', 9, [tag('western')]),
+  ];
+
+  it('reads a facet you consume beyond your usual share as pull, and one you avoid as the reverse', () => {
+    const tax = strongPull();
+    const profile = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
+    // Your usual share is 11 of 20; every musical is more than that, one western in eight is less.
+    const musical = computeFandexScore([tag('musical')], 'x', profile, tax)!;
+    const western = computeFandexScore([tag('western')], 'y', profile, tax)!;
+    expect(musical.pull!.points).toBeGreaterThan(0);
+    expect(western.pull!.points).toBeLessThan(0);
+    const row = musical.reasons.find((r) => r.axis === 'pull')!;
+    expect(row).toMatchObject({ label: 'musical', consumed: 4, catalog: 4 });
+    // Both axes are rows of one sum: the centre plus every counted row is the score (each row is printed to a tenth, so the rows may be a tenth off together).
+    expect(Math.abs(musical.center + musical.reasons.reduce((n, r) => n + r.contribution, 0) - musical.score)).toBeLessThan(0.15);
+    expect(Math.abs(musical.taste.points + musical.pull!.points - (musical.score - musical.center))).toBeLessThan(0.15);
+  });
+
+  it('leaves your own place in the counts out when scoring a title you hold', () => {
+    const tax = strongPull();
+    const profile = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
+    const held = computeFandexScore([tag('noir')], 'n0', profile, tax)!.reasons.find((r) => r.axis === 'pull')!;
+    const unseen = computeFandexScore([tag('noir')], 'n7', profile, tax)!.reasons.find((r) => r.axis === 'pull')!;
+    expect(held.consumed).toBe(5);
+    expect(held.catalog).toBe(7);
+    expect(unseen.consumed).toBe(6);
+    expect(unseen.catalog).toBe(8);
+  });
+
+  it('lets a follow set a facet to the maximum and an avoid to the minimum', () => {
+    const tax = strongPull();
+    const plain = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
+    const followed = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax), follows: new Map([['tag||western', 'follow']]) });
+    const avoided = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax), follows: new Map([['tag||noir', 'avoid']]) });
+    expect(computeFandexScore([tag('western')], 'y', followed, tax)!.pull!.points).toBeGreaterThan(computeFandexScore([tag('western')], 'y', plain, tax)!.pull!.points);
+    expect(computeFandexScore([tag('western')], 'y', followed, tax)!.reasons.find((r) => r.axis === 'pull')).toMatchObject({ followed: 'follow' });
+    expect(computeFandexScore([tag('noir')], 'x', avoided, tax)!.pull!.points).toBeLessThan(0);
+    // A follow moves pull only: the taste row is the one it was, and so is its band.
+    const tasteRow = (fx: ReturnType<typeof computeFandexScore>) => fx!.reasons.find((r) => r.axis === 'taste')!;
+    expect(tasteRow(computeFandexScore([tag('western')], 'y', followed, tax)).impact).toBe(tasteRow(computeFandexScore([tag('western')], 'y', plain, tax)).impact);
+    expect(computeFandexScore([tag('western')], 'y', followed, tax)!.taste.band).toBe(computeFandexScore([tag('western')], 'y', plain, tax)!.taste.band);
+  });
+
+  it('names the label from where the two axes land, and from taste alone without a catalog', () => {
+    const tax = strongPull();
+    const profile = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
+    expect(computeFandexScore([tag('noir')], 'x', profile, tax)!.label).toBe('sure-thing');
+    expect(computeFandexScore([tag('musical')], 'x', profile, tax)!.label).toBe('bycatch');
+    expect(computeFandexScore([tag('western')], 'y', profile, tax)!.label).toBe('hidden-gem');
+    const noCatalog = buildProfile(lib, tax);
+    expect(computeFandexScore([tag('noir')], 'x', noCatalog, tax)!.pull).toBeNull();
+    expect(computeFandexScore([tag('noir')], 'x', noCatalog, tax)!.label).toBe('sure-thing');
+    expect(computeFandexScore([tag('musical')], 'x', noCatalog, tax)!.label).toBe('not-for-you');
+  });
+
+  it('weighs a medium\'s pull by its own weight', () => {
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { pullGain: 30, pullWeight: { game: 0.5 } } } }));
+    const profile = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
+    const film = computeFandexScore([tag('musical')], 'x', profile, tax, 'movie')!;
+    const game = computeFandexScore([tag('musical')], 'x', profile, tax, 'game')!;
+    expect(game.pull!.points).toBeCloseTo(film.pull!.points / 2, 0);
+  });
+});
+
+describe('the medium offset', () => {
+  it('moves each medium\'s ratings to your overall average before a facet learns from them', () => {
+    const tax = prepareTaxonomy(json());
+    // You rate games 8 and films 6. Without the offset "arcade" reads as a taste and "drama" as a dislike; with it both are just the medium.
+    const games = [rated('g1', 8, [tag('arcade')]), rated('g2', 8, [tag('arcade')])];
+    const films = [rated('f1', 6, [tag('drama')]), rated('f2', 6, [tag('drama')])];
+    const plain = buildProfile([...games, ...films], tax);
+    expect(plain.w.get('tag||arcade')).toBeGreaterThan(0);
+    const offset = buildProfile([...games.map((r) => ({ ...r, type: 'game' })), ...films.map((r) => ({ ...r, type: 'movie' }))], tax);
+    expect(offset.w.get('tag||arcade')).toBeCloseTo(0, 6);
+    expect(offset.w.get('tag||drama')).toBeCloseTo(0, 6);
+    // The centre does not move: the moved ratings still average what your ratings average.
+    expect(offset.baseline).toBeCloseTo(plain.baseline, 6);
+    expect(offset.typeMeans.get('game')).toBe(8);
   });
 });
 

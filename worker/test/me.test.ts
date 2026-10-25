@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
-  applyStateWrite, BadRequest, episodeStateJson, hiddenJson, itemStateJson, MAX_ROWS_PER_WRITE,
+  applyStateWrite, BadRequest, episodeStateJson, followsCount, followsJson, hiddenJson, itemStateJson, MAX_ROWS_PER_WRITE,
   parsePrefs, parseStateWrite, profileJson, writePrefs,
 } from "../src/me";
 import { stateCounts } from "../src/keptCounts";
@@ -131,6 +131,19 @@ describe("writing episodes and hidden titles", () => {
     expect(JSON.parse(await hiddenJson(db, USER)).rows.map((r: any) => r.mediaItemId)).toEqual([game]);
     // Hiding is not acting on a title: it must not pull one into the pool.
     expect((await db.prepare("SELECT browsed FROM media_items WHERE id = ?").bind(game).first<{ browsed: number }>())!.browsed).toBe(1);
+  });
+
+  it("follows and avoids a facet, changes its mind, and forgets", async () => {
+    await write({ follows: { set: [{ facetId: "tag||steampunk", mode: "follow", label: "Steampunk" }, { facetId: "person|director|tim burton", mode: "follow", label: "Tim Burton" }] } });
+    expect(JSON.parse(await followsJson(db, USER)).rows.map((r: any) => [r.facetId, r.mode]).sort()).toEqual([["person|director|tim burton", "follow"], ["tag||steampunk", "follow"]]);
+    await write({ follows: { set: [{ facetId: "tag||steampunk", mode: "avoid", label: "Steampunk" }] } });
+    expect(JSON.parse(await followsJson(db, USER)).rows.find((r: any) => r.facetId === "tag||steampunk").mode).toBe("avoid");
+    expect(await followsCount(db, USER)).toMatchObject({ follows: 2 });
+    await write({ follows: { remove: ["tag||steampunk"] } });
+    expect(JSON.parse(await followsJson(db, USER)).rows.map((r: any) => r.facetId)).toEqual(["person|director|tim burton"]);
+    expect((await followsCount(db, USER)).follows).toBe(1);
+    expect(() => parseStateWrite({ follows: { set: [{ facetId: "podcast||x", mode: "follow", label: "x" }] } })).toThrow(BadRequest);
+    expect(() => parseStateWrite({ follows: { set: [{ facetId: "tag||x", mode: "love", label: "x" }] } })).toThrow(BadRequest);
   });
 
   it("applies a mixed write as one unit", async () => {

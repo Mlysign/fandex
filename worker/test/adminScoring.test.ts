@@ -13,6 +13,8 @@ const CONFIG = {
   roleWeights: { director: 1.5, cast: 0.8 },
   priorStrength: 5, mappingConstantUp: 12, mappingConstantDown: 8,
   topTagsPositive: 6, topTagsNegative: 3, topPeople: 4, topCompanies: 2, topIps: 1,
+  pullPrior: 5, pullGain: 3.5, pullWeight: { movie: 1, show: 1, game: 0.5, book: 1, boardgame: 1 },
+  pullTopTags: 5, pullTopPeople: 3, pullTopCompanies: 2, pullTopIps: 1, tasteBandMargin: 10, pullBandMargin: 10,
 };
 
 const taxonomy = async () => JSON.parse((await taxonomyJson(db)).body);
@@ -26,6 +28,15 @@ describe("the scoring config", () => {
     expect(() => parseScoringConfig({ ...CONFIG, mappingConstantUp: "12" })).toThrow("must be a number");
     const { topIps: _gone, ...partial } = CONFIG;
     expect(() => parseScoringConfig(partial)).toThrow("topIps");
+  });
+
+  it("fills the pull axis from the defaults for a body written before it existed, and checks one that names it", () => {
+    const { pullPrior: _a, pullGain: _b, pullWeight: _c, pullTopTags: _d, pullTopPeople: _e, pullTopCompanies: _f, pullTopIps: _g, tasteBandMargin: _h, pullBandMargin: _i, ...old } = CONFIG;
+    expect(parseScoringConfig(old)).toEqual(CONFIG);
+    expect(parseScoringConfig({ ...old, pullWeight: { game: 0.25 } }).pullWeight).toEqual({ ...CONFIG.pullWeight, game: 0.25 });
+    expect(() => parseScoringConfig({ ...CONFIG, pullWeight: { podcast: 1 } })).toThrow("Unknown medium");
+    expect(() => parseScoringConfig({ ...CONFIG, pullGain: -1 })).toThrow("negative");
+    expect(() => parseScoringConfig({ ...CONFIG, pullBandMargin: 0 })).toThrow("above zero");
   });
 
   it("is what /v1/taxonomy serves after a save, with a version that only goes up", async () => {

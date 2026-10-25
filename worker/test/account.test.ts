@@ -42,7 +42,7 @@ describe("which tables are personal", () => {
 
   it("finds exactly the personal tables in the real schema", async () => {
     expect(await userScopedTables(db)).toEqual([
-      "user_episode_state", "user_hidden_items", "user_identities", "user_item_state",
+      "score_report", "user_episode_state", "user_facet_follows", "user_hidden_items", "user_identities", "user_item_state",
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("export", () => {
     const { film, show, game } = await seedUser(a, "g-a");
     const ex = JSON.parse((await buildAccountExportJson(db, a, new Date("2026-10-04T12:00:00Z")))!);
 
-    expect(ex).toMatchObject({ schemaVersion: 6, service: "fandex", exportedAt: "2026-10-04T12:00:00.000Z" });
+    expect(ex).toMatchObject({ schemaVersion: 7, service: "fandex", exportedAt: "2026-10-04T12:00:00.000Z" });
     expect(ex.user).toMatchObject({ id: a, country: "DE", platforms: ["s:netflix", "p:pc"], mediaTypes: ["movie", "show"] });
     expect(ex.identities).toEqual([expect.objectContaining({ provider: "google", providerUserId: "g-a", displayName: "Nils" })]);
     expect(ex.itemState).toHaveLength(2);
@@ -141,7 +141,7 @@ describe("export", () => {
     expect(await buildAccountExportJson(db, "nobody")).toBeNull();
     await db.prepare("INSERT INTO users (id) VALUES ('empty')").run();
     const ex = JSON.parse((await buildAccountExportJson(db, "empty"))!);
-    expect(ex).toMatchObject({ identities: [], itemState: [], episodes: [], hidden: [] });
+    expect(ex).toMatchObject({ identities: [], itemState: [], episodes: [], hidden: [], scoreReports: [], follows: [] });
     expect(ex.user.platforms).toEqual([]);
   });
 });

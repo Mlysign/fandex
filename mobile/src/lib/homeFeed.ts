@@ -25,7 +25,7 @@ import { api, type CalendarCard } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
 import { tmdbTrending } from '~/lib/tmdb';
-import type { ScoreFacet } from '~/lib/fandexScore';
+import type { AxisBand, ScoreFacet, ScoreLabel } from '~/lib/fandexScore';
 import { scoreBand } from '~/lib/scoreReasons';
 
 export const RAIL_SIZE = 15;
@@ -187,8 +187,11 @@ export type Candidate = CardItem & { genres?: string[] };
 /** At most this many titles you already wishlisted in one Recommended rail (Nils, 2026-10-23). */
 export const MAX_WISHLISTED = 2;
 
+/** What `recommend` asks of a candidate: the number that ranks it, and the label and bands its card shows. */
+export type Scored = { score: number; label: ScoreLabel; taste: AxisBand; pull: AxisBand | null };
+
 export function recommend<T extends Candidate>(
-  tiers: T[][], scoreOf: (c: T) => number | null, skip: (c: T) => boolean, center: number | null,
+  tiers: T[][], scoreOf: (c: T) => Scored | null, skip: (c: T) => boolean, center: number | null,
   /** The media types the rail may hold, each given an even share. Everything when absent. */
   types?: readonly string[],
   /** Titles on your wishlist: they may be recommended, `MAX_WISHLISTED` to a rail. */
@@ -205,7 +208,7 @@ export function recommend<T extends Candidate>(
         seen.add(key);
         return true;
       })
-      .map((c) => ({ ...c, fandexScore: scoreOf(c) }))
+      .map((c): T & { fandexScore: number | null } => { const s = scoreOf(c); return { ...c, fandexScore: s?.score ?? null, match: s ? { label: s.label, taste: s.taste, pull: s.pull } : null }; })
       .filter((c): c is T & { fandexScore: number } => c.fandexScore != null && scoreBand(c.fandexScore, center) === 'high')
       .sort((a, b) => b.fandexScore - a.fandexScore);
     ranked.push(...strong);

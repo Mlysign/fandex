@@ -292,7 +292,11 @@ export interface StateCounts {
   items: number; itemsUpdatedAt: number;
   episodes: number; episodesUpdatedAt: number;
   hidden: number; hiddenUpdatedAt: number;
+  follows: number; followsUpdatedAt: number;
 }
+
+/** A tag, person, studio or franchise you follow or avoid, by the score's facet id (`kind|role|key`). */
+export interface FollowRow { facetId: string; mode: 'follow' | 'avoid'; label: string; followedAt: number }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -303,6 +307,27 @@ const q = (params: Record<string, string | number | undefined>) => {
     .join('&');
   return s ? `?${s}` : '';
 };
+
+/** One medium's goalpost counts, as `PUT /v1/me/score-report` takes them (worker/src/scoreReport.ts). */
+export interface ScoreReport {
+  medium: string;
+  rated: number;
+  /** Twelve counts of (your rating − the match ÷ 10), rounded, from −6 to +5. */
+  bins: number[];
+  /** Per label: [rated titles with this label, of those rated 8 or more]. */
+  labels: Record<string, [number, number]>;
+}
+
+export interface ScoreSummaryMedium {
+  medium: string;
+  users: number;
+  rated: number;
+  bins: number[];
+  labels: Record<string, { rated: number; eightPlus: number }>;
+}
+
+/** `GET /v1/admin/score`: every user's report summed, per medium and in all. */
+export interface ScoreSummary { version: number; binFrom: number; media: ScoreSummaryMedium[]; all: ScoreSummaryMedium }
 
 export const api = {
   health: () => request<Health>('/v1/health'),
@@ -370,6 +395,7 @@ export const api = {
       `/v1/me/state/episodes${q({ afterItem: after?.mediaItemId, afterSeason: after?.season, afterEpisode: after?.episode })}`,
     ),
   stateHidden: () => request<{ rows: { mediaItemId: string; hiddenAt: number }[] }>('/v1/me/state/hidden'),
+  stateFollows: () => request<{ rows: FollowRow[] }>('/v1/me/state/follows'),
   catalogPlatforms: (region: string) =>
     request<{ region: string; games: Record<string, string[]>; streaming: Record<string, string[]> }>(`/v1/catalog/platforms${q({ region })}`),
   // The admin page's read. Past the browser's cache on purpose: the route is
@@ -407,6 +433,10 @@ export const api = {
   pageview: (path: string, ref: string) => request<{ ok: boolean }>('/v1/t/pv', { ...json('POST', { path, ref }), keepalive: true }),
   adminAnalytics: (days: number) => request<AnalyticsSnapshot>(`/v1/admin/analytics${q({ days })}`),
   adminUsers: (days: number) => request<UsersSnapshot>(`/v1/admin/users${q({ days })}`),
+  /** How your match compares with your own ratings, as counts per medium (lib/ScoreProvider.tsx). No title and no rating leaves the device. */
+  scoreReport: (reports: ScoreReport[]) => request<{ ok: boolean; saved: number }>('/v1/me/score-report', json('PUT', { reports })),
+  /** Every user's score report summed, for the admin Score page. */
+  adminScore: () => request<ScoreSummary>('/v1/admin/score'),
   showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
   exportAccount: () => request<Record<string, unknown>>('/v1/me/export'),
@@ -456,6 +486,8 @@ export interface StateWrite {
   items?: { upsert?: ItemStateUpsert[]; delete?: ItemStateKey[] };
   episodes?: { upsert?: EpisodeStateUpsert[]; delete?: EpisodeStateKey[] };
   hidden?: { add?: string[]; remove?: string[] };
+  /** Follows and avoids: `set` writes or changes a row, `remove` forgets one. */
+  follows?: { set?: { facetId: string; mode: 'follow' | 'avoid'; label: string }[]; remove?: string[] };
 }
 export interface StateWriteResult { ok: true; applied: Record<string, number>; skipped: number }
 

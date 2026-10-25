@@ -183,6 +183,27 @@ export async function hiddenJson(db: D1Database, userId: string): Promise<string
   return `{"rows":${row?.j ?? "[]"}}`;
 }
 
+/** What you follow or avoid (migration 0007), as the device's sync pulls it. */
+export async function followsJson(db: D1Database, userId: string): Promise<string> {
+  const row = await first<{ j: string | null }>(
+    db,
+    `SELECT json_group_array(json_object('facetId', facet_id, 'mode', mode, 'label', label, 'followedAt', followed_at)) j
+       FROM (SELECT facet_id, mode, label, followed_at FROM user_facet_follows WHERE user_id = ? ORDER BY followed_at DESC LIMIT 5000)`,
+    [userId],
+  );
+  return `{"rows":${row?.j ?? "[]"}}`;
+}
+
+/**
+ * How many follows a user holds and when the newest changed, for the counts
+ * the device compares before a pull. Counted live: the table holds a handful
+ * of rows per user, so a kept count (keptCounts.ts) would cost more than it saves.
+ */
+export async function followsCount(db: D1Database, userId: string): Promise<{ follows: number; followsUpdatedAt: number }> {
+  const row = await first<{ n: number; newest: number | null }>(db, "SELECT COUNT(*) n, MAX(followed_at) newest FROM user_facet_follows WHERE user_id = ?", [userId]);
+  return { follows: row?.n ?? 0, followsUpdatedAt: row?.newest ?? 0 };
+}
+
 // ── Writing state ────────────────────────────────────────────────────────────
 
 interface ItemKey { mediaItemId: string; source: string; relation: string }
@@ -199,6 +220,9 @@ interface EpisodeRow extends EpisodeKey {
   sources: string;
 }
 
+/** A follow or an avoid of a tag, person, studio or franchise, by the score's facet id (migration 0007). */
+interface FollowRow { facetId: string; mode: "follow" | "avoid"; label: string }
+
 export interface StateWrite {
   itemUpserts: ItemRow[];
   itemDeletes: ItemKey[];
@@ -206,6 +230,8 @@ export interface StateWrite {
   episodeDeletes: EpisodeKey[];
   hide: string[];
   unhide: string[];
+  followSets: FollowRow[];
+  followRemoves: string[];
 }
 
 const list = (v: unknown, name: string): unknown[] => {
@@ -288,6 +314,7 @@ export function parseStateWrite(body: unknown): StateWrite {
   const items = isObj(body.items) ? body.items : {};
   const episodes = isObj(body.episodes) ? body.episodes : {};
   const hidden = isObj(body.hidden) ? body.hidden : {};
+  const follows = isObj(body.follows) ? body.follows : {};
 
   const w: StateWrite = {
     itemUpserts: list(items.upsert, "items.upsert").map(itemRow),
@@ -296,6 +323,8 @@ export function parseStateWrite(body: unknown): StateWrite {
     episodeDeletes: list(episodes.delete, "episodes.delete").map(episodeKey),
     hide: list(hidden.add, "hidden.add").map((v) => uuid(v, "hidden.add")),
     unhide: list(hidden.remove, "hidden.remove").map((v) => uuid(v, "hidden.remove")),
+    followSets: list(follows.set, "follows.set").map(followRow),
+    followRemoves: list(follows.remove, "follows.remove").map((v) => facetIdOf(v, "follows.remove")),
   };
   const total = stateWriteSize(w);
   if (total === 0) throw new BadRequest("Nothing to write");
@@ -303,9 +332,22 @@ export function parseStateWrite(body: unknown): StateWrite {
   return w;
 }
 
+/** A facet id as the score keys one: `kind|role|key`, a known kind, a role of letters, a key that is not blank. */
+const FACET_ID = /^(tag|person|company|ip)\|[a-z_]{0,32}\|.{1,200}$/;
+function facetIdOf(v: unknown, name: string): string {
+  if (typeof v !== "string" || !FACET_ID.test(v)) throw new BadRequest(`${name} must be a facet id`);
+  return v;
+}
+function followRow(v: unknown): FollowRow {
+  if (!isObj(v)) throw new BadRequest("Each follow must be an object");
+  if (v.mode !== "follow" && v.mode !== "avoid") throw new BadRequest("mode must be follow or avoid");
+  if (typeof v.label !== "string" || !v.label.trim() || v.label.length > 200) throw new BadRequest("label is required");
+  return { facetId: facetIdOf(v.facetId, "follows.set.facetId"), mode: v.mode, label: v.label.trim() };
+}
+
 export function stateWriteSize(w: StateWrite): number {
   return w.itemUpserts.length + w.itemDeletes.length + w.episodeUpserts.length +
-    w.episodeDeletes.length + w.hide.length + w.unhide.length;
+    w.episodeDeletes.length + w.hide.length + w.unhide.length + w.followSets.length + w.followRemoves.length;
 }
 
 /** The titles of an item write that nobody has acted on before. `?1` is the rows, as JSON. */
@@ -437,6 +479,26 @@ export async function applyStateWrite(env: Env, userId: string, w: StateWrite): 
          SELECT ?1, j.value FROM json_each(?2) j
           WHERE EXISTS (SELECT 1 FROM media_items mi WHERE mi.id = j.value)`,
       ).bind(userId, JSON.stringify(w.hide)),
+    });
+  }
+  // Follows are not among the kept counts: the device compares a live count (followsCount).
+  if (w.followRemoves.length) {
+    statements.push({
+      name: "unfollowed", sent: w.followRemoves.length,
+      stmt: db.prepare(
+        `DELETE FROM user_facet_follows WHERE user_id = ?1 AND facet_id IN (SELECT j.value FROM json_each(?2) j)`,
+      ).bind(userId, JSON.stringify(w.followRemoves)),
+    });
+  }
+  if (w.followSets.length) {
+    statements.push({
+      name: "followed", sent: w.followSets.length,
+      stmt: db.prepare(
+        `INSERT INTO user_facet_follows (user_id, facet_id, mode, label, followed_at)
+         SELECT ?1, j.value ->> 'facetId', j.value ->> 'mode', j.value ->> 'label', unixepoch() FROM json_each(?2) j
+         WHERE true
+         ON CONFLICT(user_id, facet_id) DO UPDATE SET mode = excluded.mode, label = excluded.label, followed_at = excluded.followed_at`,
+      ).bind(userId, JSON.stringify(w.followSets)),
     });
   }
 

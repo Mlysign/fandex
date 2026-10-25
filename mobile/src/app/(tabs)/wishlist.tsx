@@ -168,7 +168,7 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
       case 'addedAt': return list.sort((a, b) => b.added_at - a.added_at);
       case 'popularity': return byPopularity(list, crowdOfRow, true);
       case 'rating': return byRating(list, crowdOfRow);
-      case 'fandexScore': return list.sort((a, b) => (scores.get(b.id) ?? -1) - (scores.get(a.id) ?? -1));
+      case 'fandexScore': return list.sort((a, b) => (scores.get(b.id)?.score ?? -1) - (scores.get(a.id)?.score ?? -1));
       // Dated first, in order. What "order" means is decided where the months are cut.
       case 'releaseDate': return list.sort((a, b) => ((a.release_date ?? '9999') < (b.release_date ?? '9999') ? -1 : 1));
     }

@@ -8,6 +8,7 @@ import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native
 import { CardRail, StarPicker } from '~/components/cards';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
 import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScorePanel';
+import { facetId } from '~/lib/fandexScore';
 import { ItemPage, SOURCE_LABEL } from '~/components/ItemPage';
 import { BrandGlyph } from '~/components/BrandGlyph';
 import { Button } from '~/components/kit';
@@ -27,7 +28,7 @@ import { itemStateFor } from '~/lib/db';
 import { shortDate } from '~/lib/dates';
 import { setReturnTo } from '~/lib/returnTo';
 import type { ScoreFacet } from '~/lib/fandexScore';
-import { rateItem, removeFromLibrary, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
+import { rateItem, removeFromLibrary, setFollow, setHidden, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropItemPrerender } from '~/lib/prerender';
 import { relatedRails, type RelatedRails } from '~/lib/related';
@@ -279,7 +280,7 @@ export default function ItemScreen() {
 
   // Scored from the facets the Worker sent with the page, so a title that is
   // not in the device's catalog copy (one just opened from search) scores too.
-  const fandex = scores.score(item.id, item.facets);
+  const fandex = scores.score(item.id, item.facets, item.type);
   // Which of its four faces the score panel shows. Null while the session or
   // the taste profile is still being read: the panel's box is held open so the
   // synopsis under it does not jump when the answer arrives.
@@ -327,8 +328,9 @@ export default function ItemScreen() {
 
       {panel ? (
         <FandexScorePanel
-          state={panel} fandex={fandex} categoryLabel={scores.categoryLabel}
+          state={panel} fandex={fandex} type={item.type} categoryLabel={scores.categoryLabel} follows={scores.follows}
           onSignIn={() => router.push('/profile' as never)} onOpenFacet={(href) => router.push(href as never)}
+          onFollow={auth.status === 'signedIn' ? (reason, mode) => act(() => setFollow(db, [{ facetId: facetId(reason), label: reason.label }], mode)) : undefined}
         />
       ) : <View style={styles.panelHold} />}
 

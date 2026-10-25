@@ -132,6 +132,6 @@ describe('the schema step that heals a stored "caught up"', () => {
               ('wrongly-caught-up', NULL, NULL, 6, ${NOW}), ('real', 1, 7, 6, ${NOW})`);
     await migrate(db);
     expect(raw.prepare('SELECT media_item_id FROM up_next').all()).toEqual([{ media_item_id: 'real' }]);
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
   });
 });
