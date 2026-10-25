@@ -1,6 +1,7 @@
-import type { Source, MediaLink, EnrichedItem, MediaType, CommunityRating } from "@/types";
+import type { Source, MediaLink, EnrichedItem, MediaType, CommunityRating, TagTier } from "@/types";
 import { type SourceNormalized, normalizeSource } from "./sources/normalize";
 import { DEFAULT_COUNTRY } from "./countries";
+import { tagKey } from "./facets";
 
 // merge.ts is now pure POLICY: it merges the per-source SourceNormalized partials
 // (built by src/lib/sources/normalize.ts) by priority (single-value) or union
@@ -44,6 +45,62 @@ const GAME_MODE_SOURCES: Source[] = ["igdb"];
 // Each source reports its own regional rating system (FSK / PG / USK / ESRB) —
 // unioned so the detail page can show all of them, not just one.
 const CERTIFICATION_SOURCES: Source[] = ["tmdb", "trakt", "steam", "rawg"];
+
+// ── Tags with their tier (2026-10-25) ─────────────────────────────────────────
+// Until this, a title's tags were one flat union in TAG_SOURCES order, deduped
+// and cut at 30, so provenance died here: RAWG's thirty tags and Steam's twenty
+// came before IGDB's genres, and a game's 278 IGDB keywords filled the facets.
+// Now every tag keeps its tier and its rank, and each tier is capped on its own.
+
+/** Best tier first: a tag a provider calls a genre is a genre, whatever else lists it as a keyword. */
+const TIER_ORDER: TagTier[] = ["genre", "theme", "voted", "keyword"];
+/**
+ * Tags kept per tier on one title, by rank. The keyword tier is the long
+ * editorial tail (IGDB: a median of 5 keywords, p90 49, max 278), ordered most
+ * relevant first for the first handful; eight is where the relevance runs out
+ * on the games read. The crowd ranks the voted tier itself and Steam answers
+ * twenty, all kept: measured on the owner's library (2026-10-25), twelve lost
+ * the specific tags at the tail ("Heist", "Medieval") and ranked his wishlist
+ * worse (84% against 87%, docs/fandex-score.md §3.9).
+ */
+export const TIER_CAPS: Record<TagTier, number> = { genre: 12, theme: 12, voted: 20, keyword: 8 };
+
+/**
+ * Every source's tiered tags as one list: deduped by tag key (first spelling
+ * kept), each tag filed under the best tier any source gave it, ordered within
+ * the tier by source order then the source's own rank, capped per tier, and
+ * numbered 1 first. A tag the cap leaves out of its best tier is still filed
+ * under the next tier that lists it: Steam's fifteenth voted tag is often the
+ * specific one ("Heist", "Medieval"), and IGDB keys it too. The facets are
+ * built from this, not from `tags`.
+ */
+function mergeTagTiers(norm: Map<Source, SourceNormalized>): { name: string; tier: TagTier; rank: number }[] {
+  const seen = new Map<string, { name: string; at: Partial<Record<TagTier, number>> }>();
+  let position = 0;
+  for (const s of TAG_SOURCES) {
+    for (const t of norm.get(s)?.tiers ?? []) {
+      const key = tagKey(t.name);
+      if (!key) continue;
+      const entry = seen.get(key) ?? { name: t.name, at: {} };
+      if (entry.at[t.tier] === undefined) entry.at[t.tier] = position;
+      seen.set(key, entry);
+      position++;
+    }
+  }
+  const out: { name: string; tier: TagTier; rank: number }[] = [];
+  const placed = new Set<string>();
+  for (const tier of TIER_ORDER) {
+    const inTier: { key: string; name: string; order: number }[] = [];
+    for (const [key, e] of seen) {
+      if (!placed.has(key) && e.at[tier] !== undefined) inTier.push({ key, name: e.name, order: e.at[tier] as number });
+    }
+    inTier.sort((a, b) => a.order - b.order).slice(0, TIER_CAPS[tier]).forEach((e, i) => {
+      placed.add(e.key);
+      out.push({ name: e.name, tier, rank: i + 1 });
+    });
+  }
+  return out;
+}
 
 // Build the per-source normalized view once; everything below is policy over it.
 function normalizeAll(mediaLinks: { source: Source; data: any }[], type: MediaType): Map<Source, SourceNormalized> {
@@ -116,7 +173,10 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
 
   // ── Multi-value fields (union) ────────────────────────────────
   const images = dedup(unionValues(IMAGE_SOURCES, norm, "images"));
-  const tags = dedup(unionValues(TAG_SOURCES, norm, "tags"));
+  // The tags in tier order, so the display cut below never drops a genre for
+  // a keyword, and the page's chips are the facets the score reads.
+  const tagTiers = mergeTagTiers(norm);
+  const tags = dedup(tagTiers.map((t) => t.name));
   const platforms = dedup(unionValues(PLATFORM_SOURCES, norm, "platforms"));
 
   // ── Per-source dates ──────────────────────────────────────────
@@ -169,8 +229,10 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
     // dozens (steampunk/atmospheric/soulslike-style flavor tags plus a lot of
     // low-value platform/rerelease noise) and were getting silently
     // truncated before ever reaching categorizeTag(). Raised, not removed —
-    // still a display bound, not a data limit.
+    // still a display bound, not a data limit. Since 2026-10-25 the list is in
+    // tier order and the facets come from `tagTiers`, so the cut is display only.
     tags: tags.slice(0, 30),
+    tagTiers,
     platforms: platforms.slice(0, 10),
     description,
     tagline,
@@ -302,7 +364,7 @@ export function explainMerge(mediaLinks: MediaLink[], type: MediaType): MergeFie
 
   // ── Union fields (same source lists + slices as mergeLinks) ───
   unionRow("images", IMAGE_SOURCES, dedup(unionValues(IMAGE_SOURCES, norm, "images")).slice(0, 12), (x) => x);
-  unionRow("tags", TAG_SOURCES, dedup(unionValues(TAG_SOURCES, norm, "tags")).slice(0, 30), (x) => x);
+  unionRow("tags", TAG_SOURCES, dedup(mergeTagTiers(norm).map((t) => t.name)).slice(0, 30), (x) => x);
   unionRow("platforms", PLATFORM_SOURCES, dedup(unionValues(PLATFORM_SOURCES, norm, "platforms")).slice(0, 10), (x) => x);
   unionRow("communityRatings", RATING_SOURCES, unionValues(RATING_SOURCES, norm, "communityRatings"), (x) => x.source);
   unionRow("gameModes", GAME_MODE_SOURCES, dedup(unionValues(GAME_MODE_SOURCES, norm, "gameModes")).slice(0, 8), (x) => x);

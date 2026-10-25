@@ -194,6 +194,37 @@ describe('the pull axis', () => {
   });
 });
 
+describe('tag tiers (2026-10-25)', () => {
+  const tiered = (key: string, tier: string): ScoreFacet => ({ kind: 'tag', key, label: key, category: 'genre', tier });
+
+  it('weighs a keyword occurrence by its tier when learning and when scoring, and a genre in full', () => {
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, tagTierWeights: { keyword: 0.5 } } } }));
+    expect(tax.config.tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.5 });
+    // The same ratings behind "noir" as a genre and as a keyword: the keyword is half the evidence.
+    const asGenre = buildProfile([rated('a', 10, [tiered('noir', 'genre')]), rated('b', 10, [tiered('noir', 'genre')]), rated('c', 2, [tag('musical')]), rated('d', 2, [tag('musical')])], tax);
+    const asKeyword = buildProfile([rated('a', 10, [tiered('noir', 'keyword')]), rated('b', 10, [tiered('noir', 'keyword')]), rated('c', 2, [tag('musical')]), rated('d', 2, [tag('musical')])], tax);
+    expect(asKeyword.meta.get('tag||noir')!.weightedCount).toBe(1);
+    expect(asGenre.meta.get('tag||noir')!.weightedCount).toBe(2);
+    expect(asKeyword.w.get('tag||noir')!).toBeLessThan(asGenre.w.get('tag||noir')!);
+    // On a title, the same facet counts half when the title carries it as a keyword.
+    const genreRow = computeFandexScore([tiered('noir', 'genre')], 'x', asGenre, tax)!.reasons[0];
+    const keywordRow = computeFandexScore([tiered('noir', 'keyword')], 'x', asGenre, tax)!.reasons[0];
+    expect(keywordRow.contribution).toBeCloseTo(genreRow.contribution / 2, 1);
+    expect(keywordRow.tier).toBe('keyword');
+    expect(genreRow.tier).toBe('genre');
+    // A facet from before tiers existed carries none and counts in full.
+    expect(computeFandexScore([tag('noir')], 'x', asGenre, tax)!.reasons[0].contribution).toBe(genreRow.contribution);
+  });
+
+  it('leaves a rated title out exactly, tier weight included', () => {
+    const tax = prepareTaxonomy(json());
+    const lib = [rated('a', 10, [tiered('noir', 'keyword')]), rated('b', 9, [tiered('noir', 'genre')]), rated('c', 3, [tag('musical')]), rated('d', 2, [tag('musical')])];
+    const left = computeFandexScore(lib[0].facets, 'a', buildProfile(lib, tax), tax)!;
+    const without = computeFandexScore(lib[0].facets, 'a', buildProfile(lib.slice(1), tax), tax)!;
+    expect(left.score).toBe(without.score);
+  });
+});
+
 describe('the medium offset', () => {
   it('moves each medium\'s ratings to your overall average before a facet learns from them', () => {
     const tax = prepareTaxonomy(json());

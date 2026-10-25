@@ -48,6 +48,14 @@ export interface ScoringConfigValues {
   /** Points off your usual that make an axis read as high or low. The old BAND_MARGIN, now two. */
   tasteBandMargin: number;
   pullBandMargin: number;
+  /**
+   * 2026-10-25: how much a tag occurrence counts by where the tag came from
+   * (docs/fandex-score.md §3.9): a provider's genre or theme and a crowd's
+   * voted tag in full, an editorial keyword less. Applied per occurrence on
+   * both axes, the way a cast member's billing is; a tag facet derived before
+   * tiers existed carries none and counts in full. Keyed by TagTier.
+   */
+  tagTierWeights: Record<string, number>;
 }
 
 // Mirrors discovery.ts's ROLE_WEIGHT + K_SHRINK verbatim, so seeding this table
@@ -96,6 +104,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   pullTopIps: 1,
   tasteBandMargin: 10,
   pullBandMargin: 10,
+  tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 
 /**

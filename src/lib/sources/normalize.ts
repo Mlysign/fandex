@@ -1,7 +1,8 @@
-import type { Source, MediaType, CommunityRating, EnrichedItem } from "@/types";
+import type { Source, MediaType, CommunityRating, EnrichedItem, TagTier, TieredTag } from "@/types";
 import { bookDate, bookSubjects, coverUrl } from "@/lib/sources/bookPure";
 import { plainDescription } from "@/lib/plainText";
 import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
+import { categorizeTag } from "@/lib/tags";
 
 // ── A1: per-source normalizers ────────────────────────────────────────────────
 // Each source maps its raw_data → a SourceNormalized partial (one place per
@@ -47,6 +48,12 @@ export interface SourceNormalized {
   // multi-value (union)
   images?: string[];
   tags?: string[];
+  /**
+   * The same tags with their tier, in the source's own rank order (2026-10-25).
+   * `tags` is the flat display list; this is what the merge builds the facets
+   * from. A normalizer sets both through `tiered()`, so they cannot drift.
+   */
+  tiers?: TieredTag[];
   platforms?: string[];
   certification?: string[];
   gameModes?: string[];
@@ -118,6 +125,30 @@ function titleCaseSlug(s: string): string {
   return s.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
+/** The names in `lists`, each tier in the order given, as a source's tiered tags. Non-strings and blanks are dropped. */
+function tiered(...lists: [TagTier, unknown[] | undefined][]): TieredTag[] {
+  const out: TieredTag[] = [];
+  for (const [tier, names] of lists) {
+    for (const n of names ?? []) if (typeof n === "string" && n.trim()) out.push({ name: n.trim(), tier });
+  }
+  return out;
+}
+const names = (xs: unknown[] | undefined): string[] => (xs ?? []).map((x: any) => (typeof x === "string" ? x : x?.name)).filter((n: unknown): n is string => typeof n === "string" && !!n);
+const flat = (tiers: TieredTag[]): string[] => tiers.map((t) => t.name);
+
+/**
+ * A ranked list with its noise last. IGDB and RAWG put "steam achievements",
+ * "digital distribution" and "playstation trophies" among a game's first
+ * keywords and tags; those file as Meta / Noise and weigh nothing, so with a cap
+ * on the tier they would only take a slot from a tag that says something. The
+ * order among the rest is the source's own, which for IGDB's keywords and
+ * RAWG's tags reads as most relevant first.
+ */
+function noiseLast(list: string[]): string[] {
+  const isNoise = (n: string) => categorizeTag(n.toLowerCase().replace(/[-_\s]+/g, " ").trim()) === "meta";
+  return [...list.filter((n) => !isNoise(n)), ...list.filter(isNoise)];
+}
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function trailerKeyFromUrl(url: any): string | null {
@@ -174,7 +205,10 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
   if (d.backdrop_path) images.push(`https://image.tmdb.org/t/p/w780${d.backdrop_path}`);
   out.images = images;
 
-  out.tags = (d.genres ?? []).map((g: any) => g.name).filter(Boolean);
+  // Genres are the tags; the keywords stay their own display field (merge.ts
+  // keeps `keywords` TMDB-only) and reach the facets through `tiers`.
+  out.tiers = tiered(["genre", names(d.genres)], ["keyword", names(d.keywords?.keywords ?? d.keywords?.results)]);
+  out.tags = names(d.genres);
 
   const storeLinks: SourceNormalized["storeLinks"] = [];
   if (d.id && type === "movie") storeLinks!.push({ name: "TMDB", url: `https://www.themoviedb.org/movie/${d.id}`, source: "tmdb" });
@@ -281,8 +315,9 @@ function normalizeTrakt(d: any, type: MediaType): SourceNormalized {
   out.communityRatings = d.rating > 0
     ? [{ source: "trakt", label: "Trakt", score: round1(d.rating), outOf: 10, votes: d.votes ?? null }]
     : [];
-  out.tags = [...(d.genres ?? []), ...(d.subgenres ?? [])]
-    .filter((g: any) => typeof g === "string").map(titleCaseSlug);
+  const slugNames = (xs: unknown[] | undefined) => (xs ?? []).filter((g: any) => typeof g === "string").map(titleCaseSlug);
+  out.tiers = tiered(["genre", slugNames(d.genres)], ["theme", slugNames(d.subgenres)]);
+  out.tags = flat(out.tiers);
 
   const storeLinks: SourceNormalized["storeLinks"] = [];
   const slug = d.ids?.slug;
@@ -311,7 +346,8 @@ function normalizeLetterboxd(d: any): SourceNormalized {
   out.communityRatings = typeof d.averageRating === "number"
     ? [{ source: "letterboxd", label: "Letterboxd", score: round1(d.averageRating), outOf: 5 }]
     : [];
-  out.tags = (d.genres ?? []).map((g: any) => g.name).filter(Boolean);
+  out.tiers = tiered(["genre", names(d.genres)]);
+  out.tags = flat(out.tiers);
 
   const images: string[] = [];
   if (d.posterUrl) images.push(d.posterUrl);
@@ -389,7 +425,11 @@ function normalizeSteam(d: any): SourceNormalized {
   }
   out.images = images;
 
-  out.tags = d.resolvedTags ?? [];
+  // Steam's store tags, voted and ranked by the crowd, resolved to names when
+  // the payload was stored (sources/steam.ts). The old site kept eight; the
+  // Worker's cron step keeps every one Steam answers with.
+  out.tiers = tiered(["voted", Array.isArray(d.resolvedTags) ? d.resolvedTags : []]);
+  out.tags = flat(out.tiers);
   out.platforms = Object.entries(d.platforms ?? {})
     .filter(([k, v]) => ["windows", "mac", "linux"].includes(k) && v === true)
     .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
@@ -432,7 +472,12 @@ function normalizeRawg(d: any): SourceNormalized {
   for (const s of (d.screenshots ?? d.short_screenshots ?? []).slice(0, 5)) if (s.image) images.push(s.image);
   out.images = images;
 
-  out.tags = (d.genres ?? []).map((g: any) => g.name).filter(Boolean);
+  // RAWG's genres, then its user tags: voted by the crowd and ranked, English
+  // ones only (the list carries Russian spellings of the same tags). Unused on
+  // the facets until 2026-10-25, when provenance started to matter.
+  const voted = noiseLast(names((d.tags ?? []).filter((t: any) => !t?.language || t.language === "eng")));
+  out.tiers = tiered(["genre", names(d.genres)], ["voted", voted]);
+  out.tags = flat(out.tiers);
   out.platforms = (d.platforms ?? []).map((p: any) => p.platform?.name).filter(Boolean);
 
   const storeLinks: SourceNormalized["storeLinks"] = [];
@@ -484,7 +529,19 @@ function normalizeIgdb(d: any): SourceNormalized {
   // bucket genres/themes already use. `merge.ts`'s dedicated `keywords` field
   // is TMDB-only by design (movies/shows), so a game's flavor tags need to
   // ride in `tags` to reach the "Tags & details" section at all.
-  out.tags = [...(d.genres ?? []), ...(d.themes ?? []), ...(d.keywords ?? [])].map((g: any) => g.name).filter(Boolean);
+  //
+  // Three tiers (2026-10-25): IGDB's genres, its themes, and its keywords,
+  // which run to 278 on one game and read most relevant first for the first
+  // handful, then trail off; the merge caps the tier. `steamTags` are the
+  // store's voted tags, written onto this payload by the Worker's cron
+  // (worker/src/cron.ts, runSteamTagsStep) for a game with a Steam page,
+  // the way `collections` were: one payload, two provenances, kept apart here.
+  out.tiers = tiered(
+    ["genre", names(d.genres)], ["theme", names(d.themes)],
+    ["voted", Array.isArray(d.steamTags) ? d.steamTags : []],
+    ["keyword", noiseLast(names(d.keywords))],
+  );
+  out.tags = flat(out.tiers);
   out.platforms = (d.platforms ?? []).map((p: any) => p.name).filter(Boolean);
   out.gameModes = [
     ...(d.game_modes ?? []).map((m: any) => m.name),
@@ -518,7 +575,9 @@ function normalizeOpenLibrary(d: any): SourceNormalized {
   out.releaseDate = bookDate(d);
   out.poster = coverUrl(d.cover_i);
   out.images = out.poster ? [out.poster] : [];
-  out.tags = bookSubjects(d);
+  // A book's subjects are its one tag list, reader-added and unranked: the keyword tier.
+  out.tiers = tiered(["keyword", bookSubjects(d)]);
+  out.tags = flat(out.tiers);
   out.collection = Array.isArray(d.series_name) && typeof d.series_name[0] === "string" ? d.series_name[0] : null;
   out.publisher = Array.isArray(d.publisher) && typeof d.publisher[0] === "string" ? d.publisher[0] : null;
   out.authors = Array.isArray(d.author_name) ? d.author_name.filter((a: unknown) => typeof a === "string").slice(0, 6) : [];
@@ -544,7 +603,9 @@ function normalizeHardcover(d: any): SourceNormalized {
   out.releaseDate = typeof d.releaseDate === "string" ? d.releaseDate : null;
   out.poster = typeof d.cover === "string" ? d.cover : null;
   out.images = out.poster ? [out.poster] : [];
-  out.tags = list(d.tags);
+  // Hardcover's genres and tags come as one list its readers voted on, genres first.
+  out.tiers = tiered(["voted", list(d.tags)]);
+  out.tags = flat(out.tiers);
   out.collection = typeof d.series?.name === "string" ? d.series.name : null;
   out.authors = list(d.authors).slice(0, 6);
   out.pageCount = typeof d.pages === "number" ? d.pages : null;
@@ -566,7 +627,9 @@ function normalizeBgg(d: any): SourceNormalized {
   out.releaseDate = typeof d.year === "number" && d.year > 0 ? String(d.year) : null;
   out.poster = d.image ?? d.thumbnail ?? null;
   out.images = out.poster ? [out.poster] : [];
-  out.tags = [...list(d.categories), ...list(d.mechanics), ...bggThemes(list(d.families))];
+  // BGG's categories are the genre, its mechanics the second classification, its theme families the tail.
+  out.tiers = tiered(["genre", list(d.categories)], ["theme", list(d.mechanics)], ["keyword", bggThemes(list(d.families))]);
+  out.tags = flat(out.tiers);
   out.collection = bggFranchises(list(d.families))[0] ?? null;
   out.publisher = list(d.publishers)[0] ?? null;
   out.designers = list(d.designers);

@@ -184,6 +184,22 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
           </View>
         </Block>
 
+        <Block title="Tag tiers">
+          <Text style={styles.tiny}>
+            Where a tag came from says how much it counts (docs/fandex-score.md §3.9): a provider's genre or theme and a crowd's voted
+            tag (Steam, RAWG) in full, an editor's keyword less. Applied per occurrence on both axes, like a cast member's billing.
+          </Text>
+          <View style={styles.grid2}>
+            {([['Genres', 'genre'], ['Themes', 'theme'], ['Voted tags', 'voted'], ['Keywords', 'keyword']] as [string, string][]).map(([label, tier]) => (
+              <View key={tier} style={styles.cell2}>
+                <Field label={label}>
+                  <NumField label={`${label} tier weight`} value={draft.tagTierWeights?.[tier] ?? 1} onChange={(n) => set({ tagTierWeights: { ...draft.tagTierWeights, [tier]: n } })} />
+                </Field>
+              </View>
+            ))}
+          </View>
+        </Block>
+
         <Block title="Calibration">
           <View style={{ gap: 16 }}>
             <View style={{ gap: 4 }}>

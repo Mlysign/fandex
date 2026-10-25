@@ -162,6 +162,36 @@ Without a catalog count (no pull axis) the taste band alone names it: above usua
 
 **The odds line** under the label ("Films like this: an 8 or more about 1.4× as often as usual") is the one number shown. It is, per label and medium, how much more often than usual titles with that label were rated 8 or more: `DEFAULT_LABEL_ODDS` (`src/lib/scoringDefaults.ts`), seeded from the owner's 1,701 ratings, to be replaced by the goalpost's sums (§11) once there are enough users.
 
+### 3.9 Tag tiers: where a tag came from (added 2026-10-25)
+
+The first of the score's data fixes. Until this, a title's tags were one flat union in `merge.ts`'s source order (RAWG, Steam, TMDB, Trakt, Letterboxd, IGDB, …), deduped and cut at 30, so provenance died there: a game's 278 IGDB keywords filled its facets (a median of 5, p90 49), RAWG's voted tags were never read, and Steam's were not fetched at all on this stack. Measured 2026-10-24: the score's games ranked by tag count (ρ 0.39), and the formula was not the limit, the facets were.
+
+Every tag facet now carries a **tier** and a **rank** (`src/types` `TagTier`, `src/lib/facets.ts`):
+
+| tier | what it is | sources | cap per title |
+|---|---|---|---|
+| `genre` | the provider's own classification | TMDB, IGDB, RAWG, Trakt and Letterboxd genres, BGG categories | 12 |
+| `theme` | its second one | IGDB themes, Trakt subgenres, BGG mechanics | 12 |
+| `voted` | what a crowd put on the title and ranked | Steam's store tags (by votes), RAWG's tags (English only), Hardcover's | 20 |
+| `keyword` | the long editorial tail | TMDB and IGDB keywords, a book's subjects, BGG theme families | 8 |
+
+The normalizers (`sources/normalize.ts`) emit each source's tags with their tier in the source's own order, noise (`meta`) last; `mergeLinks` files every tag under the best tier any source gave it, orders a tier by source then rank, caps it (`TIER_CAPS`), numbers it 1 first, and lets a tag the cap leaves out fall back to the next tier that lists it (Steam's fifteenth tag is often the specific one). `extractFacets` reads that list (`merged.tagTiers`), and `merged.tags`, the display list, is the same tags in tier order, so the chips on a page are the facets the score reads.
+
+**Steam's voted tags** come from `IStoreBrowseService/GetItems` (`src/lib/sources/steam.ts`, the Web API terms cover it), written by the cron (`runSteamTagsStep`) onto the IGDB payload as `steamTags` for every pool game that names a Steam page, the way `collections` were: not a Steam link, which would also make Steam's header the game's backdrop. 1,218 of 1,313 such games answered with tags on 2026-10-25, 17 each.
+
+**The score weighs an occurrence by its tier**, on both axes, the way it weighs a cast occurrence by its billing (`occurrenceWeight`, `tagTierWeights` in the scoring config, admin-tunable): genre, theme and voted in full, keyword 0.5. A facet derived before tiers existed carries none and counts in full. The Why sheet marks a tag row "core" or "detail".
+
+Measured on the owner's library (`scripts/score-backtest.mjs`, taxonomy version 9), before → after:
+
+| | films: pairs right · ρ · wishlist | games: pairs right · ρ · wishlist · held | books ρ |
+|---|---|---|---|
+| before | 62% · 0.313 · 82% | 59% · 0.198 · 90% · 76% | −0.38 |
+| tiers and caps, no weights | 62% · 0.310 · 83% | 60% · 0.231 · 88% · 80% | 0.04 |
+| keyword 0.5 (shipped), no Steam | 62% · 0.295 · 85% | 59% · 0.205 · 89% · 81% | 0.16 |
+| plus Steam's voted tags, cap 20 (shipped) | 62% · 0.296 · 85% | 59% · 0.195 · 87% · 79% | 0.23 |
+
+Keyword at 0.25 pushed films' wishlist to 87% at ρ 0.288; at 0.75, 84% and 0.305: a trade between the two bars, left at 0.5. Steam's tags cost the games wishlist bar three points whatever their weight (0.5, 0.75 and 1 measured) and whatever the cap (12 was worse than 20); zeroing the `mode` category they mostly file under changed nothing. They stay on: the measurement is one library, and "Tower Defense", "Roguelike Deckbuilder" and "Story Rich" exist nowhere else.
+
 ### 3.4 Explainability payload
 
 **Revised 2026-07-29 (T10):** each reason now also carries a canonical `impact` number, computed by `facetImpact(id, profile, config) = gain · profile.w.get(id)` — item-independent (it doesn't matter which item you're looking at a facet from), and equal to `contribution` for any facet that made the top-N cut. This is the number now shown on the item breakdown, the tag facet page, and the hover tooltip alike — previously these three surfaces each computed their own version and disagreed (a real `classWeight`-missing bug in `/api/facet/mine`, and a plain-mean-vs-Bayesian-average mismatch in `facetDetail.ts`, were both root causes, now fixed).

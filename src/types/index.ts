@@ -1,6 +1,18 @@
 export type MediaType = "game" | "movie" | "show" | "book" | "boardgame";
 export type Source = "steam" | "rawg" | "tmdb" | "trakt" | "igdb" | "letterboxd" | "openlibrary" | "bgg" | "hardcover";
 
+/**
+ * Where a tag came from, which is how much it says about a title (2026-10-25,
+ * docs/fandex-score.md §3.9). A GENRE is the provider's own classification; a
+ * THEME its second one (IGDB themes, Trakt subgenres, a board game's
+ * mechanics); a VOTED tag is what a crowd put on the title and ranked (Steam,
+ * RAWG, Hardcover); a KEYWORD is the long editorial tail (TMDB and IGDB
+ * keywords, a book's subjects), good when ranked and capped, noise otherwise.
+ */
+export type TagTier = "genre" | "theme" | "voted" | "keyword";
+/** One tag with its tier, in the order its source ranks it. */
+export interface TieredTag { name: string; tier: TagTier }
+
 // An identity provider a user_identities row (and therefore a session) can be
 // minted from.
 //
@@ -138,6 +150,13 @@ export interface EnrichedItem {
   // From merge
   images: string[];
   tags: string[];
+  /**
+   * Every tag with its tier and its rank within that tier on this title,
+   * capped per tier (merge.ts). What extractFacets reads since 2026-10-25;
+   * `tags` and `keywords` stay the display lists. Not stored in a doc: the
+   * facets carry tier and rank themselves.
+   */
+  tagTiers?: { name: string; tier: TagTier; rank: number }[];
   platforms: string[];
   description: string | null;
   tagline: string | null;

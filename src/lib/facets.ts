@@ -7,7 +7,7 @@
 // and companies are read straight from `raw_data` here. Tags reuse the merged
 // `tags` + `keywords` (which already union genres/keywords across sources).
 
-import type { MediaLink, MediaType, Source } from "@/types";
+import type { MediaLink, MediaType, Source, TagTier } from "@/types";
 import { WRITER_JOBS } from "@/lib/crewJobs";
 import { categorizeTag } from "@/lib/tags";
 import { transliterate } from "@/lib/translit";
@@ -43,7 +43,16 @@ export interface Facet {
   // collections were asked for. Not part of the facet's identity: the app's
   // series rails and franchise page read it, the score does not.
   series?: string[];
+  // 2026-10-25, tags only: where the tag came from (types.ts, TagTier) and its
+  // rank within that tier on THIS title, 1 first. Not part of the identity
+  // either: "steampunk" is one facet whether a crowd voted it or an editor
+  // keyed it. The score weighs an occurrence by its tier (fandexScore.ts,
+  // tagTierWeights), the way it weighs a cast occurrence by its billing.
+  // Absent on a facet derived before tiers existed, which counts in full.
+  tier?: TagTier;
+  rank?: number;
 }
+export type { TagTier };
 
 // Stable id for dedup + preference-map keys. A person who is both director and
 // writer is two distinct facets (role is part of the identity); a tag has no role.
@@ -149,13 +158,13 @@ function castProminence(index: number): number {
 
 // ── Extraction ────────────────────────────────────────────────────
 
-// All normalized facets for one item. `merged` supplies tags/keywords (already
-// unioned by mergeLinks); people/companies are read from each link's raw_data.
-// Deduped by `kind|role|key`, keeping the first-seen display label.
+// All normalized facets for one item. `merged` supplies the tags (unioned,
+// tiered and capped by mergeLinks); people/companies are read from each link's
+// raw_data. Deduped by `kind|role|key`, keeping the first-seen display label.
 export function extractFacets(
   links: MediaLink[],
   type: MediaType,
-  merged: { tags?: string[]; keywords?: string[] }
+  merged: { tags?: string[]; keywords?: string[]; tagTiers?: { name: string; tier: TagTier; rank: number }[]; originalLanguage?: string | null }
 ): Facet[] {
   const out: Facet[] = [];
   const seen = new Set<string>();
@@ -167,10 +176,18 @@ export function extractFacets(
     out.push(f);
   };
 
-  // Tags (genres + keywords) — reuse the merged union.
-  for (const t of [...(merged.tags ?? []), ...(merged.keywords ?? [])]) {
-    const key = tagKey(t);
-    if (key) push({ kind: "tag", key, label: t, category: categorizeTag(key) });
+  // Tags, with their tier and rank (since 2026-10-25). A caller from before
+  // tiers hands the flat genres-plus-keywords union, which derives as it did.
+  if (merged.tagTiers) {
+    for (const t of merged.tagTiers) {
+      const key = tagKey(t.name);
+      if (key) push({ kind: "tag", key, label: t.name, category: categorizeTag(key), tier: t.tier, rank: t.rank });
+    }
+  } else {
+    for (const t of [...(merged.tags ?? []), ...(merged.keywords ?? [])]) {
+      const key = tagKey(t);
+      if (key) push({ kind: "tag", key, label: t, category: categorizeTag(key) });
+    }
   }
 
   const bySource = new Map<Source, any>();

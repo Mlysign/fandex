@@ -159,3 +159,29 @@ describe("extractFacets — franchise / IP", () => {
     expect(facets.filter((f) => f.kind === "ip")).toHaveLength(1);
   });
 });
+
+describe("extractFacets — tag tiers (2026-10-25)", () => {
+  const link = (source: string, rawData: unknown) =>
+    ({ id: "", mediaItemId: "m", source, sourceId: "1", title: null, releaseDate: null, rawData, lastSynced: 0 }) as never;
+
+  it("carries each tag's tier and rank from the merged list, and files the category as before", () => {
+    const facets = extractFacets([link("igdb", {})], "game", {
+      tagTiers: [
+        { name: "Role-playing (RPG)", tier: "genre", rank: 1 },
+        { name: "Fantasy", tier: "theme", rank: 1 },
+        { name: "Story Rich", tier: "voted", rank: 1 },
+        { name: "steampunk", tier: "keyword", rank: 1 },
+      ],
+    }).filter((f) => f.kind === "tag");
+    expect(facets.map((f) => [f.key, f.tier, f.rank])).toEqual([
+      ["role playing (rpg)", "genre", 1], ["fantasy", "theme", 1], ["story rich", "voted", 1], ["steampunk", "keyword", 1],
+    ]);
+    expect(facets.find((f) => f.key === "steampunk")!.category).toBe("setting");
+  });
+
+  it("still derives a caller's flat genres-plus-keywords union, without a tier", () => {
+    const facets = extractFacets([link("tmdb", {})], "movie", { tags: ["Drama"], keywords: ["heist"] }).filter((f) => f.kind === "tag");
+    expect(facets.map((f) => f.key)).toEqual(["drama", "heist"]);
+    expect(facets.every((f) => f.tier === undefined && f.rank === undefined)).toBe(true);
+  });
+});

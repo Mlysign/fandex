@@ -373,10 +373,10 @@ exports[`explainMerge characterization > game debug matrix 1`] = `
     "final": [
       "RPG",
       "Action",
-      "Open World",
-      "Cyberpunk",
       "Role-playing (RPG)",
       "Science fiction",
+      "Open World",
+      "Cyberpunk",
     ],
     "perSource": {
       "igdb": [
@@ -1151,6 +1151,8 @@ exports[`explainMerge characterization > movie debug matrix 1`] = `
       "Action",
       "Science Fiction",
       "Thriller",
+      "dream",
+      "heist",
     ],
     "perSource": {
       "letterboxd": [
@@ -1946,14 +1948,46 @@ exports[`mergeLinks characterization > game: steam + rawg + igdb 1`] = `
   "streamingLink": null,
   "streamingOfferType": null,
   "streamingProviders": [],
+  "tagTiers": [
+    {
+      "name": "RPG",
+      "rank": 1,
+      "tier": "genre",
+    },
+    {
+      "name": "Action",
+      "rank": 2,
+      "tier": "genre",
+    },
+    {
+      "name": "Role-playing (RPG)",
+      "rank": 3,
+      "tier": "genre",
+    },
+    {
+      "name": "Science fiction",
+      "rank": 1,
+      "tier": "theme",
+    },
+    {
+      "name": "Open World",
+      "rank": 1,
+      "tier": "voted",
+    },
+    {
+      "name": "Cyberpunk",
+      "rank": 2,
+      "tier": "voted",
+    },
+  ],
   "tagline": null,
   "tags": [
     "RPG",
     "Action",
-    "Open World",
-    "Cyberpunk",
     "Role-playing (RPG)",
     "Science fiction",
+    "Open World",
+    "Cyberpunk",
   ],
   "timeToBeat": {
     "completely": 100,
@@ -2307,11 +2341,40 @@ exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
       "providerId": 8,
     },
   ],
+  "tagTiers": [
+    {
+      "name": "Action",
+      "rank": 1,
+      "tier": "genre",
+    },
+    {
+      "name": "Science Fiction",
+      "rank": 2,
+      "tier": "genre",
+    },
+    {
+      "name": "Thriller",
+      "rank": 3,
+      "tier": "genre",
+    },
+    {
+      "name": "dream",
+      "rank": 1,
+      "tier": "keyword",
+    },
+    {
+      "name": "heist",
+      "rank": 2,
+      "tier": "keyword",
+    },
+  ],
   "tagline": "Your mind is the scene of the crime.",
   "tags": [
     "Action",
     "Science Fiction",
     "Thriller",
+    "dream",
+    "heist",
   ],
   "timeToBeat": null,
   "title": "Inception",
@@ -2483,6 +2546,13 @@ exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
   "streamingLink": null,
   "streamingOfferType": null,
   "streamingProviders": [],
+  "tagTiers": [
+    {
+      "name": "Drama",
+      "rank": 1,
+      "tier": "genre",
+    },
+  ],
   "tagline": null,
   "tags": [
     "Drama",

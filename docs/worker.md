@@ -323,8 +323,9 @@ Each of these is a way the Worker differs from the site, and each has a test.
     would have saved nothing: the 134 counts on 2026-10-10 were 134 syncs, not 134 pages.
 - **The cron is a state machine.** One trigger, every ten minutes, a few steps each run, cursors
   in the `kv` table. Four jobs: the nightly export to R2, the TMDB refresh (links older than 150
-  days, inside TMDB's six-month cap), the upcoming refresh, one calendar month. IGDB is not
-  refreshed on a timer; its retention question is open.
+  days, inside TMDB's six-month cap), the upcoming refresh, one calendar month; plus the one-off
+  walks below (books' series, IGDB collections, the projection, Steam's tags, the re-derive),
+  which park for good when done. IGDB is not refreshed on a timer; its retention question is open.
 - **A one-off that rides the same slots: the books stored before their series was read**
   (`runOpenLibraryRefetchStep`, 2026-10-17). Every Open Library link last synced before the series
   fix (`OPENLIBRARY_REFETCH_BEFORE`) is fetched again once, through the same upsert a resolve
@@ -348,11 +349,29 @@ Each of these is a way the Worker differs from the site, and each has a test.
   facet's `series`) and moves it in the delta sync. Past the last id the cursor reads `done` and
   the step costs one kv read. A failed IGDB call leaves the cursor, so the batch is asked again.
   Delete the `kv` row to walk again.
-- **A changed merge rule is true on the next item read, and nothing re-derives on a timer.**
-  `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges a doc with
-  an older stamp from its blobs, whatever the region, and the next write of the item re-stamps it.
-  ⚠️ That heals `merged` only. A bump that changes the vector or the facets reaches a device as
-  rows are refreshed, which is 150 days for a TMDB link.
+- **Steam's voted tags reach the pool's games through a cron walk** (`runSteamTagsStep`,
+  2026-10-25). Every pool IGDB game that names a Steam page (in its websites, or through a Steam
+  link of the old stack) and carries no `steamTags` yet is taken six a run by `source_id` after
+  the `steam_tags_cursor` row in `kv`; one `GetItems` call answers the batch, the tag names come
+  from `GetTagList` kept a week in `kv` (`steam_tag_map`), and each game is stored again with
+  `steamTags` and `steamAppId` merged onto its IGDB payload, which re-derives its facets (the
+  voted tier, `docs/fandex-score.md` §3.9) and moves it in the delta sync. A game Steam does not
+  answer for is stored with `steamTags: []`, so the walk moves past it. 1,313 games on
+  2026-10-25, three row writes each, about a day and a half of runs. Past the last id the cursor
+  reads `done`; delete the row to walk again. Needs `STEAM_API_KEY`; a failed Steam call leaves
+  the cursor.
+- **A changed merge rule is true on the next item read, and nothing re-derives on a timer unless
+  asked.** `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges
+  a doc with an older stamp from its blobs, whatever the region, and the next write of the item
+  re-stamps it. ⚠️ That heals `merged` only. A bump that changes the vector or the facets reaches a
+  device as rows are refreshed, which is 150 days for a TMDB link, unless the re-derive walk is
+  switched on: `runRederiveStep` (2026-10-25) derives every pool item whose doc is behind again
+  from the links it has, ten a run in `media_items.id` order (`rederive_cursor` in `kv`, parked at
+  `done:{version}`), each one read batch, one guarded write batch and three row writes (the item
+  row, its pool index, the doc). It runs only while `kv` `rederive_go` holds the version as a
+  string, so the writes are priced and agreed before they are spent:
+  `INSERT INTO kv (key, value) VALUES ('rederive_go', '4')`. The pool of 2026-10-25 is 4,614
+  items, about 14,000 writes over three days of runs.
 - **`kv` holds the Twitch app token and is never exported.** The export skips tables by name and a
   test fails if `kv` reaches the bucket.
 - **The export pages by key, and must never page by `OFFSET`.** An offset is read past, so chunk

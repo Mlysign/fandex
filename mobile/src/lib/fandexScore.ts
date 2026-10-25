@@ -37,6 +37,9 @@ export interface ScoreFacet {
   prominence?: number;
   /** A game's franchise only: its IGDB collections, the series inside the franchise. [] is none, absent is not known (src/lib/facets.ts). */
   series?: string[];
+  /** A tag's tier (genre, theme, voted, keyword) and its rank within it on this title (src/lib/facets.ts, 2026-10-25). Absent on a facet derived before, which counts in full. */
+  tier?: string;
+  rank?: number;
 }
 
 /** `/v1/taxonomy`, as the Worker answers it. */
@@ -71,6 +74,7 @@ export function prepareTaxonomy(json: TaxonomyJson): Taxonomy {
     ...stored,
     roleWeights: { ...DEFAULT_SCORING_CONFIG.roleWeights, ...(stored.roleWeights ?? {}) },
     pullWeight: { ...DEFAULT_SCORING_CONFIG.pullWeight, ...(stored.pullWeight ?? {}) },
+    tagTierWeights: { ...DEFAULT_SCORING_CONFIG.tagTierWeights, ...(stored.tagTierWeights ?? {}) },
   };
   const ipOverrides: Taxonomy['ipOverrides'] = new Map();
   for (const o of json.itemIpOverrides) {
@@ -161,6 +165,18 @@ export function classWeightOf(f: ScoreFacet, tax: Taxonomy): { weight: number; c
     return { weight: cat?.weight ?? 1, category };
   }
   return { weight: tax.config.roleWeights[f.role ?? 'tag'] ?? 1, category: f.category };
+}
+
+/**
+ * How strongly THIS title carries a facet, apart from the facet's class: a
+ * cast member's billing, and a tag's tier (a keyword counts less than a genre
+ * or a voted tag, §3.9). Applied when learning from a rated title and when
+ * scoring one, so both sides weigh an occurrence the same way. 1 for a facet
+ * that carries neither.
+ */
+export function occurrenceWeight(f: ScoreFacet, tax: Taxonomy): number {
+  const tier = f.kind === 'tag' && f.tier ? (tax.config.tagTierWeights[f.tier] ?? 1) : 1;
+  return (f.prominence ?? 1) * tier;
 }
 
 // ── The taste profile ────────────────────────────────────────────────────────
@@ -293,7 +309,7 @@ export function buildProfile(
     ratings.set(item.id, rating);
     for (const f of resolveFacets(item.facets, item.id, tax)) {
       const id = facetId(f);
-      const prominence = f.prominence ?? 1;
+      const prominence = occurrenceWeight(f, tax);
       const st = stats.get(id);
       if (st) {
         st.count++;
@@ -414,7 +430,8 @@ export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?:
   const followed = profile.follows.get(id);
   const maxLift = Math.log2(1 / share);
   const lift = followed === 'follow' ? maxLift : followed === 'avoid' ? -maxLift : pullLift(consumed, catalog, share, cfg.pullPrior);
-  const roleWeight = f.kind === 'tag' ? 1 : (cfg.roleWeights[f.role ?? 'tag'] ?? 1);
+  // A tag's tier weighs its pull as it weighs its taste; cast billing does not (a title's choice is a choice, lead or cameo).
+  const roleWeight = f.kind === 'tag' ? (f.tier ? (cfg.tagTierWeights[f.tier] ?? 1) : 1) : (cfg.roleWeights[f.role ?? 'tag'] ?? 1);
   const value = lift * salienceOf(catalog, profile.catalog!.total) * roleWeight;
   const medium = type ? (cfg.pullWeight[type] ?? 1) : 1;
   return { consumed, catalog, lift, points: Math.round(cfg.pullGain * medium * value * 10) / 10, ...(followed ? { followed } : {}) };
@@ -461,6 +478,8 @@ export interface ScoreReason {
   n: number;
   /** Outside the top few for this title: shown, not counted. */
   capped?: boolean;
+  /** A tag row: its tier on this title, so the sheet can say "core" or "detail". */
+  tier?: string;
   /** Pull rows only: the titles behind the number. */
   consumed?: number;
   catalog?: number;
@@ -534,7 +553,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     if (profile.w.get(id) == null || !stored?.classWeight) continue;
     let meta = stored;
     if (own !== undefined) {
-      const p = f.prominence ?? 1;
+      const p = occurrenceWeight(f, tax);
       const weightedCount = stored.weightedCount - p;
       // A facet only this title carried has no evidence left.
       if (stored.n <= 1 || weightedCount <= 0) continue;
@@ -542,8 +561,8 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
       const C = cfg.priorStrength;
       meta = { ...stored, n: stored.n - 1, weightedSum, weightedCount, BA: (C * baseline + weightedSum) / (C + weightedCount) };
     }
-    // THIS title's cast billing scales what the facet is worth here.
-    matched.push({ f, dev: meta.BA - baseline, classWeight: meta.classWeight * (f.prominence ?? 1), meta });
+    // THIS title's cast billing, or its tag's tier, scales what the facet is worth here.
+    matched.push({ f, dev: meta.BA - baseline, classWeight: meta.classWeight * occurrenceWeight(f, tax), meta });
   }
 
   // The pull rows: every facet with a catalog count, this title's own place in the counts left out.
@@ -619,6 +638,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     axis: 'taste', kind: c.f.kind, role: c.f.role, key: c.f.key, label: c.f.label, category: c.meta.category ?? c.f.category,
     contribution: counted ? round1(gain * weighted(c) * share) : 0,
     impact: impactOf(c), BA: c.meta.BA, n: c.meta.n,
+    ...(c.f.tier ? { tier: c.f.tier } : {}),
     ...(counted ? {} : { capped: true }),
   });
   const pullReason = (p: PullContrib, counted: boolean): ScoreReason => ({
@@ -626,6 +646,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     contribution: counted ? round1(p.value * share) : 0,
     impact: p.pull.points, BA: 0, n: Math.round(p.pull.consumed),
     consumed: p.pull.consumed, catalog: p.pull.catalog, lift: p.pull.lift,
+    ...(p.f.tier ? { tier: p.f.tier } : {}),
     ...(p.pull.followed ? { followed: p.pull.followed } : {}),
     ...(counted ? {} : { capped: true }),
   });

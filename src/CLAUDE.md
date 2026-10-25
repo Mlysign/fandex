@@ -19,4 +19,5 @@ Everything here is imported by the Worker, the app or the website build, so a ch
 - **Before a `PROJECTION_VERSION` bump** (`sources/project.ts`), check whether lazy self-heal already covers the change. A bump makes the Worker's cron re-derive the whole pool. → [[lazy-heal-vs-mass-reprojection]]
 - **`personKey`/`slugify`: NFD does not decompose `ø å æ ł ß`.** Never give `tagKey` the same fix. → [[unicode-normalization-lossy-slugs]]
 - **`CATEGORY_LABELS` (`tags.ts`) is nine static ids, and the taxonomy is editable.** Resolve a label against the live list and fall back to the id, never to a flat "Tag".
+- **A tag facet comes from `merged.tagTiers`, never from the flat `tags` list.** A normalizer sets `tiers` and `tags` together through `tiered()`; the merge files, caps and ranks them (`TIER_CAPS`); `extractFacets` reads the result, and the score weighs an occurrence by its tier. A new tag source names its tier or its tags reach no facet. → `docs/fandex-score.md` §3.9
 - **The legal pages are `legal/content/{en,de}/`.** Change both languages in one go, and move the page's `updated` date. They render on fandex.org through the website build.

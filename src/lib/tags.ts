@@ -144,7 +144,19 @@ const META = set(
   "aftercreditsstinger", "post credits scene", "credits", "cameo",
   "woman director", "marvel cinematic universe (mcu)", "dc extended universe (dceu)",
   "shared universe", "franchise", "cinematic universe", "live action remake", "directors cut",
-  "imax", "3d film", "title spoken by character", "no opening credits"
+  "imax", "3d film", "title spoken by character", "no opening credits",
+  // Store and platform features Steam's and RAWG's voted tags and IGDB's keywords
+  // carry on most games (2026-10-25). They say nothing about a title, and the
+  // merge ranks noise last before capping a tier (sources/normalize.ts), so a
+  // slot goes to a tag that does. The live taxonomy files hundreds more by hand.
+  "steam", "steam achievements", "steam cloud", "steam trading cards", "steam workshop",
+  "steam leaderboards", "steam deck", "steam turn notifications", "steam remote play", "remote play",
+  "remote play together", "full controller support", "partial controller support", "controller",
+  "controller support", "family sharing", "captions available", "stats", "includes level editor",
+  "cross platform multiplayer", "in app purchases", "early access", "free to play", "achievements",
+  "digital distribution", "playstation trophies", "xbox achievements", "downloadable content",
+  "valve anti cheat", "humble bundle", "gamersgate", "removed from steam", "commentary available",
+  "includes source sdk", "tracked controller support", "vr support", "steam greenlight"
 );
 
 // ── Theme / plot (broad catch for content elements + characters) ──

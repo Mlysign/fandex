@@ -51,9 +51,12 @@ export interface ScoringConfig {
   pullTopIps: number;
   tasteBandMargin: number;
   pullBandMargin: number;
+  /** 2026-10-25: a tag occurrence's weight by its tier (docs/fandex-score.md §3.9). Defaults for an older body too. */
+  tagTierWeights: Record<string, number>;
 }
 
 const MEDIA = new Set(["movie", "show", "game", "book", "boardgame"]);
+const TIERS = new Set(["genre", "theme", "voted", "keyword"]);
 
 /** The whole config or a refusal: a save replaces the stored object, so a half one must not get through. */
 export function parseScoringConfig(body: unknown): ScoringConfig {
@@ -78,6 +81,16 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
       pullWeight[medium] = n;
     }
   }
+  const tagTierWeights: Record<string, number> = { ...d.tagTierWeights };
+  if (body.tagTierWeights !== undefined) {
+    if (!isObj(body.tagTierWeights)) throw new BadRequest("tagTierWeights must be an object");
+    for (const [tier, weight] of Object.entries(body.tagTierWeights)) {
+      if (!TIERS.has(tier)) throw new BadRequest("Unknown tier in tagTierWeights");
+      const n = num(weight, `tagTierWeights.${tier}`);
+      if (n < 0) throw new BadRequest(`tagTierWeights.${tier} must not be negative`);
+      tagTierWeights[tier] = n;
+    }
+  }
   return {
     roleWeights,
     priorStrength: positive(body.priorStrength, "priorStrength"),
@@ -97,6 +110,7 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     pullTopIps: orDefault(body.pullTopIps, d.pullTopIps, (v) => count(v, "pullTopIps")),
     tasteBandMargin: orDefault(body.tasteBandMargin, d.tasteBandMargin, (v) => positive(v, "tasteBandMargin")),
     pullBandMargin: orDefault(body.pullBandMargin, d.pullBandMargin, (v) => positive(v, "pullBandMargin")),
+    tagTierWeights,
   };
 }
 

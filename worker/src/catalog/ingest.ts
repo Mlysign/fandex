@@ -416,6 +416,38 @@ async function writeLinkAndRederiveOnce(
 }
 
 /**
+ * Derive one existing item again from the links it already has, with nothing
+ * new stored: the cron's re-derive after a DERIVE_VERSION bump (cron.ts,
+ * runRederiveStep). One read batch, one write batch, guarded like a link write:
+ * when another writer moved the links in between, the guard fails the batch
+ * and this returns false, which is fine, since that writer derived the item
+ * under the current version itself.
+ */
+export async function rederiveItem(db: D1Database, row: ItemRow): Promise<boolean> {
+  const [linksRes, extRes, tokenRes] = await db.batch([
+    stmt(
+      db,
+      "SELECT source, source_id, media_type, release_date, last_synced, raw_data FROM media_links WHERE media_item_id = ?",
+      [row.id],
+    ),
+    stmt(db, "SELECT source, external_id FROM media_external_ids WHERE media_item_id = ?", [row.id]),
+    stmt(db, LINKS_TOKEN_SQL, [row.id]),
+  ]);
+  const token = (tokenRes.results as { token: string }[])[0]?.token ?? "";
+  const links = (linksRes.results as LinkRow[]).map(parseLink);
+  try {
+    await db.batch([
+      stmt(db, LINKS_GUARD_SQL, [token, row.id]),
+      ...rederiveStatements(db, row, links, extRes.results as { source: string; external_id: string }[]),
+    ]);
+    return true;
+  } catch (e) {
+    if (e instanceof Error && /malformed JSON/i.test(e.message)) return false;
+    throw e;
+  }
+}
+
+/**
  * The statements that bring media_items, item_doc and media_external_ids in
  * line with `links`. Shared by the write path above and the cron's re-derive.
  */

@@ -23,12 +23,14 @@
 import { getIgdbCollections, igdbConfigured } from "@/lib/sources/igdb";
 import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
+import { getSteamStoreTags, getSteamTagMap } from "@/lib/sources/steam";
 import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
 import { kvGet, kvSet } from "./budget";
 import { monthKey, runCalendarStep, SERVABLE_MONTHS, shiftMonth } from "./calendar";
 import { all, nowSeconds, utcDay } from "./d1";
 import type { Env } from "./env";
-import { upsertMediaItem } from "./catalog/ingest";
+import { DERIVE_VERSION } from "./catalog/derive";
+import { rederiveItem, upsertMediaItem } from "./catalog/ingest";
 import { useSharedIgdbToken } from "./catalog/resolve";
 
 // ── 1. The export ───────────────────────────────────────────────────────────
@@ -501,6 +503,134 @@ export async function runIgdbCollectionsStep(env: Env, batch = IGDB_COLLECTIONS_
   return { refreshed, missing };
 }
 
+// ── 2e. Steam's voted tags onto the pool's games ────────────────────────────
+//
+// The score's data fixes (2026-10-25, docs/fandex-score.md §3.9): a game's
+// voted tier was empty on this stack, because nothing fetched Steam's store.
+// This walks the pool's IGDB games that point at a Steam page (1,313 of 2,675
+// on 2026-10-25) once, a few per run: one GetItems call for the batch, then
+// each game stored again with `steamTags` and `steamAppId` merged onto its
+// IGDB payload (mergeRawData, as `collections` were), which re-derives its
+// facets and moves it in the delta sync. A game Steam does not answer for is
+// stored with `steamTags: []`, so the walk moves past it. Self-terminating.
+// Not a new link row: a Steam link would also bring Steam's header image in as
+// the backdrop (BACKDROP_PRIORITY), a visual change a tag fix has no business making.
+
+/** Games a run stores again. A re-derive each is the CPU; one Steam call answers them all. */
+export const STEAM_TAGS_PER_RUN = 6;
+const STEAM_TAGS_CURSOR_KEY = "steam_tags_cursor";
+const STEAM_TAGS_DONE = "done";
+/** Steam's tag id → name list, about 450 rows, kept a week. */
+const STEAM_TAG_MAP_KEY = "steam_tag_map";
+const STEAM_TAG_MAP_SECONDS = 7 * 86_400;
+const STEAM_APP_PATH = "store.steampowered.com/app/";
+
+export async function runSteamTagsStep(env: Env, batch = STEAM_TAGS_PER_RUN): Promise<{ tagged: number; empty: number; missing: number }> {
+  const none = { tagged: 0, empty: 0, missing: 0 };
+  if (!env.STEAM_API_KEY) return none;
+  const cursor = await kvGet(env.DB, STEAM_TAGS_CURSOR_KEY);
+  if (cursor === STEAM_TAGS_DONE) return none;
+
+  // The pool's IGDB games from the cursor on that name a Steam page (in their
+  // websites, or through a Steam link of the old stack) and carry no answer yet.
+  // The app id is cut out of the blob in SQL, so no blob leaves the database.
+  const due = await all<{ source_id: string; media_item_id: string; title: string; release_date: string | null; url_tail: string | null; steam_id: string | null }>(
+    env.DB,
+    `SELECT g.source_id, g.media_item_id, g.title, g.release_date,
+            CASE WHEN instr(g.raw_data, ?3) > 0 THEN substr(g.raw_data, instr(g.raw_data, ?3) + ?4, 12) END AS url_tail,
+            (SELECT s.source_id FROM media_links s WHERE s.media_item_id = g.media_item_id AND s.source = 'steam' LIMIT 1) AS steam_id
+       FROM media_links g JOIN media_items mi ON mi.id = g.media_item_id
+      WHERE g.source = 'igdb' AND g.media_type = 'game' AND g.source_id > ?1 AND mi.browsed = 0
+        AND g.raw_data NOT LIKE '%"steamTags"%'
+        AND (instr(g.raw_data, ?3) > 0 OR EXISTS (SELECT 1 FROM media_links s WHERE s.media_item_id = g.media_item_id AND s.source = 'steam'))
+      ORDER BY g.source_id LIMIT ?2`,
+    [cursor ?? "", batch, STEAM_APP_PATH, STEAM_APP_PATH.length],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, STEAM_TAGS_CURSOR_KEY, STEAM_TAGS_DONE);
+    return none;
+  }
+  const games = due.map((d) => {
+    const fromUrl = Number(/^\d+/.exec(d.url_tail ?? "")?.[0]);
+    const appid = fromUrl > 0 ? fromUrl : Number(d.steam_id) > 0 ? Number(d.steam_id) : null;
+    return { ...d, appid };
+  });
+
+  let tagMap: Record<number, string> | null = null;
+  try { tagMap = JSON.parse((await kvGet(env.DB, STEAM_TAG_MAP_KEY)) ?? "null"); } catch { tagMap = null; }
+  if (!tagMap) {
+    tagMap = await getSteamTagMap(env.STEAM_API_KEY);
+    await kvSet(env.DB, STEAM_TAG_MAP_KEY, JSON.stringify(tagMap), STEAM_TAG_MAP_SECONDS);
+  }
+  // A throw here leaves the cursor where it was: the batch is asked again next run.
+  const found = await getSteamStoreTags(env.STEAM_API_KEY, games.map((g) => g.appid).filter((a): a is number => a !== null), tagMap);
+
+  const out = { ...none };
+  for (const g of games) {
+    const hit = g.appid !== null ? found.get(g.appid) : undefined;
+    const steamTags = hit?.tags ?? [];
+    await upsertMediaItem(env.DB, {
+      source: "igdb", sourceId: g.source_id, type: "game", title: g.title, releaseDate: g.release_date,
+      // Merged over the stored payload (mergeRawData): only these two keys are new.
+      rawData: { id: Number(g.source_id), steamAppId: g.appid, steamTags },
+    }, CRON_UPSERT);
+    if (!hit) out.missing++; else if (steamTags.length) out.tagged++; else out.empty++;
+  }
+  await kvSet(env.DB, STEAM_TAGS_CURSOR_KEY, due[due.length - 1].source_id);
+  return out;
+}
+
+// ── 2f. The pool under an older DERIVE_VERSION ───────────────────────────────
+//
+// A doc is derived when its item is written and never again on its own
+// (catalog/derive.ts). A bump that changes the FACETS, as version 4 does,
+// therefore reaches a device only as rows happen to be rewritten, which for
+// most of the pool is never. This walks every pool item whose doc is behind,
+// a few per run, deriving it again from the links it has (no provider call),
+// which moves it in the delta sync. Priced before it runs: three row writes an
+// item (the item row, its pool index, the doc), about 14,000 for the pool of
+// 2026-10-25, over about three days of runs. So it waits for a word: the kv
+// key `rederive_go` set to the version to walk for. Self-terminating per version.
+
+/** Items a run derives again. One read batch, one write batch and a derive each. */
+export const REDERIVE_PER_RUN = 10;
+export const REDERIVE_GO_KEY = "rederive_go";
+const REDERIVE_CURSOR_KEY = "rederive_cursor";
+const rederiveDone = () => `done:${DERIVE_VERSION}`;
+
+/** Null when not asked for this version; else what the run did. */
+export async function runRederiveStep(env: Env, batch = REDERIVE_PER_RUN): Promise<{ rederived: number; skipped: number } | null> {
+  if ((await kvGet(env.DB, REDERIVE_GO_KEY)) !== String(DERIVE_VERSION)) return null;
+  const raw = await kvGet(env.DB, REDERIVE_CURSOR_KEY);
+  if (raw === rederiveDone()) return { rederived: 0, skipped: 0 };
+  // A cursor is [id, version]. One left by another version starts the walk from the beginning.
+  let after = "";
+  try {
+    const c = raw && !raw.startsWith("done") ? (JSON.parse(raw) as [string, number]) : null;
+    if (c && c[1] === DERIVE_VERSION) after = c[0];
+  } catch { /* from the start */ }
+
+  const due = await all<{ id: string; type: string; slug: string | null; created_at: number }>(
+    env.DB,
+    `SELECT mi.id, mi.type, mi.slug, mi.created_at
+       FROM media_items mi JOIN item_doc d ON d.media_item_id = mi.id
+      WHERE mi.browsed = 0 AND mi.id > ? AND d.derive_version < ?
+      ORDER BY mi.id LIMIT ?`,
+    [after, DERIVE_VERSION, batch],
+  );
+  if (!due.length) {
+    await kvSet(env.DB, REDERIVE_CURSOR_KEY, rederiveDone());
+    return { rederived: 0, skipped: 0 };
+  }
+  let rederived = 0;
+  let skipped = 0;
+  for (const row of due) {
+    if (await rederiveItem(env.DB, row)) rederived++; else skipped++;
+  }
+  await kvSet(env.DB, REDERIVE_CURSOR_KEY, JSON.stringify([due[due.length - 1].id, DERIVE_VERSION]));
+  return { rederived, skipped };
+}
+
 // ── 2d. TMDB links stored under an older projection ─────────────────────────
 //
 // A blob is stored projected (src/lib/sources/project.ts), and what a projection
@@ -656,5 +786,19 @@ export async function runScheduled(env: Env): Promise<void> {
     if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
   } catch (e) {
     console.error("igdb_collections_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The pool's games without Steam's voted tags yet, until none are left; then one kv read a run.
+  try {
+    const st = await runSteamTagsStep(env);
+    if (st.tagged || st.empty || st.missing) console.log("steam_tags_step", st);
+  } catch (e) {
+    console.error("steam_tags_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The pool under an older derive version, once asked for (REDERIVE_GO_KEY); otherwise one kv read a run.
+  try {
+    const rd = await runRederiveStep(env);
+    if (rd && (rd.rederived || rd.skipped)) console.log("rederive_step", rd);
+  } catch (e) {
+    console.error("rederive_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
 }

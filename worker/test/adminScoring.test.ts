@@ -15,6 +15,7 @@ const CONFIG = {
   topTagsPositive: 6, topTagsNegative: 3, topPeople: 4, topCompanies: 2, topIps: 1,
   pullPrior: 5, pullGain: 3.5, pullWeight: { movie: 1, show: 1, game: 0.5, book: 1, boardgame: 1 },
   pullTopTags: 5, pullTopPeople: 3, pullTopCompanies: 2, pullTopIps: 1, tasteBandMargin: 10, pullBandMargin: 10,
+  tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 
 const taxonomy = async () => JSON.parse((await taxonomyJson(db)).body);
@@ -37,6 +38,14 @@ describe("the scoring config", () => {
     expect(() => parseScoringConfig({ ...CONFIG, pullWeight: { podcast: 1 } })).toThrow("Unknown medium");
     expect(() => parseScoringConfig({ ...CONFIG, pullGain: -1 })).toThrow("negative");
     expect(() => parseScoringConfig({ ...CONFIG, pullBandMargin: 0 })).toThrow("above zero");
+  });
+
+  it("fills the tag tiers from the defaults for a body written before they existed, and checks one that names them", () => {
+    const { tagTierWeights: _t, ...old } = CONFIG;
+    expect(parseScoringConfig(old).tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.5 });
+    expect(parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: 0.25 } }).tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.25 });
+    expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { rumour: 1 } })).toThrow("Unknown tier");
+    expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: -1 } })).toThrow("negative");
   });
 
   it("is what /v1/taxonomy serves after a save, with a version that only goes up", async () => {

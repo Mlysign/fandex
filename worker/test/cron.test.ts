@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetBreakers } from "@/lib/http";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { kvSet } from "../src/budget";
+import { DERIVE_VERSION } from "../src/catalog/derive";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import {
-  exportTables, OPENLIBRARY_REFETCH_BEFORE, runExportStep, runProjectionRefreshStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
+  exportTables, OPENLIBRARY_REFETCH_BEFORE, REDERIVE_GO_KEY, runExportStep, runProjectionRefreshStep, runIgdbCollectionsStep, runOpenLibraryRefetchStep, runRederiveStep, runSteamTagsStep, runTmdbRefreshStep, runUpcomingRefreshStep, TMDB_REFRESH_AFTER_DAYS,
 } from "../src/cron";
 import { db, env, gameItem, movieItem, tmdbMovie, wipe } from "./helpers";
 
@@ -536,5 +537,109 @@ describe("the TMDB links stored under an older projection", () => {
     expect(await runProjectionRefreshStep(env)).toEqual({ refreshed: 0, failed: 0 });
     expect(await runProjectionRefreshStep(env)).toEqual({ refreshed: 0, failed: 0 });
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("Steam's voted tags onto the pool's games (2026-10-25)", () => {
+  const withKey = { ...env, STEAM_API_KEY: "test-steam-key" };
+  const cursor = () => db.prepare("SELECT value FROM kv WHERE key = 'steam_tags_cursor'").first<{ value: string }>();
+  const facetsOf = async (id: string) =>
+    JSON.parse((await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>())!.facets) as any[];
+  const steamPage = (appid: number) => ({ websites: [{ type: 13, url: `https://store.steampowered.com/app/${appid}/x` }] });
+
+  /** Steam's two calls: the tag list, and the items asked for with their top tags as (id, weight). */
+  function steam(answers: Record<number, number[] | null>): string[] {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(url);
+      if (url.includes("GetTagList")) return Response.json({ response: { tags: [{ tagid: 19, name: "Action" }, { tagid: 1663, name: "FPS" }, { tagid: 4182, name: "Steampunk" }] } });
+      if (url.includes("GetItems")) {
+        const asked = JSON.parse(new URL(url).searchParams.get("input_json")!).ids.map((i: { appid: number }) => i.appid) as number[];
+        return Response.json({ response: { store_items: asked.filter((a) => answers[a] !== null && answers[a] !== undefined)
+          .map((a) => ({ appid: a, name: `App ${a}`, tags: answers[a]!.map((tagid, i) => ({ tagid, weight: 100 - i })) })) } });
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+    return calls;
+  }
+
+  it("stores each game again with Steam's tags as its voted tier, in Steam's order, and marks one Steam has none for", async () => {
+    const thief = await upsertMediaItem(db, gameItem({ id: 101, name: "Thief", ...steamPage(239160) }));
+    const bare = await upsertMediaItem(db, gameItem({ id: 102, name: "Bare", ...steamPage(1) }));
+    const gone = await upsertMediaItem(db, gameItem({ id: 103, name: "Gone", ...steamPage(2) }));
+    // No Steam page anywhere: not asked.
+    await upsertMediaItem(db, gameItem({ id: 104, name: "Console only" }));
+    const calls = steam({ 239160: [4182, 19, 1663], 1: [], 2: null });
+
+    expect(await runSteamTagsStep(withKey, 10)).toEqual({ tagged: 1, empty: 1, missing: 1 });
+    expect(calls.filter((c) => c.includes("GetItems"))).toHaveLength(1);
+    const voted = (await facetsOf(thief.id)).filter((f) => f.kind === "tag" && f.tier === "voted");
+    expect(voted.map((f) => [f.label, f.rank])).toEqual([["Steampunk", 1], ["Action", 2], ["FPS", 3]]);
+    // The rest of the payload survives the merge, and the answer is written down either way.
+    expect((await facetsOf(thief.id)).some((f) => f.kind === "company")).toBe(true);
+    for (const id of [bare.id, gone.id]) {
+      const raw = JSON.parse((await db.prepare("SELECT raw_data FROM media_links WHERE media_item_id = ? AND source = 'igdb'").bind(id).first<{ raw_data: string }>())!.raw_data);
+      expect(raw.steamTags).toEqual([]);
+      expect(raw.name).toBeTruthy();
+    }
+    expect((await cursor())!.value).toBe("103");
+    // Nothing left: parks for good, and asks Steam nothing more.
+    expect(await runSteamTagsStep(withKey, 10)).toEqual({ tagged: 0, empty: 0, missing: 0 });
+    expect((await cursor())!.value).toBe("done");
+    expect(await runSteamTagsStep(withKey, 10)).toEqual({ tagged: 0, empty: 0, missing: 0 });
+    expect(calls.filter((c) => c.includes("GetItems"))).toHaveLength(1);
+  });
+
+  it("reads the app id off a Steam link of the old stack too, and keeps the tag list a week", async () => {
+    const { id } = await upsertMediaItem(db, gameItem({ id: 201, name: "Old" }));
+    await db.prepare("INSERT INTO media_links (source, source_id, media_type, media_item_id, title, release_date, last_synced, projection_version, raw_data) VALUES ('steam', '440', 'game', ?, 'Old', NULL, 1, 1, '{\"appid\":440}')").bind(id).run();
+    const calls = steam({ 440: [19] });
+    expect(await runSteamTagsStep(withKey, 10)).toEqual({ tagged: 1, empty: 0, missing: 0 });
+    expect((await facetsOf(id)).some((f) => f.kind === "tag" && f.tier === "voted" && f.label === "Action")).toBe(true);
+    expect(calls.filter((c) => c.includes("GetTagList"))).toHaveLength(1);
+    expect(await db.prepare("SELECT value FROM kv WHERE key = 'steam_tag_map'").first()).not.toBeNull();
+  });
+
+  it("does nothing without a key, and leaves the cursor where it was when Steam fails", async () => {
+    await upsertMediaItem(db, gameItem({ id: 301, name: "A", ...steamPage(3) }));
+    expect(await runSteamTagsStep({ ...env, STEAM_API_KEY: undefined }, 10)).toEqual({ tagged: 0, empty: 0, missing: 0 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("down", { status: 500 }));
+    await expect(runSteamTagsStep(withKey, 10)).rejects.toThrow();
+    expect(await cursor()).toBeNull();
+  });
+});
+
+describe("the pool under an older derive version", () => {
+  const cursor = () => db.prepare("SELECT value FROM kv WHERE key = 'rederive_cursor'").first<{ value: string }>();
+  const docVersion = async (id: string) => (await db.prepare("SELECT derive_version FROM item_doc WHERE media_item_id = ?").bind(id).first<{ derive_version: number }>())!.derive_version;
+
+  it("waits for the word, then derives every stale pool item again from its links and moves it in the delta", async () => {
+    const film = await upsertMediaItem(db, movieItem());
+    const game = await upsertMediaItem(db, gameItem());
+    const browsed = await upsertMediaItem(db, gameItem({ id: 9, name: "Browsed" }), { browsed: 1 });
+    await db.prepare("UPDATE item_doc SET derive_version = 1, facets = '[]'").run();
+    await db.prepare("UPDATE media_items SET updated_at = 1000").run();
+
+    // Not asked for: nothing moves, however stale.
+    expect(await runRederiveStep(env, 10)).toBeNull();
+    expect(await docVersion(film.id)).toBe(1);
+    await kvSet(db, REDERIVE_GO_KEY, String(DERIVE_VERSION - 1));
+    expect(await runRederiveStep(env, 10)).toBeNull();
+
+    await kvSet(db, REDERIVE_GO_KEY, String(DERIVE_VERSION));
+    expect(await runRederiveStep(env, 1)).toEqual({ rederived: 1, skipped: 0 });
+    expect(await runRederiveStep(env, 1)).toEqual({ rederived: 1, skipped: 0 });
+    expect(await runRederiveStep(env, 1)).toEqual({ rederived: 0, skipped: 0 });
+    expect((await cursor())!.value).toBe(`done:${DERIVE_VERSION}`);
+    for (const { id } of [film, game]) {
+      expect(await docVersion(id)).toBe(DERIVE_VERSION);
+      const doc = await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(id).first<{ facets: string }>();
+      expect(JSON.parse(doc!.facets).length).toBeGreaterThan(0);
+      expect((await db.prepare("SELECT updated_at FROM media_items WHERE id = ?").bind(id).first<{ updated_at: number }>())!.updated_at).toBeGreaterThan(1000);
+    }
+    // A row nobody acted on heals on its next write, not here.
+    expect(await docVersion(browsed.id)).toBe(1);
+    expect(await runRederiveStep(env, 10)).toEqual({ rederived: 0, skipped: 0 });
   });
 });

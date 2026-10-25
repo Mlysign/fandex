@@ -105,6 +105,8 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
               </Pressable>
             ) : <Text numberOfLines={1} style={[styles.small, styles.strong, { flexShrink: 1 }]}>{r.label}</Text>}
             <Text style={styles.group}>{groupLabel(r)}</Text>
+            {/* A tag's tier on this title (§3.9): a genre, theme or voted tag is core; an editor's keyword is detail, and counts half. */}
+            {r.kind === 'tag' && r.tier ? <Text style={styles.group}>{r.tier === 'keyword' ? 'detail' : 'core'}</Text> : null}
             {mode === 'avoid' ? <Text style={[styles.group, { color: color.scoreLow }]}>avoiding</Text> : null}
           </View>
           <Text style={styles.small}>{r.axis === 'pull' ? pullSentence(r, mediaType) : tasteSentence(r)}</Text>

@@ -32,8 +32,13 @@ import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
  * Library's description loses its Markdown, an impossible book year is none,
  * and the vector carries `addon`. The merged doc heals on read; the vector's
  * date and `addon` only on the next write (mark-addons.sql did the flag).
+ * 4 (2026-10-25): the score's data fixes. Every tag facet carries its tier and
+ * rank, keywords are capped per title, RAWG's and Steam's voted tags count, a
+ * Japanese animated film or show carries `anime`, and a game's people come
+ * from Wikidata (docs/fandex-score.md §3.9). The FACETS change, so the pool is
+ * re-derived once by the cron (cron.ts, runRederiveStep) once Nils says go.
  */
-export const DERIVE_VERSION = 3;
+export const DERIVE_VERSION = 4;
 
 /** One media_links row as the write path holds it: the blob already parsed. */
 export interface ParsedLink {
@@ -106,8 +111,11 @@ export function deriveItem(type: MediaType, links: ParsedLink[], region: string 
 
   const full = mergeLinks(mediaLinks, type, region);
   const facets = extractFacets(mediaLinks, type, full);
+  // The tiered tag list is the facets' input; the facets carry tier and rank
+  // themselves, so the stored doc does not repeat it.
+  const { tagTiers: _tiers, ...rest } = full;
   const merged: DerivedMerged = {
-    ...full,
+    ...rest,
     sources: full.sources.map((s) => ({ source: s.source, sourceId: s.sourceId })),
   };
 

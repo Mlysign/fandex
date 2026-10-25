@@ -41,6 +41,7 @@
     <rect class="chip" x="604" y="200" width="82" height="26" rx="13"/><text class="chipt" x="645" y="217" text-anchor="middle">franchise</text>
   </g>
   <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count. A tag that sits on almost everything ("action") counts less than a specific one ("steampunk").</text>
+  <text class="muted" x="60" y="270">Where a tag came from counts too: a provider's genre or theme and a crowd's voted tag (Steam) in full, an editor's keyword half. The breakdown marks them core and detail.</text>
 
   <!-- 2 · Two questions -->
   <rect class="card" x="40" y="300" width="820" height="330" rx="14"/>

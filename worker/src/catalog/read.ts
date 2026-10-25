@@ -89,7 +89,8 @@ async function mergedForRegion(db: D1Database, id: string, type: MediaType, regi
       title: null, releaseDate: r.release_date, rawData: data, lastSynced: r.last_synced,
     };
   });
-  const full = mergeLinks(links, type, region);
+  // `tagTiers` is the facets' input, not part of a doc (derive.ts strips it the same way).
+  const { tagTiers: _tiers, ...full } = mergeLinks(links, type, region);
   return JSON.stringify({ ...full, sources: full.sources.map((s) => ({ source: s.source, sourceId: s.sourceId })) });
 }
 
