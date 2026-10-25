@@ -2,7 +2,7 @@
 
 _Your index of every game, movie, show & book._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
 
-_Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
+_Last updated: **2026-10-25**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
 
 > **Settled calls and standing constraints → [docs/decisions.md](docs/decisions.md).** Every line there is closed; re-opening one wastes Nils's time.
 
@@ -48,8 +48,8 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | Hosting + deploy | ✅ Cloudflare since 2026-10-10, deployed by hand. → [docs/website.md](docs/website.md) |
 | Backups | ✅ D1 Time Travel (7 days) and a nightly export to R2 in the EU; exports under `d1/` expire after 30 days. |
 | **Cloudflare Worker + D1** (phase 1) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, export. Books (Open Library, Hardcover facts only) and board games (BGG, behind its token) since 2026-10-17. Hardened 2026-10-23. |
-| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.18.apk` built 2026-10-25 (`C:\fx\`, not yet installed): the match labels, follows and the score report. 0.3.17 (installed 2026-10-24) still shows the number; it keeps working against the new Worker. |
-| **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,613 static item pages (fewer since 105 duplicate games were folded, 2026-10-23) with their rails, 5,417 facet pages, calendar months and the legal pages (publish of 2026-10-24). |
+| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.18.apk` built and installed 2026-10-25 (`C:\fx\`): the match labels, follows and the score report. 0.3.17 still shows the number; it keeps working against the new Worker. |
+| **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,614 static item pages (fewer since 105 duplicate games were folded, 2026-10-23) with their rails, 5,489 facet pages, calendar months and the legal pages (publish of 2026-10-25, with the match labels and `/score-how-it-works.svg`). ⚠️ A publish that changes every page needs several `publish.mjs --skip-build` retries (the asset upload drops the connection; what reached Cloudflare stays). |
 | **H5** Fandex Score | ✅ Reworked 2026-10-25: a label from two axes (taste and pull), no number shown, follows, the goalpost on `/dev/score`. The data fixes behind it are open in TASKS.md. → [docs/fandex-score.md](docs/fandex-score.md) |
 | **H4** legal & compliance | ✅ |
 | **H3** monetization | 🔵 ads-first; donations live, affiliate dark |
