@@ -144,7 +144,7 @@ export function StatStrip({ cells }: { cells: { label: string; value: string }[]
 // ── The score badges (FandexScoreBadge.tsx, CommunityScoreBadge.tsx) ─────────
 
 /** The theme colour a match label wears. */
-const LABEL_COLOR: Record<LabelTone, string> = { high: color.scoreHigh, gold: color.accent, low: color.scoreLow, mute: color.textMuted, base: color.scoreBaseline };
+const LABEL_COLOR: Record<LabelTone, string> = { high: color.scoreHigh, gold: color.accent, low: color.scoreLow, danger: color.danger, base: color.scoreBaseline };
 export const labelColor = (label: ScoreLabel): string => LABEL_COLOR[LABEL_TONE[label]];
 
 const BAR_H: Record<AxisBand, number> = { low: 3, usual: 6, high: 10 };

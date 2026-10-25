@@ -1,12 +1,14 @@
 # Fandex Score: scope and design
 
-> **Since 2026-10-23 the score runs only in the app**, `mobile/src/lib/fandexScore.ts`, a port that gave the old site's exact numbers. The design below holds; the file names it cites (`libraryAnalysis.ts`, `discovery.ts`, `MatchReasons.tsx`, the calibration scripts) are the old site's, at the tag `old-site-final`.
+> **Since 2026-10-25 the score is a LABEL from two axes, and no number is shown** (Nils, after the 2026-10-24/25 measurements in memory `fandex-score-pull-vs-fit`). It answers one question, "how much more likely than usual are you to love this?", from **taste** (§3.1 to §3.6, your ratings) and **pull** (§3.7, what you seek out). Where the two land against your usual is the label (§3.8): *safe bet, hidden gem, tryout, bycatch, skip, your usual* (Nils's matrix). The 0 to 100 number still exists underneath: it ranks rails and feeds the goalpost (§11), and it is never printed in the interface. The picture of all this is `public/score-how-it-works.svg`, served at fandex.org/score-how-it-works.svg and shown on `/dev/score`; **change it whenever the score changes.**
 
-> Per-user, per-item **taste-match score** shown on every media item, click-to-expand into a full "why". Deterministic and tunable. Status: scoping (drafted 2026-07-18). Epic **H5**.
+> **Since 2026-10-23 the score runs only in the app**, `mobile/src/lib/fandexScore.ts`, a port that gave the old site's exact numbers before the 2026-10-25 change. The file names cited below (`libraryAnalysis.ts`, `discovery.ts`, `MatchReasons.tsx`, the calibration scripts) are the old site's, at the tag `old-site-final`; the live harness is `scripts/score-backtest.mjs` (§11).
+
+> Per-user, per-item **taste-match**, shown on every media item, with a "Why?" that opens the whole sum. Deterministic and tunable. Epic **H5** (2026-07-18), reworked 2026-10-25.
 
 ## 1. What it is
 
-A number from 0 to 100 on every title that answers "how well does this match *my* taste?", not "is this good?". Clicking it reveals exactly which facets pushed it up or down. Two hard properties:
+A label on every title that answers "how much more likely than usual am I to love this?", never "is this good?" and never "what number would I give it?". The 2026-10-25 measurements (memory `fandex-score-pull-vs-fit`) settled why: on 942 rated films the number predicted the owner's rating within one point 41% of the time, which is what guessing his average does; a calibrated taste-only score would sit between 52 and 68 for 80% of unseen films. The number is a weak predictor of the rating and a good finder of what a person would pick, so it says the second thing and stops pretending to the first. The "Why?" sheet shows exactly which rows moved it, in two groups, one per axis. Two hard properties:
 
 > **100 is the max, by normalizing, not clamping (Nils, 2026-10-23; supersedes 2026-08-17's "0–100 is a target, not a rule").**
 > The raw sum (§3.3) passes through `softRange` (`mobile/src/lib/fandexScore.ts`): unchanged up to halfway between your average and 100 (or 0), then a tanh that meets the edge only in the limit. Nearly every score sits inside the knee, so nearly every score is what it was; the counted rows shrink by the same share past it, so the breakdown still adds up. On his library (2026-10-23): 0 of 4,675 above 100, max 99.2, min 3.9.
@@ -123,6 +125,43 @@ Free, keyless, one SPARQL request per 50 items. `src/lib/sources/wikidata.ts` + 
 
 **Result on the real catalog:** 584 items found a franchise → **321 games, 165 movies, 98 shows**. Star Wars spans 11 movies + 6 shows. Links no TMDB collection has: Better Call Saul → Breaking Bad, Puss in Boots → Shrek, Cyberpunk: Edgerunners → Cyberpunk. Franchises with an opinion 319 → **461**; items whose score moves 516 → **713 of 1,903**.
 
+### 3.7 Pull: "do you seek this out?" (added 2026-10-25)
+
+The taste axis above learns from RATINGS, and the owner's ratings turned out to be mostly about quality, not taste: across 558 tags with enough evidence, the tags he consumes most are rated LOWER relative to his average (rank correlation −0.34), because completionism means watching the bad steampunk and only the acclaimed war films. Anime, 220 of 349 catalog titles consumed, rated exactly at his average, got −0.1 points. Every person he named (Burton, Depp, Dafoe, Swinton, del Toro, Shinkai) sat at 100% of the catalog and near zero taste points. The signal for "my taste" as people mean it is in what they CHOOSE. That is this axis.
+
+For every facet with at least `PULL_MIN_CATALOG` (3) catalog titles:
+
+```
+usualShare = Σ weights of consumed titles / catalog total          // library 1, wishlist WISHLIST_WEIGHT (0.5)
+lift_f     = log2( ((consumed_f + pullPrior·usualShare) / (catalog_f + pullPrior)) / usualShare )
+salience_f = clamp( ln(total / catalog_f) / ln(total / 10), 0.15, 1 )   // 1 for ten titles or fewer, a floor for "action"
+value_f    = lift_f · salience_f · roleWeight(class)                 // tags 1; people, companies, ip by roleWeights
+kept       = top pullTopTags tags ∪ pullTopPeople ∪ pullTopCompanies ∪ pullTopIps, by |value|
+pullRaw    = pullGain · pullWeight[medium] · Σ kept value
+```
+
+- **The denominator is the catalog copy on the device**, counted once per catalog revision (`catalogCountsFrom`). Known limit, measured: the pool's films are 68% the owner's and its shows 97%, so a broad facet lifts little (anime p52 among tags) while a small one saturates (126 of 1,087 tags at 100%). The lift still ranks a wishlist well because it rides on narrow facets; a reference population per medium from the providers is the fix, and it is a denominator swap, not a maths change. → TASKS.md
+- **A title you hold is scored with its own place in the counts left out** (`consumedIds`), as its rating is on the taste axis.
+- **A follow sets `lift_f` to the maximum, `log2(1/usualShare)`; an avoid to the minimum.** Nothing on the taste axis moves (`facetPull`, tested). A taste override was measured and rejected: steampunk set to 10 lifted Mortal Engines (rated 3) from 82 to 93.
+- **`pullWeight` is per medium** (games 0.5 by default): what the owner plays and what he rates disagree (pull alone ranks his wishlist at 96% and his ratings at −0.12). **The band reads the axis BEFORE this weight** (and before the bend, §3.8): the weight says how much pull counts in the number, not whether you seek games out; with it applied no game was ever a safe bet.
+- Both axes are bent together by `softRange` so 100 stays the maximum; every counted row shrinks by the same share and the breakdown still adds up.
+
+### 3.8 The label (added 2026-10-25)
+
+Each axis's raw points land in a band: `high` at or above its margin over your usual (`tasteBandMargin`, `pullBandMargin`, both 10), `low` at or below, else `usual`. Both bands read the axis before the bend and before the medium weight, so neither axis can hide the other.
+
+Nils's matrix (2026-10-25): the label says what to DO with the title.
+
+| | pull low | pull usual | pull high |
+|---|---|---|---|
+| taste above usual | **hidden gem** | **hidden gem** | **safe bet** |
+| taste usual | your usual | your usual | **tryout** |
+| taste below usual | **skip** | **skip** | **bycatch** |
+
+Without a catalog count (no pull axis) the taste band alone names it: above usual is a hidden gem, below usual a skip. Measured on the owner's library before the matrix was final, the cells behave as named: films in the taste-high band he gave 7.1 (43% an 8 or more) against 6.0 in the low band; on unseen films the high-pull cells were 23 to 24% wishlisted and the low-pull cells 0%; "hidden gem" games were rated 8.0 (72% an 8+) and 0% wishlisted, which is the Metal Gear and Persona back catalog. The words live in `LABEL_TEXT` (`mobile/src/lib/scoreReasons.ts`) and in the picture; renaming is one edit in each.
+
+**The odds line** under the label ("Films like this: an 8 or more about 1.4× as often as usual") is the one number shown. It is, per label and medium, how much more often than usual titles with that label were rated 8 or more: `DEFAULT_LABEL_ODDS` (`src/lib/scoringDefaults.ts`), seeded from the owner's 1,701 ratings, to be replaced by the goalpost's sums (§11) once there are enough users.
+
 ### 3.4 Explainability payload
 
 **Revised 2026-07-29 (T10):** each reason now also carries a canonical `impact` number, computed by `facetImpact(id, profile, config) = gain · profile.w.get(id)` — item-independent (it doesn't matter which item you're looking at a facet from), and equal to `contribution` for any facet that made the top-N cut. This is the number now shown on the item breakdown, the tag facet page, and the hover tooltip alike — previously these three surfaces each computed their own version and disagreed (a real `classWeight`-missing bug in `/api/facet/mine`, and a plain-mean-vs-Bayesian-average mismatch in `facetDetail.ts`, were both root causes, now fixed).
@@ -152,6 +191,8 @@ Two consequences worth knowing. First, the heal writes `media_links` while the d
 
 The score must **never** read: community / cross-platform ratings (IMDb, Rotten Tomatoes, Steam, Metacritic), item popularity or `browsed` counts, or release date / recency. Add a regression test that mutates each of those fields on an item and asserts the score is **unchanged**. (Note: the current `scoreFacets()` is already pure-facet — but the Discover *sort* uses `communityAvg` as a tiebreaker; the visible **score** must not.)
 
+**Added 2026-10-25 (Nils):** no implicit rating either. Episodes watched, hours played and rewatches never stand in for a rating, although completion predicted his show ratings at 0.31 where facets predicted them at 0.01 (memory `fandex-score-pull-vs-fit`). Only ratings a person typed count on the taste axis; what they hold counts on the pull axis. And no manual taste override (§3.7): a follow is the only thing a person sets by hand, and it moves pull alone.
+
 ## 5. Developer backend
 
 A gated `/dev/scoring` route (admin-only — see open decision D5). Two panels:
@@ -170,11 +211,16 @@ All config lives in the DB and cache-busts the profile/score caches on save.
 
 ⚠️ Follow the repo's migration invariants (`AGENTS.md`): index a new column **in the same migration** that adds it, and test **both** apply paths (in-process `getDb()` *and* `node scripts/migrate.mjs`) — green Vitest only proves the fresh-DB path.
 
-## 7. Where it surfaces
+## 7. Where it surfaces (rewritten 2026-10-25)
 
-- **Cards** (`PosterCard` / `ListCard`, via `cardItem.ts`): a compact score badge. `cardItem.ts` must start carrying the computed score.
-- **Detail page**: prominent score + expandable breakdown (extend `MatchReasons` / `RatingsSection`).
-- Computed server-side off the cached per-user profile — the engine already scores the whole catalog per user with a `BoundedCache`, so marginal cost is bounded.
+Nothing prints the number. The four levels, each one tap deeper and each one checkable:
+
+1. **The card** (`MatchLabel` in `components/kit.tsx`, drawn by `cardFace.tsx`): the label in its colour on a faint fill, with two tiny bars, pull then taste. `RowScore` (`ScoreProvider.scoresFor`) carries `{score, label, taste, pull}`; `fandexScore` on a `CardItem` still ranks, `match` is what the card shows.
+2. **The item page's panel** (`FandexScorePanel.tsx`): the label in the display face, one sentence that names both axes (`labelSentence`), the odds line (`oddsLine`), two bars that end in a word (`AxisBars wide`), and "Your usual: you rate titles 6.7 on average". States: anon, settling, cold, none, scored.
+3. **The Why sheet**: two groups, "You seek this out" and "You rate it well", each headed by its band and its points, every row one sentence with a count ("you've seen 46 of 64", "you rate it 7.6 over 41 titles") and its contribution; **Follow** on the pull rows; the rows that matched but did not count, greyed with their would-be value; a three-sentence "How this works". The same facet can sit in both groups.
+4. **The facet page** (`FacetScreen.tsx`): two pills, "Taste +4.2" with its sentence and "Pull +3.1" with "you've been through 46 of the 64 titles with this tag · you seek this out"; **Follow** and **Not interested** controls, keyed by the profile's own facet ids when you have rated the facet and by the catalog's ids otherwise.
+
+The card's explainer (`ScoreExplainer.tsx`) shows the label, the sentence and the two strongest rows of each axis. Home's Recommended rail still filters by the combined score's band (`scoreBand`, `homeFeed.recommend`), so "Recommended" never carries a title it would label bycatch.
 
 ## 8. Cold-start
 
@@ -196,6 +242,22 @@ A future pass could still tune `C` / role weights now that the spread is legible
 5. **Calibrate** (~10k) — tune `C`/`K`/weights against your own library so the numbers feel right; write down the chosen defaults.
 
 **Est. ~95k.** Order: 1 → 2 → 4 (ship a visible score early) → 3 → 5.
+
+## 11. The goalpost (added 2026-10-25)
+
+Every change to the score is measured before it ships, per medium, with the wishlist held out, on two bars: does it order a person's own ratings better, and does it rank what they wishlisted above what they never touched. `scripts/score-backtest.mjs` runs both on an exported library against a catalog folder and a taxonomy file, and prints the odds per label. Judged by rating correlation alone, a score that gave anime −0.1 passed review (2026-10-23); that is why there are two bars.
+
+In production the same check runs on every device: `sendScoreReport` (`ScoreProvider.tsx`) scores every rated title with its own rating left out and sends, about once a day, twelve counts of (rating − score ÷ 10) per medium and, per label, how many rated titles got it and how many of those were an 8 or more (`PUT /v1/me/score-report`, table `score_report`, migration 0006). Counts only: no title and no rating leaves the device, the privacy policy says so, the export carries the rows. `/dev/score` draws the sum over everybody (`GET /v1/admin/score`) as the goalpost chart, with the odds each label earned, and shows the how-it-works picture under it. Nils (2026-10-25): one chart for all users on the backend, not a page per user.
+
+## 12. Decisions (2026-10-25)
+
+- **One label, no number in the interface.** The badge reads as a rating whatever it says (Nils: "if it says 80 I'll probably rate it 8"), and a calibrated predicted rating would be true but sit in a 16-point band. The number stays internal.
+- **Two axes, pooled across media.** Facets are learned across every medium (a book is scored from your films and games: 99% of the evidence behind an unrated book is another medium). The one per-medium step is invisible: each rating is moved by the gap between its medium's average and your overall average before a facet learns from it, so "I rate games higher" does not leak into every game tag (books went from reversed to right on the owner's 14).
+- **Pull weighs per medium, with games at half.** Measured trade-off (§3.7).
+- **Follows feed pull only; no taste override; no implicit ratings** (§3.7, §4).
+- **The goalpost is one admin chart over all users**, and the odds line comes from a global ladder (§11).
+- **The labels are Nils's matrix** (§3.8): hidden gem and skip span pull low and usual, safe bet, tryout and bycatch sit at pull high. A label says what to do, not how good the title is.
+- Reopened for the salience share (§3.7 uses specificity as a weight on the pull axis): D2 ("rarity out of the visible score") holds for the taste axis and not for pull, and "a tag's contribution is the same everywhere" holds for taste rows only.
 
 ## 10. Decisions (locked 2026-07-18)
 

@@ -19,6 +19,7 @@
     .orange { fill: #F0A04B; }
     .grey { fill: #CFC9BE; }
     .mute { fill: #6F665A; }
+    .red { fill: #E5674C; }
     .cell { fill: #0B0A08; stroke: #2A2520; stroke-width: 1; }
     .cellt { font: 500 13px Georgia, 'Times New Roman', serif; }
     .axis { font: 400 11px 'Segoe UI', Inter, Helvetica, Arial, sans-serif; fill: #8A8175; letter-spacing: 0.8px; }
@@ -86,7 +87,7 @@
   <!-- 4 · The label -->
   <rect class="card" x="40" y="846" width="820" height="300" rx="14"/>
   <text class="h3" x="60" y="874">4 · WHERE THE TWO LAND IS YOUR LABEL</text>
-  <text class="body" x="60" y="900">Each question adds up to points above or below your usual. Ten points off either way reads as high or low.</text>
+  <text class="body" x="60" y="900">Each question adds up to points above or below your usual. Ten points off either way reads as high or low. The label says what to do.</text>
 
   <!-- grid -->
   <text class="axis" x="330" y="930" text-anchor="middle">PULL: LOW</text>
@@ -96,25 +97,23 @@
   <text class="axis" x="250" y="1022" text-anchor="end">TASTE: USUAL</text>
   <text class="axis" x="250" y="1076" text-anchor="end">TASTE: BELOW USUAL</text>
 
-  <rect class="cell" x="264" y="942" width="132" height="44" rx="8"/><text class="cellt gold" x="330" y="970" text-anchor="middle">Hidden gem</text>
-  <rect class="cell" x="404" y="942" width="132" height="44" rx="8"/><text class="cellt grey" x="470" y="970" text-anchor="middle">Your usual</text>
-  <rect class="cell" x="544" y="942" width="132" height="44" rx="8"/><text class="cellt green" x="610" y="970" text-anchor="middle">Sure thing</text>
+  <rect class="cell" x="264" y="942" width="272" height="44" rx="8"/><text class="cellt gold" x="400" y="970" text-anchor="middle">Hidden gem</text>
+  <rect class="cell" x="544" y="942" width="132" height="44" rx="8"/><text class="cellt green" x="610" y="970" text-anchor="middle">Safe bet</text>
 
   <rect class="cell" x="264" y="996" width="132" height="44" rx="8"/><text class="cellt grey" x="330" y="1024" text-anchor="middle">Your usual</text>
   <rect class="cell" x="404" y="996" width="132" height="44" rx="8"/><text class="cellt grey" x="470" y="1024" text-anchor="middle">Your usual</text>
-  <rect class="cell" x="544" y="996" width="132" height="44" rx="8"/><text class="cellt grey" x="610" y="1024" text-anchor="middle">Your usual</text>
+  <rect class="cell" x="544" y="996" width="132" height="44" rx="8"/><text class="cellt gold" x="610" y="1024" text-anchor="middle">Tryout</text>
 
-  <rect class="cell" x="264" y="1050" width="132" height="44" rx="8"/><text class="cellt mute" x="330" y="1078" text-anchor="middle">Not for you</text>
-  <rect class="cell" x="404" y="1050" width="132" height="44" rx="8"/><text class="cellt grey" x="470" y="1078" text-anchor="middle">Your usual</text>
+  <rect class="cell" x="264" y="1050" width="272" height="44" rx="8"/><text class="cellt red" x="400" y="1078" text-anchor="middle">Skip</text>
   <rect class="cell" x="544" y="1050" width="132" height="44" rx="8"/><text class="cellt orange" x="610" y="1078" text-anchor="middle">Bycatch</text>
 
-  <text class="small" x="700" y="962">You seek it out and</text>
-  <text class="small" x="700" y="978">rate it well.</text>
-  <text class="small" x="700" y="1016">Not your usual pick, but</text>
-  <text class="small" x="700" y="1032">you rate this kind well.</text>
-  <text class="small" x="700" y="1070">You seek it out, but you</text>
-  <text class="small" x="700" y="1086">tend not to love it.</text>
-  <text class="muted" x="60" y="1126">"Your usual" is the biggest cell on purpose: most titles are neither remarkable for you nor against you, and the label says so.</text>
+  <text class="small" x="700" y="962">Safe bet: you seek it out</text>
+  <text class="small" x="700" y="978">and rate it well.</text>
+  <text class="small" x="700" y="1016">Tryout: you seek it out;</text>
+  <text class="small" x="700" y="1032">you rate this kind so-so.</text>
+  <text class="small" x="700" y="1070">Bycatch: you seek it out,</text>
+  <text class="small" x="700" y="1086">but tend not to love it.</text>
+  <text class="muted" x="60" y="1126">Hidden gem: not what you usually go for, but you rate this kind well. Skip: not what you go for, and you tend not to love it either.</text>
 
   <!-- 5 · The odds line -->
   <rect class="card" x="40" y="1166" width="820" height="118" rx="14"/>

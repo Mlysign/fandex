@@ -441,7 +441,8 @@ export function softRange(center: number, offset: number): number {
 
 export type ScoreAxis = 'taste' | 'pull';
 export type AxisBand = 'high' | 'usual' | 'low';
-export type ScoreLabel = 'sure-thing' | 'hidden-gem' | 'bycatch' | 'not-for-you' | 'usual';
+/** Nils's matrix of 2026-10-25: what to DO with the title, from where the two axes land (docs/fandex-score.md §3.8). */
+export type ScoreLabel = 'safe-bet' | 'hidden-gem' | 'tryout' | 'bycatch' | 'skip' | 'usual';
 
 export interface ScoreReason {
   axis: ScoreAxis;
@@ -488,14 +489,20 @@ export interface FandexScore {
 
 const bandOf = (points: number, margin: number): AxisBand => (points >= margin ? 'high' : points <= -margin ? 'low' : 'usual');
 
-/** Where the two axes land is the label. Without a pull axis the taste axis alone names it. */
+/**
+ * Where the two axes land is the label (Nils's matrix, 2026-10-25):
+ *
+ *                      pull low      pull usual    pull high
+ *   taste above usual  hidden gem    hidden gem    safe bet
+ *   taste usual        your usual    your usual    tryout
+ *   taste below usual  skip          skip          bycatch
+ *
+ * Without a pull axis the taste axis alone names it: above usual is a hidden gem
+ * (you rate this kind well, whether or not you go for it), below usual a skip.
+ */
 export function labelFor(taste: AxisBand, pull: AxisBand | null): ScoreLabel {
-  if (pull === null) return taste === 'high' ? 'sure-thing' : taste === 'low' ? 'not-for-you' : 'usual';
-  if (taste === 'high' && pull === 'high') return 'sure-thing';
-  if (taste === 'high' && pull === 'low') return 'hidden-gem';
-  if (taste === 'low' && pull === 'high') return 'bycatch';
-  if (taste === 'low' && pull === 'low') return 'not-for-you';
-  return 'usual';
+  if (pull === 'high') return taste === 'high' ? 'safe-bet' : taste === 'low' ? 'bycatch' : 'tryout';
+  return taste === 'high' ? 'hidden-gem' : taste === 'low' ? 'skip' : 'usual';
 }
 
 interface Contrib { f: ScoreFacet; dev: number; classWeight: number; meta: FacetMeta }

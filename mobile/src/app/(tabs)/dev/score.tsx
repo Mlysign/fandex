@@ -13,7 +13,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { color, font, radius, type } from '~/theme';
 
 const MEDIA: [string, string][] = [['all', 'All media'], ['movie', 'Films'], ['show', 'Shows'], ['game', 'Games'], ['book', 'Books']];
-const LABEL_ORDER = ['sure-thing', 'hidden-gem', 'usual', 'bycatch', 'not-for-you'] as const;
+const LABEL_ORDER = ['safe-bet', 'hidden-gem', 'tryout', 'usual', 'bycatch', 'skip'] as const;
 /** Where the picture lives: the website build copies it from public/ (mobile/web/build.mjs). */
 const HOW_IT_WORKS = 'https://fandex.org/score-how-it-works.svg';
 

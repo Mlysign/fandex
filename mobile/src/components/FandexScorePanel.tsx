@@ -1,5 +1,5 @@
 // The item page's match panel. Since 2026-10-25 the score shows no number: a
-// label ("Sure thing", "Hidden gem", "Bycatch", "Not for you", "Your usual"),
+// label ("Safe bet", "Hidden gem", "Tryout", "Bycatch", "Skip", "Your usual"),
 // one sentence that names the two axes, the odds line, and two bars that end
 // in a word. "Why?" opens the sheet with every row behind it, in two groups,
 // one per axis, so the arithmetic can be seen (docs/fandex-score.md §7).

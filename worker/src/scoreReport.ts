@@ -18,7 +18,7 @@ export const BIN_COUNT = 12;
 export const SCORE_VERSION = 2;
 
 const MEDIA = new Set(["movie", "show", "game", "book", "boardgame"]);
-const LABELS = new Set(["sure-thing", "hidden-gem", "bycatch", "not-for-you", "usual"]);
+const LABELS = new Set(["safe-bet", "hidden-gem", "tryout", "bycatch", "skip", "usual"]);
 
 export interface ScoreReport {
   medium: string;

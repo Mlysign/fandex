@@ -268,6 +268,19 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   today's config, which confirms 2026-08-17's item 7.
 - **Remove from library undoes**: a toast with Undo, and the removal waits for it.
 - **Sign out is this device; "Sign out everywhere" is today's behaviour.**
+
+### Added 2026-10-25, the score rework (docs/fandex-score.md §3.7, §3.8, §11, §12)
+
+- **The score is a LABEL from two axes, and no surface prints the number.** Taste (your ratings, as before) and pull (how much of the catalog's titles carrying a facet you have been through, against your usual share). Measured: the number predicted the owner's rating within one point 41% of the time, which is what guessing his average does, and he read "82" as "I'll rate it 8". The number ranks rails and feeds the goalpost.
+- **Facets are pooled across media; the one per-medium step is the rating offset.** Cross-media scoring is a USP (Nils): a book is scored from your films and games. Each rating is moved by its medium's gap to your overall average before a facet learns from it.
+- **Pull weighs per medium, games at half.** What he plays and what he rates disagree (pull alone: wishlist 96%, ratings −0.12).
+- **Only typed ratings count on the taste axis. No implicit rating from episodes watched, hours played or rewatches** (Nils), although completion predicted his show ratings at 0.31 where facets sat at 0.01.
+- **A follow moves pull only; there is no taste override.** Steampunk set to 10 lifted Mortal Engines (rated 3) from 82 to 93; a follow leaves it "bycatch", which is right.
+- **The goalpost is one admin chart over all users** (`/dev/score`), fed by per-device counts, never a per-user page; the odds line under a label comes from a global ladder.
+- **The ten-point rating scale stays.** A coarser scale inflated the hit rate exactly as much as guessing the most common step, and the score learned less (ρ 0.22 → 0.16 at three steps).
+- **The labels are Nils's matrix of 2026-10-25** (`LABEL_TEXT`, docs/fandex-score.md §3.8): safe bet, hidden gem, tryout, bycatch, skip, your usual. Hidden gem and skip cover pull low AND usual; the three pull-high cells each have their own word. A label says what to do with the title.
+- **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
+- **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
 - **DLC, packs, seasons and bundles rank last in search and stay out of every rail**, Recommended
   included. Their own pages stay.
 - **Recommended may show wishlisted titles, at most two per rail.**

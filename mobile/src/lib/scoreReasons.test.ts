@@ -40,15 +40,15 @@ describe('the sentence under the label', () => {
 });
 
 describe('the odds line', () => {
-  const odds = { all: { 'sure-thing': 1.17, usual: 0.94, bycatch: 0.47 }, movie: { 'sure-thing': 1.44 } };
+  const odds = { all: { 'safe-bet': 1.17, usual: 0.94, bycatch: 0.47 }, movie: { 'safe-bet': 1.44 } };
   it('names the medium and reads the ratio in words', () => {
-    expect(oddsLine('sure-thing', 'movie', odds)).toBe('Films like this: an 8 or more about 1.4× as often as usual.');
+    expect(oddsLine('safe-bet', 'movie', odds)).toBe('Films like this: an 8 or more about 1.4× as often as usual.');
     expect(oddsLine('usual', 'movie', odds)).toBe('Films like this: an 8 or more about as often as usual.');
     expect(oddsLine('bycatch', 'game', odds)).toBe('Games like this: an 8 or more about half as often as usual.');
   });
   it('falls back to every medium, and says nothing it does not know', () => {
-    expect(oddsLine('sure-thing', 'game', odds)).toBe('Games like this: an 8 or more about 1.2× as often as usual.');
-    expect(oddsLine('sure-thing', undefined, odds)).toBe('Titles like this: an 8 or more about 1.2× as often as usual.');
+    expect(oddsLine('safe-bet', 'game', odds)).toBe('Games like this: an 8 or more about 1.2× as often as usual.');
+    expect(oddsLine('safe-bet', undefined, odds)).toBe('Titles like this: an 8 or more about 1.2× as often as usual.');
     expect(oddsLine('hidden-gem', 'movie', odds)).toBeNull();
   });
 });

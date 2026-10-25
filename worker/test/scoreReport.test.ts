@@ -6,7 +6,7 @@ beforeEach(wipe);
 
 const bins = (at: Record<number, number>) => Array.from({ length: BIN_COUNT }, (_, i) => at[i] ?? 0);
 const report = (medium: string, over: Partial<{ rated: number; bins: number[]; labels: Record<string, [number, number]> }> = {}) => ({
-  medium, rated: 10, bins: bins({ 5: 3, 6: 5, 7: 2 }), labels: { "sure-thing": [4, 3], usual: [6, 2] } as Record<string, [number, number]>, ...over,
+  medium, rated: 10, bins: bins({ 5: 3, 6: 5, 7: 2 }), labels: { "safe-bet": [4, 3], usual: [6, 2] } as Record<string, [number, number]>, ...over,
 });
 
 async function user(id: string) {
@@ -20,7 +20,7 @@ describe("a score report", () => {
     expect(() => parseScoreReports({ reports: [report("movie"), report("movie")] })).toThrow("One report per medium");
     expect(() => parseScoreReports({ reports: [report("movie", { bins: [1, 2] })] })).toThrow("counts");
     expect(() => parseScoreReports({ reports: [report("movie", { bins: bins({ 0: 11 }) })] })).toThrow("more than rated");
-    expect(() => parseScoreReports({ reports: [report("movie", { labels: { "sure-thing": [3, 4] } })] })).toThrow("cannot count more");
+    expect(() => parseScoreReports({ reports: [report("movie", { labels: { "safe-bet": [3, 4] } })] })).toThrow("cannot count more");
     expect(() => parseScoreReports({ reports: [report("movie", { labels: { hot: [1, 1] } })] })).toThrow("Unknown label");
     expect(() => parseScoreReports({ reports: [report("movie", { rated: 2.5 })] })).toThrow("whole number");
   });
@@ -39,7 +39,7 @@ describe("a score report", () => {
     await user("u1");
     await user("u2");
     await saveScoreReports(db, "u1", [report("movie")]);
-    await saveScoreReports(db, "u2", [report("movie", { rated: 20, bins: bins({ 6: 20 }), labels: { "sure-thing": [10, 9] } }), report("game", { rated: 3, bins: bins({ 7: 3 }), labels: { bycatch: [3, 0] } })]);
+    await saveScoreReports(db, "u2", [report("movie", { rated: 20, bins: bins({ 6: 20 }), labels: { "safe-bet": [10, 9] } }), report("game", { rated: 3, bins: bins({ 7: 3 }), labels: { bycatch: [3, 0] } })]);
     await db.prepare("UPDATE score_report SET version = 1 WHERE user_id = 'u2' AND medium = 'game'").run();
     const s = await scoreSummary(db);
     const movie = s.media.find((m) => m.medium === "movie")!;
@@ -47,7 +47,7 @@ describe("a score report", () => {
     expect(movie.rated).toBe(30);
     expect(movie.bins[6]).toBe(25);
     expect(movie.bins[5]).toBe(3);
-    expect(movie.labels["sure-thing"]).toEqual({ rated: 14, eightPlus: 12 });
+    expect(movie.labels["safe-bet"]).toEqual({ rated: 14, eightPlus: 12 });
     expect(s.media.find((m) => m.medium === "game")).toBeUndefined();
     expect(s.all.rated).toBe(30);
     expect(s.all.bins[6]).toBe(25);

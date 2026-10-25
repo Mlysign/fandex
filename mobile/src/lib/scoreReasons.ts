@@ -20,22 +20,24 @@ export function scoreBand(score: number, center: number | null): ScoreBand {
   return score >= c + BAND_MARGIN ? 'high' : score <= c - BAND_MARGIN ? 'low' : 'baseline';
 }
 
-/** The label as a person reads it. One place, so renaming is one edit. */
+/** The label as a person reads it (Nils's words, 2026-10-25). One place, so renaming is one edit. */
 export const LABEL_TEXT: Record<ScoreLabel, string> = {
-  'sure-thing': 'Sure thing',
+  'safe-bet': 'Safe bet',
   'hidden-gem': 'Hidden gem',
+  tryout: 'Tryout',
   bycatch: 'Bycatch',
-  'not-for-you': 'Not for you',
+  skip: 'Skip',
   usual: 'Your usual',
 };
 
-/** Which of the theme's score colours a label wears. */
-export type LabelTone = 'high' | 'gold' | 'low' | 'mute' | 'base';
+/** Which of the theme's colours a label wears: green for the safe bet, gold for the two worth a look, orange and red for the two to think twice about. */
+export type LabelTone = 'high' | 'gold' | 'low' | 'danger' | 'base';
 export const LABEL_TONE: Record<ScoreLabel, LabelTone> = {
-  'sure-thing': 'high',
+  'safe-bet': 'high',
   'hidden-gem': 'gold',
+  tryout: 'gold',
   bycatch: 'low',
-  'not-for-you': 'mute',
+  skip: 'danger',
   usual: 'base',
 };
 

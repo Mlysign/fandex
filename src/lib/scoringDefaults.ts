@@ -106,10 +106,10 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
  * goalpost summed over every user replaces it once there is one.
  */
 export const DEFAULT_LABEL_ODDS: Record<string, Partial<Record<string, number>>> = {
-  all: { usual: 0.94, 'hidden-gem': 2.18, 'sure-thing': 1.17, bycatch: 0.47, 'not-for-you': 0.7 },
-  movie: { usual: 0.88, 'sure-thing': 1.44, bycatch: 0.54 },
-  show: { usual: 0.9, 'sure-thing': 1.47, bycatch: 0.96 },
-  game: { usual: 0.92, 'hidden-gem': 1.44, 'sure-thing': 1.53 },
+  all: { usual: 1.16, 'hidden-gem': 1.82, tryout: 0.73, 'safe-bet': 1.17, bycatch: 0.47, skip: 0.61 },
+  movie: { usual: 0.7, 'hidden-gem': 1.08, tryout: 0.93, 'safe-bet': 1.44, bycatch: 0.54, skip: 0.16 },
+  show: { usual: 1.09, tryout: 0.88, 'safe-bet': 1.47, bycatch: 0.96 },
+  game: { usual: 0.88, 'hidden-gem': 1.32, tryout: 0.69, 'safe-bet': 1.53, skip: 0.71 },
 };
 
 export interface TagCategorySeed {

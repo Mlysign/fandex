@@ -176,13 +176,13 @@ describe('the pull axis', () => {
   it('names the label from where the two axes land, and from taste alone without a catalog', () => {
     const tax = strongPull();
     const profile = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(catalogRows, tax) });
-    expect(computeFandexScore([tag('noir')], 'x', profile, tax)!.label).toBe('sure-thing');
+    expect(computeFandexScore([tag('noir')], 'x', profile, tax)!.label).toBe('safe-bet');
     expect(computeFandexScore([tag('musical')], 'x', profile, tax)!.label).toBe('bycatch');
     expect(computeFandexScore([tag('western')], 'y', profile, tax)!.label).toBe('hidden-gem');
     const noCatalog = buildProfile(lib, tax);
     expect(computeFandexScore([tag('noir')], 'x', noCatalog, tax)!.pull).toBeNull();
-    expect(computeFandexScore([tag('noir')], 'x', noCatalog, tax)!.label).toBe('sure-thing');
-    expect(computeFandexScore([tag('musical')], 'x', noCatalog, tax)!.label).toBe('not-for-you');
+    expect(computeFandexScore([tag('noir')], 'x', noCatalog, tax)!.label).toBe('hidden-gem');
+    expect(computeFandexScore([tag('musical')], 'x', noCatalog, tax)!.label).toBe('skip');
   });
 
   it('weighs a medium\'s pull by its own weight', () => {

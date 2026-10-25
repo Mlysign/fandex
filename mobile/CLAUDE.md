@@ -23,7 +23,9 @@ Screens, data sources and the APK build are in `docs/app.md`; what the app still
 - **A search compares `searchKey`, never `normalizeName`, on both sides.** `normalizeName` is the matcher's stored identity key and drops every letter outside a to z ("Pokémon" is "pok mon").
 - **The series rail reads a title's RAW `ip` facets (`FacetIndex.byRawIp`).** The provider's set is the clean one; a hand attach belongs in "More from", never in a series rail.
 - **The Fandex Score ranks rows by what they contribute** (`dev · classWeight · gain`), not by raw `dev`, and labels a category from the live taxonomy, falling back to its id. Diff `docs/fandex-score.md` against `lib/fandexScore.ts` when touching either. → [[fandex-score-h5]]
-- **A title you rated is scored without its own rating, and 0 to 100 comes from `softRange`, never a clamp.** Any new score path goes through `computeFandexScore` with the title's id, or it quotes your rating back to you. → `docs/fandex-score.md` §1
+- **A title you rated is scored without its own rating, and 0 to 100 comes from `softRange`, never a clamp.** Any new score path goes through `computeFandexScore` with the title's id AND its medium, or it quotes your rating back to you and weighs pull wrong. → `docs/fandex-score.md` §1
+- **No surface prints the score as a number** (since 2026-10-25): a card shows `MatchLabel`, the item page the label, the sentence, the odds line and two bars. The number ranks and feeds the goalpost. A change to the score is measured first with `scripts/score-backtest.mjs`, per medium, on both bars, and `public/score-how-it-works.svg` changes with it. → `docs/fandex-score.md` §7, §11, [[fandex-score-pull-vs-fit]]
+- **A follow moves the pull axis only.** `setFollow` (`lib/itemActions.ts`) writes `follows` through the same state write as a hide; it never reaches a sync pull and never touches a rating. → `docs/fandex-score.md` §3.7
 
 ## Navigation and scrolling
 
