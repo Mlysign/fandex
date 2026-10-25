@@ -2,6 +2,10 @@
 
 Routes, limits, commands and the test accounts are in `docs/worker.md`. The incidents behind these rules are in memory [[cloudflare-worker-d1]].
 
+## Deploying
+
+- **Apply migrations on their own and read the table before `wrangler deploy`.** `d1 migrations apply --remote` failed once with a 7403 API error while the deploy chained behind it went through, and the Worker referenced two tables that did not exist. `d1 migrations list --remote` is the check. → [[cloudflare-worker-d1]]
+
 ## The budget
 
 - **A D1 row WRITE is the budget, and every index is one more.** D1 Free stops every query, reads included, for the rest of the UTC day past 100,000 rows written. A natural key is the PRIMARY KEY of a `WITHOUT ROWID` table; an index exists only where a request path needs it. Price a new table or index in writes per row first. Anything a stranger can trigger that writes goes behind `spend()` in `budget.ts`.
