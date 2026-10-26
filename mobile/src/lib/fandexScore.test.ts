@@ -229,7 +229,7 @@ describe('the reference population (2026-10-25)', () => {
   // Twenty catalog films, four of them noir, and a reference where noir is one film in fifty.
   const films = Array.from({ length: 20 }, (_, i) => ({ id: `f${i}`, type: 'movie', facets: i < 4 ? [tag('noir')] : [tag('drama')] }));
   const reference = { version: 1, builtAt: '2026-10-25T00:00:00Z', media: { movie: { total: 2000, facets: [['tag', '', 'noir', 40], ['tag', '', 'drama', 1500]] as [string, string, string, number][] } } };
-  const strongPull = (over: object = {}) => prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, pullGain: 40, ...over } } }));
+  const strongPull = (over: object = {}) => prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, pullGain: 40, pullReferenceBlend: 1, ...over } } }));
   const lib: RatedTitle[] = [rated('f0', 8, [tag('noir')]), rated('f4', 6, [tag('drama')]), rated('f5', 6, [tag('drama')]), rated('f6', 7, [tag('drama')])];
   const consumed = ['f0', 'f1', 'f2', 'f4', 'f5', 'f6', 'f7', 'f8'].map((id) => ({ id, facets: films.find((f) => f.id === id)!.facets, weight: 1 }));
 
@@ -243,7 +243,9 @@ describe('the reference population (2026-10-25)', () => {
     expect(counts.referenceMedia).toEqual(['movie']);
     // Without rows that name their medium, or with the switch off, the copy is its own denominator.
     expect(catalogCountsFrom(films.map(({ type: _t, ...f }) => f), tax, reference).expected).toBeUndefined();
-    expect(catalogCountsFrom(films, strongPull({ pullReference: false }), reference).expected).toBeUndefined();
+    expect(catalogCountsFrom(films, strongPull({ pullReferenceBlend: 0 }), reference).expected).toBeUndefined();
+    // A blend mixes the two: half of 0.4 expected and half of the 4 the copy holds.
+    expect(catalogCountsFrom(films, strongPull({ pullReferenceBlend: 0.5 }), reference).expected!.get('tag||noir')).toBeCloseTo(2.2, 5);
   });
 
   it('reads a facet you collected as pull against the reference, where the copy alone read it as usual', () => {

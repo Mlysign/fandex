@@ -312,8 +312,9 @@ export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[]; type
     }
   }
   const counts: CatalogCounts = { total: rows.length, byFacet };
-  // The switch is the scoring config's (`pullReference`), so the admin can take the reference out without a deploy.
-  const covered = reference && tax.config.pullReference ? Object.keys(reference.media).filter((m) => (reference.media[m]?.total ?? 0) > 0 && (byType.get(m) ?? 0) > 0) : [];
+  // How much the reference counts is the scoring config's (`pullReferenceBlend`), so the admin can tune it without a deploy.
+  const blend = Math.max(0, Math.min(1, tax.config.pullReferenceBlend ?? 0));
+  const covered = reference && blend > 0 ? Object.keys(reference.media).filter((m) => (reference.media[m]?.total ?? 0) > 0 && (byType.get(m) ?? 0) > 0) : [];
   if (!covered.length) return counts;
 
   // The reference's share of each facet, scaled to this copy's size in that
@@ -342,6 +343,8 @@ export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[]; type
     if (!onCovered && !expected.has(id)) continue;
     expected.set(id, (expected.get(id) ?? 0) + outside);
   }
+  // The mix: the copy's own count where the reference counts less than fully.
+  if (blend < 1) for (const [id, e] of expected) expected.set(id, blend * e + (1 - blend) * (byFacet.get(id) ?? 0));
   return { ...counts, expected, referenceMedia: covered };
 }
 

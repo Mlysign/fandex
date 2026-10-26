@@ -49,16 +49,15 @@ export interface ScoringConfigValues {
   tasteBandMargin: number;
   pullBandMargin: number;
   /**
-   * 2026-10-25: whether the pull axis measures against the reference population
-   * (`/catalog/reference.json`, the most popular titles per medium) where the
-   * device has it, or always against the catalog copy itself (§3.7). Measured
-   * on the owner's library: the reference lifts his games' rating order (ρ 0.21
-   * → 0.28) and lowers the held-out wishlist bar (films 85% → 79%, games 87% →
-   * 82%), because the pool's untouched titles are the anime and the franchise
-   * siblings his own library pulled in. On, by his call that "you versus the
-   * catalog" cannot say anime is his thing while the catalog is him.
+   * 2026-10-26: what the pull axis measures against (§3.7). 0 is the catalog
+   * copy on the device alone, 1 the reference population alone
+   * (`/catalog/reference.json`, the most popular titles per medium), between is
+   * the mix (1 − blend) · copy + blend · reference for every facet the reference
+   * covers. Measured on the owner's library: the copy alone ranks his wishlist
+   * best and his game ratings worst, the reference alone the reverse, and a mix
+   * beats both on the two bars together.
    */
-  pullReference: boolean;
+  pullReferenceBlend: number;
   /**
    * 2026-10-25: how much a tag occurrence counts by where the tag came from
    * (docs/fandex-score.md §3.9): a provider's genre or theme and a crowd's
@@ -115,22 +114,23 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   pullTopIps: 1,
   tasteBandMargin: 10,
   pullBandMargin: 10,
-  pullReference: true,
+  pullReferenceBlend: 0.35,
   tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 
 /**
  * The odds line under a label: how much more often than usual a title with
  * that label was rated 8 or more, per medium, with `all` as the fallback for a
- * medium or a label without enough titles. Seeded from the owner's 1,701
- * ratings on 2026-10-25 (`scripts/score-backtest.mjs --ladder`); the admin
- * goalpost summed over every user replaces it once there is one.
+ * medium or a label without enough titles. Seeded from the owner's 1,705
+ * ratings on 2026-10-26 under the tuned config (`scripts/score-backtest.mjs
+ * --ladder`, docs/fandex-score.md §3.10); the admin goalpost summed over every
+ * user replaces it once there is one.
  */
 export const DEFAULT_LABEL_ODDS: Record<string, Partial<Record<string, number>>> = {
-  all: { usual: 1.16, 'hidden-gem': 1.82, tryout: 0.73, 'safe-bet': 1.17, bycatch: 0.47, skip: 0.61 },
-  movie: { usual: 0.7, 'hidden-gem': 1.08, tryout: 0.93, 'safe-bet': 1.44, bycatch: 0.54, skip: 0.16 },
-  show: { usual: 1.09, tryout: 0.88, 'safe-bet': 1.47, bycatch: 0.96 },
-  game: { usual: 0.88, 'hidden-gem': 1.32, tryout: 0.69, 'safe-bet': 1.53, skip: 0.71 },
+  all: { usual: 1.1, tryout: 0.89, 'safe-bet': 1.45, 'hidden-gem': 1.87, bycatch: 0.66, skip: 0.56 },
+  movie: { usual: 0.86, 'safe-bet': 1.52, tryout: 1.05, bycatch: 0.6, skip: 0.15 },
+  show: { tryout: 0.94, 'safe-bet': 1.44, bycatch: 0.8, usual: 1.57 },
+  game: { usual: 0.93, tryout: 0.94, 'safe-bet': 1.21, bycatch: 0.65, 'hidden-gem': 1.27, skip: 0.59 },
 };
 
 export interface TagCategorySeed {

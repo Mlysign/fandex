@@ -11,15 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
-
-6. **🔵 Say go on the re-derive of the pool** (2026-10-26). The score's data fixes changed what a title's FACETS are (`DERIVE_VERSION` 4: tag tiers, the anime facet, a game's people), and nothing re-derives a stored doc on a timer. The cron's `runRederiveStep` walks every pool item whose doc is behind, ten a run, and is priced at **three row writes an item, about 14,000 for the 4,614 pool items, over about three days of runs** (the day's allowance is 100,000). It runs only once this is executed on prod, from `worker/`:
-
-   ```bash
-   npx wrangler d1 execute fandex --remote --command "INSERT INTO kv (key, value) VALUES ('rederive_go', '4')"
-   ```
-
-   Until then the item page already shows the new facets (a stale doc is re-merged on read), while the pool copy on every device and the site's catalog files keep the old ones. Two decisions the numbers left open, both knobs on `/dev/scoring`: the reference population (`pullReference`) lifts games' rating order and lowers the held-out wishlist bar (§3.7), and `artstyle` at weight 0 keeps the new `anime` facet out of both axes (§3.9).
+Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -36,8 +28,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
-- 🔵 **The score's data fixes are built (2026-10-25/26, `DERIVE_VERSION` 4)**; the pool still runs on version 3 until the re-derive is switched on (Needs Nils, item 6). What the Worker's cron does on its own once deployed: Steam's voted tags onto the pool's 1,313 games with a Steam page (`runSteamTagsStep`, about a day and a half) and Wikidata's people onto its 2,675 games (`runWikidataPeopleStep`, about two days), three row writes a game. After both walks, check a game page shows "core" and "detail" on its Why rows and Kojima on Metal Gear Solid, and that `/catalog/reference.json` is on the site after the next nightly build. The numbers per fix: [docs/fandex-score.md](docs/fandex-score.md) §3.9 and §3.7.
-- ⬜ **Zero the seven no-signal tag categories on prod** (character, object, audience, artstyle, source, perspective, other): measured 2026-10-25, dropping them together costs nothing (films 0.216 → 0.211, games unchanged) and removes 17% of the counted tag rows. Done at the 2026-10-25 deploy by SQL if this line is gone; otherwise `UPDATE tag_category SET weight = 0 …` plus deleting `kv` `taxonomy` and `taxonomy_etag`.
+- 🔵 **The score's data fixes and the tuned config are live (2026-10-26)**; three cron walks finish them on prod: Steam's voted tags onto the pool's 1,313 games with a Steam page (`runSteamTagsStep`), Wikidata's people onto its 2,675 games (`runWikidataPeopleStep`), and the re-derive of the 4,614 pool items to `DERIVE_VERSION` 4 (`runRederiveStep`, switched on by Nils's word: kv `rederive_go = '4'`), about three days, three row writes an item. A cron run doing all three measured 112 ms of CPU and ended ok. Done when `steam_tags_cursor` and `wikidata_people_cursor` read `done` and `rederive_cursor` reads `done:4`; then check a game's Why rows say core and detail, and Kojima on Metal Gear Solid. Re-measure the reference blend (§3.10) once other people's titles are a real share of the pool.
 - 🔵 **The TMDB projection walk** (2026-10-23): the cron refetches the 1,698 TMDB links stored before projection v4, four per run, so a film's novelist becomes a writer facet (Stephen King on his adaptations). About three days; watch `tmdb_projection_step` in the logs and `kv` key `tmdb_projection_cursor` reading `done:4`. Then check a King film's page shows him.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic

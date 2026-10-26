@@ -266,10 +266,13 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
               </View>
             ))}
           </View>
-          <Pressable onPress={() => set({ pullReference: !draft.pullReference })} accessibilityRole="checkbox" accessibilityState={{ checked: !!draft.pullReference }} style={styles.check}>
-            <View style={[styles.box, !!draft.pullReference && styles.boxOn]} />
-            <Text style={styles.tiny}>Measure against the reference population (the most popular titles per medium) where a device has it; off, against the device&apos;s own catalog copy</Text>
-          </Pressable>
+          <Field label="Reference blend (0 to 1)">
+            <NumField label="Reference blend" value={draft.pullReferenceBlend ?? 0} onChange={(n) => set({ pullReferenceBlend: Math.max(0, Math.min(1, n)) })} />
+          </Field>
+          <Text style={styles.tiny}>
+            What pull measures against: 0 is the device&apos;s own catalog copy, 1 the reference population (the most popular titles per medium), between
+            is the mix.
+          </Text>
         </Block>
 
         <Block title="Selection (top-N)">
