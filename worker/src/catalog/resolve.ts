@@ -110,6 +110,12 @@ async function rememberAlias(db: D1Database, source: string, type: string, asked
   }
 }
 
+/** Which daily budget a fetch is counted against. The users' resolves share `fetch`; the baseline walk has its own (src/baseline.ts). */
+export interface FetchBudget {
+  kind: string;
+  cap: number;
+}
+
 /**
  * `mayFetch` is the caller's rate limiter. It is asked only on a MISS: a title
  * already held is one indexed read with no provider call and no write, and a
@@ -121,6 +127,7 @@ export async function resolveItem(
   type: string,
   id: string,
   mayFetch?: () => Promise<boolean>,
+  budget?: FetchBudget,
 ): Promise<ResolveOutcome> {
   if (!validResolveTarget(source, type, id)) return { ok: false, reason: "bad-request" };
 
@@ -132,7 +139,8 @@ export async function resolveItem(
   // Counted before the fetch, so a provider that is down still spends budget.
   // That is the safe direction: a caller hammering a dead provider is exactly
   // what the cap is for.
-  if (!(await spend(env.DB, "fetch", capFrom(env.DAILY_FETCH_CAP, DEFAULT_DAILY_FETCH_CAP)))) {
+  const { kind, cap } = budget ?? { kind: "fetch", cap: capFrom(env.DAILY_FETCH_CAP, DEFAULT_DAILY_FETCH_CAP) };
+  if (!(await spend(env.DB, kind, cap))) {
     return { ok: false, reason: "budget" };
   }
 

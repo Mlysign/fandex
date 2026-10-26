@@ -5,7 +5,8 @@
 //   Public (no session)
 //     GET  /v1/health
 //     GET  /v1/catalog/delta?since&after&limit&count   the scoring pool, as a delta
-//     GET  /v1/taxonomy                                tag categories, aliases, scoring config
+//     GET  /v1/catalog/baseline                        which pool titles are the score's baseline
+//     GET  /v1/taxonomy                              tag categories, aliases, scoring config
 //     GET  /v1/items/{id}?region                       one item's detail
 //     GET  /v1/items/{type}/{slug}?region
 //     GET  /v1/resolve/{source}/{type}/{id}            find or fetch a provider title
@@ -52,7 +53,8 @@ import {
   keepTaxonomy, keptTaxonomy, keptTaxonomyEtag, showEpisodesJson,
 } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
-import { runScheduled } from "./cron";
+import { runFastScheduled, runScheduled } from "./cron";
+import { baselineJson, FAST_CRON } from "./baseline";
 import { shelves } from "./shelves";
 import { steamLibrary } from "./steam";
 import { coverRoute } from "./covers";
@@ -108,8 +110,8 @@ export default {
     return withCors(env, request, response);
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runScheduled(env));
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(controller.cron === FAST_CRON ? runFastScheduled(env, controller.scheduledTime) : runScheduled(env));
   },
 } satisfies ExportedHandler<Env>;
 
@@ -160,6 +162,18 @@ async function route(c: Ctx): Promise<Response> {
       (await allow(c.env.RL_RESOLVE, `platforms:${clientIp(request)}`)) && (await spend(c.env.DB, "platform_builds", 40)));
     if (!body) return error(503, "budget-exhausted", "This country's line-up is not built yet. Try again later.");
     return json(body, 200, { "Cache-Control": "public, max-age=3600" });
+  }
+
+  if (a === "catalog" && b === "baseline" && method === "GET" && !d) {
+    // Which pool titles are the score's baseline (src/baseline.ts). A device asks
+    // once a day and mostly gets a 304 off one kept row; only a rebuild reads
+    // the table, at most every six hours and under a cap of its own.
+    const answer = await baselineJson(c.env.DB, async () =>
+      (await allow(c.env.RL_RESOLVE, `baseline:${clientIp(request)}`)) && (await spend(c.env.DB, "baseline_builds", 24)));
+    if (!answer) return error(503, "budget-exhausted", "The baseline list is not built yet. Try again later.");
+    const asked = request.headers.get("If-None-Match");
+    if (asked && asked === answer.etag) return new Response(null, { status: 304, headers: { ETag: answer.etag, "Cache-Control": "no-cache" } });
+    return json(answer.body, 200, { ETag: answer.etag, "Cache-Control": "no-cache" });
   }
 
   if (a === "catalog" && b === "release-dates" && method === "POST" && !d) {
@@ -292,7 +306,7 @@ async function route(c: Ctx): Promise<Response> {
  */
 const PUBLIC_ROUTES: [RegExp, string][] = [
   [/^health$/, "GET, HEAD"],
-  [/^catalog\/(delta|platforms)$/, "GET"],
+  [/^catalog\/(delta|platforms|baseline)$/, "GET"],
   [/^catalog\/release-dates$/, "POST"],
   [/^taxonomy$/, "GET"],
   [/^items\/[^/]+(\/[^/]+)?$/, "GET"],

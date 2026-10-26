@@ -37,7 +37,9 @@
   // One of the account's five cron triggers. Every ten minutes, a small slice
   // each time: a cron run gets the same 10 ms of CPU a request does, so the
   // throughput comes from the number of runs, not the size of one. src/cron.ts.
-  "triggers": { "crons": ["*/10 * * * *"] },
+  // The second, every minute, carries walks that need many runs (the baseline,
+  // src/baseline.ts) and skips the minutes the first one runs in.
+  "triggers": { "crons": ["*/10 * * * *", "* * * * *"] },
   // Per-location counters, not exact ones. Enough to stop one client turning a
   // provider-calling or row-writing route into an amplifier.
   "ratelimits": [

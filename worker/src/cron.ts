@@ -33,6 +33,7 @@ import type { Env } from "./env";
 import { DERIVE_VERSION } from "./catalog/derive";
 import { rederiveItem, upsertMediaItem } from "./catalog/ingest";
 import { useSharedIgdbToken } from "./catalog/resolve";
+import { runBaselineStep } from "./baseline";
 
 // ── 1. The export ───────────────────────────────────────────────────────────
 
@@ -874,5 +875,39 @@ export async function runScheduled(env: Env): Promise<void> {
     if (rd && (rd.rederived || rd.skipped)) console.log("rederive_step", rd);
   } catch (e) {
     console.error("rederive_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ── The every-minute trigger ────────────────────────────────────────────────
+//
+// Added 2026-10-26 for the baseline walk (src/baseline.ts): a run may make 50
+// queries and a new title takes a dozen, so the throughput comes from the
+// number of runs. While the walk has titles left it takes the whole run; after
+// that the run tags pool games (Steam, Wikidata), so the games the walk added
+// get their tags in hours rather than days. Each of those walks parks itself
+// when it is through, after which a run here costs a few kv reads.
+
+export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Promise<void> {
+  // The ten-minute trigger runs in these minutes. Two runs reading one cursor would do one batch twice.
+  if (new Date(scheduledTime).getUTCMinutes() % 10 === 0) return;
+  try {
+    const b = await runBaselineStep(env);
+    if (b && (b.in || b.missing || b.failed)) console.log("baseline_step", b);
+    if (b && !b.done && !b.budget) return;
+  } catch (e) {
+    console.error("baseline_step_failed", { error: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+  try {
+    const st = await runSteamTagsStep(env);
+    if (st.tagged || st.empty || st.missing) console.log("steam_tags_step", st);
+  } catch (e) {
+    console.error("steam_tags_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  try {
+    const wp = await runWikidataPeopleStep(env);
+    if (wp.known || wp.unknown) console.log("wikidata_people_step", wp);
+  } catch (e) {
+    console.error("wikidata_people_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
 }

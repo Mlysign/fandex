@@ -433,8 +433,10 @@ describe("who has to drop a kept count", () => {
     expect(sources["../src/account.ts"].match(/dropStateCounts\(/g)).toHaveLength(2);
   });
 
-  it("the pool is written in two files, and both ways into it drop its size", () => {
+  it("the pool is written in three files, and every way into it drops its size", () => {
     expect(writes("media_items")).toEqual({
+      // The baseline walk's promotion (2026-10-26). Its drop asks the promotion's own question ahead of it.
+      "baseline.ts": 1,
       // The create (drops when the title goes straight into the pool) and the refresh, which never changes `browsed`.
       "catalog/ingest.ts": 2,
       // The promotion. Its drop asks the promotion's own question ahead of it.
@@ -442,9 +444,10 @@ describe("who has to drop a kept count", () => {
     });
     expect(sources["../src/catalog/ingest.ts"]).toContain("if (browsed === 0) statements.push(db.prepare(DROP_POOL_COUNT_SQL))");
     expect(sources["../src/me.ts"]).toContain("${DROP_POOL_COUNT_SQL} AND EXISTS (SELECT 1 FROM media_items WHERE ${NOT_YET_IN_POOL})");
+    expect(sources["../src/baseline.ts"]).toContain("${DROP_POOL_COUNT_SQL} AND EXISTS (SELECT 1 FROM media_items WHERE id = ?1 AND browsed = 1)");
     // Nothing takes a title out of the pool. The day somebody writes that, it drops the size too.
-    const browsed = Object.entries(sources).filter(([, t]) => /SET[^;`]*\bbrowsed\s*=/.test(t)).map(([f]) => f);
-    expect(browsed).toEqual(["../src/me.ts"]);
+    const browsed = Object.entries(sources).filter(([, t]) => /SET[^;`]*\bbrowsed\s*=/.test(t)).map(([f]) => f).sort();
+    expect(browsed).toEqual(["../src/baseline.ts", "../src/me.ts"]);
   });
 });
 

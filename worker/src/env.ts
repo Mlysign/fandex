@@ -38,6 +38,8 @@ export interface Env {
   DAILY_USER_WRITE_CAP?: string;
   /** Calendar month builds allowed per UTC day. Optional; calendar.ts has the default. */
   DAILY_CALENDAR_CAP?: string;
+  /** Baseline titles the walk may fetch per UTC day. Optional; baseline.ts has the default. */
+  DAILY_BASELINE_CAP?: string;
 
   // Rate limiters (wrangler.jsonc `ratelimits`). Optional so a test or a local
   // run without them degrades to "allowed" rather than throwing.
