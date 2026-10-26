@@ -15,7 +15,7 @@ import {
   buildProfile, computeFandexScore, MIN_RATED_FOR_FANDEX_SCORE,
   type ScoreReason, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
-import { parseFacets, ratedTitles } from '~/lib/ScoreProvider';
+import { catalogCounts, consumedTitles, parseFacets, ratedTitles, storedReference } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius } from '~/theme';
 
 export const ROLE_ORDER = ['director', 'creator', 'writer', 'cast', 'developer', 'publisher', 'studio', 'network', 'ip'];
@@ -23,6 +23,7 @@ const ROLE_LABELS: Record<string, string> = {
   director: 'Directors', writer: 'Writers', creator: 'Creators', cast: 'Cast', developer: 'Developers',
   publisher: 'Publishers', studio: 'Studios', network: 'Networks', ip: 'Franchise',
 };
+const MEDIUM_LABELS: Record<string, string> = { movie: 'Films', show: 'Shows', game: 'Games', book: 'Books', boardgame: 'Board games' };
 const MAX_PINNED = 3;
 
 export type Category = TaxonomyJson['tagCategories'][number];
@@ -102,12 +103,13 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
     setPreviewing(true);
     setPreviewError(null);
     try {
-      const rated = await ratedTitles(db);
       const tax: Taxonomy = {
         ...taxonomy, config: draft,
         categories: new Map(cats.map((c) => [c.id, { label: c.label, weight: c.weight, ignored: !!c.ignored }])),
       };
-      const profile = buildProfile(rated, tax);
+      // Both axes, as every screen scores: the pull knobs above would otherwise look dead here.
+      const [rated, consumed, reference] = await Promise.all([ratedTitles(db), consumedTitles(db), storedReference(db)]);
+      const profile = buildProfile(rated, tax, { consumed, catalog: await catalogCounts(db, tax, reference) });
       let targets = pinned.map((p) => ({ id: p.id, title: p.title }));
       if (!targets.length) {
         // The site's default: your top-rated title, the latest one when several tie.
@@ -121,7 +123,7 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
       const out: Preview[] = [];
       for (const t of targets) {
         const row = await db.getFirstAsync<{ facets: string }>('SELECT facets FROM catalog WHERE id = ?', [t.id]);
-        const fx = row ? computeFandexScore(parseFacets(row.facets), t.id, profile, tax) : null;
+        const fx = row ? computeFandexScore(parseFacets(row.facets), t.id, profile, tax, pinned.find((p) => p.id === t.id)?.type) : null;
         out.push({
           itemId: t.id, itemTitle: t.title, score: fx?.score ?? null,
           reasons: (fx?.reasons ?? []).filter((r) => !r.capped),
@@ -226,6 +228,48 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
               </Text>
             </View>
           </View>
+        </Block>
+
+        <Block title="Pull: do you seek this out?">
+          <Text style={styles.tiny}>
+            The second axis (docs/fandex-score.md §3.7): of the titles carrying a facet, the share you have been through against your usual
+            share, as log2 lift. The gain is points per unit of lift, the per-medium weight how much pull counts in the number for that medium
+            (the band reads the axis before it). The margins are the points off your usual that read as high or low, on each axis.
+          </Text>
+          <View style={styles.grid2}>
+            {([
+              ['Pull gain', 'pullGain'], ['Pull prior (pseudo-titles)', 'pullPrior'],
+              ['Taste band margin', 'tasteBandMargin'], ['Pull band margin', 'pullBandMargin'],
+            ] as [string, keyof ScoringConfigValues][]).map(([label, key]) => (
+              <View key={key} style={styles.cell2}>
+                <Field label={label}><NumField label={label} value={draft[key] as number} onChange={(n) => set({ [key]: n })} /></Field>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.tiny}>Pull weight per medium</Text>
+          <View style={styles.grid2}>
+            {(['movie', 'show', 'game', 'book', 'boardgame'] as const).map((medium) => (
+              <View key={medium} style={styles.cell2}>
+                <Field label={MEDIUM_LABELS[medium]}>
+                  <NumField label={`${MEDIUM_LABELS[medium]} pull weight`} value={draft.pullWeight?.[medium] ?? 1} onChange={(n) => set({ pullWeight: { ...draft.pullWeight, [medium]: n } })} />
+                </Field>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.tiny}>Pull rows counted per kind</Text>
+          <View style={styles.grid2}>
+            {([
+              ['Top tags', 'pullTopTags'], ['Top people', 'pullTopPeople'], ['Top companies', 'pullTopCompanies'], ['Top franchises', 'pullTopIps'],
+            ] as [string, keyof ScoringConfigValues][]).map(([label, key]) => (
+              <View key={key} style={styles.cell2}>
+                <Field label={label}><NumField label={`${label} (pull)`} value={draft[key] as number} onChange={(n) => set({ [key]: Math.max(0, Math.round(n)) })} /></Field>
+              </View>
+            ))}
+          </View>
+          <Pressable onPress={() => set({ pullReference: !draft.pullReference })} accessibilityRole="checkbox" accessibilityState={{ checked: !!draft.pullReference }} style={styles.check}>
+            <View style={[styles.box, !!draft.pullReference && styles.boxOn]} />
+            <Text style={styles.tiny}>Measure against the reference population (the most popular titles per medium) where a device has it; off, against the device&apos;s own catalog copy</Text>
+          </Pressable>
         </Block>
 
         <Block title="Selection (top-N)">
