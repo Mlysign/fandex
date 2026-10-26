@@ -163,5 +163,30 @@
   "ref": "franchise-merge|frankenweenie>frankenstein",
   "why": "Frankenweenie is Burton's pastiche with its own story, not Frankenstein.",
   "on": "2026-10-20"
+ },
+ {
+  "ref": "franchise-member|ebaf38b0-9b0a-4ce1-836a-73d358b904be>soul eater",
+  "why": "Fire Force is tied to Soul Eater only by its manga's last chapter; the show stands as its own series.",
+  "on": "2026-10-26"
+ },
+ {
+  "ref": "franchise-member|66e6f55c-3196-4034-9044-7cb7008660da>i robot",
+  "why": "Bicentennial Man adapts a separate Asimov story, not I, Robot.",
+  "on": "2026-10-26"
+ },
+ {
+  "ref": "franchise-merge|super mario bros>mario",
+  "why": "Super Mario Bros. is the real platformer series; its one title already carries Mario, so a bundle changes nothing.",
+  "on": "2026-10-26"
+ },
+ {
+  "ref": "franchise-member|651167d2-e858-450b-a737-702dcc968c6e>disney s cinderella",
+  "why": "The Ugly Stepsister retells Cinderella but is not Disney's; no non-Disney Cinderella franchise exists.",
+  "on": "2026-10-26"
+ },
+ {
+  "ref": "franchise-member|8d84ed9c-ba0b-45f7-a60d-118d08b89641>dc comics",
+  "why": "The Sandman is a Vertigo book, not the DC superhero line the DC Comics franchise holds.",
+  "on": "2026-10-26"
  }
 ]
