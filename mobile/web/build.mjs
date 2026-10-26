@@ -583,6 +583,35 @@ if (!limit) {
   fs.writeFileSync(portraitFile, JSON.stringify(portraits));
   fs.writeFileSync(path.join(STAGE, 'catalog', 'people.json'), JSON.stringify({ version: 1, builtAt: new Date().toISOString(), people }));
   step(`${people.length} popular people, ${people.filter((p) => p.portraitUrl).length} with a portrait (${asked} asked of TMDB)`);
+
+  // The reference population for the match's pull axis (referencePopulation.mjs,
+  // docs/fandex-score.md §3.7): the most popular titles per medium from the
+  // providers, as facet counts. Asked for once a week and kept in dist/cache; a
+  // week the providers fail keeps the last answer, and a build with none ships
+  // none, which leaves every device on its own counts, as before the file.
+  const { buildReferencePopulation, REFERENCE_MAX_AGE_MS } = await import('./referencePopulation.mjs');
+  const referenceFile = path.join(DIST, 'cache', 'reference.json');
+  let reference = null;
+  try { reference = JSON.parse(fs.readFileSync(referenceFile, 'utf8')); } catch { /* none yet */ }
+  const mediaOf = (r) => Object.keys(r?.media ?? {});
+  if (!reference || !(Date.now() - Date.parse(reference.builtAt) < REFERENCE_MAX_AGE_MS) || mediaOf(reference).length < 3) {
+    try {
+      const built = await buildReferencePopulation({ log: (m) => step(`reference population, ${m}`) });
+      // A rebuild that lost a medium the last one had is not an improvement.
+      if (mediaOf(built).length >= Math.min(3, mediaOf(reference).length || 3)) {
+        reference = built;
+        fs.writeFileSync(referenceFile, JSON.stringify(reference));
+      } else {
+        step(`reference population: the new one covers ${mediaOf(built).join(', ') || 'nothing'}; keeping the last`);
+      }
+    } catch (e) {
+      step(`reference population not rebuilt (${e instanceof Error ? e.message : String(e)}); ${reference ? 'the last one stands' : 'none shipped'}`);
+    }
+  }
+  if (reference) {
+    fs.writeFileSync(path.join(STAGE, 'catalog', 'reference.json'), JSON.stringify(reference));
+    step(`reference population of ${reference.builtAt.slice(0, 10)}: ${Object.entries(reference.media).map(([m, r]) => `${m} ${r.total} titles, ${r.facets.length} facets`).join(' · ')}`);
+  }
 }
 
 urls.unshift({ loc: `${SITE}/`, lastmod: new Date().toISOString().slice(0, 10) });

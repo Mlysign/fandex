@@ -15,6 +15,7 @@ const CONFIG = {
   topTagsPositive: 6, topTagsNegative: 3, topPeople: 4, topCompanies: 2, topIps: 1,
   pullPrior: 5, pullGain: 3.5, pullWeight: { movie: 1, show: 1, game: 0.5, book: 1, boardgame: 1 },
   pullTopTags: 5, pullTopPeople: 3, pullTopCompanies: 2, pullTopIps: 1, tasteBandMargin: 10, pullBandMargin: 10,
+  pullReference: true,
   tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 
@@ -46,6 +47,10 @@ describe("the scoring config", () => {
     expect(parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: 0.25 } }).tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.25 });
     expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { rumour: 1 } })).toThrow("Unknown tier");
     expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: -1 } })).toThrow("negative");
+    const { pullReference: _r, ...noRef } = CONFIG;
+    expect(parseScoringConfig(noRef).pullReference).toBe(true);
+    expect(parseScoringConfig({ ...CONFIG, pullReference: false }).pullReference).toBe(false);
+    expect(() => parseScoringConfig({ ...CONFIG, pullReference: "yes" })).toThrow("true or false");
   });
 
   it("is what /v1/taxonomy serves after a save, with a version that only goes up", async () => {

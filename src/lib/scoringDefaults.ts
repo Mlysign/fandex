@@ -49,6 +49,17 @@ export interface ScoringConfigValues {
   tasteBandMargin: number;
   pullBandMargin: number;
   /**
+   * 2026-10-25: whether the pull axis measures against the reference population
+   * (`/catalog/reference.json`, the most popular titles per medium) where the
+   * device has it, or always against the catalog copy itself (§3.7). Measured
+   * on the owner's library: the reference lifts his games' rating order (ρ 0.21
+   * → 0.28) and lowers the held-out wishlist bar (films 85% → 79%, games 87% →
+   * 82%), because the pool's untouched titles are the anime and the franchise
+   * siblings his own library pulled in. On, by his call that "you versus the
+   * catalog" cannot say anime is his thing while the catalog is him.
+   */
+  pullReference: boolean;
+  /**
    * 2026-10-25: how much a tag occurrence counts by where the tag came from
    * (docs/fandex-score.md §3.9): a provider's genre or theme and a crowd's
    * voted tag in full, an editorial keyword less. Applied per occurrence on
@@ -104,6 +115,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
   pullTopIps: 1,
   tasteBandMargin: 10,
   pullBandMargin: 10,
+  pullReference: true,
   tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 

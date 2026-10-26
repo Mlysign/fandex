@@ -51,6 +51,8 @@ export interface ScoringConfig {
   pullTopIps: number;
   tasteBandMargin: number;
   pullBandMargin: number;
+  /** 2026-10-25: whether pull measures against the reference population where a device has it (§3.7). */
+  pullReference: boolean;
   /** 2026-10-25: a tag occurrence's weight by its tier (docs/fandex-score.md §3.9). Defaults for an older body too. */
   tagTierWeights: Record<string, number>;
 }
@@ -110,6 +112,7 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     pullTopIps: orDefault(body.pullTopIps, d.pullTopIps, (v) => count(v, "pullTopIps")),
     tasteBandMargin: orDefault(body.tasteBandMargin, d.tasteBandMargin, (v) => positive(v, "tasteBandMargin")),
     pullBandMargin: orDefault(body.pullBandMargin, d.pullBandMargin, (v) => positive(v, "pullBandMargin")),
+    pullReference: orDefault(body.pullReference, d.pullReference, (v) => { if (typeof v !== "boolean") throw new BadRequest("pullReference must be true or false"); return v; }),
     tagTierWeights,
   };
 }

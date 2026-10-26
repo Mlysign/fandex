@@ -17,17 +17,25 @@ import { AppState } from 'react-native';
 import { api, type ScoreReport } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { API_URL } from '~/lib/config';
+import { API_URL, CATALOG_FILES_URL } from '~/lib/config';
 import { getMeta, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import {
   buildProfile, catalogCountsFrom, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
-  type AxisBand, type CatalogCounts, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreFacet, type ScoreLabel, type Taxonomy, type TaxonomyJson,
+  type AxisBand, type CatalogCounts, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ReferenceJson, type ScoreFacet, type ScoreLabel, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
 
 const TAXONOMY_KEY = 'taxonomy';
 const TAXONOMY_ETAG_KEY = 'taxonomy_etag';
 const TAXONOMY_AT_KEY = 'taxonomy_at';
+// The reference population (docs/fandex-score.md §3.7), a file the website's
+// build writes once a week next to the catalog files. Kept here like the
+// taxonomy and asked for again daily. An app pointed at another API has no
+// such file (CATALOG_FILES_URL is null) and measures pull against its own copy.
+const REFERENCE_KEY = 'reference_population';
+const REFERENCE_ETAG_KEY = 'reference_population_etag';
+const REFERENCE_AT_KEY = 'reference_population_at';
+const REFERENCE_CHECK_GAP_MS = 24 * 60 * 60 * 1000;
 /**
  * Asked on every start and every return to the app, at most once a minute (a
  * browser fires "active" on every tab switch). An unchanged taxonomy is a 304
@@ -104,6 +112,42 @@ async function refreshTaxonomy(db: SQLiteDatabase, force: boolean): Promise<bool
     await setMeta(db, TAXONOMY_KEY, body);
     await setMeta(db, TAXONOMY_ETAG_KEY, res.headers.get('etag') ?? '');
     await setMeta(db, TAXONOMY_AT_KEY, String(Date.now()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The stored reference population, or null when the device has none (or it does not parse). */
+export async function storedReference(db: SQLiteDatabase): Promise<ReferenceJson | null> {
+  const raw = await getMeta(db, REFERENCE_KEY);
+  if (!raw) return null;
+  try {
+    const json = JSON.parse(raw) as ReferenceJson;
+    return json && typeof json === 'object' && json.media && typeof json.media === 'object' ? json : null;
+  } catch { return null; }
+}
+
+/**
+ * Ask the website for the reference population unless it was asked for in the
+ * last day. True when a new one was stored. Never throws: the stored one, or
+ * none, stands, and the score then measures pull against the device's own copy.
+ */
+export async function refreshReference(db: SQLiteDatabase): Promise<boolean> {
+  if (CATALOG_FILES_URL === null) return false;
+  const at = Number(await getMeta(db, REFERENCE_AT_KEY)) || 0;
+  if (Date.now() - at < REFERENCE_CHECK_GAP_MS) return false;
+  try {
+    const etag = await getMeta(db, REFERENCE_ETAG_KEY);
+    const res = await fetch(`${CATALOG_FILES_URL}/catalog/reference.json`, { headers: etag ? { 'If-None-Match': etag } : {} });
+    if (res.status === 304) { await setMeta(db, REFERENCE_AT_KEY, String(Date.now())); return false; }
+    if (!res.ok) return false;
+    const body = await res.text();
+    const json = JSON.parse(body) as ReferenceJson;
+    if (!json?.media || typeof json.media !== 'object' || !Object.keys(json.media).length) return false;
+    await setMeta(db, REFERENCE_KEY, body);
+    await setMeta(db, REFERENCE_ETAG_KEY, res.headers.get('etag') ?? '');
+    await setMeta(db, REFERENCE_AT_KEY, String(Date.now()));
     return true;
   } catch {
     return false;
@@ -190,10 +234,14 @@ export async function followedFacets(db: SQLiteDatabase): Promise<Map<string, Fo
   return new Map(rows.map((r) => [r.facet_id, r.mode === 'avoid' ? 'avoid' : 'follow']));
 }
 
-/** The catalog copy's facet counts: the pull axis's denominator. Every row is read, so a caller caches this by catalog revision. */
-export async function catalogCounts(db: SQLiteDatabase, tax: Taxonomy): Promise<CatalogCounts> {
-  const rows = await db.getAllAsync<{ id: string; facets: string }>('SELECT id, facets FROM catalog');
-  return catalogCountsFrom(rows.map((r) => ({ id: r.id, facets: parseFacets(r.facets) })), tax);
+/**
+ * The catalog copy's facet counts: the pull axis's denominator, measured
+ * against the reference population where the device holds one (§3.7). Every
+ * row is read, so a caller caches this by catalog revision.
+ */
+export async function catalogCounts(db: SQLiteDatabase, tax: Taxonomy, reference: ReferenceJson | null = null): Promise<CatalogCounts> {
+  const rows = await db.getAllAsync<{ id: string; type: string; facets: string }>('SELECT id, type, facets FROM catalog');
+  return catalogCountsFrom(rows.map((r) => ({ id: r.id, type: r.type, facets: parseFacets(r.facets) })), tax, reference);
 }
 
 export function ScoreProvider({ children }: { children: ReactNode }) {
@@ -204,6 +252,22 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
+
+  // The reference population: what is stored, then asked for again once a day.
+  // Only its identity is kept in state; the counts read the stored file.
+  const [reference, setReference] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const stored = await storedReference(db);
+      if (live && stored) setReference(stored.builtAt);
+      if (await refreshReference(db)) {
+        const fresh = await storedReference(db);
+        if (live && fresh) setReference(fresh.builtAt);
+      }
+    })();
+    return () => { live = false; };
+  }, [db]);
 
   // The taxonomy: what is stored, at once; then asked for again, on start and
   // on every return to the app, so an edit or a sweep shows on the next open.
@@ -244,7 +308,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // The catalog's facet counts are read once per catalog revision and taxonomy,
   // not once per rating: counting means parsing every row's facets, which is
   // seconds on a phone, and a rating changes none of it.
-  const counts = useRef<{ revision: number; tax: Taxonomy; counts: CatalogCounts } | null>(null);
+  const counts = useRef<{ revision: number; tax: Taxonomy; reference: string | null; counts: CatalogCounts } | null>(null);
   useEffect(() => {
     let live = true;
     if (!signedIn || !taxonomy) {
@@ -258,13 +322,13 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       const [rated, consumed, follows] = await Promise.all([ratedTitles(db), consumedTitles(db), followedFacets(db)]);
       if (!live) return;
       let cached = counts.current;
-      if (!cached || cached.revision !== catalog.revision || cached.tax !== taxonomy) {
-        cached = { revision: catalog.revision, tax: taxonomy, counts: await catalogCounts(db, taxonomy) };
+      if (!cached || cached.revision !== catalog.revision || cached.tax !== taxonomy || cached.reference !== reference) {
+        cached = { revision: catalog.revision, tax: taxonomy, reference, counts: await catalogCounts(db, taxonomy, reference ? await storedReference(db) : null) };
         if (!live) return;
         counts.current = cached;
       }
       const built = buildProfile(rated, taxonomy, { consumed, catalog: cached.counts, follows });
-      console.log('fandex_profile', JSON.stringify({ rated: rated.length, consumed: consumed.length, follows: follows.size, catalog: cached.counts.total, facets: built.w.size, ms: Date.now() - started }));
+      console.log('fandex_profile', JSON.stringify({ rated: rated.length, consumed: consumed.length, follows: follows.size, catalog: cached.counts.total, reference: cached.counts.referenceMedia ?? null, facets: built.w.size, ms: Date.now() - started }));
       setProfile(built);
       setReady(true);
       setRevision((r) => r + 1);
@@ -272,7 +336,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       setTimeout(() => { if (live) void sendScoreReport(db, rated, built, taxonomy); }, 2_000);
     })();
     return () => { live = false; };
-  }, [db, signedIn, auth.status, taxonomy, auth.rowsRevision, catalog.revision, filling]);
+  }, [db, signedIn, auth.status, taxonomy, reference, auth.rowsRevision, catalog.revision, filling]);
 
   const score = useCallback((id: string, facets: ScoreFacet[], type?: string) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy, type) : null), [profile, taxonomy]);

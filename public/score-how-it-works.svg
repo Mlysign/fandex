@@ -50,8 +50,8 @@
 
   <rect class="inset" x="60" y="372" width="390" height="236" rx="12"/>
   <text class="h2" x="80" y="404"><tspan class="gold">Pull</tspan> · do you seek this out?</text>
-  <text class="body" x="80" y="432">Of all the titles Fandex knows with this facet,</text>
-  <text class="body" x="80" y="452">the share you have been through,</text>
+  <text class="body" x="80" y="432">Of the titles with this facet, as common as they are</text>
+  <text class="body" x="80" y="452">for people in general: the share you have been through,</text>
   <text class="body" x="80" y="472">compared with your usual share of everything.</text>
   <text class="muted" x="80" y="500">A title on your wishlist counts half. A facet on only a couple</text>
   <text class="muted" x="80" y="518">of titles is pulled toward your usual until there is evidence.</text>

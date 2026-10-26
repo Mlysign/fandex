@@ -203,12 +203,34 @@ export interface ConsumedTitle {
   weight: number;
 }
 
+/**
+ * `/catalog/reference.json`: facet counts over the most popular titles per
+ * medium, from the providers (mobile/web/referencePopulation.mjs). What "the
+ * catalog" looks like when it is not one person's library (§3.7).
+ */
+export interface ReferenceJson {
+  version: number;
+  builtAt: string;
+  /** Per medium: how many titles, and every facet on two or more of them as [kind, role, key, count]. */
+  media: Record<string, { total: number; facets: [string, string, string, number][] }>;
+}
+
 /** What the catalog copy holds, as the pull's denominator (§3.7). */
 export interface CatalogCounts {
   /** Titles in the catalog copy, every medium. */
   total: number;
   /** Facet id (after the taxonomy) → titles carrying it. */
   byFacet: Map<string, number>;
+  /**
+   * Facet id → how many titles a catalog this size would carry with it if it
+   * were nobody's library: the reference population's share per medium, scaled
+   * to the copy's size in that medium, plus the copy's own count on the media
+   * the reference does not cover. Only for facets on a covered medium; absent
+   * without a reference, when the copy's counts are the denominator.
+   */
+  expected?: Map<string, number>;
+  /** The media the expectation covers. */
+  referenceMedia?: string[];
 }
 
 /** What a follow does to a facet's pull: `follow` sets it to the maximum, `avoid` to the minimum. */
@@ -262,19 +284,65 @@ export interface Profile {
 /** Below this many rated titles there is no score at all, rather than one built on two samples. */
 export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
-/** The catalog's facet counts, from its rows, with the taxonomy applied so a bundled tag is counted once. */
-export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[] }[], tax: Taxonomy): CatalogCounts {
+/**
+ * The catalog's facet counts, from its rows, with the taxonomy applied so a
+ * bundled tag is counted once. With a reference population and rows that
+ * carry their medium, also what a catalog this size would carry if it were
+ * nobody's (`expected`): the pool's films are 68% the owner's and its shows
+ * 97%, so measured against the pool anime lifted him almost nothing, because
+ * he had put most of the pool's anime there himself.
+ */
+export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[]; type?: string }[], tax: Taxonomy, reference?: ReferenceJson | null): CatalogCounts {
   const byFacet = new Map<string, number>();
+  const byType = new Map<string, number>();
+  const byFacetType = new Map<string, Map<string, number>>();
   for (const row of rows) {
+    if (row.type) byType.set(row.type, (byType.get(row.type) ?? 0) + 1);
     const seen = new Set<string>();
     for (const f of resolveFacets(row.facets, row.id, tax)) {
       const id = facetId(f);
       if (seen.has(id)) continue;
       seen.add(id);
       byFacet.set(id, (byFacet.get(id) ?? 0) + 1);
+      if (row.type) {
+        const perType = byFacetType.get(id) ?? new Map<string, number>();
+        perType.set(row.type, (perType.get(row.type) ?? 0) + 1);
+        byFacetType.set(id, perType);
+      }
     }
   }
-  return { total: rows.length, byFacet };
+  const counts: CatalogCounts = { total: rows.length, byFacet };
+  // The switch is the scoring config's (`pullReference`), so the admin can take the reference out without a deploy.
+  const covered = reference && tax.config.pullReference ? Object.keys(reference.media).filter((m) => (reference.media[m]?.total ?? 0) > 0 && (byType.get(m) ?? 0) > 0) : [];
+  if (!covered.length) return counts;
+
+  // The reference's share of each facet, scaled to this copy's size in that
+  // medium, through the taxonomy so a bundled tag lands on the same id.
+  const expected = new Map<string, number>();
+  for (const medium of covered) {
+    const ref = reference!.media[medium];
+    const scale = (byType.get(medium) ?? 0) / ref.total;
+    for (const [kind, role, key, n] of ref.facets) {
+      if (!(n > 0)) continue;
+      const raw: ScoreFacet = { kind: kind as ScoreFacet['kind'], key, label: key, ...(role ? { role } : {}) };
+      const id = facetId(resolveFacets([raw], null, tax)[0] ?? raw);
+      expected.set(id, (expected.get(id) ?? 0) + n * scale);
+    }
+  }
+  // A facet this copy carries on a covered medium is expected as the reference
+  // says, zero where the reference lacks it there (rarer than one in two
+  // thousand); its titles on the other media count as this copy has them. A
+  // facet only on uncovered media keeps the copy's count as its denominator.
+  for (const [id, perType] of byFacetType) {
+    let outside = 0;
+    let onCovered = false;
+    for (const [type, n] of perType) {
+      if (covered.includes(type)) onCovered = true; else outside += n;
+    }
+    if (!onCovered && !expected.has(id)) continue;
+    expected.set(id, (expected.get(id) ?? 0) + outside);
+  }
+  return { ...counts, expected, referenceMedia: covered };
 }
 
 export function buildProfile(
@@ -396,6 +464,8 @@ export interface FacetPull {
   consumed: number;
   /** Catalog titles carrying it. */
   catalog: number;
+  /** How many a catalog this size would carry if it were nobody's (the reference population, §3.7). Absent when the catalog's own count was the denominator. */
+  expected?: number;
   lift: number;
   /** Points on a title of medium `type` (the pull weight of that medium applied), or on one of unknown medium. */
   points: number;
@@ -429,12 +499,23 @@ export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?:
   const cfg = tax.config;
   const followed = profile.follows.get(id);
   const maxLift = Math.log2(1 / share);
-  const lift = followed === 'follow' ? maxLift : followed === 'avoid' ? -maxLift : pullLift(consumed, catalog, share, cfg.pullPrior);
+  // The denominator: what a catalog this size would carry if it were nobody's
+  // library, where the reference population knows the facet's media; the
+  // catalog's own count otherwise. Your consumed titles can outnumber the
+  // expectation, so the lift is held to the most anyone can seek out.
+  const expected = profile.catalog!.expected?.get(id);
+  const population = expected ?? catalog;
+  const lift = followed === 'follow' ? maxLift : followed === 'avoid' ? -maxLift
+    : Math.max(-maxLift, Math.min(maxLift, pullLift(consumed, population, share, cfg.pullPrior)));
   // A tag's tier weighs its pull as it weighs its taste; cast billing does not (a title's choice is a choice, lead or cameo).
   const roleWeight = f.kind === 'tag' ? (f.tier ? (cfg.tagTierWeights[f.tier] ?? 1) : 1) : (cfg.roleWeights[f.role ?? 'tag'] ?? 1);
-  const value = lift * salienceOf(catalog, profile.catalog!.total) * roleWeight;
+  const value = lift * salienceOf(population, profile.catalog!.total) * roleWeight;
   const medium = type ? (cfg.pullWeight[type] ?? 1) : 1;
-  return { consumed, catalog, lift, points: Math.round(cfg.pullGain * medium * value * 10) / 10, ...(followed ? { followed } : {}) };
+  return {
+    consumed, catalog, lift, points: Math.round(cfg.pullGain * medium * value * 10) / 10,
+    ...(expected !== undefined ? { expected: Math.round(expected * 10) / 10 } : {}),
+    ...(followed ? { followed } : {}),
+  };
 }
 
 // ── Scoring one title ────────────────────────────────────────────────────────
@@ -483,6 +564,8 @@ export interface ScoreReason {
   /** Pull rows only: the titles behind the number. */
   consumed?: number;
   catalog?: number;
+  /** Pull rows only: the reference population's expectation for a catalog this size, when it was the denominator. */
+  expected?: number;
   lift?: number;
   followed?: FollowMode;
 }
@@ -646,6 +729,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     contribution: counted ? round1(p.value * share) : 0,
     impact: p.pull.points, BA: 0, n: Math.round(p.pull.consumed),
     consumed: p.pull.consumed, catalog: p.pull.catalog, lift: p.pull.lift,
+    ...(p.pull.expected !== undefined ? { expected: p.pull.expected } : {}),
     ...(p.f.tier ? { tier: p.f.tier } : {}),
     ...(p.pull.followed ? { followed: p.pull.followed } : {}),
     ...(counted ? {} : { capped: true }),

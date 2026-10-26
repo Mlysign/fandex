@@ -13,6 +13,9 @@
 //   --catalog   a folder of the website's /catalog/p*.json pages (the pool
 //               with facets), or a single JSON file of the same shape
 //   --taxonomy  /v1/taxonomy as the Worker answers it (curl it to a file)
+//   --reference /catalog/reference.json, the reference population (optional; without
+//               it the catalog's own counts are the pull axis's denominator, as on a
+//               device without the file)
 //   --ladder    also print the odds ladder as JSON, for scoringDefaults
 //
 // node scripts/score-backtest.mjs --state nils.json --catalog ./catalog --taxonomy taxonomy.json
@@ -56,9 +59,11 @@ const rated = [...ratingRows].map(([id, rs]) => ({ id, type: catalog.get(id).typ
 const ratedIds = new Set(rated.map((r) => r.id));
 const consumed = [...held].map((id) => ({ id, facets: catalog.get(id).facets, weight: 1 }));
 // The wishlist is HELD OUT of the profile here, so it can be the test; the app counts it at WISHLIST_WEIGHT.
-const counts = catalogCountsFrom([...catalog.values()], tax);
+const reference = args.reference ? JSON.parse(readFileSync(args.reference, 'utf8')) : null;
+const counts = catalogCountsFrom([...catalog.values()], tax, reference);
 const profile = buildProfile(rated, tax, { consumed, catalog: counts });
 console.log(`catalog ${catalog.size} · rated ${rated.length} · held ${held.size} · wishlist (held out) ${wishlist.size} · your average ${profile.baseline.toFixed(2)} · pull gain ${tax.config.pullGain} · pull weights ${JSON.stringify(tax.config.pullWeight)}`);
+console.log(reference ? `reference population of ${reference.builtAt.slice(0, 10)}: ${counts.referenceMedia?.join(', ') || 'no medium in common'} (${Object.entries(reference.media).map(([m, r]) => `${m} ${r.total}`).join(', ')}) · expected counts for ${counts.expected?.size ?? 0} facets` : 'no reference population: the catalog is its own denominator');
 console.log(`wishlist weight in the app: ${WISHLIST_WEIGHT} (not applied here, the wishlist is the test)`);
 
 // ── Score everything ───────────────────────────────────────────────────────

@@ -225,6 +225,53 @@ describe('tag tiers (2026-10-25)', () => {
   });
 });
 
+describe('the reference population (2026-10-25)', () => {
+  // Twenty catalog films, four of them noir, and a reference where noir is one film in fifty.
+  const films = Array.from({ length: 20 }, (_, i) => ({ id: `f${i}`, type: 'movie', facets: i < 4 ? [tag('noir')] : [tag('drama')] }));
+  const reference = { version: 1, builtAt: '2026-10-25T00:00:00Z', media: { movie: { total: 2000, facets: [['tag', '', 'noir', 40], ['tag', '', 'drama', 1500]] as [string, string, string, number][] } } };
+  const strongPull = (over: object = {}) => prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, pullGain: 40, ...over } } }));
+  const lib: RatedTitle[] = [rated('f0', 8, [tag('noir')]), rated('f4', 6, [tag('drama')]), rated('f5', 6, [tag('drama')]), rated('f6', 7, [tag('drama')])];
+  const consumed = ['f0', 'f1', 'f2', 'f4', 'f5', 'f6', 'f7', 'f8'].map((id) => ({ id, facets: films.find((f) => f.id === id)!.facets, weight: 1 }));
+
+  it('expects what a catalog this size would carry if it belonged to nobody, scaled per medium, and keeps the own counts beside it', () => {
+    const tax = strongPull();
+    const counts = catalogCountsFrom(films, tax, reference);
+    expect(counts.byFacet.get('tag||noir')).toBe(4);
+    // One in fifty of twenty films.
+    expect(counts.expected!.get('tag||noir')).toBeCloseTo(0.4, 5);
+    expect(counts.expected!.get('tag||drama')).toBeCloseTo(15, 5);
+    expect(counts.referenceMedia).toEqual(['movie']);
+    // Without rows that name their medium, or with the switch off, the copy is its own denominator.
+    expect(catalogCountsFrom(films.map(({ type: _t, ...f }) => f), tax, reference).expected).toBeUndefined();
+    expect(catalogCountsFrom(films, strongPull({ pullReference: false }), reference).expected).toBeUndefined();
+  });
+
+  it('reads a facet you collected as pull against the reference, where the copy alone read it as usual', () => {
+    const tax = strongPull();
+    const own = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(films, tax) });
+    const ref = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(films, tax, reference) });
+    // You have been through 3 of the copy's 4 noir films, and 8 of 20 films in all: a lift, but a modest one against a copy that is mostly you.
+    const ownRow = computeFandexScore([tag('noir')], 'x', own, tax, 'movie')!.reasons.find((r) => r.axis === 'pull')!;
+    const refRow = computeFandexScore([tag('noir')], 'x', ref, tax, 'movie')!.reasons.find((r) => r.axis === 'pull')!;
+    expect(refRow.lift).toBeGreaterThan(ownRow.lift!);
+    expect(refRow.expected).toBeCloseTo(0.4, 1);
+    expect(refRow.catalog).toBe(4);
+    expect(ownRow.expected).toBeUndefined();
+    // Never past the most anyone can seek out.
+    expect(refRow.lift).toBeLessThanOrEqual(Math.log2(20 / 8) + 1e-9);
+    // Drama, which you consume at your usual share, reads as usual either way.
+    const drama = computeFandexScore([tag('drama')], 'y', ref, tax, 'movie')!.reasons.find((r) => r.axis === 'pull')!;
+    expect(Math.abs(drama.lift!)).toBeLessThan(0.3);
+  });
+
+  it('keeps the gate on the own count: a facet on two titles has no pull row, whatever the reference says', () => {
+    const tax = strongPull();
+    const two = films.map((f, i) => (i < 2 ? { ...f, facets: [tag('noir'), tag('heist')] } : f));
+    const ref = buildProfile(lib, tax, { consumed, catalog: catalogCountsFrom(two, tax, { ...reference, media: { movie: { total: 2000, facets: [['tag', '', 'heist', 100]] } } }) });
+    expect(computeFandexScore([tag('heist')], 'z', ref, tax, 'movie')?.reasons.filter((r) => r.axis === 'pull') ?? []).toEqual([]);
+  });
+});
+
 describe('the medium offset', () => {
   it('moves each medium\'s ratings to your overall average before a facet learns from them', () => {
     const tax = prepareTaxonomy(json());

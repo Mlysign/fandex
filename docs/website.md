@@ -24,6 +24,7 @@ any code, so a visitor or a crawler costs no Worker request, no CPU and no datab
 | `/v1/*` | the Worker → the API Worker (service binding) | Same origin for the app in a browser, so no preflight. |
 | anything else | the Worker → `404.html`, status 404 | |
 | `www.fandex.org/*` | Worker `fandex-www` | 301 to fandex.org, path and query kept. |
+| `/catalog/people.json`, `/catalog/reference.json` | files | Home's Popular people pool, ranked by the build, and (since 2026-10-25) the reference population for the match's pull axis: facet counts over the 2,000 most popular titles per medium from TMDB, IGDB and Open Library, rebuilt once a week from `dist/cache` by `referencePopulation.mjs` and kept when a provider fails (`docs/fandex-score.md` §3.7). Same headers as the catalog files. |
 | `robots.txt`, `sitemap.xml` | files | `/v1/` is disallowed except `/v1/calendar/`, and so is `/catalog/`. The sitemap lists `/`, every item page, every facet page, the calendar months and six legal pages (9,449 on 2026-10-15). |
 
 Three Workers exist: `fandex-api` (worker/, the API), `fandex-web` (the files and `mobile/web/worker.ts`),

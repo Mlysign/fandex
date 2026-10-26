@@ -29,13 +29,13 @@ const tagCards = (r: ReturnType<typeof sweep>) => r.suggestions.filter((s): s is
 const merges = (r: ReturnType<typeof sweep>) => r.suggestions.filter((s): s is FranchiseMergeSuggestion => s.kind === 'franchise-merge');
 
 describe('tag category proposals', () => {
-  const TAGS = [tag('co op', 40), tag('pvp', 12), tag('steam achievements', 30), tag('zzz no rule knows this', 2)];
+  const TAGS = [tag('co op', 40), tag('pvp', 12), tag('xbox game pass', 30), tag('zzz no rule knows this', 2)];
 
   it('groups the tags in Other by the rule that claims them, biggest change first', () => {
     const r = sweep({ tags: TAGS });
     expect(tagCards(r).map((s) => [s.ref, s.tags.map((t) => t.key), s.itemsAffected])).toEqual([
       ['modes', ['co op', 'pvp'], 52],
-      ['store-plumbing', ['steam achievements'], 30],
+      ['store-plumbing', ['xbox game pass'], 30],
     ]);
     expect(r.stats).toMatchObject({ totalTags: 4, otherTags: 4, tagsCovered: 3, otherAfterAccepting: 1, itemsAffected: 82 });
   });
