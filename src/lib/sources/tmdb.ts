@@ -13,17 +13,6 @@ async function tmdbGet(endpoint: string, params: Record<string, string> = {}) {
   return res.json();
 }
 
-/**
- * TMDB's most-voted films or shows, twenty a page (2026-10-25): the reference
- * population the pull axis is measured against (mobile/web/referencePopulation.mjs,
- * docs/fandex-score.md §3.7). Votes, not the day's popularity, so the list is
- * what people have watched, not what came out this week.
- */
-export async function discoverTmdbMostVoted(kind: "movie" | "tv", page: number): Promise<{ id: number }[]> {
-  const data = await tmdbGet(`/discover/${kind}`, { sort_by: "vote_count.desc", include_adult: "false", page: String(Math.max(1, Math.floor(page))) });
-  return (data?.results ?? []).filter((r: any) => Number.isInteger(r?.id));
-}
-
 export async function getTmdbMovie(id: number) {
   return tmdbGet(`/movie/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,release_dates,external_ids" });
 }

@@ -48,7 +48,7 @@ import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { setFollow } from '~/lib/itemActions';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
-import { signed } from '~/lib/scoreReasons';
+import { pullSentence, signed } from '~/lib/scoreReasons';
 import { TYPE_ICONS } from '~/lib/typeIcons';
 import { color, font, radius, type, TYPE_PLURAL } from '~/theme';
 
@@ -80,15 +80,11 @@ function impactLine(kind: FacetKind, im: PageImpact): string {
   return `${who} ${how} · ${im.ratedCount} rated`;
 }
 
-/** The pull half: how much of the catalog's titles with it you have been through, against your usual share. */
-function pullLine(kind: FacetKind, im: PageImpact): string | null {
+/** The pull half, in the Why sheet's words: "You pick anime 5 times more often than average (88 of your films)". */
+function pullLine(kind: FacetKind, im: PageImpact, name: string): string | null {
   const p = im.pull;
   if (!p) return null;
-  const seen = Number.isInteger(p.consumed) ? String(p.consumed) : p.consumed.toFixed(1);
-  const what = kind === 'tag' ? 'with this tag' : kind === 'franchise' ? 'in this franchise' : 'with them';
-  const how = p.followed === 'follow' ? 'you follow this' : p.followed === 'avoid' ? 'you asked not to be shown this'
-    : p.lift >= 0.5 ? 'you seek this out' : p.lift <= -0.5 ? 'not your usual pick' : 'about your usual share';
-  return `you've been through ${seen} of the ${p.catalog} titles ${what} · ${how}`;
+  return pullSentence({ kind: kind === 'tag' ? 'tag' : kind === 'franchise' ? 'ip' : 'person', times: p.times, titles: p.titles, media: p.media, followed: p.followed }, name);
 }
 
 /** A row of media types under the numbers: tap one to keep that type, tap again to drop it, none kept shows every type. */
@@ -404,13 +400,15 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
             </Text>
           ) : null}
           {impacts.map((im) => {
-            const pull = pullLine(kind, im);
+            const pull = pullLine(kind, im, name);
             return (
               <View key={im.role ?? 'tag'} style={{ gap: 6 }}>
-                <View style={styles.impact}>
-                  <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Taste {signed(im.points)}</Text>
-                  <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
-                </View>
+                {im.points !== null ? (
+                  <View style={styles.impact}>
+                    <Text style={[styles.impactPill, IMPACT_TONE[im.direction]]}>Taste {signed(im.points)}</Text>
+                    <Text style={[type.bodySm, { flex: 1, minWidth: 0 }]}>{impactLine(kind, im)}</Text>
+                  </View>
+                ) : null}
                 {pull && im.pull ? (
                   <View style={styles.impact}>
                     <Text style={[styles.impactPill, IMPACT_TONE[im.pull.points >= 0.5 ? 'up' : im.pull.points <= -0.5 ? 'down' : 'neutral']]}>Pull {signed(im.pull.points)}</Text>

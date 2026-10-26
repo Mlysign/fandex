@@ -49,7 +49,7 @@ describe("a facet page's Fandex impact", () => {
     const tax = prepareTaxonomy(json());
     const rows = pageImpacts('person', 'denis villeneuve', buildProfile(library, tax), tax);
     expect(rows.map((r) => r.role).sort()).toEqual(['director', 'writer']);
-    expect(Math.abs(rows[0].points)).toBeGreaterThanOrEqual(Math.abs(rows[1].points));
+    expect(Math.abs(rows[0].points!)).toBeGreaterThanOrEqual(Math.abs(rows[1].points!));
   });
 
   it("reads a bundled tag's canonical entry from a member spelling's page", () => {

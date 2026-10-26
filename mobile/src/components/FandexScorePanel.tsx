@@ -109,7 +109,7 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
             {r.kind === 'tag' && r.tier ? <Text style={styles.group}>{r.tier === 'keyword' ? 'detail' : 'core'}</Text> : null}
             {mode === 'avoid' ? <Text style={[styles.group, { color: color.scoreLow }]}>avoiding</Text> : null}
           </View>
-          <Text style={styles.small}>{r.axis === 'pull' ? pullSentence(r, mediaType) : tasteSentence(r)}</Text>
+          <Text style={styles.small}>{r.axis === 'pull' ? pullSentence(r) : tasteSentence(r)}</Text>
         </View>
         {r.axis === 'pull' && onFollow ? (
           // The one thing a person sets by hand: a follow moves this row to the most anyone can seek out, and nothing else.
@@ -158,9 +158,12 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
                 <Text style={[styles.groupTitle, { color: color.accent }]}>You seek this out</Text>
                 <Text style={[styles.small, styles.strong]}>{axisWord('pull', fandex.pull.band)} · {signed(fandex.pull.points)}</Text>
               </View>
-              {pullRows.length ? pullRows.map(row) : <Text style={styles.small}>Nothing here that the catalog counts yet.</Text>}
+              {pullRows.length ? pullRows.map(row) : <Text style={styles.small}>Nothing on this title stands out from how often you usually pick things.</Text>}
             </View>
-          ) : null}
+          ) : (
+            // No pull axis: the device has no baseline for this medium yet. Said, so a missing group never reads as broken.
+            <Text style={styles.small}>How often you seek this kind of thing out is not measured here yet: the ordinary titles it is compared with are still arriving on this device.</Text>
+          )}
 
           <View style={styles.groupBlock}>
             <View style={styles.groupHead}>
@@ -184,7 +187,7 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 
           <Text style={[styles.small, styles.how]}>
             <Text style={styles.strong}>How this works. </Text>
-            Fandex looks at what this title is made of: its setting and themes, its people, its studio and its franchise. For each one it checks two things against your library: how much of it you already go for, and how you rated it when you did. The label is where those two land against your usual. Tap any row to see the titles behind the number.
+            Fandex looks at what this title is made of: its setting and themes, its people, its studio and its franchise. For each one it checks two things: how much more often you pick it than average, against ordinary titles drawn at random, and how you rated it when you did. A facet that only comes along with another, or sits on too few of your titles to tell, does not count. The label is where the two land against your usual. Tap any row to see the titles behind the number.
           </Text>
         </ScrollView>
       </Sheet>

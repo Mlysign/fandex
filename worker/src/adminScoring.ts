@@ -39,20 +39,17 @@ export interface ScoringConfig {
   topPeople: number;
   topCompanies: number;
   topIps: number;
-  // The pull axis (2026-10-25, docs/fandex-score.md §3.7). A body written by
-  // an admin panel from before the axis existed carries none of these, so each
-  // one falls back to the shipped default rather than refusing the save.
-  pullPrior: number;
+  // The pull axis (docs/fandex-score.md §3.7), one model over every facet since
+  // 2026-10-26. A body written by an older admin panel carries none of the new
+  // knobs, so each falls back to the shipped default rather than refusing the
+  // save; the old ones it may carry (pullPrior, the pull top-N, the reference
+  // blend) are dropped.
+  pullL1: number;
+  pullL2: number;
   pullGain: number;
   pullWeight: Record<string, number>;
-  pullTopTags: number;
-  pullTopPeople: number;
-  pullTopCompanies: number;
-  pullTopIps: number;
   tasteBandMargin: number;
   pullBandMargin: number;
-  /** 2026-10-26: how much pull measures against the reference population (§3.7): 0 the device's copy, 1 the reference. */
-  pullReferenceBlend: number;
   /** 2026-10-25: a tag occurrence's weight by its tier (docs/fandex-score.md §3.9). Defaults for an older body too. */
   tagTierWeights: Record<string, number>;
 }
@@ -103,16 +100,12 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     topPeople: count(body.topPeople, "topPeople"),
     topCompanies: count(body.topCompanies, "topCompanies"),
     topIps: count(body.topIps, "topIps"),
-    pullPrior: orDefault(body.pullPrior, d.pullPrior, (v) => positive(v, "pullPrior")),
+    pullL1: orDefault(body.pullL1, d.pullL1, (v) => positive(v, "pullL1")),
+    pullL2: orDefault(body.pullL2, d.pullL2, (v) => { const n = num(v, "pullL2"); if (n < 0) throw new BadRequest("pullL2 must not be negative"); return n; }),
     pullGain: orDefault(body.pullGain, d.pullGain, (v) => { const n = num(v, "pullGain"); if (n < 0) throw new BadRequest("pullGain must not be negative"); return n; }),
     pullWeight,
-    pullTopTags: orDefault(body.pullTopTags, d.pullTopTags, (v) => count(v, "pullTopTags")),
-    pullTopPeople: orDefault(body.pullTopPeople, d.pullTopPeople, (v) => count(v, "pullTopPeople")),
-    pullTopCompanies: orDefault(body.pullTopCompanies, d.pullTopCompanies, (v) => count(v, "pullTopCompanies")),
-    pullTopIps: orDefault(body.pullTopIps, d.pullTopIps, (v) => count(v, "pullTopIps")),
     tasteBandMargin: orDefault(body.tasteBandMargin, d.tasteBandMargin, (v) => positive(v, "tasteBandMargin")),
     pullBandMargin: orDefault(body.pullBandMargin, d.pullBandMargin, (v) => positive(v, "pullBandMargin")),
-    pullReferenceBlend: orDefault(body.pullReferenceBlend, d.pullReferenceBlend, (v) => { const n = num(v, "pullReferenceBlend"); if (n < 0 || n > 1) throw new BadRequest("pullReferenceBlend must be between 0 and 1"); return n; }),
     tagTierWeights,
   };
 }

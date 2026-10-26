@@ -15,7 +15,7 @@ import {
   buildProfile, computeFandexScore, MIN_RATED_FOR_FANDEX_SCORE,
   type ScoreReason, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
-import { catalogCounts, consumedTitles, parseFacets, ratedTitles, storedReference } from '~/lib/ScoreProvider';
+import { consumedTitles, parseFacets, pullModelFor, ratedTitles } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius } from '~/theme';
 
 export const ROLE_ORDER = ['director', 'creator', 'writer', 'cast', 'developer', 'publisher', 'studio', 'network', 'ip'];
@@ -108,8 +108,8 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
         categories: new Map(cats.map((c) => [c.id, { label: c.label, weight: c.weight, ignored: !!c.ignored }])),
       };
       // Both axes, as every screen scores: the pull knobs above would otherwise look dead here.
-      const [rated, consumed, reference] = await Promise.all([ratedTitles(db), consumedTitles(db), storedReference(db)]);
-      const profile = buildProfile(rated, tax, { consumed, catalog: await catalogCounts(db, tax, reference) });
+      const [rated, consumed] = await Promise.all([ratedTitles(db), consumedTitles(db)]);
+      const profile = buildProfile(rated, tax, { consumed, pull: await pullModelFor(db, consumed, tax) });
       let targets = pinned.map((p) => ({ id: p.id, title: p.title }));
       if (!targets.length) {
         // The site's default: your top-rated title, the latest one when several tie.
@@ -232,13 +232,15 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
 
         <Block title="Pull: do you seek this out?">
           <Text style={styles.tiny}>
-            The second axis (docs/fandex-score.md §3.7): of the titles carrying a facet, the share you have been through against your usual
-            share, as log2 lift. The gain is points per unit of lift, the per-medium weight how much pull counts in the number for that medium
-            (the band reads the axis before it). The margins are the points off your usual that read as high or low, on each axis.
+            The second axis (docs/fandex-score.md §3.7): one model over every facet, your picks against the baseline (ordinary titles drawn
+            at random). Evidence is what a facet needs before it counts, as a z-score: how many standard errors its count among your picks
+            sits from what the baseline expects (2 lets about one coincidence in twenty through, 3 one in four hundred). The gain is points
+            per doubling, the per-medium weight how much pull counts in the number for that
+            medium (the band reads the axis before it). The margins are the points off your usual that read as high or low, on each axis.
           </Text>
           <View style={styles.grid2}>
             {([
-              ['Pull gain', 'pullGain'], ['Pull prior (pseudo-titles)', 'pullPrior'],
+              ['Pull gain', 'pullGain'], ['Evidence (z)', 'pullL1'], ['Ridge', 'pullL2'],
               ['Taste band margin', 'tasteBandMargin'], ['Pull band margin', 'pullBandMargin'],
             ] as [string, keyof ScoringConfigValues][]).map(([label, key]) => (
               <View key={key} style={styles.cell2}>
@@ -256,23 +258,6 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
               </View>
             ))}
           </View>
-          <Text style={styles.tiny}>Pull rows counted per kind</Text>
-          <View style={styles.grid2}>
-            {([
-              ['Top tags', 'pullTopTags'], ['Top people', 'pullTopPeople'], ['Top companies', 'pullTopCompanies'], ['Top franchises', 'pullTopIps'],
-            ] as [string, keyof ScoringConfigValues][]).map(([label, key]) => (
-              <View key={key} style={styles.cell2}>
-                <Field label={label}><NumField label={`${label} (pull)`} value={draft[key] as number} onChange={(n) => set({ [key]: Math.max(0, Math.round(n)) })} /></Field>
-              </View>
-            ))}
-          </View>
-          <Field label="Reference blend (0 to 1)">
-            <NumField label="Reference blend" value={draft.pullReferenceBlend ?? 0} onChange={(n) => set({ pullReferenceBlend: Math.max(0, Math.min(1, n)) })} />
-          </Field>
-          <Text style={styles.tiny}>
-            What pull measures against: 0 is the device&apos;s own catalog copy, 1 the reference population (the most popular titles per medium), between
-            is the mix.
-          </Text>
         </Block>
 
         <Block title="Selection (top-N)">

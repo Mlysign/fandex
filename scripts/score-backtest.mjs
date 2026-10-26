@@ -13,9 +13,17 @@
 //   --catalog   a folder of the website's /catalog/p*.json pages (the pool
 //               with facets), or a single JSON file of the same shape
 //   --taxonomy  /v1/taxonomy as the Worker answers it (curl it to a file)
-//   --reference /catalog/reference.json, the reference population (optional; without
-//               it the catalog's own counts are the pull axis's denominator, as on a
-//               device without the file)
+//   --baseline  the pull axis's baseline (§3.7): GET /v1/catalog/baseline saved
+//               to a file (its ids are looked up in --catalog), or a JSON array of
+//               {id, type, facets}. Without it there is no pull axis, as on a
+//               device without the list. With it, "untouched" in the wishlist bar
+//               is the baseline titles you have not touched: ordinary titles,
+//               where without it they were the pool's, mostly pulled in by your
+//               own library.
+//   --strip     facets the baseline cannot carry, taken off both sides: tags of
+//               these tiers and people on these media, e.g. "voted,game:person"
+//               for a baseline fetched without Steam's tags and Wikidata's people
+//   --set k=v,… override scoring config values (numbers), e.g. pullL1=3,pullGain=4
 //   --ladder    also print the odds ladder as JSON, for scoringDefaults
 //
 // node scripts/score-backtest.mjs --state nils.json --catalog ./catalog --taxonomy taxonomy.json
@@ -32,19 +40,31 @@ const repo = path.dirname(here);
 const { resolve } = await import(pathToFileURL(path.join(repo, 'scripts/alias-hooks.mjs')));
 registerHooks({ resolve });
 const score = await import(pathToFileURL(path.join(repo, 'mobile/src/lib/fandexScore.ts')));
-const { prepareTaxonomy, buildProfile, catalogCountsFrom, computeFandexScore, WISHLIST_WEIGHT } = score;
+const { prepareTaxonomy, buildProfile, buildPullModel, computeFandexScore, WISHLIST_WEIGHT } = score;
 
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? true : all[i + 1]] : [])).filter((p) => p.length));
 for (const need of ['state', 'catalog', 'taxonomy']) if (!args[need]) { console.error(`--${need} is required`); process.exit(2); }
 
 // ── Load ───────────────────────────────────────────────────────────────────
 const catalog = new Map();
+const byProvider = new Map();
 const catalogFiles = statSync(args.catalog).isDirectory() ? readdirSync(args.catalog).filter((f) => f.endsWith('.json')).map((f) => path.join(args.catalog, f)) : [args.catalog];
 for (const file of catalogFiles) {
   const j = JSON.parse(readFileSync(file, 'utf8'));
-  for (const it of j.items ?? j) catalog.set(it.vector.id, { id: it.vector.id, type: it.vector.type, title: it.vector.title, year: it.vector.year, facets: it.facets });
+  for (const it of j.items ?? j) {
+    catalog.set(it.vector.id, { id: it.vector.id, type: it.vector.type, title: it.vector.title, year: it.vector.year, facets: it.facets });
+    // "tmdb:603" and a medium → the pool's id (TMDB numbers films and shows apart), so a baseline given as provider ids finds a title the pool already holds.
+    for (const s of it.vector.sources ?? []) byProvider.set(`${s.source}:${s.sourceId}:${it.vector.type}`, it.vector.id);
+  }
 }
-const tax = prepareTaxonomy(JSON.parse(readFileSync(args.taxonomy, 'utf8')));
+const taxJson = JSON.parse(readFileSync(args.taxonomy, 'utf8'));
+// --set pullL1=3,pullGain=4: numbers over the stored config, for a measurement.
+const overrides = Object.fromEntries(String(args.set === true ? '' : args.set ?? '').split(',').filter(Boolean).map((kv) => { const [k, v] = kv.split('='); return [k, Number(v)]; }));
+const tax = prepareTaxonomy({ ...taxJson, scoring: { ...(taxJson.scoring ?? { version: 0 }), config: { ...(taxJson.scoring?.config ?? {}), ...overrides } } });
+// --strip voted,game:person: facets the baseline cannot carry, off both sides.
+const strips = String(args.strip === true ? '' : args.strip ?? '').split(',').filter(Boolean);
+const stripped = (facets, type) => facets.filter((f) => !strips.some((s) => (s.includes(':') ? s === `${type}:${f.kind}` : f.kind === 'tag' && f.tier === s)));
+for (const c of catalog.values()) c.facets = stripped(c.facets, c.type);
 const stateJson = JSON.parse(readFileSync(args.state, 'utf8'));
 const state = Array.isArray(stateJson) && stateJson[0]?.results ? stateJson[0].results : stateJson;
 
@@ -57,13 +77,28 @@ for (const r of state) {
 for (const id of held) wishlist.delete(id);
 const rated = [...ratingRows].map(([id, rs]) => ({ id, type: catalog.get(id).type, rating: Math.round((rs.reduce((a, b) => a + b, 0) / rs.length) * 10) / 10, facets: catalog.get(id).facets }));
 const ratedIds = new Set(rated.map((r) => r.id));
-const consumed = [...held].map((id) => ({ id, facets: catalog.get(id).facets, weight: 1 }));
+const consumed = [...held].map((id) => ({ id, type: catalog.get(id).type, facets: catalog.get(id).facets, weight: 1 }));
 // The wishlist is HELD OUT of the profile here, so it can be the test; the app counts it at WISHLIST_WEIGHT.
-const reference = args.reference ? JSON.parse(readFileSync(args.reference, 'utf8')) : null;
-const counts = catalogCountsFrom([...catalog.values()], tax, reference);
-const profile = buildProfile(rated, tax, { consumed, catalog: counts });
+let baselineTitles = [];
+if (args.baseline) {
+  const b = JSON.parse(readFileSync(args.baseline, 'utf8'));
+  // A title the pool already holds is scored as the pool's (with its Steam tags and the like); the rest from their own facets.
+  baselineTitles = Array.isArray(b)
+    ? b.map((t) => { const held = catalog.get(byProvider.get(`${t.id}:${t.type}`) ?? t.id); return held ? { id: held.id, type: held.type, facets: held.facets } : { id: t.id, type: t.type, facets: stripped(t.facets, t.type), fresh: true }; })
+    : (b.items ?? []).filter(([id]) => catalog.has(id)).map(([id, , added]) => { const c = catalog.get(id); return { id: c.id, type: c.type, facets: c.facets, ...(added === 1 ? { fresh: true } : {}) }; });
+}
+const fitStarted = Date.now();
+const pull = baselineTitles.length ? buildPullModel(consumed, baselineTitles, tax) : null;
+const fitMs = Date.now() - fitStarted;
+const profile = buildProfile(rated, tax, { consumed, pull });
+const baselineIds = new Set(baselineTitles.map((t) => t.id));
+// A baseline title the catalog does not hold is scored from its own facets.
+for (const t of baselineTitles) if (!catalog.has(t.id)) catalog.set(t.id, { id: t.id, type: t.type, title: t.id, facets: t.facets });
 console.log(`catalog ${catalog.size} · rated ${rated.length} · held ${held.size} · wishlist (held out) ${wishlist.size} · your average ${profile.baseline.toFixed(2)} · pull gain ${tax.config.pullGain} · pull weights ${JSON.stringify(tax.config.pullWeight)}`);
-console.log(reference ? `reference population of ${reference.builtAt.slice(0, 10)}: ${counts.referenceMedia?.join(', ') || 'no medium in common'} (${Object.entries(reference.media).map(([m, r]) => `${m} ${r.total}`).join(', ')}) · expected counts for ${counts.expected?.size ?? 0} facets` : 'no reference population: the catalog is its own denominator');
+console.log(pull
+  ? `pull model: ${[...pull.media].map(([m, v]) => `${m} ${v.picks} picks / ${v.baseline} baseline`).join(', ')} · ${pull.beta.size} facets with weight · ${pull.sweeps} sweeps · fitted with folds in ${fitMs} ms · penalty ${tax.config.pullL1}, ridge ${tax.config.pullL2}`
+  : 'no baseline: no pull axis');
+if (strips.length) console.log(`stripped from both sides: ${strips.join(', ')}`);
 console.log(`wishlist weight in the app: ${WISHLIST_WEIGHT} (not applied here, the wishlist is the test)`);
 
 // ── Score everything ───────────────────────────────────────────────────────
@@ -95,7 +130,9 @@ for (const type of ['movie', 'show', 'game', 'book', 'boardgame', 'all']) {
   const of = rows.filter((r) => type === 'all' || r.c.type === type);
   const ratedRows = of.filter((r) => r.own !== undefined); if (ratedRows.length < 10) continue;
   const unseen = of.filter((r) => r.own === undefined);
-  const wish = unseen.filter((r) => r.wish), untouched = unseen.filter((r) => !r.held && !r.wish), owned = unseen.filter((r) => r.held);
+  // With a baseline, untouched means the ordinary titles you have not touched; without one, the pool's.
+  const wish = unseen.filter((r) => r.wish), owned = unseen.filter((r) => r.held);
+  const untouched = unseen.filter((r) => !r.held && !r.wish && (!baselineIds.size || baselineIds.has(r.c.id)));
   const base8 = ratedRows.filter((r) => r.own >= 8).length / ratedRows.length;
   let agree = 0, pairs = 0;
   for (let i = 0; i < ratedRows.length; i++) for (let j = i + 1; j < ratedRows.length; j++) { const a = ratedRows[i], b = ratedRows[j]; if (a.own === b.own) continue; pairs++; if (a.fx.score === b.fx.score) agree += 0.5; else if ((a.fx.score > b.fx.score) === (a.own > b.own)) agree++; }

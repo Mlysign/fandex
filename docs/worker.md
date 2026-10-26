@@ -26,6 +26,7 @@ Public, no session:
 |---|---|
 | `GET /v1/health` | D1 answers, plus today's budget counters (`fetches`, `userWrites`, `hardcover` against Hardcover's 5,000 a day, `covers` copied today) and `openProviderCircuits`: which providers this isolate has stopped asking. ⚠️ Per isolate, so an empty list is no proof a provider is up. Answers `HEAD` too. |
 | `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is kept current with this. A device with nothing starts from the website's `/catalog/` files instead ([website.md](website.md)), so a first visit is one call here and not thirty-one. |
+| `GET /v1/catalog/baseline` | Which pool titles are the score's baseline (`src/baseline.ts`, 2026-10-26): `{"draw":1,"items":[[id, type, added], …]}`, `added` 1 for a title only the draw put in the pool (the website gives it no page). Kept in `kv` (`baseline_json`, as `etag\nbody`) for six hours; building it reads every baseline row and its item (about 15,000), under `RL_RESOLVE` and 24 builds a day. ETag, so a device that has it gets a 304. `Cache-Control: no-cache`. |
 | `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. Served from a copy kept in `kv` (`taxonomy`, `taxonomy_etag`): an unchanged device gets a 304 for one row read, where building it reads about 8,300 rows. An admin write keeps it again, the sweep script drops it, and it expires after an hour, which bounds SQL run by hand. `Cache-Control: no-cache`. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |
 | `GET /v1/resolve/{tmdb\|igdb\|openlibrary\|hardcover\|bgg}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. Each provider takes only its own types and id shape (`TARGETS` in `catalog/resolve.ts`): an Open Library work is `OL…W`, a BGG or Hardcover id is digits. A Hardcover id is asked at Open Library by its ISBNs first: a work found there is the item, with the Hardcover link attached to it; only a book Open Library has no edition of is created under the Hardcover id ([decisions.md](decisions.md), 2026-10-17). 404 while Hardcover is off. |
@@ -384,6 +385,22 @@ Each of these is a way the Worker differs from the site, and each has a test.
   string, so the writes are priced and agreed before they are spent:
   `INSERT INTO kv (key, value) VALUES ('rederive_go', '4')`. The pool of 2026-10-25 is 4,614
   items, about 14,000 writes over three days of runs.
+- **The baseline walk puts the score's random draw into the pool** (`runBaselineStep`,
+  `src/baseline.ts`, migration 0008, 2026-10-26). `scripts/baseline-draw.mjs` lists every title a
+  provider knows above a vote floor (TMDB films with 200+ votes, shows with 100+, IGDB games with a
+  rating count of 10+, Open Library works with 100+ reading-log entries), draws 2,500 films, 1,500
+  shows, 2,500 games and 1,000 books at random with a seed, and writes them to `baseline_items` as
+  pending (SQL for `wrangler d1 execute --remote --file`). The walk resolves each through
+  `resolveItem`, so it is stored and tagged like any pool title, then promotes it into the pool
+  (`browsed = 0`, the kept pool size dropped in the same batch) and records whether the draw is what
+  put it there (`added`). It runs on its own every-minute cron trigger (`* * * * *`, which skips the
+  minutes the ten-minute one runs in), three titles a run, about a dozen queries each against the
+  free plan's 50, and spends its own daily budget (`baseline`, `DAILY_BASELINE_CAP`, 2,500 titles,
+  about 30,000 row writes), never the users' `fetch`. It waits for `kv` `baseline_go` set to the
+  draw number, goes round three times for titles a provider failed on, then parks
+  (`baseline_cursor`) and restarts the Steam and Wikidata walks, which the same trigger then runs
+  so the drawn games get their tags in hours. Draw 1 went in on 2026-10-26: 7,500 titles, about
+  three days to walk.
 - **`kv` holds the Twitch app token and is never exported.** The export skips tables by name and a
   test fails if `kv` reaches the bucket.
 - **The export pages by key, and must never page by `OFFSET`.** An offset is read past, so chunk

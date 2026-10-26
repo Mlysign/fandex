@@ -95,12 +95,33 @@ export function cappedRows(reasons: ScoreReason[]): ScoreReason[] {
   return reasons.filter((r) => r.capped).sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 }
 
-/** A pull row in one sentence: "you've seen 46 of 64", a wishlisted title counting half. */
-export function pullSentence(r: ScoreReason, type?: string): string {
-  const verb = type === 'game' ? 'played' : type === 'book' ? 'read' : 'seen';
-  const seen = r.consumed ?? 0;
-  const shown = Number.isInteger(seen) ? String(seen) : seen.toFixed(1);
-  return `you've ${verb} ${shown} of ${r.catalog ?? 0}`;
+const MEDIUM_PLURAL: Record<string, string> = { movie: 'films', show: 'shows', game: 'games', book: 'books', boardgame: 'board games' };
+
+/** "5 times", "1.4 times": a whole number from two up, one decimal below. */
+function timesWord(x: number): string {
+  return x >= 1.95 ? `${Math.round(x)} times` : `${(Math.round(x * 10) / 10).toFixed(1)} times`;
+}
+
+/**
+ * A pull row in one sentence, Nils's wording (2026-10-26): "you pick it 5
+ * times more often than average (88 of your films)", or "3 times less often".
+ * With `name`, the facet page's form: "You pick anime 5 times more often…".
+ * The count says how much evidence stands behind the number; it names the
+ * medium when all of those titles share one. "Average" is the baseline: the
+ * ordinary titles drawn at random (docs/fandex-score.md §3.7).
+ */
+export function pullSentence(r: Pick<ScoreReason, 'kind' | 'times' | 'titles' | 'media' | 'followed'>, name?: string): string {
+  const who = name ?? (r.kind === 'person' || r.kind === 'company' ? 'them' : 'it');
+  const start = name ? 'You' : 'you';
+  const n = r.titles ?? 0;
+  const media = r.media ?? [];
+  const what = media.length === 1 && MEDIUM_PLURAL[media[0]] ? MEDIUM_PLURAL[media[0]] : 'titles';
+  const count = n > 0 ? ` (${n} of your ${what})` : '';
+  if (r.followed === 'follow') return `${start} follow ${who}${count}`;
+  if (r.followed === 'avoid') return `${start} asked not to be shown ${who}`;
+  const times = r.times ?? 1;
+  if (times >= 1) return `${start} pick ${who} ${timesWord(times)} more often than average${count}`;
+  return `${start} pick ${who} ${timesWord(1 / times)} less often than average${count}`;
 }
 
 /** A taste row in one sentence: "you rate it 7.6 over 41 titles". */

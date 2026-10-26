@@ -40,24 +40,24 @@
     <rect class="chip" x="390" y="200" width="206" height="26" rx="13"/><text class="chipt" x="493" y="217" text-anchor="middle">studio, developer, publisher, network</text>
     <rect class="chip" x="604" y="200" width="82" height="26" rx="13"/><text class="chipt" x="645" y="217" text-anchor="middle">franchise</text>
   </g>
-  <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count. A tag that sits on almost everything ("action") counts less than a specific one ("steampunk").</text>
+  <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count.</text>
   <text class="muted" x="60" y="270">Where a tag came from counts too: a provider's genre or theme and a crowd's voted tag (Steam) in full, an editor's keyword half. The breakdown marks them core and detail.</text>
 
   <!-- 2 · Two questions -->
   <rect class="card" x="40" y="300" width="820" height="330" rx="14"/>
   <text class="h3" x="60" y="328">2 · TWO QUESTIONS, ASKED OF EVERY FACET</text>
-  <text class="body" x="60" y="354">Each facet is checked against your own library twice. Both answers are measured against your usual, never against other people.</text>
+  <text class="body" x="60" y="354">Each facet is checked twice: taste against your own usual, pull against ordinary titles. Neither reads anyone else's ratings.</text>
 
   <rect class="inset" x="60" y="372" width="390" height="236" rx="12"/>
   <text class="h2" x="80" y="404"><tspan class="gold">Pull</tspan> · do you seek this out?</text>
-  <text class="body" x="80" y="432">Of the titles with this facet, as common as they are</text>
-  <text class="body" x="80" y="452">for people in general: the share you have been through,</text>
-  <text class="body" x="80" y="472">compared with your usual share of everything.</text>
-  <text class="muted" x="80" y="500">A title on your wishlist counts half. A facet on only a couple</text>
-  <text class="muted" x="80" y="518">of titles is pulled toward your usual until there is evidence.</text>
-  <text class="ex" x="80" y="552">Steampunk · you've seen 46 of 64 · 1.7× your usual share</text>
-  <text class="ex" x="80" y="574">Tim Burton · 19 of 19 · the most anyone can seek out</text>
-  <text class="small" x="80" y="598">Follow a facet and it counts as that maximum. Avoid one, the minimum.</text>
+  <text class="body" x="80" y="432">Your picks against ordinary titles drawn at random from</text>
+  <text class="body" x="80" y="452">everything the providers know, all facets weighed together:</text>
+  <text class="body" x="80" y="472">how much more often you pick it than average.</text>
+  <text class="muted" x="80" y="500">A tag that only rides along (firefighter, on anime films) gets</text>
+  <text class="muted" x="80" y="518">no credit. One on a few titles stays at zero without evidence.</text>
+  <text class="ex" x="80" y="552">Steampunk · 4 times more often than average · 46 of yours</text>
+  <text class="ex" x="80" y="574">Firefighter · only ever with anime · no credit</text>
+  <text class="small" x="80" y="598">Wishlist titles count half. Follow a facet: your strongest pull. Avoid: the weakest.</text>
 
   <rect class="inset" x="470" y="372" width="370" height="236" rx="12"/>
   <text class="h2" x="490" y="404"><tspan class="green">Taste</tspan> · do you rate it well?</text>
@@ -73,7 +73,7 @@
   <!-- 3 · Only the strongest few count -->
   <rect class="card" x="40" y="650" width="820" height="176" rx="14"/>
   <text class="h3" x="60" y="678">3 · ONLY THE STRONGEST FEW COUNT</text>
-  <text class="body" x="60" y="704">A title can carry thirty tags. For each question, only the strongest few of each kind add up:</text>
+  <text class="body" x="60" y="704">A title can carry thirty tags. On taste, only the strongest few of each kind add up (pull has already chosen its own):</text>
   <g>
     <rect class="chip" x="60" y="720" width="150" height="26" rx="13"/><text class="chipt" x="135" y="737" text-anchor="middle">5 tags that lift it</text>
     <rect class="chip" x="218" y="720" width="166" height="26" rx="13"/><text class="chipt" x="301" y="737" text-anchor="middle">3 tags that pull it down</text>
@@ -83,12 +83,12 @@
   </g>
   <text class="muted" x="60" y="772">The rest are still shown in the breakdown, greyed, with the value they would have had. Nothing is hidden.</text>
   <text class="muted" x="60" y="792">Some kinds weigh more: a director counts about twice a tag, a setting tag about twice a genre. Those weights are set in one place and printed on every row.</text>
-  <text class="small" x="60" y="812">A title you rated is scored as if you had not: its own rating and its own place in the counts are left out, so it can never quote itself.</text>
+  <text class="small" x="60" y="812">A title you rated is scored as if you had not: its own rating is left out, and its pull comes from a model fitted without it, so it can never quote itself.</text>
 
   <!-- 4 · The label -->
   <rect class="card" x="40" y="846" width="820" height="300" rx="14"/>
   <text class="h3" x="60" y="874">4 · WHERE THE TWO LAND IS YOUR LABEL</text>
-  <text class="body" x="60" y="900">Each question adds up to points above or below your usual. Ten points off either way reads as high or low. The label says what to do.</text>
+  <text class="body" x="60" y="900">Each question adds up to points above or below your usual. A few points off either way reads as high or low. The label says what to do.</text>
 
   <!-- grid -->
   <text class="axis" x="330" y="930" text-anchor="middle">PULL: LOW</text>
@@ -143,5 +143,5 @@
   <text class="body" x="480" y="1442">· does each label still mean what it says</text>
   <text class="small" x="480" y="1468">The goalpost chart on the telemetry page is the running proof.</text>
 
-  <text class="small" x="40" y="1530">Fandex match, version 2 · 2026-10-25 · this picture changes whenever the score does</text>
+  <text class="small" x="40" y="1530">Fandex match, version 3 · 2026-10-26 · this picture changes whenever the score does</text>
 </svg>

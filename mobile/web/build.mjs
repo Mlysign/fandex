@@ -167,10 +167,20 @@ if (!pool.length) throw new Error('The pool came back empty');
 // Receiving a row twice is how the delta stays safe (worker/src/catalog/read.ts). Keep the newest.
 const byId = new Map();
 for (const p of pool) if ((byId.get(p.vector.id)?.updatedAt ?? -1) <= p.updatedAt) byId.set(p.vector.id, p);
-let wanted = [...byId.values()].filter((p) => TYPES.includes(p.vector.type) && p.vector.slug && SLUG.test(p.vector.slug));
-const unaddressed = byId.size - wanted.length;
+// The score's baseline (worker/src/baseline.ts, 2026-10-26): ordinary titles
+// that only a random draw put in the pool. They are in the catalog files, which
+// is how a device scores against them, and nowhere else on the site: no page
+// of their own (the free plan allows 20,000 files and the site was 10,230), and
+// not on the rails or the facet pages, whose cards link to pages. A drawn title
+// that was in the pool already keeps its page. An API without the route
+// answers 404, and then no title is held back.
+const drawn = await getJson(`${API}/v1/catalog/baseline`);
+const drawnOnly = new Set((drawn?.items ?? []).filter((r) => r[2] === 1).map((r) => r[0]));
+const shown = [...byId.values()].filter((p) => !drawnOnly.has(p.vector.id));
+let wanted = shown.filter((p) => TYPES.includes(p.vector.type) && p.vector.slug && SLUG.test(p.vector.slug));
+const unaddressed = shown.length - wanted.length;
 if (limit) wanted = wanted.slice(0, limit);
-step(`${byId.size} titles in the pool, ${unaddressed} without an address`);
+step(`${byId.size} titles in the pool, ${drawnOnly.size} of them only the score's baseline (no page), ${unaddressed} without an address`);
 
 // One request per title, eight at a time. A title is asked for again only when
 // its `updatedAt` moved, so a second build the same day asks for almost nothing.
@@ -293,7 +303,7 @@ const APP_BOOT = `(function(){var s=document.createElement("script");s.src=${JSO
 fs.writeFileSync(path.join(STAGE, 'app-boot.js'), APP_BOOT);
 
 // Every pool title with its stored facets: what the rails and the facet pages are picked from.
-const poolTitles = [...byId.values()].map((p) => ({ vector: p.vector, facets: p.facets }));
+const poolTitles = shown.map((p) => ({ vector: p.vector, facets: p.facets }));
 const facetsOf = new Map(poolTitles.map((p) => [p.vector.id, p.facets]));
 const relatedFor = relatedPicker(poolTitles, taxonomy);
 // Worked out before the item pages, whose breadcrumb names a tag only when its page exists.
@@ -583,35 +593,8 @@ if (!limit) {
   fs.writeFileSync(portraitFile, JSON.stringify(portraits));
   fs.writeFileSync(path.join(STAGE, 'catalog', 'people.json'), JSON.stringify({ version: 1, builtAt: new Date().toISOString(), people }));
   step(`${people.length} popular people, ${people.filter((p) => p.portraitUrl).length} with a portrait (${asked} asked of TMDB)`);
-
-  // The reference population for the match's pull axis (referencePopulation.mjs,
-  // docs/fandex-score.md §3.7): the most popular titles per medium from the
-  // providers, as facet counts. Asked for once a week and kept in dist/cache; a
-  // week the providers fail keeps the last answer, and a build with none ships
-  // none, which leaves every device on its own counts, as before the file.
-  const { buildReferencePopulation, REFERENCE_MAX_AGE_MS } = await import('./referencePopulation.mjs');
-  const referenceFile = path.join(DIST, 'cache', 'reference.json');
-  let reference = null;
-  try { reference = JSON.parse(fs.readFileSync(referenceFile, 'utf8')); } catch { /* none yet */ }
-  const mediaOf = (r) => Object.keys(r?.media ?? {});
-  if (!reference || !(Date.now() - Date.parse(reference.builtAt) < REFERENCE_MAX_AGE_MS) || mediaOf(reference).length < 3) {
-    try {
-      const built = await buildReferencePopulation({ log: (m) => step(`reference population, ${m}`) });
-      // A rebuild that lost a medium the last one had is not an improvement.
-      if (mediaOf(built).length >= Math.min(3, mediaOf(reference).length || 3)) {
-        reference = built;
-        fs.writeFileSync(referenceFile, JSON.stringify(reference));
-      } else {
-        step(`reference population: the new one covers ${mediaOf(built).join(', ') || 'nothing'}; keeping the last`);
-      }
-    } catch (e) {
-      step(`reference population not rebuilt (${e instanceof Error ? e.message : String(e)}); ${reference ? 'the last one stands' : 'none shipped'}`);
-    }
-  }
-  if (reference) {
-    fs.writeFileSync(path.join(STAGE, 'catalog', 'reference.json'), JSON.stringify(reference));
-    step(`reference population of ${reference.builtAt.slice(0, 10)}: ${Object.entries(reference.media).map(([m, r]) => `${m} ${r.total} titles, ${r.facets.length} facets`).join(' · ')}`);
-  }
+  // The reference population file that stood here (2026-10-25) is gone: the
+  // pull axis compares against the baseline titles in the pool now (§3.7).
 }
 
 urls.unshift({ loc: `${SITE}/`, lastmod: new Date().toISOString().slice(0, 10) });
@@ -674,7 +657,7 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
 // ── 5. Is this a whole site? ─────────────────────────────────────────────────
 
 const itemPages = urls.filter((u) => TYPES.some((t) => u.loc.startsWith(`${SITE}/${t}/`))).length;
-const expected = (poolCount ?? byId.size) - unaddressed;
+const expected = (poolCount ?? byId.size) - drawnOnly.size - unaddressed;
 if (!limit && itemPages < expected * 0.98) {
   throw new Error(`Only ${itemPages} item pages for a pool of ${expected} addressed titles. Not publishing a short site.`);
 }

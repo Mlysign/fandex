@@ -17,25 +17,27 @@ import { AppState } from 'react-native';
 import { api, type ScoreReport } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { API_URL, CATALOG_FILES_URL } from '~/lib/config';
+import { API_URL } from '~/lib/config';
 import { getMeta, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import {
-  buildProfile, catalogCountsFrom, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
-  type AxisBand, type CatalogCounts, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ReferenceJson, type ScoreFacet, type ScoreLabel, type Taxonomy, type TaxonomyJson,
+  buildProfile, buildPullModel, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
+  type AxisBand, type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreFacet, type ScoreLabel, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
+import type { PullModel } from '~/lib/pullModel';
 
 const TAXONOMY_KEY = 'taxonomy';
 const TAXONOMY_ETAG_KEY = 'taxonomy_etag';
 const TAXONOMY_AT_KEY = 'taxonomy_at';
-// The reference population (docs/fandex-score.md §3.7), a file the website's
-// build writes once a week next to the catalog files. Kept here like the
-// taxonomy and asked for again daily. An app pointed at another API has no
-// such file (CATALOG_FILES_URL is null) and measures pull against its own copy.
-const REFERENCE_KEY = 'reference_population';
-const REFERENCE_ETAG_KEY = 'reference_population_etag';
-const REFERENCE_AT_KEY = 'reference_population_at';
-const REFERENCE_CHECK_GAP_MS = 24 * 60 * 60 * 1000;
+// The baseline (docs/fandex-score.md §3.7): which pool titles are the ordinary
+// titles drawn at random that the pull axis compares your picks with. The
+// Worker answers the list (GET /v1/catalog/baseline); it is kept here like the
+// taxonomy and asked for again daily, mostly as a 304. The titles themselves
+// are in the catalog copy like every other pool title.
+const BASELINE_KEY = 'baseline';
+const BASELINE_ETAG_KEY = 'baseline_etag';
+const BASELINE_AT_KEY = 'baseline_at';
+const BASELINE_CHECK_GAP_MS = 24 * 60 * 60 * 1000;
 /**
  * Asked on every start and every return to the app, at most once a minute (a
  * browser fires "active" on every tab switch). An unchanged taxonomy is a 304
@@ -118,40 +120,62 @@ async function refreshTaxonomy(db: SQLiteDatabase, force: boolean): Promise<bool
   }
 }
 
-/** The stored reference population, or null when the device has none (or it does not parse). */
-export async function storedReference(db: SQLiteDatabase): Promise<ReferenceJson | null> {
-  const raw = await getMeta(db, REFERENCE_KEY);
-  if (!raw) return null;
+/** The Worker's answer: which pool titles are the baseline. `added` is for the website build; the device reads the ids. */
+interface BaselineJson { draw: number; items: [string, string, number][] }
+
+/** The stored baseline, as ids with whether the draw itself added each one; an empty list when the device has none (or it does not parse). */
+export async function storedBaseline(db: SQLiteDatabase): Promise<{ id: string; fresh: boolean }[]> {
+  const raw = await getMeta(db, BASELINE_KEY);
+  if (!raw) return [];
   try {
-    const json = JSON.parse(raw) as ReferenceJson;
-    return json && typeof json === 'object' && json.media && typeof json.media === 'object' ? json : null;
-  } catch { return null; }
+    const json = JSON.parse(raw) as BaselineJson;
+    return Array.isArray(json?.items) ? json.items.filter((r) => typeof r[0] === 'string').map((r) => ({ id: r[0], fresh: r[2] === 1 })) : [];
+  } catch { return []; }
+}
+
+/** The stored baseline ids. */
+export async function storedBaselineIds(db: SQLiteDatabase): Promise<string[]> {
+  return (await storedBaseline(db)).map((b) => b.id);
 }
 
 /**
- * Ask the website for the reference population unless it was asked for in the
- * last day. True when a new one was stored. Never throws: the stored one, or
- * none, stands, and the score then measures pull against the device's own copy.
+ * Ask the Worker for the baseline list unless it was asked for in the last day
+ * (`force` asks anyway). True when a new one was stored. Never throws: the
+ * stored one, or none, stands; with none there is no pull axis yet.
  */
-export async function refreshReference(db: SQLiteDatabase): Promise<boolean> {
-  if (CATALOG_FILES_URL === null) return false;
-  const at = Number(await getMeta(db, REFERENCE_AT_KEY)) || 0;
-  if (Date.now() - at < REFERENCE_CHECK_GAP_MS) return false;
+export async function refreshBaseline(db: SQLiteDatabase, force = false): Promise<boolean> {
+  const at = Number(await getMeta(db, BASELINE_AT_KEY)) || 0;
+  if (!force && Date.now() - at < BASELINE_CHECK_GAP_MS) return false;
   try {
-    const etag = await getMeta(db, REFERENCE_ETAG_KEY);
-    const res = await fetch(`${CATALOG_FILES_URL}/catalog/reference.json`, { headers: etag ? { 'If-None-Match': etag } : {} });
-    if (res.status === 304) { await setMeta(db, REFERENCE_AT_KEY, String(Date.now())); return false; }
+    const etag = await getMeta(db, BASELINE_ETAG_KEY);
+    const res = await fetch(`${API_URL}/v1/catalog/baseline`, { headers: etag ? { 'If-None-Match': etag } : {} });
+    if (res.status === 304) { await setMeta(db, BASELINE_AT_KEY, String(Date.now())); return false; }
     if (!res.ok) return false;
     const body = await res.text();
-    const json = JSON.parse(body) as ReferenceJson;
-    if (!json?.media || typeof json.media !== 'object' || !Object.keys(json.media).length) return false;
-    await setMeta(db, REFERENCE_KEY, body);
-    await setMeta(db, REFERENCE_ETAG_KEY, res.headers.get('etag') ?? '');
-    await setMeta(db, REFERENCE_AT_KEY, String(Date.now()));
+    const json = JSON.parse(body) as BaselineJson;
+    if (!Array.isArray(json?.items)) return false;
+    await setMeta(db, BASELINE_KEY, body);
+    await setMeta(db, BASELINE_ETAG_KEY, res.headers.get('etag') ?? '');
+    await setMeta(db, BASELINE_AT_KEY, String(Date.now()));
     return true;
   } catch {
     return false;
   }
+}
+
+/** The baseline titles the catalog copy holds, with their facets. A baseline title the copy has not received yet is left out until it has. */
+export async function baselineTitles(db: SQLiteDatabase, list: { id: string; fresh: boolean }[]): Promise<BaselineTitle[]> {
+  const fresh = new Set(list.filter((b) => b.fresh).map((b) => b.id));
+  const ids = list.map((b) => b.id);
+  const out: BaselineTitle[] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const chunk = ids.slice(i, i + ID_CHUNK);
+    const rows = await db.getAllAsync<{ id: string; type: string; facets: string }>(
+      `SELECT id, type, facets FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk,
+    );
+    for (const r of rows) out.push({ id: r.id, type: r.type, facets: parseFacets(r.facets), ...(fresh.has(r.id) ? { fresh: true } : {}) });
+  }
+  return out;
 }
 
 export async function ratedTitles(db: SQLiteDatabase): Promise<RatedTitle[]> {
@@ -173,13 +197,13 @@ export async function ratedTitles(db: SQLiteDatabase): Promise<RatedTitle[]> {
  * thought of it (docs/fandex-score.md §3.7).
  */
 export async function consumedTitles(db: SQLiteDatabase): Promise<ConsumedTitle[]> {
-  const rows = await db.getAllAsync<{ id: string; facets: string; held: number }>(
-    `SELECT c.id, c.facets, MAX(CASE WHEN s.relation = 'library' THEN 1 ELSE 0 END) AS held
+  const rows = await db.getAllAsync<{ id: string; type: string; facets: string; held: number }>(
+    `SELECT c.id, c.type, c.facets, MAX(CASE WHEN s.relation = 'library' THEN 1 ELSE 0 END) AS held
        FROM item_state s JOIN catalog c ON c.id = s.media_item_id
       WHERE s.relation IN ('library', 'wishlist')
       GROUP BY c.id`,
   );
-  return rows.map((r) => ({ id: r.id, facets: parseFacets(r.facets), weight: r.held ? 1 : WISHLIST_WEIGHT }));
+  return rows.map((r) => ({ id: r.id, type: r.type, facets: parseFacets(r.facets), weight: r.held ? 1 : WISHLIST_WEIGHT }));
 }
 
 const REPORT_AT_KEY = 'score_report_at';
@@ -235,14 +259,34 @@ export async function followedFacets(db: SQLiteDatabase): Promise<Map<string, Fo
 }
 
 /**
- * The catalog copy's facet counts: the pull axis's denominator, measured
- * against the reference population where the device holds one (§3.7). Every
- * row is read, so a caller caches this by catalog revision.
+ * The pull model for these picks: fitted against the baseline titles the
+ * catalog copy holds. Null when the device holds no baseline yet.
  */
-export async function catalogCounts(db: SQLiteDatabase, tax: Taxonomy, reference: ReferenceJson | null = null): Promise<CatalogCounts> {
-  const rows = await db.getAllAsync<{ id: string; type: string; facets: string }>('SELECT id, type, facets FROM catalog');
-  return catalogCountsFrom(rows.map((r) => ({ id: r.id, type: r.type, facets: parseFacets(r.facets) })), tax, reference);
+export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[], tax: Taxonomy): Promise<PullModel | null> {
+  const list = await storedBaseline(db);
+  if (!list.length) return null;
+  return buildPullModel(consumed, await baselineTitles(db, list), tax);
 }
+
+/** How many of the baseline titles the catalog copy holds: while the Worker is still adding them, this is what grows. */
+async function baselinePresent(db: SQLiteDatabase): Promise<number> {
+  const ids = await storedBaselineIds(db);
+  let n = 0;
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const chunk = ids.slice(i, i + ID_CHUNK);
+    n += (await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) n FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk))?.n ?? 0;
+  }
+  return n;
+}
+
+/**
+ * What the pull model was fitted on, as one string: the picks, the baseline
+ * list and how much of it the copy holds. Not the catalog's revision, which
+ * moves on every sync: fitting is seconds on a phone, and a sync that only
+ * refreshed some titles' details changes next to nothing in it.
+ */
+const pullSignature = (consumed: ConsumedTitle[], present: number, baseline: string | null) =>
+  `${present}|${baseline ?? ''}|${consumed.map((c) => `${c.id}:${c.weight}`).sort().join(',')}`;
 
 export function ScoreProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
@@ -253,17 +297,17 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
 
-  // The reference population: what is stored, then asked for again once a day.
-  // Only its identity is kept in state; the counts read the stored file.
-  const [reference, setReference] = useState<string | null>(null);
+  // The baseline list: what is stored, then asked for again once a day. Only
+  // its identity (the ETag) is kept in state; the model reads the stored list.
+  const [baseline, setBaseline] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     (async () => {
-      const stored = await storedReference(db);
-      if (live && stored) setReference(stored.builtAt);
-      if (await refreshReference(db)) {
-        const fresh = await storedReference(db);
-        if (live && fresh) setReference(fresh.builtAt);
+      const stored = await getMeta(db, BASELINE_ETAG_KEY);
+      if (live && stored) setBaseline(stored);
+      if (await refreshBaseline(db)) {
+        const fresh = await getMeta(db, BASELINE_ETAG_KEY);
+        if (live) setBaseline(fresh ?? String(Date.now()));
       }
     })();
     return () => { live = false; };
@@ -305,10 +349,10 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // the request took (RV31, 2026-10-23).
   const signedIn = auth.status === 'signedIn';
   const filling = catalog.filling;
-  // The catalog's facet counts are read once per catalog revision and taxonomy,
-  // not once per rating: counting means parsing every row's facets, which is
-  // seconds on a phone, and a rating changes none of it.
-  const counts = useRef<{ revision: number; tax: Taxonomy; reference: string | null; counts: CatalogCounts } | null>(null);
+  // The pull model is fitted once per set of picks, catalog revision, baseline
+  // and taxonomy, not once per rating: fitting reads every baseline title's
+  // facets and is the slow part of a rebuild, and a rating changes none of it.
+  const pullFit = useRef<{ signature: string; tax: Taxonomy; model: PullModel | null } | null>(null);
   useEffect(() => {
     let live = true;
     if (!signedIn || !taxonomy) {
@@ -321,14 +365,24 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       const started = Date.now();
       const [rated, consumed, follows] = await Promise.all([ratedTitles(db), consumedTitles(db), followedFacets(db)]);
       if (!live) return;
-      let cached = counts.current;
-      if (!cached || cached.revision !== catalog.revision || cached.tax !== taxonomy || cached.reference !== reference) {
-        cached = { revision: catalog.revision, tax: taxonomy, reference, counts: await catalogCounts(db, taxonomy, reference ? await storedReference(db) : null) };
+      const signature = pullSignature(consumed, await baselinePresent(db), baseline);
+      if (!live) return;
+      let cached = pullFit.current;
+      let fitMs = 0;
+      if (!cached || cached.signature !== signature || cached.tax !== taxonomy) {
+        const fitStarted = Date.now();
+        cached = { signature, tax: taxonomy, model: await pullModelFor(db, consumed, taxonomy) };
+        fitMs = Date.now() - fitStarted;
         if (!live) return;
-        counts.current = cached;
+        pullFit.current = cached;
       }
-      const built = buildProfile(rated, taxonomy, { consumed, catalog: cached.counts, follows });
-      console.log('fandex_profile', JSON.stringify({ rated: rated.length, consumed: consumed.length, follows: follows.size, catalog: cached.counts.total, reference: cached.counts.referenceMedia ?? null, facets: built.w.size, ms: Date.now() - started }));
+      const built = buildProfile(rated, taxonomy, { consumed, pull: cached.model, follows });
+      const model = cached.model;
+      console.log('fandex_profile', JSON.stringify({
+        rated: rated.length, consumed: consumed.length, follows: follows.size, facets: built.w.size,
+        pull: model ? { media: Object.fromEntries(model.media), facets: model.beta.size, sweeps: model.sweeps, ms: fitMs } : null,
+        ms: Date.now() - started,
+      }));
       setProfile(built);
       setReady(true);
       setRevision((r) => r + 1);
@@ -336,7 +390,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       setTimeout(() => { if (live) void sendScoreReport(db, rated, built, taxonomy); }, 2_000);
     })();
     return () => { live = false; };
-  }, [db, signedIn, auth.status, taxonomy, reference, auth.rowsRevision, catalog.revision, filling]);
+  }, [db, signedIn, auth.status, taxonomy, baseline, auth.rowsRevision, catalog.revision, filling]);
 
   const score = useCallback((id: string, facets: ScoreFacet[], type?: string) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy, type) : null), [profile, taxonomy]);

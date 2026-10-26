@@ -6270,3 +6270,31 @@ half of `smoketest.md` and eight old-site docs moved to `docs/archive/old-site/`
 rules that named deleted code rewritten against the Worker and the app.
 - **Housekeeping, the same night, on his word:** the two finished worktrees (`practical-jennings-151cbf`, merged; `cranky-sutherland-b5b333`, whose one commit `d17ac5b` was superseded by the `afterReset` guard and whose branch is kept) and the old site's local databases (`data/rr.db` and the July 2026-07-17 backup, 274 MB) were deleted. `data/prod-snapshots/` stays.
 - **2026-10-26 weekly taxonomy sweep**: 9 attaches, 1 bundle (Mario Bros. into Mario, whose 15 titles all carried Mario already), 3 tag moves (one spelling fold, two placements), no new categories; Baldur's Gate and Civilization got proper display names. Most notable: Split and Glass join Unbreakable as the Eastrail 177 Trilogy, Coyote vs. Acme joins Looney Tunes, and the 2013 Evil Dead and Evil Dead Burn join Evil Dead. Report and undo: `docs/archive/taxonomy-sweeps/2026-10-26.md`.
+
+## 2026-10-25 to 10-26, the pull axis before the model (superseded the same week)
+
+The Fandex Score's first pull axis, as `docs/fandex-score.md` §3.7 described it until the 2026-10-26 rework (the model against the baseline). Kept for the measurements; nothing here runs.
+
+#### 3.7 (old) Pull: "do you seek this out?" (added 2026-10-25)
+
+The taste axis above learns from RATINGS, and the owner's ratings turned out to be mostly about quality, not taste: across 558 tags with enough evidence, the tags he consumes most are rated LOWER relative to his average (rank correlation −0.34), because completionism means watching the bad steampunk and only the acclaimed war films. Anime, 220 of 349 catalog titles consumed, rated exactly at his average, got −0.1 points. Every person he named (Burton, Depp, Dafoe, Swinton, del Toro, Shinkai) sat at 100% of the catalog and near zero taste points. The signal for "my taste" as people mean it is in what they CHOOSE. That is this axis.
+
+For every facet with at least `PULL_MIN_CATALOG` (3) catalog titles:
+
+```
+usualShare = Σ weights of consumed titles / catalog total          // library 1, wishlist WISHLIST_WEIGHT (0.5)
+lift_f     = log2( ((consumed_f + pullPrior·usualShare) / (catalog_f + pullPrior)) / usualShare )
+salience_f = clamp( ln(total / catalog_f) / ln(total / 10), 0.15, 1 )   // 1 for ten titles or fewer, a floor for "action"
+value_f    = lift_f · salience_f · roleWeight(class)                 // tags 1; people, companies, ip by roleWeights
+kept       = top pullTopTags tags ∪ pullTopPeople ∪ pullTopCompanies ∪ pullTopIps, by |value|
+pullRaw    = pullGain · pullWeight[medium] · Σ kept value
+```
+
+- **The denominator is the reference population where the device has it, the catalog copy otherwise** (data fix d, 2026-10-25). The copy alone was measured and found wanting: the pool's films are 68% the owner's and its shows 97%, so a broad facet lifted little (anime p52 among tags) while a small one saturated (126 of 1,087 tags at 100%), and "you versus the catalog" could not say anime was his thing while the catalog was him. The website's build (`mobile/web/referencePopulation.mjs`) takes the 2,000 most voted films and shows from TMDB, the 2,000 most rated games from IGDB and the 2,000 most read books from Open Library once a week, extracts their facets with the Worker's own `extractFacets`, and ships every facet on two or more of them as counts per medium in `/catalog/reference.json` (536 KB, 128 gzipped, on 2026-10-25; a medium whose provider fails is left out, never written short). The device keeps the file like the taxonomy, asks again daily (`refreshReference`), and `catalogCountsFrom` turns it into `expected`: per medium, the reference's share of a facet scaled to the copy's size in that medium, plus the copy's own count on media the file does not cover. `facetPull` divides by `expected` where it exists (zero when the reference lacks the facet on that medium: rarer than one in two thousand, which the prior absorbs), by the copy's count otherwise; the gate stays on the copy's count (`PULL_MIN_CATALOG`), and the lift is held to `log2(1/usualShare)`, since your consumed titles can outnumber the expectation. The Why row keeps "you've seen 46 of 64" and carries `expected` for the day a sentence wants it. `pullReferenceBlend` in the scoring config (0 to 1) says how much the reference counts against the copy's own count, without a deploy; 0.35 since the tuning of 2026-10-26 (§3.10), which found a mix beats either alone.
+
+  Measured on the owner's library (the pool as of 2026-10-25, with fixes a to c in): the reference says anime is 1% of the most voted films and 14% of his pool's. Games order his ratings right 62% of pairs, ρ 0.211 → **0.279**; films 61%, 0.295 → 0.288; the held-out wishlist bar DROPS, films 85% → 79% (pull alone 83 → 74) and games 87% → 82%, held-unrated 79% → 69%, because the pool's untouched titles are the One Piece entries and the franchise siblings his own library pulled in, and against a neutral population anime and those franchises are now his thing on every one of them. Labels on unseen films move from "your usual" 46% to "tryout" 37% and "bycatch" 16%: the pull band reads high far more often, which `pullBandMargin` (an admin knob since fix e) can re-anchor. Shipped on; §3.10 then tuned it to a blend.
+- **A title you hold is scored with its own place in the counts left out** (`consumedIds`), as its rating is on the taste axis.
+- **A follow sets `lift_f` to the maximum, `log2(1/usualShare)`; an avoid to the minimum.** Nothing on the taste axis moves (`facetPull`, tested). A taste override was measured and rejected: steampunk set to 10 lifted Mortal Engines (rated 3) from 82 to 93.
+- **`pullWeight` is per medium** (games 0.5 by default): what the owner plays and what he rates disagree (pull alone ranks his wishlist at 96% and his ratings at −0.12). **The band reads the axis BEFORE this weight** (and before the bend, §3.8): the weight says how much pull counts in the number, not whether you seek games out; with it applied no game was ever a safe bet.
+- Both axes are bent together by `softRange` so 100 stays the maximum; every counted row shrinks by the same share and the breakdown still adds up.
+

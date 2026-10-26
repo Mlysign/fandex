@@ -26,6 +26,7 @@
 // counts (leave-one-out, exact, since only this title's facets enter).
 
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from '@/lib/scoringDefaults';
+import { fitPullModel, timesAverage, type PullModel } from './pullModel';
 
 export interface ScoreFacet {
   kind: 'tag' | 'person' | 'company' | 'ip';
@@ -195,51 +196,32 @@ export interface RatedTitle {
   type?: string;
 }
 
-/** A title you consumed: in your library, or on your wishlist at a lower weight. */
+/** A title you picked: in your library, or on your wishlist at a lower weight. */
 export interface ConsumedTitle {
   id: string;
+  /** The medium. A pick without one stays out of the pull model, which compares within a medium. */
+  type?: string;
   facets: ScoreFacet[];
   /** 1 for a title in your library, `WISHLIST_WEIGHT` for one you only wishlisted. */
   weight: number;
 }
 
-/**
- * `/catalog/reference.json`: facet counts over the most popular titles per
- * medium, from the providers (mobile/web/referencePopulation.mjs). What "the
- * catalog" looks like when it is not one person's library (§3.7).
- */
-export interface ReferenceJson {
-  version: number;
-  builtAt: string;
-  /** Per medium: how many titles, and every facet on two or more of them as [kind, role, key, count]. */
-  media: Record<string, { total: number; facets: [string, string, string, number][] }>;
+/** A baseline title as the device holds it: one of the ordinary titles drawn at random (worker/src/baseline.ts). */
+export interface BaselineTitle {
+  id: string;
+  type: string;
+  facets: ScoreFacet[];
+  /** The draw itself put it in the pool (the Worker's `added`): tagged by today's pipeline alone (pullModel.ts). */
+  fresh?: boolean;
 }
 
-/** What the catalog copy holds, as the pull's denominator (§3.7). */
-export interface CatalogCounts {
-  /** Titles in the catalog copy, every medium. */
-  total: number;
-  /** Facet id (after the taxonomy) → titles carrying it. */
-  byFacet: Map<string, number>;
-  /**
-   * Facet id → how many titles a catalog this size would carry with it if it
-   * were nobody's library: the reference population's share per medium, scaled
-   * to the copy's size in that medium, plus the copy's own count on the media
-   * the reference does not cover. Only for facets on a covered medium; absent
-   * without a reference, when the copy's counts are the denominator.
-   */
-  expected?: Map<string, number>;
-  /** The media the expectation covers. */
-  referenceMedia?: string[];
-}
-
-/** What a follow does to a facet's pull: `follow` sets it to the maximum, `avoid` to the minimum. */
+/** What a follow does to a facet's pull: `follow` sets it to the strongest anyone has, `avoid` to the weakest. */
 export type FollowMode = 'follow' | 'avoid';
 
 /** A wishlisted title is half the evidence a consumed one is: you chose it, you have not been through it. */
 export const WISHLIST_WEIGHT = 0.5;
-/** A facet on fewer catalog titles than this says nothing about pull. */
-export const PULL_MIN_CATALOG = 3;
+/** Folds for scoring your own picks with a model that did not see them (pullModel.ts). */
+export const PULL_FOLDS = 5;
 
 interface FacetMeta {
   kind: string;
@@ -270,88 +252,52 @@ export interface Profile {
   ratingSum: number;
   /** Your mean rating per medium, before the offset. Empty when the titles came without a medium. */
   typeMeans: Map<string, number>;
-  /** Pull: facet id → the weight of the titles you consumed that carry it. */
-  consumed: Map<string, number>;
-  /** The weight of every title you consumed, so `consumedTotal / catalog.total` is your usual share. */
-  consumedTotal: number;
-  /** Consumed title id → its weight, so scoring one of them can leave it out. */
-  consumedIds: Map<string, number>;
-  /** The catalog's counts, or null when the device has not counted it: then there is no pull axis. */
-  catalog: CatalogCounts | null;
+  /** The pull model (pullModel.ts), or null when the device holds no baseline yet: then there is no pull axis. */
+  pull: PullModel | null;
+  /** Your picks by id, with their medium and weight, so scoring one of them leaves it out of its own sentence. */
+  picks: Map<string, { type: string; weight: number }>;
   follows: Map<string, FollowMode>;
+  /** What a follow sets a facet's coefficient to: the strongest one in the model, and never under a doubling. */
+  followBeta: number;
 }
 
 /** Below this many rated titles there is no score at all, rather than one built on two samples. */
 export const MIN_RATED_FOR_FANDEX_SCORE = 3;
 
 /**
- * The catalog's facet counts, from its rows, with the taxonomy applied so a
- * bundled tag is counted once. With a reference population and rows that
- * carry their medium, also what a catalog this size would carry if it were
- * nobody's (`expected`): the pool's films are 68% the owner's and its shows
- * 97%, so measured against the pool anime lifted him almost nothing, because
- * he had put most of the pool's anime there himself.
+ * The facet ids the pull model reads off a title: every facet the taxonomy
+ * resolves, except tags in an IGNORED category (platforms, provider noise).
+ * Category, role and tier weights are the taste axis's: the model weighs each
+ * facet itself, and a category zeroed for taste can still be what you seek out
+ * (anime is filed under art style, which weighs 0 for taste since 2026-10-25).
  */
-export function catalogCountsFrom(rows: { id: string; facets: ScoreFacet[]; type?: string }[], tax: Taxonomy, reference?: ReferenceJson | null): CatalogCounts {
-  const byFacet = new Map<string, number>();
-  const byType = new Map<string, number>();
-  const byFacetType = new Map<string, Map<string, number>>();
-  for (const row of rows) {
-    if (row.type) byType.set(row.type, (byType.get(row.type) ?? 0) + 1);
-    const seen = new Set<string>();
-    for (const f of resolveFacets(row.facets, row.id, tax)) {
-      const id = facetId(f);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      byFacet.set(id, (byFacet.get(id) ?? 0) + 1);
-      if (row.type) {
-        const perType = byFacetType.get(id) ?? new Map<string, number>();
-        perType.set(row.type, (perType.get(row.type) ?? 0) + 1);
-        byFacetType.set(id, perType);
-      }
-    }
+export function pullFacetIds(raw: ScoreFacet[], itemId: string | null, tax: Taxonomy): string[] {
+  const out = new Set<string>();
+  for (const f of resolveFacets(raw, itemId, tax)) {
+    if (f.kind === 'tag' && tax.categories.get(tax.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other')?.ignored) continue;
+    out.add(facetId(f));
   }
-  const counts: CatalogCounts = { total: rows.length, byFacet };
-  // How much the reference counts is the scoring config's (`pullReferenceBlend`), so the admin can tune it without a deploy.
-  const blend = Math.max(0, Math.min(1, tax.config.pullReferenceBlend ?? 0));
-  const covered = reference && blend > 0 ? Object.keys(reference.media).filter((m) => (reference.media[m]?.total ?? 0) > 0 && (byType.get(m) ?? 0) > 0) : [];
-  if (!covered.length) return counts;
+  return [...out];
+}
 
-  // The reference's share of each facet, scaled to this copy's size in that
-  // medium, through the taxonomy so a bundled tag lands on the same id.
-  const expected = new Map<string, number>();
-  for (const medium of covered) {
-    const ref = reference!.media[medium];
-    const scale = (byType.get(medium) ?? 0) / ref.total;
-    for (const [kind, role, key, n] of ref.facets) {
-      if (!(n > 0)) continue;
-      const raw: ScoreFacet = { kind: kind as ScoreFacet['kind'], key, label: key, ...(role ? { role } : {}) };
-      const id = facetId(resolveFacets([raw], null, tax)[0] ?? raw);
-      expected.set(id, (expected.get(id) ?? 0) + n * scale);
-    }
-  }
-  // A facet this copy carries on a covered medium is expected as the reference
-  // says, zero where the reference lacks it there (rarer than one in two
-  // thousand); its titles on the other media count as this copy has them. A
-  // facet only on uncovered media keeps the copy's count as its denominator.
-  for (const [id, perType] of byFacetType) {
-    let outside = 0;
-    let onCovered = false;
-    for (const [type, n] of perType) {
-      if (covered.includes(type)) onCovered = true; else outside += n;
-    }
-    if (!onCovered && !expected.has(id)) continue;
-    expected.set(id, (expected.get(id) ?? 0) + outside);
-  }
-  // The mix: the copy's own count where the reference counts less than fully.
-  if (blend < 1) for (const [id, e] of expected) expected.set(id, blend * e + (1 - blend) * (byFacet.get(id) ?? 0));
-  return { ...counts, expected, referenceMedia: covered };
+/**
+ * Fit the pull model: your picks against the baseline (§3.7). Seconds on a
+ * phone for a big library, so a caller keeps it until the picks, the baseline
+ * or the taxonomy change. Null without a baseline, or with no medium both have.
+ */
+export function buildPullModel(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy): PullModel | null {
+  if (!baseline.length) return null;
+  return fitPullModel(
+    picks.filter((t) => t.type).map((t) => ({ id: t.id, type: t.type!, weight: t.weight, facets: pullFacetIds(t.facets, t.id, tax) })),
+    baseline.map((t) => ({ id: t.id, type: t.type, facets: pullFacetIds(t.facets, t.id, tax), ...(t.fresh ? { fresh: true } : {}) })),
+    { l1: tax.config.pullL1, l2: tax.config.pullL2, folds: PULL_FOLDS },
+  );
 }
 
 export function buildProfile(
   rated: RatedTitle[],
   tax: Taxonomy,
-  extras: { consumed?: ConsumedTitle[]; catalog?: CatalogCounts; follows?: Map<string, FollowMode> } = {},
+  extras: { consumed?: ConsumedTitle[]; pull?: PullModel | null; follows?: Map<string, FollowMode> } = {},
 ): Profile {
   // The medium offset: each rating is moved by the gap between its medium's
   // average and your overall average, so a facet's deviation is about the
@@ -406,26 +352,17 @@ export function buildProfile(
     meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, classWeight, BA, n: f.count, weightedSum: f.weightedSum, weightedCount: f.weightedCount });
   }
 
-  // Pull: what you consumed, per facet, weighted.
-  const consumed = new Map<string, number>();
-  const consumedIds = new Map<string, number>();
-  let consumedTotal = 0;
-  for (const item of extras.consumed ?? []) {
-    if (consumedIds.has(item.id)) continue;
-    consumedIds.set(item.id, item.weight);
-    consumedTotal += item.weight;
-    const seen = new Set<string>();
-    for (const f of resolveFacets(item.facets, item.id, tax)) {
-      const id = facetId(f);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      consumed.set(id, (consumed.get(id) ?? 0) + item.weight);
-    }
-  }
+  // Pull: the model is fitted by the caller (buildPullModel), which keeps it
+  // while only ratings change. Your picks are kept by id for the sentences.
+  const picks = new Map<string, { type: string; weight: number }>();
+  for (const item of extras.consumed ?? []) if (item.type && !picks.has(item.id)) picks.set(item.id, { type: item.type, weight: item.weight });
+  const pull = extras.pull ?? null;
+  let strongest = 0;
+  for (const b of pull?.beta.values() ?? []) strongest = Math.max(strongest, Math.abs(b));
 
   return {
     w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans,
-    consumed, consumedTotal, consumedIds, catalog: extras.catalog ?? null, follows: extras.follows ?? new Map(),
+    pull, picks, follows: extras.follows ?? new Map(), followBeta: Math.max(Math.LN2, strongest),
   };
 }
 
@@ -443,82 +380,59 @@ export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number
 
 // ── Pull ─────────────────────────────────────────────────────────────────────
 
-/**
- * How specific a facet is: 1 for one on ten catalog titles or fewer, down to
- * a floor for one on most of them ("action"). A broad tag you have consumed
- * all of says less about you than a narrow one.
- */
-export function salienceOf(catalogCount: number, catalogTotal: number): number {
-  if (catalogTotal <= 10) return 1;
-  return Math.min(1, Math.max(0.15, Math.log(catalogTotal / Math.max(1, catalogCount)) / Math.log(catalogTotal / 10)));
-}
-
-/**
- * A facet's pull: log2 of your share of the catalog titles carrying it over
- * your usual share, with `prior` pseudo-titles at your usual share so three
- * titles cannot read as "all of them". 0 is your usual; 1 is twice it.
- */
-export function pullLift(consumed: number, catalogCount: number, usualShare: number, prior: number): number {
-  return Math.log2(((consumed + prior * usualShare) / (catalogCount + prior)) / usualShare);
-}
-
 export interface FacetPull {
-  /** The weight of your consumed titles carrying it (a wishlisted one counts `WISHLIST_WEIGHT`). */
-  consumed: number;
-  /** Catalog titles carrying it. */
-  catalog: number;
-  /** How many a catalog this size would carry if it were nobody's (the reference population, §3.7). Absent when the catalog's own count was the denominator. */
-  expected?: number;
-  lift: number;
-  /** Points on a title of medium `type` (the pull weight of that medium applied), or on one of unknown medium. */
+  /** The model's coefficient (natural log): how much more often a title with it is one of your picks, other facets held equal. A follow sets it. */
+  beta: number;
+  /** Points on a title of medium `type` (that medium's pull weight applied), or on one of unknown medium. */
   points: number;
+  /** From the plain counts: how many times more often (above 1) or less often (below 1) your picks carry it than the baseline says they would. */
+  times: number;
+  /** How many of your picks carry it, and their media, for "88 of your films". */
+  titles: number;
+  media: string[];
   followed?: FollowMode;
 }
 
-/** Your usual share of the catalog, or null when the device has not counted it. */
-function usualShare(profile: Profile): number | null {
-  if (!profile.catalog || profile.catalog.total <= 0 || profile.consumedTotal <= 0) return null;
-  return Math.min(0.95, profile.consumedTotal / profile.catalog.total);
-}
-
 /**
- * A facet's pull as a facet page prints it, or null when the catalog has not
- * been counted, the facet sits on too few catalog titles, or the score ignores
- * its class. `leaveOut` takes one consumed title back out, for a title you hold.
+ * A facet's pull, or null when it has none: there is no model yet, the model
+ * holds it at zero (too little evidence, or another facet explains the titles
+ * it is on, as anime explains firefighter), or the model and the plain count
+ * disagree on its direction. A row the score counts is a row the reader can
+ * check against the counts, and nothing else moves the score (Nils,
+ * 2026-10-26: "don't let firefighter influence the pull if it's explained by
+ * anime, therefore don't show it either").
+ *
+ * `leaveOut` is a title you picked, scored by the model that did not see it
+ * and left out of its own counts.
  */
 export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?: string, leaveOut?: { id: string }): FacetPull | null {
-  const share = usualShare(profile);
-  if (share == null) return null;
-  const { weight: classWeight } = classWeightOf(f, tax);
-  if (!classWeight) return null;
+  const model = profile.pull;
+  if (!model) return null;
   const id = facetId(f);
-  let catalog = profile.catalog!.byFacet.get(id) ?? 0;
-  let consumed = profile.consumed.get(id) ?? 0;
-  if (leaveOut) {
-    const own = profile.consumedIds.get(leaveOut.id);
-    if (own !== undefined) { catalog -= 1; consumed = Math.max(0, consumed - own); }
-  }
-  if (catalog < PULL_MIN_CATALOG) return null;
-  const cfg = tax.config;
+  const pick = leaveOut ? profile.picks.get(leaveOut.id) : undefined;
+  const fold = pick ? model.foldOf.get(leaveOut!.id) : undefined;
+  let beta = (fold !== undefined ? model.foldBeta[fold] : model.beta)?.get(id) ?? 0;
   const followed = profile.follows.get(id);
-  const maxLift = Math.log2(1 / share);
-  // The denominator: what a catalog this size would carry if it were nobody's
-  // library, where the reference population knows the facet's media; the
-  // catalog's own count otherwise. Your consumed titles can outnumber the
-  // expectation, so the lift is held to the most anyone can seek out.
-  const expected = profile.catalog!.expected?.get(id);
-  const population = expected ?? catalog;
-  const lift = followed === 'follow' ? maxLift : followed === 'avoid' ? -maxLift
-    : Math.max(-maxLift, Math.min(maxLift, pullLift(consumed, population, share, cfg.pullPrior)));
-  // A tag's tier weighs its pull as it weighs its taste; cast billing does not (a title's choice is a choice, lead or cameo).
-  const roleWeight = f.kind === 'tag' ? (f.tier ? (cfg.tagTierWeights[f.tier] ?? 1) : 1) : (cfg.roleWeights[f.role ?? 'tag'] ?? 1);
-  const value = lift * salienceOf(population, profile.catalog!.total) * roleWeight;
+  if (followed === 'follow') beta = Math.max(beta, profile.followBeta);
+  else if (followed === 'avoid') beta = Math.min(beta, -profile.followBeta);
+  if (beta === 0) return null;
+  const plain = timesAverage(model, id, pick);
+  if (!followed && (!plain || Math.sign(Math.log(plain.times)) !== Math.sign(beta))) return null;
+  const cfg = tax.config;
   const medium = type ? (cfg.pullWeight[type] ?? 1) : 1;
   return {
-    consumed, catalog, lift, points: Math.round(cfg.pullGain * medium * value * 10) / 10,
-    ...(expected !== undefined ? { expected: Math.round(expected * 10) / 10 } : {}),
+    beta,
+    points: Math.round(((cfg.pullGain * medium * beta) / Math.LN2) * 10) / 10,
+    times: plain?.times ?? 1,
+    titles: plain?.titles ?? 0,
+    media: [...(plain?.media ?? [])],
     ...(followed ? { followed } : {}),
   };
+}
+
+/** Whether the pull axis can speak about a title of this medium: a model exists and compared this medium with a baseline. */
+export function hasPullFor(profile: Profile, type?: string): boolean {
+  return !!profile.pull && (!type || profile.pull.media.has(type));
 }
 
 // ── Scoring one title ────────────────────────────────────────────────────────
@@ -564,12 +478,10 @@ export interface ScoreReason {
   capped?: boolean;
   /** A tag row: its tier on this title, so the sheet can say "core" or "detail". */
   tier?: string;
-  /** Pull rows only: the titles behind the number. */
-  consumed?: number;
-  catalog?: number;
-  /** Pull rows only: the reference population's expectation for a catalog this size, when it was the denominator. */
-  expected?: number;
-  lift?: number;
+  /** Pull rows only: how many times more (above 1) or less (below 1) often your picks carry it than average, and how many of them do, in which media. */
+  times?: number;
+  titles?: number;
+  media?: string[];
   followed?: FollowMode;
 }
 
@@ -584,7 +496,7 @@ export interface FandexScore {
   /** Your own mean rating × 10: the score of a title you have no opinion about. */
   center: number;
   taste: AxisResult;
-  /** Null when the device has not counted its catalog: then there is no pull axis. */
+  /** Null when the device holds no baseline for this medium yet: then there is no pull axis. */
   pull: AxisResult | null;
   label: ScoreLabel;
   reasons: ScoreReason[];
@@ -651,12 +563,16 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     matched.push({ f, dev: meta.BA - baseline, classWeight: meta.classWeight * occurrenceWeight(f, tax), meta });
   }
 
-  // The pull rows: every facet with a catalog count, this title's own place in the counts left out.
-  const leaveOut = itemId != null && profile.consumedIds.has(itemId) ? { id: itemId } : undefined;
+  // The pull rows: every facet the model gives weight to, for a title you
+  // picked from the model that did not see it. Tags in an ignored category are
+  // not facets to the model (pullFacetIds).
+  const leaveOut = itemId != null && profile.picks.has(itemId) ? { id: itemId } : undefined;
   const pulls: PullContrib[] = [];
-  const hasPull = usualShare(profile) != null;
+  const hasPull = hasPullFor(profile, type);
   if (hasPull) {
+    const ids = new Set(pullFacetIds(facets, itemId, tax));
     for (const f of resolved) {
+      if (!ids.delete(facetId(f))) continue;
       const pull = facetPull(f, profile, tax, type, leaveOut);
       if (pull) pulls.push({ f, pull, value: pull.points });
     }
@@ -689,19 +605,10 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     ...tags.filter((c) => c.dev === 0),
   ];
 
-  const pullValue = (p: PullContrib) => p.value;
-  const pullTags = byMagnitude(pulls.filter((p) => p.f.kind === 'tag'), pullValue);
-  const pullPeople = byMagnitude(pulls.filter((p) => p.f.kind === 'person'), pullValue);
-  const pullCompanies = byMagnitude(pulls.filter((p) => p.f.kind === 'company'), pullValue);
-  const pullIps = byMagnitude(pulls.filter((p) => p.f.kind === 'ip'), pullValue);
-  const pullKept = [
-    ...pullTags.slice(0, cfg.pullTopTags), ...pullPeople.slice(0, cfg.pullTopPeople),
-    ...pullCompanies.slice(0, cfg.pullTopCompanies), ...pullIps.slice(0, cfg.pullTopIps),
-  ];
-  const pullCapped = [
-    ...pullTags.slice(cfg.pullTopTags), ...pullPeople.slice(cfg.pullTopPeople),
-    ...pullCompanies.slice(cfg.pullTopCompanies), ...pullIps.slice(cfg.pullTopIps),
-  ];
+  // Every pull row counts: the model has already picked which facets carry
+  // weight and shared the credit among the ones that come together, so there
+  // is no top few to choose here.
+  const pullKept = pulls;
 
   // Two raw sums, not means (spec §3.3), then bent together so 100 is the max
   // and 0 the min (decided 2026-10-23). Every counted row shrinks by the same
@@ -727,15 +634,13 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     ...(c.f.tier ? { tier: c.f.tier } : {}),
     ...(counted ? {} : { capped: true }),
   });
-  const pullReason = (p: PullContrib, counted: boolean): ScoreReason => ({
+  const pullReason = (p: PullContrib): ScoreReason => ({
     axis: 'pull', kind: p.f.kind, role: p.f.role, key: p.f.key, label: p.f.label, category: classWeightOf(p.f, tax).category ?? p.f.category,
-    contribution: counted ? round1(p.value * share) : 0,
-    impact: p.pull.points, BA: 0, n: Math.round(p.pull.consumed),
-    consumed: p.pull.consumed, catalog: p.pull.catalog, lift: p.pull.lift,
-    ...(p.pull.expected !== undefined ? { expected: p.pull.expected } : {}),
+    contribution: round1(p.value * share),
+    impact: p.pull.points, BA: 0, n: p.pull.titles,
+    times: p.pull.times, titles: p.pull.titles, media: p.pull.media,
     ...(p.f.tier ? { tier: p.f.tier } : {}),
     ...(p.pull.followed ? { followed: p.pull.followed } : {}),
-    ...(counted ? {} : { capped: true }),
   });
 
   // The bands read each axis BEFORE the bend: the bend shrinks both axes by
@@ -760,9 +665,8 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     ...(own === undefined ? {} : { leftOut: true }),
     reasons: [
       ...[...kept].sort((a, b) => weighted(b) - weighted(a)).map((c) => tasteReason(c, true)),
-      ...[...pullKept].sort((a, b) => b.value - a.value).map((p) => pullReason(p, true)),
+      ...[...pullKept].sort((a, b) => b.value - a.value).map((p) => pullReason(p)),
       ...[...capped].sort((a, b) => Math.abs(weighted(b)) - Math.abs(weighted(a))).map((c) => tasteReason(c, false)),
-      ...[...pullCapped].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).map((p) => pullReason(p, false)),
     ],
   };
 }

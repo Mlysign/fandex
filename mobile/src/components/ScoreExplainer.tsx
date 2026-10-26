@@ -74,7 +74,7 @@ export function ScoreExplainerBody({ item, match: row, state }: { item: CardItem
                 <View key={`${r.axis}|${r.kind}|${r.role ?? ''}|${r.label}`} style={styles.reason}>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={type.caption} numberOfLines={1}>{r.label}</Text>
-                    <Text style={styles.tiny} numberOfLines={1}>{r.axis === 'pull' ? pullSentence(r, item.type) : tasteSentence(r)}</Text>
+                    <Text style={styles.tiny} numberOfLines={1}>{r.axis === 'pull' ? pullSentence(r) : tasteSentence(r)}</Text>
                   </View>
                   <Text style={[styles.impact, { color: r.contribution >= 0 ? color.success : color.danger }]}>{signed(r.contribution)}</Text>
                 </View>

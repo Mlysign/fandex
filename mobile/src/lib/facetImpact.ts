@@ -49,12 +49,12 @@ export interface PageImpact {
   facetId: string;
   /** Absent for a tag. */
   role?: string;
-  /** Taste: points this adds to, or takes from, a title that carries it. */
-  points: number;
+  /** Taste: points this adds to, or takes from, a title that carries it. Null when none of your rated titles carry it, and only pull speaks. */
+  points: number | null;
   direction: ImpactDirection;
   /** How many of your rated titles carry it. */
   ratedCount: number;
-  /** Pull: how much of the catalog's titles carrying it you have been through, or null when the device has not counted its catalog. */
+  /** Pull: how much more or less often you pick it than average, or null when the model gives it no weight (or there is no model yet). */
   pull: FacetPull | null;
 }
 
@@ -85,9 +85,18 @@ export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax
     const pull = facetPull({ kind: m.kind as ScoreFacet['kind'], role: m.role, key: m.key, label: m.label, category: m.category }, profile, tax);
     rows.push({ facetId: facetId(m), role: kind === 'tag' || kind === 'ip' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n, pull });
   }
+  // A facet you pick but never rated a title of: pull speaks, taste does not.
+  const seen = new Set(rows.map((r) => r.facetId));
+  for (const id of new Set([...(profile.pull?.beta.keys() ?? []), ...profile.follows.keys()])) {
+    const [k, role, ...rest] = id.split('|');
+    const key = rest.join('|');
+    if (k !== kind || seen.has(id) || spokenKey(key) !== target) continue;
+    const pull = facetPull({ kind: k as ScoreFacet['kind'], role: role || undefined, key, label: key }, profile, tax);
+    if (pull) rows.push({ facetId: id, role: kind === 'tag' || kind === 'ip' ? undefined : role || undefined, points: null, direction: 'neutral', ratedCount: 0, pull });
+  }
   // Two stored spellings of one tag can speak the same: the one you rated more is the tag.
   if (kind === 'tag' || kind === 'ip') return rows.sort((a, b) => b.ratedCount - a.ratedCount).slice(0, 1);
-  return rows.sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
+  return rows.sort((a, b) => Math.abs(b.points ?? 0) - Math.abs(a.points ?? 0));
 }
 
 /**

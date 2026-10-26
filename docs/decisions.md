@@ -281,6 +281,14 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **The labels are Nils's matrix of 2026-10-25** (`LABEL_TEXT`, docs/fandex-score.md §3.8): safe bet, hidden gem, tryout, bycatch, skip, your usual. Hidden gem and skip cover pull low AND usual; the three pull-high cells each have their own word. A label says what to do with the title.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
 - **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
+
+### Added 2026-10-26, pull against a baseline (docs/fandex-score.md §3.7)
+
+- **Pull compares your picks with a baseline of ordinary titles drawn at random, never with the pool.** The pool was mostly the owner's library, so it counted itself ("4 of 4 firefighter films"). The baseline is in the pool, tagged by the same pipeline as every title, so every tag from every provider has a comparison (Nils: no counting only what a provider can count). Not "fill every facet to fifty titles" either: that makes every tag look equally common.
+- **All facets are weighed at once, and a facet needs evidence before it counts.** A tag that only rides along with another gets no weight, and **is not shown** (Nils: "don't let firefighter influence the pull if it's explained by anime, therefore don't show it either"). A row shows only when the model weighs it and the plain count agrees on its direction; nothing else moves the score.
+- **The Why sheet's pull sentence is Nils's**: "you pick it 5 times more often than average (88 of your films)", "3 times less often". "Than average", not "than others", until Fandex has other people to compare with.
+- **A title only the baseline put in the pool gets no web page, rail card or facet-page card**, and stays in the catalog files (the free plan's 20,000 files).
+- **The label names wait until pull has settled.** Nils dislikes the gambling theme (safe bet, coin flip) and keeps it as the fallback; "hidden gem" goes, because it describes fame, which the score does not know.
 - **DLC, packs, seasons and bundles rank last in search and stay out of every rail**, Recommended
   included. Their own pages stay.
 - **Recommended may show wishlisted titles, at most two per rail.**
