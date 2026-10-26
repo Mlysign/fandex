@@ -41,7 +41,7 @@
     <rect class="chip" x="604" y="200" width="82" height="26" rx="13"/><text class="chipt" x="645" y="217" text-anchor="middle">franchise</text>
   </g>
   <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count.</text>
-  <text class="muted" x="60" y="270">Where a tag came from counts too: a provider's genre or theme and a crowd's voted tag (Steam) in full, an editor's keyword half. The breakdown marks them core and detail.</text>
+  <text class="muted" x="60" y="270">For taste, where a tag came from counts: a provider's genre or theme and a crowd's voted tag (Steam) in full, an editor's keyword less.</text>
 
   <!-- 2 · Two questions -->
   <rect class="card" x="40" y="300" width="820" height="330" rx="14"/>
@@ -57,7 +57,7 @@
   <text class="muted" x="80" y="518">no credit. One on a few titles stays at zero without evidence.</text>
   <text class="ex" x="80" y="552">Steampunk · 4 times more often than average · 46 of yours</text>
   <text class="ex" x="80" y="574">Firefighter · only ever with anime · no credit</text>
-  <text class="small" x="80" y="598">Wishlist titles count half. Follow a facet: your strongest pull. Avoid: the weakest.</text>
+  <text class="small" x="80" y="598">Wishlist titles count half. Follow: strongest pull. Avoid: weakest.</text>
 
   <rect class="inset" x="470" y="372" width="370" height="236" rx="12"/>
   <text class="h2" x="490" y="404"><tspan class="green">Taste</tspan> · do you rate it well?</text>
@@ -82,7 +82,7 @@
     <rect class="chip" x="606" y="720" width="104" height="26" rx="13"/><text class="chipt" x="658" y="737" text-anchor="middle">1 franchise</text>
   </g>
   <text class="muted" x="60" y="772">The rest are still shown in the breakdown, greyed, with the value they would have had. Nothing is hidden.</text>
-  <text class="muted" x="60" y="792">Some kinds weigh more: a director counts about twice a tag, a setting tag about twice a genre. Those weights are set in one place and printed on every row.</text>
+  <text class="muted" x="60" y="792">Some kinds weigh more: a director counts about twice a tag. The weights are set in one place and printed on every row.</text>
   <text class="small" x="60" y="812">A title you rated is scored as if you had not: its own rating is left out, and its pull comes from a model fitted without it, so it can never quote itself.</text>
 
   <!-- 4 · The label -->
