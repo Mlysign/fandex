@@ -6,7 +6,7 @@
 
 import { companyKey, ipKey, personKey, tagKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
-import { DEFAULT_LABEL_ODDS } from '@/lib/scoringDefaults';
+import { DEFAULT_LABEL_EVIDENCE, DEFAULT_LABEL_ODDS, MIN_LABEL_EVIDENCE } from '@/lib/scoringDefaults';
 import type { AxisBand, FandexScore, ScoreLabel, ScoreReason } from '~/lib/fandexScore';
 
 /** How far from your own average the combined score has to be to read as strong or weak: what the Recommended rail filters by. */
@@ -64,20 +64,46 @@ export function labelSentence(fx: Pick<FandexScore, 'taste' | 'pull'>): string {
 
 const TYPE_PLURAL: Record<string, string> = { movie: 'Films', show: 'Shows', game: 'Games', book: 'Books', boardgame: 'Board games' };
 
+/** A ratio as the odds line prints it: one decimal, no ".0". */
+const times = (x: number) => `${(Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '')}×`;
+
+/** The Wilson interval of k in n at 90%: where the true share of 8s plausibly sits. */
+function wilson(k: number, n: number): [number, number] {
+  const z = 1.645;
+  const p = k / n;
+  const centre = (p + (z * z) / (2 * n)) / (1 + (z * z) / n);
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / (1 + (z * z) / n);
+  return [Math.max(0, centre - half), Math.min(1, centre + half)];
+}
+
 /**
  * The odds line: for titles with this label, how much more often than usual
- * people gave an 8 or more. `odds` is the Worker's summed ladder when it has
- * one, else the shipped defaults. Null when neither knows this label.
+ * people gave an 8 or more, with the range the counts behind it allow, or
+ * "too few" when fewer than `MIN_LABEL_EVIDENCE` rated titles stand behind it
+ * (Nils, 2026-10-26: make the Why sheet honest). `odds` and `evidence` are
+ * the Worker's summed ladder when it has one, else the shipped defaults; the
+ * medium's own when it knows the label, else every medium's. Null when
+ * neither knows this label.
  */
-export function oddsLine(label: ScoreLabel, type: string | undefined, odds: Record<string, Partial<Record<string, number>>> = DEFAULT_LABEL_ODDS): string | null {
-  const ratio = (type ? odds[type]?.[label] : undefined) ?? odds.all?.[label];
-  if (ratio == null) return null;
+export function oddsLine(
+  label: ScoreLabel, type: string | undefined,
+  odds: Record<string, Partial<Record<string, number>>> = DEFAULT_LABEL_ODDS,
+  evidence: Record<string, { base: number; labels: Partial<Record<string, [number, number]>> }> = DEFAULT_LABEL_EVIDENCE,
+): string | null {
+  const medium = type && odds[type]?.[label] != null ? type : 'all';
+  const ratio = odds[medium]?.[label];
+  const counts = evidence[medium]?.labels[label];
   const what = type && TYPE_PLURAL[type] ? `${TYPE_PLURAL[type]} like this` : 'Titles like this';
-  const howOften = ratio >= 1.15 ? `about ${(Math.round(ratio * 10) / 10).toFixed(1).replace(/\.0$/, '')}× as often as usual`
+  if (counts && counts[0] < MIN_LABEL_EVIDENCE) return `${what}: too few rated titles with this label yet to say how often they reach an 8.`;
+  if (ratio == null) return null;
+  const howOften = ratio >= 1.15 ? `about ${times(ratio)} as often as usual`
     : ratio > 0.85 ? 'about as often as usual'
     : ratio > 0.6 ? 'less often than usual'
     : 'about half as often as usual';
-  return `${what}: an 8 or more ${howOften}.`;
+  const base = evidence[medium]?.base;
+  if (!counts || !base) return `${what}: an 8 or more ${howOften}.`;
+  const [lo, hi] = wilson(counts[1], counts[0]);
+  return `${what}: an 8 or more ${howOften} (${times(lo / base)} to ${times(hi / base)}).`;
 }
 
 /** Counted rows first, by what they add; rows that were left out sink to the end. Within that, the axis order the sheet shows. */

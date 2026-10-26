@@ -113,11 +113,27 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfigValues = {
  */
 export const DEFAULT_LABEL_ODDS: Record<string, Partial<Record<string, number>>> = {
   // Re-seeded 2026-10-26 under pull against the baseline (§3.7), provisional until the baseline is in the pool.
-  all: { usual: 0.79, tryout: 0.97, 'safe-bet': 1.57, 'hidden-gem': 1.46, bycatch: 0.74, skip: 0.6 },
+  all: { usual: 0.79, tryout: 0.97, 'safe-bet': 1.56, 'hidden-gem': 1.48, bycatch: 0.76, skip: 0.59 },
   movie: { usual: 0.88, tryout: 1.09, 'safe-bet': 1.65, 'hidden-gem': 1.64, bycatch: 0.65, skip: 0.41 },
-  show: { usual: 1.03, tryout: 0.99, 'safe-bet': 1.31, 'hidden-gem': 1.44, bycatch: 0.87, skip: 0.61 },
-  game: { usual: 0.8, tryout: 0.91, 'safe-bet': 1.23, 'hidden-gem': 1.13, bycatch: 0.72, skip: 0.79 },
+  show: { usual: 1.03, tryout: 0.99, 'safe-bet': 1.27, bycatch: 0.82, skip: 0.63 },
+  game: { usual: 0.83, tryout: 0.9, 'safe-bet': 1.23, 'hidden-gem': 1.14, bycatch: 0.7, skip: 0.81 },
 };
+
+/**
+ * What stands behind each odds above, from the same run: per medium, the
+ * share of rated titles at 8 or more (`base`), and per label how many rated
+ * titles got it and how many of those were an 8 or more. The odds line gives
+ * a range from these, and says "too few" below `MIN_LABEL_EVIDENCE` titles
+ * (scoreReasons.ts, Nils 2026-10-26: "make the Why sheet honest").
+ */
+export const DEFAULT_LABEL_EVIDENCE: Record<string, { base: number; labels: Partial<Record<string, [number, number]>> }> = {
+  all: { base: 0.392, labels: { usual: [498, 155], tryout: [474, 180], 'safe-bet': [313, 191], skip: [183, 42], bycatch: [131, 39], 'hidden-gem': [102, 59] } },
+  movie: { base: 0.292, labels: { usual: [355, 91], tryout: [249, 79], 'safe-bet': [118, 57], skip: [109, 13], bycatch: [63, 12], 'hidden-gem': [48, 23] } },
+  show: { base: 0.347, labels: { 'safe-bet': [34, 15], tryout: [105, 36], usual: [76, 27], bycatch: [21, 6], skip: [32, 7], 'hidden-gem': [9, 5] } },
+  game: { base: 0.603, labels: { 'safe-bet': [161, 119], usual: [60, 30], bycatch: [45, 19], tryout: [120, 65], skip: [37, 18], 'hidden-gem': [45, 31] } },
+};
+/** Below this many rated titles behind a label, its odds line says so instead of quoting a number. */
+export const MIN_LABEL_EVIDENCE = 20;
 
 export interface TagCategorySeed {
   id: string;

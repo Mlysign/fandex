@@ -42,14 +42,22 @@ describe('the sentence under the label', () => {
 describe('the odds line', () => {
   const odds = { all: { 'safe-bet': 1.17, usual: 0.94, bycatch: 0.47 }, movie: { 'safe-bet': 1.44 } };
   it('names the medium and reads the ratio in words', () => {
-    expect(oddsLine('safe-bet', 'movie', odds)).toBe('Films like this: an 8 or more about 1.4× as often as usual.');
-    expect(oddsLine('usual', 'movie', odds)).toBe('Films like this: an 8 or more about as often as usual.');
-    expect(oddsLine('bycatch', 'game', odds)).toBe('Games like this: an 8 or more about half as often as usual.');
+    expect(oddsLine('safe-bet', 'movie', odds, {})).toBe('Films like this: an 8 or more about 1.4× as often as usual.');
+    expect(oddsLine('usual', 'movie', odds, {})).toBe('Films like this: an 8 or more about as often as usual.');
+    expect(oddsLine('bycatch', 'game', odds, {})).toBe('Games like this: an 8 or more about half as often as usual.');
   });
   it('falls back to every medium, and says nothing it does not know', () => {
-    expect(oddsLine('safe-bet', 'game', odds)).toBe('Games like this: an 8 or more about 1.2× as often as usual.');
-    expect(oddsLine('safe-bet', undefined, odds)).toBe('Titles like this: an 8 or more about 1.2× as often as usual.');
-    expect(oddsLine('hidden-gem', 'movie', odds)).toBeNull();
+    expect(oddsLine('safe-bet', 'game', odds, {})).toBe('Games like this: an 8 or more about 1.2× as often as usual.');
+    expect(oddsLine('safe-bet', undefined, odds, {})).toBe('Titles like this: an 8 or more about 1.2× as often as usual.');
+    expect(oddsLine('hidden-gem', 'movie', odds, {})).toBeNull();
+  });
+  it('gives the range its counts allow, and says so when there are too few to tell', () => {
+    // 118 safe-bet films, 57 of them an 8 or more, against 29% of all films: 1.65×, plausibly 1.4× to 1.9×.
+    const evidence = { movie: { base: 0.292, labels: { 'safe-bet': [118, 57] as [number, number], 'hidden-gem': [9, 5] as [number, number] } } };
+    expect(oddsLine('safe-bet', 'movie', { movie: { 'safe-bet': 1.65, 'hidden-gem': 1.9 } }, evidence)).toBe('Films like this: an 8 or more about 1.7× as often as usual (1.4× to 1.9×).');
+    expect(oddsLine('hidden-gem', 'movie', { movie: { 'safe-bet': 1.65, 'hidden-gem': 1.9 } }, evidence)).toBe('Films like this: too few rated titles with this label yet to say how often they reach an 8.');
+    // The shipped defaults carry their counts: every line they give has a range or says too few.
+    expect(oddsLine('safe-bet', 'movie')).toMatch(/\(\d(\.\d)?× to \d(\.\d)?×\)\.$/);
   });
 });
 
