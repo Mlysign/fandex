@@ -16,6 +16,7 @@ Screens, data sources and the APK build are in `docs/app.md`; what the app still
 
 ## Data on the device
 
+- **A new device-schema step bumps `SCHEMA_VERSION` in the same edit** (`lib/db.ts`): `migrate` returns early at that number, so a step above it never runs on a device already there. 0.3.18 forgot, and every sync failed on a missing table; `src/lib/mobileDbSchema.test.ts` guards it.
 - **A write transaction goes through `inTransaction` (`lib/db.ts`), never `db.withTransactionAsync`.** Two overlapping ones on expo-sqlite's single connection cancel each other. A screen showing your rows says when they are still arriving (`auth.rowsSyncing`), or a fresh tab reads as an empty account and a tick made from it duplicates on Trakt.
 - **A title missing from the catalog copy is UNKNOWN, never an answer.** Any pool shrink makes every device refill its copy page by page, so a half-empty copy is normal. Up next once stored "caught up" for every show not refilled yet.
 - **`catalog.release_date` is the date in the device's country; the worldwide one is `world_date`** (`lib/localDates.ts`). A statement that writes the catalog writes both, through `regional_date` as `storePage` does.

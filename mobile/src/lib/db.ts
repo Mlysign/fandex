@@ -17,8 +17,13 @@ export const DATABASE_NAME = 'fandex.db';
 /**
  * The newest step below. Bump it IN THE SAME EDIT that adds the step, and never
  * edit a step that has shipped.
+ *
+ * ⚠️ 0.3.18 added step 8 (facet_follow) and left this at 7, so every device
+ * already at 7 returned early and never made the table: every state pull, Trakt
+ * sync and Steam sync then failed on "no such table: facet_follow" (found on
+ * Nils's phone, 2026-10-26). `src/lib/mobileDbSchema.test.ts` now fails when the two differ.
  */
-const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
