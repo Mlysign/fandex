@@ -50,19 +50,19 @@ _Last updated: **2026-10-23**. State only, per the doc conventions in AGENTS.md:
 | **Cloudflare Worker + D1** (phase 1) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, export. Books (Open Library, Hardcover facts only) and board games (BGG, behind its token) since 2026-10-17. Hardened 2026-10-23. |
 | **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. `fandex-0.3.17.apk` installed 2026-10-24: every product-review fix (typo-tolerant search last), and Discord sign-in returning through fandex.org. |
 | **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,613 static item pages (fewer since 105 duplicate games were folded, 2026-10-23) with their rails, 5,417 facet pages, calendar months and the legal pages (publish of 2026-10-24). |
-| **H5** Fandex Score | ✅ Reworked 2026-10-25: a label from two axes (taste and pull), no number shown, follows, the goalpost on `/dev/score`. The data fixes behind it are open in TASKS.md. → [docs/fandex-score.md](docs/fandex-score.md) |
+| **H5** Fandex Score | ✅ Reworked 2026-10-25: a label from two axes (taste and pull), no number shown, follows, the goalpost on `/dev/score`. The five data fixes behind it are built (2026-10-26: tag tiers with Steam's and RAWG's voted tags, the anime facet, a game's people from Wikidata, a reference population for pull, the pull knobs on `/dev/scoring`); the pool's re-derive waits for Nils (TASKS.md item 6). → [docs/fandex-score.md](docs/fandex-score.md) §3.7, §3.9 |
 | **H4** legal & compliance | ✅ |
 | **H3** monetization | 🔵 ads-first; donations live, affiliate dark |
 | The native app on Play | ⏸️ paused on the account upgrade; the native app, not the TWA (2026-10-23) → [docs/play-store.md](docs/play-store.md) |
 | The old Next.js site | 🗑️ Deleted 2026-10-23 after running nowhere since 2026-10-05. At the tag `old-site-final`, the visual reference for the app. Its rules: [docs/archive/old-site/invariants.md](docs/archive/old-site/invariants.md). |
 
-## ✅ Quality bar (re-run 2026-10-25, after the score rework)
+## ✅ Quality bar (re-run 2026-10-26, after the score's data fixes)
 
 Three packages, each with its own bar, plus one lint over all of them:
 
-- **root** (`src/lib`, the shared modules): **368 tests** · `tsc` clean · `npm run lint` **0 errors** and 0 warnings across root, `worker/` and `mobile/`.
-- **`worker/`**: **304 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
-- **`mobile/`**: **282 tests** · `tsc` clean.
+- **root** (`src/lib`, the shared modules): **381 tests** · `tsc` clean · `npm run lint` **0 errors** and 0 warnings across root, `worker/` and `mobile/`.
+- **`worker/`**: **311 tests** inside workerd against a local D1 · `tsc` clean · the bundle builds (`wrangler deploy --dry-run`).
+- **`mobile/`**: **287 tests** · `tsc` clean.
 - **`npm audit --omit=dev`**: root and `worker/` clean; `mobile/` has high advisories only through Expo's build CLI, which never reaches the bundle, so CI fails it on critical only.
 
 ---
