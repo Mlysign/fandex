@@ -151,7 +151,10 @@ refresh replaces the refresh token, so two copies means one stops working.
   franchise) gone entirely, and the build stops. `--accept-shrink` lets a drop that is right
   through, such as a sweep that folded many tags. A delta with titles and no facet page at all
   always stops. The checks are `mobile/web/buildChecks.mjs`, tested in
-  `mobile/src/lib/webBuildChecks.test.ts`.
+  `mobile/src/lib/webBuildChecks.test.ts`. ⚠️ While the baseline walk is adding titles, a drop
+  is expected and right: `GET /v1/catalog/baseline` is kept in kv for six hours, so a build can
+  read a list that lacks the latest drawn-only titles and give them pages, and the next build
+  takes those pages away (2026-10-27: 5,252 → 4,618 item pages, 634 of them baseline-only).
 - **No `not_found_handling` in `wrangler.jsonc`.** With `"404-page"` set, Cloudflare answers a
   browser's navigation to an unknown address itself and never runs `worker.ts`: `/search`,
   `/library` and every old item link were a 404 in a browser while curl got the right answer,
