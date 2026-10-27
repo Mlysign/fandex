@@ -401,12 +401,13 @@ MSYS_NO_PATHCONV=1 robocopy src C:\fx\src /E
 
 ⚠️ The copy also brings over the READ-ONLY attribute OneDrive puts on folders, and Gradle cannot
 delete a read-only folder: `Unable to delete directory …\node_modules\…\build\pluginDescriptors`,
-a different library each run (2026-10-27, four failed builds). Clear it on the Gradle build folders
-under `node_modules` before building, and stop a daemon a failed build left behind (`gradlew --stop`,
-or kill the `jbr\bin\java.exe` process) before trying again:
+a different library each run (2026-10-27, five failed builds; `attrib -R … /S /D` from Git Bash does
+not help, MSYS rewrites `/S` too). Delete the Gradle build folders under `node_modules` before
+building (they are caches; the libraries recompile), and stop a daemon a failed build left behind
+(`gradlew --stop`, or kill the `jbr\bin\java.exe` process) before trying again:
 
 ```bash
-cd C:\fx\mobile\node_modules && for d in $(find . -type d -name build -prune \( -path "*/android/*" -o -path "*gradle-plugin*" \)); do attrib -R "$(cygpath -w "$d")" && attrib -R "$(cygpath -w "$d")\\*" /S /D; done
+cd C:\fx\mobile\node_modules && find . -type d -name build -prune \( -path "*/android/*" -o -path "*gradle-plugin*" \) -exec rm -rf {} +
 ```
 
 Then, in `C:\fx\mobile\android`, with `JAVA_HOME` set to `C:/Program Files/Android/Android
