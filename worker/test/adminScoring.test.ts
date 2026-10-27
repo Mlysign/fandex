@@ -13,8 +13,9 @@ const CONFIG = {
   roleWeights: { director: 1.5, cast: 0.8 },
   priorStrength: 5, mappingConstantUp: 12, mappingConstantDown: 8,
   topTagsPositive: 6, topTagsNegative: 3, topPeople: 4, topCompanies: 2, topIps: 1,
-  pullL1: 1.5, pullL2: 0.5, pullGain: 3.5, pullWeight: { movie: 1, show: 1, game: 0.5, book: 1, boardgame: 1 },
-  tasteBandMargin: 10, pullBandMargin: 10,
+  // The pull and band knobs at their defaults, so a body without them parses to this.
+  pullL1: 1.5, pullL2: 0.5, pullGain: 3.5,
+  tasteBandMargin: 4, pullBandMargin: 6,
   tagTierWeights: { genre: 1, theme: 1, voted: 1, keyword: 0.5 },
 };
 
@@ -32,22 +33,20 @@ describe("the scoring config", () => {
   });
 
   it("fills the pull axis from the defaults for a body written before it existed, and checks one that names it", () => {
-    const { pullL1: _a, pullL2: _b, pullGain: _c, pullWeight: _d, tasteBandMargin: _h, pullBandMargin: _i, ...old } = CONFIG;
+    const { pullL1: _a, pullL2: _b, pullGain: _c, tasteBandMargin: _h, pullBandMargin: _i, ...old } = CONFIG;
     expect(parseScoringConfig(old)).toEqual(CONFIG);
-    // The knobs of the pull before the model (2026-10-25) are dropped from a body that still carries them.
-    expect(parseScoringConfig({ ...CONFIG, pullPrior: 5, pullTopTags: 5, pullReferenceBlend: 0.35 })).toEqual(CONFIG);
+    // The knobs of the pull before the model (2026-10-25), and the per-medium weight of the pull in the number (gone 2026-10-27), are dropped from a body that still carries them.
+    expect(parseScoringConfig({ ...CONFIG, pullPrior: 5, pullTopTags: 5, pullReferenceBlend: 0.35, pullWeight: { game: 0.5 } })).toEqual(CONFIG);
     expect(() => parseScoringConfig({ ...CONFIG, pullL1: 0 })).toThrow("above zero");
     expect(() => parseScoringConfig({ ...CONFIG, pullL2: -1 })).toThrow("negative");
-    expect(parseScoringConfig({ ...old, pullWeight: { game: 0.25 } }).pullWeight).toEqual({ ...CONFIG.pullWeight, game: 0.25 });
-    expect(() => parseScoringConfig({ ...CONFIG, pullWeight: { podcast: 1 } })).toThrow("Unknown medium");
     expect(() => parseScoringConfig({ ...CONFIG, pullGain: -1 })).toThrow("negative");
     expect(() => parseScoringConfig({ ...CONFIG, pullBandMargin: 0 })).toThrow("above zero");
   });
 
   it("fills the tag tiers from the defaults for a body written before they existed, and checks one that names them", () => {
     const { tagTierWeights: _t, ...old } = CONFIG;
-    expect(parseScoringConfig(old).tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.5 });
-    expect(parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: 0.25 } }).tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.25 });
+    expect(parseScoringConfig(old).tagTierWeights).toEqual({ genre: 0.5, theme: 1, voted: 1, keyword: 0.5 });
+    expect(parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: 0.25 } }).tagTierWeights).toEqual({ genre: 0.5, theme: 1, voted: 1, keyword: 0.25 });
     expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { rumour: 1 } })).toThrow("Unknown tier");
     expect(() => parseScoringConfig({ ...CONFIG, tagTierWeights: { keyword: -1 } })).toThrow("negative");
   });

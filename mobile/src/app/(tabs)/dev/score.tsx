@@ -1,5 +1,5 @@
 // /dev/score: the score's goalpost. Every signed-in device sends counts of how
-// the match compared with the person's own ratings (lib/ScoreProvider.tsx,
+// the score compared with the person's own ratings (lib/scoreCalibration.ts,
 // worker/src/scoreReport.ts); this page sums them over everybody and draws
 // the curve, per medium, with the picture of how the score works under it.
 // Nils, 2026-10-25: one chart for all users on the backend, not a page per user.
@@ -8,12 +8,13 @@ import { Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View
 import { AdminOnly, DashHeader, devStyles, num, Panel, Stat } from '~/components/dev/parts';
 import { Screen } from '~/components/ui';
 import { api, type ScoreSummary, type ScoreSummaryMedium } from '~/lib/api';
-import { LABEL_TEXT } from '~/lib/scoreReasons';
 import { usePageTitle } from '~/lib/pageTitle';
 import { color, font, radius, type } from '~/theme';
 
 const MEDIA: [string, string][] = [['all', 'All media'], ['movie', 'Films'], ['show', 'Shows'], ['game', 'Games'], ['book', 'Books']];
-const LABEL_ORDER = ['safe-bet', 'hidden-gem', 'tryout', 'usual', 'bycatch', 'skip'] as const;
+/** The score's bands against the person's average for the medium (lib/fandexScore.ts `ScoreBand`). */
+const BAND_ORDER = ['high', 'usual', 'low'] as const;
+const BAND_TEXT: Record<(typeof BAND_ORDER)[number], string> = { high: 'Above their usual', usual: 'About their usual', low: 'Below their usual' };
 /** Where the picture lives: the website build copies it from public/ (mobile/web/build.mjs). */
 const HOW_IT_WORKS = 'https://fandex.org/score-how-it-works.svg';
 
@@ -55,7 +56,7 @@ function Dashboard() {
 
   const m = useMemo<ScoreSummaryMedium | null>(() => {
     if (!data) return null;
-    return medium === 'all' ? data.all : data.media.find((x) => x.medium === medium) ?? { medium, users: 0, rated: 0, bins: data.all.bins.map(() => 0), labels: {} };
+    return medium === 'all' ? data.all : data.media.find((x) => x.medium === medium) ?? { medium, users: 0, rated: 0, bins: data.all.bins.map(() => 0), bands: {} };
   }, [data, medium]);
 
   const within = (k: number) => {
@@ -65,12 +66,12 @@ function Dashboard() {
     for (let i = idx0 - k; i <= idx0 + k; i++) n += m.bins[i] ?? 0;
     return Math.round((100 * n) / m.bins.reduce((a, b) => a + b, 0));
   };
-  const eightShare = m && m.rated ? Object.values(m.labels).reduce((a, v) => a + v.eightPlus, 0) / Math.max(1, Object.values(m.labels).reduce((a, v) => a + v.rated, 0)) : null;
+  const eightShare = m && m.rated ? Object.values(m.bands).reduce((a, v) => a + v.eightPlus, 0) / Math.max(1, Object.values(m.bands).reduce((a, v) => a + v.rated, 0)) : null;
 
   return (
     <Screen wide>
       <ScrollView contentContainerStyle={devStyles.main}>
-        <DashHeader title="Score" subtitle="Every device's counts of how the match fits its owner's own ratings, summed. No title or rating is in them." here="score">
+        <DashHeader title="Score" subtitle="Every device's counts of how the score fits its owner's own ratings, summed. No title or rating is in them." here="score">
           <View style={styles.tabs}>
             {MEDIA.map(([key, label]) => (
               <Pressable key={key} onPress={() => setMedium(key)} accessibilityRole="button" style={[styles.tab, medium === key && styles.tabOn]}>
@@ -88,22 +89,22 @@ function Dashboard() {
             <View style={devStyles.grid}>
               <Stat label="Users reporting" value={num(m.users)} hint="Accounts whose device has sent a report for this medium since the current score version. A device sends about once a day." />
               <Stat label="Rated titles" value={num(m.rated)} hint="Titles those users rated and the device could score, with the title's own rating left out." />
-              <Stat label="Within 1 point" value={within(1) == null ? '-' : `${within(1)}%`} sub="of rating − match ÷ 10" hint="Share of rated titles where the match, read as a rating, landed within one point of what the person gave. Guessing a person's own average lands within one point about 41% of the time, so this number is only good news above that." />
+              <Stat label="Within 1 point" value={within(1) == null ? '-' : `${within(1)}%`} sub="of rating − score ÷ 10" hint="Share of rated titles where the score, read as a rating, landed within one point of what the person gave. Guessing a person's own average for the medium lands within one point about 41% of the time on films and 38% on games (the owner's library, 2026-10-27), so this number is only good news above that." />
               <Stat label="Within 2 points" value={within(2) == null ? '-' : `${within(2)}%`} hint="The same, two points either way." />
             </View>
 
-            <Panel title="Rating minus match, as a rating" note={`Each bar is how many rated titles landed there. Zero means the match, divided by ten, was the rating given. Score version ${data.version}.`}>
+            <Panel title="Rating minus score, as a rating" note={`Each bar is how many rated titles landed there. Zero means the score, divided by ten, was the rating given. Score version ${data.version}.`}>
               {m.rated ? <Bins m={m} binFrom={data.binFrom} /> : <Text style={devStyles.small}>No report yet for this medium. A device sends one about a day after it rebuilds its profile.</Text>}
             </Panel>
 
-            <Panel title="What each label meant" note="Per label: how many rated titles got it, and how often those were rated 8 or more against the overall share. This is where the odds line under a label comes from once there are enough reports.">
-              {LABEL_ORDER.map((label) => {
-                const v = m.labels[label];
+            <Panel title="What each band meant" note="Per band (the score against the person's average for the medium, by the score band margin): how many rated titles the score put there, and how often those were rated 8 or more against the overall share. A green badge should earn an 8 more often than the grey.">
+              {BAND_ORDER.map((band) => {
+                const v = m.bands[band];
                 const share = v && v.rated ? v.eightPlus / v.rated : null;
                 const lift = share != null && eightShare ? share / eightShare : null;
                 return (
-                  <View key={label} style={styles.labelRow}>
-                    <Text style={[devStyles.small, { width: 110, color: color.textPrimary }]}>{LABEL_TEXT[label]}</Text>
+                  <View key={band} style={styles.labelRow}>
+                    <Text style={[devStyles.small, { width: 120, color: color.textPrimary }]}>{BAND_TEXT[band]}</Text>
                     <Text style={[devStyles.small, { width: 90 }]}>{v ? num(v.rated) : '0'} rated</Text>
                     <Text style={[devStyles.small, { width: 90 }]}>{share == null ? '-' : `${Math.round(100 * share)}% an 8+`}</Text>
                     <Text style={[devStyles.small, { flex: 1 }, lift != null && lift >= 1.15 && { color: color.success }, lift != null && lift <= 0.85 && { color: color.scoreLow }]}>

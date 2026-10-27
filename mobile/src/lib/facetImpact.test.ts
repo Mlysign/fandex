@@ -46,7 +46,8 @@ describe("a facet page's Fandex impact", () => {
   });
 
   it('gives a person one row per role, and matches a key stored with hyphens', () => {
-    const tax = prepareTaxonomy(json());
+    // Writers weigh nothing by default since 2026-10-27; this page reads every role with a weight.
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 4, roleWeights: { writer: 1 } } } }));
     const rows = pageImpacts('person', 'denis villeneuve', buildProfile(library, tax), tax);
     expect(rows.map((r) => r.role).sort()).toEqual(['director', 'writer']);
     expect(Math.abs(rows[0].points!)).toBeGreaterThanOrEqual(Math.abs(rows[1].points!));

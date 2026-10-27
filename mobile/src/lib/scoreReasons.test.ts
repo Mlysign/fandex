@@ -1,63 +1,58 @@
 import { describe, expect, it } from 'vitest';
 import type { ScoreReason } from '~/lib/fandexScore';
-import { axisRows, axisWord, cappedRows, labelSentence, oddsLine, pullSentence, reasonHref, scoreBand, signed, sortReasons, tasteSentence } from '~/lib/scoreReasons';
+import type { MediumCalibration } from '~/lib/scoreCalibration';
+import { axisRows, calibrationLine, cappedRows, centreSentence, pullLine, pullSentence, ratingOf, reasonHref, rungLine, scoreSentence, signed, sortReasons, tasteSentence } from '~/lib/scoreReasons';
 
 const reason = (label: string, contribution: number, over: Partial<ScoreReason> = {}): ScoreReason => ({
   axis: 'taste', kind: 'tag', key: label.toLowerCase(), label, contribution, impact: contribution, BA: 7, n: 4, ...over,
 });
 
-describe('the score band', () => {
-  it('sits around your own average, not around 50', () => {
-    expect(scoreBand(70, 80)).toBe('low');
-    expect(scoreBand(70, 70)).toBe('baseline');
-    expect(scoreBand(70, 60)).toBe('high');
-    // Ten either way is the edge, and the edge counts.
-    expect(scoreBand(90, 80)).toBe('high');
-    expect(scoreBand(89.9, 80)).toBe('baseline');
+describe('the sentence under the number (2026-10-27)', () => {
+  it('reads the score as the rating you would give, a whole number', () => {
+    expect(ratingOf(72)).toBe(7);
+    expect(ratingOf(65)).toBe(7);
+    expect(ratingOf(64.9)).toBe(6);
+    expect(scoreSentence({ score: 72, band: 'high' }, 'movie')).toBe("You'd probably give this a 7, above your usual for films.");
+    expect(scoreSentence({ score: 63, band: 'usual' }, 'game')).toBe("You'd probably give this a 6, about your usual for games.");
+    expect(scoreSentence({ score: 48, band: 'low' }, 'show')).toBe("You'd probably give this a 5, below your usual for shows.");
+    expect(scoreSentence({ score: 80, band: 'high' })).toBe("You'd probably give this a 8, above your usual for titles.");
+  });
+  it('anchors the number on your average for the medium', () => {
+    expect(centreSentence(64.1, 'movie')).toBe('You give films 6.4 on average.');
+    expect(centreSentence(72.6, 'game', true)).toBe('You give games 7.3 on average, this one left out.');
   });
 });
 
-describe('the sentence under the label', () => {
-  const fx = (taste: 'high' | 'usual' | 'low', pull: 'high' | 'usual' | 'low' | null) => ({ taste: { points: 0, band: taste }, pull: pull ? { points: 0, band: pull } : null });
-  it('names both axes, pull first', () => {
-    expect(labelSentence(fx('high', 'high'))).toBe('You seek this out, and you rate it well.');
-    expect(labelSentence(fx('high', 'low'))).toBe('Not your usual pick, but you rate this kind of thing well.');
-    expect(labelSentence(fx('low', 'high'))).toBe('You seek this out, but you tend not to love it.');
-    expect(labelSentence(fx('low', 'low'))).toBe('Not your kind of thing, and you tend not to love it.');
-  });
-  it('names the one axis that moved when only one did, and says so when neither did', () => {
-    expect(labelSentence(fx('high', 'usual'))).toBe('You rate this kind of thing well.');
-    expect(labelSentence(fx('usual', 'high'))).toBe('You seek this out.');
-    expect(labelSentence(fx('usual', 'usual'))).toBe('About your usual, on both counts.');
-    // Without a catalog there is no pull axis, and the sentence does not pretend there is.
-    expect(labelSentence(fx('high', null))).toBe('You rate this kind of thing well.');
-  });
-  it('ends each bar in a word', () => {
-    expect(axisWord('taste', 'high')).toBe('above usual');
-    expect(axisWord('pull', 'high')).toBe('high');
-    expect(axisWord('pull', 'usual')).toBe('usual');
+describe('the pull line, beside the number', () => {
+  it('says how many times more or less often you pick this kind of thing, and nothing without a pull axis', () => {
+    expect(pullLine({ points: 5, band: 'high', times: 3.2 }, 'movie')).toBe('You pick films like this 3 times more often than average.');
+    expect(pullLine({ points: -3, band: 'low', times: 0.5 }, 'game')).toBe('You pick games like this 2 times less often than average.');
+    expect(pullLine({ points: -1.5, band: 'usual', times: 0.62 }, 'game')).toBe('You pick games like this 1.6 times less often than average.');
+    expect(pullLine({ points: 0.4, band: 'usual', times: 1.1 }, 'show')).toBe('You pick shows like this about as often as average.');
+    expect(pullLine(null, 'movie')).toBeNull();
   });
 });
 
-describe('the odds line', () => {
-  const odds = { all: { 'safe-bet': 1.17, usual: 0.94, bycatch: 0.47 }, movie: { 'safe-bet': 1.44 } };
-  it('names the medium and reads the ratio in words', () => {
-    expect(oddsLine('safe-bet', 'movie', odds, {})).toBe('Films like this: an 8 or more about 1.4× as often as usual.');
-    expect(oddsLine('usual', 'movie', odds, {})).toBe('Films like this: an 8 or more about as often as usual.');
-    expect(oddsLine('bycatch', 'game', odds, {})).toBe('Games like this: an 8 or more about half as often as usual.');
+describe('the honesty lines', () => {
+  const cal = (over: Partial<MediumCalibration> = {}): MediumCalibration => ({
+    medium: 'movie', n: 939, withinOne: 413, withinTwo: 714, bins: [], bands: { high: [0, 0], usual: [0, 0], low: [0, 0] },
+    rungs: [{ lo: 0, hi: 50, n: 18, mean: 4.5 }, { lo: 50, hi: 60, n: 90, mean: 5.6 }, { lo: 60, hi: 65, n: 230, mean: 6.1 }, { lo: 65, hi: 70, n: 505, mean: 6.6 }, { lo: 70, hi: 75, n: 92, mean: 7.4 }, { lo: 75, hi: 80, n: 4, mean: 7.5 }, { lo: 80, hi: 101, n: 0, mean: 0 }],
+    ...over,
   });
-  it('falls back to every medium, and says nothing it does not know', () => {
-    expect(oddsLine('safe-bet', 'game', odds, {})).toBe('Games like this: an 8 or more about 1.2× as often as usual.');
-    expect(oddsLine('safe-bet', undefined, odds, {})).toBe('Titles like this: an 8 or more about 1.2× as often as usual.');
-    expect(oddsLine('hidden-gem', 'movie', odds, {})).toBeNull();
+  it('quotes the device\'s own measurement, per medium', () => {
+    expect(calibrationLine(cal())).toBe('On the 939 films you rated, it was within one point of your rating 44% of the time, and within two 76%.');
+    expect(calibrationLine(cal({ medium: 'all', n: 1696, withinOne: 695, withinTwo: 1290 }))).toBe('On the 1696 titles you rated, it was within one point of your rating 41% of the time, and within two 76%.');
   });
-  it('gives the range its counts allow, and says so when there are too few to tell', () => {
-    // 118 safe-bet films, 57 of them an 8 or more, against 29% of all films: 1.65×, plausibly 1.4× to 1.9×.
-    const evidence = { movie: { base: 0.292, labels: { 'safe-bet': [118, 57] as [number, number], 'hidden-gem': [9, 5] as [number, number] } } };
-    expect(oddsLine('safe-bet', 'movie', { movie: { 'safe-bet': 1.65, 'hidden-gem': 1.9 } }, evidence)).toBe('Films like this: an 8 or more about 1.7× as often as usual (1.4× to 1.9×).');
-    expect(oddsLine('hidden-gem', 'movie', { movie: { 'safe-bet': 1.65, 'hidden-gem': 1.9 } }, evidence)).toBe('Films like this: too few rated titles with this label yet to say how often they reach an 8.');
-    // The shipped defaults carry their counts: every line they give has a range or says too few.
-    expect(oddsLine('safe-bet', 'movie')).toMatch(/\(\d(\.\d)?× to \d(\.\d)?×\)\.$/);
+  it('says nothing on too few titles', () => {
+    expect(calibrationLine(cal({ n: 14, withinOne: 6, withinTwo: 10 }))).toBeNull();
+    expect(calibrationLine(null)).toBeNull();
+  });
+  it('names the rung the score sits on, with what you gave there', () => {
+    expect(rungLine(cal(), 72)).toBe('When it said 70 to 75, you gave 7.4 on average (92 films).');
+    expect(rungLine(cal(), 45)).toBe('When it said under 50, you gave 4.5 on average (18 films).');
+    // Four titles on the rung: not enough to quote.
+    expect(rungLine(cal(), 77)).toBeNull();
+    expect(rungLine(cal({ rungs: [{ lo: 80, hi: 101, n: 90, mean: 8.4 }] }), 85)).toBe('When it said 80 or more, you gave 8.4 on average (90 films).');
   });
 });
 
@@ -66,10 +61,11 @@ describe('the rows', () => {
     const rows = [reason('left out', 0, { capped: true, impact: 9 }), reason('minus', -3), reason('plus', 4), reason('small', 1)];
     expect(sortReasons(rows).map((r) => r.label)).toEqual(['plus', 'small', 'minus', 'left out']);
   });
-  it('splits by axis and keeps the left-out rows apart', () => {
-    const rows = [reason('a', 2), reason('b', 5, { axis: 'pull', times: 3, titles: 4 }), reason('c', 0, { capped: true, impact: -3 }), reason('d', 1, { axis: 'pull' })];
+  it('splits by axis, orders pull rows by their own points, and keeps the left-out rows apart', () => {
+    // A pull row adds nothing to the score (contribution 0); its order is its own points (`impact`).
+    const rows = [reason('a', 2), reason('b', 0, { axis: 'pull', impact: 2, times: 3, titles: 4 }), reason('c', 0, { capped: true, impact: -3 }), reason('d', 0, { axis: 'pull', impact: 5 })];
     expect(axisRows(rows, 'taste').map((r) => r.label)).toEqual(['a']);
-    expect(axisRows(rows, 'pull').map((r) => r.label)).toEqual(['b', 'd']);
+    expect(axisRows(rows, 'pull').map((r) => r.label)).toEqual(['d', 'b']);
     expect(cappedRows(rows).map((r) => r.label)).toEqual(['c']);
   });
   it('reads a row as one sentence with its count', () => {

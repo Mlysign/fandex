@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { balanceByType, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
-import { BAND_MARGIN } from '~/lib/scoreReasons';
 
-/** A score as `recommend` takes one: the number that ranks, with a plain label behind it. */
-const scored = (n: number | null | undefined): Scored | null => (n == null ? null : { score: n, label: 'usual', taste: 'usual', pull: null });
+/** A score as `recommend` takes one: the number that ranks, with its band as the score computes it around an average of 50 (green from 60, orange under 40). */
+const scored = (n: number | null | undefined, center = 50): Scored | null => (n == null ? null : { score: n, band: n >= center + 10 ? 'high' : n <= center - 10 ? 'low' : 'usual' });
 
 const card = (key: string, id: string | null = null, type: Candidate['type'] = 'movie'): Candidate => ({
   key, id, type, title: key, releaseDate: '2026-12-01', posterUrl: null, communityScore: null, genres: [],
@@ -57,9 +56,10 @@ describe('Recommended for you', () => {
   const scoreOf = (c: Candidate) => scored(scores[c.key]);
 
   it('carries only titles in the green band, best first', () => {
-    // Your average is 50: strong from 60, weak under 40 (the badge's margin).
+    // The band is the score's own (`FandexScore.band`, around your average for the medium); the rail reads it, never the number.
     expect(recommend([cards], scoreOf, () => false, 50).map((c) => c.key)).toEqual(['stronger', 'strong']);
-    expect(recommend([cards], scoreOf, () => false, 60 + BAND_MARGIN).map((c) => c.key)).toEqual(['stronger']);
+    expect(recommend([cards], (c) => scored(scores[c.key], 70), () => false, 70).map((c) => c.key)).toEqual(['stronger']);
+    expect(recommend([cards], scoreOf, () => false, 50).map((c) => c.match)).toEqual([{ score: 80, band: 'high' }, { score: 75, band: 'high' }]);
   });
 
   it('leaves out what you already hold or hid', () => {

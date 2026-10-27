@@ -312,10 +312,10 @@ const q = (params: Record<string, string | number | undefined>) => {
 export interface ScoreReport {
   medium: string;
   rated: number;
-  /** Twelve counts of (your rating − the match ÷ 10), rounded, from −6 to +5. */
+  /** Twelve counts of (your rating − the score ÷ 10), rounded, from −6 to +5. */
   bins: number[];
-  /** Per label: [rated titles with this label, of those rated 8 or more]. */
-  labels: Record<string, [number, number]>;
+  /** Per band (high, usual, low): [rated titles the score put there, of those rated 8 or more]. */
+  bands: Record<string, [number, number]>;
 }
 
 export interface ScoreSummaryMedium {
@@ -323,7 +323,7 @@ export interface ScoreSummaryMedium {
   users: number;
   rated: number;
   bins: number[];
-  labels: Record<string, { rated: number; eightPlus: number }>;
+  bands: Record<string, { rated: number; eightPlus: number }>;
 }
 
 /** `GET /v1/admin/score`: every user's report summed, per medium and in all. */

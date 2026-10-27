@@ -11,8 +11,7 @@ import {
   useWindowDimensions, type StyleProp, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { Img } from '~/components/Img';
-import type { AxisBand, AxisResult, ScoreLabel } from '~/lib/fandexScore';
-import { axisWord, LABEL_TEXT, LABEL_TONE, type LabelTone } from '~/lib/scoreReasons';
+import type { ScoreBand } from '~/lib/fandexScore';
 import { breakpoint, color, font, radius, space, type } from '~/theme';
 
 // ── Button (ui/Button.tsx) ───────────────────────────────────────────────────
@@ -143,50 +142,19 @@ export function StatStrip({ cells }: { cells: { label: string; value: string }[]
 
 // ── The score badges (FandexScoreBadge.tsx, CommunityScoreBadge.tsx) ─────────
 
-/** The theme colour a match label wears. */
-const LABEL_COLOR: Record<LabelTone, string> = { high: color.scoreHigh, gold: color.accent, low: color.scoreLow, danger: color.danger, base: color.scoreBaseline };
-export const labelColor = (label: ScoreLabel): string => LABEL_COLOR[LABEL_TONE[label]];
-
-const BAR_H: Record<AxisBand, number> = { low: 3, usual: 6, high: 10 };
+/** The theme colour a score band wears: green above your usual for the medium, grey about it, orange below (the site's ramp, re-anchored per medium). */
+export const bandColor = (band: ScoreBand): string => (band === 'high' ? color.scoreHigh : band === 'low' ? color.scoreLow : color.scoreBaseline);
 
 /**
- * The two axes as two small bars, pull then taste: low, usual or high. `wide`
- * is the item page's version, with the axis named and its band in a word.
+ * Your Fandex Score for a title on a card: the number in its band's colour on
+ * a faint fill. A whole number, no decimals: it is right to about a point
+ * (docs/fandex-score.md §7), and "72.4" would claim a tenth.
  */
-export function AxisBars({ taste, pull, tint, wide }: { taste: AxisResult; pull: AxisResult | null; tint?: string; wide?: boolean }) {
-  if (!wide) {
-    return (
-      <View accessibilityLabel={`you seek this out: ${pull ? axisWord('pull', pull.band) : 'unknown'}, you rate it: ${axisWord('taste', taste.band)}`} style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 10 }}>
-        <View style={{ width: 3, height: pull ? BAR_H[pull.band] : 2, backgroundColor: tint ?? color.textSecondary, opacity: pull ? 1 : 0.4, borderRadius: 1 }} />
-        <View style={{ width: 3, height: BAR_H[taste.band], backgroundColor: tint ?? color.textSecondary, borderRadius: 1 }} />
-      </View>
-    );
-  }
-  const widthOf = (points: number) => `${Math.max(6, Math.min(100, 50 + points * 2))}%` as const;
-  const bar = (name: string, axis: 'taste' | 'pull', a: AxisResult | null, fill: string) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <Text style={[type.caption, { width: 108 }]}>{name}</Text>
-      <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: color.surfaceInset, overflow: 'hidden' }}>
-        {a ? <View style={{ width: widthOf(a.points), height: '100%', backgroundColor: fill }} /> : null}
-      </View>
-      <Text style={[type.caption, { width: 78, textAlign: 'right', color: color.textPrimary }]}>{a ? axisWord(axis, a.band) : 'not counted'}</Text>
-    </View>
-  );
+export function FandexScoreBadge({ score, band }: { score: number; band: ScoreBand }) {
+  const tint = bandColor(band);
   return (
-    <View style={{ gap: 6 }}>
-      {bar('You seek this out', 'pull', pull, color.accent)}
-      {bar('You rate it well', 'taste', taste, color.scoreHigh)}
-    </View>
-  );
-}
-
-/** Your match for a title on a card: the label in its colour on a faint fill, with the two bars beside it. No number. */
-export function MatchLabel({ label, taste, pull }: { label: ScoreLabel; taste: AxisBand; pull: AxisBand | null }) {
-  const tint = labelColor(label);
-  return (
-    <View accessibilityLabel={`Your match: ${LABEL_TEXT[label]}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full, backgroundColor: `${tint}22`, maxWidth: '100%' }}>
-      <AxisBars taste={{ points: 0, band: taste }} pull={pull ? { points: 0, band: pull } : null} tint={tint} />
-      <Text numberOfLines={1} style={[type.micro, { color: tint, textTransform: 'none', letterSpacing: 0 }]}>{LABEL_TEXT[label]}</Text>
+    <View accessibilityLabel={`Your Fandex Score ${Math.round(score)}`} style={{ paddingHorizontal: 7, paddingVertical: 1, borderRadius: radius.full, backgroundColor: `${tint}22` }}>
+      <Text style={{ fontFamily: font.serif, fontSize: 16, lineHeight: 19, color: tint, fontVariant: ['tabular-nums'] }}>{Math.round(score)}</Text>
     </View>
   );
 }

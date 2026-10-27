@@ -23,7 +23,6 @@ const ROLE_LABELS: Record<string, string> = {
   director: 'Directors', writer: 'Writers', creator: 'Creators', cast: 'Cast', developer: 'Developers',
   publisher: 'Publishers', studio: 'Studios', network: 'Networks', ip: 'Franchise',
 };
-const MEDIUM_LABELS: Record<string, string> = { movie: 'Films', show: 'Shows', game: 'Games', book: 'Books', boardgame: 'Board games' };
 const MAX_PINNED = 3;
 
 export type Category = TaxonomyJson['tagCategories'][number];
@@ -213,18 +212,19 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
               </Text>
             </View>
             <View style={{ gap: 4 }}>
-              <Field label="Mapping constant, above your average (K_up)"><NumField label="K up" value={draft.mappingConstantUp} onChange={(n) => set({ mappingConstantUp: n })} /></Field>
+              <Field label="Gain, above your average (K_up)"><NumField label="K up" value={draft.mappingConstantUp} onChange={(n) => set({ mappingConstantUp: n })} /></Field>
               <Text style={styles.tiny}>
-                Formula: yourAvgRating×10 + K · Σ(dev·weight). A raw sum over the selected facets below, not an average, and no longer
-                clamped to 0–100. Applied when an item's facets sum positive. Higher K_up = a good match swings up more dramatically.
+                Formula: your average for the medium × 10 + K · Σ(dev·weight), a raw sum over the selected facets below, bent toward 0 and
+                100 only near the edges. Applied when an item&apos;s facets sum positive. Since 2026-10-27 the two gains are FITTED, not
+                chosen: the least-squares fit of rating − medium average on the sum, so that the score ÷ 10 is what you would give
+                (`scripts/score-backtest.mjs --fit-gains` prints the pair the weights above imply; set them here).
               </Text>
             </View>
             <View style={{ gap: 4 }}>
-              <Field label="Mapping constant, below your average (K_down)"><NumField label="K down" value={draft.mappingConstantDown} onChange={(n) => set({ mappingConstantDown: n })} /></Field>
+              <Field label="Gain, below your average (K_down)"><NumField label="K down" value={draft.mappingConstantDown} onChange={(n) => set({ mappingConstantDown: n })} /></Field>
               <Text style={styles.tiny}>
-                Same formula, applied when an item scores below your average. Set lower than K_up to skew the visible range toward
-                enthusiasm, so mismatches drop off gently instead of the score reading as “you won't like this.” The center itself (your
-                own average rating, ×10) is not a knob. Only these two gains are.
+                Same formula, applied when an item&apos;s facets sum negative. The fit gives it its own value (a sum below zero predicts
+                more strongly per point than one above). The centre itself (your average rating for the medium, ×10) is not a knob.
               </Text>
             </View>
           </View>
@@ -232,29 +232,19 @@ export function WeightsPanel({ config, categories, taxonomy, onSaved }: {
 
         <Block title="Pull: do you seek this out?">
           <Text style={styles.tiny}>
-            The second axis (docs/fandex-score.md §3.7): one model over every facet, your picks against the baseline (ordinary titles drawn
-            at random). Evidence is what a facet needs before it counts, as a z-score: how many standard errors its count among your picks
-            sits from what the baseline expects (2 lets about one coincidence in twenty through, 3 one in four hundred). The gain is points
-            per doubling, the per-medium weight how much pull counts in the number for that
-            medium (the band reads the axis before it). The margins are the points off your usual that read as high or low, on each axis.
+            Said beside the score, not in it (docs/fandex-score.md §3.7, since 2026-10-27): one model over every facet, your picks against the
+            baseline (ordinary titles drawn at random). Evidence is what a facet needs before it counts, as a z-score: how many standard errors
+            its count among your picks sits from what the baseline expects (2 lets about one coincidence in twenty through, 3 one in four
+            hundred). The gain is points per doubling, for pull&apos;s own bar. The score band margin is the points off your average for the
+            medium that colour a badge green or orange and fill Recommended; the pull band margin is the same for pull&apos;s own points.
           </Text>
           <View style={styles.grid2}>
             {([
               ['Pull gain', 'pullGain'], ['Evidence (z)', 'pullL1'], ['Ridge', 'pullL2'],
-              ['Taste band margin', 'tasteBandMargin'], ['Pull band margin', 'pullBandMargin'],
+              ['Score band margin', 'tasteBandMargin'], ['Pull band margin', 'pullBandMargin'],
             ] as [string, keyof ScoringConfigValues][]).map(([label, key]) => (
               <View key={key} style={styles.cell2}>
                 <Field label={label}><NumField label={label} value={draft[key] as number} onChange={(n) => set({ [key]: n })} /></Field>
-              </View>
-            ))}
-          </View>
-          <Text style={styles.tiny}>Pull weight per medium</Text>
-          <View style={styles.grid2}>
-            {(['movie', 'show', 'game', 'book', 'boardgame'] as const).map((medium) => (
-              <View key={medium} style={styles.cell2}>
-                <Field label={MEDIUM_LABELS[medium]}>
-                  <NumField label={`${MEDIUM_LABELS[medium]} pull weight`} value={draft.pullWeight?.[medium] ?? 1} onChange={(n) => set({ pullWeight: { ...draft.pullWeight, [medium]: n } })} />
-                </Field>
               </View>
             ))}
           </View>

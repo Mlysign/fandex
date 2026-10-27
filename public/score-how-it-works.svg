@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1560" width="900" height="1560" role="img" aria-labelledby="t d">
-  <title id="t">How your Fandex match works</title>
-  <desc id="d">One label per title, from two questions asked of everything the title is made of: do you seek this kind of thing out, and do you rate it well. The label is where the two land against your usual.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1950" width="900" height="1950" role="img" aria-labelledby="t d">
+  <title id="t">How your Fandex Score works</title>
+  <desc id="d">One number per title: the rating you would probably give, times ten. It starts from your average for the medium. Each facet moves it by how you rated the titles that carry it, and the sum is scaled to match the ratings you gave.</desc>
   <style>
     .bg { fill: #100E0C; }
     .card { fill: #181512; stroke: #2A2520; stroke-width: 1; }
@@ -24,11 +24,11 @@
     .cellt { font: 500 13px Georgia, 'Times New Roman', serif; }
     .axis { font: 400 11px 'Segoe UI', Inter, Helvetica, Arial, sans-serif; fill: #8A8175; letter-spacing: 0.8px; }
   </style>
-  <rect class="bg" width="900" height="1560" rx="0"/>
+  <rect class="bg" width="900" height="1950" rx="0"/>
 
-  <text class="h1" x="40" y="58">How your match works</text>
-  <text class="muted" x="40" y="86">One label on every title. It answers: how much more likely than usual are you to love this?</text>
-  <text class="small" x="40" y="106">It is not a prediction of the number you would give. Nothing here reads the crowd's ratings or what is popular.</text>
+  <text class="h1" x="40" y="58">How your Fandex Score works</text>
+  <text class="muted" x="40" y="86">One number on every title: what you would probably rate it, times ten. A 72 means about a 7.</text>
+  <text class="small" x="40" y="106">It is right to about a point, not a tenth. Nothing here reads the crowd's ratings or what is popular.</text>
 
   <!-- 1 · What a title is made of -->
   <rect class="card" x="40" y="130" width="820" height="150" rx="14"/>
@@ -36,112 +36,138 @@
   <text class="body" x="60" y="184">Fandex breaks every film, show, game or book into its facets:</text>
   <g>
     <rect class="chip" x="60" y="200" width="118" height="26" rx="13"/><text class="chipt" x="119" y="217" text-anchor="middle">genres and tags</text>
-    <rect class="chip" x="186" y="200" width="196" height="26" rx="13"/><text class="chipt" x="284" y="217" text-anchor="middle">people: director, writer, cast, author</text>
-    <rect class="chip" x="390" y="200" width="206" height="26" rx="13"/><text class="chipt" x="493" y="217" text-anchor="middle">studio, developer, publisher, network</text>
-    <rect class="chip" x="604" y="200" width="82" height="26" rx="13"/><text class="chipt" x="645" y="217" text-anchor="middle">franchise</text>
+    <rect class="chip" x="186" y="200" width="210" height="26" rx="13"/><text class="chipt" x="291" y="217" text-anchor="middle">people: director, writer, cast, author</text>
+    <rect class="chip" x="404" y="200" width="218" height="26" rx="13"/><text class="chipt" x="513" y="217" text-anchor="middle">studio, developer, publisher, network</text>
+    <rect class="chip" x="630" y="200" width="82" height="26" rx="13"/><text class="chipt" x="671" y="217" text-anchor="middle">franchise</text>
   </g>
-  <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count.</text>
-  <text class="muted" x="60" y="270">For taste, where a tag came from counts: a provider's genre or theme and a crowd's voted tag (Steam) in full, an editor's keyword less.</text>
+  <text class="muted" x="60" y="252">Platform tags ("PC", "PS5") and noise never count. Where a tag came from counts too:</text>
+  <text class="muted" x="60" y="270">a provider's theme and a crowd's voted tag (Steam) in full, a genre and an editor's keyword half.</text>
 
-  <!-- 2 · Two questions -->
-  <rect class="card" x="40" y="300" width="820" height="330" rx="14"/>
-  <text class="h3" x="60" y="328">2 · TWO QUESTIONS, ASKED OF EVERY FACET</text>
-  <text class="body" x="60" y="354">Each facet is checked twice: taste against your own usual, pull against ordinary titles. Neither reads anyone else's ratings.</text>
-
-  <rect class="inset" x="60" y="372" width="390" height="236" rx="12"/>
-  <text class="h2" x="80" y="404"><tspan class="gold">Pull</tspan> · do you seek this out?</text>
-  <text class="body" x="80" y="432">Your picks against ordinary titles drawn at random from</text>
-  <text class="body" x="80" y="452">everything the providers know, all facets weighed together:</text>
-  <text class="body" x="80" y="472">how much more often you pick it than average.</text>
-  <text class="muted" x="80" y="500">A tag that only rides along (firefighter, on anime films) gets</text>
-  <text class="muted" x="80" y="518">no credit. One on a few titles stays at zero without evidence.</text>
-  <text class="ex" x="80" y="552">Steampunk · 4 times more often than average · 46 of yours</text>
-  <text class="ex" x="80" y="574">Firefighter · only ever with anime · no credit</text>
-  <text class="small" x="80" y="598">Wishlist titles count half. Follow: strongest pull. Avoid: weakest.</text>
-
-  <rect class="inset" x="470" y="372" width="370" height="236" rx="12"/>
-  <text class="h2" x="490" y="404"><tspan class="green">Taste</tspan> · do you rate it well?</text>
-  <text class="body" x="490" y="432">Your average rating for the titles you rated</text>
-  <text class="body" x="490" y="452">that carry this facet,</text>
-  <text class="body" x="490" y="472">compared with your overall average.</text>
-  <text class="muted" x="490" y="500">Only ratings you typed yourself. A facet you met once</text>
-  <text class="muted" x="490" y="518">barely moves; one you met forty times moves fully.</text>
-  <text class="ex" x="490" y="552">Steampunk · you rate it 7.6 over 41 titles · usual 6.7</text>
-  <text class="ex" x="490" y="574">Disease · you rate it 8.5 over 11 titles</text>
-  <text class="small" x="490" y="598">Games you rate higher than films? That gap is taken out first.</text>
-
-  <!-- 3 · Only the strongest few count -->
-  <rect class="card" x="40" y="650" width="820" height="176" rx="14"/>
-  <text class="h3" x="60" y="678">3 · ONLY THE STRONGEST FEW COUNT</text>
-  <text class="body" x="60" y="704">A title can carry thirty tags. On taste, only the strongest few of each kind add up (pull has already chosen its own):</text>
+  <!-- 2 · Your average for the medium -->
+  <rect class="card" x="40" y="296" width="820" height="182" rx="14"/>
+  <text class="h3" x="60" y="324">2 · YOUR AVERAGE FOR THE MEDIUM IS WHERE IT STARTS</text>
+  <text class="body" x="60" y="350">You rate games 7.3 and films 6.4? A game starts at 73 and a film at 64.</text>
+  <text class="body" x="60" y="370">A title the facets say nothing about reads as your average.</text>
+  <text class="muted" x="60" y="390">Below ten ratings in a medium it starts from your overall average instead.</text>
   <g>
-    <rect class="chip" x="60" y="720" width="150" height="26" rx="13"/><text class="chipt" x="135" y="737" text-anchor="middle">5 tags that lift it</text>
-    <rect class="chip" x="218" y="720" width="166" height="26" rx="13"/><text class="chipt" x="301" y="737" text-anchor="middle">3 tags that pull it down</text>
-    <rect class="chip" x="392" y="720" width="92" height="26" rx="13"/><text class="chipt" x="438" y="737" text-anchor="middle">3 people</text>
-    <rect class="chip" x="492" y="720" width="106" height="26" rx="13"/><text class="chipt" x="545" y="737" text-anchor="middle">2 companies</text>
-    <rect class="chip" x="606" y="720" width="104" height="26" rx="13"/><text class="chipt" x="658" y="737" text-anchor="middle">1 franchise</text>
+    <rect class="inset" x="60" y="406" width="250" height="56" rx="12"/>
+    <text class="body" x="76" y="429">Films <tspan class="muted">· you give 6.4</tspan></text>
+    <text class="muted" x="76" y="453">starts at <tspan class="h2 gold">64</tspan></text>
+    <rect class="inset" x="320" y="406" width="250" height="56" rx="12"/>
+    <text class="body" x="336" y="429">Games <tspan class="muted">· you give 7.3</tspan></text>
+    <text class="muted" x="336" y="453">starts at <tspan class="h2 gold">73</tspan></text>
+    <rect class="inset" x="580" y="406" width="250" height="56" rx="12"/>
+    <text class="body" x="596" y="429">Books <tspan class="muted">· you give 8.9</tspan></text>
+    <text class="muted" x="596" y="453">starts at <tspan class="h2 gold">89</tspan></text>
   </g>
-  <text class="muted" x="60" y="772">The rest are still shown in the breakdown, greyed, with the value they would have had. Nothing is hidden.</text>
-  <text class="muted" x="60" y="792">Some kinds weigh more: a director counts about twice a tag. The weights are set in one place and printed on every row.</text>
-  <text class="small" x="60" y="812">A title you rated is scored as if you had not: its own rating is left out, and its pull comes from a model fitted without it, so it can never quote itself.</text>
 
-  <!-- 4 · The label -->
-  <rect class="card" x="40" y="846" width="820" height="300" rx="14"/>
-  <text class="h3" x="60" y="874">4 · WHERE THE TWO LAND IS YOUR LABEL</text>
-  <text class="body" x="60" y="900">Each question adds up to points above or below your usual. A few points off either way reads as high or low. The label says what to do.</text>
+  <!-- 3 · Each facet moves it -->
+  <rect class="card" x="40" y="494" width="820" height="326" rx="14"/>
+  <text class="h3" x="60" y="522">3 · EACH FACET MOVES IT BY HOW YOU RATED IT</text>
+  <text class="body" x="60" y="548">For every facet on the title: your average rating for the titles you rated that carry it,</text>
+  <text class="body" x="60" y="568">against your overall average. Only ratings you typed yourself count.</text>
+  <text class="muted" x="60" y="588">A facet you met once barely moves it; one you met forty times moves it fully.</text>
+  <text class="muted" x="60" y="606">Games you rate higher than films? That gap is taken out before a facet learns.</text>
+  <text class="ex" x="60" y="634">Steampunk · you rate it 7.6 over 41 titles · usual 6.7 · +0.9</text>
+  <text class="ex" x="60" y="654">Disease · you rate it 8.5 over 11 titles · +1.5</text>
+  <text class="ex" x="60" y="674">Musical · you rate it 4.8 over 9 titles · −1.6</text>
+  <text class="body" x="60" y="702">Only the strongest few of each kind count:</text>
+  <g>
+    <rect class="chip" x="60" y="716" width="156" height="26" rx="13"/><text class="chipt" x="138" y="733" text-anchor="middle">12 tags that lift it</text>
+    <rect class="chip" x="224" y="716" width="150" height="26" rx="13"/><text class="chipt" x="299" y="733" text-anchor="middle">2 that pull it down</text>
+    <rect class="chip" x="382" y="716" width="84" height="26" rx="13"/><text class="chipt" x="424" y="733" text-anchor="middle">1 person</text>
+    <rect class="chip" x="474" y="716" width="90" height="26" rx="13"/><text class="chipt" x="519" y="733" text-anchor="middle">1 company</text>
+    <rect class="chip" x="572" y="716" width="104" height="26" rx="13"/><text class="chipt" x="624" y="733" text-anchor="middle">1 franchise</text>
+  </g>
+  <text class="muted" x="60" y="766">The rest are still shown in the breakdown, greyed, with the value they would have had.</text>
+  <text class="muted" x="60" y="784">Some kinds weigh more: a developer counts twice a tag; cast and writers count nothing</text>
+  <text class="muted" x="60" y="802">(measured: they predicted nothing).</text>
 
-  <!-- grid -->
-  <text class="axis" x="330" y="930" text-anchor="middle">PULL: LOW</text>
-  <text class="axis" x="470" y="930" text-anchor="middle">PULL: USUAL</text>
-  <text class="axis" x="610" y="930" text-anchor="middle">PULL: HIGH</text>
-  <text class="axis" x="250" y="968" text-anchor="end">TASTE: ABOVE USUAL</text>
-  <text class="axis" x="250" y="1022" text-anchor="end">TASTE: USUAL</text>
-  <text class="axis" x="250" y="1076" text-anchor="end">TASTE: BELOW USUAL</text>
+  <!-- 4 · The sum is scaled -->
+  <rect class="card" x="40" y="836" width="820" height="276" rx="14"/>
+  <text class="h3" x="60" y="864">4 · THE SUM IS SCALED SO THE NUMBER MATCHES WHAT YOU GAVE</text>
+  <text class="body" x="60" y="890">The facets' sum is multiplied by a gain fitted to your own ratings, by least squares, so that the score</text>
+  <text class="body" x="60" y="910">divided by ten lands on the rating you gave for titles you rated.</text>
+  <text class="muted" x="60" y="930">A sum below zero has its own gain: it predicts more strongly.</text>
+  <text class="muted" x="60" y="948">The result is bent near 0 and 100 so it never passes them.</text>
+  <text class="muted" x="60" y="976">What it said · what the owner gave, 2026-10-27</text>
+  <g>
+    <rect class="cell" x="60" y="988" width="148" height="60" rx="8"/>
+    <text class="small" x="134" y="1010" text-anchor="middle">under 60</text>
+    <text class="h2" x="134" y="1036" text-anchor="middle">5.4</text>
+    <rect class="cell" x="218" y="988" width="148" height="60" rx="8"/>
+    <text class="small" x="292" y="1010" text-anchor="middle">60 to 65</text>
+    <text class="h2" x="292" y="1036" text-anchor="middle">6.0</text>
+    <rect class="cell" x="376" y="988" width="148" height="60" rx="8"/>
+    <text class="small" x="450" y="1010" text-anchor="middle">65 to 70</text>
+    <text class="h2" x="450" y="1036" text-anchor="middle">6.6</text>
+    <rect class="cell" x="534" y="988" width="148" height="60" rx="8"/>
+    <text class="small" x="608" y="1010" text-anchor="middle">70 to 75</text>
+    <text class="h2" x="608" y="1036" text-anchor="middle">7.5</text>
+    <rect class="cell" x="692" y="988" width="148" height="60" rx="8"/>
+    <text class="small" x="766" y="1010" text-anchor="middle">80 and up</text>
+    <text class="h2" x="766" y="1036" text-anchor="middle">8.5 <tspan class="small">games</tspan></text>
+  </g>
+  <text class="muted" x="60" y="1076">Right within one point of the rating about 4 times in 10 on films</text>
+  <text class="muted" x="60" y="1094">(guessing the average: 4 in 10 too, a little worse), within two points 3 times in 4.</text>
 
-  <rect class="cell" x="264" y="942" width="272" height="44" rx="8"/><text class="cellt gold" x="400" y="970" text-anchor="middle">Hidden gem</text>
-  <rect class="cell" x="544" y="942" width="132" height="44" rx="8"/><text class="cellt green" x="610" y="970" text-anchor="middle">Safe bet</text>
+  <!-- 5 · Never quotes itself -->
+  <rect class="card" x="40" y="1128" width="820" height="130" rx="14"/>
+  <text class="h3" x="60" y="1156">5 · A TITLE YOU RATED NEVER QUOTES ITSELF</text>
+  <text class="body" x="60" y="1182">A title you rated is scored as if you had not: its own rating is left out of your average</text>
+  <text class="body" x="60" y="1202">and of every facet it carries.</text>
+  <text class="muted" x="60" y="1222">That is also how the score checks itself: every rated title against what you gave, on your own device,</text>
+  <text class="muted" x="60" y="1240">and the Why sheet says how right it has been.</text>
 
-  <rect class="cell" x="264" y="996" width="132" height="44" rx="8"/><text class="cellt grey" x="330" y="1024" text-anchor="middle">Your usual</text>
-  <rect class="cell" x="404" y="996" width="132" height="44" rx="8"/><text class="cellt grey" x="470" y="1024" text-anchor="middle">Your usual</text>
-  <rect class="cell" x="544" y="996" width="132" height="44" rx="8"/><text class="cellt gold" x="610" y="1024" text-anchor="middle">Tryout</text>
+  <!-- 6 · How often you pick this -->
+  <rect class="card" x="40" y="1274" width="820" height="204" rx="14"/>
+  <text class="h3" x="60" y="1302">6 · HOW OFTEN YOU PICK THIS, SAID BESIDE THE NUMBER</text>
+  <text class="body" x="60" y="1328">A second question, asked of every facet: how much more often you pick it than average, against ordinary</text>
+  <text class="body" x="60" y="1348">titles drawn at random, all facets weighed together.</text>
+  <text class="muted" x="60" y="1368">A tag that only rides along (firefighter, on anime films) gets no credit.</text>
+  <text class="body" x="60" y="1392">It reads as one line, "You pick films like this 3 times more often than average",</text>
+  <text class="body" x="60" y="1412">and it never moves the number: on titles you rated it read high almost by construction</text>
+  <text class="body" x="60" y="1432">and made the number worse, so it was taken out (2026-10-27).</text>
+  <text class="ex" x="60" y="1460">Steampunk · 4 times more often than average · 46 of yours</text>
 
-  <rect class="cell" x="264" y="1050" width="272" height="44" rx="8"/><text class="cellt red" x="400" y="1078" text-anchor="middle">Skip</text>
-  <rect class="cell" x="544" y="1050" width="132" height="44" rx="8"/><text class="cellt orange" x="610" y="1078" text-anchor="middle">Bycatch</text>
+  <!-- 7 · The colour -->
+  <rect class="card" x="40" y="1494" width="820" height="174" rx="14"/>
+  <text class="h3" x="60" y="1522">7 · THE COLOUR</text>
+  <text class="body" x="60" y="1548">Green: at least 4 points above your average for the medium (you would give it about half a point</text>
+  <text class="body" x="60" y="1568">more than usual). Orange: at least 4 below. Grey: about your usual.</text>
+  <text class="muted" x="60" y="1588">Home's Recommended rail carries green titles only.</text>
+  <g>
+    <rect class="inset" x="60" y="1604" width="220" height="48" rx="12"/>
+    <text class="h2 green" x="78" y="1636">72</text>
+    <text class="chipt" x="118" y="1635">above your usual</text>
+    <rect class="inset" x="300" y="1604" width="220" height="48" rx="12"/>
+    <text class="h2 grey" x="318" y="1636">65</text>
+    <text class="chipt" x="358" y="1635">about your usual</text>
+    <rect class="inset" x="540" y="1604" width="220" height="48" rx="12"/>
+    <text class="h2 orange" x="558" y="1636">58</text>
+    <text class="chipt" x="598" y="1635">below your usual</text>
+  </g>
 
-  <text class="small" x="700" y="962">Safe bet: you seek it out</text>
-  <text class="small" x="700" y="978">and rate it well.</text>
-  <text class="small" x="700" y="1016">Tryout: you seek it out;</text>
-  <text class="small" x="700" y="1032">you rate this kind so-so.</text>
-  <text class="small" x="700" y="1070">Bycatch: you seek it out,</text>
-  <text class="small" x="700" y="1086">but tend not to love it.</text>
-  <text class="muted" x="60" y="1126">Hidden gem: not what you usually go for, but you rate this kind well. Skip: not what you go for, and you tend not to love it either.</text>
+  <!-- What never counts -->
+  <rect class="card" x="40" y="1684" width="400" height="206" rx="14"/>
+  <text class="h3" x="60" y="1712">WHAT NEVER COUNTS</text>
+  <text class="body" x="60" y="1738">· the crowd's ratings</text>
+  <text class="body" x="60" y="1760">· how popular a title is</text>
+  <text class="body" x="60" y="1782">· when it came out</text>
+  <text class="body" x="60" y="1804">· episodes watched or hours played</text>
+  <text class="body" x="60" y="1826">· your rating of the title being scored</text>
+  <text class="body" x="60" y="1848">· how often you pick it</text>
+  <text class="small" x="60" y="1872">Only the ratings you typed yourself.</text>
 
-  <!-- 5 · The odds line -->
-  <rect class="card" x="40" y="1166" width="820" height="118" rx="14"/>
-  <text class="h3" x="60" y="1194">5 · THE ONE NUMBER UNDER THE LABEL</text>
-  <text class="body" x="60" y="1220">"Films like this: an 8 or more about 1.4× as often as usual."</text>
-  <text class="muted" x="60" y="1242">For titles that got this label, how much more often than usual people rated them 8 or more. Measured on real ratings across</text>
-  <text class="muted" x="60" y="1260">every Fandex user, never guessed. It is odds against your own usual, not a rating.</text>
+  <!-- How we check it -->
+  <rect class="card" x="460" y="1684" width="400" height="206" rx="14"/>
+  <text class="h3" x="480" y="1712">HOW WE CHECK IT</text>
+  <text class="body" x="480" y="1738">Every change is measured first, per medium:</text>
+  <text class="body" x="480" y="1760">· how far the score ÷ 10 sits from the rating given,</text>
+  <text class="body" x="480" y="1778">  against guessing the average</text>
+  <text class="body" x="480" y="1800">· what each band of the score meant</text>
+  <text class="body" x="480" y="1822">· whether a green badge earns an 8 more often</text>
+  <text class="small" x="480" y="1872">The goalpost chart on the telemetry page is the running proof.</text>
 
-  <!-- 6 · What never counts -->
-  <rect class="card" x="40" y="1304" width="400" height="176" rx="14"/>
-  <text class="h3" x="60" y="1332">WHAT NEVER COUNTS</text>
-  <text class="body" x="60" y="1358">· the crowd's ratings</text>
-  <text class="body" x="60" y="1380">· how popular a title is</text>
-  <text class="body" x="60" y="1402">· when it came out</text>
-  <text class="body" x="60" y="1424">· episodes watched or hours played</text>
-  <text class="body" x="60" y="1446">· your rating of the title being scored</text>
-  <text class="small" x="60" y="1468">Only ratings you typed, and what is in your library.</text>
-
-  <!-- 7 · How we check it -->
-  <rect class="card" x="460" y="1304" width="400" height="176" rx="14"/>
-  <text class="h3" x="480" y="1332">HOW WE CHECK IT</text>
-  <text class="body" x="480" y="1358">Every change is measured first, per medium:</text>
-  <text class="body" x="480" y="1380">· does it order your own ratings better</text>
-  <text class="body" x="480" y="1402">· does it rank what you wishlisted above</text>
-  <text class="body" x="480" y="1420">  what you never touched</text>
-  <text class="body" x="480" y="1442">· does each label still mean what it says</text>
-  <text class="small" x="480" y="1468">The goalpost chart on the telemetry page is the running proof.</text>
-
-  <text class="small" x="40" y="1530">Fandex match, version 3 · 2026-10-26 · this picture changes whenever the score does</text>
+  <text class="small" x="40" y="1924">Fandex Score, version 4 · 2026-10-27 · this picture changes whenever the score does</text>
 </svg>

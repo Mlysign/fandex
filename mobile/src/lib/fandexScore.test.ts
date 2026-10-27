@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfile, buildPullModel, computeFandexScore, prepareTaxonomy, pullFacetIds, resolveFacets, softRange, type FandexScore, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
+import { buildProfile, buildPullModel, centreFor, computeFandexScore, MIN_RATED_FOR_MEDIUM_CENTRE, prepareTaxonomy, pullFacetIds, resolveFacets, softRange, type FandexScore, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 // The old site's agreement probe went with the site (tag `old-site-final`), and
 // since 2026-10-23 the app departs from it on purpose. These pin the rules a
@@ -107,7 +107,7 @@ describe('the Fandex Score on the device', () => {
   it('weights a director by the stored role weight, with the default for a role the stored config lacks', () => {
     const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { roleWeights: { director: 2 } } } }));
     expect(tax.config.roleWeights.director).toBe(2);
-    expect(tax.config.roleWeights.ip).toBe(1.3);
+    expect(tax.config.roleWeights.ip).toBe(1.5);
     expect(buildProfile(library, tax).meta.get('person|director|villeneuve')?.classWeight).toBe(2);
   });
 });
@@ -166,10 +166,14 @@ describe('the pull axis (one model against the baseline, 2026-10-26)', () => {
     expect(m!.beta.has('tag||heist')).toBe(false);
   });
 
-  it('adds up: the centre plus every counted row is the score', () => {
+  it('adds up: the centre plus every counted row is the score, and pull is beside it, not in it (2026-10-27)', () => {
     const fx = computeFandexScore([tag('anime'), tag('drama')], 'x', profile, tax, 'movie')!;
     expect(Math.abs(fx.center + fx.reasons.reduce((n, r) => n + r.contribution, 0) - fx.score)).toBeLessThan(0.15);
-    expect(Math.abs(fx.taste.points + fx.pull!.points - (fx.score - fx.center))).toBeLessThan(0.15);
+    expect(Math.abs(fx.taste.points - (fx.score - fx.center))).toBeLessThan(0.15);
+    // The pull axis still speaks: its points, and how many times more often a title like this is one of your picks.
+    expect(fx.pull!.points).toBeGreaterThan(0);
+    expect(fx.pull!.times).toBeGreaterThan(1);
+    expect(pullRows(fx).every((r) => r.contribution === 0 && r.impact > 0)).toBe(true);
   });
 
   it('scores a title you picked by the model that did not see it, and leaves it out of its own count', () => {
@@ -197,16 +201,14 @@ describe('the pull axis (one model against the baseline, 2026-10-26)', () => {
     const none = buildProfile(lib, tax, { consumed: picks });
     expect(computeFandexScore([tag('anime')], 'x', none, tax, 'movie')!.pull).toBeNull();
     expect(computeFandexScore([tag('anime')], 'x', profile, tax, 'book')!.pull).toBeNull();
-    expect(computeFandexScore([tag('western')], 'x', none, tax, 'movie')!.label).toBe('hidden-gem');
+    // The band is the score's own, with or without a pull axis.
+    expect(computeFandexScore([tag('western')], 'x', none, tax, 'movie')!.band).toBe('high');
+    expect(computeFandexScore([tag('western')], 'x', profile, tax, 'movie')!.band).toBe('high');
   });
 
-  it('weighs a medium\'s pull by its own weight in the number, and not in the band', () => {
-    const halfFilms = prepareTaxonomy(json({ scoring: { version: 1, config: { ...tax.config, pullWeight: { movie: 0.5 } } } }));
-    const p2 = buildProfile(lib, halfFilms, { consumed: picks, pull: model });
-    const full = computeFandexScore([tag('anime')], 'x', profile, tax, 'movie')!;
-    const half = computeFandexScore([tag('anime')], 'x', p2, halfFilms, 'movie')!;
-    expect(pullRows(half)[0].impact).toBeCloseTo(pullRows(full)[0].impact / 2, 0);
-    expect(half.pull!.band).toBe(full.pull!.band);
+  it('leaves the number where it was whether or not the device has a baseline', () => {
+    const none = buildProfile(lib, tax, { consumed: picks });
+    expect(computeFandexScore([tag('anime')], 'x', none, tax, 'movie')!.score).toBe(computeFandexScore([tag('anime')], 'x', profile, tax, 'movie')!.score);
   });
 
   it('leaves a tag in an ignored category out of the model', () => {
@@ -219,8 +221,10 @@ describe('tag tiers (2026-10-25)', () => {
   const tiered = (key: string, tier: string): ScoreFacet => ({ kind: 'tag', key, label: key, category: 'genre', tier });
 
   it('weighs a keyword occurrence by its tier when learning and when scoring, and a genre in full', () => {
-    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, tagTierWeights: { keyword: 0.5 } } } }));
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 10, tagTierWeights: { genre: 1, keyword: 0.5 } } } }));
+    // A stored tier fills the rest from the defaults (genre is 0.5 there since 2026-10-27).
     expect(tax.config.tagTierWeights).toEqual({ genre: 1, theme: 1, voted: 1, keyword: 0.5 });
+    expect(prepareTaxonomy(json({ scoring: { version: 1, config: { tagTierWeights: { keyword: 0.25 } } } })).config.tagTierWeights).toEqual({ genre: 0.5, theme: 1, voted: 1, keyword: 0.25 });
     // The same ratings behind "noir" as a genre and as a keyword: the keyword is half the evidence.
     const asGenre = buildProfile([rated('a', 10, [tiered('noir', 'genre')]), rated('b', 10, [tiered('noir', 'genre')]), rated('c', 2, [tag('musical')]), rated('d', 2, [tag('musical')])], tax);
     const asKeyword = buildProfile([rated('a', 10, [tiered('noir', 'keyword')]), rated('b', 10, [tiered('noir', 'keyword')]), rated('c', 2, [tag('musical')]), rated('d', 2, [tag('musical')])], tax);
@@ -246,6 +250,36 @@ describe('tag tiers (2026-10-25)', () => {
   });
 });
 
+
+describe('the centre is your average for the medium (2026-10-27)', () => {
+  const tax = prepareTaxonomy(json());
+  // Twelve games rated 8 (one of them a 10), twelve films rated 6, five books rated 9.
+  const games = Array.from({ length: 12 }, (_, i) => ({ ...rated(`g${i}`, i === 0 ? 10 : 8, [tag('arcade')]), type: 'game' }));
+  const films = Array.from({ length: 12 }, (_, i) => ({ ...rated(`f${i}`, 6, [tag('drama')]), type: 'movie' }));
+  const books = Array.from({ length: 5 }, (_, i) => ({ ...rated(`b${i}`, 9, [tag('drama')]), type: 'book' }));
+  const profile = buildProfile([...games, ...films, ...books], tax);
+
+  it('starts a game from your games average and a film from your films average', () => {
+    expect(computeFandexScore([tag('arcade')], 'x', profile, tax, 'game')!.center).toBeCloseTo((8 * 11 + 10) / 12 * 10, 1);
+    expect(computeFandexScore([tag('drama')], 'x', profile, tax, 'movie')!.center).toBe(60);
+  });
+
+  it('falls back to your overall average below ten ratings in the medium, or without one', () => {
+    expect(MIN_RATED_FOR_MEDIUM_CENTRE).toBe(10);
+    const overall = (8 * 11 + 10 + 6 * 12 + 9 * 5) / 29;
+    expect(centreFor(profile, 'book')).toBeCloseTo(overall, 6);
+    expect(centreFor(profile, undefined)).toBeCloseTo(overall, 6);
+    expect(computeFandexScore([tag('drama')], 'x', profile, tax)!.center).toBeCloseTo(overall * 10, 1);
+  });
+
+  it('leaves a rated title out of its own centre', () => {
+    // g0 is the 10: without it the games average is 8, and the facets have nothing to add on an all-8 tag.
+    expect(centreFor(profile, 'game', { id: 'g0' })).toBe(8);
+    expect(computeFandexScore(games[0].facets, 'g0', profile, tax, 'game')!.center).toBe(80);
+    // Out of a medium with too few ratings, the overall average without the title.
+    expect(centreFor(profile, 'book', { id: 'b0' })).toBeCloseTo((8 * 11 + 10 + 6 * 12 + 9 * 4) / 28, 6);
+  });
+});
 
 describe('the medium offset', () => {
   it('moves each medium\'s ratings to your overall average before a facet learns from them', () => {

@@ -271,16 +271,26 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 
 ### Added 2026-10-25, the score rework (docs/fandex-score.md §3.7, §3.8, §11, §12)
 
-- **The score is a LABEL from two axes, and no surface prints the number.** Taste (your ratings, as before) and pull (how much of the catalog's titles carrying a facet you have been through, against your usual share). Measured: the number predicted the owner's rating within one point 41% of the time, which is what guessing his average does, and he read "82" as "I'll rate it 8". The number ranks rails and feeds the goalpost.
+- **~~The score is a LABEL from two axes, and no surface prints the number.~~ Superseded 2026-10-27** (above). Taste (your ratings, as before) and pull (how much of the catalog's titles carrying a facet you have been through, against your usual share). Measured: the number predicted the owner's rating within one point 41% of the time, which is what guessing his average does, and he read "82" as "I'll rate it 8". The number ranks rails and feeds the goalpost.
 - **Facets are pooled across media; the one per-medium step is the rating offset.** Cross-media scoring is a USP (Nils): a book is scored from your films and games. Each rating is moved by its medium's gap to your overall average before a facet learns from it.
-- **Pull weighs per medium, games at half.** What he plays and what he rates disagree (pull alone: wishlist 96%, ratings −0.12).
+- **~~Pull weighs per medium, games at half.~~ Gone 2026-10-27**: pull is not in the number. What he plays and what he rates disagree (pull alone: wishlist 96%, ratings −0.12).
 - **Only typed ratings count on the taste axis. No implicit rating from episodes watched, hours played or rewatches** (Nils), although completion predicted his show ratings at 0.31 where facets sat at 0.01.
 - **A follow moves pull only; there is no taste override.** Steampunk set to 10 lifted Mortal Engines (rated 3) from 82 to 93; a follow leaves it "bycatch", which is right.
 - **The goalpost is one admin chart over all users** (`/dev/score`), fed by per-device counts, never a per-user page; the odds line under a label comes from a global ladder.
 - **The ten-point rating scale stays.** A coarser scale inflated the hit rate exactly as much as guessing the most common step, and the score learned less (ρ 0.22 → 0.16 at three steps).
-- **The labels are Nils's matrix of 2026-10-25** (`LABEL_TEXT`, docs/fandex-score.md §3.8): safe bet, hidden gem, tryout, bycatch, skip, your usual. Hidden gem and skip cover pull low AND usual; the three pull-high cells each have their own word. A label says what to do with the title.
+- **~~The labels are Nils's matrix of 2026-10-25~~ Gone 2026-10-27** with the odds line; the matrix is in `docs/archive/history.md`.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
 - **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
+
+### Added 2026-10-27, the calibrated number (docs/fandex-score.md §3.11, §13)
+
+- **The score is ONE NUMBER, read as the rating you would give, times ten.** Nils: the labels were ambiguous, a flat number is intuitive, and "82 means I'd rate it 8" is an assumption to accept and get as close to as the data allows. Supersedes 2026-10-25's "a LABEL from two axes, no number"; the labels, the matrix and the odds line are gone (`docs/archive/history.md`).
+- **Pull is said beside the number and is never in it.** On a title you rated it reads high almost by construction (you picked it), so it was an offset, not information: films off by 1.63 with it, 1.40 without. Its sentence, rows, pills and follows stay; the per-medium pull weight went.
+- **The centre is your average for the medium**, below ten ratings in it your overall average.
+- **The gains are fitted to the person's own ratings by least squares, one each way, and refitted after any weight change** (`scripts/score-backtest.mjs --fit-gains`). The weights were re-tuned for the rating error on half the titles and checked on the other half.
+- **The Bayesian average stays; no regression, no crowd ratings** ("do not rely on user ratings"). Measured: the regression ties on films and loses on games.
+- **The number is honest in the interface**: the medium average beside it, a whole number (no decimals), colour by distance from the medium's average, and the device's own "within one point X% of the time" in the Why sheet. No percent sign, no stretching of the spread (most unseen films read 47 to 68).
+- **Recommended carries the green band only, four points over the medium's average.** Films' wishlist bar dropped from 82% to 70% without pull in the ranking, accepted.
 
 ### Added 2026-10-26, pull against a baseline (docs/fandex-score.md §3.7)
 
@@ -288,7 +298,7 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **All facets are weighed at once, and a facet needs evidence before it counts.** A tag that only rides along with another gets no weight, and **is not shown** (Nils: "don't let firefighter influence the pull if it's explained by anime, therefore don't show it either"). A row shows only when the model weighs it and the plain count agrees on its direction; nothing else moves the score.
 - **The Why sheet's pull sentence is Nils's**: "you pick it 5 times more often than average (88 of your films)", "3 times less often". "Than average", not "than others", until Fandex has other people to compare with.
 - **A title only the baseline put in the pool gets no web page, rail card or facet-page card**, and stays in the catalog files (the free plan's 20,000 files).
-- **The label names wait until pull has settled.** Nils dislikes the gambling theme (safe bet, coin flip) and keeps it as the fallback; "hidden gem" goes, because it describes fame, which the score does not know.
+- **~~The label names wait until pull has settled.~~ Moot since 2026-10-27**: there are no labels.
 - **DLC, packs, seasons and bundles rank last in search and stay out of every rail**, Recommended
   included. Their own pages stay.
 - **Recommended may show wishlisted titles, at most two per rail.**

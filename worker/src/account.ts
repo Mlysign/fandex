@@ -188,9 +188,9 @@ export async function buildAccountExportJson(db: D1Database, userId: string, now
                  FROM user_hidden_items h LEFT JOIN media_items m ON m.id = h.media_item_id
                 WHERE h.user_id = ? ORDER BY h.hidden_at DESC)`,
     ).bind(userId),
-    // The score's goalpost counts (migration 0006): per medium, how the match compared with your ratings.
+    // The score's goalpost counts (migration 0006): per medium, how the score compared with your ratings. The bands' counts sit in the column `labels` (scoreReport.ts).
     db.prepare(
-      `SELECT json_group_array(json_object('medium', medium, 'rated', rated, 'bins', json(bins), 'labels', json(labels),
+      `SELECT json_group_array(json_object('medium', medium, 'rated', rated, 'bins', json(bins), 'bands', json(labels),
               'scoreVersion', version, 'updatedAt', updated_at)) j
          FROM (SELECT medium, rated, bins, labels, version, updated_at FROM score_report WHERE user_id = ? ORDER BY medium)`,
     ).bind(userId),

@@ -22,9 +22,11 @@ import { getMeta, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import {
   buildProfile, buildPullModel, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
-  type AxisBand, type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreFacet, type ScoreLabel, type Taxonomy, type TaxonomyJson,
+  type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
 import type { PullModel } from '~/lib/pullModel';
+import { calibrate, type MediumCalibration } from '~/lib/scoreCalibration';
+import { MIN_CALIBRATION } from '~/lib/scoreReasons';
 
 const TAXONOMY_KEY = 'taxonomy';
 const TAXONOMY_ETAG_KEY = 'taxonomy_etag';
@@ -69,6 +71,13 @@ interface Scores {
   impactsFor: (kind: ImpactKind, key: string) => PageImpact[];
   /** Why `impactsFor` is empty, in words, or null when it is not (or nobody is signed in). */
   impactAbsenceFor: (kind: ImpactKind, key: string, name: string) => string | null;
+  /**
+   * How right the score has been on your own ratings (scoreCalibration.ts):
+   * the medium's own measurement when it rests on enough titles, else every
+   * medium's; null until the device has measured. Read by the Why sheet's
+   * honesty lines.
+   */
+  calibrationFor: (type?: string) => MediumCalibration | null;
   /** Bumped when the profile is rebuilt, so a list can re-score. */
   revision: number;
   /** What you follow or avoid, by facet id, as the profile last read it. */
@@ -79,8 +88,8 @@ interface Scores {
   adoptTaxonomy: (json: TaxonomyJson) => Promise<void>;
 }
 
-/** What a list row needs of a score: the number that ranks it, the label the card shows, and the two bands behind it. */
-export interface RowScore { score: number; label: ScoreLabel; taste: AxisBand; pull: AxisBand | null }
+/** What a list row needs of a score: the number, and the band that colours it. */
+export interface RowScore { score: number; band: ScoreBand }
 
 const Ctx = createContext<Scores | null>(null);
 const NO_FOLLOWS: ReadonlyMap<string, FollowMode> = new Map();
@@ -211,39 +220,24 @@ const REPORT_SIG_KEY = 'score_report_sig';
 /** A report goes out at most this often, unless the rated count moved by `REPORT_RATED_STEP` since the last one. */
 const REPORT_GAP_MS = 24 * 60 * 60 * 1000;
 const REPORT_RATED_STEP = 10;
-const BIN_FROM = -6;
-const BIN_COUNT = 12;
 
 /**
- * The score's goalpost (worker/src/scoreReport.ts): for every title you rated,
- * scored with your rating left out, the gap between your rating and the match,
- * and the label it got. Sent as counts per medium, about once a day. Nothing
- * here names a title or carries a rating, and a send that fails is not worth a
- * word: the next rebuild tries again.
+ * The score's goalpost (worker/src/scoreReport.ts): the device's own
+ * measurement of every title you rated against what you gave
+ * (scoreCalibration.ts), sent as counts per medium, about once a day. Nothing
+ * here names a title or carries a rating, and a send that fails is not worth
+ * a word: the next rebuild tries again.
  */
-export async function sendScoreReport(db: SQLiteDatabase, rated: RatedTitle[], profile: Profile, tax: Taxonomy): Promise<boolean> {
+export async function sendScoreReport(db: SQLiteDatabase, cal: Map<string, MediumCalibration>, ratedCount: number, tax: Taxonomy): Promise<boolean> {
   try {
-    const sig = `${rated.length}|${tax.config.pullGain}|${tax.config.tasteBandMargin}`;
+    const sig = `${ratedCount}|${tax.config.mappingConstantUp}|${tax.config.mappingConstantDown}|${tax.config.tasteBandMargin}`;
     const at = Number(await getMeta(db, REPORT_AT_KEY)) || 0;
     const last = (await getMeta(db, REPORT_SIG_KEY)) ?? '';
     const lastRated = Number(last.split('|')[0]) || 0;
-    if (Date.now() - at < REPORT_GAP_MS && Math.abs(rated.length - lastRated) < REPORT_RATED_STEP) return false;
-    const per = new Map<string, ScoreReport>();
-    for (const r of rated) {
-      if (!r.type) continue;
-      const fx = computeFandexScore(r.facets, r.id, profile, tax, r.type);
-      if (!fx) continue;
-      let rep = per.get(r.type);
-      if (!rep) per.set(r.type, (rep = { medium: r.type, rated: 0, bins: new Array<number>(BIN_COUNT).fill(0), labels: {} }));
-      rep.rated++;
-      const bin = Math.max(0, Math.min(BIN_COUNT - 1, Math.round(r.rating - fx.score / 10) - BIN_FROM));
-      rep.bins[bin]++;
-      const pair = rep.labels[fx.label] ?? (rep.labels[fx.label] = [0, 0]);
-      pair[0]++;
-      if (r.rating >= 8) pair[1]++;
-    }
-    if (!per.size) return false;
-    await api.scoreReport([...per.values()]);
+    if (Date.now() - at < REPORT_GAP_MS && Math.abs(ratedCount - lastRated) < REPORT_RATED_STEP) return false;
+    const reports: ScoreReport[] = [...cal.values()].filter((m) => m.medium !== 'all' && m.n > 0).map((m) => ({ medium: m.medium, rated: m.n, bins: m.bins, bands: m.bands }));
+    if (!reports.length) return false;
+    await api.scoreReport(reports);
     await setMeta(db, REPORT_AT_KEY, String(Date.now()));
     await setMeta(db, REPORT_SIG_KEY, sig);
     return true;
@@ -294,6 +288,8 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   const catalog = useCatalogSync();
   const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  // How right the score has been on your own ratings, measured after each profile build.
+  const [calibration, setCalibration] = useState<Map<string, MediumCalibration> | null>(null);
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
 
@@ -357,6 +353,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     let live = true;
     if (!signedIn || !taxonomy) {
       setProfile(null);
+      setCalibration(null);
       if (auth.status !== 'loading') setReady(true);
       return;
     }
@@ -386,8 +383,21 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       setProfile(built);
       setReady(true);
       setRevision((r) => r + 1);
-      // The goalpost, after the profile is in use: a report of how the match fits your own ratings, about once a day.
-      setTimeout(() => { if (live) void sendScoreReport(db, rated, built, taxonomy); }, 2_000);
+      // The score's own check, after the profile is in use: every rated title
+      // against what you gave, for the Why sheet's honesty lines; then the
+      // goalpost report, about once a day. The last measurement stands until
+      // the new one lands.
+      setTimeout(() => {
+        if (!live) return;
+        const started = Date.now();
+        void calibrate(rated, built, taxonomy).then((cal) => {
+          if (!live) return;
+          setCalibration(cal);
+          const all = cal.get('all');
+          console.log('fandex_calibration', JSON.stringify({ rated: all?.n ?? 0, withinOne: all?.withinOne ?? 0, withinTwo: all?.withinTwo ?? 0, ms: Date.now() - started }));
+          void sendScoreReport(db, cal, rated.length, taxonomy);
+        });
+      }, 1_000);
     })();
     return () => { live = false; };
   }, [db, signedIn, auth.status, taxonomy, baseline, auth.rowsRevision, catalog.revision, filling]);
@@ -406,7 +416,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       );
       for (const r of rows) {
         const fx = computeFandexScore(parseFacets(r.facets), r.id, profile, taxonomy, r.type);
-        if (fx) out.set(r.id, { score: fx.score, label: fx.label, taste: fx.taste.band, pull: fx.pull?.band ?? null });
+        if (fx) out.set(r.id, { score: fx.score, band: fx.band });
       }
     }
     return out;
@@ -438,8 +448,12 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       ready, center, score, scoresFor, impactsFor, impactAbsenceFor, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
       follows: profile?.follows ?? NO_FOLLOWS,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
+      calibrationFor: (type) => {
+        const own = type ? calibration?.get(type) : undefined;
+        return (own && own.n >= MIN_CALIBRATION ? own : calibration?.get('all')) ?? null;
+      },
     };
-  }, [ready, profile, taxonomy, score, scoresFor, impactsFor, impactAbsenceFor, revision, reloadTaxonomy, adoptTaxonomy]);
+  }, [ready, profile, taxonomy, calibration, score, scoresFor, impactsFor, impactAbsenceFor, revision, reloadTaxonomy, adoptTaxonomy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

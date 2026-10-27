@@ -12,13 +12,14 @@ import { api, ApiError, type MediaType } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
-import type { AxisBand, ScoreLabel } from '~/lib/fandexScore';
+import type { ScoreBand } from '~/lib/fandexScore';
 import { rateItem, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 
+/** What a card shows of your score: the number, and the band that colours it (2026-10-27). */
+export interface CardMatch { score: number; band: ScoreBand }
+
 /** One title on a card. Either a catalog row (`id`) or a provider's title nobody holds yet (`source` + `sourceId`). */
-/** What a card shows of your match: the label and the two bands behind it. No number (2026-10-25). */
-export interface CardMatch { label: ScoreLabel; taste: AxisBand; pull: AxisBand | null }
 
 export interface CardItem {
   /** The key in a list. A catalog id, or `source:type:sourceId`. */
@@ -36,7 +37,7 @@ export interface CardItem {
   communityVotes?: number;
   /** A score worked out for this card alone, from less than the full title: Home's recommendations. Ranks; the card shows `match`. */
   fandexScore?: number | null;
-  /** The label and bands behind `fandexScore`, for a card the device cannot score from its catalog copy. */
+  /** The number and band behind `fandexScore`, for a card the device cannot score from its catalog copy. */
   match?: CardMatch | null;
   /** On a person's or a studio's page: the part they had in this title ("Director · as Tony Stark", "Author"). */
   role?: string | null;

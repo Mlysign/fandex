@@ -40,21 +40,20 @@ export interface ScoringConfig {
   topCompanies: number;
   topIps: number;
   // The pull axis (docs/fandex-score.md §3.7), one model over every facet since
-  // 2026-10-26. A body written by an older admin panel carries none of the new
-  // knobs, so each falls back to the shipped default rather than refusing the
-  // save; the old ones it may carry (pullPrior, the pull top-N, the reference
-  // blend) are dropped.
+  // 2026-10-26, beside the score and not in it since 2026-10-27. A body written
+  // by an older admin panel carries none of the new knobs, so each falls back
+  // to the shipped default rather than refusing the save; the old ones it may
+  // carry (pullPrior, the pull top-N, the reference blend, the per-medium pull
+  // weight) are dropped.
   pullL1: number;
   pullL2: number;
   pullGain: number;
-  pullWeight: Record<string, number>;
   tasteBandMargin: number;
   pullBandMargin: number;
   /** 2026-10-25: a tag occurrence's weight by its tier (docs/fandex-score.md §3.9). Defaults for an older body too. */
   tagTierWeights: Record<string, number>;
 }
 
-const MEDIA = new Set(["movie", "show", "game", "book", "boardgame"]);
 const TIERS = new Set(["genre", "theme", "voted", "keyword"]);
 
 /** The whole config or a refusal: a save replaces the stored object, so a half one must not get through. */
@@ -70,16 +69,6 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
   }
   const d = DEFAULT_SCORING_CONFIG;
   const orDefault = <T,>(v: unknown, fallback: T, check: (v: unknown) => T): T => (v === undefined ? fallback : check(v));
-  const pullWeight: Record<string, number> = { ...d.pullWeight };
-  if (body.pullWeight !== undefined) {
-    if (!isObj(body.pullWeight)) throw new BadRequest("pullWeight must be an object");
-    for (const [medium, weight] of Object.entries(body.pullWeight)) {
-      if (!MEDIA.has(medium)) throw new BadRequest("Unknown medium in pullWeight");
-      const n = num(weight, `pullWeight.${medium}`);
-      if (n < 0) throw new BadRequest(`pullWeight.${medium} must not be negative`);
-      pullWeight[medium] = n;
-    }
-  }
   const tagTierWeights: Record<string, number> = { ...d.tagTierWeights };
   if (body.tagTierWeights !== undefined) {
     if (!isObj(body.tagTierWeights)) throw new BadRequest("tagTierWeights must be an object");
@@ -103,7 +92,6 @@ export function parseScoringConfig(body: unknown): ScoringConfig {
     pullL1: orDefault(body.pullL1, d.pullL1, (v) => positive(v, "pullL1")),
     pullL2: orDefault(body.pullL2, d.pullL2, (v) => { const n = num(v, "pullL2"); if (n < 0) throw new BadRequest("pullL2 must not be negative"); return n; }),
     pullGain: orDefault(body.pullGain, d.pullGain, (v) => { const n = num(v, "pullGain"); if (n < 0) throw new BadRequest("pullGain must not be negative"); return n; }),
-    pullWeight,
     tasteBandMargin: orDefault(body.tasteBandMargin, d.tasteBandMargin, (v) => positive(v, "tasteBandMargin")),
     pullBandMargin: orDefault(body.pullBandMargin, d.pullBandMargin, (v) => positive(v, "pullBandMargin")),
     tagTierWeights,

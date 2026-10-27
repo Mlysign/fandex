@@ -2,7 +2,7 @@
 
 _Your index of every game, movie, show & book._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
 
-_Last updated: **2026-10-26**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
+_Last updated: **2026-10-27**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
 
 > **Settled calls and standing constraints → [docs/decisions.md](docs/decisions.md).** Every line there is closed; re-opening one wastes Nils's time.
 
@@ -48,9 +48,9 @@ _Last updated: **2026-10-26**. State only, per the doc conventions in AGENTS.md:
 | Hosting + deploy | ✅ Cloudflare since 2026-10-10, deployed by hand. → [docs/website.md](docs/website.md) |
 | Backups | ✅ D1 Time Travel (7 days) and a nightly export to R2 in the EU; exports under `d1/` expire after 30 days. |
 | **Cloudflare Worker + D1** (phase 1) | ✅ 2026-10-04. Catalog, accounts, IGDB proxy, calendar, cron, export. Books (Open Library, Hardcover facts only) and board games (BGG, behind its token) since 2026-10-17. Hardened 2026-10-23. |
-| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. 0.3.21 installed 2026-10-26: pull against the baseline (first start on the phone: 1,739 rated, pull fitted for games only, against the 84 baseline games it had then, in 0.4 s). |
+| **Expo app** (phase 2) | 🔵 On a Pixel 8 against the real account. 0.3.22 built 2026-10-27: the calibrated number. |
 | **Website** (phase 3) | 🔵 Online 2026-10-10: the app in a browser and 4,614 static item pages (fewer since 105 duplicate games were folded, 2026-10-23) with their rails, 5,489 facet pages, calendar months and the legal pages (publish of 2026-10-26: pull against the baseline, and the score's baseline titles in the catalog files with no page of their own). ⚠️ A publish that changes every page needs several `publish.mjs --skip-build` retries (the asset upload drops the connection; what reached Cloudflare stays). |
-| **H5** Fandex Score | ✅ Reworked 2026-10-25: a label from two axes (taste and pull), no number shown, follows, the goalpost on `/dev/score`. The five data fixes behind it are built (2026-10-26: tag tiers with Steam's and RAWG's voted tags, the anime facet, a game's people from Wikidata, the pull knobs on `/dev/scoring`); the config tuned on both bars (§3.10), and the pool's re-derive to version 4 running on the cron. **Pull is one model against a baseline of ordinary titles since 2026-10-26** (§3.7): draw 1, 7,500 titles, is walking into the pool for about three days, and until a medium's baseline reaches a device that medium has no pull axis there. Measured provisionally; the real test runs after the fill (TASKS.md). → [docs/fandex-score.md](docs/fandex-score.md) §3.7, §3.9, §3.10 |
+| **H5** Fandex Score | ✅ **The calibrated number since 2026-10-27** (§3.11): what you would probably rate it, times ten, from your average for the medium, the weights re-tuned for the rating error and the gains fitted to Nils's ratings (films within one point 44% of the time against 41% guessing his average; 70 to 75 meant 7.5, 80 and up on games 8.5). Shown as a whole number with "You'd probably give this a 7, above your usual for films" and "You give films 6.4 on average"; the Why sheet says how right it has been from the device's own measurement. Pull (one model against the baseline since 2026-10-26, §3.7) is said beside the number and is not in it; the labels of 2026-10-25 are gone. Draw 1 of the baseline, 7,500 titles, is still walking into the pool, and until a medium's baseline reaches a device that medium has no pull line there. → [docs/fandex-score.md](docs/fandex-score.md) §3.11, §3.7, §7 |
 | **H4** legal & compliance | ✅ |
 | **H3** monetization | 🔵 ads-first; donations live, affiliate dark |
 | The native app on Play | ⏸️ paused on the account upgrade; the native app, not the TWA (2026-10-23) → [docs/play-store.md](docs/play-store.md) |

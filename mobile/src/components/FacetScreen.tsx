@@ -268,7 +268,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const scored = useMemo(() => (cards ?? []).map((c) => {
     if (c.id && scores.has(c.id)) return c;
     const estimate = center == null ? null : score(c.key, estimateFacets(kind, key, label || key, c.roles, c.genres), c.type);
-    return estimate == null ? c : { ...c, fandexScore: estimate.score, match: { label: estimate.label, taste: estimate.taste.band, pull: estimate.pull?.band ?? null } };
+    return estimate == null ? c : { ...c, fandexScore: estimate.score, match: { score: estimate.score, band: estimate.band } };
   }), [cards, scores, center, score, kind, key, label]);
 
   // Narrowed: the kept types, then the sheet's filters.

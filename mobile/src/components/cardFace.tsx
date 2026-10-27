@@ -11,7 +11,7 @@ import { Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
 import { Children, isValidElement, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Img } from '~/components/Img';
-import { CommunityScore, MatchLabel } from '~/components/kit';
+import { CommunityScore, FandexScoreBadge } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
 import { cardHref } from '~/lib/cardHref';
 import type { CardItem, CardMatch } from '~/lib/cards';
@@ -75,7 +75,7 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
           {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role]}>{item.role}</Text> : null}
           <View style={cardStyles.metaRow}>
             <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
-            {match ? <MatchLabel label={match.label} taste={match.taste} pull={match.pull} />
+            {match ? <FandexScoreBadge score={match.score} band={match.band} />
               : item.communityScore != null && (item.communityVotes == null || item.communityVotes >= MIN_CROWD_VOTES) ? <CommunityScore score={item.communityScore} /> : null}
           </View>
         </View>

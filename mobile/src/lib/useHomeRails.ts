@@ -92,7 +92,7 @@ export function useHomeRails() {
       (c) => {
         if (c.id && pool.scores.has(c.id)) return pool.scores.get(c.id) as RowScore;
         const fx = score(c.id ?? c.key, genreFacets(c.genres ?? []), c.type);
-        return fx ? { score: fx.score, label: fx.label, taste: fx.taste.band, pull: fx.pull?.band ?? null } : null;
+        return fx ? { score: fx.score, band: fx.band } : null;
       },
       // Not what you already watched or played, not what you asked not to be shown, and no DLC or pack.
       (c) => !!c.addon || (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),

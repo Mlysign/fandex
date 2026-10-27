@@ -1,18 +1,21 @@
 // The Fandex Score, computed on the device.
 //
-// Since 2026-10-25 the score answers one question, "how much more likely than
-// usual are you to love this?", from two axes (docs/fandex-score.md §3):
+// Since 2026-10-27 the score is one number that means one thing: what you
+// would probably rate this, times ten (docs/fandex-score.md §1, §3.3). It
+// starts from your average rating for the title's medium and moves by the
+// taste axis, your ratings of titles carrying each facet against your own
+// average (the 2026-07 maths), with the gain fitted so that the number lands
+// on what you gave on titles you rated (§3.10). Measured on the owner's
+// library: within one point of his rating 44% of the time on films, where
+// guessing his average does it 41%; 70 to 75 meant 7.4, 80 and up 8.4.
 //
-//   taste  "do you rate this kind of thing well?"   your ratings of titles
-//          carrying each facet, against your own average (the 2026-07 maths)
-//   pull   "do you seek this kind of thing out?"    how much of the catalog's
-//          titles carrying each facet you have consumed, against your usual
-//          share of the catalog
+// Pull, "do you seek this kind of thing out?" (your picks against ordinary
+// titles, pullModel.ts), is NOT in the number since the same day: on a title
+// you rated it reads high almost by construction, so it added an offset, not
+// information (off by 1.63 with it, 1.40 without). It is still computed and
+// said beside the number, with its rows in the Why sheet.
 //
-// Both are sums of named rows, so the breakdown IS the computation. The label
-// ("sure thing", "hidden gem", "bycatch", "not for you", "your usual") is where
-// the two axes land against your usual; the number underneath ranks rails and
-// feeds the admin goalpost chart, and is not shown as a number any more.
+// The taste rows sum to the score, so the breakdown IS the computation.
 //
 // Everything here is a pure function of what the device already holds: the
 // titles you rated and consumed, with the catalog copy's facets; the taxonomy
@@ -74,7 +77,6 @@ export function prepareTaxonomy(json: TaxonomyJson): Taxonomy {
     ...DEFAULT_SCORING_CONFIG,
     ...stored,
     roleWeights: { ...DEFAULT_SCORING_CONFIG.roleWeights, ...(stored.roleWeights ?? {}) },
-    pullWeight: { ...DEFAULT_SCORING_CONFIG.pullWeight, ...(stored.pullWeight ?? {}) },
     tagTierWeights: { ...DEFAULT_SCORING_CONFIG.tagTierWeights, ...(stored.tagTierWeights ?? {}) },
   };
   const ipOverrides: Taxonomy['ipOverrides'] = new Map();
@@ -252,6 +254,12 @@ export interface Profile {
   ratingSum: number;
   /** Your mean rating per medium, before the offset. Empty when the titles came without a medium. */
   typeMeans: Map<string, number>;
+  /** The sums behind `typeMeans`, so a medium's centre can be read without one title (`centreFor`). */
+  typeStats: Map<string, { sum: number; n: number }>;
+  /** Your rating per rated title as you gave it, with its medium, for the centre without that title. */
+  rawRatings: Map<string, { rating: number; type?: string }>;
+  /** The sum of every rating as given. */
+  rawSum: number;
   /** The pull model (pullModel.ts), or null when the device holds no baseline yet: then there is no pull axis. */
   pull: PullModel | null;
   /** Your picks by id, with their medium and weight, so scoring one of them leaves it out of its own sentence. */
@@ -304,9 +312,11 @@ export function buildProfile(
   // facet and not about the medium. The mean of the moved ratings is still
   // your overall average, so the centre does not move.
   const typeSums = new Map<string, { sum: number; n: number }>();
+  const rawRatings = new Map<string, { rating: number; type?: string }>();
   let rawSum = 0;
   for (const item of rated) {
     rawSum += item.rating;
+    rawRatings.set(item.id, { rating: item.rating, ...(item.type ? { type: item.type } : {}) });
     if (!item.type) continue;
     const t = typeSums.get(item.type) ?? { sum: 0, n: 0 };
     t.sum += item.rating; t.n++;
@@ -361,9 +371,31 @@ export function buildProfile(
   for (const b of pull?.beta.values() ?? []) strongest = Math.max(strongest, Math.abs(b));
 
   return {
-    w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans,
+    w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans, typeStats: typeSums, rawRatings, rawSum,
     pull, picks, follows: extras.follows ?? new Map(), followBeta: Math.max(Math.LN2, strongest),
   };
+}
+
+/** Below this many ratings in a medium, a title of it scores from your overall average instead of the medium's. */
+export const MIN_RATED_FOR_MEDIUM_CENTRE = 10;
+
+/**
+ * Your average rating for a medium, 0 to 10: the centre a title of that medium
+ * scores from (§3.3, since 2026-10-27). You rate games 7.3 and films 6.4, and
+ * one centre for both read every game half a point low. Your overall average
+ * when the medium has too few ratings to have one of its own, or the title has
+ * no medium. `leaveOut` is a title you rated: its own rating is taken out.
+ */
+export function centreFor(profile: Profile, type: string | undefined, leaveOut?: { id: string }): number {
+  const own = leaveOut ? profile.rawRatings.get(leaveOut.id) : undefined;
+  const ts = type ? profile.typeStats.get(type) : undefined;
+  if (ts) {
+    const mine = own && own.type === type ? own.rating : undefined;
+    const n = ts.n - (mine === undefined ? 0 : 1);
+    if (n >= MIN_RATED_FOR_MEDIUM_CENTRE) return (ts.sum - (mine ?? 0)) / n;
+  }
+  const n = profile.ratedItemCount - (own === undefined ? 0 : 1);
+  return n > 0 ? (profile.rawSum - (own?.rating ?? 0)) / n : 0;
 }
 
 /**
@@ -383,7 +415,7 @@ export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number
 export interface FacetPull {
   /** The model's coefficient (natural log): how much more often a title with it is one of your picks, other facets held equal. A follow sets it. */
   beta: number;
-  /** Points on a title of medium `type` (that medium's pull weight applied), or on one of unknown medium. */
+  /** The coefficient as points, `pullGain` per doubling. Said beside the score, never in it (2026-10-27). */
   points: number;
   /** From the plain counts: how many times more often (above 1) or less often (below 1) your picks carry it than the baseline says they would. */
   times: number;
@@ -405,7 +437,7 @@ export interface FacetPull {
  * `leaveOut` is a title you picked, scored by the model that did not see it
  * and left out of its own counts.
  */
-export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?: string, leaveOut?: { id: string }): FacetPull | null {
+export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, leaveOut?: { id: string }): FacetPull | null {
   const model = profile.pull;
   if (!model) return null;
   const id = facetId(f);
@@ -418,11 +450,9 @@ export function facetPull(f: ScoreFacet, profile: Profile, tax: Taxonomy, type?:
   if (beta === 0) return null;
   const plain = timesAverage(model, id, pick);
   if (!followed && (!plain || Math.sign(Math.log(plain.times)) !== Math.sign(beta))) return null;
-  const cfg = tax.config;
-  const medium = type ? (cfg.pullWeight[type] ?? 1) : 1;
   return {
     beta,
-    points: Math.round(((cfg.pullGain * medium * beta) / Math.LN2) * 10) / 10,
+    points: Math.round(((tax.config.pullGain * beta) / Math.LN2) * 10) / 10,
     times: plain?.times ?? 1,
     titles: plain?.titles ?? 0,
     media: [...(plain?.media ?? [])],
@@ -440,10 +470,10 @@ export function hasPullFor(profile: Profile, type?: string): boolean {
 /**
  * How far a score may move from your average, bent so it never passes 100 or
  * 0. Unchanged up to halfway to the edge, which is where nearly every score
- * sits (the band margin is 10), then a tanh that meets the edge only in the
- * limit: a strong match still outranks a slightly weaker one, nothing reads 101.
- * `offset` is the points the facets add to the centre; the answer is the same
- * kind of number.
+ * sits (unseen films read 48 to 75 around a centre of 64, 2026-10-27), then a
+ * tanh that meets the edge only in the limit: a strong match still outranks a
+ * slightly weaker one, nothing reads 101. `offset` is the points the facets
+ * add to the centre; the answer is the same kind of number.
  */
 export function softRange(center: number, offset: number): number {
   const room = offset >= 0 ? 100 - center : center;
@@ -455,9 +485,14 @@ export function softRange(center: number, offset: number): number {
 }
 
 export type ScoreAxis = 'taste' | 'pull';
-export type AxisBand = 'high' | 'usual' | 'low';
-/** Nils's matrix of 2026-10-25: what to DO with the title, from where the two axes land (docs/fandex-score.md §3.8). */
-export type ScoreLabel = 'safe-bet' | 'hidden-gem' | 'tryout' | 'bycatch' | 'skip' | 'usual';
+/**
+ * Where a number sits against your usual: `high` at or above the margin over
+ * it, `low` at or below. For the score it is the taste band margin (§3.8),
+ * what colours a badge and fills Home's Recommended rail; for the pull axis
+ * its own margin.
+ */
+export type ScoreBand = 'high' | 'usual' | 'low';
+export type AxisBand = ScoreBand;
 
 export interface ScoreReason {
   axis: ScoreAxis;
@@ -467,9 +502,9 @@ export interface ScoreReason {
   key: string;
   label: string;
   category?: string;
-  /** Points this facet added to or took from the score. 0 when it was not counted. */
+  /** Points this facet added to or took from the score. 0 when it was not counted, and always 0 on a pull row: pull is said beside the number, never in it. */
   contribution: number;
-  /** What the facet is worth on any title of this medium, counted or not. */
+  /** What the facet is worth on any title, counted or not; on a pull row, its pull points. */
   impact: number;
   /** Taste: your average rating for titles carrying it, and how many there are. 0 on a pull row. */
   BA: number;
@@ -486,41 +521,32 @@ export interface ScoreReason {
 }
 
 export interface AxisResult {
-  /** Points this axis moved the score by, after the bend. */
+  /** Taste: the points the score sits off the centre, after the bend. Pull: its own points, `pullGain` per doubling, not in the score. */
   points: number;
   band: AxisBand;
 }
 
+export interface PullResult extends AxisResult {
+  /** How many times more often (above 1) or less often (below 1) a title like this is one of your picks, by the model: e to the sum of its coefficients. */
+  times: number;
+}
+
 export interface FandexScore {
+  /** What you would probably rate this, times ten. */
   score: number;
-  /** Your own mean rating × 10: the score of a title you have no opinion about. */
+  /** Your average rating for the medium, times ten (`centreFor`): the score of a title the facets say nothing about. */
   center: number;
+  /** Where the score sits against the centre, by the taste band margin. */
+  band: ScoreBand;
   taste: AxisResult;
-  /** Null when the device holds no baseline for this medium yet: then there is no pull axis. */
-  pull: AxisResult | null;
-  label: ScoreLabel;
+  /** How often you pick this kind of thing, said beside the number. Null when the device holds no baseline for this medium yet. */
+  pull: PullResult | null;
   reasons: ScoreReason[];
   /** A title you rated, scored with your rating of it left out. */
   leftOut?: boolean;
 }
 
-const bandOf = (points: number, margin: number): AxisBand => (points >= margin ? 'high' : points <= -margin ? 'low' : 'usual');
-
-/**
- * Where the two axes land is the label (Nils's matrix, 2026-10-25):
- *
- *                      pull low      pull usual    pull high
- *   taste above usual  hidden gem    hidden gem    safe bet
- *   taste usual        your usual    your usual    tryout
- *   taste below usual  skip          skip          bycatch
- *
- * Without a pull axis the taste axis alone names it: above usual is a hidden gem
- * (you rate this kind well, whether or not you go for it), below usual a skip.
- */
-export function labelFor(taste: AxisBand, pull: AxisBand | null): ScoreLabel {
-  if (pull === 'high') return taste === 'high' ? 'safe-bet' : taste === 'low' ? 'bycatch' : 'tryout';
-  return taste === 'high' ? 'hidden-gem' : taste === 'low' ? 'skip' : 'usual';
-}
+export const bandOf = (points: number, margin: number): ScoreBand => (points >= margin ? 'high' : points <= -margin ? 'low' : 'usual');
 
 interface Contrib { f: ScoreFacet; dev: number; classWeight: number; meta: FacetMeta }
 interface PullContrib { f: ScoreFacet; pull: FacetPull; value: number }
@@ -529,11 +555,12 @@ interface PullContrib { f: ScoreFacet; pull: FacetPull; value: number }
  * Score one title. `facets` are the catalog's raw facets; the taxonomy is
  * applied here, as the site applies it inside computeFandexScore, so no caller
  * can score a title against keys the profile did not learn under. `type` is
- * the title's medium, for the pull weight; without it pull counts in full.
+ * the title's medium: the centre is your average for it (`centreFor`), and
+ * without it the centre is your overall average.
  */
 export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, profile: Profile, tax: Taxonomy, type?: string): FandexScore | null {
   // A title you rated is scored as if you had not (decided 2026-10-23): its own
-  // rating left out of the baseline and of every facet it carries. Read with
+  // rating left out of the centre and of every facet it carries. Read with
   // its own rating in, The Last of Us Part I scored 101, +11.3 of it from a
   // franchise average its own 10 had raised. Only this title's facets enter the
   // score, so taking it out of those is the whole leave-one-out, exactly.
@@ -541,6 +568,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   const ratedCount = profile.ratedItemCount - (own === undefined ? 0 : 1);
   if (profile.w.size === 0 || ratedCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
   const cfg = tax.config;
+  // The offset average every facet's deviation is measured from (§3.1), not the centre the score starts at.
   const baseline = own === undefined ? profile.baseline : (profile.ratingSum - own) / ratedCount;
   const resolved = resolveFacets(facets, itemId, tax);
 
@@ -569,12 +597,13 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   const leaveOut = itemId != null && profile.picks.has(itemId) ? { id: itemId } : undefined;
   const pulls: PullContrib[] = [];
   const hasPull = hasPullFor(profile, type);
+  let pullBeta = 0;
   if (hasPull) {
     const ids = new Set(pullFacetIds(facets, itemId, tax));
     for (const f of resolved) {
       if (!ids.delete(facetId(f))) continue;
-      const pull = facetPull(f, profile, tax, type, leaveOut);
-      if (pull) pulls.push({ f, pull, value: pull.points });
+      const pull = facetPull(f, profile, tax, leaveOut);
+      if (pull) { pulls.push({ f, pull, value: pull.points }); pullBeta += pull.beta; }
     }
   }
   if (!matched.length && !pulls.length) return null;
@@ -605,22 +634,22 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     ...tags.filter((c) => c.dev === 0),
   ];
 
-  // Every pull row counts: the model has already picked which facets carry
+  // Every pull row shows: the model has already picked which facets carry
   // weight and shared the credit among the ones that come together, so there
-  // is no top few to choose here.
+  // is no top few to choose here. None of them is in the number.
   const pullKept = pulls;
 
-  // Two raw sums, not means (spec §3.3), then bent together so 100 is the max
+  // A raw sum, not a mean (spec §3.3), times the gain fitted to your ratings
+  // (§3.10), from your average for the medium; then bent so 100 is the max
   // and 0 the min (decided 2026-10-23). Every counted row shrinks by the same
   // share, so the breakdown still adds up to the score.
   const tasteSum = kept.reduce((acc, c) => acc + weighted(c), 0);
-  const center = baseline * 10;
+  const center = centreFor(profile, type, own === undefined || itemId == null ? undefined : { id: itemId }) * 10;
   const gain = tasteSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
   const tasteRaw = gain * tasteSum;
+  const bent = softRange(center, tasteRaw);
+  const share = tasteRaw === 0 ? 1 : bent / tasteRaw;
   const pullRaw = pullKept.reduce((acc, p) => acc + p.value, 0);
-  const raw = tasteRaw + pullRaw;
-  const bent = softRange(center, raw);
-  const share = raw === 0 ? 1 : bent / raw;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
   // What the facet is worth on any title; for a title you rated, without that title.
@@ -636,32 +665,26 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   });
   const pullReason = (p: PullContrib): ScoreReason => ({
     axis: 'pull', kind: p.f.kind, role: p.f.role, key: p.f.key, label: p.f.label, category: classWeightOf(p.f, tax).category ?? p.f.category,
-    contribution: round1(p.value * share),
+    contribution: 0,
     impact: p.pull.points, BA: 0, n: p.pull.titles,
     times: p.pull.times, titles: p.pull.titles, media: p.pull.media,
     ...(p.f.tier ? { tier: p.f.tier } : {}),
     ...(p.pull.followed ? { followed: p.pull.followed } : {}),
   });
 
-  // The bands read each axis BEFORE the bend: the bend shrinks both axes by
-  // the same share, so a strong pull could otherwise squeeze a strong taste
-  // under its margin and the label would change with the other axis. The
-  // points are after the bend, so the two add up to the score.
-  //
-  // The pull band also reads the axis before the medium's weight: that weight
-  // says how much pull counts in the NUMBER for a game, not whether you seek
-  // games out. With it applied, no game ever read as a sure thing.
-  const mediumWeight = type ? (cfg.pullWeight[type] ?? 1) : 1;
-  const taste: AxisResult = { points: round1(tasteRaw * share), band: bandOf(tasteRaw, cfg.tasteBandMargin) };
-  const pull: AxisResult | null = hasPull
-    ? { points: round1(pullRaw * share), band: mediumWeight > 0 ? bandOf(pullRaw / mediumWeight, cfg.pullBandMargin) : 'usual' }
+  // The score's band reads the bent points, the ones the number shows, so a
+  // green badge always sits at least the margin over the centre. Pull's band
+  // reads its own points against its own margin.
+  const band = bandOf(bent, cfg.tasteBandMargin);
+  const taste: AxisResult = { points: round1(bent), band };
+  const pull: PullResult | null = hasPull
+    ? { points: round1(pullRaw), band: bandOf(pullRaw, cfg.pullBandMargin), times: Math.round(Math.exp(pullBeta) * 100) / 100 }
     : null;
 
   return {
     score: round1(center + bent),
     center: round1(center),
-    taste, pull,
-    label: labelFor(taste.band, pull?.band ?? null),
+    band, taste, pull,
     ...(own === undefined ? {} : { leftOut: true }),
     reasons: [
       ...[...kept].sort((a, b) => weighted(b) - weighted(a)).map((c) => tasteReason(c, true)),

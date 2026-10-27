@@ -25,8 +25,7 @@ import { api, type CalendarCard } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
 import { tmdbTrending } from '~/lib/tmdb';
-import type { AxisBand, ScoreFacet, ScoreLabel } from '~/lib/fandexScore';
-import { scoreBand } from '~/lib/scoreReasons';
+import type { ScoreBand, ScoreFacet } from '~/lib/fandexScore';
 
 export const RAIL_SIZE = 15;
 
@@ -172,9 +171,9 @@ export type Candidate = CardItem & { genres?: string[] };
 
 /**
  * The candidates your taste scores a strong match, best first, as today's rail.
- * Strong is the badge's green band (`scoreBand`, the same margin over your own
- * average that colours a score on every card): a rail called "Recommended"
- * must not carry a title it would paint orange (Nils, 2026-10-17).
+ * Strong is the badge's green band (`FandexScore.band`, the margin over your
+ * average for the medium that colours a score on every card): a rail called
+ * "Recommended" must not carry a title it would paint orange (Nils, 2026-10-17).
  *
  * `tiers` come in the order they should fill the rail: what is still to come
  * first, then what is recent, then the rest of the catalog. The next three
@@ -187,8 +186,8 @@ export type Candidate = CardItem & { genres?: string[] };
 /** At most this many titles you already wishlisted in one Recommended rail (Nils, 2026-10-23). */
 export const MAX_WISHLISTED = 2;
 
-/** What `recommend` asks of a candidate: the number that ranks it, and the label and bands its card shows. */
-export type Scored = { score: number; label: ScoreLabel; taste: AxisBand; pull: AxisBand | null };
+/** What `recommend` asks of a candidate: the number that ranks it, and the band that colours it on its card (`high` is what the rail carries). */
+export type Scored = { score: number; band: ScoreBand };
 
 export function recommend<T extends Candidate>(
   tiers: T[][], scoreOf: (c: T) => Scored | null, skip: (c: T) => boolean, center: number | null,
@@ -208,8 +207,8 @@ export function recommend<T extends Candidate>(
         seen.add(key);
         return true;
       })
-      .map((c): T & { fandexScore: number | null } => { const s = scoreOf(c); return { ...c, fandexScore: s?.score ?? null, match: s ? { label: s.label, taste: s.taste, pull: s.pull } : null }; })
-      .filter((c): c is T & { fandexScore: number } => c.fandexScore != null && scoreBand(c.fandexScore, center) === 'high')
+      .map((c): T & { fandexScore: number | null; match: Scored | null } => { const s = scoreOf(c); return { ...c, fandexScore: s?.score ?? null, match: s }; })
+      .filter((c): c is T & { fandexScore: number; match: Scored } => c.match?.band === 'high')
       .sort((a, b) => b.fandexScore - a.fandexScore);
     ranked.push(...strong);
   }

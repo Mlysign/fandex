@@ -6298,3 +6298,21 @@ pullRaw    = pullGain · pullWeight[medium] · Σ kept value
 - **`pullWeight` is per medium** (games 0.5 by default): what the owner plays and what he rates disagree (pull alone ranks his wishlist at 96% and his ratings at −0.12). **The band reads the axis BEFORE this weight** (and before the bend, §3.8): the weight says how much pull counts in the number, not whether you seek games out; with it applied no game was ever a safe bet.
 - Both axes are bent together by `softRange` so 100 stays the maximum; every counted row shrinks by the same share and the breakdown still adds up.
 
+## 2026-10-25 to 10-27, the label from two axes (superseded by the calibrated number)
+
+For two days the score was a LABEL and no surface printed the number (decisions, 2026-10-25: Nils read "82" as "I'll rate it 8", and the number predicted his rating within one point 41% of the time, which is what guessing his average did). On 2026-10-27 he asked for the number back, calibrated to that very reading (`docs/fandex-score.md` §3.11, §13). What went: `ScoreLabel`, `labelFor`, `LABEL_TEXT`, `LABEL_TONE`, `labelSentence`, `MatchLabel`, `AxisBars`, the odds line (`oddsLine`, `DEFAULT_LABEL_ODDS`, `DEFAULT_LABEL_EVIDENCE`, `MIN_LABEL_EVIDENCE`), `pullWeight`, and the labels in the score report (the column keeps the name; it holds the bands' counts).
+
+**The matrix** (Nils, 2026-10-25): each axis's raw points landed in a band against its margin (`tasteBandMargin`, `pullBandMargin`), and where the two landed was the label, which said what to DO with the title:
+
+| | pull low | pull usual | pull high |
+|---|---|---|---|
+| taste above usual | hidden gem | hidden gem | safe bet |
+| taste usual | your usual | your usual | tryout |
+| taste below usual | skip | skip | bycatch |
+
+Without a pull axis the taste band alone named it. Measured on the owner's library before the matrix was final: films in the taste-high band he gave 7.1 (43% an 8 or more) against 6.0 in the low; on unseen films the high-pull cells were 23 to 24% wishlisted and the low-pull cells 0%; "hidden gem" games were rated 8.0 (72% an 8+) and 0% wishlisted (the Metal Gear and Persona back catalog). Under the tuned config of 2026-10-26: a safe-bet film was rated 8+ 1.52× as often as usual, a skip film 0.15×, a bycatch film 0.60×; games' hidden gems 1.27×, safe bets 1.21×, skips 0.59×.
+
+**The odds line** under the label ("Films like this: an 8 or more about 1.4× as often as usual (1.2× to 1.7×)") was the one number shown: per label and medium, how much more often than usual titles with that label were rated 8 or more, with the 90% Wilson range its counts allowed, or "too few rated titles" below 20 (Nils, 2026-10-26: "make the Why sheet honest"). Seeded from the owner's ratings, meant to be replaced by the goalpost's sums over every user.
+
+The label names were never settled: Nils disliked the gambling theme (safe bet, coin flip) and "hidden gem" (it describes fame, which the score does not know); they waited on pull, and the number came back first.
+

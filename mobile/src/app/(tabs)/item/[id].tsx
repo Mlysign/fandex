@@ -328,7 +328,7 @@ export default function ItemScreen() {
 
       {panel ? (
         <FandexScorePanel
-          state={panel} fandex={fandex} type={item.type} categoryLabel={scores.categoryLabel} follows={scores.follows}
+          state={panel} fandex={fandex} type={item.type} categoryLabel={scores.categoryLabel} follows={scores.follows} calibration={scores.calibrationFor(item.type)}
           onSignIn={() => router.push('/profile' as never)} onOpenFacet={(href) => router.push(href as never)}
           onFollow={auth.status === 'signedIn' ? (reason, mode) => act(() => setFollow(db, [{ facetId: facetId(reason), label: reason.label }], mode)) : undefined}
         />
