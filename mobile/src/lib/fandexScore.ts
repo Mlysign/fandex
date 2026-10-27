@@ -536,6 +536,8 @@ export interface FandexScore {
   score: number;
   /** Your average rating for the medium, times ten (`centreFor`): the score of a title the facets say nothing about. */
   center: number;
+  /** Your average over everything, times ten, with this title left out: what every row's "you rate it 7.6" is measured against (§3.1). */
+  usual: number;
   /** Where the score sits against the centre, by the taste band margin. */
   band: ScoreBand;
   taste: AxisResult;
@@ -684,6 +686,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   return {
     score: round1(center + bent),
     center: round1(center),
+    usual: round1(baseline * 10),
     band, taste, pull,
     ...(own === undefined ? {} : { leftOut: true }),
     reasons: [

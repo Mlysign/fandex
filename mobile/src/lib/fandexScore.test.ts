@@ -259,9 +259,12 @@ describe('the centre is your average for the medium (2026-10-27)', () => {
   const books = Array.from({ length: 5 }, (_, i) => ({ ...rated(`b${i}`, 9, [tag('drama')]), type: 'book' }));
   const profile = buildProfile([...games, ...films, ...books], tax);
 
-  it('starts a game from your games average and a film from your films average', () => {
-    expect(computeFandexScore([tag('arcade')], 'x', profile, tax, 'game')!.center).toBeCloseTo((8 * 11 + 10) / 12 * 10, 1);
+  it('starts a game from your games average and a film from your films average, and says what the rows are measured against', () => {
+    const game = computeFandexScore([tag('arcade')], 'x', profile, tax, 'game')!;
+    expect(game.center).toBeCloseTo((8 * 11 + 10) / 12 * 10, 1);
     expect(computeFandexScore([tag('drama')], 'x', profile, tax, 'movie')!.center).toBe(60);
+    // The rows' baseline is your average over everything (the offset keeps a medium's gap out of its tags).
+    expect(game.usual).toBeCloseTo(((8 * 11 + 10 + 6 * 12 + 9 * 5) / 29) * 10, 0);
   });
 
   it('falls back to your overall average below ten ratings in the medium, or without one', () => {

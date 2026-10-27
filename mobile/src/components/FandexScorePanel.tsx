@@ -156,8 +156,9 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 
       <Sheet open={open} onClose={() => setOpen(false)} title={`Why ${shown}?`}>
         <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={styles.breakdown}>
+          {/* The rows are measured against your average over EVERYTHING (§3.1, the medium offset), the score starts at the medium's; both are said, or a game's rows read as inconsistent with its centre. */}
           <Text style={styles.small}>
-            {centreSentence(fandex.center, mediaType, fandex.leftOut)} The score starts there, and every counted row below moves it.
+            {centreSentence(fandex.center, mediaType, fandex.leftOut)} The score starts there, and every counted row below moves it. A row compares what you gave the titles carrying it, in every medium, with your average over everything, {(fandex.usual / 10).toFixed(1)}.
           </Text>
 
           <View style={styles.groupBlock}>

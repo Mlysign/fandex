@@ -15,7 +15,7 @@ describe('the sentence under the number (2026-10-27)', () => {
     expect(scoreSentence({ score: 72, band: 'high' }, 'movie')).toBe("You'd probably give this a 7, above your usual for films.");
     expect(scoreSentence({ score: 63, band: 'usual' }, 'game')).toBe("You'd probably give this a 6, about your usual for games.");
     expect(scoreSentence({ score: 48, band: 'low' }, 'show')).toBe("You'd probably give this a 5, below your usual for shows.");
-    expect(scoreSentence({ score: 80, band: 'high' })).toBe("You'd probably give this a 8, above your usual for titles.");
+    expect(scoreSentence({ score: 80, band: 'high' })).toBe("You'd probably give this an 8, above your usual for titles.");
   });
   it('anchors the number on your average for the medium', () => {
     expect(centreSentence(64.1, 'movie')).toBe('You give films 6.4 on average.');

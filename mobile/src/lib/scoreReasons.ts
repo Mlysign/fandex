@@ -21,7 +21,8 @@ export const ratingOf = (score: number): number => Math.round(score / 10);
 export function scoreSentence(fx: Pick<FandexScore, 'score' | 'band'>, type?: string): string {
   const what = mediumPlural(type);
   const where = fx.band === 'high' ? 'above' : fx.band === 'low' ? 'below' : 'about';
-  return `You'd probably give this a ${ratingOf(fx.score)}, ${where} your usual for ${what}.`;
+  const rating = ratingOf(fx.score);
+  return `You'd probably give this ${rating === 8 ? 'an' : 'a'} ${rating}, ${where} your usual for ${what}.`;
 }
 
 /** The anchor: "You give films 6.4 on average." `leftOut` for a title you rated, scored without that rating. */
