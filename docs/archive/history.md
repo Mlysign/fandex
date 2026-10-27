@@ -6316,3 +6316,13 @@ Without a pull axis the taste band alone named it. Measured on the owner's libra
 
 The label names were never settled: Nils disliked the gambling theme (safe bet, coin flip) and "hidden gem" (it describes fame, which the score does not know); they waited on pull, and the number came back first.
 
+## 2026-10-27, the calibrated number (0.3.22)
+
+Nils: the labels were ambiguous, a flat number is intuitive, and "82 means I'd rate it 8" is an assumption to accept and get as close to as the data allows, from his own picks and ratings only. The measurements, the search and the choices are `docs/fandex-score.md` §3.11 and §13 (commit 21a4737); what moved and why, in one line each:
+
+- **Shipped:** the score is what you would probably rate it, times ten: your average for the medium (`centreFor`), the facets' raw sum, two gains fitted by least squares (1.2 up, 5.3 down, prior 2), the weights re-tuned for the rating error on half the titles and checked on the other half, the band 4 points over the medium's average. Pull is said beside the number and not in it. Shown as a whole number with "You'd probably give this an 8, above your usual for games", "You give games 7.2 on average", the pull line, and in the Why sheet the device's own measurement (`lib/scoreCalibration.ts`). Labels, odds line, `MatchLabel`, `AxisBars`, `pullWeight` gone; `SCORE_VERSION` 3.
+- **Measured, the app's own maths:** films within one point of his rating 44% (41% guessing his average), games 38% (38%), shows 36% (36%); 70 to 75 → 7.5, games 80+ → 8.5; unseen films 47 to 68 for most, none 80 or more. On the phone: 1,731 titles in 370 ms, 40% / 72%.
+- **Live:** the Worker, the tuned config (`scoring_config` version 11, the category rows), fandex.org (two publishes; the second needed `--accept-shrink`, see `docs/website.md`), the APK on the Pixel 8.
+- **Traps met:** Git Bash rewrites robocopy's `/E` (the first build carried the old code); OneDrive's read-only folders under `node_modules` stop Gradle (five failed builds); both in `docs/app.md`.
+- **Next:** Thursday 2026-10-29, pull's own wishlist bar once the baseline fill is done (TASKS.md, the calendar reminder); a gain refit after the re-derive and Wikidata walks (`--fit-gains`).
+

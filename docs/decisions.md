@@ -276,7 +276,7 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **~~Pull weighs per medium, games at half.~~ Gone 2026-10-27**: pull is not in the number. What he plays and what he rates disagree (pull alone: wishlist 96%, ratings −0.12).
 - **Only typed ratings count on the taste axis. No implicit rating from episodes watched, hours played or rewatches** (Nils), although completion predicted his show ratings at 0.31 where facets sat at 0.01.
 - **A follow moves pull only; there is no taste override.** Steampunk set to 10 lifted Mortal Engines (rated 3) from 82 to 93; a follow leaves it "bycatch", which is right.
-- **The goalpost is one admin chart over all users** (`/dev/score`), fed by per-device counts, never a per-user page; the odds line under a label comes from a global ladder.
+- **The goalpost is one admin chart over all users** (`/dev/score`), fed by per-device counts, never a per-user page. (The odds line it was to feed went with the labels, 2026-10-27; the device's own measurement feeds the Why sheet instead.)
 - **The ten-point rating scale stays.** A coarser scale inflated the hit rate exactly as much as guessing the most common step, and the score learned less (ρ 0.22 → 0.16 at three steps).
 - **~~The labels are Nils's matrix of 2026-10-25~~ Gone 2026-10-27** with the odds line; the matrix is in `docs/archive/history.md`.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
