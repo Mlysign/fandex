@@ -431,16 +431,6 @@ sideloading and is not a Play upload key.
 file after `version`; before that, the APK's file name was the only version. A Play build is the
 same build with `bundleRelease -PfandexPlay` and the upload key → [play-store.md](play-store.md).
 
-## Not built yet, in the order it should be built
-
-1. **Google sign-in on ANDROID.** It is built for a browser since 2026-10-11 (below). The phone
-   needs an OAuth client of type Android in the Google Cloud console, keyed to the package name
-   (`org.fandex.app`) and the signing certificate's SHA-1, and a native module to ask it. Google
-   does not send a "Web" client back to an app's own address, so the browser's flow cannot be
-   reused. Until then a person who made their account with Google cannot sign in to it on the
-   phone, and Settings there says so on the Google row. The Worker side is ready for it: the
-   native call takes a nonce, and `GOOGLE_CLIENT_ID` takes a comma-separated list.
-
 ## Joining two accounts (2026-10-17)
 
 A way in added in Settings (Trakt, Google, Discord) can belong to ANOTHER Fandex account. With no
@@ -462,9 +452,20 @@ either of the others, and the connect goes through the real `signIn()`
 ([worker.md](worker.md), "The test accounts"). Walked through on 2026-10-17: the form, "keep the
 other account's copies", the survivor holding the 9 over the 6, and the device showing it.
 
-## Google sign-in, in a browser (2026-10-11)
+## Google sign-in (a browser 2026-10-11, the phone 2026-10-29)
 
-`src/lib/google.ts`, `src/app/auth/google.tsx`, the button in `components/SignIn.tsx`.
+`src/lib/google.ts`, `src/app/auth/google.tsx`, the button in `components/SignIn.tsx`,
+`startGoogleSignIn` in `lib/AuthProvider.tsx`.
+
+**On the phone (0.3.23) it is the same trip in a browser sheet, as Discord's is.** The sheet goes
+to Google with the Web client, comes back to `https://fandex.org/auth/google`, and that page hands
+the answer on to `fandex://auth/google` before anything else runs (a `state` starting `app.` is
+how it knows; it keeps an "Open the app" button in case the browser wants a tap). The app made the
+secret and kept it, so a token read on the way is useless to anyone else. Google does not send a
+Web client back to an app's own address, which is why the site sits in the middle. There is no
+Android OAuth client and no native module, and the Worker is unchanged. ⚠️ The phone's sign-in
+needs the site published with this page: an app newer than the site gets "Signing you in…" on
+fandex.org forever.
 
 The whole page goes to Google and comes back to `/auth/google` with an ID token after the `#`.
 No script of Google's runs on fandex.org and nothing reaches Google before the button is pressed,
@@ -472,8 +473,8 @@ which is why the privacy policy needs no consent step for it. Before leaving, th
 secret and gives Google its SHA-256 as the `nonce`; on return it sends the token and the secret to
 `POST /v1/auth/google`, and the Worker refuses a token whose nonce is not that secret's hash.
 
-- **The button shows only in a browser, and only in a build given `EXPO_PUBLIC_GOOGLE_CLIENT_ID`**
-  (`npm run env` in `mobile/` copies it from the repo's `.env`).
+- **The button shows only in a build given `EXPO_PUBLIC_GOOGLE_CLIENT_ID`**, in a browser and,
+  since 0.3.23, on the phone (`npm run env` in `mobile/` copies it from the repo's `.env`).
 - **The address Google returns to must be on the OAuth client**, per origin:
   `https://fandex.org/auth/google`, and `http://localhost:8081/auth/google` for this machine.
   Without it the button leads to Google's "redirect_uri_mismatch" page. `publish.mjs` asks Google
