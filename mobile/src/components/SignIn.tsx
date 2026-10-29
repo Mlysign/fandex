@@ -6,7 +6,8 @@
 // filled in for you when you open Trakt from here, and a tap copies it.
 //
 // Google: in a browser the page goes to Google and comes back to
-// /auth/google (lib/google.ts). Not on the phone yet (docs/app.md).
+// /auth/google; a phone opens a browser sheet that comes back through the site
+// (lib/google.ts). Only in a build given the client id.
 //
 // Discord: a browser goes to Discord and back to /auth/discord, a phone opens a
 // browser sheet (lib/discord.ts). Only in a build given the application id.
@@ -21,23 +22,35 @@ import { Button, Panel } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
 import { LOCAL_API } from '~/lib/config';
 import { discordAvailable } from '~/lib/discord';
-import { googleAvailable, startGoogleSignIn } from '~/lib/google';
+import { googleAvailable } from '~/lib/google';
 import { activationUrl } from '~/lib/trakt';
 import { color, font, radius, space, type } from '~/theme';
 
-/** Leave for Google, coming back to the page this was pressed on. Only where `googleAvailable()`. */
+/**
+ * Sign in with Google, coming back to the page this was pressed on. In a
+ * browser the page leaves for Google; on a phone a browser sheet opens and
+ * closes again. Only where `googleAvailable()`.
+ */
 export function useGoogleSignIn(): { start: () => void; leaving: boolean; error: string | null } {
+  const auth = useAuth();
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const start = () => {
     setLeaving(true);
     setError(null);
-    const here = `${window.location.pathname}${window.location.search}`;
-    startGoogleSignIn(here).catch((e: unknown) => {
-      console.warn('google_sign_in_not_started', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-      setLeaving(false);
-      setError('Could not open Google from this window. A private window that blocks storage cannot sign in this way.');
-    });
+    const web = Platform.OS === 'web';
+    const here = web ? `${window.location.pathname}${window.location.search}` : '/profile';
+    auth.startGoogleSignIn(here).then(
+      // In a browser the page has left; on a phone the sheet has closed.
+      () => { if (!web) setLeaving(false); },
+      (e: unknown) => {
+        console.warn('google_sign_in_not_started', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        setLeaving(false);
+        setError(web
+          ? 'Could not open Google from this window. A private window that blocks storage cannot sign in this way.'
+          : e instanceof Error ? e.message : 'Could not open Google.');
+      },
+    );
   };
   return { start, leaving, error };
 }

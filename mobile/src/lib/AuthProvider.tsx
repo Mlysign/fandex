@@ -19,7 +19,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Platform } from 'react-native';
 import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution, type PendingMerge, type PrefsPatch, type Profile } from '~/lib/api';
 import { deviceRegion } from '~/lib/region';
-import { DISCORD_CLIENT_ID, traktConfigured } from '~/lib/config';
+import { DISCORD_CLIENT_ID, GOOGLE_CLIENT_ID, traktConfigured } from '~/lib/config';
+import { GOOGLE_APP_REDIRECT, GOOGLE_APP_STATE_PREFIX, GOOGLE_SITE_ORIGIN, googleAuthorizeUrl, newGoogleSignIn, readGoogleReturn, startGoogleSignIn as startGoogleWebSignIn } from '~/lib/google';
 import { DISCORD_APP_REDIRECT, DISCORD_APP_STATE_PREFIX, DISCORD_SITE_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
 import { clearState, StaleSync, syncState } from '~/lib/stateSync';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
@@ -60,6 +61,12 @@ interface Auth {
    * the reason, in words, when it did not work.
    */
   finishGoogleSignIn: (idToken: string, secret: string) => Promise<void>;
+  /**
+   * Google (lib/google.ts). In a browser the page leaves for Google and
+   * `/auth/google` calls `finishGoogleSignIn`; on a phone a browser sheet opens
+   * and this finishes the sign-in itself. Throws with the reason, in words.
+   */
+  startGoogleSignIn: (returnTo: string) => Promise<void>;
   /**
    * Discord (lib/discord.ts). In a browser the page leaves for Discord and
    * `/auth/discord` calls `finishDiscordSignIn`; on a phone a browser sheet
@@ -520,6 +527,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void pullRows(true).then(() => runTraktSync(true)).then(() => runSteamSync(true));
   }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
 
+  const startGoogleSignIn = useCallback(async (returnTo: string) => {
+    if (Platform.OS === 'web') {
+      await startGoogleWebSignIn(returnTo);
+      return;
+    }
+    // A browser sheet that goes to Google, comes back to the site, and is handed
+    // on to fandex://auth/google (lib/google.ts). The secret stays here.
+    const { pending, nonce } = await newGoogleSignIn(returnTo, GOOGLE_APP_STATE_PREFIX);
+    const url = googleAuthorizeUrl({ clientId: GOOGLE_CLIENT_ID, origin: GOOGLE_SITE_ORIGIN, state: pending.state, nonce });
+    const result = await WebBrowser.openAuthSessionAsync(url, GOOGLE_APP_REDIRECT);
+    // Closed without an answer: back where they started, not an error.
+    if (result.type !== 'success') return;
+    const back = readGoogleReturn(result.url.split('#')[1] ?? '', pending);
+    if (!back.ok) {
+      if (back.reason === 'declined') return;
+      throw new Error('Google did not confirm the sign-in. Try again.');
+    }
+    await finishGoogleSignIn(back.idToken, back.secret);
+  }, [finishGoogleSignIn]);
+
   const finishDiscordSignIn = useCallback(async (accessToken: string) => {
     let result;
     try {
@@ -724,7 +751,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, finishGoogleSignIn,
+      status, profile, trakt, startTraktSignIn, startTraktCodeSignIn, cancelTraktSignIn, startGoogleSignIn, finishGoogleSignIn,
       startDiscordSignIn, finishDiscordSignIn, devSignIn, devConnect, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow, steamSync, syncSteamNow,
       region, savePrefs, disconnect, deleteAccount, pendingMerge, completeMerge, cancelMerge,

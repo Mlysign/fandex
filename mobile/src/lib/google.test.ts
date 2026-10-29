@@ -71,3 +71,26 @@ describe('the page to go back to', () => {
     expect(safeReturnPath('/auth/google#id_token=a')).toBe('/profile');
   });
 });
+
+describe("a phone's sign-in, coming back through the site", () => {
+  it('is handed on to the app, token and state with it, only when its state marks it as the phone', async () => {
+    const { googleAppReturnUrl, GOOGLE_APP_STATE_PREFIX } = await import('./google');
+    expect(googleAppReturnUrl(`#id_token=t&state=${GOOGLE_APP_STATE_PREFIX}abc`)).toBe(`fandex://auth/google#id_token=t&state=${GOOGLE_APP_STATE_PREFIX}abc`);
+    // A browser's own sign-in stays on the site.
+    expect(googleAppReturnUrl('#id_token=t&state=abc')).toBeNull();
+    expect(googleAppReturnUrl('#error=access_denied')).toBeNull();
+  });
+
+  it('is finished by the phone with the secret it kept, and by nothing that lacks the state', async () => {
+    const { readGoogleReturn: read } = await import('./google');
+    const phone: PendingGoogleSignIn = { state: 'app.s9', secret: 'y'.repeat(64), returnTo: '/profile' };
+    expect(read('id_token=tok&state=app.s9', phone)).toEqual({ ok: true, idToken: 'tok', secret: phone.secret, returnTo: '/profile' });
+    expect(read('id_token=tok&state=app.other', phone)).toEqual({ ok: false, reason: 'unknown', returnTo: '/profile' });
+  });
+
+  it('goes to Google with the site as the return address, the one the Web client lists', () => {
+    const url = new URL(googleAuthorizeUrl({ clientId: 'abc.apps.googleusercontent.com', origin: 'https://fandex.org', state: 'app.s9', nonce: 'n' }));
+    expect(url.searchParams.get('redirect_uri')).toBe('https://fandex.org/auth/google');
+    expect(url.searchParams.get('state')).toBe('app.s9');
+  });
+});

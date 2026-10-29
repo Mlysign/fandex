@@ -3,15 +3,16 @@
 // address, hands it to the Worker with the secret this tab kept, and goes back
 // to the page the sign-in was started on.
 //
-// A browser only. The phone has no Google sign-in yet, and if this address is
-// ever opened there it goes to You.
+// A phone's sign-in comes back here too, in its browser sheet, and is handed on
+// to the app (fandex://auth/google) before anything else runs; the app finishes
+// it with the secret it kept. Opened in the app itself, this goes to You.
 
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
-import { takeGoogleReturn } from '~/lib/google';
+import { GOOGLE_APP_RETURN, takeGoogleReturn } from '~/lib/google';
 import { usePageTitle } from '~/lib/pageTitle';
 import { color, space, type } from '~/theme';
 
@@ -30,6 +31,8 @@ export default function GoogleReturn() {
     if (!ready || taken.current) return;
     taken.current = true;
     if (Platform.OS !== 'web') { router.replace('/profile'); return; }
+    // A phone's sign-in, being handed on to the app (lib/google.ts): not this tab's to finish.
+    if (GOOGLE_APP_RETURN) return;
 
     const back = takeGoogleReturn();
     const returnTo = back.returnTo as Href;
@@ -47,7 +50,13 @@ export default function GoogleReturn() {
 
   return (
     <View style={styles.screen}>
-      {failed ? (
+      {GOOGLE_APP_RETURN ? (
+        <View style={styles.box}>
+          <Text style={type.serifMd}>Back to the Fandex app</Text>
+          <Text style={type.bodySm}>Your Google sign-in continues in the app. If it did not open, tap the button.</Text>
+          <Button label="Open the app" variant="primary" size="md" pill onPress={() => { window.location.href = GOOGLE_APP_RETURN as string; }} />
+        </View>
+      ) : failed ? (
         <View style={styles.box}>
           <Text style={type.serifMd}>Google sign-in did not finish</Text>
           <Text style={type.bodySm}>{failed.message}</Text>

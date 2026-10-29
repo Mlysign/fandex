@@ -38,7 +38,7 @@ import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
 import { count } from '~/lib/plural';
-import { color, font, radius, space, TYPE_PLURAL } from '~/theme';
+import { breakpoint, color, font, radius, space, TYPE_PLURAL } from '~/theme';
 
 type Notice = { msg: string; ok: boolean } | null;
 
@@ -132,8 +132,19 @@ const PROVIDERS: Record<string, { label: string; description: string; identityOn
   steam: { label: 'Steam', description: 'Your games and wishlist', readOnly: true },
 };
 
+/**
+ * A sign-in row's head: the name beside its buttons, stacked above them below
+ * `breakpoint.sm` as the old site did. Side by side on a phone, the Connected
+ * pill, Sync and Disconnect squeezed the name to "Ste…" (2026-10-29).
+ */
+function useProviderRowStyle() {
+  const { width } = useWindowDimensions();
+  return width < breakpoint.sm ? [styles.provider, styles.providerStacked] : styles.provider;
+}
+
 function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n: Notice) => void }) {
   const auth = useAuth();
+  const rowStyle = useProviderRowStyle();
   const { traktSync, steamSync } = auth;
   const meta = PROVIDERS[provider] ?? { label: provider, description: '' };
   const identity = auth.profile?.identities.find((i) => i.provider === provider);
@@ -156,7 +167,7 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
 
   return (
     <Card>
-      <View style={styles.provider}>
+      <View style={rowStyle}>
         <View style={styles.providerWho}>
           <View style={styles.glyph}>
             {provider === 'google' ? <GoogleMark size={18} /> : <BrandGlyph source={provider} size={18} />}
@@ -217,10 +228,8 @@ function ProviderPanel({ provider, onNotice }: { provider: string; onNotice: (n:
       ) : null}
       {meta.identityOnly ? (
         <T variant="bodySm">
-          {/* Discord signs in on a phone too (lib/discord.ts); Google does not yet (docs/app.md). */}
-          {Platform.OS === 'web' || provider === 'discord'
-            ? 'A way to sign in. It holds no library.'
-            : 'Signs you in on fandex.org. It holds no library.'}
+          {/* Google and Discord both sign in on a phone too, through a browser sheet (lib/google.ts, lib/discord.ts). */}
+          A way to sign in. It holds no library.
         </T>
       ) : null}
 
@@ -379,11 +388,12 @@ function AddProvider({ provider }: { provider: 'trakt' | 'google' | 'discord' })
   const traktBusy = provider === 'trakt' && (flow.phase === 'starting' || flow.phase === 'finishing');
   const busy = traktBusy || (provider === 'google' && google.leaving) || (provider === 'discord' && discord.leaving);
   const error = provider === 'trakt' ? (flow.phase === 'error' ? flow.message : null) : provider === 'discord' ? discord.error : google.error;
+  const rowStyle = useProviderRowStyle();
 
   if (provider === 'trakt' && flow.phase === 'waiting') return <TraktCodeCard />;
   return (
     <Card>
-      <View style={styles.provider}>
+      <View style={rowStyle}>
         <View style={styles.providerWho}>
           <View style={styles.glyph}>
             {provider === 'google' ? <GoogleMark size={18} /> : <BrandGlyph source={provider} size={18} />}
@@ -1024,6 +1034,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingTop: space.xs },
 
   provider: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: space.md, marginBottom: 4 },
+  providerStacked: { flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start' },
   providerWho: { flexDirection: 'row', alignItems: 'center', gap: space.md, minWidth: 0, flexGrow: 1, flexShrink: 1 },
   providerActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
   glyph: {

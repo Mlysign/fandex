@@ -20,15 +20,31 @@
 // origin: https://fandex.org/auth/google, and http://localhost:8081/auth/google
 // for a developer's machine.
 //
-// Android is not here yet (docs/app.md): Google does not send a "Web" client
-// back to an app's own address, so the phone needs its own client and a native
-// module.
+// On a phone (since 2026-10-29) it is the same trip in a browser sheet, as
+// Discord's is (lib/discord.ts): Google does not send a "Web" client back to an
+// app's own address, so the sheet comes back to https://fandex.org/auth/google,
+// and that page hands the answer on to fandex://auth/google. The secret never
+// leaves the phone, so a token read on the way, by the site or by another app
+// that claims fandex://, is refused by the Worker without it. No Android OAuth
+// client and no native module: the Web client and its listed address serve both.
 
 import * as Crypto from 'expo-crypto';
-import { Platform } from 'react-native';
 import { GOOGLE_CLIENT_ID } from '~/lib/config';
 
 export const GOOGLE_RETURN_PATH = '/auth/google';
+/** Where the phone's browser sheet returns to in the end. */
+export const GOOGLE_APP_REDIRECT = 'fandex://auth/google';
+/** The site the phone's sign-in comes back to first, which passes it on to the app. Listed on the OAuth client. */
+export const GOOGLE_SITE_ORIGIN = 'https://fandex.org';
+/** A phone's `state` starts with this, which is how the site knows to pass the answer on. */
+export const GOOGLE_APP_STATE_PREFIX = 'app.';
+
+/** The app address a return to the site belongs to, fragment and all, or null when it is the site's own. */
+export function googleAppReturnUrl(fragment: string): string | null {
+  const bare = fragment.replace(/^#/, '');
+  const state = new URLSearchParams(bare).get('state');
+  return state?.startsWith(GOOGLE_APP_STATE_PREFIX) ? `${GOOGLE_APP_REDIRECT}#${bare}` : null;
+}
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const PENDING_KEY = 'fandex.google.pending';
 
@@ -49,9 +65,9 @@ export type GoogleReturn =
   /** Nothing in this tab started the sign-in that came back, or Google sent no token. */
   | { ok: false; reason: 'unknown'; returnTo: string };
 
-/** Is there a Google button to show? Only in a browser, and only in a build that was given the client id. */
+/** Is there a Google button to show? In a build that was given the client id, in a browser or on a phone. */
 export function googleAvailable(): boolean {
-  return Platform.OS === 'web' && GOOGLE_CLIENT_ID.length > 0;
+  return GOOGLE_CLIENT_ID.length > 0;
 }
 
 /**
@@ -104,6 +120,15 @@ function randomToken(bytes: number): string {
   return Array.from(Crypto.getRandomBytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** A new sign-in: its state (with `statePrefix` in front), its secret, and the nonce Google is given. */
+export async function newGoogleSignIn(returnTo: string, statePrefix = ''): Promise<{ pending: PendingGoogleSignIn; nonce: string }> {
+  const pending: PendingGoogleSignIn = { state: `${statePrefix}${randomToken(16)}`, secret: randomToken(32), returnTo: safeReturnPath(returnTo) };
+  const nonce = base64Url(
+    await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, pending.secret, { encoding: Crypto.CryptoEncoding.BASE64 }),
+  );
+  return { pending, nonce };
+}
+
 // ── The browser's side ───────────────────────────────────────────────────────
 
 /**
@@ -113,13 +138,18 @@ function randomToken(bytes: number): string {
  */
 const OPENED_WITH = typeof window !== 'undefined' && window.location?.pathname === GOOGLE_RETURN_PATH ? window.location.hash : '';
 
+/**
+ * A phone's sign-in that came back to the site: handed on to the app at once,
+ * before anything else runs, and kept for the page's "Open the app" button in
+ * case the browser wants a tap before it leaves for another app.
+ */
+export const GOOGLE_APP_RETURN = OPENED_WITH ? googleAppReturnUrl(OPENED_WITH) : null;
+if (GOOGLE_APP_RETURN) window.location.replace(GOOGLE_APP_RETURN);
+
 /** Leave for Google. The page unloads, so this only returns if something went wrong first. */
 export async function startGoogleSignIn(returnTo: string): Promise<void> {
   if (!googleAvailable()) throw new Error('Google sign-in is not set up in this build.');
-  const pending: PendingGoogleSignIn = { state: randomToken(16), secret: randomToken(32), returnTo: safeReturnPath(returnTo) };
-  const nonce = base64Url(
-    await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, pending.secret, { encoding: Crypto.CryptoEncoding.BASE64 }),
-  );
+  const { pending, nonce } = await newGoogleSignIn(returnTo);
   // sessionStorage: this tab only, and gone when it closes. A private window
   // that refuses storage cannot sign in this way, and says so here.
   window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
