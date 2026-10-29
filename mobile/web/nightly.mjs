@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pickCommit } from './buildChecks.mjs';
+import { pickCommit, retrying } from './buildChecks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..', '..');
@@ -86,7 +86,15 @@ try {
   // 1. The worktree, on the newest commit on origin/main whose CI passed.
   //    A commit that failed CI, or is still in it, is not published; the night
   //    builds the newest one before it that passed (buildChecks.mjs, pickCommit).
-  if (!run('git', ['fetch', '--quiet', 'origin', 'main'], repo)) fail('git fetch failed.');
+  //    Five tries a minute apart: a run started right after boot can beat the
+  //    network (2026-10-29, "Could not resolve host: github.com").
+  const fetched = retrying(() => run('git', ['fetch', '--quiet', 'origin', 'main'], repo), {
+    tries: 5,
+    waitMs: 60_000,
+    sleep: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+    onRetry: (n) => log(`git fetch failed (try ${n} of 5), trying again in a minute`),
+  });
+  if (!fetched) fail('git fetch failed five times, a minute apart.');
   const mainShas = git('rev-list', '--first-parent', '-n', '30', 'origin/main').split('\n').filter(Boolean);
   const picked = pickCommit(mainShas, ciRuns());
   if (!picked.sha) fail(`${picked.error}. Nothing was built.`);

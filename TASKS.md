@@ -28,7 +28,6 @@ Four items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
-- ⬜ **The nightly site build gives up on the first failed `git fetch`** (seen 2026-10-29: the PC came on at 16:08, the task ran at once, and `github.com` did not resolve yet, so nothing was published that day; the 28th has no log at all, the PC was off). `mobile/web/nightly.mjs` should retry the fetch a few times a minute apart before writing `LAST-RUN-FAILED.txt`. → [docs/website.md](docs/website.md), "The nightly rebuild"
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic

@@ -3,7 +3,7 @@
 // nightly run publishes.
 
 import { describe, expect, it } from 'vitest';
-import { baselineOf, contentSecurityPolicy, inlineScripts, pickCommit, scriptHash, shrinkProblems } from '../../web/buildChecks.mjs';
+import { baselineOf, contentSecurityPolicy, inlineScripts, pickCommit, retrying, scriptHash, shrinkProblems } from '../../web/buildChecks.mjs';
 
 describe('the CSP', () => {
   it('hashes a script the way a browser does: sha256 of the exact text, base64', () => {
@@ -92,5 +92,27 @@ describe('the nightly commit', () => {
     const picked = pickCommit(main, [run('c3', 'failure'), run('c2', 'cancelled')]);
     expect(picked.sha).toBeNull();
     expect(picked.error).toBeTruthy();
+  });
+});
+
+describe('the nightly git fetch', () => {
+  it('stops at the first try that works and waits only between tries', () => {
+    const results = [false, false, true, true];
+    const waits: number[] = [];
+    const retries: number[] = [];
+    let calls = 0;
+    const ok = retrying(() => results[calls++], { tries: 5, waitMs: 60_000, sleep: (ms: number) => waits.push(ms), onRetry: (n: number) => retries.push(n) });
+    expect(ok).toBe(true);
+    expect(calls).toBe(3);
+    expect(waits).toEqual([60_000, 60_000]);
+    expect(retries).toEqual([1, 2]);
+  });
+
+  it('gives up after the last try, with no wait after it', () => {
+    const waits: number[] = [];
+    let calls = 0;
+    expect(retrying(() => { calls++; return false; }, { tries: 3, waitMs: 10, sleep: (ms: number) => waits.push(ms) })).toBe(false);
+    expect(calls).toBe(3);
+    expect(waits).toEqual([10, 10]);
   });
 });

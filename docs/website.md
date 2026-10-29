@@ -109,7 +109,9 @@ half-finished edits live here), runs `git clean -fd` there so no untracked file 
 bundle, runs `npm ci` only when a lockfile or a `patches/` file changed, copies `mobile/.env` in, and runs
 `publish.mjs`. Logs, one a day, the last 14 kept: `C:\fx\site-logs`; a failed run, a thrown
 error included, also leaves `LAST-RUN-FAILED.txt` there, because the task's own result reads 0
-either way.
+either way. The `git fetch` is tried five times a minute apart (`retrying`, `buildChecks.mjs`,
+since 2026-10-29): a run that starts as the PC boots can beat the network, and that night
+published nothing.
 
 **It publishes the newest commit on main whose CI passed** (since 2026-10-23). It asks
 `gh run list --workflow=ci.yml --branch main`; when the head commit failed CI, is still in it, or

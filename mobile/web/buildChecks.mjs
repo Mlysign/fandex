@@ -144,3 +144,27 @@ export function pickCommit(mainShas, runs) {
   if (!older) return { sha: null, error: `main's newest commit ${head.slice(0, 7)} ${state}, and no recent commit on main passed CI` };
   return { sha: older, warning: `main's newest commit ${head.slice(0, 7)} ${state}; building ${older.slice(0, 7)}, the newest that passed` };
 }
+
+/**
+ * Run `attempt` until it returns true, at most `tries` times, calling
+ * `sleep(waitMs)` between tries and `onRetry(n)` before each new one.
+ * True when one try succeeded.
+ *
+ * For the nightly run's `git fetch`: the task starts as soon as the PC is on
+ * when it was off at 06:30, and on 2026-10-29 that was before DNS answered
+ * ("Could not resolve host: github.com"), so the night published nothing.
+ *
+ * @param {() => boolean} attempt
+ * @param {{ tries?: number, waitMs?: number, sleep: (ms: number) => unknown, onRetry?: (n: number) => unknown }} options
+ * @returns {boolean}
+ */
+export function retrying(attempt, { tries = 5, waitMs = 60_000, sleep, onRetry = () => {} }) {
+  for (let n = 1; n <= tries; n++) {
+    if (attempt()) return true;
+    if (n < tries) {
+      onRetry(n);
+      sleep(waitMs);
+    }
+  }
+  return false;
+}
