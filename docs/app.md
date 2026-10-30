@@ -192,7 +192,8 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   already knows its Fandex id through `/v1/lookup`. A title without one opens through `/open/tmdb/…`, which is what
   creates it. Films and shows only.
 - **A show's episodes come from two places.** The Worker's `/v1/shows/{id}/episodes` holds the
-  seasons, and episode lists only for seasons somebody opened on the old site. For the rest the
+  seasons (stored from TMDB at ingest and by a cron walk since 2026-10-30, `docs/worker.md`), and
+  episode lists only for seasons somebody opened on the old site. For the rest the
   item page asks TMDB from the device when a season is opened (`tmdbSeasonEpisodes`), which is
   when the site asked. How many you have watched is counted from your own rows, never from the
   episode list, so a season whose list is not loaded still reads right.

@@ -373,6 +373,20 @@ Each of these is a way the Worker differs from the site, and each has a test.
   writers; Kojima 18 games, Miyamoto 9, Druckmann 8, Todd Howard 8). Three row writes a game,
   about two days of runs; past the last id the cursor reads `done`. A failed request leaves the
   cursor. After the Steam walk in a run, so a game asked here carries its app id already.
+- **A show's seasons are stored from TMDB** (`worker/src/catalog/seasons.ts`, 2026-10-30). Until
+  then only the seeded shows had `show_seasons` rows, and every show resolved later opened on
+  "Fandex has no episode list for this show yet" (The Legend of Korra). Ingest stores the
+  numbered seasons (not season 0, Specials) of every full TMDB show payload it is given, before
+  the projection drops them from the blob: a resolve, the retention refresh and the projection
+  walk, with no extra TMDB call. Only changed rows are written, a season missing from a payload
+  keeps its row, and a season whose episode count moved has its stored episode list dropped so
+  the device asks TMDB again. The shows stored before that are walked once
+  (`runShowSeasonsStep`): six a run by `source_id` after `show_seasons_cursor` in `kv`, one plain
+  `/tv/{id}` call each, on both triggers (after the projection walk, and after Wikidata on the
+  fast one). A 404 or other per-show error moves past the show; an open TMDB circuit stops the
+  run where it is. Past the last id the cursor reads `done`. Plan and rows read are asserted in
+  `test/seasons.test.ts` (27 rows read for a batch of three over 25 links). Not covered: a show
+  with no TMDB link.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer unless
   asked.** `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges
   a doc with an older stamp from its blobs, whatever the region, and the next write of the item
@@ -490,8 +504,6 @@ What it showed a real restore still needs:
 
 - **The telemetry beacon and App Links.** The API is on fandex.org since 2026-10-10; these two parts of phase 3 are not.
 - **Steam**: sign-in and the owned-games proxy. Phase 5 by decision.
-- **Episode fill on demand.** Seeded shows have their episodes. A show resolved later does not;
-  the plan has the client take episodes from Trakt.
 - **Dropping stale rows.** A `browsed = 1` row nobody acted on should be dropped, not refreshed,
   once it is 150 days old. The first such row is due in March 2027. Needs the same schema-derived
   "is anything pointing at this" check erasure uses, before anything deletes. ⚠️ Two costs to

@@ -28,8 +28,11 @@ export async function getTmdbShow(id: number) {
 // that took prod down once. Two small dedicated calls, cached in show_seasons /
 // show_episodes forever after, cost far less than that.
 //
-// Both THROW on a bad response (tmdbGet does). Callers in lib/episodes.ts
-// degrade to whatever is already stored; nothing here drives a prune.
+// Both THROW on a bad response (tmdbGet does). The Worker's season walk
+// (worker/src/cron.ts, runShowSeasonsStep) degrades to whatever is already
+// stored; nothing here drives a prune. A full getTmdbShow answer carries
+// `seasons` too, and ingest stores them before the projection drops them
+// (worker/src/catalog/seasons.ts).
 export async function getTmdbShowSeasons(id: string | number): Promise<any[]> {
   const data = await tmdbGet(`/tv/${id}`);
   return Array.isArray(data?.seasons) ? data.seasons : [];

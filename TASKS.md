@@ -28,6 +28,8 @@ Four items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
+- **Deploy the show season fill** (2026-10-30, branch `ccr-30a97e53-h3e7l7`): `npx wrangler deploy` from `worker/`, no migration. Then watch `show_seasons_step` in the logs until `show_seasons_cursor` reads `done`, and open The Legend of Korra: its seasons should list. → `docs/worker.md` ("A show's seasons are stored from TMDB")
+
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
