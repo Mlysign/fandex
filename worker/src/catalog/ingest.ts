@@ -32,6 +32,7 @@ import type { MediaType, Source } from "@/types";
 import { all, first, isConstraintError, stmt } from "../d1";
 import { DROP_POOL_COUNT_SQL } from "../keptCounts";
 import { buildVector, deriveItem, DERIVE_VERSION, type ParsedLink } from "./derive";
+import { seasonRowsFromTmdb, storeShowSeasons } from "./seasons";
 
 export interface SourceItem {
   source: Source;
@@ -79,6 +80,23 @@ const SLUG_CANDIDATES_PER_TRY = 4;
 const MAX_CREATE_ATTEMPTS = 3;
 
 export async function upsertMediaItem(db: D1Database, item: SourceItem, opts: UpsertOptions = {}): Promise<UpsertResult> {
+  const result = await upsertLink(db, item, opts);
+  // A full TMDB show payload carries the season list the episode tracker draws.
+  // The projection drops it from the blob, so this is the one place it is read.
+  const seasons = item.source === "tmdb" && item.type === "show" && !item.thin ? seasonRowsFromTmdb(item.rawData?.seasons) : null;
+  if (seasons) {
+    // The title is stored. A failed season write leaves the show as it was and
+    // must not fail the resolve that brought it in; the cron walk retries it.
+    try {
+      await storeShowSeasons(db, result.id, seasons);
+    } catch (e) {
+      console.warn("show_seasons_store_failed", { id: result.id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return result;
+}
+
+async function upsertLink(db: D1Database, item: SourceItem, opts: UpsertOptions): Promise<UpsertResult> {
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
     // 1. The exact link, type included.
     const existing = await first<{ media_item_id: string; raw_data: string }>(

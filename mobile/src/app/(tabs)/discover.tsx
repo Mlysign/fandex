@@ -3,13 +3,14 @@
 // once and the film, show and game databases a moment later, and both land in
 // the same grid under the chosen sort.
 //
-// With nothing typed the grid is the catalog on this device, and below it the
+// With nothing typed the grid is the catalog on this device, opening on Picks
+// (a fresh hand of strong titles each visit, lib/picks.ts), and below it the
 // site's provider-fed feed of upcoming titles: films and shows from TMDB, asked
 // from the device, and games from the Worker (/v1/browse/games), a page of each
 // at a time as the list reaches its end. Typing also shows the people and
 // tags in the catalog whose names match, above the titles, as the site did.
 
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -31,6 +32,7 @@ import { onSearchQuery, takeWaitingQuery } from '~/lib/searchHandoff';
 import { boardgamesOn } from '~/lib/features';
 import { catalogCards } from '~/lib/db';
 import { useHiddenIds, withoutHidden } from '~/lib/hidden';
+import { drawPicks } from '~/lib/picks';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
@@ -40,9 +42,14 @@ import { facetVocab, matchVocab, type VocabEntry } from '~/lib/facetVocab';
 import { spokenKey } from '~/lib/facetImpact';
 import { color, radius, type } from '~/theme';
 
-// src/components/discovery/types.ts, SORTS.
-type Sort = 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
-const SORTS: [Sort, string][] = [['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
+// src/components/discovery/types.ts, SORTS, and Picks (lib/picks.ts), the one
+// the grid opens on with nothing typed. A search has no use for it: typing
+// sorts by Popularity until another sort is chosen.
+type Sort = 'picks' | 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
+const SORTS: [Sort, string][] = [['picks', 'Picks'], ['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
+/** Away from Search this long, and Picks deals a new hand on the way back. Back from a title is quicker than this. */
+const PICKS_AWAY_MS = 10 * 60 * 1000;
+const newSeed = () => Math.floor(Math.random() * 2 ** 32);
 
 const DEBOUNCE_MS = 300;
 const QUERY_KEY = 'fandex.search.q';
@@ -99,7 +106,7 @@ export default function DiscoverScreen() {
   const db = useSQLiteContext();
   const sync = useCatalogSync();
   const types = useTypeFilter();
-  const { center } = useScores();
+  const { center, ready: scoresReady, scoresFor } = useScores();
   // Kept for the browser tab, as the site kept it (rr_discover_q): Back already
   // returns to the mounted screen with its query and scroll, and this covers a
   // reload.
@@ -115,7 +122,7 @@ export default function DiscoverScreen() {
     if (Platform.OS !== 'web') return;
     try { globalThis.sessionStorage?.setItem(QUERY_KEY, query); } catch { /* storage refused: nothing kept */ }
   }, [query]);
-  const [sort, setSort] = useState<Sort>('popularity');
+  const [sort, setSort] = useState<Sort>('picks');
   const [pool, setPool] = useState<CardItem[] | null>(null);
   const [screen, setScreen] = useState<Remote>(IDLE);
   const [games, setGames] = useState<Remote>(IDLE);
@@ -236,29 +243,84 @@ export default function DiscoverScreen() {
     return [...local, ...fresh];
   }, [pool, keyed, norm, hidden, screen.rows, games.rows, shelf.rows, feed.rows]);
 
+  const sortNow: Sort = norm && sort === 'picks' ? 'popularity' : sort;
+
+  // Picks: a hand dealt once per seed and then kept, so rating a card, a sync
+  // or a new score never reshuffles the grid under the reader. A new seed on
+  // each visit: a fresh mount, or a return after PICKS_AWAY_MS.
+  const [seed, setSeed] = useState(newSeed);
+  const leftAt = useRef<number | null>(null);
+  useFocusEffect(useCallback(() => {
+    if (leftAt.current != null && Date.now() - leftAt.current >= PICKS_AWAY_MS) setSeed(newSeed());
+    leftAt.current = null;
+    return () => { leftAt.current = Date.now(); };
+  }, []));
+  const [picks, setPicks] = useState<{ seed: number; rank: Map<string, number>; library: Set<string> } | null>(null);
+  const signedIn = auth.status === 'signedIn';
+  // Your rows and your profile first: a hand dealt before them would show your
+  // library and miss your score, and it is kept. An empty catalog copy (a first
+  // start, still downloading) is not dealt from: it shows Popularity's order
+  // and the download's own state until there is something to deal.
+  const picksCanDeal = !!pool?.length && auth.status !== 'loading' && (!signedIn || (scoresReady && !auth.rowsSyncing));
+  useEffect(() => {
+    if (sortNow !== 'picks' || !picksCanDeal || picks?.seed === seed) return;
+    let live = true;
+    void (async () => {
+      // Titles new to you: none from your library (where ratings live), and no DLC or packs.
+      const library = signedIn
+        ? new Set((await db.getAllAsync<{ id: string }>("SELECT DISTINCT media_item_id id FROM item_state WHERE relation = 'library'")).map((r) => r.id))
+        : new Set<string>();
+      const candidates = (pool ?? []).filter((c) => c.id && !c.addon && !library.has(c.id));
+      const scores = center != null ? await scoresFor(candidates.map((c) => c.id as string), () => live) : new Map<string, { score: number }>();
+      if (!live) return;
+      const order = drawPicks(candidates, (c) => ({
+        type: c.type, fandexScore: scores.get(c.id as string)?.score ?? null,
+        communityScore: c.communityScore, communityVotes: c.communityVotes ?? 0,
+      }), seed);
+      setPicks({ seed, rank: new Map(order.map((c, i) => [c.key, i])), library });
+    })().catch((e: unknown) => {
+      // A failed deal must end the spinner: the grid falls back to Popularity's order.
+      console.warn('picks_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      if (live) setPicks({ seed, rank: new Map(), library: new Set() });
+    });
+    return () => { live = false; };
+  }, [sortNow, picksCanDeal, seed, picks?.seed, pool, db, signedIn, center, scoresFor]);
+  const picksPending = sortNow === 'picks' && picksCanDeal && picks?.seed !== seed;
+
   const typed = useMemo(() => matches.filter((c) => types.isVisible(c.type)), [matches, types]);
   // Your state for every title is only read while a "your lists" filter is on.
   const listed = Object.values(filters.membership).some(Boolean);
   const stateOf = useCardStates(useMemo(() => (listed ? typed.map((c) => c.id) : []), [listed, typed]));
   const visible = useFiltered(typed, filters, stateOf);
   const allScores = useRowScores(useMemo(
-    () => (sort === 'fandexScore' ? visible.map((c) => c.id).filter((id): id is string => !!id) : []), [sort, visible],
+    () => (sortNow === 'fandexScore' ? visible.map((c) => c.id).filter((id): id is string => !!id) : []), [sortNow, visible],
   ));
 
   const sorted = useMemo(() => {
     const list = [...visible];
-    switch (sort) {
+    switch (sortNow) {
+      case 'picks': {
+        if (picksPending) return [];
+        const rank = picks?.seed === seed ? picks.rank : null;
+        if (!rank?.size) return byPopularity(list, crowdOf, true);
+        // The deal first. After it what it did not see, by Popularity: titles
+        // that arrived since (a catalog still filling) and the upcoming feed.
+        // Your library and DLC stay out, as they did from the deal.
+        const dealt = list.filter((c) => rank.has(c.key)).sort((a, b) => rank.get(a.key)! - rank.get(b.key)!);
+        const since = list.filter((c) => !rank.has(c.key) && !c.addon && !(c.id && picks!.library.has(c.id)));
+        return [...dealt, ...byPopularity(since, crowdOf, true)];
+      }
       // Browsing mixes the types by each title's rank among its own; a search keeps the raw count (lib/sortCards.ts).
       case 'popularity': return norm ? addonsLast(byPopularity(list, crowdOf, false)) : byPopularity(list, crowdOf, true);
       case 'rating': return byRating(list, crowdOf);
       case 'fandexScore': return list.sort((a, b) => ((b.id ? allScores.get(b.id)?.score : null) ?? -1) - ((a.id ? allScores.get(a.id)?.score : null) ?? -1));
       case 'releaseDate': return list.sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1));
     }
-  }, [visible, sort, allScores, norm]);
+  }, [visible, sortNow, allScores, norm, picks, picksPending, seed]);
 
   // A new question starts at the top of its own answer.
   const shownKey = types.shown.join(',');
-  useEffect(() => setShown(STEP), [norm, sort, shownKey, filters]);
+  useEffect(() => setShown(STEP), [norm, sortNow, shownKey, filters, seed]);
   const page = useMemo(() => sorted.slice(0, shown), [sorted, shown]);
   const more = useCallback(() => {
     if (shown < sorted.length) setShown((n) => n + STEP);
@@ -266,7 +328,7 @@ export default function DiscoverScreen() {
   }, [shown, sorted.length, norm, feed.done, feed.loading, feed.page, loadFeed]);
 
   const sections = useMemo<CardSection[] | undefined>(() => {
-    if (sort !== 'releaseDate') return undefined;
+    if (sortNow !== 'releaseDate') return undefined;
     const now = currentMonth();
     const out: CardSection[] = [];
     for (const c of page) {
@@ -276,7 +338,7 @@ export default function DiscoverScreen() {
       else out.push({ key: m, label: m === 'none' ? 'No date yet' : monthLabel(m), past: m < now, current: m === now, items: [c] });
     }
     return out;
-  }, [sort, page]);
+  }, [sortNow, page]);
 
   const searching = screen.state === 'loading' || games.state === 'loading' || shelf.state === 'loading';
   const notes = [
@@ -289,7 +351,7 @@ export default function DiscoverScreen() {
     !norm && sync.state === 'syncing' && sync.written > 0 ? `Downloading the catalog… ${sync.total.toLocaleString('en')} so far` : null,
   ].filter(Boolean);
 
-  const empty = pool === null ? <StateBlock loading />
+  const empty = pool === null || picksPending ? <StateBlock loading />
     : searching ? <StateBlock loading title="Searching" />
     : norm ? <EmptyState title="Nothing found" hint={term.length < 2 ? 'Type one more letter to search the databases.' : 'Nothing by that name in games, movies, shows, books or board games.'} />
     : sync.state === 'syncing' ? <StateBlock loading title="Downloading the catalog" detail="This happens once. After that only changes are fetched." />
@@ -301,7 +363,7 @@ export default function DiscoverScreen() {
       <SubBar
         search={{ value: query, onChange: setQuery, placeholder: 'Search games, movies, shows, books…' }}
         count={pool ? { noun: 'titles', n: sorted.length } : null}
-        sort={{ value: sort, options: center == null ? SORTS.filter(([k]) => k !== 'fandexScore') : SORTS, onChange: setSort }}
+        sort={{ value: sortNow, options: SORTS.filter(([k]) => (k !== 'fandexScore' || center != null) && (k !== 'picks' || !norm)), onChange: setSort }}
         trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}
       />
       <PosterGrid
