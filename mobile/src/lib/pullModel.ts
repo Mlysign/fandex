@@ -115,6 +115,12 @@ export interface FacetCounts {
 
 const sigmoid = (x: number) => (x >= 0 ? 1 / (1 + Math.exp(-x)) : Math.exp(x) / (1 + Math.exp(x)));
 const softThreshold = (x: number, l: number) => (x > l ? x - l : x < -l ? x + l : 0);
+/**
+ * The fit's own version, part of what a stored fit is keyed by (ScoreProvider):
+ * raise it with any change to what `fitPullModelSteps` computes, or a device
+ * keeps the coefficients the old code fitted.
+ */
+export const PULL_FIT_VERSION = 1;
 /** Rows or facets handled between two yields: small enough that a slice ends near its budget on a phone. */
 const YIELD_EVERY = 256;
 
@@ -207,8 +213,40 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
   return drain(fitPullModelSteps(picks, baseline, opts));
 }
 
-/** `fitPullModel` as steps, for a caller that runs it in slices (timeSlice.ts `runSliced`). */
-export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opts: PullOptions): Steps<PullModel | null> {
+/**
+ * What a fit found, without what can be counted again: the coefficients and
+ * the sweeps. Small enough to keep on the device (a few hundred facets), where
+ * the counts (every facet any title carries) are megabytes and a pass over the
+ * rows to rebuild.
+ */
+export interface StoredPullFit {
+  beta: [string, number][];
+  foldBeta: [string, number][][];
+  sweeps: number;
+}
+
+export function storedFitOf(model: PullModel): StoredPullFit {
+  return { beta: [...model.beta], foldBeta: model.foldBeta.map((m) => [...m]), sweeps: model.sweeps };
+}
+
+/** A stored fit read back, or null when it is not one (an older shape, a damaged row). */
+export function parseStoredFit(v: unknown): StoredPullFit | null {
+  const pairs = (x: unknown): x is [string, number][] =>
+    Array.isArray(x) && x.every((p) => Array.isArray(p) && typeof p[0] === 'string' && typeof p[1] === 'number');
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Partial<StoredPullFit>;
+  if (!pairs(o.beta) || !Array.isArray(o.foldBeta) || !o.foldBeta.every(pairs) || typeof o.sweeps !== 'number') return null;
+  return { beta: o.beta, foldBeta: o.foldBeta, sweeps: o.sweeps };
+}
+
+/**
+ * `fitPullModel` as steps, for a caller that runs it in slices (timeSlice.ts
+ * `runSliced`). With `stored`, a fit made earlier on exactly these picks and
+ * this baseline, the fits are skipped: the counts and the folds are rebuilt
+ * from the rows and the stored coefficients are used as they are. That pass is
+ * a small part of the work; the sweeps are the rest.
+ */
+export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opts: PullOptions, stored?: StoredPullFit): Steps<PullModel | null> {
   const pickWeight = new Map<string, number>();
   const baselineSize = new Map<string, number>();
   for (const t of picks) if (t.weight > 0) pickWeight.set(t.type, (pickWeight.get(t.type) ?? 0) + t.weight);
@@ -238,6 +276,18 @@ export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opt
       if (r.y === 1) { c.picked += r.weight; c.titles++; c.pickedMedia.add(r.t.type); }
       else c.baseline.set(r.t.type, (c.baseline.get(r.t.type) ?? 0) + 1);
     }
+  }
+  const media = new Map(mediaList.map((m) => [m, { picks: pickWeight.get(m) ?? 0, baseline: baselineSize.get(m) ?? 0 }]));
+  const foldOf = new Map<string, number>();
+  const fold = new Int32Array(firstBaseline);
+  if (opts.folds > 1) {
+    for (let i = 0; i < firstBaseline; i++) {
+      fold[i] = foldFor(rows[i].t.id, opts.folds);
+      foldOf.set(rows[i].t.id, fold[i]);
+    }
+  }
+  if (stored) {
+    return { beta: new Map(stored.beta), foldBeta: stored.foldBeta.map((m) => new Map(m)), foldOf, media, counts, sweeps: stored.sweeps };
   }
 
   const minSupport = opts.minSupport ?? 3;
@@ -309,13 +359,7 @@ export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opt
   };
 
   const foldBeta: Map<string, number>[] = [];
-  const foldOf = new Map<string, number>();
   if (opts.folds > 1) {
-    const fold = new Int32Array(firstBaseline);
-    for (let i = 0; i < firstBaseline; i++) {
-      fold[i] = foldFor(rows[i].t.id, opts.folds);
-      foldOf.set(rows[i].t.id, fold[i]);
-    }
     for (let k = 0; k < opts.folds; k++) {
       // Warm from the whole fit: a fold moves few coefficients, so it settles in a few sweeps.
       foldBeta.push(toMap((yield* fit(design, weights((i) => fold[i] === k), penalty, opts, whole)).beta));
@@ -326,7 +370,7 @@ export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opt
     beta: toMap(whole.beta),
     foldBeta,
     foldOf,
-    media: new Map(mediaList.map((m) => [m, { picks: pickWeight.get(m) ?? 0, baseline: baselineSize.get(m) ?? 0 }])),
+    media,
     counts,
     sweeps: whole.sweeps,
   };

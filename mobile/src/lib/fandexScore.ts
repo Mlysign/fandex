@@ -29,7 +29,7 @@
 // counts (leave-one-out, exact, since only this title's facets enter).
 
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from '@/lib/scoringDefaults';
-import { fitPullModelSteps, timesAverage, type PullModel, type PullPick, type PullTitle } from './pullModel';
+import { fitPullModelSteps, timesAverage, type PullModel, type PullPick, type PullTitle, type StoredPullFit } from './pullModel';
 import { drain, type Steps } from './timeSlice';
 
 export interface ScoreFacet {
@@ -303,7 +303,8 @@ export function buildPullModel(picks: ConsumedTitle[], baseline: BaselineTitle[]
 /** Titles resolved between two yields of `buildPullModelSteps`. */
 const RESOLVE_EVERY = 200;
 
-export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy): Steps<PullModel | null> {
+/** `stored`: a fit made on exactly these picks, baseline and taxonomy, reused in place of fitting (pullModel.ts `fitPullModelSteps`). */
+export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy, stored?: StoredPullFit): Steps<PullModel | null> {
   if (!baseline.length) return null;
   const pickRows: PullPick[] = [];
   for (const t of picks) {
@@ -316,7 +317,7 @@ export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineT
     if (baselineRows.length % RESOLVE_EVERY === RESOLVE_EVERY - 1) yield;
     baselineRows.push({ id: t.id, type: t.type, facets: pullFacetIds(t.facets, t.id, tax), ...(t.fresh ? { fresh: true } : {}) });
   }
-  return yield* fitPullModelSteps(pickRows, baselineRows, { l1: tax.config.pullL1, l2: tax.config.pullL2, folds: PULL_FOLDS });
+  return yield* fitPullModelSteps(pickRows, baselineRows, { l1: tax.config.pullL1, l2: tax.config.pullL2, folds: PULL_FOLDS }, stored);
 }
 
 export function buildProfile(

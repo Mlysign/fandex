@@ -18,13 +18,13 @@ import { api, type ScoreReport } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
-import { getMeta, setMeta } from '~/lib/db';
+import { getMeta, PULL_FIT_KEY, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import {
   buildProfile, buildPullModelSteps, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
   type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
-import type { PullModel } from '~/lib/pullModel';
+import { parseStoredFit, PULL_FIT_VERSION, storedFitOf, type PullModel, type StoredPullFit } from '~/lib/pullModel';
 import { calibrate, type MediumCalibration } from '~/lib/scoreCalibration';
 import { MIN_CALIBRATION } from '~/lib/scoreReasons';
 import { runSliced, SliceCancelled } from '~/lib/timeSlice';
@@ -48,6 +48,12 @@ const BASELINE_CHECK_GAP_MS = 24 * 60 * 60 * 1000;
  * is cheap; asking twice a day left a sweep invisible for up to twelve hours.
  */
 const TAXONOMY_CHECK_GAP_MS = 60_000;
+/**
+ * A stored pull fit is used for at most this long. Its key holds the picks,
+ * the baseline and the taxonomy, but not the facets the catalog copy carries
+ * for those titles, which a sync can change; a weekly fit catches that up.
+ */
+const PULL_FIT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Host parameters per statement, kept well under any SQLite build's limit. */
 const ID_CHUNK = 200;
 
@@ -104,10 +110,34 @@ export function parseFacets(json: string): ScoreFacet[] {
   }
 }
 
+/**
+ * Each taxonomy in use, by a fingerprint of the JSON it was prepared from: a
+ * stored pull fit names the taxonomy it was fitted with this way.
+ */
+const taxonomyPrints = new WeakMap<Taxonomy, string>();
+
+/** Two FNV-1a hashes and the length: a fingerprint, not a secret. */
+export function textPrint(text: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 16777619);
+    b = Math.imul(b ^ c, 0x5bd1e995);
+  }
+  return `${(a >>> 0).toString(36)}.${(b >>> 0).toString(36)}.${text.length}`;
+}
+
+function preparedTaxonomy(raw: string): Taxonomy {
+  const tax = prepareTaxonomy(JSON.parse(raw) as TaxonomyJson);
+  taxonomyPrints.set(tax, textPrint(raw));
+  return tax;
+}
+
 async function storedTaxonomy(db: SQLiteDatabase): Promise<Taxonomy | null> {
   const raw = await getMeta(db, TAXONOMY_KEY);
   if (!raw) return null;
-  try { return prepareTaxonomy(JSON.parse(raw) as TaxonomyJson); } catch { return null; }
+  try { return preparedTaxonomy(raw); } catch { return null; }
 }
 
 /** Ask for the taxonomy unless it was asked for under a minute ago. True when a new one was stored. Never throws: the stored one stands. */
@@ -259,10 +289,30 @@ export async function followedFacets(db: SQLiteDatabase): Promise<Map<string, Fo
  * seconds on a phone, so it runs in slices (timeSlice.ts) and taps still land
  * while it does; `alive` going false stops it with `SliceCancelled`.
  */
-export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[], tax: Taxonomy, alive?: () => boolean): Promise<PullModel | null> {
+export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[], tax: Taxonomy, alive?: () => boolean, stored?: StoredPullFit): Promise<PullModel | null> {
   const list = await storedBaseline(db);
   if (!list.length) return null;
-  return runSliced(buildPullModelSteps(consumed, await baselineTitles(db, list), tax), { alive });
+  return runSliced(buildPullModelSteps(consumed, await baselineTitles(db, list), tax, stored), { alive });
+}
+
+/** The stored pull fit when it was made under `key` within the last week, else null. */
+async function storedPullFit(db: SQLiteDatabase, key: string): Promise<StoredPullFit | null> {
+  const raw = await getMeta(db, PULL_FIT_KEY);
+  if (!raw) return null;
+  try {
+    const row = JSON.parse(raw) as { key?: unknown; at?: unknown; fit?: unknown };
+    if (row.key !== key || typeof row.at !== 'number' || Date.now() - row.at > PULL_FIT_MAX_AGE_MS) return null;
+    return parseStoredFit(row.fit);
+  } catch {
+    return null;
+  }
+}
+
+/** Keep a fit for the next start. A failed write costs only a fit then. */
+async function keepPullFit(db: SQLiteDatabase, key: string, model: PullModel): Promise<void> {
+  try {
+    await setMeta(db, PULL_FIT_KEY, JSON.stringify({ key, at: Date.now(), fit: storedFitOf(model) }));
+  } catch { /* the next start fits again */ }
 }
 
 /** How many of the baseline titles the catalog copy holds: while the Worker is still adding them, this is what grows. */
@@ -298,12 +348,14 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
 
   // The baseline list: what is stored, then asked for again once a day. Only
   // its identity (the ETag) is kept in state; the model reads the stored list.
-  const [baseline, setBaseline] = useState<string | null>(null);
+  // Undefined until the stored one has been read: the identity is part of a
+  // stored pull fit's key, so a rebuild waits for it rather than fit under none.
+  const [baseline, setBaseline] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
     (async () => {
       const stored = await getMeta(db, BASELINE_ETAG_KEY);
-      if (live && stored) setBaseline(stored);
+      if (live) setBaseline(stored || null);
       if (await refreshBaseline(db)) {
         const fresh = await getMeta(db, BASELINE_ETAG_KEY);
         if (live) setBaseline(fresh ?? String(Date.now()));
@@ -360,7 +412,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       if (auth.status !== 'loading') setReady(true);
       return;
     }
-    if (filling) return;
+    if (filling || baseline === undefined) return;
     (async () => {
       const started = Date.now();
       const [rated, consumed, follows] = await Promise.all([ratedTitles(db), consumedTitles(db), followedFacets(db)]);
@@ -369,11 +421,18 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       if (!live) return;
       let cached = pullFit.current;
       let fitMs = 0;
+      let reused = false;
       if (!cached || cached.signature !== signature || cached.tax !== taxonomy) {
         const fitStarted = Date.now();
+        // What a stored fit must have been made on to stand in for this one.
+        const print = taxonomyPrints.get(taxonomy);
+        const fitKey = print ? `${PULL_FIT_VERSION}|${print}|${signature}` : null;
+        const stored = fitKey ? await storedPullFit(db, fitKey) : null;
+        if (!live) return;
+        reused = !!stored;
         let model: PullModel | null;
         try {
-          model = await pullModelFor(db, consumed, taxonomy, () => live);
+          model = await pullModelFor(db, consumed, taxonomy, () => live, stored ?? undefined);
         } catch (e) {
           // A newer rebuild took over; it fits again with what changed.
           if (e instanceof SliceCancelled) return;
@@ -383,12 +442,13 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
         fitMs = Date.now() - fitStarted;
         if (!live) return;
         pullFit.current = cached;
+        if (fitKey && model && !stored) void keepPullFit(db, fitKey, model);
       }
       const built = buildProfile(rated, taxonomy, { consumed, pull: cached.model, follows });
       const model = cached.model;
       console.log('fandex_profile', JSON.stringify({
         rated: rated.length, consumed: consumed.length, follows: follows.size, facets: built.w.size,
-        pull: model ? { media: Object.fromEntries(model.media), facets: model.beta.size, sweeps: model.sweeps, ms: fitMs } : null,
+        pull: model ? { media: Object.fromEntries(model.media), facets: model.beta.size, sweeps: model.sweeps, ms: fitMs, reused } : null,
         ms: Date.now() - started,
       }));
       setProfile(built);
@@ -445,8 +505,9 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   const adoptTaxonomy = useCallback(async (json: TaxonomyJson) => {
-    const next = prepareTaxonomy(json);
-    await setMeta(db, TAXONOMY_KEY, JSON.stringify(json));
+    const raw = JSON.stringify(json);
+    const next = preparedTaxonomy(raw);
+    await setMeta(db, TAXONOMY_KEY, raw);
     // The stored ETag no longer describes what is stored. Dropping it makes the next check a full fetch.
     await setMeta(db, TAXONOMY_ETAG_KEY, '');
     setTaxonomy(next);
