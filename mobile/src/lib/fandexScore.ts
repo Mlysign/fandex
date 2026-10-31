@@ -29,7 +29,8 @@
 // counts (leave-one-out, exact, since only this title's facets enter).
 
 import { DEFAULT_SCORING_CONFIG, type ScoringConfigValues } from '@/lib/scoringDefaults';
-import { fitPullModel, timesAverage, type PullModel } from './pullModel';
+import { fitPullModelSteps, timesAverage, type PullModel, type PullPick, type PullTitle } from './pullModel';
+import { drain, type Steps } from './timeSlice';
 
 export interface ScoreFacet {
   kind: 'tag' | 'person' | 'company' | 'ip';
@@ -291,15 +292,31 @@ export function pullFacetIds(raw: ScoreFacet[], itemId: string | null, tax: Taxo
 /**
  * Fit the pull model: your picks against the baseline (§3.7). Seconds on a
  * phone for a big library, so a caller keeps it until the picks, the baseline
- * or the taxonomy change. Null without a baseline, or with no medium both have.
+ * or the taxonomy change, and the device runs `buildPullModelSteps` in slices
+ * (timeSlice.ts) rather than this. Null without a baseline, or with no medium
+ * both have.
  */
 export function buildPullModel(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy): PullModel | null {
+  return drain(buildPullModelSteps(picks, baseline, tax));
+}
+
+/** Titles resolved between two yields of `buildPullModelSteps`. */
+const RESOLVE_EVERY = 200;
+
+export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineTitle[], tax: Taxonomy): Steps<PullModel | null> {
   if (!baseline.length) return null;
-  return fitPullModel(
-    picks.filter((t) => t.type).map((t) => ({ id: t.id, type: t.type!, weight: t.weight, facets: pullFacetIds(t.facets, t.id, tax) })),
-    baseline.map((t) => ({ id: t.id, type: t.type, facets: pullFacetIds(t.facets, t.id, tax), ...(t.fresh ? { fresh: true } : {}) })),
-    { l1: tax.config.pullL1, l2: tax.config.pullL2, folds: PULL_FOLDS },
-  );
+  const pickRows: PullPick[] = [];
+  for (const t of picks) {
+    if (!t.type) continue;
+    if (pickRows.length % RESOLVE_EVERY === RESOLVE_EVERY - 1) yield;
+    pickRows.push({ id: t.id, type: t.type, weight: t.weight, facets: pullFacetIds(t.facets, t.id, tax) });
+  }
+  const baselineRows: PullTitle[] = [];
+  for (const t of baseline) {
+    if (baselineRows.length % RESOLVE_EVERY === RESOLVE_EVERY - 1) yield;
+    baselineRows.push({ id: t.id, type: t.type, facets: pullFacetIds(t.facets, t.id, tax), ...(t.fresh ? { fresh: true } : {}) });
+  }
+  return yield* fitPullModelSteps(pickRows, baselineRows, { l1: tax.config.pullL1, l2: tax.config.pullL2, folds: PULL_FOLDS });
 }
 
 export function buildProfile(

@@ -21,12 +21,13 @@ import { API_URL } from '~/lib/config';
 import { getMeta, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
 import {
-  buildProfile, buildPullModel, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
+  buildProfile, buildPullModelSteps, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
   type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
 import type { PullModel } from '~/lib/pullModel';
 import { calibrate, type MediumCalibration } from '~/lib/scoreCalibration';
 import { MIN_CALIBRATION } from '~/lib/scoreReasons';
+import { runSliced, SliceCancelled } from '~/lib/timeSlice';
 
 const TAXONOMY_KEY = 'taxonomy';
 const TAXONOMY_ETAG_KEY = 'taxonomy_etag';
@@ -254,12 +255,14 @@ export async function followedFacets(db: SQLiteDatabase): Promise<Map<string, Fo
 
 /**
  * The pull model for these picks: fitted against the baseline titles the
- * catalog copy holds. Null when the device holds no baseline yet.
+ * catalog copy holds. Null when the device holds no baseline yet. The fit is
+ * seconds on a phone, so it runs in slices (timeSlice.ts) and taps still land
+ * while it does; `alive` going false stops it with `SliceCancelled`.
  */
-export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[], tax: Taxonomy): Promise<PullModel | null> {
+export async function pullModelFor(db: SQLiteDatabase, consumed: ConsumedTitle[], tax: Taxonomy, alive?: () => boolean): Promise<PullModel | null> {
   const list = await storedBaseline(db);
   if (!list.length) return null;
-  return buildPullModel(consumed, await baselineTitles(db, list), tax);
+  return runSliced(buildPullModelSteps(consumed, await baselineTitles(db, list), tax), { alive });
 }
 
 /** How many of the baseline titles the catalog copy holds: while the Worker is still adding them, this is what grows. */
@@ -368,7 +371,15 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       let fitMs = 0;
       if (!cached || cached.signature !== signature || cached.tax !== taxonomy) {
         const fitStarted = Date.now();
-        cached = { signature, tax: taxonomy, model: await pullModelFor(db, consumed, taxonomy) };
+        let model: PullModel | null;
+        try {
+          model = await pullModelFor(db, consumed, taxonomy, () => live);
+        } catch (e) {
+          // A newer rebuild took over; it fits again with what changed.
+          if (e instanceof SliceCancelled) return;
+          throw e;
+        }
+        cached = { signature, tax: taxonomy, model };
         fitMs = Date.now() - fitStarted;
         if (!live) return;
         pullFit.current = cached;

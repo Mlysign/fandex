@@ -27,7 +27,14 @@
 //
 // A title you picked is scored by a model that did not see it: the picks are
 // split into folds, and each fold has a model fitted without it. Pure
-// TypeScript with no imports, so scripts/score-backtest.mjs runs it under Node.
+// TypeScript, importing only timeSlice.ts (itself pure), so
+// scripts/score-backtest.mjs runs it under Node.
+//
+// The fit is seconds on a phone, so it is written as steps (timeSlice.ts):
+// `fitPullModelSteps` yields every few hundred rows or facets, and the device
+// runs it in slices so the app keeps answering taps while it fits.
+
+import { drain, type Steps } from './timeSlice';
 
 export interface PullTitle {
   id: string;
@@ -108,6 +115,8 @@ export interface FacetCounts {
 
 const sigmoid = (x: number) => (x >= 0 ? 1 / (1 + Math.exp(-x)) : Math.exp(x) / (1 + Math.exp(x)));
 const softThreshold = (x: number, l: number) => (x > l ? x - l : x < -l ? x + l : 0);
+/** Rows or facets handled between two yields: small enough that a slice ends near its budget on a phone. */
+const YIELD_EVERY = 256;
 
 /** A stable fold for an id: the same title lands in the same fold on every device and every rebuild. */
 export function foldFor(id: string, folds: number): number {
@@ -130,7 +139,7 @@ interface Design {
  * Coordinate descent for a weighted lasso logistic regression with unpenalised
  * per-medium intercepts. `penalty[j]` is facet j's own lasso weight.
  */
-function fit(d: Design, w: Float64Array, penalty: Float64Array, opts: PullOptions, init?: { beta: Float64Array; b0: Float64Array }): { beta: Float64Array; b0: Float64Array; sweeps: number } {
+function* fit(d: Design, w: Float64Array, penalty: Float64Array, opts: PullOptions, init?: { beta: Float64Array; b0: Float64Array }): Steps<{ beta: Float64Array; b0: Float64Array; sweeps: number }> {
   const p = d.cols.length;
   const beta = init ? Float64Array.from(init.beta) : new Float64Array(p);
   const b0 = init ? Float64Array.from(init.b0) : new Float64Array(d.byMedium.length);
@@ -169,6 +178,7 @@ function fit(d: Design, w: Float64Array, penalty: Float64Array, opts: PullOption
     }
     let biggest = 0;
     for (let j = 0; j < p; j++) {
+      if (j % YIELD_EVERY === YIELD_EVERY - 1) yield;
       if (!full && beta[j] === 0) continue;
       const delta = step(d.cols[j], beta[j], penalty[j], opts.l2);
       if (delta === 0) continue;
@@ -176,6 +186,7 @@ function fit(d: Design, w: Float64Array, penalty: Float64Array, opts: PullOption
       move(d.cols[j], delta);
       biggest = Math.max(biggest, Math.abs(delta));
     }
+    yield;
     if (biggest < tol) {
       // Settled on the facets already counted: one sweep over all of them says whether any other wants in.
       if (full) break;
@@ -193,6 +204,11 @@ function fit(d: Design, w: Float64Array, penalty: Float64Array, opts: PullOption
  * to compare them with. Null when no medium has both.
  */
 export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: PullOptions): PullModel | null {
+  return drain(fitPullModelSteps(picks, baseline, opts));
+}
+
+/** `fitPullModel` as steps, for a caller that runs it in slices (timeSlice.ts `runSliced`). */
+export function* fitPullModelSteps(picks: PullPick[], baseline: PullTitle[], opts: PullOptions): Steps<PullModel | null> {
   const pickWeight = new Map<string, number>();
   const baselineSize = new Map<string, number>();
   for (const t of picks) if (t.weight > 0) pickWeight.set(t.type, (pickWeight.get(t.type) ?? 0) + t.weight);
@@ -209,7 +225,9 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
   // The plain counts, for every facet: what the sentence on a row is made of.
   const counts = new Map<string, FacetCounts>();
   const support = new Map<string, number>();
-  for (const r of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    if (i % YIELD_EVERY === YIELD_EVERY - 1) yield;
+    const r = rows[i];
     const seen = new Set<string>();
     for (const f of r.t.facets) {
       if (seen.has(f)) continue;
@@ -227,10 +245,13 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
   // Which tags today's pipeline puts on a drawn title: counted on the fresh ones.
   const anyFresh = baseline.some((t) => t.fresh);
   const vouched = new Map<string, number>();
-  for (const t of baseline) {
+  for (let i = 0; i < baseline.length; i++) {
+    if (i % YIELD_EVERY === YIELD_EVERY - 1) yield;
+    const t = baseline[i];
     if (anyFresh && !t.fresh) continue;
     for (const f of new Set(t.facets)) if (f.startsWith('tag|')) vouched.set(f, (vouched.get(f) ?? 0) + 1);
   }
+  yield;
   const features = [...support].filter(([f, n]) => n >= minSupport && (!f.startsWith('tag|') || (vouched.get(f) ?? 0) >= minBaseline)).map(([f]) => f).sort();
   const featureIndex = new Map(features.map((f, j) => [f, j]));
   const colLists: number[][] = features.map(() => []);
@@ -238,7 +259,9 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
   const y = new Uint8Array(n);
   const medium = new Int32Array(n);
   const mediumRows: number[][] = mediaList.map(() => []);
-  rows.forEach((r, i) => {
+  for (let i = 0; i < n; i++) {
+    if (i % YIELD_EVERY === YIELD_EVERY - 1) yield;
+    const r = rows[i];
     y[i] = r.y;
     medium[i] = mediumIndex.get(r.t.type)!;
     mediumRows[medium[i]].push(i);
@@ -249,7 +272,8 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
       seen.add(j);
       colLists[j].push(i);
     }
-  });
+  }
+  yield;
   const design: Design = { n, y, medium, cols: colLists.map((c) => Int32Array.from(c)), byMedium: mediumRows.map((c) => Int32Array.from(c)) };
 
   /** The weights for a fit that leaves out the picks for which `out` is true: each medium's baseline weighs what its picks weigh. */
@@ -268,6 +292,7 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
   // standard errors: a franchise you finished four of four (0.1 expected) does,
   // three firefighter films against 1.75 expected does not. Without the scaling
   // the bar is a count of titles, which favours big facets over telling ones.
+  yield;
   const wholeWeights = weights(() => false);
   const penalty = new Float64Array(features.length);
   design.cols.forEach((col, j) => {
@@ -275,7 +300,8 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
     for (const i of col) m += wholeWeights[i];
     penalty[j] = (opts.l1 / 2) * Math.sqrt(m);
   });
-  const whole = fit(design, wholeWeights, penalty, opts);
+  yield;
+  const whole = yield* fit(design, wholeWeights, penalty, opts);
   const toMap = (beta: Float64Array) => {
     const m = new Map<string, number>();
     beta.forEach((b, j) => { if (b !== 0) m.set(features[j], b); });
@@ -292,7 +318,7 @@ export function fitPullModel(picks: PullPick[], baseline: PullTitle[], opts: Pul
     }
     for (let k = 0; k < opts.folds; k++) {
       // Warm from the whole fit: a fold moves few coefficients, so it settles in a few sweeps.
-      foldBeta.push(toMap(fit(design, weights((i) => fold[i] === k), penalty, opts, whole).beta));
+      foldBeta.push(toMap((yield* fit(design, weights((i) => fold[i] === k), penalty, opts, whole)).beta));
     }
   }
 
