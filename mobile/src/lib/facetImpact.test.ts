@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateFacets, pageImpacts } from './facetImpact';
+import { estimateFacets, impactAbsence, pageImpacts } from './facetImpact';
 import { buildProfile, computeFandexScore, prepareTaxonomy, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 const json = (over: Partial<TaxonomyJson> = {}): TaxonomyJson => ({
@@ -66,6 +66,37 @@ describe("a facet page's Fandex impact", () => {
     expect(pageImpacts('tag', 'western', profile, tax)).toEqual([]);
     expect(pageImpacts('company', 'steampunk', profile, tax)).toEqual([]);
     expect(pageImpacts('tag', 'steampunk', buildProfile(library.slice(0, 2), tax), tax)).toEqual([]);
+  });
+});
+
+// 2026-11-01: Western's page counted 19 rated titles above "none of the 1747
+// titles you rated carries this tag", because Genre weighs 0 for taste.
+describe("why a facet page shows no impact row", () => {
+  it('names the zero-weight category, not "none carries it", for a tag your rated titles carry', () => {
+    const tax = prepareTaxonomy(json({ tagCategories: [
+      { id: 'genre', label: 'Genre', color: '#fff', weight: 0, ignored: 0, sortOrder: 0 },
+      { id: 'setting', label: 'Setting', color: '#fff', weight: 2, ignored: 0, sortOrder: 1 },
+      { id: 'meta', label: 'Meta', color: '#fff', weight: 0, ignored: 1, sortOrder: 2 },
+    ] }));
+    const profile = buildProfile(library, tax);
+    expect(pageImpacts('tag', 'musical', profile, tax)).toEqual([]);
+    const line = impactAbsence('tag', 'musical', profile, tax, 'Musical');
+    expect(line).toMatch(/^Tags filed under Genre carry no weight/);
+    expect(line).not.toMatch(/none of/);
+    expect(impactAbsence('tag', 'pc', profile, tax, 'PC')).toMatch(/^Tags filed under Meta carry no weight/);
+  });
+
+  it('names the role for a person rated only in a zero-weight role', () => {
+    const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 4, roleWeights: { writer: 0 } } } }));
+    const profile = buildProfile([...library, rated('e', 5, [person('writer', 'greta gerwig')])], tax);
+    expect(impactAbsence('person', 'greta gerwig', profile, tax, 'Greta Gerwig')).toMatch(/^Writer credits carry no weight/);
+  });
+
+  it('still says none of your titles carries it when that is true', () => {
+    const tax = prepareTaxonomy(json());
+    const profile = buildProfile(library, tax);
+    expect(impactAbsence('tag', 'western', profile, tax, 'Western')).toMatch(/none of the 4 titles you rated carries this tag/);
+    expect(impactAbsence('tag', 'steampunk', profile, tax, 'Steampunk')).toBeNull();
   });
 });
 
