@@ -203,6 +203,13 @@ async function stamp(db: SQLiteDatabase, version: number): Promise<void> {
   await db.execAsync(`PRAGMA user_version = ${version}`);
 }
 
+/**
+ * The pull model's last fit (ScoreProvider), kept so a start does not fit
+ * again. Derived from the account's rows, so signing out forgets it
+ * (stateSync.ts `clearState`).
+ */
+export const PULL_FIT_KEY = 'pull_fit';
+
 export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
   return row?.value ?? null;

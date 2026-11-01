@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fitPullModel, foldFor, timesAverage, type PullPick, type PullTitle } from './pullModel';
+import { fitPullModel, fitPullModelSteps, foldFor, parseStoredFit, storedFitOf, timesAverage, type PullPick, type PullTitle } from './pullModel';
+import { drain } from './timeSlice';
 
 // The pull model on its own (docs/fandex-score.md §3.7). The score's own
 // tests (fandexScore.test.ts) cover what a reader sees; these pin the maths.
@@ -62,5 +63,28 @@ describe('the pull model', () => {
     const without = timesAverage(model, 'noir', { type: 'movie', weight: 1 })!;
     expect(without.titles).toBe(all.titles - 1);
     expect(without.times).toBeLessThanOrEqual(all.times);
+  });
+});
+
+describe('a stored fit', () => {
+  // Kept on the device so a start does not fit again (ScoreProvider): only the
+  // coefficients are kept, and the counts and folds are rebuilt from the rows.
+  const picks = picked([...titles('p', 40, 'movie', ['noir', 'heist']), ...titles('q', 40, 'movie', ['noir'])]);
+  const baseline = [...titles('b', 200, 'movie', []), ...titles('c', 20, 'movie', ['noir']), ...titles('d', 20, 'movie', ['heist'])];
+  const opts = { ...OPTS, folds: 5 };
+
+  it('rebuilds the same model a fresh fit gives, through JSON', () => {
+    const fresh = fitPullModel(picks, baseline, opts)!;
+    const stored = parseStoredFit(JSON.parse(JSON.stringify(storedFitOf(fresh))))!;
+    const reused = drain(fitPullModelSteps(picks, baseline, opts, stored))!;
+    expect(reused).toEqual(fresh);
+    expect(fresh.beta.get('noir')).toBeGreaterThan(0);
+  });
+
+  it('is refused when the row is not one', () => {
+    expect(parseStoredFit(null)).toBeNull();
+    expect(parseStoredFit({ beta: [['noir', 1]], sweeps: 3 })).toBeNull();
+    expect(parseStoredFit({ beta: [['noir', '1']], foldBeta: [], sweeps: 3 })).toBeNull();
+    expect(parseStoredFit({ beta: [['noir', 1]], foldBeta: [[['noir', 0.9]]], sweeps: 3 })).toEqual({ beta: [['noir', 1]], foldBeta: [[['noir', 0.9]]], sweeps: 3 });
   });
 });

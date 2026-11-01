@@ -15,7 +15,7 @@
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api, type EpisodeStateRow, type ItemStateRow, type StateCounts, type StateWrite } from '~/lib/api';
-import { getMeta, setMeta, inTransaction } from '~/lib/db';
+import { getMeta, setMeta, inTransaction, PULL_FIT_KEY } from '~/lib/db';
 
 /**
  * One signature per kind of row, so a change to one kind pulls that kind only.
@@ -235,6 +235,6 @@ export async function clearState(db: SQLiteDatabase): Promise<void> {
     await db.runAsync('DELETE FROM episode_state');
     await db.runAsync('DELETE FROM hidden_item');
     await db.runAsync('DELETE FROM facet_follow');
-    for (const key of [OLD_SIGNATURE_KEY, ...KINDS.map(signatureKey)]) await db.runAsync('DELETE FROM meta WHERE key = ?', [key]);
+    for (const key of [OLD_SIGNATURE_KEY, PULL_FIT_KEY, ...KINDS.map(signatureKey)]) await db.runAsync('DELETE FROM meta WHERE key = ?', [key]);
   });
 }
