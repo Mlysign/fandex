@@ -190,7 +190,8 @@ describe("serving a month", () => {
   });
 
   it("is reachable over HTTP", async () => {
-    providers(full);
+    // The month asked for is the real clock's next one, so the fixtures follow it into that month.
+    providers(full, true);
     const ctx = createExecutionContext();
     const month = shiftMonth(monthKey(new Date()), 1);
     const res = await worker.fetch(new Request(`https://api.test/v1/calendar/${month}?region=DE`), env, ctx);
