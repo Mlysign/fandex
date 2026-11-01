@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget, a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -25,6 +25,8 @@ Four items. Everything else in this file is work I can do without him, and every
 
 5. **🔵 One check from the 2026-10-23 codebase review** (the signed-in CSP check passed 2026-10-24 and the policy is enforced):
    - **If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app; nobody has proven it. A Trakt identity is keyed on Trakt's uuid since 2026-10-23, and his old username row moves to it on his next Trakt sign-in.
+
+6. **🔵 Remind him at the start of his next session on his PC: the "planet" tag page says "9 rated" but Taste says "4 rated"** (postponed 2026-11-01). The page counts its live provider cards too (`FacetScreen.tsx` merges `providerFacet`, e.g. TMDB discover `with_keywords`), while the taste profile reads only stored facets, which keep at most 8 keywords (`TIER_CAPS` in `src/lib/merge.ts`). Unconfirmed until the 5 missing titles are named: on his PC, query his rated library rows and their stored facets in production D1 (read-only), compare each with its TMDB keyword list, and report where "planet" sits. If confirmed, the proposed fix is that the page's "your average · N rated" tile and its crowd sentence count only stored-facet titles, the same set Taste uses; the keyword cap stays.
 
 ## Mine, open
 
