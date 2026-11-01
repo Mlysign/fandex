@@ -20,11 +20,12 @@
 //      TMDB titles are refetched daily when near and weekly when far, with
 //      whatever the refresh above leaves of a run.
 
+import { ProviderUnavailableError } from "@/lib/http";
 import { getIgdbCollections, igdbConfigured } from "@/lib/sources/igdb";
 import { bookDate, getOpenLibraryWork } from "@/lib/sources/openlibrary";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
 import { getSteamStoreTags, getSteamTagMap } from "@/lib/sources/steam";
-import { getTmdbMovie, getTmdbShow } from "@/lib/sources/tmdb";
+import { getTmdbMovie, getTmdbShow, getTmdbShowSeasons } from "@/lib/sources/tmdb";
 import { peopleForGames, type WikidataGamePeople } from "@/lib/sources/wikidata";
 import { kvGet, kvSet } from "./budget";
 import { monthKey, runCalendarStep, SERVABLE_MONTHS, shiftMonth } from "./calendar";
@@ -32,6 +33,7 @@ import { all, nowSeconds, utcDay } from "./d1";
 import type { Env } from "./env";
 import { DERIVE_VERSION } from "./catalog/derive";
 import { rederiveItem, upsertMediaItem } from "./catalog/ingest";
+import { seasonRowsFromTmdb, storeShowSeasons } from "./catalog/seasons";
 import { useSharedIgdbToken } from "./catalog/resolve";
 import { runBaselineStep } from "./baseline";
 
@@ -757,6 +759,69 @@ export async function runProjectionRefreshStep(env: Env, batch = PROJECTION_REFR
   return { refreshed, failed };
 }
 
+// ── 2f. Seasons for the shows that have none ────────────────────────────────
+//
+// Only the seeded shows had `show_seasons` rows: nothing on this stack wrote
+// the table until 2026-10-30, so every show resolved later (The Legend of
+// Korra) opened on "Fandex has no episode list for this show yet". Ingest now
+// stores the seasons of every TMDB show it is given (catalog/seasons.ts); this
+// walks the TMDB shows stored before that, once, in key order, one small
+// `/tv/{id}` call each. Self-terminating: past the last id it parks for good.
+
+/** Shows a run asks TMDB about. One call and two queries each. */
+export const SHOW_SEASONS_PER_RUN = 6;
+const SHOW_SEASONS_CURSOR_KEY = "show_seasons_cursor";
+const SHOW_SEASONS_DONE = "done";
+/**
+ * The primary key is (source, source_id, media_type), so this reads from the
+ * cursor on; each candidate costs one primary-key probe of show_seasons. The
+ * plan and the rows read are asserted in test/seasons.test.ts.
+ */
+export const SHOW_SEASONS_DUE_SQL =
+  `SELECT l.source_id, l.media_item_id FROM media_links l
+    WHERE l.source = 'tmdb' AND l.source_id > ? AND l.media_type = 'show'
+      AND NOT EXISTS (SELECT 1 FROM show_seasons s WHERE s.media_item_id = l.media_item_id)
+    ORDER BY l.source_id LIMIT ?`;
+
+export async function runShowSeasonsStep(env: Env, batch = SHOW_SEASONS_PER_RUN): Promise<{ stored: number; empty: number; failed: number }> {
+  const result = { stored: 0, empty: 0, failed: 0 };
+  const cursor = await kvGet(env.DB, SHOW_SEASONS_CURSOR_KEY);
+  if (cursor === SHOW_SEASONS_DONE) return result;
+
+  const due = await all<{ source_id: string; media_item_id: string }>(env.DB, SHOW_SEASONS_DUE_SQL, [cursor ?? "", batch]);
+  if (!due.length) {
+    await kvSet(env.DB, SHOW_SEASONS_CURSOR_KEY, SHOW_SEASONS_DONE);
+    return result;
+  }
+
+  let last: string | null = null;
+  for (const link of due) {
+    let rows;
+    try {
+      rows = seasonRowsFromTmdb(await getTmdbShowSeasons(link.source_id)) ?? [];
+    } catch (e) {
+      // TMDB looks down: stop here, and this show is asked again next run.
+      if (e instanceof ProviderUnavailableError) break;
+      // Anything else is about this one show (a 404 is a show TMDB deleted).
+      // The walk moves past it; the retention refresh stores its seasons if
+      // TMDB still has it.
+      result.failed++;
+      last = link.source_id;
+      console.warn("show_seasons_fetch_failed", { id: link.source_id, error: e instanceof Error ? e.message : String(e) });
+      continue;
+    }
+    if (rows.length) {
+      await storeShowSeasons(env.DB, link.media_item_id, rows);
+      result.stored++;
+    } else {
+      result.empty++;
+    }
+    last = link.source_id;
+  }
+  if (last !== null) await kvSet(env.DB, SHOW_SEASONS_CURSOR_KEY, last);
+  return result;
+}
+
 // ── 4. Housekeeping ─────────────────────────────────────────────────────────
 //
 // Two tables only ever grew. `daily_budget` gains a row per kind per day, and
@@ -849,6 +914,13 @@ export async function runScheduled(env: Env): Promise<void> {
   } catch (e) {
     console.error("tmdb_projection_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
+  // The TMDB shows with no seasons stored, until none are left; then one kv read a run.
+  try {
+    const ss = await runShowSeasonsStep(env);
+    if (ss.stored || ss.empty || ss.failed) console.log("show_seasons_step", ss);
+  } catch (e) {
+    console.error("show_seasons_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
   try {
     const ic = await runIgdbCollectionsStep(env);
     if (ic.refreshed || ic.missing) console.log("igdb_collections_step", ic);
@@ -884,7 +956,8 @@ export async function runScheduled(env: Env): Promise<void> {
 // queries and a new title takes a dozen, so the throughput comes from the
 // number of runs. While the walk has titles left it takes the whole run; after
 // that the run tags pool games (Steam, Wikidata), so the games the walk added
-// get their tags in hours rather than days. Each of those walks parks itself
+// get their tags in hours rather than days, and fills the seasons of shows
+// stored without them. Each of those walks parks itself
 // when it is through, after which a run here costs a few kv reads.
 
 export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Promise<void> {
@@ -909,5 +982,11 @@ export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Pr
     if (wp.known || wp.unknown) console.log("wikidata_people_step", wp);
   } catch (e) {
     console.error("wikidata_people_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  try {
+    const ss = await runShowSeasonsStep(env);
+    if (ss.stored || ss.empty || ss.failed) console.log("show_seasons_step", ss);
+  } catch (e) {
+    console.error("show_seasons_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
 }
