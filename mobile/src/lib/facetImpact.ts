@@ -7,6 +7,7 @@
 // one row per role you have rated them in.
 
 import { tagKey } from '@/lib/facets';
+import { ROLE_LABEL } from './creditLine';
 import { facetImpact, facetId, facetPull, MIN_RATED_FOR_FANDEX_SCORE, type FacetPull, type Profile, type ScoreFacet, type Taxonomy } from './fandexScore';
 
 /**
@@ -68,15 +69,19 @@ const directionOf = (points: number): ImpactDirection => (Math.abs(points) < 0.5
  */
 export type ImpactKind = 'tag' | 'person' | 'company' | 'ip';
 
-export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax: Taxonomy): PageImpact[] {
-  if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return [];
-  // The profile learned a bundled tag or franchise under its canonical key, so a member spelling's page reads that entry.
-  let target = key;
+/** The profile learned a bundled tag or franchise under its canonical key, so a member spelling's page reads that entry. */
+function profileKey(kind: ImpactKind, key: string, tax: Taxonomy): string {
   if (kind === 'tag' || kind === 'ip') {
     for (const [alias, canonical] of kind === 'tag' ? tax.tagAliases : tax.ipAliases) {
-      if (spokenKey(alias) === key) { target = spokenKey(canonical); break; }
+      if (spokenKey(alias) === key) return spokenKey(canonical);
     }
   }
+  return key;
+}
+
+export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax: Taxonomy): PageImpact[] {
+  if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return [];
+  const target = profileKey(kind, key, tax);
   const rows: PageImpact[] = [];
   for (const m of profile.meta.values()) {
     if (m.kind !== kind || spokenKey(m.key) !== target) continue;
@@ -108,6 +113,22 @@ export function impactAbsence(kind: ImpactKind, key: string, profile: Profile | 
   if (!profile || !tax) return null;
   if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return `Rate ${MIN_RATED_FOR_FANDEX_SCORE} titles and this page will say what ${name} does to your Fandex Score.`;
   if (pageImpacts(kind, key, profile, tax).length) return null;
+  // Rated titles carry it, but its class weighs nothing: say that, never "none of your titles carries it"
+  // over a page that counts the ones you rated (Western under a zero-weight Genre, Nils, 2026-11-01).
+  const target = profileKey(kind, key, tax);
+  const zero = [...profile.unweighted.values()].filter((u) => u.kind === kind && spokenKey(u.key) === target);
+  if (zero.length) {
+    const tail = `so ${name} does not move it, however you rate those titles.`;
+    if (kind === 'tag') {
+      const category = zero[0].category ?? 'other';
+      const label = tax.categories.get(category)?.label ?? category;
+      return `Tags filed under ${label} carry no weight in your Fandex Score, ${tail}`;
+    }
+    if (kind === 'ip') return `Franchises carry no weight in your Fandex Score, ${tail}`;
+    const roles = [...new Set(zero.map((u) => ROLE_LABEL[u.role ?? ''] ?? u.role ?? kind))];
+    const credits = roles.length > 1 ? `${roles.slice(0, -1).join(', ')} and ${roles[roles.length - 1]}` : roles[0];
+    return `${credits} credits carry no weight in your Fandex Score, ${tail}`;
+  }
   const what = kind === 'tag' ? 'this tag' : kind === 'ip' ? 'this franchise' : 'them';
   return `Not in your Fandex Score yet: none of the ${profile.ratedItemCount} titles you rated carries ${what}.`;
 }

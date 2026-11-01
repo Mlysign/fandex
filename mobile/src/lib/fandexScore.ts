@@ -245,6 +245,12 @@ export interface Profile {
   /** facet id → deviation from your baseline × the facet's class weight. */
   w: Map<string, number>;
   meta: Map<string, FacetMeta>;
+  /**
+   * Facets your rated titles carry that the score gives no weight (a tag in an
+   * ignored or zero-weight category, a role weighted 0), so a facet page can
+   * say why it shows no taste row instead of "none of your titles carries it".
+   */
+  unweighted: Map<string, { kind: string; role?: string; key: string; category?: string; n: number }>;
   /** Your mean rating, 0-10. */
   baseline: number;
   ratedItemCount: number;
@@ -353,10 +359,14 @@ export function buildProfile(
 
   const w = new Map<string, number>();
   const meta = new Map<string, FacetMeta>();
+  const unweighted: Profile['unweighted'] = new Map();
   for (const [id, f] of stats) {
     const { weight: classWeight, category } = classWeightOf({ kind: f.kind as ScoreFacet['kind'], role: f.role, key: f.key, label: f.label, category: f.category }, tax);
     // An ignored category (platform and noise tags) is left out entirely.
-    if (!classWeight) continue;
+    if (!classWeight) {
+      unweighted.set(id, { kind: f.kind, role: f.role, key: f.key, category, n: f.count });
+      continue;
+    }
     const BA = (C * baseline + f.weightedSum) / (C + f.weightedCount);
     w.set(id, (BA - baseline) * classWeight);
     meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category, classWeight, BA, n: f.count, weightedSum: f.weightedSum, weightedCount: f.weightedCount });
@@ -371,7 +381,7 @@ export function buildProfile(
   for (const b of pull?.beta.values() ?? []) strongest = Math.max(strongest, Math.abs(b));
 
   return {
-    w, meta, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans, typeStats: typeSums, rawRatings, rawSum,
+    w, meta, unweighted, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans, typeStats: typeSums, rawRatings, rawSum,
     pull, picks, follows: extras.follows ?? new Map(), followBeta: Math.max(Math.LN2, strongest),
   };
 }
