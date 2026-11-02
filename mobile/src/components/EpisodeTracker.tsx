@@ -38,12 +38,17 @@ function failure(e: unknown): string {
   return e instanceof Error ? e.message : 'That did not work. Nothing was changed.';
 }
 
-export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
+export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
   mediaItemId: string;
-  /** The show's TMDB id, for the seasons the catalog holds no episodes for. */
-  tmdbId: string | null;
+  /**
+   * The show's provider ids. TMDB's is asked for the seasons the catalog holds
+   * no episodes for, and a tick names the show to Trakt by them: a show outside
+   * the scoring pool is not in the device's catalog copy.
+   */
+  sources: { source: string; sourceId: string }[];
   onSignIn: () => void;
 }) {
+  const tmdbId = sources.find((s) => s.source === 'tmdb')?.sourceId ?? null;
   const db = useSQLiteContext();
   const auth = useAuth();
   const { toast } = useToast();
@@ -176,7 +181,7 @@ export function EpisodeTracker({ mediaItemId, tmdbId, onSignIn }: {
     setWatched(optimistic);
     setWatchedCount(counts);
     setBusy(key);
-    setEpisodesWatched(db, mediaItemId, changing, next)
+    setEpisodesWatched(db, mediaItemId, changing, next, sources)
       .then(() => auth.rowsChanged())
       .catch((e: unknown) => {
         // Read the device again, never put a snapshot back: your rows may have

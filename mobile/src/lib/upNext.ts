@@ -20,8 +20,9 @@
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api } from '~/lib/api';
+import { traktIds } from '~/lib/itemActions';
 import { applyLocalWrite } from '~/lib/stateSync';
-import { TraktBusyError, traktAccessToken, traktGet, traktPost } from '~/lib/trakt';
+import { TraktBusyError, traktAccessToken, traktGet, traktMissed, traktPost } from '~/lib/trakt';
 import { publishWidget } from '~/lib/widget';
 
 /** Shows asked about per run. Each is one request to Trakt. */
@@ -152,21 +153,60 @@ async function watchedShows(db: SQLiteDatabase): Promise<ShowWatch[]> {
   return rows.map((r) => ({ mediaItemId: r.media_item_id, watchedCount: r.n, lastWatchedAt: r.last }));
 }
 
+type Sources = { source: string; sourceId: string }[];
+
 /**
- * The show's Trakt id, out of the catalog copy. Null when the copy holds the
- * show with no Trakt link; undefined when it does not hold the show at all,
- * which says nothing about Trakt.
+ * The show's provider ids, out of the catalog copy. Undefined when the copy
+ * does not hold the show at all, which says nothing about Trakt.
  */
-async function traktIdOf(db: SQLiteDatabase, mediaItemId: string): Promise<number | null | undefined> {
+async function catalogSources(db: SQLiteDatabase, mediaItemId: string): Promise<Sources | undefined> {
   const row = await db.getFirstAsync<{ vector: string }>('SELECT vector FROM catalog WHERE id = ?', [mediaItemId]);
   if (!row) return undefined;
   try {
-    const sources = (JSON.parse(row.vector) as { sources?: { source: string; sourceId: string }[] }).sources ?? [];
-    const id = Number(sources.find((s) => s.source === 'trakt')?.sourceId);
-    return Number.isInteger(id) && id > 0 ? id : null;
+    return (JSON.parse(row.vector) as { sources?: Sources }).sources ?? [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** How long "Trakt has no such show" holds before it is asked again: a new show reaches Trakt late. */
+const LOOKUP_TTL = 7 * DAY;
+
+/**
+ * Read Trakt's `/search/tmdb/{id}?type=show`: the Trakt id of the show with
+ * that TMDB id, or null when Trakt has none. Anything but a list is not an
+ * answer and throws, so it is not kept as "none".
+ */
+export function readTmdbLookup(answer: unknown, tmdbId: number): number | null {
+  if (!Array.isArray(answer)) throw new Error('Trakt answered the show lookup with something unexpected.');
+  for (const hit of answer) {
+    const show = obj(obj(hit).show);
+    const ids = obj(show.ids);
+    if (obj(hit).type === 'show' && ids.tmdb === tmdbId) {
+      const trakt = int(ids.trakt);
+      if (trakt != null && trakt > 0) return trakt;
+    }
+  }
+  return null;
+}
+
+/**
+ * The show's Trakt id. Most shows in the catalog carry only a TMDB id (1,415
+ * of 1,706 pool shows on 2026-11-02), so Trakt is asked which show that is,
+ * and the answer is kept in `trakt_show`. Null when there is no TMDB id either,
+ * or Trakt has no such show.
+ */
+async function traktShowId(db: SQLiteDatabase, token: string, sources: Sources, now: number): Promise<number | null> {
+  const ids = traktIds({ sources });
+  if (!ids) return null;
+  if ('trakt' in ids) return ids.trakt;
+  const held = await db.getFirstAsync<{ trakt_id: number | null; checked_at: number }>(
+    'SELECT trakt_id, checked_at FROM trakt_show WHERE tmdb_id = ?', [ids.tmdb],
+  );
+  if (held && (held.trakt_id != null || now - held.checked_at < LOOKUP_TTL)) return held.trakt_id;
+  const traktId = readTmdbLookup(await traktGet(`/search/tmdb/${ids.tmdb}?type=show`, token), ids.tmdb);
+  await db.runAsync('INSERT OR REPLACE INTO trakt_show (tmdb_id, trakt_id, checked_at) VALUES (?, ?, ?)', [ids.tmdb, traktId, now]);
+  return traktId;
 }
 
 async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: number): Promise<void> {
@@ -182,11 +222,12 @@ async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: numb
 }
 
 async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now: number): Promise<void> {
-  const traktId = await traktIdOf(db, show.mediaItemId);
+  const sources = await catalogSources(db, show.mediaItemId);
   // Not in the catalog copy (yet): nothing is known, so nothing is stored.
-  if (traktId === undefined) return;
-  // No Trakt link: there is nobody to ask. Stored as caught up so it is not
-  // asked about on every run.
+  if (sources === undefined) return;
+  const traktId = await traktShowId(db, token, sources, now);
+  // Trakt does not know the show: there is nobody to ask. Stored as caught up
+  // so it is not asked about on every run.
   if (traktId === null) {
     await store(db, show, { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt, upcomingAt: null }, now);
     return;
@@ -292,23 +333,32 @@ export async function upNextPending(db: SQLiteDatabase): Promise<number> {
  * Every episode is named. Trakt can mark "a whole season" in one word, and then
  * what it marked is its own list, not ours: the rows saved here would be a guess
  * at what the provider did.
+ *
+ * The show is named to Trakt by its Trakt id, or else its TMDB id, as a rating
+ * is (itemActions.ts `traktIds`). `known` is the ids the caller's page holds:
+ * a show outside the scoring pool is not in the catalog copy at all.
  */
 export async function setEpisodesWatched(
   db: SQLiteDatabase,
   mediaItemId: string,
   episodes: { season: number; episode: number }[],
   watched: boolean,
+  known: Sources = [],
 ): Promise<void> {
   if (!episodes.length) return;
-  const traktId = await traktIdOf(db, mediaItemId);
-  if (traktId == null) throw new Error('This show is not linked to Trakt, so the episode could not be marked.');
+  const ids = traktIds({ sources: [...((await catalogSources(db, mediaItemId)) ?? []), ...known] });
+  if (!ids) throw new Error('Fandex holds no Trakt or TMDB id for this show, so the episode could not be marked.');
   const token = await traktAccessToken();
   const now = Math.floor(Date.now() / 1000);
 
   const bySeason = new Map<number, number[]>();
   for (const e of episodes) bySeason.set(e.season, [...(bySeason.get(e.season) ?? []), e.episode]);
   const seasons = [...bySeason].map(([number, list]) => ({ number, episodes: list.map((n) => ({ number: n })) }));
-  await traktPost(watched ? '/sync/history' : '/sync/history/remove', token, { shows: [{ ids: { trakt: traktId }, seasons }] });
+  const answer = await traktPost(watched ? '/sync/history' : '/sync/history/remove', token, { shows: [{ ids, seasons }] });
+  // Trakt answers 201 and lists under `not_found` what it could not match. A
+  // row saved here for that is one Trakt does not hold, which the next sync
+  // deletes, so nothing is saved; whatever Trakt did take arrives with that sync.
+  if (traktMissed(answer)) throw new Error('Trakt could not find this show or some of these episodes, so nothing was marked here. Anything Trakt did take shows up after the next sync.');
 
   const write = watched
     ? { episodes: { upsert: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode, watchedAt: now, sources: ['trakt'] })) } }

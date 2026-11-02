@@ -288,6 +288,11 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   the later of Trakt's `last_watched_at` and this device's own newest tick for the show: Trakt's
   value lagged a tick made seconds earlier, and a show ticked again and again stayed in second
   place. The tab and the widget share that one ORDER BY and it has to stay the same in both.
+  ⚠️ **Most shows carry no Trakt id** (1,415 of 1,706 pool shows on 2026-11-02): for those the
+  device asks Trakt `/search/tmdb/{id}?type=show` once and keeps the answer in `trakt_show`
+  ("none" is asked again after a week). A tick names the show by its Trakt id or else its TMDB id,
+  from the catalog copy or the page's own item (a show outside the pool is not in the copy), and
+  saves nothing when Trakt lists it under `not_found`.
 - **The widget is Kotlin in a local Expo module** (`mobile/modules/up-next-widget`), autolinked
   through `expo.autolinking.nativeModulesDir` in `package.json`. That is what keeps it out of the
   generated `android/` folder: the module carries its own manifest entries, layouts and classes,
