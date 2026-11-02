@@ -18,7 +18,54 @@ export async function getTmdbMovie(id: number) {
 }
 
 export async function getTmdbShow(id: number) {
-  return tmdbGet(`/tv/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,content_ratings,external_ids" });
+  const d = await tmdbGet(`/tv/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,content_ratings,external_ids" });
+  // A show's `credits` holds only the latest season's REGULARS. A miniseries
+  // whose actors TMDB files episode by episode as guest stars (Adolescence:
+  // 0 regulars, everyone a guest) comes back with no cast at all, so its page
+  // had no Cast rail and the score no cast facet (50 of the pool's 1,706 TMDB
+  // shows on 2026-11-02). `aggregate_credits` holds every episode's credits.
+  // The LATEST season's is asked, the season `credits` describes: the whole
+  // series' list runs to thousands of rows on a soap or a wrestling show, too
+  // much to parse in a 10 ms Worker. Only an empty CAST asks; an empty crew
+  // alone is common. It throws like any TMDB call, so a refresh keeps the
+  // stored copy instead of storing no cast.
+  if (d?.credits && !d.credits.cast?.length) {
+    const season = latestSeasonNumber(d);
+    const agg = await tmdbGet(season == null ? `/tv/${id}/aggregate_credits` : `/tv/${id}/season/${season}/aggregate_credits`);
+    d.credits = fillCreditsFromAggregate(d.credits, agg);
+  }
+  return d;
+}
+
+/** The latest aired season, else the season count; null when TMDB names neither. */
+function latestSeasonNumber(d: any): number | null {
+  const n = d?.last_episode_to_air?.season_number ?? d?.number_of_seasons;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Fills an empty half of a show's `credits` from its `aggregate_credits`, in
+ * `credits`' own row shape, so the projection, normalize and facets read it
+ * unchanged. A half that has rows is left as it is. Most episodes first; a
+ * person's character is the role they played in the most episodes, and a crew
+ * member gets one row per job.
+ */
+export function fillCreditsFromAggregate(credits: any, agg: any): any {
+  const byEpisodes = (rows: any[]) =>
+    rows.slice().sort((a, b) => (b?.total_episode_count ?? 0) - (a?.total_episode_count ?? 0));
+  const out = { ...credits };
+  if (!credits?.cast?.length && Array.isArray(agg?.cast)) {
+    out.cast = byEpisodes(agg.cast).map((c: any, i: number) => {
+      const role = (c?.roles ?? []).slice().sort((a: any, b: any) => (b?.episode_count ?? 0) - (a?.episode_count ?? 0))[0];
+      return { id: c?.id, name: c?.name, character: role?.character || null, profile_path: c?.profile_path ?? null, order: i };
+    });
+  }
+  if (!credits?.crew?.length && Array.isArray(agg?.crew)) {
+    out.crew = byEpisodes(agg.crew).flatMap((c: any) =>
+      (c?.jobs ?? []).map((j: any) => ({ id: c?.id, name: c?.name, job: j?.job, profile_path: c?.profile_path ?? null })),
+    );
+  }
+  return out;
 }
 
 // ── Seasons + episodes (MB14) ────────────────────────────────────────────────
