@@ -33,6 +33,14 @@ Four items. Everything else in this file is work I can do without him, and every
 
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 
+## Later: feature ideas (Nils, 2026-11-02) ⬜
+
+Parked, not started. Each needs a design talk with Nils before any code.
+
+- **A proper profile page, with following.** Users can follow each other and open each other's profiles. Clashes with a standing call: the You tab is lighter than the old site's profile page on purpose ([docs/decisions.md](docs/decisions.md), "The You tab"), so settle where a profile lives before building. A public profile also needs a privacy setting and an erasure path (→ [[account-erasure-and-export]]).
+- **A notification when a wishlisted title is released.** The app has no push today; Expo push needs an FCM setup and a nightly Worker job that finds wishlist rows whose release date is today in the user's country (→ [[region-country-setting]]).
+- **A "what now?" page**: help pick something to watch, binge, play or read right now. Overlaps Search's Picks (`docs/app.md`, Search row); decide whether this grows Picks or is its own screen, and whether it draws from the library, the wishlist or the whole catalog.
+
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 
 **Nothing to do until a gate is hit, and both gates are traffic.** Ads at **10,000 pageviews/mo**,
