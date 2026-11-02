@@ -426,7 +426,7 @@ export default function ItemScreen() {
       <ItemPage
         item={item}
         personal={personal}
-        progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} tmdbId={item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null} onSignIn={() => router.push('/profile' as never)} /> : undefined}
+        progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} sources={item.vector.sources} onSignIn={() => router.push('/profile' as never)} /> : undefined}
         related={<Related itemId={item.id} facets={item.facets}
           tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null}
           igdbId={item.type === 'game' ? item.vector.sources.find((s) => s.source === 'igdb')?.sourceId ?? null : null}

@@ -23,7 +23,7 @@ export const DATABASE_NAME = 'fandex.db';
  * sync and Steam sync then failed on "no such table: facet_follow" (found on
  * Nils's phone, 2026-10-26). `src/lib/mobileDbSchema.test.ts` now fails when the two differ.
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   // Two connections write this file: the app's, and the one the widget's
@@ -186,6 +186,24 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       );
     `);
     await stamp(db, (version = 8));
+  }
+
+  if (version < 9) {
+    // The Trakt id of a show the catalog knows only by its TMDB id, as Trakt
+    // answered it (upNext.ts, traktShowId). A null `trakt_id` is "Trakt had no
+    // such show at checked_at", asked again a week later. Not per account, so
+    // a sign-out keeps it. Most pool shows have no Trakt link (1,415 of 1,706
+    // on 2026-11-02), and Up next stored each one as caught up without asking
+    // Trakt, so every caught-up row is asked about once more, as in step 5.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS trakt_show (
+        tmdb_id INTEGER PRIMARY KEY NOT NULL,
+        trakt_id INTEGER,
+        checked_at INTEGER NOT NULL
+      );
+      DELETE FROM up_next WHERE season IS NULL;
+    `);
+    await stamp(db, (version = 9));
   }
 }
 
