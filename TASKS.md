@@ -30,8 +30,8 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
-- **Deploy the show season fill** (2026-10-30, branch `ccr-30a97e53-h3e7l7`): `npx wrangler deploy` from `worker/`, no migration. Then watch `show_seasons_step` in the logs until `show_seasons_cursor` reads `done`, and open The Legend of Korra: its seasons should list. → `docs/worker.md` ("A show's seasons are stored from TMDB")
-- **Ship Search's Picks** (2026-10-30, same branch): publish the website and build an APK, then open Search signed in and signed out, and once more after ten minutes away: a different hand of strong titles, none from the library. Not yet run in the app: this session had no network for a catalog. Watch how long the first hand takes signed in, since it scores the whole catalog copy (as Home's Recommended already does). → `docs/app.md` (Search row)
+- **Check the show season fill finished** (deployed 2026-11-02; 1,389 of 1,717 TMDB shows had no seasons, about six a minute): `show_seasons_cursor` in `kv` reads `done`, then open The Legend of Korra and its seasons list. Shows TMDB lists no numbered season for stay without rows. → `docs/worker.md` ("A show's seasons are stored from TMDB")
+- **Check Search's Picks signed in** (site 2026-11-02, APK 0.3.26): a different hand after ten minutes away, none from the library, and how long the first hand takes, since it scores the whole catalog copy. Signed out on fandex.org it opened on Picks with no console error. → `docs/app.md` (Search row)
 
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 

@@ -72,6 +72,19 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # Expo pins these per SDK, and a 0.x minor is a breaking release: PR #40
+      # took React Native 0.86 to 0.88 and its lockfile did not even install.
+      # They move with `npx expo install --fix`, not one at a time.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-reanimated"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-worklets"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: "/"
