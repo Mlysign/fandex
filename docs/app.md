@@ -399,12 +399,16 @@ the site's `src` need copying again; a new native dependency also needs its whol
 rewrites `/E` as `E:/` and robocopy copies nothing while the build goes on with the old source
 (0.3.22's first build, 2026-10-27, carried 0.3.21's code). Check the log says files were copied.
 
+⚠️ Quote every Windows path. Unquoted, bash eats the backslashes: `C:\fx\mobile` becomes
+`C:fxmobile`, a folder inside the repo, and the copy filled it with 1.2 GB (2026-11-02). Never
+`/XD android` on its own either: it also skips `modules/up-next-widget/android`, the widget's code.
+
 ```bash
-MSYS_NO_PATHCONV=1 robocopy mobile C:\fx\mobile /E /XD android\build android\app\build android\.gradle .expo
+MSYS_NO_PATHCONV=1 robocopy mobile 'C:\fx\mobile' /E /XD 'android\build' 'android\app\build' 'android\.gradle' .expo
 ```
 
 ```bash
-MSYS_NO_PATHCONV=1 robocopy src C:\fx\src /E
+MSYS_NO_PATHCONV=1 robocopy src 'C:\fx\src' /E
 ```
 
 ⚠️ The copy also brings over the READ-ONLY attribute OneDrive puts on folders, and Gradle cannot
