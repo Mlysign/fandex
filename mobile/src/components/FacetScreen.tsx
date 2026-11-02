@@ -305,28 +305,34 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     });
   }, [kind, found, sorted, key]);
 
+  // What you rated is counted over the device's own titles only, the ones whose
+  // stored facets carry this one: the set Taste counts. A provider card can be a
+  // title you rated whose stored facets dropped the tag (eight keywords are kept,
+  // TMDB filed "planet" eleventh on Star Wars), and counting it made the page say
+  // 9 rated where Taste said 4 (2026-11-02).
   const tiles = useMemo(() => {
     const all = cards ?? [];
     const crowd = all.filter((c) => c.communityScore != null);
-    const mine = all.map((c) => stateOf(c.id).rating).filter((r): r is number => r != null && r > 0);
+    const mine = (found?.cards ?? []).map((c) => stateOf(c.id).rating).filter((r): r is number => r != null && r > 0);
     const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     return [
       { label: 'titles', value: String(all.length) },
       { label: 'crowd average', value: crowd.length ? (avg(crowd.map((c) => c.communityScore as number)) / 10).toFixed(1) : '-' },
       ...(auth.status === 'signedIn' ? [{ label: mine.length ? `your average · ${mine.length} rated` : 'your average', value: mine.length ? avg(mine).toFixed(1) : '-' }] : []),
     ];
-  }, [cards, stateOf, auth.status]);
+  }, [cards, found, stateOf, auth.status]);
 
   // The site's like-for-like line (PublicFacetView, SM22): over the titles you
-  // rated, your average against the crowd's average for those same titles.
+  // rated, your average against the crowd's average for those same titles. The
+  // same titles as the tile above.
   const delta = useMemo(() => {
-    const pairs = (cards ?? [])
+    const pairs = (found?.cards ?? [])
       .map((c) => ({ mine: stateOf(c.id).rating, crowd: c.communityScore }))
       .filter((p): p is { mine: number; crowd: number } => p.mine != null && p.mine > 0 && p.crowd != null);
     if (!pairs.length) return null;
     const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     return { n: pairs.length, d: avg(pairs.map((p) => p.mine)) - avg(pairs.map((p) => p.crowd / 10)) };
-  }, [cards, stateOf]);
+  }, [found, stateOf]);
 
   // A tag's place in the taxonomy (the site's Q18): its category, and the
   // spellings bundled into it ("Also known as"). A franchise lists its bundled names the same way.
