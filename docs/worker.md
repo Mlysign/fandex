@@ -405,8 +405,8 @@ Each of these is a way the Worker differs from the site, and each has a test.
   books stored since are reached. Not in the resolve path on purpose: a tap would wait on a second
   provider and pay a second re-derive. Plan and rows read asserted in `test/hardcoverWalk.test.ts`.
   ⚠️ The ISBN query's shape (`editions` at the top level with `_in`) was written from Hardcover's
-  schema and not probed live: if it errs, every book is counted `failed` in the
-  `hardcover_walk_step` log and nothing is stamped.
+  schema and not probed live: if Hardcover refuses it as a query, each lookup logs
+  `hardcover_isbn_query_refused` and goes on to the search, at the price of a wasted request.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer unless
   asked.** `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges
   a doc with an older stamp from its blobs, whatever the region, and the next write of the item

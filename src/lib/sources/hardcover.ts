@@ -82,6 +82,14 @@ export class HardcoverNotConfigured extends Error {
   }
 }
 
+/** Hardcover answered, and refused the query itself (a field or a filter it does not allow). Not an outage. */
+export class HardcoverQueryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HardcoverQueryError";
+  }
+}
+
 /** One GraphQL request. ONE top-level field per query: each costs a request against the daily 5,000. */
 async function graphql(query: string, variables: Record<string, unknown>, budgetMs?: number): Promise<any> {
   if (!hardcoverConfigured()) throw new HardcoverNotConfigured();
@@ -103,7 +111,7 @@ async function graphql(query: string, variables: Record<string, unknown>, budget
   if (!res.ok) throw new Error(`Hardcover error: ${res.status}`);
   const body = await res.json();
   if (Array.isArray(body?.errors) && body.errors.length) {
-    throw new Error(`Hardcover error: ${body.errors[0]?.message ?? JSON.stringify(body.errors[0]).slice(0, 120)}`);
+    throw new HardcoverQueryError(`Hardcover error: ${body.errors[0]?.message ?? JSON.stringify(body.errors[0]).slice(0, 120)}`);
   }
   return body?.data ?? null;
 }
@@ -209,10 +217,18 @@ export async function findHardcoverBook(
   const isbns = isbnList(want.isbns).slice(0, 8);
   if (isbns.length) {
     if (!(await mayAsk())) return undefined;
-    const data = await graphql(
-      `query ($isbns: [String!]!) { editions(where: {isbn_13: {_in: $isbns}}, limit: 10) { book { ${BOOK_FIELDS} } } }`,
-      { isbns },
-    );
+    let data: any = null;
+    try {
+      data = await graphql(
+        `query ($isbns: [String!]!) { editions(where: {isbn_13: {_in: $isbns}}, limit: 10) { book { ${BOOK_FIELDS} } } }`,
+        { isbns },
+      );
+    } catch (e) {
+      // This query's shape was not probed live (2026-11-02). Refused as a
+      // query, it must not stop the search below; an outage still throws.
+      if (!(e instanceof HardcoverQueryError)) throw e;
+      console.warn("hardcover_isbn_query_refused", { error: e.message });
+    }
     const rows = (Array.isArray(data?.editions) ? data.editions : []).map((e: any) => e?.book).filter(Boolean);
     const hit = pickHardcoverBook(rows.map((r: any) => (r.is_partial_book === true ? null : parseHardcoverBook(r, origin))), want, true);
     if (hit) return hit;

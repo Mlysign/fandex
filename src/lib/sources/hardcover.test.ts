@@ -315,6 +315,21 @@ describe("talking to Hardcover", () => {
     vi.restoreAllMocks();
     expect(asked).toBe(5);
 
+    // The ISBN query refused as a query (its shape was not probed live): the search still runs.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    let n = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(n++ === 0
+      ? { errors: [{ message: "field 'editions' not found" }] }
+      : { data: { search: { results: { hits: [{ document: { id: "11", title: "Dune Messiah", author_names: ["Frank Herbert"] } }] } } } }));
+    expect(await findHardcoverBook(want, mayAsk)).toMatchObject({ id: 11 });
+    vi.restoreAllMocks();
+    // An outage is not a refusal: it throws, and nothing is searched.
+    n = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => { n++; return new Response("down", { status: 502 }); });
+    await expect(findHardcoverBook(want, mayAsk)).rejects.toThrow();
+    expect(n).toBeGreaterThanOrEqual(1);
+    vi.restoreAllMocks();
+
     // The budget said no before an answer: undefined, which says nothing about the book.
     calls = answers([{ editions: [] }]);
     expect(await findHardcoverBook(want, async () => false)).toBeUndefined();
