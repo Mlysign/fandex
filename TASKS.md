@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget (on 2026-10-20 a tick moved its taps while the rows stayed old; the rows travel inside the widget's own update since 0.3.26), a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -26,11 +26,9 @@ Five items. Everything else in this file is work I can do without him, and every
 5. **🔵 One check from the 2026-10-23 codebase review** (the signed-in CSP check passed 2026-10-24 and the policy is enforced):
    - **If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app; nobody has proven it. A Trakt identity is keyed on Trakt's uuid since 2026-10-23, and his old username row moves to it on his next Trakt sign-in.
 
-6. **🔵 The "planet" tag page says "9 rated", Taste "4 rated": confirmed 2026-11-02, his call on the fix.** The 4 are the titles with a stored `planet` tag (Alien³, Dune: Part Two, Treasure Planet, Riddick). The page adds its live provider cards (`FacetScreen.tsx`, `providerFacet`): 3 films from TMDB discover `with_keywords=13194` (Star Wars, Revenge of the Sith, Interstellar, where "planet" is TMDB keyword 11, 14 and 17, past the cap of 8 in `TIER_CAPS`, `src/lib/merge.ts`) and 2 games from IGDB's contains-match on themes, keywords and genres (Bastion, Ratchet & Clank: Rift Apart). The proposed fix: the page's "your average · N rated" tile and its "Across the N you've rated" sentence count only the device's stored-facet titles, the set Taste uses; the provider cards stay in the grid and the cap stays.
-
 ## Mine, open
 
-- **Check the show season fill finished** (deployed 2026-11-02; 1,389 of 1,717 TMDB shows had no seasons, about six a minute): `show_seasons_cursor` in `kv` reads `done`, then open The Legend of Korra and its seasons list. Shows TMDB lists no numbered season for stay without rows. → `docs/worker.md` ("A show's seasons are stored from TMDB")
+- **Install 0.3.27 on the phone** (built 2026-11-02, `C:\fx\fandex-0.3.27.apk`; the phone was not connected): the planet tag page then says 4 rated, as Taste does.
 - **Check Search's Picks signed in** (site 2026-11-02, APK 0.3.26): a different hand after ten minutes away, none from the library, and how long the first hand takes, since it scores the whole catalog copy. Signed out on fandex.org it opened on Picks with no console error. → `docs/app.md` (Search row)
 
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).

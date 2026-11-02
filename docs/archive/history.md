@@ -21,6 +21,23 @@ full history.
 
 ---
 
+## The remote sessions' work shipped, and the planet tag's count (2026-11-02)
+
+- **Shipped:** the widget fix of 2026-10-20 merged (`0029dca`; rows inside the widget's own update,
+  first compiled in 0.3.26), the Worker deployed with the show season fill, the site published with
+  Search's Picks, 0.3.26 on the phone. The season fill finished the same day: every TMDB show has
+  `show_seasons` rows (The Legend of Korra, 4). Dependabot PR #40 (React Native 0.86 to 0.88) closed
+  and minor bumps of RN, reanimated, worklets and React ignored.
+- **The planet tag page said "9 rated", Taste 4** (`f308d77`, 0.3.27). The 4 carry a stored `planet`
+  tag (Alien³, Dune: Part Two, Treasure Planet, Riddick). The page also counted its live provider
+  cards: Star Wars, Revenge of the Sith and Interstellar from TMDB discover, where "planet" is keyword
+  11, 14 and 17, past the 8 Fandex keeps, and Bastion and Ratchet & Clank: Rift Apart from IGDB's
+  contains-match. The rated tile and the crowd line now read the stored-facet titles only. Checked on
+  the local stack: a test account's Interstellar, rated 8 and only a provider card there, is no longer
+  counted.
+
+---
+
 ---
 
 ## Product review, 2026-10-23: the fixes (RV1 to RV35)
