@@ -30,7 +30,10 @@ export interface CardItem {
   type: MediaType;
   title: string;
   slug?: string | null;
+  /** The date in the device's country, for a title the device holds (lib/localDates.ts). */
   releaseDate: string | null;
+  /** The worldwide date of a title the device holds (`catalog.world_date`): what a provider's date is matched against (lib/titleIdentity.ts). */
+  worldDate?: string | null;
   posterUrl: string | null;
   /** The crowd's rating, 0 to 100. */
   communityScore: number | null;
@@ -52,6 +55,7 @@ export interface CardItem {
 export function cardFromCatalog(r: CatalogRow): CardItem {
   return {
     key: r.id, id: r.id, type: r.type, title: r.title, slug: r.slug, releaseDate: r.release_date,
+    ...(r.world_date !== undefined ? { worldDate: r.world_date } : {}),
     posterUrl: r.poster_url, communityScore: r.community_score, communityVotes: r.community_votes,
     ...(r.addon ? { addon: true } : {}),
   };

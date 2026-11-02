@@ -379,7 +379,7 @@ async function byId<T extends { id: string }>(db: SQLiteDatabase, columns: strin
 // lib/cards.ts has this as cardFromCatalog. Written out here so this file stays free of the
 // hooks that module carries, and can be tested without a device.
 const toCard = (r: CatalogRow): CardItem => ({
-  key: r.id, id: r.id, type: r.type, title: r.title, slug: r.slug, releaseDate: r.release_date,
+  key: r.id, id: r.id, type: r.type, title: r.title, slug: r.slug, releaseDate: r.release_date, worldDate: r.world_date ?? null,
   posterUrl: r.poster_url, communityScore: r.community_score, communityVotes: r.community_votes,
 });
 
@@ -404,7 +404,7 @@ export async function relatedRails(db: SQLiteDatabase, revision: number, tax: Ta
 
   const picked = pickRelated({ id, facets, rawFacets, index, vectors, tax });
   const rows = await byId<CatalogRow>(
-    db, 'id, type, title, slug, poster_url, release_date, year, community_score, community_votes',
+    db, 'id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes',
     [...(picked.series?.ids ?? []), ...(picked.franchise?.ids ?? []), ...picked.similar],
   );
   const cards = (ids: string[]) => ids.map((cid) => rows.get(cid)).filter((r): r is CatalogRow => !!r).map(toCard);

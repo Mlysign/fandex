@@ -231,6 +231,8 @@ export interface CatalogRow {
   slug: string | null;
   poster_url: string | null;
   release_date: string | null;
+  /** The worldwide date, where the query read it; `release_date` is the device country's. */
+  world_date?: string | null;
   year: number | null;
   community_score: number | null;
   community_votes: number;
@@ -238,7 +240,7 @@ export interface CatalogRow {
   addon?: number | null;
 }
 
-const CARD_COLUMNS = "id, type, title, slug, poster_url, release_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon";
+const CARD_COLUMNS = "id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon";
 
 export async function catalogCount(db: SQLiteDatabase): Promise<number> {
   return (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM catalog'))?.n ?? 0;
