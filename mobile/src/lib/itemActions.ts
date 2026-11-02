@@ -44,7 +44,7 @@ export interface HeldRow {
 const isOurs = (source: string) => source !== 'steam';
 
 /** How Trakt should find the title: its own id when the catalog holds one, else TMDB's. */
-export function traktIds(target: ActionTarget): { trakt: number } | { tmdb: number } | null {
+export function traktIds(target: Pick<ActionTarget, 'sources'>): { trakt: number } | { tmdb: number } | null {
   const of = (source: string) => {
     const id = Number(target.sources.find((s) => s.source === source)?.sourceId);
     return Number.isInteger(id) && id > 0 ? id : null;
