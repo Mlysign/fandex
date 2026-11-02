@@ -17,7 +17,6 @@ import { LegalLinks, SITE_URL } from '~/components/LegalLinks';
 import { Screen, StateBlock, T } from '~/components/ui';
 import { useSQLiteContext } from 'expo-sqlite';
 import { keyToSlug } from '@/lib/facetUrl';
-import { normalizeName } from '@/lib/normalize';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toggled } from '~/lib/a11y';
 import { api, ApiError, type ItemDetail } from '~/lib/api';
@@ -33,6 +32,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { dropItemPrerender } from '~/lib/prerender';
 import { relatedRails, type RelatedRails } from '~/lib/related';
 import { useScores } from '~/lib/ScoreProvider';
+import { titleIndex } from '~/lib/titleIdentity';
 import { tmdbCollectionFor } from '~/lib/tmdb';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { color, font, radius, space } from '~/theme';
@@ -80,8 +80,8 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
         // The titles of its franchise the catalog does not hold, after the ones
         // it does: the site's franchise_members, which D1 does not have. A film's
         // TMDB collection; a game's IGDB franchise or collection, by its name.
-        const ident = (c: { title: string; releaseDate: string | null }) => `${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
-        const have = new Set((r.franchise?.items ?? []).map(ident));
+        // One card a title (lib/titleIdentity.ts): by name and year now, by id once the Worker has said.
+        const have = titleIndex(r.franchise?.items ?? []);
         let label = r.franchise?.label ?? null;
         let parts: CardItem[] = [];
         if (tmdbMovieId) {
@@ -109,7 +109,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
           }));
         }
         if (!live) return;
-        const extra = label ? parts.filter((p) => !have.has(ident(p))) : [];
+        const extra = label ? parts.filter((p) => !have.has(p)) : [];
         if (!label || !extra.length) { setRails(r); return; }
         try {
           const res = await api.lookup(extra.map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
@@ -122,7 +122,8 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
         } catch { /* they open through /open all the same */ }
         if (!live) return;
         // The page's own title is never in its franchise rail, held or not.
-        const items = [...(r.franchise?.items ?? []), ...extra.filter((c) => c.id !== itemId)]
+        // A part the lookup named is dropped when the rail already holds that id under another name or year.
+        const items = [...(r.franchise?.items ?? []), ...extra.filter((c) => c.id !== itemId && !have.has(c))]
           .sort((a, b) => ((b.releaseDate ?? '') < (a.releaseDate ?? '') ? -1 : 1)); // newest first, as the rail is
         setRails({ ...r, franchise: { key: r.franchise?.key ?? null, label, items } });
       })

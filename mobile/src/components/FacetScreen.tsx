@@ -44,6 +44,7 @@ import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
+import { titleIndex } from '~/lib/titleIdentity';
 import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { setFollow } from '~/lib/itemActions';
@@ -178,7 +179,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       // handful; the parse below is what decides.
       // On the key's first word only: the rest may be stored with hyphens where the address has spaces.
       const patterns = memberKeys.map((k) => `%"key":"${(k.split(' ')[0] ?? '').replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
-      const columns = 'id, type, title, slug, poster_url, release_date, year, community_score, community_votes, facets';
+      const columns = 'id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, facets';
       const rows = await db.getAllAsync<CatalogRow & { facets: string }>(
         `SELECT ${columns} FROM catalog WHERE ${patterns.map(() => "facets LIKE ? ESCAPE '\\'").join(' OR ')}`,
         patterns,
@@ -241,23 +242,18 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const cards = useMemo(() => {
     const own = found?.cards;
     if (!own || !more) return own;
-    // The same title is one card: by Fandex id where the Worker knows it, else by type, name and year.
-    const ident = (c: CardItem) => `${c.type}|${c.title.toLowerCase().replace(/[^a-z0-9]+/g, '')}|${c.releaseDate?.slice(0, 4) ?? ''}`;
-    const ids = new Set(own.map((c) => c.id));
-    const names = new Set(own.map(ident));
+    // The same title is one card (lib/titleIdentity.ts): by Fandex id where the
+    // Worker knows it, else by type, name and year. The id can be missing on a
+    // title the device took in after the page asked the Worker.
+    const held = titleIndex(own);
     // The provider's copy of a title the device holds is dropped, but its credit
     // is kept: the device knows "Cast", TMDB knows "as Tony Stark".
-    const twinRole = new Map<string, string>();
-    for (const c of more.cards) {
-      if (!c.role) continue;
-      if (c.id) twinRole.set(`id:${c.id}`, c.role);
-      twinRole.set(ident(c), c.role);
-    }
+    const twins = titleIndex(more.cards.filter((c) => c.role));
     const credited = own.map((c) => {
-      const r = (c.id && twinRole.get(`id:${c.id}`)) || twinRole.get(ident(c));
+      const r = twins.find(c)?.role;
       return r && r !== c.role ? { ...c, role: r } : c;
     });
-    return [...credited, ...more.cards.filter((c) => !(c.id && ids.has(c.id)) && !names.has(ident(c)))];
+    return [...credited, ...more.cards.filter((c) => !held.has(c))];
   }, [found, more]);
   const ids = useMemo(() => (cards ?? []).map((c) => c.id), [cards]);
   const stateOf = useCardStates(ids);
