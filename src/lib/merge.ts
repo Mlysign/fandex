@@ -124,7 +124,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   // re-releases/restorations decades later, so an unbounded override turns a 1985
   // classic into its 2026 restoration date (the "Angel's Egg" bug). The 3-year
   // window covers genuine staggered international releases while excluding those.
-  const primaryReleaseDate = earliestGameDate(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  const primaryReleaseDate = earliestGameDate(norm) ?? bookDateDisagreement(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
   const regionDate = norm.get("tmdb")?.releaseDatesByRegion?.[region] ?? null;
   const releaseDate = regionalReleaseDate(primaryReleaseDate, regionDate);
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
@@ -455,6 +455,19 @@ function earliestGameDate(norm: Map<Source, SourceNormalized>): string | null {
     .filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d))
     .sort();
   return full[0] ?? null;
+}
+
+/**
+ * Open Library's date when Hardcover's names another YEAR, else null (the
+ * priority list decides, Hardcover first, for the day it adds). Since
+ * 2026-11-02 most Open Library books carry a Hardcover link, and a Hardcover
+ * date can be an edition's or a placeholder (Doors of Stone reads 2013-04-01);
+ * Open Library's first year of print is the safer of two that disagree.
+ */
+function bookDateDisagreement(norm: Map<Source, SourceNormalized>): string | null {
+  const hc = norm.get("hardcover")?.releaseDate;
+  const ol = norm.get("openlibrary")?.releaseDate;
+  return hc && ol && hc.slice(0, 4) !== ol.slice(0, 4) ? ol : null;
 }
 
 // ── Normalization for matching ────────────────────────────────────

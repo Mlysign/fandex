@@ -204,6 +204,13 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   matcher holds one id per namespace per item, and two editions' ISBNs would read as two works.
   In every list, Open Library's card wins a book both know (same ISBN-13, or same title and
   author), and Hardcover's cards follow.
+- **Hardcover's moods are taken, and every Open Library book is asked for its Hardcover link**
+  (Nils, 2026-11-02: Dune Messiah "has missing all the mood tags from hardcover"; he chose the
+  backfill). Moods are reader tags like the genres and tags already taken, filed under Mood /
+  Tone; content warnings stay out. The link comes from a cron walk with its own share of the
+  Hardcover day (`worker/src/hardcoverWalk.ts`), never from a resolve. Open Library stays the
+  identity. A book's date is Hardcover's only when it names the same year as Open Library's;
+  otherwise Open Library's first year of print stands (`bookDateDisagreement` in `merge.ts`).
 - **A Hardcover cover only where Open Library has none** (Nils: "covers only if the other
   provider has none", 2026-10-17). On an item, the poster priority puts Open Library ahead of
   Hardcover; in a merged list, a book both know keeps Open Library's cover and takes Hardcover's

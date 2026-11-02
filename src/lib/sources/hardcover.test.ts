@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  getHardcoverBook, hardcoverCard, hardcoverConfigured, hardcoverCoverPath, hardcoverDate, HardcoverNotConfigured, hardcoverTags,
-  isbn13, parseHardcoverBook, searchDocuments, searchHardcover, seriesHardcover, setHardcoverEnv, upcomingHardcover,
+  findHardcoverBook, getHardcoverBook, hardcoverCard, hardcoverConfigured, hardcoverCoverPath, hardcoverDate, hardcoverMoods,
+  HardcoverNotConfigured, hardcoverTags, isbn13, isSameHardcoverBook, parseHardcoverBook, pickHardcoverBook, type HardcoverBook, searchDocuments, searchHardcover, seriesHardcover, setHardcoverEnv, upcomingHardcover,
 } from "@/lib/sources/hardcover";
 import { bookIdentityKey, mergeBookCards, stripIsbns } from "@/lib/sources/bookPure";
 import { bookCard, openLibraryWorkByIsbn } from "@/lib/sources/openlibrary";
@@ -39,7 +39,7 @@ const ROW = {
 const SEARCH_DOC = {
   id: "426728", title: "The Doors of Stone", slug: "the-doors-of-stone", author_names: ["Patrick Rothfuss"],
   isbns: ["9780756404079"], release_year: null, release_date_i: null, series_names: ["The Kingkiller Chronicle"],
-  featured_series: { name: "The Kingkiller Chronicle" }, featured_series_position: 3, genres: ["Fantasy"], tags: ["magic"],
+  featured_series: { name: "The Kingkiller Chronicle" }, featured_series_position: 3, genres: ["Fantasy"], tags: ["magic"], moods: ["Dark", "dark"],
   image: { url: "https://assets.hardcover.app/editions/31843562/8162436135689143.jpg" },
   rating: 4.4, ratings_count: 1200, users_count: 53000,
 };
@@ -80,7 +80,7 @@ describe("a Hardcover record", () => {
       description: "The third day of Kvothe's story.", releaseDate: null, authors: ["Patrick Rothfuss"],
       series: { name: "The Kingkiller Chronicle", position: 3 }, isbns: ["9780756404079"],
       cover: "https://fandex.org/v1/cover/hardcover/editions/31843562/8162436135689143.jpg",
-      tags: ["Fantasy", "Fiction", "magic"], pages: null, editionsCount: 3, compilation: false, canonicalId: null,
+      tags: ["Fantasy", "Fiction", "magic"], moods: ["adventurous"], pages: null, editionsCount: 3, compilation: false, canonicalId: null,
     });
     // The rules: no rating, no count of readers, no lists. Not even by another name.
     expect(JSON.stringify(b)).not.toMatch(/rating|users_count|lists|reviews|53000|4\.4/);
@@ -90,7 +90,7 @@ describe("a Hardcover record", () => {
     const b = parseHardcoverBook(SEARCH_DOC);
     expect(b).toMatchObject({
       id: 426728, title: "The Doors of Stone", authors: ["Patrick Rothfuss"], isbns: ["9780756404079"],
-      series: { name: "The Kingkiller Chronicle", position: 3 }, tags: ["Fantasy", "magic"],
+      series: { name: "The Kingkiller Chronicle", position: 3 }, tags: ["Fantasy", "magic"], moods: ["Dark"],
       cover: "https://fandex.org/v1/cover/hardcover/editions/31843562/8162436135689143.jpg",
     });
     expect(searchDocuments({ found: 1, hits: [{ document: SEARCH_DOC }] })).toEqual([SEARCH_DOC]);
@@ -124,10 +124,47 @@ describe("a Hardcover record", () => {
     expect(isbn13(null)).toBeNull();
   });
 
-  it("takes genres and tags and leaves moods and content warnings out", () => {
+  it("takes genres and tags, moods in a list of their own, and never a content warning", () => {
     expect(hardcoverTags(ROW.cached_tags)).toEqual(["Fantasy", "Fiction", "magic"]);
     expect(hardcoverTags(JSON.stringify(ROW.cached_tags))).toEqual(["Fantasy", "Fiction", "magic"]);
     expect(hardcoverTags(null, ["Fantasy", "Fantasy"], [{ tag: "magic" }])).toEqual(["Fantasy", "magic"]);
+    expect(hardcoverMoods(ROW.cached_tags)).toEqual(["adventurous"]);
+    expect(hardcoverMoods(JSON.stringify(ROW.cached_tags), ["Tense"])).toEqual(["adventurous", "Tense"]);
+    // Twelve genres and tags cannot crowd the moods out: each list has its own cap.
+    const many = { Genre: Array.from({ length: 20 }, (_, i) => ({ tag: `g${i}` })), Mood: [{ tag: "Dark" }, { tag: "Reflective" }] };
+    expect(hardcoverTags(many)).toHaveLength(12);
+    expect(hardcoverMoods(many)).toEqual(["Dark", "Reflective"]);
+    const all = JSON.stringify(parseHardcoverBook(ROW));
+    expect(all).not.toMatch(/Violence/);
+  });
+
+  it("files moods with the voted tags, after the genres and tags", () => {
+    const m = mergeLinks([{ source: "hardcover", sourceId: "426728", rawData: parseHardcoverBook(ROW) } as unknown as MediaLink], "book");
+    expect(m.tagTiers?.filter((t) => t.tier === "voted").map((t) => t.name)).toEqual(["Fantasy", "Fiction", "magic", "adventurous"]);
+    // A record stored before moods were taken has no `moods` and still merges.
+    const { moods: _, ...old } = parseHardcoverBook(ROW)!;
+    expect(mergeLinks([{ source: "hardcover", sourceId: "426728", rawData: old } as unknown as MediaLink], "book").tags).toEqual(["Fantasy", "Fiction", "magic"]);
+  });
+
+  it("matches a Hardcover record to a book on the folded title and a shared author", () => {
+    const want = { title: "Dune Messiah", authors: ["Frank Herbert"] };
+    const hc = (over: Partial<HardcoverBook>) => ({ ...DUNE_HC, title: "Dune Messiah", ...over }) as HardcoverBook;
+    expect(isSameHardcoverBook(hc({}), want, false)).toBe(true);
+    expect(isSameHardcoverBook(hc({ title: "Dune Messiah (Dune Chronicles, #2)" }), want, false)).toBe(true);
+    expect(isSameHardcoverBook(hc({ title: "dune messiah" }), { title: "Dune Messiah", authors: ["F. Herbert"] }, false)).toBe(true);
+    // A prefix is another book, and so is the same title by somebody else.
+    expect(isSameHardcoverBook(hc({ title: "Dune" }), want, true)).toBe(false);
+    expect(isSameHardcoverBook(hc({ authors: ["Brian Herbert", "Kevin J. Anderson"] }), want, false)).toBe(true);
+    expect(isSameHardcoverBook(hc({ authors: ["Somebody Else"] }), want, true)).toBe(false);
+    // With no author on one side, only an ISBN hit may pass on the title.
+    expect(isSameHardcoverBook(hc({ authors: [] }), want, true)).toBe(true);
+    expect(isSameHardcoverBook(hc({ authors: [] }), want, false)).toBe(false);
+    // Of several, the one with the most editions; never a duplicate or a box set.
+    const picked = pickHardcoverBook([
+      hc({ id: 2, editionsCount: 1 }), hc({ id: 3, editionsCount: 90 }), hc({ id: 4, editionsCount: 500, canonicalId: 3 }),
+      hc({ id: 5, editionsCount: 900, compilation: true }), null,
+    ], want, false);
+    expect(picked?.id).toBe(3);
   });
 
   it("only ever points a cover at Hardcover's asset host, under the shapes it uses", () => {
@@ -205,6 +242,17 @@ describe("a book held by both", () => {
     expect(m.storeLinks.map((l) => l.name)).toEqual(["Open Library", "Hardcover"]);
   });
 
+  it("keeps Open Library's date when Hardcover's names another year", () => {
+    // An edition's date, or a placeholder: the first year of print is the safer one.
+    const reprint = { ...hcLink, rawData: { ...DUNE_HC, releaseDate: "2005-08-02" } } as unknown as MediaLink;
+    expect(mergeLinks([olLink, reprint], "book").releaseDate).toBe("1965-08-01");
+    // The same year: Hardcover's, first by priority.
+    const sameYear = { ...hcLink, rawData: { ...DUNE_HC, releaseDate: "1965-06-01" } } as unknown as MediaLink;
+    expect(mergeLinks([olLink, sameYear], "book").releaseDate).toBe("1965-06-01");
+    // Hardcover alone: its date.
+    expect(mergeLinks([reprint], "book").releaseDate).toBe("2005-08-02");
+  });
+
   it("gives the score an author and a series off a Hardcover-only book", () => {
     const rothfuss = { source: "hardcover", sourceId: "426728", rawData: parseHardcoverBook(ROW) } as unknown as MediaLink;
     const m = mergeLinks([rothfuss], "book");
@@ -234,6 +282,46 @@ describe("talking to Hardcover", () => {
       expect(cards).toEqual([expect.objectContaining({ source: "hardcover", sourceId: "426728", title: "The Doors of Stone", authors: ["Patrick Rothfuss"] })]);
       vi.restoreAllMocks();
     }
+  });
+
+  it("finds an Open Library book on Hardcover by ISBN, then by title and author, and only the same book", async () => {
+    const want = { title: "Dune Messiah", authors: ["Frank Herbert"], isbns: ["0441172695", "junk"] };
+    const messiah = { ...ROW, id: 11, title: "Dune Messiah", editions_count: 300, contributions: [{ contribution: "Author", author: { name: "Frank Herbert" } }],
+      cached_tags: { Genre: [{ tag: "Science Fiction" }], Mood: [{ tag: "Dark" }, { tag: "Reflective" }] } };
+    let asked = 0;
+    const mayAsk = async () => { asked++; return true; };
+
+    // By ISBN: one request, the ISBN-10 sent as its ISBN-13, the box set and the other book passed over.
+    let calls = answers([{ editions: [{ book: { ...ROW, id: 12, title: "Dune" } }, { book: { ...messiah, id: 13, compilation: true } }, { book: messiah }] }]);
+    const byIsbn = await findHardcoverBook(want, mayAsk);
+    expect(byIsbn).toMatchObject({ id: 11, moods: ["Dark", "Reflective"] });
+    expect(calls).toHaveLength(1);
+    expect(body(calls[0]).variables).toEqual({ isbns: ["9780441172696"] });
+    expect((body(calls[0]).query.match(/\beditions\(/g) ?? []).length).toBe(2); // the top-level field, and a book's own editions
+    vi.restoreAllMocks();
+
+    // No ISBN hit: a search for the title and the first author, which must match on both.
+    calls = answers([{ editions: [] }, { search: { results: { hits: [
+      { document: { id: "20", title: "Dune Messiah", author_names: ["Someone Else"] } },
+      { document: { id: "11", title: "Dune Messiah", author_names: ["Frank Herbert"], moods: ["Dark"], genres: ["Science Fiction"] } },
+    ] } } }]);
+    expect(await findHardcoverBook(want, mayAsk)).toMatchObject({ id: 11, moods: ["Dark"] });
+    expect(body(calls[1]).variables).toEqual({ q: "Dune Messiah Frank Herbert" });
+    vi.restoreAllMocks();
+
+    // Nothing that is the same book: null, an answer.
+    answers([{ editions: [] }, { search: { results: { hits: [{ document: { id: "20", title: "Dune Messiah", author_names: ["Someone Else"] } }] } } }]);
+    expect(await findHardcoverBook(want, mayAsk)).toBeNull();
+    vi.restoreAllMocks();
+    expect(asked).toBe(5);
+
+    // The budget said no before an answer: undefined, which says nothing about the book.
+    calls = answers([{ editions: [] }]);
+    expect(await findHardcoverBook(want, async () => false)).toBeUndefined();
+    expect(calls).toHaveLength(0);
+    let once = 0;
+    expect(await findHardcoverBook(want, async () => once++ === 0)).toBeUndefined();
+    expect(calls).toHaveLength(1);
   });
 
   it("follows a duplicate to the book it duplicates", async () => {

@@ -65,6 +65,8 @@ export interface Env {
   HARDCOVER_ENABLED?: string;
   /** Hardcover requests allowed per UTC day across every route. Optional; src/hardcover.ts has the default (their free plan allows 5,000). */
   HARDCOVER_DAILY_CAP?: string;
+  /** Of those, how many the cron's book walk may use a day (`runHardcoverWalkStep`). Default 600. */
+  HARDCOVER_WALK_DAILY_CAP?: string;
   /** Cover copies allowed per UTC day (one per cover, ever). Optional; src/covers.ts has the default. */
   DAILY_COVER_CAP?: string;
   /** Where a copied cover is served from, in a card and in a stored record. Unset: the public site. */

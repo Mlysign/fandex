@@ -31,7 +31,7 @@ export function useHardcover(env: Env): void {
 export async function hardcoverHalf(env: Env, kind: string, units: number, load: () => Promise<BookCard[]>): Promise<BookCard[]> {
   useHardcover(env);
   if (!hardcoverConfigured()) return [];
-  if (!(await spend(env.DB, "hardcover", capFrom(env.HARDCOVER_DAILY_CAP, DEFAULT_HARDCOVER_DAILY_CAP), units))) {
+  if (!(await spendHardcover(env, units))) {
     console.warn("hardcover_budget", { kind });
     return [];
   }
@@ -41,4 +41,9 @@ export async function hardcoverHalf(env: Env, kind: string, units: number, load:
     console.warn("hardcover_failed", { kind, error: e instanceof Error ? e.message : String(e) });
     return [];
   }
+}
+
+/** Count `units` requests against today's Hardcover budget; false when they do not fit. */
+export async function spendHardcover(env: Env, units = 1): Promise<boolean> {
+  return spend(env.DB, "hardcover", capFrom(env.HARDCOVER_DAILY_CAP, DEFAULT_HARDCOVER_DAILY_CAP), units);
 }
