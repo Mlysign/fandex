@@ -203,7 +203,9 @@ Five budgets stop a stranger spending the day's writes, or a provider's day: `fe
 day), `hardcover` (requests to Hardcover, 4,000 a day of the 5,000 their free plan allows, one
 per top-level query field; `HARDCOVER_DAILY_CAP`) and `cover` (covers copied from Hardcover,
 3,000 a day; `DAILY_COVER_CAP`). They live in `daily_budget` and are read at call time. Over the
-Hardcover budget, a book route answers Open Library's half alone and says nothing.
+Hardcover budget, a book route answers Open Library's half alone and says nothing. The cron's
+Hardcover walk also counts each request against `hardcover_walk` (600 a day,
+`HARDCOVER_WALK_DAILY_CAP`), so it can never spend what search and the calendar need.
 
 **CPU, measured on the live Worker with `wrangler tail`:**
 
@@ -387,6 +389,24 @@ Each of these is a way the Worker differs from the site, and each has a test.
   run where it is. Past the last id the cursor reads `done`. Plan and rows read are asserted in
   `test/seasons.test.ts` (27 rows read for a batch of three over 25 links). Not covered: a show
   with no TMDB link.
+- **Open Library books get their Hardcover link from a cron walk** (`runHardcoverWalkStep`,
+  `src/hardcoverWalk.ts`, 2026-11-02). Until then only a book opened from a Hardcover card had one,
+  so Dune Messiah's page showed none of Hardcover's genres or moods. Three books a run on the
+  every-minute trigger, after the seasons walk. First, Hardcover links stored before moods were
+  parsed are asked again and their `moods` merged in (parks a day once none are left,
+  `hardcover_moods_idle`). Then Open Library books with no Hardcover link, by `source_id` after
+  `hardcover_walk_cursor`: one `editions(where: {isbn_13: {_in}})` request by the work's ISBNs,
+  else one search for title plus first author, and a hit counts only with the same folded title
+  and a shared author surname (`isSameHardcoverBook`). A hit on no other item is attached with
+  `linkSourceToItem`; a miss, or a Hardcover book already on another item, is stamped
+  `hardcoverChecked` on the Open Library record and asked again after 180 days. A failing book is
+  moved past unstamped; an open circuit or a spent budget stops the run where it is. At the end of
+  a pass the cursor goes back to `""` and the walk parks a day (`hardcover_walk_idle`), which is how
+  books stored since are reached. Not in the resolve path on purpose: a tap would wait on a second
+  provider and pay a second re-derive. Plan and rows read asserted in `test/hardcoverWalk.test.ts`.
+  ⚠️ The ISBN query's shape (`editions` at the top level with `_in`) was written from Hardcover's
+  schema and not probed live: if Hardcover refuses it as a query, each lookup logs
+  `hardcover_isbn_query_refused` and goes on to the search, at the price of a wasted request.
 - **A changed merge rule is true on the next item read, and nothing re-derives on a timer unless
   asked.** `DERIVE_VERSION` (`catalog/derive.ts`) stamps every stored doc. An item read re-merges
   a doc with an older stamp from its blobs, whatever the region, and the next write of the item

@@ -437,6 +437,8 @@ export const TAG_RULES: TagRule[] = [
       "exhilarated", "joyous", "introspective", "candid", "reflective",
       "provocative", "empathetic", "intimate", "antagonistic", "frightened",
       "never ending", "extreme violence",
+      // Hardcover's book moods (taken since 2026-11-02) the sets above miss.
+      "adventurous", "challenging", "inspiring",
     ],
   },
   {

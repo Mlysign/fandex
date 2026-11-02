@@ -51,6 +51,8 @@ export interface HardcoverBook {
   cover: string | null;
   /** Hardcover's genres and tags, as plain names. */
   tags: string[];
+  /** Hardcover's moods ("Dark", "Reflective"), as plain names. Absent on a record stored before 2026-11-02. */
+  moods: string[];
   pages: number | null;
   editionsCount: number | null;
   compilation: boolean;
@@ -142,29 +144,48 @@ export function hardcoverAuthors(contributions: unknown, names: unknown): string
   return out;
 }
 
+/** `cached_tags` as an object, whether it came as one or as its JSON text. */
+function cachedTagsObject(cached: unknown): Record<string, unknown> | null {
+  let obj: any = cached;
+  if (typeof obj === "string") { try { obj = JSON.parse(obj); } catch { obj = null; } }
+  return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : null;
+}
+
+/** Distinct names off lists of `{tag}` objects or plain strings, capped. */
+function tagNames(cap: number, ...lists: unknown[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const v of Array.isArray(list) ? list : []) {
+      const s = str(typeof v === "object" && v ? (v as any).tag ?? (v as any).name : v);
+      if (!s || s.length > 40 || seen.has(s.toLowerCase())) continue;
+      seen.add(s.toLowerCase());
+      if (out.length < cap) out.push(s);
+    }
+  }
+  return out;
+}
+
 /**
  * Genre and tag names off `cached_tags` (a JSON object keyed by category:
  * Genre, Mood, Tag, Content Warning) or off the search index's plain lists.
- * Genres and tags only: a content warning is not a tag, and a mood is too
- * subjective to file a book under.
+ * A content warning is never taken: it is not a tag. Moods are their own list
+ * (`hardcoverMoods`), so the twelve here cannot crowd them out.
  */
 export function hardcoverTags(cached: unknown, genres?: unknown, tags?: unknown): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const add = (v: unknown) => {
-    const s = str(typeof v === "object" && v ? (v as any).tag ?? (v as any).name : v);
-    if (!s || s.length > 40 || seen.has(s.toLowerCase())) return;
-    seen.add(s.toLowerCase());
-    if (out.length < 12) out.push(s);
-  };
-  let obj: any = cached;
-  if (typeof obj === "string") { try { obj = JSON.parse(obj); } catch { obj = null; } }
-  if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-    for (const key of ["Genre", "genre", "Tag", "tag"]) for (const t of Array.isArray(obj[key]) ? obj[key] : []) add(t);
-  }
-  for (const g of Array.isArray(genres) ? genres : []) add(g);
-  for (const t of Array.isArray(tags) ? tags : []) add(t);
-  return out;
+  const obj = cachedTagsObject(cached);
+  return tagNames(12, obj?.Genre, obj?.genre, obj?.Tag, obj?.tag, genres, tags);
+}
+
+/**
+ * Mood names off `cached_tags` or the search index's `moods` list. Taken since
+ * 2026-11-02 (Nils: a book page was missing Hardcover's moods): they are what
+ * readers tagged the book with, the same kind of fact as its genres and tags,
+ * and the taxonomy files them under Mood / Tone as it does Trakt's.
+ */
+export function hardcoverMoods(cached: unknown, moods?: unknown): string[] {
+  const obj = cachedTagsObject(cached);
+  return tagNames(6, obj?.Mood, obj?.mood, moods);
 }
 
 /** The series a book is filed under, the featured one first. */
@@ -207,6 +228,7 @@ export function parseHardcoverBook(d: any, coverOrigin: string = DEFAULT_COVER_O
     isbns,
     cover: hardcoverCoverUrl(hardcoverCoverPath(d?.image?.url ?? d?.cached_image?.url), coverOrigin),
     tags: hardcoverTags(d?.cached_tags, d?.genres, d?.tags),
+    moods: hardcoverMoods(d?.cached_tags, d?.moods),
     pages: int(d?.pages),
     editionsCount: int(d?.editions_count),
     compilation: d?.compilation === true,
@@ -229,4 +251,49 @@ export function searchDocuments(results: unknown): any[] {
 /** A book that is the book itself: not a piece of one, not a duplicate, not a deleted row. */
 export function isWholeHardcoverBook(b: HardcoverBook | null, raw?: any): b is HardcoverBook {
   return !!b && b.canonicalId == null && raw?.is_partial_book !== true;
+}
+
+/** A title or a name folded for comparison: accents, case, punctuation, a leading article and a trailing "(…)" gone. */
+function foldForMatch(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\s*\([^)]*\)\s*$/, "").replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/^(the|a|an) /, "");
+}
+
+const surname = (name: string): string => foldForMatch(name).split(" ").pop() ?? "";
+
+/** What a book held under another provider is matched on. */
+export interface HardcoverMatchWant {
+  title: string;
+  authors: string[];
+}
+
+/**
+ * Whether a Hardcover record is the book wanted. The title must be the same
+ * once folded; a prefix is not enough ("Dune" is not "Dune Messiah"). An
+ * author must be shared (by surname) when both sides name one. Found by ISBN,
+ * a book with no author on one side passes on the title; found by a text
+ * search it never does, since the title alone is all such a hit shares.
+ */
+export function isSameHardcoverBook(b: HardcoverBook, want: HardcoverMatchWant, byIsbn: boolean): boolean {
+  const t = foldForMatch(want.title);
+  if (!t || foldForMatch(b.title) !== t) return false;
+  const wanted = new Set(want.authors.map(surname).filter(Boolean));
+  const theirs = b.authors.map(surname).filter(Boolean);
+  if (!wanted.size || !theirs.length) return byIsbn;
+  return theirs.some((s) => wanted.has(s));
+}
+
+/**
+ * The record among `candidates` that is the book wanted, or null. Of several
+ * (a translation filed as a book of its own shares the title), the one with
+ * the most editions: 108 for The Name of the Wind against 1 for each copy.
+ */
+export function pickHardcoverBook(candidates: (HardcoverBook | null)[], want: HardcoverMatchWant, byIsbn: boolean): HardcoverBook | null {
+  let best: HardcoverBook | null = null;
+  for (const b of candidates) {
+    if (!b || b.canonicalId != null || b.compilation || !isSameHardcoverBook(b, want, byIsbn)) continue;
+    if (!best || (b.editionsCount ?? 0) > (best.editionsCount ?? 0)) best = b;
+  }
+  return best;
 }

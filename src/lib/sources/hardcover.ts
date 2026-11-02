@@ -30,7 +30,8 @@
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
 import { isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
 import {
-  DEFAULT_COVER_ORIGIN, isWholeHardcoverBook, parseHardcoverBook, searchDocuments, type HardcoverBook,
+  DEFAULT_COVER_ORIGIN, isbnList, isWholeHardcoverBook, parseHardcoverBook, pickHardcoverBook, searchDocuments,
+  type HardcoverBook, type HardcoverMatchWant,
 } from "@/lib/sources/hardcoverPure";
 
 export * from "@/lib/sources/hardcoverPure";
@@ -81,6 +82,14 @@ export class HardcoverNotConfigured extends Error {
   }
 }
 
+/** Hardcover answered, and refused the query itself (a field or a filter it does not allow). Not an outage. */
+export class HardcoverQueryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HardcoverQueryError";
+  }
+}
+
 /** One GraphQL request. ONE top-level field per query: each costs a request against the daily 5,000. */
 async function graphql(query: string, variables: Record<string, unknown>, budgetMs?: number): Promise<any> {
   if (!hardcoverConfigured()) throw new HardcoverNotConfigured();
@@ -102,7 +111,7 @@ async function graphql(query: string, variables: Record<string, unknown>, budget
   if (!res.ok) throw new Error(`Hardcover error: ${res.status}`);
   const body = await res.json();
   if (Array.isArray(body?.errors) && body.errors.length) {
-    throw new Error(`Hardcover error: ${body.errors[0]?.message ?? JSON.stringify(body.errors[0]).slice(0, 120)}`);
+    throw new HardcoverQueryError(`Hardcover error: ${body.errors[0]?.message ?? JSON.stringify(body.errors[0]).slice(0, 120)}`);
   }
   return body?.data ?? null;
 }
@@ -185,6 +194,55 @@ export async function getHardcoverBook(id: string | number): Promise<HardcoverBo
     book = raw ? parseHardcoverBook(raw, hardcoverCoverOrigin()) : null;
   }
   return book && book.canonicalId == null ? book : null;
+}
+
+/**
+ * The Hardcover book that is a book Fandex holds from Open Library, found by
+ * its ISBNs and, failing that, by a search for its title and first author
+ * (2026-11-02: an Open Library book had no Hardcover link, so its page showed
+ * none of Hardcover's genres or moods). A hit counts only when it is the same
+ * book (`isSameHardcoverBook`): the same title, and a shared author.
+ *
+ * `mayAsk` is asked before each request (at most two) and spends the budget.
+ * Answers the record, null when Hardcover has no such book, or undefined when
+ * `mayAsk` said no before an answer was reached: that says nothing about the
+ * book, and the caller must not file it as "not on Hardcover". A provider
+ * failure throws.
+ */
+export async function findHardcoverBook(
+  want: HardcoverMatchWant & { isbns: string[] },
+  mayAsk: () => Promise<boolean>,
+): Promise<HardcoverBook | null | undefined> {
+  const origin = hardcoverCoverOrigin();
+  const isbns = isbnList(want.isbns).slice(0, 8);
+  if (isbns.length) {
+    if (!(await mayAsk())) return undefined;
+    let data: any = null;
+    try {
+      data = await graphql(
+        `query ($isbns: [String!]!) { editions(where: {isbn_13: {_in: $isbns}}, limit: 10) { book { ${BOOK_FIELDS} } } }`,
+        { isbns },
+      );
+    } catch (e) {
+      // This query's shape was not probed live (2026-11-02). Refused as a
+      // query, it must not stop the search below; an outage still throws.
+      if (!(e instanceof HardcoverQueryError)) throw e;
+      console.warn("hardcover_isbn_query_refused", { error: e.message });
+    }
+    const rows = (Array.isArray(data?.editions) ? data.editions : []).map((e: any) => e?.book).filter(Boolean);
+    const hit = pickHardcoverBook(rows.map((r: any) => (r.is_partial_book === true ? null : parseHardcoverBook(r, origin))), want, true);
+    if (hit) return hit;
+  }
+  const author = want.authors[0]?.trim();
+  if (!author) return null;
+  if (!(await mayAsk())) return undefined;
+  const q = `${want.title} ${author}`.slice(0, 100);
+  const found = await graphql(
+    `query ($q: String!) { search(query: $q, query_type: "Book", per_page: 10, page: 1) { results } }`,
+    { q },
+  );
+  const docs = searchDocuments(found?.search?.results);
+  return pickHardcoverBook(docs.map((d) => (d?.is_partial_book === true ? null : parseHardcoverBook(d, origin))), want, false);
 }
 
 /**

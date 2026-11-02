@@ -36,6 +36,7 @@ import { rederiveItem, upsertMediaItem } from "./catalog/ingest";
 import { seasonRowsFromTmdb, storeShowSeasons } from "./catalog/seasons";
 import { useSharedIgdbToken } from "./catalog/resolve";
 import { runBaselineStep } from "./baseline";
+import { runHardcoverWalkStep } from "./hardcoverWalk";
 
 // ── 1. The export ───────────────────────────────────────────────────────────
 
@@ -956,8 +957,8 @@ export async function runScheduled(env: Env): Promise<void> {
 // queries and a new title takes a dozen, so the throughput comes from the
 // number of runs. While the walk has titles left it takes the whole run; after
 // that the run tags pool games (Steam, Wikidata), so the games the walk added
-// get their tags in hours rather than days, and fills the seasons of shows
-// stored without them. Each of those walks parks itself
+// get their tags in hours rather than days, fills the seasons of shows stored
+// without them, and links Open Library books to Hardcover. Each of those walks parks itself
 // when it is through, after which a run here costs a few kv reads.
 
 export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Promise<void> {
@@ -988,5 +989,13 @@ export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Pr
     if (ss.stored || ss.empty || ss.failed) console.log("show_seasons_step", ss);
   } catch (e) {
     console.error("show_seasons_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // Hardcover's genres, tags and moods onto the Open Library books (hardcoverWalk.ts).
+  // Behind its own share of Hardcover's day; parks for a day after each pass.
+  try {
+    const hw = await runHardcoverWalkStep(env);
+    if (hw.moods || hw.linked || hw.absent || hw.failed) console.log("hardcover_walk_step", hw);
+  } catch (e) {
+    console.error("hardcover_walk_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
 }

@@ -31,7 +31,8 @@ Four items. Everything else in this file is work I can do without him, and every
 - **Install 0.3.27 on the phone** (built 2026-11-02, `C:\fx\fandex-0.3.27.apk`; the phone was not connected): the planet tag page then says 4 rated, as Taste does.
 - **Check Search's Picks signed in** (site 2026-11-02, APK 0.3.26): a different hand after ten minutes away, none from the library, and how long the first hand takes, since it scores the whole catalog copy. Signed out on fandex.org it opened on Picks with no console error. → `docs/app.md` (Search row)
 
-- **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
+- **Deploy the Hardcover walk and watch its first day** (2026-11-02, branch `ccr-dc16fb2a-o3p6tz`): `npx wrangler deploy`, no migration. Then `wrangler tail` for `hardcover_walk_step`: `hardcover_isbn_query_refused` in the log means the unprobed `editions` ISBN query's shape is wrong (books still link through the search, one request dearer). After a day, check Dune Messiah shows Dark, Reflective and Tense, and publish the site. → `docs/worker.md`
+- **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Due again once the Hardcover walk is through: every book gains voted tags. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 

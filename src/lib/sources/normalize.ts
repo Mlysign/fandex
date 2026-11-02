@@ -603,8 +603,9 @@ function normalizeHardcover(d: any): SourceNormalized {
   out.releaseDate = typeof d.releaseDate === "string" ? d.releaseDate : null;
   out.poster = typeof d.cover === "string" ? d.cover : null;
   out.images = out.poster ? [out.poster] : [];
-  // Hardcover's genres and tags come as one list its readers voted on, genres first.
-  out.tiers = tiered(["voted", list(d.tags)]);
+  // Hardcover's genres and tags come as one list its readers voted on, genres
+  // first; its moods follow (a record stored before 2026-11-02 has none).
+  out.tiers = tiered(["voted", [...list(d.tags), ...list(d.moods)]]);
   out.tags = flat(out.tiers);
   out.collection = typeof d.series?.name === "string" ? d.series.name : null;
   out.authors = list(d.authors).slice(0, 6);
