@@ -30,6 +30,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
+- **The trailer plays in the app** (2026-11-03, draft PR #56, branch `ccr-3f73571f-r09itr`, CI green): adds `react-native-webview`, a native module, so it needs an APK (raise `version` and `versionCode` when building). On the phone: the trailer plays, fullscreen works (letterboxed, the app is portrait-locked), the sound stops on going back. Error 153 on the player means the referrer fix in `Trailer.tsx` did not take.
 - **Install 0.3.27 on the phone** (built 2026-11-02, `C:\fx\fandex-0.3.27.apk`; the phone was not connected): the planet tag page then says 4 rated, as Taste does.
 - **Check Search's Picks signed in** (site 2026-11-02, APK 0.3.26): a different hand after ten minutes away, none from the library, and how long the first hand takes, since it scores the whole catalog copy. Signed out on fandex.org it opened on Picks with no console error. → `docs/app.md` (Search row)
 
