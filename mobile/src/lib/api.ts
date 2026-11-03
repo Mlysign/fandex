@@ -348,12 +348,16 @@ export const api = {
     request<{ region: string; dates: Record<string, string> }>('/v1/catalog/release-dates', json('POST', { region, ids })),
 
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
+  // `region` on the book calls: books come in English and that country's languages (2026-11-03).
   /** Open Library's or BGG's titles for a query. Board games answer 503 `not-configured` while BGG is off. */
-  searchShelf: (shelf: 'books' | 'boardgames', query: string) => request<{ results: ProviderResult[] }>(`/v1/search/${shelf}${q({ q: query })}`),
+  searchShelf: (shelf: 'books' | 'boardgames', query: string, region?: string) =>
+    request<{ results: ProviderResult[] }>(`/v1/search/${shelf}${q({ q: query, region: shelf === 'books' ? region : undefined })}`),
   /** What is popular: Open Library's weekly trending books, BGG's hot board games. */
-  browseShelf: (shelf: 'books' | 'boardgames') => request<{ results: ProviderResult[] }>(`/v1/browse/${shelf}`),
+  browseShelf: (shelf: 'books' | 'boardgames', region?: string) =>
+    request<{ results: ProviderResult[] }>(`/v1/browse/${shelf}${q({ region: shelf === 'books' ? region : undefined })}`),
   /** A tag's, an author's, a publisher's or a series' books at Open Library. */
-  facetBooks: (kind: 'tag' | 'person' | 'studio' | 'franchise', label: string) => request<{ results: ProviderResult[] }>(`/v1/facet/books${q({ kind, q: label })}`),
+  facetBooks: (kind: 'tag' | 'person' | 'studio' | 'franchise', label: string, region?: string) =>
+    request<{ results: ProviderResult[] }>(`/v1/facet/books${q({ kind, q: label, region })}`),
   /** Which optional types the API has switched on (board games need a BGG token). */
   features: () => request<{ boardgames: boolean; books: boolean; hardcover?: boolean }>('/v1/features'),
   /** Upcoming games, most anticipated first, forty a page (1 to 10). */

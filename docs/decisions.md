@@ -182,10 +182,15 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **The You tab is lighter than the site's profile page, on purpose.** No "Recently added" and
   "Coming up" lists and no Wishlist or Your ratings rows: the tabs already are those. An Import row
   instead. A parity pass must not put them back.
-- **One book per language.** Open Library files a translation as a work of its own; every shelf
-  answer keeps the works with an English edition (or no language given) and drops split editions
-  and box sets (`isWholeBook`). The English work stands for the book. A book's series is read off
-  its English editions when the search row has none.
+- **A book list shows English and the user's country's languages** (Nils, 2026-11-03, replacing
+  English alone). The country is the one set in Settings, sent as `?region=`; `bookLanguagesFor`
+  maps it (Switzerland is German, French and Italian). Open Library files a translation as a work
+  of its own; every shelf answer keeps the works with an edition in those languages (or no language
+  given) and drops split editions and box sets (`isWholeBook`). Hardcover's lists read each book's
+  edition languages the same way and title a book after an edition in those languages
+  (`editionsInLanguages`). An audiobook or large-print work ("… Lib/E") is the same book
+  (`withoutEditionMarker`), and of one provider's two cards the one with more votes stays. A book's
+  series is read off its English editions when the search row has none.
 - **Hardcover is the SECOND book source, facts only, behind `HARDCOVER_TOKEN`** (Nils: "please
   add the token yourself", 2026-10-17, which settled the yes). Its API Rules now allow a
   professional project to use facts about books, editions and series; what they forbid is used

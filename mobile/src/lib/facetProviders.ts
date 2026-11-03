@@ -268,9 +268,9 @@ async function collection(label: string, signal?: AbortSignal): Promise<CardItem
  * it has. Throws when TMDB cannot be reached; the page then shows what the
  * device holds.
  */
-export async function providerFacet(kind: FacetPageKind, key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
+export async function providerFacet(kind: FacetPageKind, key: string, label: string, region: string, signal?: AbortSignal): Promise<ProviderFacet> {
   // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's, a publisher's or a series'.
-  const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), () => [] as CardItem[]);
+  const books = api.facetBooks(kind, label, region).then((r) => r.results.map((b) => shelfCard(b, kind)), () => [] as CardItem[]);
   // An author TMDB does not know still gets a face and a biography.
   const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
   if (!tmdbConfigured()) return { cards: unique(await books), person: await author };

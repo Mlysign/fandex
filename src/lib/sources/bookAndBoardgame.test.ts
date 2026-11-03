@@ -236,3 +236,77 @@ describe("book search clutter (2026-10-23 review)", () => {
     expect(out.map((c) => c.sourceId)).toEqual(["OL1W", "OL3W"]);
   });
 });
+
+describe("an audiobook work beside its book (2026-11-03)", () => {
+  const card = (sourceId: string, title: string, votes: number, authors = ["Jason Schreier"]) => ({
+    source: "openlibrary" as const, sourceId, type: "book" as const, title, releaseDate: "2017-09-05", posterUrl: null,
+    votes, rating: null, popularity: 0, genres: [], authors,
+  });
+
+  it("takes a printing's label off a title, and nothing else", async () => {
+    const { withoutEditionMarker } = await import("@/lib/sources/bookPure");
+    expect(withoutEditionMarker("Blood, Sweat, and Pixels Lib/E")).toBe("Blood, Sweat, and Pixels");
+    expect(withoutEditionMarker("Dune (Unabridged)")).toBe("Dune");
+    expect(withoutEditionMarker("Dune [Audiobook] Lib/E")).toBe("Dune");
+    expect(withoutEditionMarker("Project Hail Mary - Large Print")).toBe("Project Hail Mary");
+    for (const t of ["The Library", "Audio", "AC/DC", "Abridged"]) expect(withoutEditionMarker(t)).toBe(t);
+  });
+
+  it("is one card, the book with the votes, whichever came first", async () => {
+    const { mergeBookCards } = await import("@/lib/sources/bookPure");
+    const book = card("OL19721368W", "Blood, sweat, and pixels", 3);
+    const audio = card("OL27016925W", "Blood, Sweat, and Pixels Lib/E", 0, ["Jason Schreier", "Ray Chase"]);
+    expect(mergeBookCards([book, audio], []).map((c) => c.sourceId)).toEqual(["OL19721368W"]);
+    expect(mergeBookCards([audio, book], []).map((c) => c.sourceId)).toEqual(["OL19721368W"]);
+    // On a tie, the title without the label.
+    expect(mergeBookCards([card("A", "Dune Lib/E", 0, ["Frank Herbert"]), card("B", "Dune", 0, ["Frank Herbert"])], []).map((c) => c.title)).toEqual(["Dune"]);
+    // Across providers the first list still wins: a Hardcover card never replaces Open Library's.
+    const hc = { ...card("9", "Blood, Sweat, and Pixels", 5), source: "hardcover" as const };
+    expect(mergeBookCards([audio], [hc]).map((c) => c.source)).toEqual(["openlibrary"]);
+  });
+});
+
+describe("the languages a book list shows (2026-11-03)", () => {
+  it("is English, then the country's own", async () => {
+    const { bookLanguagesFor } = await import("@/lib/sources/bookPure");
+    expect(bookLanguagesFor("DE")).toEqual(["eng", "ger"]);
+    expect(bookLanguagesFor("ch")).toEqual(["eng", "ger", "fre", "ita"]);
+    expect(bookLanguagesFor("US")).toEqual(["eng"]);
+    expect(bookLanguagesFor(null)).toEqual(["eng"]);
+    expect(bookLanguagesFor("XX")).toEqual(["eng"]);
+  });
+
+  it("reads a language however a provider names it", async () => {
+    const { bookLanguageCode } = await import("@/lib/sources/bookPure");
+    expect(bookLanguageCode("German")).toBe("ger");
+    expect(bookLanguageCode("/languages/ita")).toBe("ita");
+    expect(bookLanguageCode("Norwegian Bokmål")).toBe("nor");
+    expect(bookLanguageCode("Brazilian Portuguese")).toBe("por");
+    expect(bookLanguageCode("de")).toBe("ger");
+    expect(bookLanguageCode("Klingon")).toBeNull();
+    expect(bookLanguageCode(null)).toBeNull();
+  });
+
+  it("keeps an Open Library work in the country's language, and not in another", async () => {
+    const { isWholeBook } = await import("@/lib/sources/bookPure");
+    const german = { title: "Die Alchemisten: Der Hüter der Elixiere", language: ["ger"] };
+    expect(isWholeBook(german, ["eng", "ger"])).toBe(true);
+    expect(isWholeBook(german)).toBe(false);
+    expect(isWholeBook({ title: "Il custode delle essenze", language: ["ita"] }, ["eng", "ger"])).toBe(false);
+  });
+
+  it("titles a book after an edition the reader can read, and keeps what it cannot judge", async () => {
+    const { editionsInLanguages } = await import("@/lib/sources/bookPure");
+    const eds = [{ title: "Il custode delle essenze", language: "Italian" }, { title: "Der Hüter der Elixiere", language: "German" }];
+    expect(editionsInLanguages("Il custode delle essenze", eds, 2, ["eng", "ger"])).toEqual({ keep: true, title: "Der Hüter der Elixiere" });
+    expect(editionsInLanguages("Il custode delle essenze", eds, 2, ["eng"]).keep).toBe(false);
+    expect(editionsInLanguages("Il custode delle essenze", eds, 30, ["eng"]).keep).toBe(true);
+    // The book's own title in an accepted edition stays, a subtitle aside.
+    expect(editionsInLanguages("The Name of the Wind", [{ title: "Der Name des Windes", language: "German" }, { title: "The Name of the Wind: 10th Anniversary", language: "English" }], 2, ["eng", "ger"]))
+      .toEqual({ keep: true, title: "The Name of the Wind" });
+    // English before the country's language.
+    expect(editionsInLanguages("Le Gardien", [{ title: "Der Hüter", language: "German" }, { title: "The Keeper", language: "English" }], 2, ["eng", "ger"]).title).toBe("The Keeper");
+    expect(editionsInLanguages("Anything", [], 5, ["eng"])).toEqual({ keep: true, title: "Anything" });
+    expect(editionsInLanguages("Anything", undefined, null, ["eng"])).toEqual({ keep: true, title: "Anything" });
+  });
+});

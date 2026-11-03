@@ -28,7 +28,7 @@
 // Imported by the Worker: no Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
+import { editionsInLanguages, ENGLISH_ONLY, isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
 import {
   DEFAULT_COVER_ORIGIN, isbnList, isWholeHardcoverBook, parseHardcoverBook, pickHardcoverBook, searchDocuments,
   type HardcoverBook, type HardcoverMatchWant,
@@ -126,6 +126,18 @@ const BOOK_FIELDS = `
   book_series { position series { id name } }
   editions(limit: 12) { isbn_13 isbn_10 }`;
 
+/**
+ * What a LIST reads besides a book's fields: each edition's title and
+ * language, for the languages a list shows (bookPure.ts, `editionsInLanguages`).
+ * Aliased, since `editions` is already selected above with other fields. Kept
+ * out of BOOK_FIELDS on purpose: a book page and the ingest never ask for it,
+ * so a refusal of these fields can only empty a list's Hardcover half, which
+ * `hardcoverHalf` turns into Open Library's answer alone.
+ */
+const LANGUAGE_FIELDS = `lang_editions: editions(limit: 12) { title language { language } }`;
+const LIST_FIELDS = `${BOOK_FIELDS}
+  ${LANGUAGE_FIELDS}`;
+
 /** A record as the app's card. No votes and no rating: Hardcover's are not ours to show. */
 export function hardcoverCard(b: HardcoverBook): BookCard {
   return {
@@ -145,17 +157,23 @@ const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,
  * the Wind, Book 1" (a part), each a book of its own. A record without a cover
  * is nearly always one of those; a real book somebody would look for has one.
  */
-function listable(raw: any): HardcoverBook | null {
+function listable(raw: any, accepted: readonly string[]): HardcoverBook | null {
   const b = parseHardcoverBook(raw, hardcoverCoverOrigin());
-  return isWholeHardcoverBook(b, raw) && b.cover && !isPieceOfBook(b.title) ? b : null;
+  if (!isWholeHardcoverBook(b, raw) || !b.cover || isPieceOfBook(b.title)) return null;
+  // Only in languages the list does not show, or titled after a translation (2026-11-03).
+  const editions = Array.isArray(raw?.lang_editions)
+    ? (raw.lang_editions as any[]).map((e) => ({ title: e?.title, language: e?.language?.language ?? e?.language }))
+    : null;
+  const lang = editionsInLanguages(b.title, editions, b.editionsCount, accepted);
+  return lang.keep ? { ...b, title: lang.title } : null;
 }
 
 /** Rows as cards, one per book, listable books only, in the order given. */
-function cards(rows: unknown): BookCard[] {
+function cards(rows: unknown, accepted: readonly string[]): BookCard[] {
   const out: BookCard[] = [];
   const seen = new Set<number>();
   for (const raw of Array.isArray(rows) ? rows : []) {
-    const b = listable(raw);
+    const b = listable(raw, accepted);
     if (!b || seen.has(b.id)) continue;
     seen.add(b.id);
     out.push(hardcoverCard(b));
@@ -163,8 +181,16 @@ function cards(rows: unknown): BookCard[] {
   return out;
 }
 
-/** Books matching a query, Hardcover's order (best text match, then most shelved). */
-export async function searchHardcover(query: string, limit = 20): Promise<BookCard[]> {
+/**
+ * Books matching a query, Hardcover's order (best text match, then most
+ * shelved). TWO requests since 2026-11-03: the search index's documents carry
+ * no edition languages, so the hits' editions are asked for by id, to drop a
+ * translation into a language the list does not show and to title a book
+ * after an edition the reader can read (`listable`).
+ */
+export const SEARCH_HARDCOVER_REQUESTS = 2;
+
+export async function searchHardcover(query: string, limit = 20, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
   const data = await graphql(
@@ -172,7 +198,19 @@ export async function searchHardcover(query: string, limit = 20): Promise<BookCa
     { q, n: Math.min(25, Math.max(limit, 1)) },
     BROWSE_BUDGET_MS,
   );
-  return cards(searchDocuments(data?.search?.results)).slice(0, limit);
+  const docs = searchDocuments(data?.search?.results);
+  const ids = [...new Set(docs.map((d) => Number(d?.id)).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return [];
+  const langs = await graphql(
+    `query ($ids: [Int!]!) { books(where: {id: {_in: $ids}}, limit: ${ids.length}) { id editions_count ${LANGUAGE_FIELDS} } }`,
+    { ids },
+    BROWSE_BUDGET_MS,
+  );
+  const byId = new Map<number, any>(((langs?.books ?? []) as any[]).map((b) => [Number(b?.id), b]));
+  return cards(docs.map((d) => {
+    const l = byId.get(Number(d?.id));
+    return l ? { ...d, editions_count: l.editions_count ?? d?.editions_count, lang_editions: l.lang_editions } : d;
+  }), accepted).slice(0, limit);
 }
 
 /**
@@ -251,7 +289,7 @@ export async function findHardcoverBook(
  * API disables, and `_eq` would miss "the" and a capital. The exact spelling
  * wins when one of the hits has it; otherwise the first hit does.
  */
-export async function seriesHardcover(series: string, limit = 40): Promise<BookCard[]> {
+export async function seriesHardcover(series: string, limit = 40, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const s = series.trim().slice(0, 100);
   if (s.length < 2) return [];
   const found = await graphql(
@@ -264,7 +302,7 @@ export async function seriesHardcover(series: string, limit = 40): Promise<BookC
   const pick = exact ?? docs[0];
   if (!pick) return [];
   const data = await graphql(
-    `query ($id: Int!, $n: Int!) { series(where: {id: {_eq: $id}}, limit: 1) { name book_series(order_by: {position: asc}, limit: $n) { position book { ${BOOK_FIELDS} } } } }`,
+    `query ($id: Int!, $n: Int!) { series(where: {id: {_eq: $id}}, limit: 1) { name book_series(order_by: {position: asc}, limit: $n) { position book { ${LIST_FIELDS} } } } }`,
     { id: Number(pick.id), n: Math.min(60, Math.max(limit, 1)) },
     BROWSE_BUDGET_MS,
   );
@@ -275,7 +313,7 @@ export async function seriesHardcover(series: string, limit = 40): Promise<BookC
   // translation. The map keeps position order, which the query sorted.
   const best = new Map<string, HardcoverBook>();
   for (const r of (data?.series?.[0]?.book_series ?? []) as any[]) {
-    const b = listable(r?.book);
+    const b = listable(r?.book, accepted);
     if (!b) continue;
     const key = typeof r?.position === "number" ? `pos:${r.position}` : `id:${b.id}`;
     const held = best.get(key);
@@ -290,7 +328,7 @@ export async function seriesHardcover(series: string, limit = 40): Promise<BookC
  * first, which is what its site uses too. ⚠️ That number is the sort key of
  * the request and nothing else: it is not asked for, stored or shown.
  */
-export async function upcomingHardcover(month: string, limit = 60): Promise<BookCard[]> {
+export async function upcomingHardcover(month: string, limit = 60, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const m = /^(\d{4})-(\d{2})$/.exec(month);
   if (!m) return [];
   const y = Number(m[1]);
@@ -301,9 +339,9 @@ export async function upcomingHardcover(month: string, limit = 60): Promise<Book
   const data = await graphql(
     `query ($from: date!, $to: date!, $n: Int!) {
        books(where: {release_date: {_gte: $from, _lt: $to}, book_status_id: {_in: [1, 2]}, canonical_id: {_is_null: true}},
-             order_by: [{users_count: desc}, {id: asc}], limit: $n) { ${BOOK_FIELDS} } }`,
+             order_by: [{users_count: desc}, {id: asc}], limit: $n) { ${LIST_FIELDS} } }`,
     { from, to, n: Math.min(60, Math.max(limit, 1)) },
     BROWSE_BUDGET_MS,
   );
-  return cards(data?.books).slice(0, limit);
+  return cards(data?.books, accepted).slice(0, limit);
 }

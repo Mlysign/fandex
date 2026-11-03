@@ -68,19 +68,109 @@ export function parseDay(raw: unknown): string | null {
   return null;
 }
 
+// ── The languages a book list shows (2026-11-03) ─────────────────────────────
+
 /**
- * Whether a work has an edition in English, or says nothing about languages.
- * Open Library files a translation as a WORK of its own ("Der Weg der Könige"
- * beside "The Way of Kings"), so an author's or a series' books came back once
- * per language (Nils, 2026-10-17). The catalog is in English, as TMDB's titles
- * are, so a work with editions only in other languages is left out and the
- * English work stands for it. A record with no language list is kept: unknown
- * is not "not English".
+ * A book language, as Open Library writes it (MARC codes: "eng", "ger"), with
+ * the names and ISO codes another provider may use for it. Hardcover names an
+ * edition's language in words ("German").
  */
-export function hasEnglishEdition(doc: any): boolean {
-  const langs = doc?.language;
-  return !Array.isArray(langs) || langs.length === 0 || langs.includes("eng");
+const BOOK_LANGUAGE_NAMES: Record<string, string[]> = {
+  eng: ["english", "en"], ger: ["german", "deutsch", "de", "deu"], fre: ["french", "fr", "fra"],
+  ita: ["italian", "it"], spa: ["spanish", "castilian", "es"], por: ["portuguese", "pt"],
+  dut: ["dutch", "flemish", "nl", "nld"], swe: ["swedish", "sv"], nor: ["norwegian", "bokmal", "nynorsk", "no", "nb", "nob", "nn", "nno"],
+  dan: ["danish", "da"], fin: ["finnish", "fi"], pol: ["polish", "pl"], cze: ["czech", "cs", "ces"],
+  gre: ["greek", "el", "ell"], jpn: ["japanese", "ja"], kor: ["korean", "ko"], hin: ["hindi", "hi"], afr: ["afrikaans", "af"],
+};
+
+/**
+ * The languages a country reads besides English, by the country the user set
+ * (Nils, 2026-11-03: "English and the language set in the user's settings";
+ * the setting is the country). A country with more than one gets each.
+ */
+const COUNTRY_BOOK_LANGUAGES: Record<string, string[]> = {
+  DE: ["ger"], AT: ["ger"], CH: ["ger", "fre", "ita"], FR: ["fre"], BE: ["dut", "fre"], NL: ["dut"],
+  ES: ["spa"], MX: ["spa"], AR: ["spa"], PT: ["por"], BR: ["por"], IT: ["ita"], SE: ["swe"], NO: ["nor"],
+  DK: ["dan"], FI: ["fin", "swe"], PL: ["pol"], CZ: ["cze"], GR: ["gre"], JP: ["jpn"], KR: ["kor"],
+  CA: ["fre"], IN: ["hin"], ZA: ["afr"],
+};
+
+/** English alone: what a list shows when no country is given. */
+export const ENGLISH_ONLY: readonly string[] = ["eng"];
+
+/** The languages a list shows for a country: English first, then the country's own. */
+export function bookLanguagesFor(country: string | null | undefined): string[] {
+  const extra = COUNTRY_BOOK_LANGUAGES[String(country ?? "").trim().toUpperCase()] ?? [];
+  return ["eng", ...extra.filter((l) => l !== "eng")];
 }
+
+/** A language as a provider wrote it ("German", "de", "/languages/ger") as Open Library's code, or null. */
+export function bookLanguageCode(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.replace("/languages/", "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (!t) return null;
+  if (BOOK_LANGUAGE_NAMES[t]) return t;
+  for (const [code, names] of Object.entries(BOOK_LANGUAGE_NAMES)) {
+    if (names.includes(t) || names.some((n) => n.length > 3 && t.split(/[^a-z]+/).includes(n))) return code;
+  }
+  return null;
+}
+
+/**
+ * Whether a work has an edition in one of `accepted`, or says nothing about
+ * languages. Open Library files a translation as a WORK of its own ("Der Weg
+ * der Könige" beside "The Way of Kings"), so an author's or a series' books
+ * came back once per language (Nils, 2026-10-17). A list shows English and
+ * the user's country's languages (`bookLanguagesFor`); a work with editions
+ * only in others is left out. A record with no language list is kept: unknown
+ * is not "another language".
+ */
+export function hasEditionIn(doc: any, accepted: readonly string[] = ENGLISH_ONLY): boolean {
+  const langs = doc?.language;
+  return !Array.isArray(langs) || langs.length === 0 || langs.some((l) => accepted.includes(String(l)));
+}
+
+/** An edition as a list reads it for its language: its own title, and its language as the provider wrote it. */
+export interface EditionLanguage {
+  title?: unknown;
+  language?: unknown;
+}
+
+/**
+ * A book filed with its editions (Hardcover's shape), read for the languages a
+ * list shows: whether to keep it, and under which title. Hardcover titles a
+ * book after one of its editions, which can be a translation: Sam Feuerbach's
+ * "Der Hüter der Elixiere" was "Il custode delle essenze" (seen 2026-11-03).
+ *
+ *  • No edition names a language: kept as it is. Unknown is not "another language".
+ *  • An edition in `accepted`: kept. When no accepted edition carries the
+ *    book's own title, the title of the first accepted edition is shown,
+ *    English before the country's language.
+ *  • Every edition seen is in another language: left out, but only when all
+ *    of them were seen (`editionsCount` at most the number given). A book
+ *    with more editions than were asked for may have an accepted one among
+ *    the rest, and a book left out by a guess is worse than one shown.
+ */
+export function editionsInLanguages(
+  bookTitle: string, editions: readonly EditionLanguage[] | null | undefined, editionsCount: number | null, accepted: readonly string[] = ENGLISH_ONLY,
+): { keep: boolean; title: string } {
+  const named = (editions ?? []).map((e) => ({ title: typeof e?.title === "string" ? e.title.trim() : "", code: bookLanguageCode(e?.language) }))
+    .filter((e): e is { title: string; code: string } => !!e.code);
+  if (!named.length) return { keep: true, title: bookTitle };
+  const ok = named.filter((e) => accepted.includes(e.code));
+  if (!ok.length) return { keep: editionsCount != null && editionsCount > (editions ?? []).length, title: bookTitle };
+  const head = (t: string) => foldKey(withoutEditionMarker(t).split(/[:(]/)[0]);
+  const same = (t: string) => head(t) === head(bookTitle);
+  if (ok.some((e) => e.title && same(e.title))) return { keep: true, title: bookTitle };
+  for (const code of accepted) {
+    const e = ok.find((x) => x.code === code && x.title);
+    if (e) return { keep: true, title: e.title };
+  }
+  return { keep: true, title: bookTitle };
+}
+
+/** `hasEditionIn` for English alone: what a lookup by ISBN prefers. */
+export const hasEnglishEdition = (doc: any): boolean => hasEditionIn(doc, ENGLISH_ONLY);
 
 /**
  * A work that is a piece or a bundle of another, catalogued on its own: a
@@ -96,8 +186,9 @@ export function isPieceOfBook(title: unknown): boolean {
     || /\b(boxed?\s+sets?|collection\s+sets?|books?\s+(collection|bundles?)|bundles?\s+sets?|\d+\s+books?\s+(collection|sets?|bundles?)|books\s+\d+\s*-\s*\d+)\b/i.test(title);
 }
 
-/** A work that is the book itself, in a language the catalog shows: what every shelf answer keeps. */
-export const isWholeBook = (doc: any): boolean => hasEnglishEdition(doc) && !isPieceOfBook(doc?.title);
+/** A work that is the book itself, in a language the list shows: what every shelf answer keeps. */
+export const isWholeBook = (doc: any, accepted: readonly string[] = ENGLISH_ONLY): boolean =>
+  hasEditionIn(doc, accepted) && !isPieceOfBook(doc?.title);
 
 /** What an edition's `series` string adds after the name: "#1", ", 2", ", book 3", ", Day 2", " -- bk. 1", "(1)", "Band I". */
 const SERIES_NUMBERING = /(\s*--\s*.*|[,;]\s*.*|\s*#\s*\d+.*|\s*\(\s*\d+\s*\)\s*|\s+(book|bk\.?|band|vol\.?|volume|day|no\.?|part)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|[ivx]+)\b.*|\s+\d+)\s*$/i;
@@ -197,6 +288,28 @@ const foldKey = (s: string) => {
 };
 
 /**
+ * A printing's label at the end of a title, which Open Library keeps when it
+ * files an audiobook or a large print as a work of its own: "Blood, Sweat, and
+ * Pixels Lib/E" (a library audiobook, beside the book itself, seen 2026-11-03),
+ * "… (Unabridged)", "… [Audiobook]", "… Large Print". Repeated, since a
+ * title can carry two ("Lib/E Unabridged").
+ */
+const EDITION_MARKER = /[\s,;:-]*[([]?\s*(lib\s*\/\s*e|library edition|un-?abridged|abridged|audio\s*books?|audio\s*cd|mp3\s*cd|large\s*(print|type)|ebook|e-book|kindle edition)\s*[)\]]?\s*$/i;
+
+export function withoutEditionMarker(title: string): string {
+  let t = title.trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = t.replace(EDITION_MARKER, "").trim();
+    if (next === t || !next) break;
+    t = next;
+  }
+  return t;
+}
+
+/** Whether a title carries a printing's label (`withoutEditionMarker`). */
+export const hasEditionMarker = (title: string): boolean => withoutEditionMarker(title) !== title.trim();
+
+/**
  * What one book looks like whichever provider names it: the title before any
  * subtitle, without a leading article, plus the first author's surname. "The
  * Doors of Stone" at Hardcover and "Doors of Stone" at Open Library are one key.
@@ -205,7 +318,7 @@ const foldKey = (s: string) => {
  * its own book, keyed by the provider's id.
  */
 export function bookIdentityKey(card: { title: string; authors?: string[]; source?: string; sourceId?: string }): string {
-  const title = foldKey(card.title.split(/[:(]/)[0]).replace(/^(the|a|an) /, "");
+  const title = foldKey(withoutEditionMarker(card.title).split(/[:(]/)[0]).replace(/^(the|a|an) /, "");
   const author = card.authors?.[0] ? foldKey(card.authors[0]).split(" ").pop() ?? "" : "";
   if (!title) return `id:${card.source ?? ""}:${card.sourceId ?? card.title}`;
   return `${title}|${author}`;
@@ -231,7 +344,10 @@ export function isCompanionBook(title: string): boolean {
  *
  * Since 2026-10-23 the same book twice in ONE list is one card too ("witcher"
  * answered nine "The Witcher" works), and a summary, study guide or workbook
- * of somebody else's book is no card at all.
+ * of somebody else's book is no card at all. Of two cards from the SAME
+ * provider, the one with more votes is kept, and on a tie the one whose title
+ * carries no printing's label, so an audiobook work listed first does not
+ * stand for the book (2026-11-03). Across providers the first list still wins.
  */
 export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): BookCard[] {
   const byIsbn = new Map<string, BookCard>();
@@ -241,24 +357,20 @@ export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): Book
     const k = bookIdentityKey(c);
     if (!byKey.has(k)) byKey.set(k, c);
   };
+  const better = (c: BookCard, held: BookCard) => c.source === held.source
+    && (c.votes > held.votes || (c.votes === held.votes && hasEditionMarker(held.title) && !hasEditionMarker(c.title)));
   // Copies: filling a cover in must not change the caller's card.
   const out: BookCard[] = [];
-  for (const c of primary) {
+  for (const c of [...primary, ...secondary]) {
     if (isCompanionBook(c.title)) continue;
     const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
     if (twin) {
-      if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
-      continue;
-    }
-    const copy = { ...c };
-    note(copy);
-    out.push(copy);
-  }
-  for (const c of secondary) {
-    if (isCompanionBook(c.title)) continue;
-    const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
-    if (twin) {
-      if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
+      if (better(c, twin)) {
+        // The kept card takes the place of the one it beats, so the maps and the order still hold.
+        const isbns = [...new Set([...(c.isbns ?? []), ...(twin.isbns ?? [])])];
+        Object.assign(twin, c, { posterUrl: c.posterUrl ?? twin.posterUrl, ...(isbns.length ? { isbns } : {}) });
+        note(twin);
+      } else if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
       continue;
     }
     const copy = { ...c };

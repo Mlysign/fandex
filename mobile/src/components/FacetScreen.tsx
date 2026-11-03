@@ -232,12 +232,12 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     if (!ready) return;
     const abort = new AbortController();
     setAsking(true);
-    providerFacet(kind, key, label || key, abort.signal)
+    providerFacet(kind, key, label || key, auth.region, abort.signal)
       .then((p) => { if (!abort.signal.aborted) setMore(p); })
       .catch(() => { /* offline or the providers down: the page is what the device holds */ })
       .finally(() => { if (!abort.signal.aborted) setAsking(false); });
     return () => abort.abort();
-  }, [kind, key, label, ready]);
+  }, [kind, key, label, ready, auth.region]);
 
   const cards = useMemo(() => {
     const own = found?.cards;

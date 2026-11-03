@@ -83,14 +83,14 @@ export async function lookupHeld(cards: CalendarCard[]): Promise<Map<string, Hel
  * sources by each one's median (popularMonth.ts); taking turns is the same
  * idea without a number the three do not share. Null when nothing answered.
  */
-async function trendingPool(): Promise<FeedCard[] | null> {
+async function trendingPool(region: string): Promise<FeedCard[] | null> {
   const settle = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[]);
   const [films1, films2, shows, games, books, boardgames] = await Promise.all([
     settle(tmdbTrending('movie', 1)), settle(tmdbTrending('movie', 2)), settle(tmdbTrending('show', 1)),
     settle(api.browseGames(1, 'recent').then((r) => r.results.filter((g) => g.posterUrl))),
     // Open Library's weekly trending and BGG's hot list (2026-10-17). Board games
     // answer "not switched on" without a BGG token: an empty list, as a failure is.
-    settle(api.browseShelf('books').then((r) => r.results.filter((b) => b.posterUrl))),
+    settle(api.browseShelf('books', region).then((r) => r.results.filter((b) => b.posterUrl))),
     settle(boardgamesOn().then((on) => (on ? api.browseShelf('boardgames').then((r) => r.results.filter((b) => b.posterUrl)) : []))),
   ]);
   const lists: { source: string; sourceId: string; type: CardItem['type']; title: string; releaseDate: string | null; posterUrl: string | null; votes: number; score?: number | null; rating?: number | null }[][] =
@@ -133,7 +133,7 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   const now = currentMonth();
   const months = [shiftMonth(now, -1), now, shiftMonth(now, 1), shiftMonth(now, 2)];
   // A month that fails is a shorter rail, not an empty home page.
-  const trendingAsked = trendingPool();
+  const trendingAsked = trendingPool(region);
   const answers = await Promise.all(months.map((m) => api.calendar(m, region).catch(() => null)));
   if (answers.every((a) => a === null)) throw new Error('The calendar did not answer');
 

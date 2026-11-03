@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   findHardcoverBook, getHardcoverBook, hardcoverCard, hardcoverConfigured, hardcoverCoverPath, hardcoverDate, hardcoverMoods,
-  HardcoverNotConfigured, hardcoverTags, isbn13, isSameHardcoverBook, parseHardcoverBook, pickHardcoverBook, type HardcoverBook, searchDocuments, searchHardcover, seriesHardcover, setHardcoverEnv, upcomingHardcover,
+  HardcoverNotConfigured, hardcoverTags, isbn13, isSameHardcoverBook, parseHardcoverBook, pickHardcoverBook, type HardcoverBook, searchDocuments, SEARCH_HARDCOVER_REQUESTS, searchHardcover, seriesHardcover, setHardcoverEnv, upcomingHardcover,
 } from "@/lib/sources/hardcover";
 import { bookIdentityKey, mergeBookCards, stripIsbns } from "@/lib/sources/bookPure";
 import { bookCard, openLibraryWorkByIsbn } from "@/lib/sources/openlibrary";
@@ -267,12 +267,15 @@ describe("a book held by both", () => {
 });
 
 describe("talking to Hardcover", () => {
-  it("sends one top-level query with the token as a bearer, whichever way the token was pasted", async () => {
+  it("sends one top-level query a request, with the token as a bearer, whichever way the token was pasted", async () => {
     for (const token of ["test-token", "Bearer test-token"]) {
       setHardcoverEnv(() => ({ token }));
-      const calls = answers([{ search: { results: { hits: [{ document: SEARCH_DOC }] } } }]);
+      const calls = answers([{ search: { results: { hits: [{ document: SEARCH_DOC }] } } }, { books: [] }]);
       const cards = await searchHardcover("doors of stone");
-      expect(calls).toHaveLength(1);
+      // The search, then the hits' edition languages by id (SEARCH_HARDCOVER_REQUESTS).
+      expect(calls).toHaveLength(SEARCH_HARDCOVER_REQUESTS);
+      expect(body(calls[1]).variables).toEqual({ ids: [426728] });
+      expect((body(calls[1]).query.match(/\bbooks\(/g) ?? []).length).toBe(1);
       expect(calls[0].url).toBe("https://api.hardcover.app/v1/graphql");
       expect(calls[0].init.method).toBe("POST");
       expect(calls[0].init.headers?.Authorization).toBe("Bearer test-token");
@@ -376,6 +379,27 @@ describe("talking to Hardcover", () => {
     expect((await upcomingHardcover("2026-12")).map((c) => c.sourceId)).toEqual(["426728"]);
     expect(body(calls[0]).variables).toMatchObject({ from: "2026-12-01", to: "2027-01-01" });
     expect(await upcomingHardcover("2026-13")).toEqual([]);
+  });
+
+  it("shows English and the region's languages, under a title the reader can read (2026-11-03)", async () => {
+    // Sam Feuerbach's book, titled after its Italian edition, with a German one beside it.
+    const doc = { ...SEARCH_DOC, id: "1618123", title: "Il custode delle essenze", author_names: ["Sam Feuerbach"] };
+    const italianOnly = { ...SEARCH_DOC, id: "55", title: "Il maestro delle essenze", author_names: ["Sam Feuerbach"] };
+    const langs = { books: [
+      { id: 1618123, editions_count: 2, lang_editions: [{ title: "Il custode delle essenze", language: { language: "Italian" } }, { title: "Der Hüter der Elixiere", language: { language: "German" } }] },
+      { id: 55, editions_count: 1, lang_editions: [{ title: "Il maestro delle essenze", language: { language: "Italian" } }] },
+    ] };
+    const search = { search: { results: { hits: [{ document: doc }, { document: italianOnly }] } } };
+    answers([search, langs]);
+    expect((await searchHardcover("hüter der elixiere", 20, ["eng", "ger"])).map((c) => c.title)).toEqual(["Der Hüter der Elixiere"]);
+    vi.restoreAllMocks();
+    answers([search, langs]);
+    // English alone: both are only in other languages, and every edition was seen.
+    expect(await searchHardcover("hüter der elixiere")).toEqual([]);
+    vi.restoreAllMocks();
+    // A book with more editions than were asked for is kept: an English one may be among the rest.
+    answers([search, { books: [{ ...langs.books[0], editions_count: 40 }] }]);
+    expect((await searchHardcover("hüter der elixiere")).map((c) => c.sourceId)).toEqual(["1618123", "55"]);
   });
 
   it("reads a GraphQL error and a bad status as failures, never as an empty answer", async () => {

@@ -13,7 +13,7 @@
 // Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { bookDate, bookRating, bookSubjects, coverUrl, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects, type BookCard } from "@/lib/sources/bookPure";
+import { bookDate, bookRating, bookSubjects, coverUrl, ENGLISH_ONLY, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects, type BookCard } from "@/lib/sources/bookPure";
 import { isbnList } from "@/lib/sources/hardcoverPure";
 
 export * from "@/lib/sources/bookPure";
@@ -128,23 +128,25 @@ export async function openLibraryWorkByIsbn(isbns: string[]): Promise<string | n
   const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=key,title,language,cover_i,ratings_count&limit=5`, BROWSE_BUDGET_MS);
   const workId = (d: any): string | null => /\/works\/(OL\d+W)$/.exec(String(d?.key ?? ""))?.[1] ?? null;
   const real = ((data?.docs ?? []) as any[]).filter((d) => workId(d) && (d.cover_i || Number(d.ratings_count) > 0));
-  const pick = real.find(isWholeBook) ?? real[0];
+  const pick = real.find((d) => isWholeBook(d)) ?? real[0];
   return pick ? workId(pick) : null;
 }
 
 /**
- * Rows as cards, one per book: a translation filed as its own work and a split
- * edition or a box set are left out (bookPure.ts, `isWholeBook`), so an author's
- * or a series' books come back once each rather than once per language.
+ * Rows as cards, one per book: a translation into a language the list does
+ * not show (`accepted`, English and the user's country's) and a split edition
+ * or a box set are left out (bookPure.ts, `isWholeBook`), so an author's or a
+ * series' books come back once each rather than once per language.
  */
-const cards = (docs: unknown): BookCard[] => ((docs ?? []) as any[]).filter(isWholeBook).map(bookCard).filter((c): c is BookCard => !!c);
+const cards = (docs: unknown, accepted: readonly string[]): BookCard[] =>
+  ((docs ?? []) as any[]).filter((d) => isWholeBook(d, accepted)).map(bookCard).filter((c): c is BookCard => !!c);
 
 /** Books matching a query, best match first. */
-export async function searchOpenLibrary(query: string, limit = 20): Promise<BookCard[]> {
+export async function searchOpenLibrary(query: string, limit = 20, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
   const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=${OL_FIELDS}&limit=40`, BROWSE_BUDGET_MS);
-  return cards(relevantBooks(data?.docs, q)).slice(0, limit);
+  return cards(relevantBooks(data?.docs, q), accepted).slice(0, limit);
 }
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -170,33 +172,33 @@ export function relevantBooks(docs: unknown, query: string): any[] {
 }
 
 /** What people are reading (Open Library's trending), as cards: Home's popular books. */
-export async function trendingOpenLibrary(period: "daily" | "weekly" | "monthly" = "weekly", limit = 30): Promise<BookCard[]> {
+export async function trendingOpenLibrary(period: "daily" | "weekly" | "monthly" = "weekly", limit = 30, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const data = await getJson(`/trending/${period}.json?limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.works);
+  return cards(data?.works, accepted);
 }
 
 /** Books on a subject, best rated first: a tag page's books. */
-export async function subjectOpenLibrary(subject: string, limit = 40): Promise<BookCard[]> {
+export async function subjectOpenLibrary(subject: string, limit = 40, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const s = subject.trim().slice(0, 100);
   if (s.length < 2) return [];
   const data = await getJson(`/search.json?subject=${encodeURIComponent(s)}&sort=rating&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs);
+  return cards(data?.docs, accepted);
 }
 
 /** An author's books, most wanted first: a person page's books. */
-export async function authorOpenLibrary(name: string, limit = 40): Promise<BookCard[]> {
+export async function authorOpenLibrary(name: string, limit = 40, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const s = name.trim().slice(0, 100);
   if (s.length < 2) return [];
   const data = await getJson(`/search.json?author=${encodeURIComponent(s)}&sort=want_to_read&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs);
+  return cards(data?.docs, accepted);
 }
 
 /** A publisher's books, most wanted first: a studio page's books. */
-export async function publisherOpenLibrary(name: string, limit = 40): Promise<BookCard[]> {
+export async function publisherOpenLibrary(name: string, limit = 40, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const s = name.trim().slice(0, 100);
   if (s.length < 2) return [];
   const data = await getJson(`/search.json?publisher=${encodeURIComponent(s)}&sort=want_to_read&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
-  return cards(data?.docs);
+  return cards(data?.docs, accepted);
 }
 
 /**
@@ -206,14 +208,14 @@ export async function publisherOpenLibrary(name: string, limit = 40): Promise<Bo
  * which has no `series_name` at all). An OR of the two answers nothing
  * (probed 2026-10-17), so both are asked and the answers joined.
  */
-export async function seriesOpenLibrary(series: string, limit = 40): Promise<BookCard[]> {
+export async function seriesOpenLibrary(series: string, limit = 40, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const s = series.trim().replace(/"/g, "").slice(0, 100);
   if (s.length < 2) return [];
   const ask = (field: string) =>
     getJson(`/search.json?q=${encodeURIComponent(`${field}:"${s}"`)}&sort=old&fields=${OL_FIELDS}&limit=${Math.min(60, limit)}`, BROWSE_BUDGET_MS);
   const [byName, byEdition] = await Promise.all([ask("series_name"), ask("series")]);
   const seen = new Set<string>();
-  return cards([...(byName?.docs ?? []), ...(byEdition?.docs ?? [])].filter((d) => (seen.has(d?.key) ? false : (seen.add(d?.key), true))))
+  return cards([...(byName?.docs ?? []), ...(byEdition?.docs ?? [])].filter((d) => (seen.has(d?.key) ? false : (seen.add(d?.key), true))), accepted)
     .sort((a, b) => (a.releaseDate ?? "9999").localeCompare(b.releaseDate ?? "9999"))
     .slice(0, limit);
 }
@@ -226,7 +228,7 @@ export async function seriesOpenLibrary(series: string, limit = 40): Promise<Boo
  * own date (`bookDate`). Checked 2026-10-17: Freida McFadden, Alice Feeney and
  * Rebecca Yarros near the top of 2026.
  */
-export async function upcomingOpenLibrary(month: string, pages = 3): Promise<BookCard[]> {
+export async function upcomingOpenLibrary(month: string, pages = 3, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   if (!/^\d{4}-\d{2}$/.test(month)) return [];
   const year = month.slice(0, 4);
   // ⚠️ Open Library knows little about books not out yet: of its 500 most wanted
@@ -235,5 +237,5 @@ export async function upcomingOpenLibrary(month: string, pages = 3): Promise<Boo
   const answers = await Promise.all(Array.from({ length: pages }, (_, i) =>
     getJson(`/search.json?q=${encodeURIComponent(`first_publish_year:${year}`)}&sort=want_to_read&fields=${OL_FIELDS}&limit=100&page=${i + 1}`, BROWSE_BUDGET_MS)
       .catch(() => null)));
-  return answers.flatMap((a) => cards(a?.docs)).filter((c) => !!c.releaseDate?.startsWith(month));
+  return answers.flatMap((a) => cards(a?.docs, accepted)).filter((c) => !!c.releaseDate?.startsWith(month));
 }

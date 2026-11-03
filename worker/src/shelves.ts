@@ -1,11 +1,14 @@
 // Books (Open Library, plus Hardcover) and board games (BoardGameGeek): search,
 // what is popular, and a facet page's titles, as the app's provider cards (2026-10-17).
 //
-//   GET /v1/search/books?q            Open Library search, plus Hardcover's for what it lacks
+//   GET /v1/search/books?q&region     Open Library search, plus Hardcover's for what it lacks
 //   GET /v1/search/boardgames?q       BGG search (with statistics)
-//   GET /v1/browse/books              Open Library's weekly trending
+//   GET /v1/browse/books?region       Open Library's weekly trending
 //   GET /v1/browse/boardgames         BGG's hot list
-//   GET /v1/facet/books?kind&q        a subject's, an author's, a publisher's or a series' books
+//   GET /v1/facet/books?kind&q&region a subject's, an author's, a publisher's or a series' books
+//
+// `region` on a books route is the country set in Settings: a books answer
+// shows English and that country's languages (bookPure.ts, `bookLanguagesFor`).
 //   GET /v1/features                  which optional types and sources are switched on
 //
 // Nothing here writes to D1 or reads it, bar the Hardcover budget: an answer is
@@ -24,8 +27,8 @@
 import {
   authorOpenLibrary, publisherOpenLibrary, searchOpenLibrary, seriesOpenLibrary, subjectOpenLibrary, trendingOpenLibrary,
 } from "@/lib/sources/openlibrary";
-import { mergeBookCards, stripIsbns, type BookCard } from "@/lib/sources/bookPure";
-import { hardcoverConfigured, searchHardcover, seriesHardcover } from "@/lib/sources/hardcover";
+import { bookLanguagesFor, mergeBookCards, stripIsbns, type BookCard } from "@/lib/sources/bookPure";
+import { hardcoverConfigured, SEARCH_HARDCOVER_REQUESTS, searchHardcover, seriesHardcover } from "@/lib/sources/hardcover";
 import { bggConfigured, BggNotConfigured, hotBgg, searchBgg, setBggToken } from "@/lib/sources/bgg";
 import type { Env } from "./env";
 import { hardcoverHalf, useHardcover } from "./hardcover";
@@ -45,7 +48,7 @@ export function useBggToken(env: Env): void {
 
 const HOUR = 3600;
 /** Bumped when what a shelf answers changes (a filter, a field), so a day-old cached answer is not served under the new rules. */
-const CACHE_VERSION = 4; // 3: Hardcover's cards behind Open Library's in search and series; authors on every card. 4: one card per book, no summaries (2026-10-23)
+const CACHE_VERSION = 5; // 3: Hardcover's cards behind Open Library's in search and series; authors on every card. 4: one card per book, no summaries (2026-10-23). 5: English plus the region's languages, an audiobook work folded into its book (2026-11-03)
 
 /** Answer from the edge cache, or run `load`, cache a non-empty answer for `ttl` seconds and answer. */
 async function cached(c: ShelfCtx, key: string, ttl: number, limiter: string, load: () => Promise<unknown[]>): Promise<Response> {
@@ -86,6 +89,15 @@ async function bothBookSources(env: Env, kind: string, units: number, ol: () => 
   return stripIsbns(merged);
 }
 
+/**
+ * The languages a books answer shows: English and the caller's country's
+ * (`?region=`, the country set in Settings; bookPure.ts, `bookLanguagesFor`).
+ * The cache key holds the languages, not the country, so every English-only
+ * country shares one answer. No region is English alone, as before.
+ */
+const bookLanguages = (c: ShelfCtx) => bookLanguagesFor(c.url.searchParams.get("region"));
+const langKey = (langs: string[]) => `lang=${langs.join("+")}`;
+
 const query = (c: ShelfCtx) => (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 
 /** Routes under /v1 this file answers, or null for any other path. */
@@ -101,16 +113,19 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
   if (a === "search" && (b === "books" || b === "boardgames")) {
     const q = query(c);
     if (q.length < 2) return error(400, "bad-request", "q must be at least two characters");
-    const key = `search/${b}?q=${encodeURIComponent(q.toLowerCase())}`;
+    const langs = bookLanguages(c);
+    const key = `search/${b}?q=${encodeURIComponent(q.toLowerCase())}${b === "books" ? `&${langKey(langs)}` : ""}`;
     return cached(c, key, HOUR, "search", () => (b === "books"
-      ? bothBookSources(c.env, "search", 1, () => searchOpenLibrary(q, 20), () => searchHardcover(q, 15)).then((cards) => cards.slice(0, 25))
+      ? bothBookSources(c.env, "search", SEARCH_HARDCOVER_REQUESTS, () => searchOpenLibrary(q, 20, langs), () => searchHardcover(q, 15, langs)).then((cards) => cards.slice(0, 25))
       : searchBgg(q, 20)));
   }
 
   if (a === "browse" && (b === "books" || b === "boardgames")) {
     // Keyed by the day: what is popular moves daily.
     const day = new Date().toISOString().slice(0, 10);
-    return cached(c, `browse/${b}?day=${day}`, 6 * HOUR, "browse", () => (b === "books" ? trendingOpenLibrary("weekly", 40).then(stripIsbns) : hotBgg(30)));
+    const langs = bookLanguages(c);
+    return cached(c, `browse/${b}?day=${day}${b === "books" ? `&${langKey(langs)}` : ""}`, 6 * HOUR, "browse",
+      () => (b === "books" ? trendingOpenLibrary("weekly", 40, langs).then(stripIsbns) : hotBgg(30)));
   }
 
   if (a === "facet" && b === "books") {
@@ -119,17 +134,20 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
     if (!kind || !["tag", "person", "studio", "franchise"].includes(kind) || q.length < 2) {
       return error(400, "bad-request", "kind must be tag, person, studio or franchise, q at least two characters");
     }
-    const load = kind === "tag" ? () => subjectOpenLibrary(q, 40).then(stripIsbns)
-      : kind === "person" ? () => authorOpenLibrary(q, 40).then(stripIsbns)
-      : kind === "studio" ? () => publisherOpenLibrary(q, 40).then(stripIsbns)
+    const langs = bookLanguages(c);
+    // One card per book on every kind, not only a series: an author's audiobook work beside the book is one book (2026-11-03).
+    const one = (cards: BookCard[]) => stripIsbns(mergeBookCards(cards, []));
+    const load = kind === "tag" ? () => subjectOpenLibrary(q, 40, langs).then(one)
+      : kind === "person" ? () => authorOpenLibrary(q, 40, langs).then(one)
+      : kind === "studio" ? () => publisherOpenLibrary(q, 40, langs).then(one)
       // A series: Hardcover holds every member in order, including the ones not
       // out yet, which is the one place Open Library's index is thinnest. Two
       // Hardcover requests (find the series, then its books). Oldest first; a
       // book with no date yet (announced, not scheduled) goes last.
-      : () => bothBookSources(c.env, "facet", 2, () => seriesOpenLibrary(q, 40), () => seriesHardcover(q, 40))
+      : () => bothBookSources(c.env, "facet", 2, () => seriesOpenLibrary(q, 40, langs), () => seriesHardcover(q, 40, langs))
         .then((cards) => cards.sort((x, y) => (x.releaseDate ?? "9999").localeCompare(y.releaseDate ?? "9999")).slice(0, 40));
     // A week, as the games' facet answers: what a subject holds barely moves.
-    return cached(c, `facet/books?kind=${kind}&q=${encodeURIComponent(q.toLowerCase())}`, 7 * 24 * HOUR, "facet", load);
+    return cached(c, `facet/books?kind=${kind}&q=${encodeURIComponent(q.toLowerCase())}&${langKey(langs)}`, 7 * 24 * HOUR, "facet", load);
   }
 
   return null;
