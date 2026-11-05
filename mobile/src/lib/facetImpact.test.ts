@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateFacets, impactAbsence, pageImpacts } from './facetImpact';
+import { estimateFacets, impactAbsence, pageImpacts, tasteImpactIndex, tasteImpactOf } from './facetImpact';
 import { buildProfile, computeFandexScore, prepareTaxonomy, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 const json = (over: Partial<TaxonomyJson> = {}): TaxonomyJson => ({
@@ -66,6 +66,26 @@ describe("a facet page's Fandex impact", () => {
     expect(pageImpacts('tag', 'western', profile, tax)).toEqual([]);
     expect(pageImpacts('company', 'steampunk', profile, tax)).toEqual([]);
     expect(pageImpacts('tag', 'steampunk', buildProfile(library.slice(0, 2), tax), tax)).toEqual([]);
+  });
+});
+
+describe('the taste index Insights reads', () => {
+  const tax = prepareTaxonomy(json({ tagAliases: [['steam-punk', 'steampunk']], scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 10, mappingConstantDown: 4, roleWeights: { writer: 1 } } } }));
+  const profile = buildProfile(library, tax);
+  const index = tasteImpactIndex(profile, tax);
+
+  it("gives every facet the points its own page shows, a person's per role", () => {
+    for (const key of ['steampunk', 'musical']) expect(tasteImpactOf(index, 'tag', undefined, key)).toBe(pageImpacts('tag', key, profile, tax)[0].points);
+    for (const r of pageImpacts('person', 'denis villeneuve', profile, tax)) {
+      expect(tasteImpactOf(index, 'person', r.role, 'denis-villeneuve')).toBe(r.points);
+    }
+  });
+
+  it("reads a bundled spelling as its canonical tag, and nothing for what the score does not weigh", () => {
+    expect(tasteImpactOf(index, 'tag', undefined, 'steam-punk')).toBe(tasteImpactOf(index, 'tag', undefined, 'steampunk'));
+    expect(tasteImpactOf(index, 'tag', undefined, 'pc')).toBeNull();
+    expect(tasteImpactOf(index, 'tag', undefined, 'western')).toBeNull();
+    expect(tasteImpactOf(tasteImpactIndex(buildProfile(library.slice(0, 2), tax), tax), 'tag', undefined, 'steampunk')).toBeNull();
   });
 });
 

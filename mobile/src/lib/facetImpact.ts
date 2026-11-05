@@ -107,6 +107,49 @@ export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax
 }
 
 /**
+ * Every facet's taste points at once, for a page that shows hundreds (Insights).
+ * `pageImpacts` scans the whole profile per facet, and a thousand rows of that
+ * kept Insights filling in for seconds with nothing on screen saying so (Nils,
+ * 2026-11-05). This is the same taste numbers from one pass: a tag or franchise
+ * under its canonical spelling, the most-rated spelling winning as there; a
+ * person or company per role. Pull is left out: Insights shows taste only.
+ */
+export interface TasteIndex {
+  /** Points by `kind|role|spoken key` (no role for a tag or a franchise). */
+  points: Map<string, number>;
+  /** A bundled tag's or franchise's spoken spelling to its canonical one's. */
+  aliases: Map<string, string>;
+}
+
+const indexKey = (kind: string, role: string | undefined, spoken: string) => `${kind}|${kind === 'tag' || kind === 'ip' ? '' : role ?? ''}|${spoken}`;
+
+export function tasteImpactIndex(profile: Profile, tax: Taxonomy): TasteIndex {
+  const aliases = new Map<string, string>();
+  for (const [alias, canonical] of tax.tagAliases) aliases.set(`tag|${spokenKey(alias)}`, spokenKey(canonical));
+  for (const [alias, canonical] of tax.ipAliases) aliases.set(`ip|${spokenKey(alias)}`, spokenKey(canonical));
+  const points = new Map<string, number>();
+  if (profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return { points, aliases };
+  const ratedOf = new Map<string, number>();
+  for (const m of profile.meta.values()) {
+    const p = facetImpact(facetId(m), profile, tax);
+    if (p == null) continue;
+    const k = indexKey(m.kind, m.role, spokenKey(m.key));
+    // Two stored spellings of one tag can speak the same: the one you rated more is the tag (as pageImpacts).
+    if ((ratedOf.get(k) ?? -1) >= m.n) continue;
+    ratedOf.set(k, m.n);
+    points.set(k, p);
+  }
+  return { points, aliases };
+}
+
+/** One facet's taste points from the index, or null when the score does not weigh it. */
+export function tasteImpactOf(index: TasteIndex, kind: ImpactKind, role: string | undefined, key: string): number | null {
+  const spoken = spokenKey(key);
+  const canonical = kind === 'tag' || kind === 'ip' ? index.aliases.get(`${kind}|${spoken}`) ?? spoken : spoken;
+  return index.points.get(indexKey(kind, role, canonical)) ?? null;
+}
+
+/**
  * Why a page shows no impact row, in words, so an empty space never reads as
  * a broken feature (AGENTS.md: a component that renders null must know why).
  * Null when there IS a row to show, or when nobody is signed in.

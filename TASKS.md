@@ -31,7 +31,7 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
-- **Check Insights on the phone** (0.3.32, 2026-11-05): the taste impacts in the facet boxes are worked out in slices, measured only in Node (about 0.5 ms a facet); on Nils's profile watch how long "Weighing…" shows. If it is seconds, give `ScoreProvider` a per-facet impact lookup instead of `impactsFor` per row (`lib/insightsImpacts.ts`).
+- **Check Insights on the phone** (0.3.34, 2026-11-05): it took seconds on Chrome with no spinner (Nils). The impacts now come from one index (`tasteImpactIndex`, about 4 ms in Node) and a spinner shows until the boxes fill. Confirm on his profile that the boxes fill at once after "Reading your taste profile…".
 
 - **The trailer plays in the app** (on the phone in 0.3.29, 2026-11-05, not tried yet): the trailer plays, fullscreen works (letterboxed, the app is portrait-locked), the sound stops on going back. Error 153 on the player means the referrer fix in `Trailer.tsx` did not take.
 - **Check 0.3.29's merged work on the phone** (installed 2026-11-05): a facet page names a provider that failed and offers a retry (PR #58), and books follow the country's languages with one card per book (PR #59).

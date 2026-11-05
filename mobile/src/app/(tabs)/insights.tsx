@@ -170,8 +170,11 @@ const impactCell = (f: FacetStat, impacts: Impacts): ImpactCell => (impacts ? im
 
 /** By impact: the biggest effect either way first, and what the score does not weigh last. */
 function sortFacets(list: FacetStat[], order: Order, impacts: Impacts): FacetStat[] {
-  if (order === 'picked') return [...list].sort((a, b) => b.count - a.count || b.ba - a.ba);
-  if (order !== 'impact') return [...list].sort((a, b) => (order === 'top' ? b.ba - a.ba : a.ba - b.ba) || b.count - a.count);
+  if (order === 'picked') return [...list].sort((a, b) => b.count - a.count || b.avg - a.avg);
+  // By the average the row shows, not the smoothed `ba` behind it: feudal japan at 8.8 sat under
+  // Post-apocalyptic at 8.0 because `ba` leans few titles toward your overall average (Nils, 2026-11-05).
+  // The minimum count (5+ by default) keeps one lucky title from topping the list.
+  if (order !== 'impact') return [...list].sort((a, b) => (order === 'top' ? b.avg - a.avg : a.avg - b.avg) || b.count - a.count);
   const at = (f: FacetStat) => impacts?.get(impactId(f)) ?? null;
   return [...list].sort((a, b) => {
     const x = at(a);
@@ -253,7 +256,7 @@ function FacetBox({ label, rows, baseline, impacts, tint }: { label: string; row
 function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
   kind: 'tag' | 'person' | 'company'; title: string; hint: string; facets: FacetStat[]; baseline: number; taxonomy: Taxonomy | null; cols: number;
 }) {
-  const { impactsFor } = useScores();
+  const { tasteIndex } = useScores();
   const [query, setQuery] = useState('');
   const [minCount, setMinCount] = useState(DEFAULT_MIN_COUNT);
   const [order, setOrder] = useState<Order>(DEFAULT_ORDER);
@@ -274,7 +277,7 @@ function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
   }, [ofKind, kind, taxonomy, minCount]);
   // Only what can be shown is weighed: the boxes at this minimum, or the search's matches.
   const targets = useMemo(() => (q ? found : eligible.flatMap((g) => g.facets)), [q, found, eligible]);
-  const impacts = useFacetImpacts(targets, impactsFor, taxonomy);
+  const impacts = useFacetImpacts(targets, tasteIndex, taxonomy);
   const groups = useMemo(() => eligible.map((g) => ({ ...g, sorted: sortFacets(g.facets, order, impacts) })), [eligible, order, impacts]);
   const total = eligible.reduce((n, g) => n + g.facets.length, 0);
 
@@ -299,11 +302,12 @@ function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
           : <Text style={[type.bodySm, { textAlign: 'center', paddingVertical: 24 }]}>No matches for “{query}”.</Text>
       ) : !groups.length ? (
         <Text style={[type.bodySm, { textAlign: 'center', paddingVertical: 24 }]}>None of your {noun} is on {minCount} or more rated titles yet.</Text>
-      ) : !impacts && order === 'impact' ? (
-        // Sorting by impact needs every row's number; a box that reshuffled as they landed would read as broken.
+      ) : !impacts ? (
+        // No taste profile on the device yet (a fresh start reads your library first). Said with a spinner,
+        // never a faint "…" per cell: Nils could not tell whether the page had loaded (2026-11-05).
         <View style={styles.weighing}>
           <ActivityIndicator color={color.accent} />
-          <Text style={type.caption}>Weighing them against your Fandex Score…</Text>
+          <Text style={type.caption}>Reading your taste profile…</Text>
         </View>
       ) : (
         <View style={styles.wrap}>

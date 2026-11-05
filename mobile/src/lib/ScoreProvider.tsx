@@ -19,7 +19,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
 import { getMeta, PULL_FIT_KEY, setMeta } from '~/lib/db';
-import { impactAbsence, pageImpacts, type ImpactKind, type PageImpact } from '~/lib/facetImpact';
+import { impactAbsence, pageImpacts, tasteImpactIndex, type ImpactKind, type PageImpact, type TasteIndex } from '~/lib/facetImpact';
 import {
   buildProfile, buildPullModelSteps, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
   type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
@@ -78,6 +78,8 @@ interface Scores {
   impactsFor: (kind: ImpactKind, key: string) => PageImpact[];
   /** Why `impactsFor` is empty, in words, or null when it is not (or nobody is signed in). */
   impactAbsenceFor: (kind: ImpactKind, key: string, name: string) => string | null;
+  /** Every facet's taste points from one pass, built on first ask and kept per profile (Insights). Null with no profile yet. */
+  tasteIndex: () => TasteIndex | null;
   /**
    * How right the score has been on your own ratings (scoreCalibration.ts):
    * the medium's own measurement when it rests on enough titles, else every
@@ -497,6 +499,11 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     (profile && taxonomy ? pageImpacts(kind, key, profile, taxonomy) : []), [profile, taxonomy]);
   const impactAbsenceFor = useCallback((kind: ImpactKind, key: string, name: string) =>
     (signedIn ? impactAbsence(kind, key, profile, taxonomy, name) : null), [signedIn, profile, taxonomy]);
+  // A new getter per profile, so a page that reads it recomputes; the index itself is built on the first call only.
+  const tasteIndex = useMemo(() => {
+    let built: TasteIndex | null = null;
+    return () => (profile && taxonomy ? (built ??= tasteImpactIndex(profile, taxonomy)) : null);
+  }, [profile, taxonomy]);
 
   const reloadTaxonomy = useCallback(async () => {
     await refreshTaxonomy(db, true);
@@ -517,7 +524,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
     // The same rounding the score itself uses, so the two never disagree by a tenth.
     const center = profile && profile.w.size > 0 && profile.ratedItemCount >= 3 ? Math.round(profile.baseline * 100) / 10 : null;
     return {
-      ready, center, score, scoresFor, impactsFor, impactAbsenceFor, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
+      ready, center, score, scoresFor, impactsFor, impactAbsenceFor, tasteIndex, revision, taxonomy, reloadTaxonomy, adoptTaxonomy,
       follows: profile?.follows ?? NO_FOLLOWS,
       categoryLabel: (id) => (id ? taxonomy?.categories.get(id)?.label ?? null : null),
       calibrationFor: (type) => {
@@ -525,7 +532,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
         return (own && own.n >= MIN_CALIBRATION ? own : calibration?.get('all')) ?? null;
       },
     };
-  }, [ready, profile, taxonomy, calibration, score, scoresFor, impactsFor, impactAbsenceFor, revision, reloadTaxonomy, adoptTaxonomy]);
+  }, [ready, profile, taxonomy, calibration, score, scoresFor, impactsFor, impactAbsenceFor, tasteIndex, revision, reloadTaxonomy, adoptTaxonomy]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
