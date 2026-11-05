@@ -277,11 +277,11 @@ async function collection(label: string, signal?: AbortSignal): Promise<CardItem
  * it has. Each half (TMDB, books, games) fails on its own: the others still
  * answer, and `failed` names the ones that did not. Throws only when aborted.
  */
-export async function providerFacet(kind: FacetPageKind, key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
+export async function providerFacet(kind: FacetPageKind, key: string, label: string, region: string, signal?: AbortSignal): Promise<ProviderFacet> {
   const failed: ProviderHalf[] = [];
   const half = (h: ProviderHalf) => () => { failed.push(h); return [] as CardItem[]; };
   // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's, a publisher's or a series'.
-  const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), half('books'));
+  const books = api.facetBooks(kind, label, region).then((r) => r.results.map((b) => shelfCard(b, kind)), half('books'));
   // An author TMDB does not know still gets a face and a biography.
   const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
   if (!tmdbConfigured()) {

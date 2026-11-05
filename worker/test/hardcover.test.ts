@@ -102,9 +102,33 @@ describe("search", () => {
     });
     expect(results.some((r) => "isbns" in r)).toBe(false);
     expect(results[0].authors).toEqual(["Patrick Rothfuss"]);
-    expect(hardcoverCalls(calls)).toHaveLength(1);
-    // One request against Hardcover's day, counted.
-    expect(await count("daily_budget", "kind = 'hardcover' AND n = 1")).toBe(1);
+    // The search and the hits' edition languages: two requests against Hardcover's day, counted.
+    expect(hardcoverCalls(calls)).toHaveLength(2);
+    expect(await count("daily_budget", "kind = 'hardcover' AND n = 2")).toBe(1);
+  });
+
+  it("shows English and the region's languages, and keys the cache by the languages (2026-11-03)", async () => {
+    // Sam Feuerbach's book at Hardcover, titled after its Italian edition; a German one beside it.
+    const hc = (query: string) => (query.includes("search(")
+      ? { search: { results: { hits: [{ document: { id: "1618123", title: "Il custode delle essenze", author_names: ["Sam Feuerbach"], isbns: [], release_year: 2023, image: { url: "https://assets.hardcover.app/editions/1/aaa.jpg" } } }] } } }
+      : { books: [{ id: 1618123, editions_count: 2, lang_editions: [
+          { title: "Il custode delle essenze", language: { language: "Italian" } }, { title: "Der Hüter der Elixiere", language: { language: "German" } }] }] });
+    const ol = () => ({ docs: [OL_DOC({ key: "/works/OL1W", title: "Die Alchemisten: Der Hüter der Elixiere", author_name: ["Sam Feuerbach"], language: ["ger"], isbn: [] })] });
+    let calls = providers({ hardcover: hc, openlibrary: ol });
+    const de = (await (await call("/v1/search/books?q=h%C3%BCter%20der%20elixiere&region=DE")).json()) as { results: any[] };
+    expect(de.results.map((r) => r.title)).toEqual(["Die Alchemisten: Der Hüter der Elixiere", "Der Hüter der Elixiere"]);
+    vi.restoreAllMocks();
+    // Another country: another cache entry, and neither book is English or Italian-and-shown.
+    calls = providers({ hardcover: hc, openlibrary: ol });
+    const us = await call("/v1/search/books?q=h%C3%BCter%20der%20elixiere&region=US");
+    expect(((await us.json()) as { results: any[] }).results).toEqual([]);
+    expect(calls.length).toBeGreaterThan(0);
+    vi.restoreAllMocks();
+    // Austria reads German too: the same languages, the same cached answer, no provider call.
+    calls = providers({});
+    const at = (await (await call("/v1/search/books?q=h%C3%BCter%20der%20elixiere&region=AT")).json()) as { results: any[] };
+    expect(at.results.map((r) => r.title)).toEqual(de.results.map((r) => r.title));
+    expect(calls).toHaveLength(0);
   });
 
   it("is Open Library alone without the token, with no Hardcover call and no budget row", async () => {

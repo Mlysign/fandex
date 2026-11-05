@@ -29,7 +29,7 @@ import { all, first, run } from "./d1";
 import type { Env } from "./env";
 import { useSharedIgdbToken } from "./catalog/resolve";
 import { upcomingOpenLibrary } from "@/lib/sources/openlibrary";
-import { mergeBookCards, type BookCard } from "@/lib/sources/bookPure";
+import { bookLanguagesFor, mergeBookCards, type BookCard } from "@/lib/sources/bookPure";
 import { upcomingHardcover } from "@/lib/sources/hardcover";
 import { hardcoverHalf } from "./hardcover";
 
@@ -154,6 +154,8 @@ export function inWindow(candidates: FeedCandidate[], win: { gte: string; lte: s
 export async function buildMonth(env: Env, month: string, region: string): Promise<StoredMonth | null> {
   useSharedIgdbToken(env);
   const win = monthWindow(month);
+  // A month is built per region, so its books are in English and the region's languages (2026-11-03).
+  const langs = bookLanguagesFor(region);
   // Page 1 of each source is enough: each is already sorted by its own
   // popularity, so page 2 holds titles that could never place. Each fetcher
   // degrades to [] on its own, so one provider being down costs its own titles.
@@ -167,12 +169,12 @@ export async function buildMonth(env: Env, month: string, region: string): Promi
     // games have only a year from BGG, so none is placed on a day.
     // A cover and at least three readers who shelved it: what Open Library calls
     // 2026 also holds self-published leaflets nobody has seen.
-    upcomingOpenLibrary(month).then((cards) => cards.filter((b) => b.posterUrl && b.popularity >= 3)).catch(() => [] as BookCard[]),
+    upcomingOpenLibrary(month, 3, langs).then((cards) => cards.filter((b) => b.posterUrl && b.popularity >= 3)).catch(() => [] as BookCard[]),
     // Hardcover (2026-10-17): the books due that month it knows and Open
     // Library does not, most shelved there first. Merged behind Open Library's
     // by ISBN or title and author, so a book both know counts once, as Open
     // Library's. A cover and an author: what separates a book from a listing.
-    hardcoverHalf(env, "calendar", 1, () => upcomingHardcover(month)).then((cards) => cards.filter((b) => b.posterUrl && b.authors.length)),
+    hardcoverHalf(env, "calendar", 1, () => upcomingHardcover(month, 60, langs)).then((cards) => cards.filter((b) => b.posterUrl && b.authors.length)),
   ]);
   const books = mergeBookCards(olBooks, hcBooks).map(bookCandidate);
   const ranked = rankCrossSourcePopularity(inWindow([...games, ...movies, ...shows, ...books], win), MONTH_POOL_DEPTH);

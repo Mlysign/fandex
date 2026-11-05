@@ -250,7 +250,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     if (!ready) return;
     const abort = new AbortController();
     setAsking(true);
-    providerFacet(kind, key, label || key, abort.signal)
+    providerFacet(kind, key, label || key, auth.region, abort.signal)
       .then((p) => {
         if (abort.signal.aborted) return;
         // A half that failed this time keeps what it gave last time: a retry never shrinks the page.
@@ -266,7 +266,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       })
       .finally(() => { if (!abort.signal.aborted) setAsking(false); });
     return () => abort.abort();
-  }, [kind, key, label, ready, attempt]);
+  }, [kind, key, label, ready, attempt, auth.region]);
 
   const cards = useMemo(() => {
     const own = found?.cards;

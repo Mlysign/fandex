@@ -148,7 +148,7 @@ export default function DiscoverScreen() {
       settle(tmdbUpcoming('show', page, auth.region)),
       settle(api.browseGames(page).then((r) => r.results)),
       // What is popular in books and board games: one page of each, with the first page.
-      settle(page === 1 ? api.browseShelf('books').then((r) => r.results) : Promise.resolve([])),
+      settle(page === 1 ? api.browseShelf('books', auth.region).then((r) => r.results) : Promise.resolve([])),
       settle(page === 1 ? boardgamesOn().then((on) => (on ? api.browseShelf('boardgames').then((r) => r.results, () => []) : [])) : Promise.resolve([])),
     ]).then((parts) => {
       const rows = parts.flatMap((part) => (part.v as ProviderCard[]).map(fromProvider));
@@ -194,7 +194,7 @@ export default function DiscoverScreen() {
         .then((res) => { if (live) setGames({ state: 'done', rows: res.results.map((g) => fromProvider({ ...g, votes: g.votes })) }); })
         .catch(() => { if (live) setGames({ state: 'error', rows: [] }); });
       void Promise.all([
-        api.searchShelf('books', term).then((r) => ({ ok: true, rows: r.results }), () => ({ ok: false, rows: [] })),
+        api.searchShelf('books', term, auth.region).then((r) => ({ ok: true, rows: r.results }), () => ({ ok: false, rows: [] })),
         boardgamesOn().then((on) => (on
           ? api.searchShelf('boardgames', term).then((r) => ({ ok: true, rows: r.results }), (e: unknown) => ({ ok: e instanceof ApiError && e.code === 'not-configured', rows: [] as ProviderResult[] }))
           : { ok: true, rows: [] })),
@@ -204,7 +204,7 @@ export default function DiscoverScreen() {
       });
     }, DEBOUNCE_MS);
     return () => { live = false; clearTimeout(timer); abort.abort(); };
-  }, [term]);
+  }, [term, auth.region]);
 
   // searchKey, not normalizeName: an accent must not stop "pokemon" finding Pokémon (SM78).
   const norm = searchKey(term);

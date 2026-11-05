@@ -53,6 +53,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
   const db = useSQLiteContext();
   const catalog = useCatalogSync();
   const { taxonomy } = useScores();
+  const { region } = useAuth();
   const [rails, setRails] = useState<RelatedRails | null>(null);
 
   // The rails go blank only for another title. Re-picked for the same one (the
@@ -93,7 +94,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
           }));
         } else if (bookSeries) {
           label ??= bookSeries;
-          const books = await api.facetBooks('franchise', bookSeries).then((b) => b.results, () => []);
+          const books = await api.facetBooks('franchise', bookSeries, region).then((b) => b.results, () => []);
           parts = books.map((b) => ({
             // The card's own source: a series member only Hardcover lists opens by its Hardcover id.
             key: `${b.source}:book:${b.sourceId}`, id: null, source: b.source, sourceId: b.sourceId, type: 'book', title: b.title,
@@ -129,7 +130,7 @@ function Related({ itemId, facets, tmdbMovieId, igdbId, bookSeries }: {
       })
       .catch((e: unknown) => console.warn('related_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
-  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId, bookSeries]);
+  }, [db, catalog.revision, taxonomy, itemId, facets, tmdbMovieId, igdbId, bookSeries, region]);
 
   if (!rails || (!rails.series?.items.length && !rails.franchise?.items.length && !rails.similar.length)) return null;
   return (
