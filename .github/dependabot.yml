@@ -64,6 +64,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
         update-types: ["version-update:semver-major"]
+      # @expo/ui's major IS the SDK number (PR #51 offered 58 on SDK 57).
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "react-native*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "react"
