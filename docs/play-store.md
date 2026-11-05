@@ -11,6 +11,7 @@ steps it shares with this one written out click by click, is archived at
 | | State |
 |---|---|
 | Play developer account | Exists (InFlucx), $25 paid, identity verified. **Personal**, and the Play work is paused until it is a business account. |
+| Trader status | ⚠️ **Not declared. Deadline 2027-02-01**, the one hard date in this plan (below). |
 | Play Console app entry | One exists, but for the TWA's package `org.fandex.twa`. **A package name can never change in Play**, so the native app (`org.fandex.app`) needs a new entry. The old one was never published and can stay a draft. |
 | Upload key | **Nils makes it** (the command is below). Until then a Play build cannot run; every other release build signs with the debug key, as the sideloaded APKs always have. `android-package/signing.keystore` is the TWA's upload key, not this one. |
 | The signing | ✅ Built 2026-10-23: `mobile/plugins/withPlayUploadSigning.js`, a config plugin, so it survives `expo prebuild`. A build run with `-PfandexPlay` signs with the upload key; without it, nothing changes. |
@@ -44,9 +45,28 @@ steps it shares with this one written out click by click, is archived at
   - Re-check Play's current target API level requirement against the Expo SDK the app is on
     before the first upload.
 
+## Trader status
+
+Google's email of 2026-11-04 (to both the Gmail and the InFlucx address): every developer
+account must declare trader or non-trader under the EEA and UK rules **by 2027-02-01**. Missed,
+the account can submit no updates and its profile and every app are removed from Play. Where:
+Play Console, Manage account > Account details > About you > Trader status. A trader then
+confirms the status on each app as well (App content > Needs attention), optionally with a link
+to terms of service.
+
+- **Non-trader is accurate today**: nothing is published and monetization is off.
+- **Ads make it trader.** Google counts ad revenue as commercial, and ads-first is the plan
+  (STATUS.md, "Monetization"). Switch before the first ad goes live; a false non-trader
+  declaration breaches §11.4 of the Developer Distribution Agreement.
+- **What goes public**: an individual trader must verify a phone number, and Play shows it and
+  the address. The address is already public in the Impressum; the phone number would be new.
+- ⚠️ Unverified: the email describes only an individual's declaration. Read what the business
+  account asks for when upgrading, since the declaration belongs to that sitting.
+
 ## The order
 
-1. Nils: upgrade the account to a business account, then re-read the testing rule.
+1. Nils: upgrade the account to a business account and declare the trader status in the same
+   sitting (below), then re-read the testing rule.
 2. ✅ Mine: the upload-key plugin and `versionCode` (2026-10-23). Nils: make the key and its
    settings (below). Then mine: build the real `.aab`.
 3. Nils: create the `org.fandex.app` entry, fill App content (privacy policy, Data safety,
