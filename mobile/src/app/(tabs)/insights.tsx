@@ -169,6 +169,9 @@ const COMPANY_ROLES: [string, string][] = [['developer', 'Developer'], ['publish
 /** Rows a box shows; the rest open in a sheet (Nils, Miro board: at most four). */
 const PER_GROUP = 4;
 const MIN_COUNTS = [1, 2, 3, 5, 10];
+/** What a rating box opens on: on 5+ titles, sorted Highest (Nils, 2026-11-05). */
+const DEFAULT_MIN_COUNT = 5;
+const DEFAULT_ORDER = 'top' satisfies Order;
 
 type Order = 'impact' | 'top' | 'bottom';
 const ORDERS: [Order, string][] = [['impact', 'Score impact'], ['top', 'Highest'], ['bottom', 'Lowest']];
@@ -262,8 +265,8 @@ function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
 }) {
   const { impactsFor } = useScores();
   const [query, setQuery] = useState('');
-  const [minCount, setMinCount] = useState(MIN_COUNT);
-  const [order, setOrder] = useState<Order>('impact');
+  const [minCount, setMinCount] = useState(DEFAULT_MIN_COUNT);
+  const [order, setOrder] = useState<Order>(DEFAULT_ORDER);
   const noun = kind === 'company' ? 'studios' : kind === 'person' ? 'people' : 'tags';
   const ofKind = useMemo(() => facets.filter((f) => f.kind === kind), [facets, kind]);
   const q = query.trim().toLowerCase();
