@@ -6,17 +6,14 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      # Daily, not weekly (2026-07-22). On a weekly cadence a fresh HIGH advisory
-      # can sit for up to 7 days failing the `audit` job on every unrelated push
-      # — which is exactly what happened twice running: the eslint-chain
-      # advisories (20595b4) and sharp/libvips (a3aff34) both surfaced as "CI is
-      # red again" on commits that had nothing to do with them.
-      #
-      # This narrows the window; it does not close it. Dependabot **security**
-      # updates (repo Settings → Code security) are the same-day reaction, and
-      # neither helps when the fix is an override rather than a version bump.
-      # See the "overrides" block in package.json.
-      interval: daily
+      # Weekly since 2026-11-05. Daily (from 2026-07-22) meant an email burst
+      # most days across three folders. The cost of weekly: a fresh HIGH
+      # advisory can fail the `audit` job on unrelated pushes until the next
+      # run, as the eslint-chain advisories (20595b4) and sharp/libvips
+      # (a3aff34) did. Dependabot security updates (repo Settings → Code
+      # security) are the same-day answer to that. Neither helps when the fix
+      # is an override rather than a bump: see "overrides" in package.json.
+      interval: weekly
     open-pull-requests-limit: 10
     groups:
       # Batch low-risk minor/patch bumps into one PR to cut noise; majors stay
@@ -40,7 +37,7 @@ updates:
   - package-ecosystem: npm
     directory: "/worker"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     groups:
       minor-and-patch:
@@ -52,42 +49,27 @@ updates:
   - package-ecosystem: npm
     directory: "/mobile"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
     ignore:
-      # A major of Expo, React Native or React comes with an Expo SDK upgrade
-      # (`npx expo install --fix`), never as a lone bump.
+      # Expo pins these per SDK, down to the patch, and they move only with
+      # `npx expo install --fix` or an SDK upgrade. Any bump Dependabot offers
+      # is one --fix undoes: PR #40 took React Native 0.86 to 0.88 and its
+      # lockfile did not install, #51 offered @expo/ui 58 on SDK 57, and #62
+      # re-offered the nine versions --fix had just rolled back from #57, with
+      # CI green each time (CI never runs `expo install --check`).
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
-        update-types: ["version-update:semver-major"]
-      # @expo/ui's major IS the SDK number (PR #51 offered 58 on SDK 57).
       - dependency-name: "@expo/*"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react-native*"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # Expo pins these per SDK, and a 0.x minor is a breaking release: PR #40
-      # took React Native 0.86 to 0.88 and its lockfile did not even install.
-      # They move with `npx expo install --fix`, not one at a time.
-      - dependency-name: "react-native"
-        update-types: ["version-update:semver-minor"]
-      - dependency-name: "react-native-reanimated"
-        update-types: ["version-update:semver-minor"]
-      - dependency-name: "react-native-worklets"
-        update-types: ["version-update:semver-minor"]
-      - dependency-name: "react"
-        update-types: ["version-update:semver-minor"]
-      - dependency-name: "react-dom"
-        update-types: ["version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: "/"
