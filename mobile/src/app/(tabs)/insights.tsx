@@ -45,8 +45,6 @@ interface FacetStat { kind: string; role?: string; key: string; label: string; c
 
 /** How strongly a facet's average is pulled toward your own until it has been seen often (the site's C). */
 const PRIOR_STRENGTH = 5;
-/** A facet has to be on this many rated titles to be ranked at all. */
-const MIN_COUNT = 3;
 
 const facetHref = (f: FacetStat) => `/${f.kind === 'company' ? 'studio' : f.kind}/${keyToSlug(f.key)}`;
 const tintOf = (f: FacetStat) => (f.kind === 'person' ? color.facet.person : f.kind === 'company' ? color.facet.company : color.facet.tag);
@@ -152,16 +150,6 @@ function StatBar({ f, baseline, impact, onNavigate }: { f: FacetStat; baseline: 
   );
 }
 
-function FacetColumn({ title, facets, baseline, tone }: { title: string; facets: FacetStat[]; baseline: number; tone?: string }) {
-  return (
-    <Panel style={styles.column}>
-      <Text style={[styles.columnTitle, tone ? { color: tone } : null]}>{title}</Text>
-      {facets.length ? facets.map((f) => <StatBar key={`${f.kind}|${f.role ?? ''}|${f.key}`} f={f} baseline={baseline} />)
-        : <Text style={[type.caption, { paddingVertical: 8 }]}>Not enough data.</Text>}
-    </Panel>
-  );
-}
-
 // ── The rating sections (the site's FacetSection) ─────────────────────────────
 
 const PERSON_ROLES: [string, string][] = [['director', 'Director'], ['writer', 'Writer'], ['creator', 'Creator'], ['cast', 'Cast']];
@@ -173,14 +161,16 @@ const MIN_COUNTS = [1, 2, 3, 5, 10];
 const DEFAULT_MIN_COUNT = 5;
 const DEFAULT_ORDER = 'top' satisfies Order;
 
-type Order = 'impact' | 'top' | 'bottom';
-const ORDERS: [Order, string][] = [['impact', 'Score impact'], ['top', 'Highest'], ['bottom', 'Lowest']];
+type Order = 'impact' | 'top' | 'bottom' | 'picked';
+// "Most picked": on the most of your rated titles, which "Most watched" used to list (Nils, 2026-11-05).
+const ORDERS: [Order, string][] = [['top', 'Highest'], ['bottom', 'Lowest'], ['picked', 'Most picked'], ['impact', 'Score impact']];
 
 type Impacts = ReadonlyMap<string, number | null> | null;
 const impactCell = (f: FacetStat, impacts: Impacts): ImpactCell => (impacts ? impacts.get(impactId(f)) ?? null : 'pending');
 
 /** By impact: the biggest effect either way first, and what the score does not weigh last. */
 function sortFacets(list: FacetStat[], order: Order, impacts: Impacts): FacetStat[] {
+  if (order === 'picked') return [...list].sort((a, b) => b.count - a.count || b.ba - a.ba);
   if (order !== 'impact') return [...list].sort((a, b) => (order === 'top' ? b.ba - a.ba : a.ba - b.ba) || b.count - a.count);
   const at = (f: FacetStat) => impacts?.get(impactId(f)) ?? null;
   return [...list].sort((a, b) => {
@@ -337,7 +327,6 @@ export default function InsightsScreen() {
   const auth = useAuth();
   const sync = useCatalogSync();
   const { width } = useWindowDimensions();
-  const cols = width >= breakpoint.lg ? 4 : width >= breakpoint.sm ? 2 : 1;
   const [rated, setRated] = useState<Rated[] | null>(null);
   const [libraryTotal, setLibraryTotal] = useState(0);
   const [bucket, setBucket] = useState<number | null>(null);
@@ -411,11 +400,6 @@ export default function InsightsScreen() {
       category: f.kind === 'tag' ? (taxonomy?.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other') : undefined,
       ba: (PRIOR_STRENGTH * baseline + sum) / (PRIOR_STRENGTH + n),
     }));
-    const ranked = (kind: string) => facets.filter((f) => f.kind === kind && f.count >= MIN_COUNT);
-    const top = (kind: string) => [...ranked(kind)].sort((a, b) => b.ba - a.ba).slice(0, 8);
-    const bottom = (kind: string) => [...ranked(kind)].sort((a, b) => a.ba - b.ba).slice(0, 8);
-    const most = (kind: string, ...roles: string[]) => facets.filter((f) => f.kind === kind && roles.includes(f.role ?? ''))
-      .sort((a, b) => b.count - a.count || b.avg - a.avg).slice(0, 8);
 
     return {
       baseline, histogram: hist(rated),
@@ -425,16 +409,8 @@ export default function InsightsScreen() {
         { title: 'Tag ratings', hint: 'How you rate every genre, theme and keyword in your rated library.', kind: 'tag' },
         { title: 'People ratings', hint: 'How you rate the directors, writers, creators and cast behind what you have watched.', kind: 'person' },
         { title: 'Studio ratings', hint: 'Developers, publishers, film studios and TV networks, ranked by how you rate their work.', kind: 'company' },
-      ].map((s) => ({ ...s, top: top(s.kind), bottom: bottom(s.kind) })),
-      facets,
-      mostWatched: [
-        { title: 'Actors', facets: most('person', 'cast') },
-        { title: 'Directors', facets: most('person', 'director') },
-        { title: 'Film studios', facets: most('company', 'studio') },
-        { title: 'Game studios', facets: most('company', 'developer', 'publisher') },
-        // Authors, board game designers and show creators share the role.
-        { title: 'Creators and authors', facets: most('person', 'creator') },
       ],
+      facets,
     };
   }, [rated, taxonomy]);
 
@@ -551,15 +527,7 @@ export default function InsightsScreen() {
             facets={data.facets} baseline={data.baseline} taxonomy={taxonomy} cols={width >= breakpoint.sm ? 2 : 1}
           />
         ))}
-
-        <View style={styles.section}>
-          <PanelHeader eyebrow="Most watched" hint="Who appears most often across your rated library: actors and directors, film and game studios." />
-          <View style={styles.wrap}>
-            {data.mostWatched.map((c) => (
-              <View key={c.title} style={[styles.cell, grid(cols === 1 ? 1 : cols === 2 ? 2 : 4)]}><FacetColumn title={c.title} facets={c.facets} baseline={data.baseline} /></View>
-            ))}
-          </View>
-        </View>
+        {/* No "Most watched" since 2026-11-05 (Nils): a box's "Most picked" sort says the same. */}
       </ScrollView>
     </Screen>
   );
@@ -608,7 +576,6 @@ const styles = StyleSheet.create({
   typeHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   dot: { width: 8, height: 8, borderRadius: radius.full },
   column: { padding: 12, borderRadius: radius.xl },
-  columnTitle: { fontFamily: font.mono, fontSize: 11, lineHeight: 14, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textSecondary, marginBottom: 6 },
   statBar: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 30, paddingHorizontal: 4 },
   track: { width: 56, height: 6, borderRadius: 3, backgroundColor: color.surfaceInset, overflow: 'hidden' },
   statBarValue: { width: 26, textAlign: 'right', fontFamily: font.sansBold, fontSize: 12, lineHeight: 15, fontVariant: ['tabular-nums'] },
