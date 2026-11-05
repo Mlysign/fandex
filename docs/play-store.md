@@ -11,6 +11,7 @@ steps it shares with this one written out click by click, is archived at
 | | State |
 |---|---|
 | Play developer account | Exists (InFlucx), $25 paid, identity verified. **Personal**, and the Play work is paused until it is a business account. |
+| The business behind it | Einzelunternehmen in Düsseldorf: Gewerbe registered 2026-09-01 (NRW Wirtschafts-Service-Portal), tax registration (FsE EUn) sent through ELSTER the same day, Steuernummer and USt-IdNr issued by letter, W-IdNr ready in ELSTER since 2026-10-25. **No D-U-N-S number yet**, and it is the one thing the upgrade can't go without. |
 | Trader status | ⚠️ **Not declared. Deadline 2027-02-01**, the one hard date in this plan (below). |
 | Play Console app entry | One exists, but for the TWA's package `org.fandex.twa`. **A package name can never change in Play**, so the native app (`org.fandex.app`) needs a new entry. The old one was never published and can stay a draft. |
 | Upload key | **Nils makes it** (the command is below). Until then a Play build cannot run; every other release build signs with the debug key, as the sideloaded APKs always have. `android-package/signing.keystore` is the TWA's upload key, not this one. |
@@ -66,7 +67,16 @@ to terms of service.
 ## The order
 
 1. Nils: upgrade the account to a business account and declare the trader status in the same
-   sitting (below), then re-read the testing rule.
+   sitting (below), then re-read the testing rule. **The upgrade converts the existing account**
+   (checked 2026-11-05, support.google.com/googleplay/android-developer/answer/16260648): Manage
+   account > Account details > About you. First the organization website (fandex.org) is verified
+   through Search Console (automatic when the Search Console owner is the Play Console owner's
+   Google account), then "Change account type" appears. It asks for a new organization payments
+   profile with the **D-U-N-S number** (free from Dun & Bradstreet, dnb.com/de-de/kleinunternehmen/duns.html;
+   paid "services" are not needed), organization type and size, an organization phone, and a
+   contact plus a public developer email and phone, each confirmed by a one-time code. Google may
+   ask for documents (the Gewerbe receipt). Wait 72 hours after the switch before submitting an
+   app. One way only: it can't go back to personal. Steuernummer and USt-IdNr are not asked for.
 2. ✅ Mine: the upload-key plugin and `versionCode` (2026-10-23). Nils: make the key and its
    settings (below). Then mine: build the real `.aab`.
 3. Nils: create the `org.fandex.app` entry, fill App content (privacy policy, Data safety,
