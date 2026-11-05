@@ -34,14 +34,14 @@ describe('providerFacet', () => {
   it('names the books half when the Worker fails it, and still answers TMDB', async () => {
     tmdb(true);
     worker.facetBooks.mockRejectedValue(new Error('provider-unavailable'));
-    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier');
+    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier', 'DE');
     expect(p.failed).toEqual(['books']);
   });
 
   it('keeps the books when TMDB fails, and names TMDB', async () => {
     tmdb(false);
     worker.facetBooks.mockResolvedValue({ results: [book('OL1W', 'Press Reset'), book('OL2W', 'Play Nice')] });
-    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier');
+    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier', 'DE');
     expect(p.failed).toEqual(['tmdb']);
     expect(p.cards.map((c) => c.title)).toEqual(['Press Reset', 'Play Nice']);
   });
@@ -49,7 +49,7 @@ describe('providerFacet', () => {
   it('reports nothing failed when every half answers, even with nothing', async () => {
     tmdb(true);
     worker.facetBooks.mockResolvedValue({ results: [] });
-    const p = await providerFacet('tag', 'heist', 'heist');
+    const p = await providerFacet('tag', 'heist', 'heist', 'DE');
     expect(p.failed).toEqual([]);
   });
 
@@ -57,7 +57,7 @@ describe('providerFacet', () => {
     tmdb(true);
     worker.facetBooks.mockResolvedValue({ results: [] });
     worker.facetGames.mockRejectedValue(new Error('provider-unavailable'));
-    const p = await providerFacet('tag', 'heist', 'heist');
+    const p = await providerFacet('tag', 'heist', 'heist', 'DE');
     expect(p.failed).toEqual(['games']);
   });
 
@@ -65,7 +65,7 @@ describe('providerFacet', () => {
     config.key = '';
     tmdb(true);
     worker.facetBooks.mockRejectedValue(new Error('provider-unavailable'));
-    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier');
+    const p = await providerFacet('person', 'jason schreier', 'Jason Schreier', 'DE');
     expect(p.failed).toEqual(['books']);
   });
 
@@ -73,6 +73,6 @@ describe('providerFacet', () => {
     const abort = new AbortController();
     vi.stubGlobal('fetch', vi.fn(async () => { abort.abort(); throw new DOMException('aborted', 'AbortError'); }));
     worker.facetBooks.mockResolvedValue({ results: [] });
-    await expect(providerFacet('person', 'x y', 'X Y', abort.signal)).rejects.toThrow();
+    await expect(providerFacet('person', 'x y', 'X Y', 'DE', abort.signal)).rejects.toThrow();
   });
 });
