@@ -23,7 +23,7 @@ export function facetEyebrow(kind: FacetKind, roles: string[]): string {
   return roles.length ? roles.map((r) => ROLE_LABEL[r] ?? r).join(' · ') : KIND_LABEL[kind];
 }
 
-export function FacetHeader({ back, eyebrow, name, avatar, life, bio, tiles, extra, count, sort }: {
+export function FacetHeader({ back, eyebrow, name, avatar, life, bio, tiles, extra, count, sort, status }: {
   back: ReactNode;
   eyebrow: string;
   name: string;
@@ -36,6 +36,8 @@ export function FacetHeader({ back, eyebrow, name, avatar, life, bio, tiles, ext
   /** The "titles · N" line. */
   count: string;
   sort?: ReactNode;
+  /** Under the count: whether more titles are still on their way, or which providers failed (the app only). */
+  status?: ReactNode;
 }) {
   return (
     <View style={styles.header}>
@@ -55,6 +57,7 @@ export function FacetHeader({ back, eyebrow, name, avatar, life, bio, tiles, ext
         <Text style={[type.micro, { color: color.accent, letterSpacing: 0.8 }]}>{count}</Text>
         {sort}
       </View>
+      {status}
     </View>
   );
 }

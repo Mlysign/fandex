@@ -22,7 +22,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ipDisplayLabel } from '@/lib/facets';
 import { slugToKey } from '@/lib/facetUrl';
 import type { MediaType } from '@/types';
@@ -43,7 +43,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
-import { providerFacet, type FacetPerson } from '~/lib/facetProviders';
+import { providerFacet, type FacetPerson, type ProviderHalf } from '~/lib/facetProviders';
 import { titleIndex } from '~/lib/titleIdentity';
 import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
@@ -86,6 +86,15 @@ function pullLine(kind: FacetKind, im: PageImpact, name: string): string | null 
   const p = im.pull;
   if (!p) return null;
   return pullSentence({ kind: kind === 'tag' ? 'tag' : kind === 'franchise' ? 'ip' : 'person', times: p.times, titles: p.titles, media: p.media, followed: p.followed }, name);
+}
+
+/** What each provider half brings, for the line that says one failed. */
+const HALF_NOUN: Record<ProviderHalf, string> = { tmdb: 'films and shows', books: 'books', games: 'games' };
+
+/** "films and shows or books": the halves that failed, in words. */
+function failedNouns(failed: ProviderHalf[]): string {
+  const nouns = [...new Set(failed)].map((h) => HALF_NOUN[h]);
+  return nouns.length <= 1 ? (nouns[0] ?? 'titles') : `${nouns.slice(0, -1).join(', ')} or ${nouns[nouns.length - 1]}`;
 }
 
 /** A row of media types under the numbers: tap one to keep that type, tap again to drop it, none kept shows every type. */
@@ -220,24 +229,44 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   }, [db, kind, key, memberKeys, overrides, sync.revision]);
 
   // What the providers have beyond the catalog copy. The device's rows show at once; these join them.
-  const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null } | null>(null);
+  // A provider half that fails is said under the count with a retry (`failed`), never read as "nothing more":
+  // a Worker 502 from Open Library left an author's page at the one book the device held (2026-11-03).
+  const [more, setMore] = useState<{ cards: CardItem[]; person: FacetPerson | null; failed: ProviderHalf[] } | null>(null);
   const [asking, setAsking] = useState(false);
+  /** Bumped by "Try again": asks the providers again without blanking what they already gave. */
+  const [attempt, setAttempt] = useState(0);
+  const askedFor = useRef<string | null>(null);
   const label = found?.label ?? '';
   // The website's static copy of this page lies over the app until the app has the titles.
   useEffect(() => { if (found) dropFacetPrerender(); }, [found]);
   usePageTitle(label || null);
   const ready = found != null;
   useEffect(() => {
-    setMore(null);
+    // A retry keeps the cards on screen until the new answer replaces them; another page starts empty.
+    if (askedFor.current !== `${kind}|${key}|${label}`) {
+      askedFor.current = `${kind}|${key}|${label}`;
+      setMore(null);
+    }
     if (!ready) return;
     const abort = new AbortController();
     setAsking(true);
     providerFacet(kind, key, label || key, abort.signal)
-      .then((p) => { if (!abort.signal.aborted) setMore(p); })
-      .catch(() => { /* offline or the providers down: the page is what the device holds */ })
+      .then((p) => {
+        if (abort.signal.aborted) return;
+        // A half that failed this time keeps what it gave last time: a retry never shrinks the page.
+        setMore((prev) => {
+          if (!prev || !p.failed.length) return p;
+          const fresh = new Set(p.cards.map((c) => c.key));
+          return { ...p, cards: [...p.cards, ...prev.cards.filter((c) => !fresh.has(c.key))] };
+        });
+      })
+      .catch(() => {
+        // Only an abort or a bug reaches here; each half's failure is in `failed`. Say it, keep what is on screen.
+        if (!abort.signal.aborted) setMore((prev) => ({ cards: prev?.cards ?? [], person: prev?.person ?? null, failed: kind === 'person' ? ['tmdb', 'books'] : ['tmdb', 'books', 'games'] }));
+      })
       .finally(() => { if (!abort.signal.aborted) setAsking(false); });
     return () => abort.abort();
-  }, [kind, key, label, ready]);
+  }, [kind, key, label, ready, attempt]);
 
   const cards = useMemo(() => {
     const own = found?.cards;
@@ -450,7 +479,21 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
           ) : null}
         </>
       )}
-      count={`titles · ${sorted.length}${narrowed && sorted.length !== (cards ?? []).length ? ` of ${(cards ?? []).length}` : ''}${asking ? ' · asking for more…' : ''}`}
+      count={`titles · ${sorted.length}${narrowed && sorted.length !== (cards ?? []).length ? ` of ${(cards ?? []).length}` : ''}`}
+      status={asking ? (
+        <View style={styles.status} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="small" color={color.accent} />
+          <Text style={type.caption}>Looking for more titles…</Text>
+        </View>
+      ) : more?.failed.length ? (
+        <View style={styles.status} accessibilityLiveRegion="polite">
+          <Text style={[type.caption, { flexShrink: 1 }]}>Couldn&apos;t load more {failedNouns(more.failed)} just now.</Text>
+          <Pressable onPress={() => setAttempt((n) => n + 1)} accessibilityRole="button" accessibilityLabel={`Try loading more ${failedNouns(more.failed)} again`} hitSlop={6}
+            style={({ pressed }) => [styles.followBtn, pressed && { opacity: 0.6 }]}>
+            <Text style={[type.caption, { color: color.textPrimary }]}>Try again</Text>
+          </Pressable>
+        </View>
+      ) : null}
       sort={(
         <View style={styles.controls}>
           {typesHere.length > 1 ? <TypeRow offered={typesHere} kept={kept} onToggle={(t) => setKept((s) => { const n = new Set(s); if (n.has(t)) n.delete(t); else n.add(t); return n; })} /> : null}
@@ -477,7 +520,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         ) : header}
         empty={grouped ? undefined : asking ? <StateBlock loading />
           : narrowed ? <EmptyState title="Nothing matches these filters" hint="Widen the types or the filters above." />
-          : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : 'No title in the catalog or at the providers carries this.'} />}
+          : <EmptyState title="Nothing here yet" hint={sync.state === 'syncing' ? 'The catalog is still downloading.' : more?.failed.length ? 'Some providers could not be reached. Try again above.' : 'No title in the catalog or at the providers carries this.'} />}
       />
       <FilterSheet
         open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters}
@@ -504,6 +547,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden',
     backgroundColor: `${color.facet.tag}21`, color: color.textPrimary,
   },
+  status: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 },
   followRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
   followBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: color.border },
   followOn: { backgroundColor: color.accent, borderColor: color.accent },

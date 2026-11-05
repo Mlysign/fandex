@@ -37,9 +37,18 @@ export interface FacetPerson {
   photos: { full: string; thumb: string; width: number; height: number }[];
 }
 
+/** One provider half of a facet page's question: TMDB's films and shows, the Worker's books, the Worker's games. */
+export type ProviderHalf = 'tmdb' | 'books' | 'games';
+
 export interface ProviderFacet {
   cards: CardItem[];
   person: FacetPerson | null;
+  /**
+   * The halves that were asked and FAILED, so the page can say so and offer a
+   * retry. A half that failed is not a half that found nothing: a Worker 502
+   * (Open Library timing out) read as "this author wrote one book" (2026-11-03).
+   */
+  failed: ProviderHalf[];
 }
 
 function card(c: any, mediaHint?: 'movie' | 'tv'): CardItem {
@@ -147,7 +156,7 @@ async function personId(key: string, signal?: AbortSignal): Promise<number | nul
   return (exact[0] ?? [...results].sort(byPopularity)[0])?.id ?? null;
 }
 
-async function person(key: string, signal?: AbortSignal): Promise<ProviderFacet> {
+async function person(key: string, signal?: AbortSignal): Promise<Omit<ProviderFacet, 'failed'>> {
   const id = await personId(key, signal);
   if (id == null) return { cards: [], person: null };
   const [meta, credits, images] = await Promise.all([
@@ -265,35 +274,47 @@ async function collection(label: string, signal?: AbortSignal): Promise<CardItem
 /**
  * What the providers have for this facet, with each title the Worker already
  * knows given its Fandex id, so the card shows your state and opens the page
- * it has. Throws when TMDB cannot be reached; the page then shows what the
- * device holds.
+ * it has. Each half (TMDB, books, games) fails on its own: the others still
+ * answer, and `failed` names the ones that did not. Throws only when aborted.
  */
 export async function providerFacet(kind: FacetPageKind, key: string, label: string, signal?: AbortSignal): Promise<ProviderFacet> {
+  const failed: ProviderHalf[] = [];
+  const half = (h: ProviderHalf) => () => { failed.push(h); return [] as CardItem[]; };
   // Books run alongside too (Open Library, 2026-10-17): a subject's, an author's, a publisher's or a series'.
-  const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), () => [] as CardItem[]);
+  const books = api.facetBooks(kind, label).then((r) => r.results.map((b) => shelfCard(b, kind)), half('books'));
   // An author TMDB does not know still gets a face and a biography.
   const author = kind === 'person' ? openLibraryAuthor(label, signal).catch(() => null) : Promise.resolve(null);
-  if (!tmdbConfigured()) return { cards: unique(await books), person: await author };
-  let found: ProviderFacet;
-  // The games run alongside TMDB and never fail the page: no games is a shorter list.
+  if (!tmdbConfigured()) {
+    const cards = unique(await books);
+    return { cards, person: await author, failed };
+  }
+  let found: Omit<ProviderFacet, 'failed'>;
+  // The games run alongside TMDB. A person's page has none (see the head of this file).
   const games = kind === 'person' ? Promise.resolve([] as CardItem[])
-    : api.facetGames(kind, label).then((r) => r.results.map(gameCard), () => [] as CardItem[]);
-  if (kind === 'person') found = await person(key, signal);
-  else if (kind === 'studio') {
-    const id = await companyId(label, signal);
-    found = { cards: id == null ? [] : (await discover(`with_companies=${id}`, signal)).map((c) => ({ ...c, roles: ['studio'] })), person: null };
-  } else if (kind === 'franchise') {
-    found = { cards: await collection(label, signal).catch(() => [] as CardItem[]), person: null };
-  } else {
-    const filter = await tagFilter(label, signal);
-    found = { cards: filter ? await discover(filter, signal) : [], person: null };
+    : api.facetGames(kind, label).then((r) => r.results.map(gameCard), half('games'));
+  try {
+    if (kind === 'person') found = await person(key, signal);
+    else if (kind === 'studio') {
+      const id = await companyId(label, signal);
+      found = { cards: id == null ? [] : (await discover(`with_companies=${id}`, signal)).map((c) => ({ ...c, roles: ['studio'] })), person: null };
+    } else if (kind === 'franchise') {
+      found = { cards: await collection(label, signal), person: null };
+    } else {
+      const filter = await tagFilter(label, signal);
+      found = { cards: filter ? await discover(filter, signal) : [], person: null };
+    }
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    // TMDB down is a page without its films and shows, not a page without its books and games.
+    failed.push('tmdb');
+    found = { cards: [], person: null };
   }
   found.cards = unique([...found.cards, ...(await games), ...(await books)]);
   if (kind === 'person' && (!found.person || !found.person.profileUrl)) {
     const ol = await author;
     if (ol) found.person = found.person ? { ...ol, ...Object.fromEntries(Object.entries(found.person).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length))) } as FacetPerson : ol;
   }
-  if (!found.cards.length) return found;
+  if (!found.cards.length) return { ...found, failed };
   try {
     const res = await api.lookup(found.cards.slice(0, 2000).map((c) => ({ source: c.source as string, type: c.type, id: c.sourceId as string })));
     const held = new Map(res.found.map((f) => [`${f.source}:${f.type}:${f.id}`, f]));
@@ -302,5 +323,5 @@ export async function providerFacet(kind: FacetPageKind, key: string, label: str
       return f ? { ...c, id: f.mediaItemId, slug: f.slug ?? null } : c;
     });
   } catch { /* the cards still open; they just do not know your state */ }
-  return found;
+  return { ...found, failed };
 }
