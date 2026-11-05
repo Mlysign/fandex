@@ -49,7 +49,7 @@ import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { setFollow } from '~/lib/itemActions';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
-import { pullSentence, signed } from '~/lib/scoreReasons';
+import { PULL_SHOWN, pullSentence, signed } from '~/lib/scoreReasons';
 import { TYPE_ICONS } from '~/lib/typeIcons';
 import { color, font, radius, type, TYPE_PLURAL } from '~/theme';
 
@@ -84,7 +84,7 @@ function impactLine(kind: FacetKind, im: PageImpact): string {
 /** The pull half, in the Why sheet's words: "You pick anime 5 times more often than average (88 of your films)". */
 function pullLine(kind: FacetKind, im: PageImpact, name: string): string | null {
   const p = im.pull;
-  if (!p) return null;
+  if (!p || !PULL_SHOWN) return null;
   return pullSentence({ kind: kind === 'tag' ? 'tag' : kind === 'franchise' ? 'ip' : 'person', times: p.times, titles: p.titles, media: p.media, followed: p.followed }, name);
 }
 
@@ -451,7 +451,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
           })}
           {/* No impact row has a reason, and the reason is said (AGENTS.md: a component that renders null must know why). */}
           {absence ? <Text style={[type.caption, { color: color.textSecondary, marginTop: 12 }]}>{absence}</Text> : null}
-          {auth.status === 'signedIn' && followIds.length ? (
+          {/* A follow moves pull and nothing else, so it leaves the page with pull (PULL_SHOWN, scoreReasons.ts). */}
+          {PULL_SHOWN && auth.status === 'signedIn' && followIds.length ? (
             // Follow: this counts as the most you could seek out, on every title that carries it. Not interested: the least. Neither touches how you rate it.
             <View style={styles.followRow}>
               {([['follow', 'Follow', 'Following'], ['avoid', 'Not interested', 'Avoiding']] as const).map(([mode, off, on]) => {

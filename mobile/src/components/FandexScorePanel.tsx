@@ -22,7 +22,7 @@ import { FACET_HEX, facetClassOf } from '@/lib/facetPalette';
 import { bandColor, Sheet } from '~/components/kit';
 import { facetId, type FandexScore, type FollowMode, type ScoreReason } from '~/lib/fandexScore';
 import type { MediumCalibration } from '~/lib/scoreCalibration';
-import { axisRows, calibrationLine, cappedRows, centreSentence, mediumPlural, pullLine, pullSentence, reasonHref, rungLine, scoreSentence, signed, tasteSentence } from '~/lib/scoreReasons';
+import { axisRows, calibrationLine, cappedRows, centreSentence, mediumPlural, PULL_SHOWN, pullLine, pullSentence, reasonHref, rungLine, scoreSentence, signed, tasteSentence } from '~/lib/scoreReasons';
 import { color, font, radius, type } from '~/theme';
 
 // The site's ROLE_LABELS (src/lib/constants.ts). Franchise is singular on
@@ -91,8 +91,9 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 
   const tone = bandColor(fandex.band);
   const shown = Math.round(fandex.score);
-  const pull = pullLine(fandex.pull, mediaType);
-  const pullRows = axisRows(fandex.reasons, 'pull');
+  // Pull is off the screen while PULL_SHOWN is false (scoreReasons.ts): no line, no group, no Follow.
+  const pull = PULL_SHOWN ? pullLine(fandex.pull, mediaType) : null;
+  const pullRows = PULL_SHOWN ? axisRows(fandex.reasons, 'pull') : [];
   const tasteRows = axisRows(fandex.reasons, 'taste');
   const capped = cappedRows(fandex.reasons);
   const honest = calibrationLine(calibration ?? null);
@@ -169,7 +170,7 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
             {tasteRows.length ? tasteRows.map(row) : <Text style={styles.small}>None of your ratings touch this title's facets.</Text>}
           </View>
 
-          {fandex.pull ? (
+          {!PULL_SHOWN ? null : fandex.pull ? (
             <View style={styles.groupBlock}>
               <View style={styles.groupHead}>
                 <Text style={[styles.groupTitle, { color: color.accent }]}>What you pick</Text>
@@ -197,7 +198,7 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 
           <Text style={[styles.small, styles.how]}>
             <Text style={styles.strong}>How this works. </Text>
-            The number is what you would probably rate this, times ten. It starts from your average for {mediumPlural(mediaType)} and moves by what this title is made of: its setting and themes, its people, its studio and its franchise, each by how you rated the titles you have met it on. A facet you met once barely moves it; one you met forty times moves it fully. Only ratings you typed count, nobody else&apos;s. How often you pick this kind of thing is said beside the number and never moves it. Tap any row to see the titles behind it.
+            The number is what you would probably rate this, times ten. It starts from your average for {mediumPlural(mediaType)} and moves by what this title is made of: its setting and themes, its people, its studio and its franchise, each by how you rated the titles you have met it on. A facet you met once barely moves it; one you met forty times moves it fully. Only ratings you typed count, nobody else&apos;s.{PULL_SHOWN ? ' How often you pick this kind of thing is said beside the number and never moves it.' : ''} Tap any row to see the titles behind it.
           </Text>
           {honest || rung ? (
             <Text style={styles.small}>

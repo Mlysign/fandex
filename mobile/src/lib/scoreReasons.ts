@@ -9,6 +9,15 @@ import { keyToSlug } from '@/lib/facetUrl';
 import type { FandexScore, ScoreReason } from '~/lib/fandexScore';
 import type { MediumCalibration } from '~/lib/scoreCalibration';
 
+/**
+ * Whether pull (how often you pick a facet) and the Follow buttons that move it
+ * reach the screen. Off since 2026-11-05: shown beside the score, it read as
+ * part of it (Brad Pitt's page showed a pull row, Helena Bonham Carter's said
+ * cast carries no weight). The model still runs; it comes back with the "what
+ * should I watch now" page. The dev screens show it regardless.
+ */
+export const PULL_SHOWN = false;
+
 const TYPE_PLURAL: Record<string, string> = { movie: 'films', show: 'shows', game: 'games', book: 'books', boardgame: 'board games' };
 
 /** "films", "games", or "titles" for a medium the app does not name. */

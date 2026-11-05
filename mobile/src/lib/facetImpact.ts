@@ -8,6 +8,7 @@
 
 import { tagKey } from '@/lib/facets';
 import { ROLE_LABEL } from './creditLine';
+import { PULL_SHOWN } from './scoreReasons';
 import { facetImpact, facetId, facetPull, MIN_RATED_FOR_FANDEX_SCORE, type FacetPull, type Profile, type ScoreFacet, type Taxonomy } from './fandexScore';
 
 /**
@@ -91,8 +92,9 @@ export function pageImpacts(kind: ImpactKind, key: string, profile: Profile, tax
     rows.push({ facetId: facetId(m), role: kind === 'tag' || kind === 'ip' ? undefined : m.role, points, direction: directionOf(points), ratedCount: m.n, pull });
   }
   // A facet you pick but never rated a title of: pull speaks, taste does not.
+  // Not while pull is off the screen, or the page shows nothing and says no reason.
   const seen = new Set(rows.map((r) => r.facetId));
-  for (const id of new Set([...(profile.pull?.beta.keys() ?? []), ...profile.follows.keys()])) {
+  for (const id of PULL_SHOWN ? new Set([...(profile.pull?.beta.keys() ?? []), ...profile.follows.keys()]) : []) {
     const [k, role, ...rest] = id.split('|');
     const key = rest.join('|');
     if (k !== kind || seen.has(id) || spokenKey(key) !== target) continue;

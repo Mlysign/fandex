@@ -19,7 +19,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem, CardMatch, CardState } from '~/lib/cards';
 import { shortDate } from '~/lib/dates';
 import type { FandexScore } from '~/lib/fandexScore';
-import { axisRows, pullSentence, scoreSentence, signed, tasteSentence } from '~/lib/scoreReasons';
+import { axisRows, PULL_SHOWN, pullSentence, scoreSentence, signed, tasteSentence } from '~/lib/scoreReasons';
 import { parseFacets, useScores } from '~/lib/ScoreProvider';
 import { color, font, radius, type, TYPE_LABEL } from '~/theme';
 
@@ -52,7 +52,7 @@ export function ScoreExplainerBody({ item, match: row, state }: { item: CardItem
   const match = useMatch(item, row != null);
   const rated = state.rating != null && state.rating > 0;
   // The three taste rows that moved it most, then the one pull row that stands out most, which is beside the number and not in it.
-  const top = match ? [...axisRows(match.reasons, 'taste').slice(0, 3), ...axisRows(match.reasons, 'pull').slice(0, 1)] : [];
+  const top = match ? [...axisRows(match.reasons, 'taste').slice(0, 3), ...(PULL_SHOWN ? axisRows(match.reasons, 'pull').slice(0, 1) : [])] : [];
 
   return (
     <View style={styles.body}>

@@ -294,10 +294,14 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
 - **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
 
+### Added 2026-11-05, the UI review
+
+- **Pull is off the screen, and so are Follow and Not interested.** Nils: shown beside the score it read as part of it (Brad Pitt's page showed a pull row, Helena Bonham Carter's said cast carries no weight), "more confusion than benefit". The model still fits and follows still sync; one switch (`PULL_SHOWN`, `mobile/src/lib/scoreReasons.ts`) brings it all back. It returns with the "what now?" page, where picking is the question.
+
 ### Added 2026-10-27, the calibrated number (docs/fandex-score.md §3.11, §13)
 
 - **The score is ONE NUMBER, read as the rating you would give, times ten.** Nils: the labels were ambiguous, a flat number is intuitive, and "82 means I'd rate it 8" is an assumption to accept and get as close to as the data allows. Supersedes 2026-10-25's "a LABEL from two axes, no number"; the labels, the matrix and the odds line are gone (`docs/archive/history.md`).
-- **Pull is said beside the number and is never in it.** On a title you rated it reads high almost by construction (you picked it), so it was an offset, not information: films off by 1.63 with it, 1.40 without. Its sentence, rows, pills and follows stay; the per-medium pull weight went.
+- **Pull is said beside the number and is never in it.** On a title you rated it reads high almost by construction (you picked it), so it was an offset, not information: films off by 1.63 with it, 1.40 without. Its sentence, rows, pills and follows stay (off the screen since 2026-11-05, above); the per-medium pull weight went.
 - **The centre is your average for the medium**, below ten ratings in it your overall average.
 - **The gains are fitted to the person's own ratings by least squares, one each way, and refitted after any weight change** (`scripts/score-backtest.mjs --fit-gains`). The weights were re-tuned for the rating error on half the titles and checked on the other half.
 - **The Bayesian average stays; no regression, no crowd ratings** ("do not rely on user ratings"). Measured: the regression ties on films and loses on games.
