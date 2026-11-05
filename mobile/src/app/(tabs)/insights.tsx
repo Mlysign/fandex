@@ -24,7 +24,7 @@ import { SignIn } from '~/components/SignIn';
 import { Screen } from '~/components/ui';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
-import { cardHref, type CardItem } from '~/lib/cards';
+import type { CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { Taxonomy } from '~/lib/fandexScore';
 import { useScores } from '~/lib/ScoreProvider';
@@ -275,14 +275,6 @@ export default function InsightsScreen() {
       decades.set(d, cur);
     }
 
-    // Against the crowd, on a 0 to 10 scale. Only titles with enough votes to call it a crowd.
-    const diverging = rated.filter((r) => r.communityScore != null && (r.communityVotes ?? 0) >= 50)
-      .map((r) => ({ r, delta: r.rating - (r.communityScore as number) / 10 }));
-    // Each column takes only its own sign. One list sorted both ways put a title
-    // you rate 5.8 BELOW the crowd under "You rate higher" (SM79).
-    const over = diverging.filter((d) => d.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 8);
-    const under = diverging.filter((d) => d.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 8);
-
     const stats = new Map<string, { f: StoredFacet; n: number; sum: number }>();
     for (const r of rated) {
       const seen = new Set<string>();
@@ -311,7 +303,6 @@ export default function InsightsScreen() {
       baseline, histogram: hist(rated),
       byType: Object.entries(byType).filter(([, l]) => l.length).map(([t, l]) => ({ type: t, count: l.length, histogram: hist(l) })),
       decades: [...decades.entries()].sort(([a], [b]) => a - b).map(([d, v]) => ({ decade: d, count: v.n, avg: v.sum / v.n })),
-      over, under,
       sections: [
         { title: 'Tag ratings', hint: 'How you rate every genre, theme and keyword in your rated library.', kind: 'tag' },
         { title: 'People ratings', hint: 'How you rate the directors, writers, creators and cast behind what you have watched.', kind: 'person' },
@@ -436,26 +427,7 @@ export default function InsightsScreen() {
           {decade != null && picked.length ? <Picked label={`${picked.length} from the ${decade}s`} items={picked} onClear={() => setDecade(null)} /> : null}
         </View>
 
-        <View style={styles.section}>
-          <PanelHeader eyebrow="You vs the crowd" hint="Where your ratings most diverge from the crowd (both shown on a 0-10 scale)." />
-          <View style={styles.wrap}>
-            {[{ title: 'You rate higher', tone: color.success, list: data.over }, { title: 'You rate lower', tone: color.danger, list: data.under }].map((side) => (
-              <View key={side.title} style={[styles.cell, grid(width >= breakpoint.sm ? 2 : 1)]}>
-                <Panel style={styles.column}>
-                  <Text style={[styles.columnTitle, { color: side.tone }]}>{side.title}</Text>
-                  {side.list.map(({ r, delta }) => (
-                    <Pressable key={r.key} onPress={() => router.push(cardHref(r) as never)} accessibilityRole="link" style={({ pressed }) => [styles.statBar, pressed && { opacity: 0.6 }]}>
-                      <Text numberOfLines={1} style={[type.bodySm, { flex: 1, color: color.textPrimary }]}>{r.title}</Text>
-                      <Text style={styles.statBarCount}>you {r.rating.toFixed(1)} · crowd {((r.communityScore as number) / 10).toFixed(1)}</Text>
-                      <Text style={[styles.statBarValue, { width: 40, color: delta >= 0 ? color.success : color.danger }]}>{delta >= 0 ? '+' : ''}{delta.toFixed(1)}</Text>
-                    </Pressable>
-                  ))}
-                </Panel>
-              </View>
-            ))}
-          </View>
-        </View>
-
+        {/* No "You vs the crowd" since 2026-11-05 (Nils, Miro board: "remove this entire section"). */}
         {data.sections.map((s) => (
           <FacetRatings
             key={s.kind} kind={s.kind as 'tag' | 'person' | 'company'} title={s.title} hint={s.hint}

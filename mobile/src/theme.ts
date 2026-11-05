@@ -47,7 +47,7 @@ export const color = {
   fillIdle: 'rgba(237,231,220,0.06)',
   fillIdleBorder: 'rgba(237,231,220,0.07)',
   // What sits over artwork: the type chip, a hover label.
-  scrimChip: 'rgba(16,14,12,0.62)',
+  scrimChip: 'rgba(16,14,12,0.86)', // 0.62 until 2026-11-05: the type label read poorly over a bright poster (Nils, Miro board).
 
   // What a chip is about, the site's four facet colours (src/lib/facetPalette.ts).
   facet: { person: '#E0B15C', genre: '#C8A24B', tag: '#AC9A72', company: '#C08152' },

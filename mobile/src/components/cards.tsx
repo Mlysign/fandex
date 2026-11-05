@@ -5,7 +5,7 @@
 // date, a serif score, and a Rate and Bookmark bar 32 px tall.
 
 import { useRouter } from 'expo-router';
-import { ArrowRight, Bookmark, Star } from 'lucide-react-native';
+import { Bookmark, Star } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
@@ -202,9 +202,9 @@ export function RailHeader({ title, forYou, seeAllHref, action }: { title: strin
 function SeeAll({ href }: { href: string }) {
   const link = useLink(href);
   return (
-    <Pressable {...link.anchor} onPress={link.onPress} accessibilityRole="link" hitSlop={14} style={styles.seeAll}>
-      <Text style={[type.label, { color: color.textSecondary }]}>See all</Text>
-      <ArrowRight size={14} color={color.textSecondary} />
+    // A quiet pill, no arrow (Nils, Miro board, 2026-11-05).
+    <Pressable {...link.anchor} onPress={link.onPress} accessibilityRole="link" hitSlop={10} style={({ pressed }) => [styles.seeAll, pressed && { opacity: 0.6 }]}>
+      <Text style={[type.caption, { color: color.textSecondary }]}>See all</Text>
     </Pressable>
   );
 }
@@ -372,7 +372,7 @@ const styles = { ...cardStyles, ...StyleSheet.create({
   sectionNavItem: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.sm },
   stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 8, paddingVertical: 6 },
   star: { paddingHorizontal: 2 },
-  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  seeAll: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: color.border },
   gridRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   gridCell: { flex: 1, minWidth: 0 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 8, marginTop: 8, marginBottom: 8 },

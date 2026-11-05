@@ -305,7 +305,7 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **The centre is your average for the medium**, below ten ratings in it your overall average.
 - **The gains are fitted to the person's own ratings by least squares, one each way, and refitted after any weight change** (`scripts/score-backtest.mjs --fit-gains`). The weights were re-tuned for the rating error on half the titles and checked on the other half.
 - **The Bayesian average stays; no regression, no crowd ratings** ("do not rely on user ratings"). Measured: the regression ties on films and loses on games.
-- **The number is honest in the interface**: the medium average beside it, a whole number (no decimals), colour by distance from the medium's average, and the device's own "within one point X% of the time" in the Why sheet. No percent sign, no stretching of the spread (most unseen films read 47 to 68).
+- **The number is honest in the interface**: a whole number (no decimals), colour by distance from the medium's average, and the device's own "within one point X% of the time" in the Why sheet. No percent sign, no stretching of the spread (most unseen films read 47 to 68). ~~The medium average beside it~~: since 2026-11-05 the item page's panel is the label, the number and "Why?" only (Nils, Miro board: "too much"); the medium average opens the Why sheet.
 - **Recommended carries the green band only, four points over the medium's average.** Films' wishlist bar dropped from 82% to 70% without pull in the ranking, accepted.
 
 ### Added 2026-10-26, pull against a baseline (docs/fandex-score.md §3.7)

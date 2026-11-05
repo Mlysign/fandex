@@ -750,6 +750,11 @@ function YourData({ onNotice, counts }: { onNotice: (n: Notice) => void; counts:
         />
         <Button label={exporting ? 'Preparing...' : 'Download'} onPress={exportData} disabled={exporting} />
       </Card>
+      {/* Here since the Account card went (Nils, Miro board, 2026-11-05). Sign out of this device alone is on the You page. */}
+      <Card row>
+        <RowText title="Sign out everywhere" text="Ends every session on this account, on every device." />
+        <Button label="Sign out" onPress={() => void auth.signOut({ everywhere: true })} />
+      </Card>
       <Card row danger>
         <RowText danger title="Delete your account" text="Permanently removes your account and everything in it. This cannot be undone." />
         <Button label="Delete" variant="danger" onPress={() => { setConfirm(''); setShowDelete(true); }} />
@@ -925,8 +930,6 @@ export default function SettingsScreen() {
   }, [db, auth.rowsRevision, catalog.revision, catalog.state]);
 
   const identities = auth.profile?.identities ?? [];
-  const who = identities.find((i) => i.displayName)?.displayName;
-  const via = identities.map((i) => PROVIDER_NAME[i.provider] ?? i.provider).join(', ');
 
   return (
     <Screen wide>
@@ -975,29 +978,16 @@ export default function SettingsScreen() {
             <DefaultTypes onNotice={setNotice} />
             <YourPlatforms onNotice={setNotice} />
 
-            <Section eyebrow="Account">
-              <Card>
-                <Line label="Logged in as" value={who ? `${who}${via ? ` via ${via}` : ''}` : via || 'Yes'} />
-                <Line label="Library" value={count(counts.library, 'title')} />
-                <Line label="Wishlist" value={count(counts.wishlist, 'title')} />
-                {auth.rowsSyncing ? <T variant="bodySm">Refreshing your library…</T> : null}
-                {auth.rowsError ? <T variant="bodySm" style={{ color: color.warning }}>{auth.rowsError}</T> : null}
-                <View style={styles.actions}>
-                  <Button label="Refresh library" onPress={auth.syncRows} disabled={auth.rowsSyncing} />
-                  <Button label="Sign out" onPress={() => void auth.signOut()} />
-                  <Button label="Sign out everywhere" onPress={() => void auth.signOut({ everywhere: true })} />
-                </View>
-                <T variant="meta" style={{ color: color.textMuted }}>Sign out ends this device only. Sign out everywhere ends every session on this account, on every device.</T>
-              </Card>
-            </Section>
-
+            {/* No Account card since 2026-11-05 (Nils: "redundant"): who you are is the list above, the counts are
+                the tabs, Refresh is each provider's Sync, Sign out is on the You page, and Sign out everywhere is under Your data. */}
             <YourData onNotice={setNotice} counts={counts} />
             {auth.profile?.admin ? <AdminLinks /> : null}
             <WidgetOffer />
+            {/* The catalog copy's counts and its re-download, for the admin only since 2026-11-05 (Nils: "remove"). */}
+            {auth.profile?.admin ? <Device /> : null}
           </>
         )}
 
-        <Device />
         {Platform.OS === 'web' ? null : <LegalLinks />}
       </ScrollView>
     </Screen>

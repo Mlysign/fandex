@@ -327,15 +327,6 @@ export function ratedInOrder(certs: string[], region: string | null | undefined)
   return [...certs.filter(mine), ...certs.filter((c) => !mine(c))];
 }
 
-/** Whether the per-source dates are worth a list: two full dates more than a week apart, or a year against a day elsewhere. */
-export function datesDisagree(dates: { date: string }[]): boolean {
-  const distinct = [...new Set(dates.map((d) => d.date))];
-  if (distinct.length < 2) return false;
-  const days = distinct.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).map((d) => Date.parse(`${d}T00:00:00Z`) / 86_400_000);
-  if (days.length < distinct.length) return true;
-  return Math.max(...days) - Math.min(...days) > 7;
-}
-
 function ScorePill({ label, value, href, hint }: { label: string; value: string; href?: string | null; hint?: string }) {
   const inner = (
     <>
@@ -380,18 +371,21 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
 
   // A book's author and a board game's designer are its credit, as a film's director is.
   const makers = item.type === 'book' ? m.authors : item.type === 'boardgame' ? m.designers : null;
+  // A film's director bare, no "dir." (Nils, Miro board, 2026-11-05).
   const credit = makers?.length ? `by ${makers.slice(0, 2).join(', ')}`
-    : m.director ? `${item.type === 'show' ? 'by' : 'dir.'} ${m.director}` : null;
+    : m.director ? (item.type === 'show' ? `by ${m.director}` : m.director) : null;
+  const released = longDate(m.releaseDate);
+  const upcoming = !!m.releaseDate && m.releaseDate.slice(0, 10) > todayIso();
+  // The one release date on the page, in full and for the country in Settings
+  // (`m.releaseDate` is already the region's). It replaced the year here and the
+  // "Released … (DE)" line with its per-source list below (Nils, 2026-11-05).
   const metaParts = [
-    m.releaseDate ? m.releaseDate.slice(0, 4) : 'TBA',
-    // "/ep" as in the Runtime fact below: without it a show's header read as
-    // the length of the whole show.
+    released ?? (m.releaseDate ? m.releaseDate.slice(0, 4) : 'TBA'),
+    item.type === 'show' && m.seasonCount ? `${m.seasonCount} season${m.seasonCount > 1 ? 's' : ''}` : null,
+    // "/ep": without it a show's header read as the length of the whole show.
     m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null,
     credit,
   ].filter((p): p is string => !!p);
-
-  const released = longDate(m.releaseDate);
-  const upcoming = !!m.releaseDate && m.releaseDate.slice(0, 10) > todayIso();
   const watchable = item.type === 'movie' || item.type === 'show';
   const groups = tagGroups(m.tags, m.keywords ?? [], taxonomy);
   const gameModes = m.gameModes ?? [];
@@ -439,28 +433,6 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           {metaParts.length ? <T variant="meta">{metaParts.join(' · ')}</T> : null}
         </View>
 
-        {/* The release date, said in full. The hero's line only has room for the year. */}
-        {released ? (
-          <T variant="caption" style={upcoming ? { color: color.accent } : undefined}>
-            {upcoming ? `Out ${released}` : `Released ${released}`}
-            {item.region !== 'US' && item.type === 'movie' ? ` (${item.region})` : ''}
-          </T>
-        ) : null}
-
-        {/* Per-source dates, only when the sources disagree by more than a week:
-            TMDB and Trakt a day apart (15 and 16 Jul 2010) is a time zone, not news (2026-10-23). */}
-        {datesDisagree(m.dates) ? (
-          <View style={styles.dateBlock}>
-            {m.dates.map((d) => (
-              <View key={d.source} style={styles.dateRow}>
-                <BrandGlyph source={d.source} size={12} />
-                <T variant="caption" style={styles.dateSource}>{SOURCE_LABEL[d.source] ?? d.source}</T>
-                <T variant="meta" style={{ color: color.textPrimary }}>{longDate(d.date)}</T>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
         {ratings.length || m.steamReviewLabel ? (
           <View style={styles.pills}>
             {ratings.map((r) => {
@@ -494,13 +466,12 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="Publisher" value={m.publisher && m.publisher !== m.developer ? m.publisher : null} linkTo="studio" />
           <Fact label="Network" value={m.network} linkTo="studio" />
           <Fact label="Rated" value={m.certification.length ? ratedInOrder(m.certification, item.region).join(' · ') : null} />
-          <Fact label="Runtime" value={m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null} />
-          <Fact label="Status" value={m.status} />
+          {/* No Runtime: the header says it. Status only when it says more than the date does ("Ended", "In production"). */}
+          <Fact label="Status" value={m.status && !/^released$/i.test(m.status) ? m.status : null} />
           <Fact
             label="Episodes"
-            value={item.type === 'show' && (m.seasonCount || m.episodeCount)
-              ? [m.seasonCount ? `${m.seasonCount} season${m.seasonCount > 1 ? 's' : ''}` : null, m.episodeCount ? `${m.episodeCount} eps` : null].filter(Boolean).join(' · ')
-              : null}
+            // The season count is in the header since 2026-11-05.
+            value={item.type === 'show' && m.episodeCount ? String(m.episodeCount) : null}
           />
           <Fact
             label="Next episode"
@@ -736,9 +707,6 @@ const styles = StyleSheet.create({
   // The band below, with more air: 32 between sections.
   lower: { paddingHorizontal: GUTTER, marginTop: 40, gap: 32 },
 
-  dateBlock: { gap: space.xs, marginTop: -space.md },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  dateSource: { width: 72 },
 
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pill: {

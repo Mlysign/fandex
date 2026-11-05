@@ -46,7 +46,7 @@ import { color, radius, type } from '~/theme';
 // the grid opens on with nothing typed. A search has no use for it: typing
 // sorts by Popularity until another sort is chosen.
 type Sort = 'picks' | 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
-const SORTS: [Sort, string][] = [['picks', 'Picks'], ['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
+const SORTS: [Sort, string][] = [['fandexScore', 'Fandex Score'], ['picks', 'Picks'], ['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating']];
 /** Away from Search this long, and Picks deals a new hand on the way back. Back from a title is quicker than this. */
 const PICKS_AWAY_MS = 10 * 60 * 1000;
 const newSeed = () => Math.floor(Math.random() * 2 ** 32);

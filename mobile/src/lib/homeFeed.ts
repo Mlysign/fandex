@@ -93,7 +93,7 @@ async function trendingPool(region: string): Promise<FeedCard[] | null> {
     settle(api.browseShelf('books', region).then((r) => r.results.filter((b) => b.posterUrl))),
     settle(boardgamesOn().then((on) => (on ? api.browseShelf('boardgames').then((r) => r.results.filter((b) => b.posterUrl)) : []))),
   ]);
-  const lists: { source: string; sourceId: string; type: CardItem['type']; title: string; releaseDate: string | null; posterUrl: string | null; votes: number; score?: number | null; rating?: number | null }[][] =
+  const lists: { source: string; sourceId: string; type: CardItem['type']; title: string; releaseDate: string | null; posterUrl: string | null; votes: number; score?: number | null; rating?: number | null; genres?: string[] }[][] =
     [[...films1, ...films2], shows, games, books, boardgames];
   if (lists.every((l) => !l.length)) return null;
   const out: FeedCard[] = [];
@@ -107,7 +107,7 @@ async function trendingPool(region: string): Promise<FeedCard[] | null> {
       seen.add(key);
       out.push({
         key, id: null, source: c.source, sourceId: c.sourceId, type: c.type, title: c.title,
-        releaseDate: c.releaseDate, posterUrl: c.posterUrl, genres: [],
+        releaseDate: c.releaseDate, posterUrl: c.posterUrl, genres: c.genres ?? [],
         communityScore: c.score ?? c.rating ?? null, communityVotes: c.votes,
       });
     }

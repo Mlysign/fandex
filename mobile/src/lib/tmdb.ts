@@ -5,6 +5,7 @@
 // one goes through the Worker's /v1/resolve, which is what turns a provider id
 // into a Fandex item.
 
+import { tmdbGenreNames } from '@/lib/tmdbGenres';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 import type { MediaType } from '~/lib/api';
 
@@ -164,7 +165,7 @@ export async function tmdbUpcoming(type: 'movie' | 'show', page: number, region:
  * "Popular right now" (src/lib/homeRails.ts, trendingPool). `score` is the
  * crowd's, 0 to 100.
  */
-export async function tmdbTrending(type: 'movie' | 'show', page: number, signal?: AbortSignal): Promise<(ProviderCard & { score: number | null })[]> {
+export async function tmdbTrending(type: 'movie' | 'show', page: number, signal?: AbortSignal): Promise<(ProviderCard & { score: number | null; genres: string[] })[]> {
   if (!tmdbConfigured()) return [];
   const res = await fetch(`${BASE}/trending/${type === 'movie' ? 'movie' : 'tv'}/week?api_key=${TMDB_API_KEY}&page=${page}`, { signal });
   if (!res.ok) throw new Error(`TMDB trending answered ${res.status}`);
@@ -180,6 +181,8 @@ export async function tmdbTrending(type: 'movie' | 'show', page: number, signal?
       posterUrl: `https://image.tmdb.org/t/p/w342${r.poster_path}`,
       votes: typeof r.vote_count === 'number' ? r.vote_count : 0,
       score: typeof r.vote_average === 'number' && r.vote_average > 0 ? Math.round(r.vote_average * 10) : null,
+      // A trending title the device does not hold is scored from these (Home, lib/useHomeRails.ts).
+      genres: tmdbGenreNames(Array.isArray(r.genre_ids) ? r.genre_ids : undefined, type),
     }));
 }
 

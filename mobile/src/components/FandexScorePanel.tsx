@@ -22,7 +22,7 @@ import { FACET_HEX, facetClassOf } from '@/lib/facetPalette';
 import { bandColor, Sheet } from '~/components/kit';
 import { facetId, type FandexScore, type FollowMode, type ScoreReason } from '~/lib/fandexScore';
 import type { MediumCalibration } from '~/lib/scoreCalibration';
-import { axisRows, calibrationLine, cappedRows, centreSentence, mediumPlural, PULL_SHOWN, pullLine, pullSentence, reasonHref, rungLine, scoreSentence, signed, tasteSentence } from '~/lib/scoreReasons';
+import { axisRows, calibrationLine, cappedRows, centreSentence, mediumPlural, PULL_SHOWN, pullLine, pullSentence, reasonHref, rungLine, signed, tasteSentence } from '~/lib/scoreReasons';
 import { color, font, radius, type } from '~/theme';
 
 // The site's ROLE_LABELS (src/lib/constants.ts). Franchise is singular on
@@ -138,14 +138,10 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
   return (
     <View style={styles.panel}>
       <View style={styles.row}>
+        {/* The label, the number and "Why?", nothing else (Nils, Miro board, 2026-11-05). The sentences live in the Why sheet. */}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[type.eyebrow, { color: color.accent }]}>{fandex.leftOut ? 'Your Fandex Score, without your rating' : 'Your Fandex Score'}</Text>
-          <View style={styles.numberLine}>
-            <Text accessibilityLabel={`Your Fandex Score ${shown}`} style={[styles.number, { color: tone }]}>{shown}</Text>
-            <Text style={[styles.line, { flex: 1, minWidth: 0, marginTop: 0 }]}>{scoreSentence(fandex, mediaType)}</Text>
-          </View>
-          <Text style={[styles.small, { marginTop: 6 }]}>{centreSentence(fandex.center, mediaType)}</Text>
-          {pull ? <Text style={styles.small}>{pull}</Text> : null}
+          <Text style={[type.eyebrow, { color: color.accent }]}>Your Fandex Score</Text>
+          <Text accessibilityLabel={`Your Fandex Score ${shown}`} style={[styles.number, { color: tone }]}>{shown}</Text>
         </View>
         {fandex.reasons.length ? (
           // The one control on the panel: the number and the sentences are not buttons.
@@ -215,8 +211,7 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 const styles = StyleSheet.create({
   panel: { borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surfaceElevated },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
-  numberLine: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 },
-  number: { fontFamily: font.serif, fontSize: 36, lineHeight: 40, fontVariant: ['tabular-nums'] },
+  number: { fontFamily: font.serif, fontSize: 36, lineHeight: 40, marginTop: 2, fontVariant: ['tabular-nums'] },
   line: { fontFamily: font.sansBold, fontSize: 12, lineHeight: 16, color: color.textPrimary, marginTop: 4 },
   why: { paddingHorizontal: 8, paddingVertical: 4, marginRight: -4, borderRadius: radius.sm },
   whyText: { fontFamily: font.sans, fontSize: 12, lineHeight: 16, color: color.textSecondary },

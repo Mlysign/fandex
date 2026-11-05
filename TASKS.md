@@ -38,13 +38,25 @@ Five items. Everything else in this file is work I can do without him, and every
 - **Deploy the Hardcover walk and watch its first day** (2026-11-02, branch `ccr-dc16fb2a-o3p6tz`): `npx wrangler deploy`, no migration. Then `wrangler tail` for `hardcover_walk_step`: `hardcover_isbn_query_refused` in the log means the unprobed `editions` ISBN query's shape is wrong (books still link through the search, one request dearer). After a day, check Dune Messiah shows Dark, Reflective and Tense, and publish the site. → `docs/worker.md`
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Due again once the Hardcover walk is through: every book gains voted tags. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
 
+## UI slim-down from the Miro board (Nils's notes, 2026-11-05) 🔵
+
+His 39 stickies on the board (→ [[ui-review-miro-board]]), numbered as in the list he saw.
+
+- ✅ **Done in 0.3.31 (2026-11-05):** 1 to 13, 22, 27, 30, 31. A Home card the device does not hold is now scored by its genres (TMDB trending dropped them); a card with no genres and no catalog row still shows the crowd's rating. Status stays on the table when it is not "Released" ("Ended"). Fandex Score is first in all three sort menus; each screen's default is unchanged.
+- **Title page:** (14) IGDB and IGDB critics in one chip; (15) developer, director, studio as chips so they read as links; (16) a long description clamps with "Read more"; (17) Language: original plus whether a dub in your language exists (research first: TMDB may not say).
+- **Why sheet:** (18) drop the intro and the "How this works" / "How right it has been" blocks, link a new "How the score works" page instead; (19) rows drop "core"/"detail", the "you rate it…" line shorter and dimmer than the tag, genre and people chips in different colours.
+- **Person page:** (20) space between the yellow role line and the photo; (21) the "your average · 12 rated" tile centred, no wrap.
+- **Insights:** (23) overview tiles in one compact row; (24) no media-type colour on a chart; (25) type icons on distribution by type; (26) taste by era as a horizontal rail, labels on one line; (28) tag-ratings controls styled like the grid's filter and sort; (29) facet boxes show 4 rows, each with its score impact and sorted by it, bars aligned, "+N more" opens a sheet like Why.
+
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
 Parked, not started. Each needs a design talk with Nils before any code.
 
 - **A proper profile page, with following.** Users can follow each other and open each other's profiles. Clashes with a standing call: the You tab is lighter than the old site's profile page on purpose ([docs/decisions.md](docs/decisions.md), "The You tab"), so settle where a profile lives before building. A public profile also needs a privacy setting and an erasure path (→ [[account-erasure-and-export]]).
 - **A notification when a wishlisted title is released.** The app has no push today; Expo push needs an FCM setup and a nightly Worker job that finds wishlist rows whose release date is today in the user's country (→ [[region-country-setting]]).
-- **A "what now?" page**: help pick something to watch, binge, play or read right now. Overlaps Search's Picks (`docs/app.md`, Search row); decide whether this grows Picks or is its own screen, and whether it draws from the library, the wishlist or the whole catalog. Pull (what you seek out) and Follow come back here: they are hidden from the app since 2026-11-05 behind `PULL_SHOWN` (`mobile/src/lib/scoreReasons.ts`).
+- **A "what now?" page**: help pick something to watch, binge, play or read right now. Overlaps Search's Picks (`docs/app.md`, Search row); decide whether this grows Picks or is its own screen, and whether it draws from the library, the wishlist or the whole catalog. Pull (what you seek out) and Follow come back here: they are hidden from the app since 2026-11-05 behind `PULL_SHOWN` (`mobile/src/lib/scoreReasons.ts`). When they do, Follow and Not interested become icons at the top right, and Not interested is the same button as a title's "Hide from suggestions" (Nils, Miro board).
+- **A series' order, and main entry vs spin-off**, on the "More from…" rail of a book, film or game (Nils, 2026-11-05). Needs a data source per medium.
+- **A customisable Insights page with showcases**, the way Steam profiles have them: graphs, favourite titles (Nils, 2026-11-05). Overlaps the profile page above.
 
 ## H3: Monetization 🔵 ads-first, waiting on traffic
 

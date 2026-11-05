@@ -1,10 +1,11 @@
 // You. The site's profile page (src/app/profile/ProfilePageClient.tsx): who you
-// are, three counts, the rows that lead to your pages, Sign out, and a rail of
-// recommendations.
+// are, three counts, the rows that lead to your pages and Sign out.
 //
 // Lighter than the site's since 2026-10-17 (Nils): no "Recently added" and
 // "Coming up" lists and no Wishlist or Your ratings rows, which the tabs
 // already are; an Import row instead, which had no way in but the address.
+// No "Recommended for you" rail since 2026-11-05 (Nils: "bad fit in this page"):
+// Home has it.
 //
 // Signed out it is where you sign in.
 
@@ -13,7 +14,6 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { ChevronRight, Heart, Settings as SettingsIcon, TrendingUp, Upload } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CardRail } from '~/components/cards';
 import { Avatar, Button } from '~/components/kit';
 import { LegalLinks } from '~/components/LegalLinks';
 import { SignIn } from '~/components/SignIn';
@@ -23,8 +23,6 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { SUPPORT_URL } from '~/lib/config';
 import { setReturnTo } from '~/lib/returnTo';
-import { useHomeRails } from '~/lib/useHomeRails';
-import { useTypeFilter } from '~/lib/typeFilter';
 import { color, radius, type } from '~/theme';
 
 interface Stats { tracked: number; rated: number; wishlist: number }
@@ -35,8 +33,6 @@ export default function ProfileScreen() {
   const db = useSQLiteContext();
   const auth = useAuth();
   const catalog = useCatalogSync();
-  const types = useTypeFilter();
-  const rails = useHomeRails();
   const [stats, setStats] = useState<Stats | null>(null);
 
   const signedIn = auth.status === 'signedIn';
@@ -96,7 +92,6 @@ export default function ProfileScreen() {
   ];
   // The site's donations row (H3.3): last, after what people came here to do, and only when a page is configured.
   if (SUPPORT_URL) entries.push({ href: SUPPORT_URL, label: 'Support Fandex', hint: 'Help cover the running costs', Icon: Heart, external: true });
-  const recommended = rails.recommendation ? rails.withoutHidden(rails.recommendation).filter((c) => types.isVisible(c.type)).slice(0, 8) : [];
 
   return (
     <Screen>
@@ -141,8 +136,6 @@ export default function ProfileScreen() {
         </View>
 
         <Button label="Sign out" variant="secondary" size="lg" onPress={() => void auth.signOut()} />
-
-        {recommended.length ? <CardRail title="Recommended for you" forYou seeAllHref="/discover" items={recommended} /> : null}
 
         <View style={styles.footer}><LegalLinks /></View>
       </ScrollView>

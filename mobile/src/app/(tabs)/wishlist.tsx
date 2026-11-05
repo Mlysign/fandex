@@ -41,7 +41,7 @@ const isTab = (v: unknown): v is Tab => v === 'wishlist' || v === 'progress' || 
 // The site's sort lists (src/components/discovery/types.ts), in its order and words.
 type Sort = 'addedAt' | 'releaseDate' | 'popularity' | 'rating' | 'fandexScore';
 const LIBRARY_SORTS: [Sort, string][] = [
-  ['addedAt', 'Recently added'], ['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score'],
+  ['fandexScore', 'Fandex Score'], ['addedAt', 'Recently added'], ['releaseDate', 'Release date'], ['popularity', 'Popularity'], ['rating', 'Rating'],
 ];
 type ProgressSort = 'upNext' | 'releaseDate' | 'popularity' | 'rating';
 const PROGRESS_SORTS: [ProgressSort, string][] = [
@@ -51,7 +51,7 @@ const PROGRESS_SORTS: [ProgressSort, string][] = [
 const PLACEHOLDER: Record<Tab, string> = {
   wishlist: 'Search your wishlist…', progress: 'Search shows you’re watching…', library: 'Search your library…',
 };
-const NOUN: Record<Tab, string> = { wishlist: 'saved', progress: 'episodes', library: 'titles' };
+const NOUN: Record<Tab, string> = { wishlist: 'saved', progress: 'shows', library: 'titles' };
 
 /** Cut a date-sorted list into months. Titles with no date go last, under their own heading. */
 /** The crowd's rating in whole-star bands, high to low, as the list is already sorted; titles without one last. */
@@ -120,11 +120,19 @@ export default function MyStuffScreen() {
     : <Shelf key={tab} relation={tab} tabs={tabs} query={query} setQuery={setQuery} />;
 }
 
-function SyncButton() {
+/**
+ * Busy while your rows sync, and while the catalog copy is still filling in titles
+ * the shelf holds (`filling`): a spinner on the button, which replaced the
+ * "One of your titles is still loading." line (Nils, Miro board, 2026-11-05). Only
+ * while the copy is actually syncing: a title missing for good must not leave
+ * Sync disabled for good.
+ */
+function SyncButton({ filling = false }: { filling?: boolean }) {
   const auth = useAuth();
+  const catalog = useCatalogSync();
   const trakt = auth.profile?.identities.some((i) => i.provider === 'trakt');
-  const busy = auth.rowsSyncing || auth.traktSync.running;
-  return <Button label={busy ? 'Syncing…' : 'Sync'} disabled={busy} onPress={trakt ? auth.syncTraktNow : auth.syncRows} />;
+  const busy = auth.rowsSyncing || auth.traktSync.running || (filling && catalog.state === 'syncing');
+  return <Button label="Sync" loading={busy} style={{ minWidth: 72 }} onPress={trakt ? auth.syncTraktNow : auth.syncRows} />;
 }
 
 // ── Wishlist and Library ─────────────────────────────────────────────────────
@@ -204,7 +212,7 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
         search={{ value: query, onChange: setQuery, placeholder: PLACEHOLDER[relation] }}
         count={rows ? { noun: NOUN[relation], n: cards.length } : null}
         sort={{ value: sort, options: LIBRARY_SORTS, onChange: setSort }}
-        actions={<SyncButton />}
+        actions={<SyncButton filling={missing > 0} />}
         trailing={<FiltersButton active={countActive(filters)} onPress={() => setSheet(true)} />}
       />
       <FilterSheet open={sheet} onClose={() => setSheet(false)} filters={filters} onChange={setFilters} resultCount={cards.length} noun="titles" signedIn items={allCards} onEditPlatforms={() => { setSheet(false); router.push('/settings' as never); }} />
@@ -213,10 +221,9 @@ function Shelf({ relation, tabs, query, setQuery }: { relation: 'wishlist' | 'li
         sections={sections}
         empty={empty}
         header={
-          auth.rowsError || missing > 0 ? (
+          auth.rowsError ? (
             <View style={{ gap: 4, marginBottom: 12 }}>
-              {auth.rowsError ? <Text style={[type.caption, { color: color.warning }]}>{auth.rowsError}</Text> : null}
-              {missing > 0 ? <Text style={type.caption}>{missing === 1 ? 'One of your titles is' : `${missing.toLocaleString('en')} of your titles are`} still loading.</Text> : null}
+              <Text style={[type.caption, { color: color.warning }]}>{auth.rowsError}</Text>
             </View>
           ) : null
         }

@@ -10,7 +10,7 @@ import { todayIso } from '~/lib/dates';
 import { catalogCandidates } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
 import { jsHeapMB } from '~/lib/jsHeap';
-import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type HomeFeed } from '~/lib/homeFeed';
+import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
 import { useScores, type RowScore } from '~/lib/ScoreProvider';
 import { useTypeFilter } from '~/lib/typeFilter';
 
@@ -42,7 +42,17 @@ export function useHomeRails() {
   const { shown } = useTypeFilter();
   const typesKey = shown.join(',');
   const types = useMemo(() => typesKey.split(',').filter(Boolean), [typesKey]);
-  const upcoming = useMemo(() => (feed ? upcomingRail(feed.candidates, types) : null), [feed, types]);
+  // A card the device holds is scored from its full facets (the card's own row
+  // score wins, components/cards.tsx). One it does not hold carries only its
+  // genres, the same fallback Recommended uses: without it the card showed the
+  // crowd's "7.6/10" where a Fandex Score belongs (Nils, Miro board, 2026-11-05).
+  const byGenre = useCallback(<T extends FeedCard>(items: T[]): T[] => items.map((c) => {
+    if (c.match || !c.genres.length) return c;
+    const fx = score(c.id ?? c.key, genreFacets(c.genres), c.type);
+    return fx ? { ...c, match: { score: fx.score, band: fx.band } } : c;
+  }), [score]);
+  const upcoming = useMemo(() => (feed ? byGenre(upcomingRail(feed.candidates, types)) : null), [feed, types, byGenre]);
+  const trending = useMemo(() => (feed ? byGenre(feed.trending) : null), [feed, byGenre]);
 
   // "Recommended for you" chooses from the whole catalog copy, not only from
   // the calendar's next months: those alone, scored by genre, left one green
@@ -108,6 +118,8 @@ export function useHomeRails() {
     feed, failed, load, recommendation, withoutHidden, signedIn,
     /** Today's Upcoming rail for the types on screen; null until the feed is in. */
     upcoming,
+    /** Popular right now, each card scored by genre when the device does not hold it; null until the feed is in. */
+    trending,
     /** Signed in, and the personal rail cannot be drawn yet. */
     personalPending: signedIn && (!feed || !scores.ready || (center != null && !pool)) && !failed,
   };

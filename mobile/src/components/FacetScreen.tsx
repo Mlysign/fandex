@@ -56,7 +56,7 @@ import { color, font, radius, type, TYPE_PLURAL } from '~/theme';
 export type { FacetKind } from '~/components/FacetHeader';
 
 type Sort = 'popularity' | 'releaseDate' | 'rating' | 'fandexScore';
-const SORTS: [Sort, string][] = [['popularity', 'Popularity'], ['releaseDate', 'Release date'], ['rating', 'Rating'], ['fandexScore', 'Fandex Score']];
+const SORTS: [Sort, string][] = [['fandexScore', 'Fandex Score'], ['popularity', 'Popularity'], ['releaseDate', 'Release date'], ['rating', 'Rating']];
 
 interface StoredFacet { kind: string; key: string; label: string; role?: string; category?: string; series?: string[] }
 
@@ -347,17 +347,9 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     ];
   }, [cards, found, stateOf, auth.status]);
 
-  // The site's like-for-like line (PublicFacetView, SM22): over the titles you
-  // rated, your average against the crowd's average for those same titles. The
-  // same titles as the tile above.
-  const delta = useMemo(() => {
-    const pairs = (found?.cards ?? [])
-      .map((c) => ({ mine: stateOf(c.id).rating, crowd: c.communityScore }))
-      .filter((p): p is { mine: number; crowd: number } => p.mine != null && p.mine > 0 && p.crowd != null);
-    if (!pairs.length) return null;
-    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-    return { n: pairs.length, d: avg(pairs.map((p) => p.mine)) - avg(pairs.map((p) => p.crowd / 10)) };
-  }, [found, stateOf]);
+  // No "you score X 1.4 lower than the crowd" line any more (Nils, Miro board, 2026-11-05):
+  // it compared the crowd on YOUR titles, the tiles compare it on all of them,
+  // and side by side the two read as a contradiction.
 
   // A tag's place in the taxonomy (the site's Q18): its category, and the
   // spellings bundled into it ("Also known as"). A franchise lists its bundled names the same way.
@@ -423,12 +415,6 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
               {tagCategory ? <Text style={[type.caption, styles.categoryChip]}>{tagCategory}</Text> : null}
               {akas.length ? <Text style={[type.caption, { flexShrink: 1 }]}>Also known as: {akas.join(', ')}</Text> : null}
             </View>
-          ) : null}
-          {delta ? (
-            <Text style={[type.bodySm, { marginTop: 12 }]}>
-              Across the {delta.n} you&apos;ve rated, you score {name}{' '}
-              {Math.abs(delta.d) < 0.05 ? 'the same as the crowd' : `${Math.abs(delta.d).toFixed(1)} ${delta.d > 0 ? 'higher' : 'lower'} than the crowd`}
-            </Text>
           ) : null}
           {impacts.map((im) => {
             const pull = pullLine(kind, im, name);
