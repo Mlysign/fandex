@@ -63,7 +63,7 @@ export function facetColorVar(f: FacetLike): string {
  * canvas. Must stay in sync with globals.css's dark `--color-facet-*` block.
  */
 export const FACET_HEX: Record<FacetClass, string> = {
-  person: "#E0B15C",
+  person: "#D4A0A7", // #E0B15C until 2026-11-05: too close to genre gold (Nils, Miro board).
   genre: "#C8A24B",
   tag: "#AC9A72",
   company: "#C08152",

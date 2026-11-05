@@ -121,9 +121,12 @@ export function pullSentence(r: Pick<ScoreReason, 'kind' | 'times' | 'titles' | 
   return `${start} pick ${who} ${timesWord(1 / times)} less often than average${count}`;
 }
 
-/** A taste row in one sentence: "you rate it 7.6 over 41 titles". */
+/**
+ * A taste row's line: "7.6 avg · 41 titles", under the "What you rate" heading.
+ * "you rate it 7.6 over 41 titles" until 2026-11-05 (Nils, Miro board: too long).
+ */
 export function tasteSentence(r: ScoreReason): string {
-  return `you rate ${r.kind === 'person' || r.kind === 'company' ? 'them' : 'it'} ${r.BA.toFixed(1)} over ${r.n} title${r.n === 1 ? '' : 's'}`;
+  return `${r.BA.toFixed(1)} avg · ${r.n} title${r.n === 1 ? '' : 's'}`;
 }
 
 /** Where a reason's chip leads, or null for one with no page of its own. A franchise has one since 2026-10-18. */

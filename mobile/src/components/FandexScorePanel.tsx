@@ -1,11 +1,9 @@
 // The item page's score panel. Since 2026-10-27 the score is the number again,
-// read as the rating you would probably give, times ten: "72", then "You'd
-// probably give this a 7, above your usual for films", your average for the
-// medium under it so the number has an anchor, and how often you pick this
-// kind of thing, which is said beside the number and is not in it. "Why?"
-// opens the sheet with every row behind it, so the arithmetic can be seen,
-// and ends with how right the number has been on your own ratings
-// (docs/fandex-score.md §7).
+// read as the rating you would probably give, times ten. Since 2026-11-05 the
+// panel is "Your Fandex Score", the number and "Why?" (Nils, Miro board). "Why?"
+// opens the sheet with every row behind it, so the arithmetic can be seen, and
+// a link to /score, which explains the score and says how right it has been on
+// your own ratings (docs/fandex-score.md §7).
 //
 // Five states:
 //   anon     → "Sign in to see your score." The whole panel is the button.
@@ -21,9 +19,11 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { FACET_HEX, facetClassOf } from '@/lib/facetPalette';
 import { bandColor, Sheet } from '~/components/kit';
 import { facetId, type FandexScore, type FollowMode, type ScoreReason } from '~/lib/fandexScore';
-import type { MediumCalibration } from '~/lib/scoreCalibration';
-import { axisRows, calibrationLine, cappedRows, centreSentence, mediumPlural, PULL_SHOWN, pullLine, pullSentence, reasonHref, rungLine, signed, tasteSentence } from '~/lib/scoreReasons';
+import { axisRows, cappedRows, PULL_SHOWN, pullLine, pullSentence, reasonHref, signed, tasteSentence } from '~/lib/scoreReasons';
 import { color, font, radius, type } from '~/theme';
+
+/** The page the sheet ends with a link to (app/(tabs)/score.tsx). */
+const HOW_IT_WORKS = '/score';
 
 // The site's ROLE_LABELS (src/lib/constants.ts). Franchise is singular on
 // purpose: a title belongs to one, so it reads as a row heading.
@@ -46,7 +46,7 @@ function Shell({ eyebrow, line, muted }: { eyebrow: string; line: string; muted?
 /** `settling`: signed in, and your library is still arriving on this device. */
 export type ScorePanelState = 'anon' | 'settling' | 'cold' | 'none' | 'scored';
 
-export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel, calibration, onSignIn, signInHref, onOpenFacet, follows, onFollow }: {
+export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel, onSignIn, signInHref, onOpenFacet, follows, onFollow }: {
   /** Where signing in happens, for a page that cannot run `onSignIn`. */
   signInHref?: string;
   state: ScorePanelState;
@@ -56,10 +56,8 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
   type?: string;
   /** A tag category's name, from the live taxonomy. */
   categoryLabel: (id: string | undefined) => string | null;
-  /** How right the score has been on your own ratings, for the sheet's last lines. Absent until the device has measured. */
-  calibration?: MediumCalibration | null;
   onSignIn?: () => void;
-  /** Follow a row's chip to its tag, person, studio or franchise page. */
+  /** Follow a row's chip to its tag, person, studio or franchise page, or the sheet's link to /score. */
   onOpenFacet?: (href: string) => void;
   /** What you follow or avoid, by facet id, so a row can say so. */
   follows?: ReadonlyMap<string, FollowMode>;
@@ -96,8 +94,6 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
   const pullRows = PULL_SHOWN ? axisRows(fandex.reasons, 'pull') : [];
   const tasteRows = axisRows(fandex.reasons, 'taste');
   const capped = cappedRows(fandex.reasons);
-  const honest = calibrationLine(calibration ?? null);
-  const rung = rungLine(calibration ?? null, fandex.score);
   const groupLabel = (r: ScoreReason) => (r.kind === 'tag' ? categoryLabel(r.category ?? 'other') ?? r.category ?? 'other' : ROLE_LABELS[r.role ?? ''] ?? 'Person');
 
   const row = (r: ScoreReason) => {
@@ -114,11 +110,11 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
               </Pressable>
             ) : <Text numberOfLines={1} style={[styles.small, styles.strong, { flexShrink: 1 }]}>{r.label}</Text>}
             <Text style={styles.group}>{groupLabel(r)}</Text>
-            {/* A tag's tier on this title (§3.9): a genre, theme or voted tag is core; an editor's keyword is detail, and counts half. */}
-            {r.kind === 'tag' && r.tier ? <Text style={styles.group}>{r.tier === 'keyword' ? 'detail' : 'core'}</Text> : null}
+            {/* No "core" / "detail" tier label since 2026-11-05 (Nils: "too much"). The tier still weighs the row (§3.9). */}
             {mode === 'avoid' ? <Text style={[styles.group, { color: color.scoreLow }]}>avoiding</Text> : null}
           </View>
-          <Text style={styles.small}>{r.axis === 'pull' ? pullSentence(r) : tasteSentence(r)}</Text>
+          {/* Quieter than the chip and its category: they say what, this says how much (Nils, Miro board). */}
+          <Text style={styles.sentence}>{r.axis === 'pull' ? pullSentence(r) : tasteSentence(r)}</Text>
         </View>
         {r.axis === 'pull' && onFollow ? (
           // The one thing a person sets by hand: a follow moves this row to the most anyone can seek out, and nothing else.
@@ -153,11 +149,8 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
 
       <Sheet open={open} onClose={() => setOpen(false)} title={`Why ${shown}?`}>
         <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={styles.breakdown}>
-          {/* The rows are measured against your average over EVERYTHING (§3.1, the medium offset), the score starts at the medium's; both are said, or a game's rows read as inconsistent with its centre. */}
-          <Text style={styles.small}>
-            {centreSentence(fandex.center, mediaType, fandex.leftOut)} The score starts there, and every counted row below moves it. A row compares what you gave the titles carrying it, in every medium, with your average over everything, {(fandex.usual / 10).toFixed(1)}.
-          </Text>
-
+          {/* No opening paragraph and no "How this works" or "How right it has been" at the end since 2026-11-05
+              (Nils, Miro board: "too much"). The rows, then a link to the page that explains them (/score). */}
           <View style={styles.groupBlock}>
             <View style={styles.groupHead}>
               <Text style={[styles.groupTitle, { color: color.scoreHigh }]}>What you rate</Text>
@@ -192,16 +185,12 @@ export function FandexScorePanel({ state, fandex, type: mediaType, categoryLabel
             </View>
           ) : null}
 
-          <Text style={[styles.small, styles.how]}>
-            <Text style={styles.strong}>How this works. </Text>
-            The number is what you would probably rate this, times ten. It starts from your average for {mediumPlural(mediaType)} and moves by what this title is made of: its setting and themes, its people, its studio and its franchise, each by how you rated the titles you have met it on. A facet you met once barely moves it; one you met forty times moves it fully. Only ratings you typed count, nobody else&apos;s.{PULL_SHOWN ? ' How often you pick this kind of thing is said beside the number and never moves it.' : ''} Tap any row to see the titles behind it.
-          </Text>
-          {honest || rung ? (
-            <Text style={styles.small}>
-              <Text style={styles.strong}>How right it has been. </Text>
-              {[honest, rung].filter(Boolean).join(' ')}
-            </Text>
-          ) : null}
+          <Pressable
+            {...(Platform.OS === 'web' && !onOpenFacet ? ({ href: HOW_IT_WORKS } as object) : null)}
+            onPress={onOpenFacet ? () => { setOpen(false); onOpenFacet(HOW_IT_WORKS); } : undefined}
+            accessibilityRole="link" hitSlop={8} style={({ pressed }) => [styles.how, pressed && { opacity: 0.6 }]}>
+            <Text style={[styles.small, { color: color.accent }]}>How the score works</Text>
+          </Pressable>
         </ScrollView>
       </Sheet>
     </View>
@@ -223,7 +212,8 @@ const styles = StyleSheet.create({
   groupTitle: { fontFamily: font.sansBold, fontSize: 10, lineHeight: 14, letterSpacing: 0.6, textTransform: 'uppercase' },
   reason: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   reasonHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  group: { fontFamily: font.sans, fontSize: 10, lineHeight: 14, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textMuted },
+  group: { fontFamily: font.sans, fontSize: 10, lineHeight: 14, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textSecondary },
+  sentence: { fontFamily: font.sans, fontSize: 11, lineHeight: 15, color: color.textMuted },
   chip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, maxWidth: '100%' },
   follow: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: color.border },
   followOn: { backgroundColor: color.accent, borderColor: color.accent },
@@ -231,5 +221,5 @@ const styles = StyleSheet.create({
   cappedNote: { fontFamily: font.sans, fontSize: 10, lineHeight: 14, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textSecondary },
   cappedWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   cappedChip: { fontFamily: font.sans, fontSize: 11, lineHeight: 14, color: color.textMuted, borderWidth: 1, borderColor: color.border, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  how: { paddingTop: 10, borderTopWidth: 1, borderTopColor: color.border, lineHeight: 17 },
+  how: { paddingTop: 10, borderTopWidth: 1, borderTopColor: color.border },
 });

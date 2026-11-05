@@ -343,7 +343,8 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
     return [
       { label: 'titles', value: String(all.length) },
       { label: 'crowd average', value: crowd.length ? (avg(crowd.map((c) => c.communityScore as number)) / 10).toFixed(1) : '-' },
-      ...(auth.status === 'signedIn' ? [{ label: mine.length ? `your average · ${mine.length} rated` : 'your average', value: mine.length ? avg(mine).toFixed(1) : '-' }] : []),
+      // Two centred lines on purpose: "your average · 12 rated" wrapped mid-phrase on a phone (Nils, Miro board, 2026-11-05).
+      ...(auth.status === 'signedIn' ? [{ label: mine.length ? `your average\n${mine.length} rated` : 'your average', value: mine.length ? avg(mine).toFixed(1) : '-' }] : []),
     ];
   }, [cards, found, stateOf, auth.status]);
 

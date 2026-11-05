@@ -50,7 +50,7 @@ export const color = {
   scrimChip: 'rgba(16,14,12,0.86)', // 0.62 until 2026-11-05: the type label read poorly over a bright poster (Nils, Miro board).
 
   // What a chip is about, the site's four facet colours (src/lib/facetPalette.ts).
-  facet: { person: '#E0B15C', genre: '#C8A24B', tag: '#AC9A72', company: '#C08152' },
+  facet: { person: '#D4A0A7', genre: '#C8A24B', tag: '#AC9A72', company: '#C08152' },
 
   // The media-type axis. Not brand colours: a type, not a provider.
   media: { game: '#4ade80', movie: '#f59e0b', show: '#a78bfa', book: '#38bdf8', boardgame: '#f472b6' } as Record<string, string>,

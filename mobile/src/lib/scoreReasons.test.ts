@@ -69,8 +69,8 @@ describe('the rows', () => {
     expect(cappedRows(rows).map((r) => r.label)).toEqual(['c']);
   });
   it('reads a row as one sentence with its count', () => {
-    expect(tasteSentence(reason('noir', 2, { BA: 7.64, n: 41 }))).toBe('you rate it 7.6 over 41 titles');
-    expect(tasteSentence(reason('Tim Burton', 2, { kind: 'person', role: 'director', BA: 7.5, n: 1 }))).toBe('you rate them 7.5 over 1 title');
+    expect(tasteSentence(reason('noir', 2, { BA: 7.64, n: 41 }))).toBe('7.6 avg · 41 titles');
+    expect(tasteSentence(reason('Tim Burton', 2, { kind: 'person', role: 'director', BA: 7.5, n: 1 }))).toBe('7.5 avg · 1 title');
   });
   it('says a pull row in Nils\'s words: how many times more or less often than average, and the titles behind it', () => {
     const pull = (over: Partial<ScoreReason>) => reason('anime', 3, { axis: 'pull', ...over });

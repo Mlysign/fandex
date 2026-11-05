@@ -36,6 +36,8 @@ import { color, font, radius, space, TYPE_LABEL } from '~/theme';
 
 /** The page gutter. The handoff's 20 px, wider than a list screen's 16. */
 const GUTTER = space.xl;
+/** Past this many characters a description is cut with "Read more": about six lines on a phone. */
+const DESCRIPTION_CLAMP_CHARS = 360;
 
 export const SOURCE_LABEL: Record<string, string> = {
   trakt: 'Trakt', tmdb: 'TMDB', igdb: 'IGDB', steam: 'Steam', rawg: 'RAWG', letterboxd: 'Letterboxd',
@@ -298,9 +300,12 @@ function Fact({ label, value, linkTo }: { label: string; value: string | null | 
             const key = linkTo === 'person' ? personKey(name) : linkTo === 'franchise' ? ipKey(name) : companyKey(name);
             // A franchise takes the tag's colour: the palette is four colours, on purpose.
             const tint = linkTo === 'person' ? color.facet.person : linkTo === 'franchise' ? color.facet.tag : color.facet.company;
+            // A chip, so it reads as something to tap (Nils, Miro board, 2026-11-05: coloured text alone "does not read like a link").
             return key ? (
               <FacetLink key={name} href={`/${linkTo}/${keyToSlug(key)}`}>
-                <T variant="body" style={[styles.factValue, { color: tint }]}>{name}</T>
+                <View style={[styles.factChip, { backgroundColor: `${tint}21`, borderColor: `${tint}55` }]}>
+                  <T variant="body" style={[styles.factChipText, { color: tint }]}>{name}</T>
+                </View>
               </FacetLink>
             ) : <T key={name} variant="body" style={styles.factValue}>{name}</T>;
           })}
@@ -394,6 +399,12 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
   const sources = [...new Set(m.dates.map((d) => d.source))];
   // RAWG was retired in 2026-09: its stored number is frozen, so it is not shown as a live rating.
   const ratings = m.communityRatings.filter((r) => r.source !== 'rawg');
+  const igdbPlayers = ratings.find((r) => r.source === 'igdb');
+  const igdbCritics = ratings.find((r) => r.source === 'igdb-critics');
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const description = m.description ? plainDescription(m.description) : null;
+  // About six lines on a phone. Measured text would be exact, but a static page has no layout to measure.
+  const longDescription = !!description && description.length > DESCRIPTION_CLAMP_CHARS;
 
   // The hero runs under the status bar on purpose. Once it has scrolled away the
   // page's text would run under the clock too (seen on the phone, 2026-10-05), so
@@ -435,9 +446,12 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
 
         {ratings.length || m.steamReviewLabel ? (
           <View style={styles.pills}>
-            {ratings.map((r) => {
+            {ratings.filter((r) => !(r.source === 'igdb-critics' && igdbPlayers)).map((r) => {
               // Steam's percentage and its words are one fact, so one pill: "84% · Very Positive".
-              const value = r.source === 'steam' && m.steamReviewLabel ? `${scoreText(r)} · ${m.steamReviewLabel}` : scoreText(r);
+              // IGDB's players and its critics are one source, so one pill too: "89 · critics 94" (Nils, Miro board, 2026-11-05).
+              const value = r.source === 'steam' && m.steamReviewLabel ? `${scoreText(r)} · ${m.steamReviewLabel}`
+                : r.source === 'igdb' && igdbCritics ? `${scoreText(r)} · critics ${scoreText(igdbCritics)}`
+                : scoreText(r);
               return (
                 <ScorePill
                   key={r.source}
@@ -456,7 +470,17 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
 
         {m.tagline ? <Text {...part('prose')} style={styles.tagline}>{m.tagline}</Text> : null}
         {/* Cleaned here too: a stored description predates the normalizer's clean-up until its title is derived again. */}
-        {m.description ? <Text {...part('prose')} style={styles.description}>{plainDescription(m.description)}</Text> : null}
+        {/* A long one is cut at six lines with "Read more" (Nils, Miro board, 2026-11-05). The whole text stays in the page, for a crawler. */}
+        {description ? (
+          <View {...part('prose')}>
+            <Text numberOfLines={longDescription && !descriptionOpen ? 6 : undefined} style={styles.description}>{description}</Text>
+            {longDescription ? (
+              <Pressable onPress={() => setDescriptionOpen((v) => !v)} accessibilityRole="button" hitSlop={8} style={({ pressed }) => [styles.readMore, pressed && { opacity: 0.6 }]}>
+                <T variant="label" style={{ color: color.accent }}>{descriptionOpen ? 'Read less' : 'Read more'}</T>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         <View>
           <Fact label={item.type === 'show' ? 'Creator' : 'Director'} value={m.director} linkTo="person" />
@@ -487,7 +511,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
           <Fact label="ISBN" value={m.isbn ?? null} />
           {/* Leads to the franchise's page (2026-10-18), named without the provider's "Collection". */}
           <Fact label={item.type === 'game' ? 'Franchise' : item.type === 'book' || item.type === 'boardgame' ? 'Series' : 'Collection'} value={m.collection ? ipDisplayLabel(m.collection) : null} linkTo="franchise" />
-          <Fact label="Language" value={m.originalLanguage} />
+          {/* Whether a dub in your language exists is not shown: no provider we use says (TMDB's translations are titles and synopses, not audio). */}
+          <Fact label="Original language" value={m.originalLanguage} />
           <Fact label="Country" value={m.country} />
           <Fact label="Avg playtime" value={m.playtimeHours ? `${m.playtimeHours}h` : null} />
           <Fact label="Time to beat" value={m.timeToBeat?.normally != null ? `${m.timeToBeat.normally}h` : null} />
@@ -718,14 +743,17 @@ const styles = StyleSheet.create({
 
   tagline: { fontFamily: font.sans, fontStyle: 'italic', fontSize: 16, lineHeight: 23, color: color.textSecondary },
   description: { fontFamily: font.sans, fontSize: 14, lineHeight: 23, color: color.textSecondary },
+  readMore: { alignSelf: 'flex-start', marginTop: 6 },
 
-  factLinks: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 10 },
+  factLinks: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
   poweredBy: { alignSelf: 'flex-start', marginTop: 12, paddingVertical: 4 },
   fact: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.lg,
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: color.border,
   },
   factValue: { flexShrink: 1, textAlign: 'right', fontSize: 13, lineHeight: 19 },
+  factChip: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1 },
+  factChipText: { fontSize: 13, lineHeight: 19 },
 
   sectionHeading: { color: color.accent, marginBottom: space.md },
   steamTrailer: {

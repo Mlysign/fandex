@@ -133,7 +133,7 @@ export function StatStrip({ cells }: { cells: { label: string; value: string }[]
       {cells.map((c, i) => (
         <View key={c.label} style={[styles.statCell, i > 0 && { borderLeftWidth: 1, borderLeftColor: color.border }]}>
           <Text style={[type.serifLg, { fontVariant: ['tabular-nums'] }]}>{c.value}</Text>
-          <Text style={[type.meta, { marginTop: 6 }]}>{c.label}</Text>
+          <Text style={[type.meta, { marginTop: 6, textAlign: 'center' }]}>{c.label}</Text>
         </View>
       ))}
     </Panel>

@@ -31,22 +31,14 @@ Five items. Everything else in this file is work I can do without him, and every
 
 ## Mine, open
 
+- **Check Insights on the phone** (0.3.32, 2026-11-05): the taste impacts in the facet boxes are worked out in slices, measured only in Node (about 0.5 ms a facet); on Nils's profile watch how long "Weighing…" shows. If it is seconds, give `ScoreProvider` a per-facet impact lookup instead of `impactsFor` per row (`lib/insightsImpacts.ts`).
+
 - **The trailer plays in the app** (on the phone in 0.3.29, 2026-11-05, not tried yet): the trailer plays, fullscreen works (letterboxed, the app is portrait-locked), the sound stops on going back. Error 153 on the player means the referrer fix in `Trailer.tsx` did not take.
 - **Check 0.3.29's merged work on the phone** (installed 2026-11-05): a facet page names a provider that failed and offers a retry (PR #58), and books follow the country's languages with one card per book (PR #59).
 - **Check Search's Picks signed in** (site 2026-11-02, APK 0.3.26): a different hand after ten minutes away, none from the library, and how long the first hand takes, since it scores the whole catalog copy. Signed out on fandex.org it opened on Picks with no console error. → `docs/app.md` (Search row)
 
 - **Deploy the Hardcover walk and watch its first day** (2026-11-02, branch `ccr-dc16fb2a-o3p6tz`): `npx wrangler deploy`, no migration. Then `wrangler tail` for `hardcover_walk_step`: `hardcover_isbn_query_refused` in the log means the unprobed `editions` ISBN query's shape is wrong (books still link through the search, one request dearer). After a day, check Dune Messiah shows Dark, Reflective and Tense, and publish the site. → `docs/worker.md`
 - **Refit the gains whenever the pool or the weights change**: `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Due again once the Hardcover walk is through: every book gains voted tags. Last done 2026-10-29 (`mappingConstantUp` 1.3). The four cron walks of 2026-10-23 to 26 and the baseline test are done and archived (grep `2026-10-29`).
-
-## UI slim-down from the Miro board (Nils's notes, 2026-11-05) 🔵
-
-His 39 stickies on the board (→ [[ui-review-miro-board]]), numbered as in the list he saw.
-
-- ✅ **Done in 0.3.31 (2026-11-05):** 1 to 13, 22, 27, 30, 31. A Home card the device does not hold is now scored by its genres (TMDB trending dropped them); a card with no genres and no catalog row still shows the crowd's rating. Status stays on the table when it is not "Released" ("Ended"). Fandex Score is first in all three sort menus; each screen's default is unchanged.
-- **Title page:** (14) IGDB and IGDB critics in one chip; (15) developer, director, studio as chips so they read as links; (16) a long description clamps with "Read more"; (17) Language: original plus whether a dub in your language exists (research first: TMDB may not say).
-- **Why sheet:** (18) drop the intro and the "How this works" / "How right it has been" blocks, link a new "How the score works" page instead; (19) rows drop "core"/"detail", the "you rate it…" line shorter and dimmer than the tag, genre and people chips in different colours.
-- **Person page:** (20) space between the yellow role line and the photo; (21) the "your average · 12 rated" tile centred, no wrap.
-- **Insights:** (23) overview tiles in one compact row; (24) no media-type colour on a chart; (25) type icons on distribution by type; (26) taste by era as a horizontal rail, labels on one line; (28) tag-ratings controls styled like the grid's filter and sort; (29) facet boxes show 4 rows, each with its score impact and sorted by it, bars aligned, "+N more" opens a sheet like Why.
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
@@ -72,6 +64,8 @@ app has no affiliate code yet. → [[monetization-h3]]
 ## Closed: pointers only
 
 Fully written up in [docs/archive/history.md](docs/archive/history.md). **Grep it; don't read it.**
+
+- **The Miro board's UI notes** ✅ (2026-11-05, 0.3.31 and 0.3.32): all 31 items but one. Not doable: whether a dub in your language exists, since no provider says. → grep `Miro board's UI notes`.
 
 - **Discord sign-in** ✅ (2026-10-24): the leaked secret reset (the old one answers 401), and Nils's first real Discord sign-in is on his account (`user_identities`, 08:38 UTC), after the phone's return through fandex.org. → `docs/app.md` ("Discord sign-in").
 - **The product review, RV1 to RV35, and the cause behind RV11's mixed-up games** ✅ (2026-10-23 and 24, APK 0.3.17). By Nils's call: the calendar stays a top-40, Search keeps rated titles, remasters stay folded. → grep `Product review, 2026-10-23`.

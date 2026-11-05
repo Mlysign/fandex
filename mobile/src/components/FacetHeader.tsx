@@ -42,7 +42,8 @@ export function FacetHeader({ back, eyebrow, name, avatar, life, bio, tiles, ext
   return (
     <View style={styles.header}>
       {back}
-      <Text style={[type.eyebrow, { color: color.accent }]}>{eyebrow}</Text>
+      {/* Space under it, or the photo's top touches the role line (Nils, Miro board, 2026-11-05). */}
+      <Text style={[type.eyebrow, { color: color.accent, marginBottom: 12 }]}>{eyebrow}</Text>
       <View style={styles.who}>
         {avatar}
         <View style={{ flex: 1, minWidth: 0 }}>
