@@ -36,9 +36,12 @@ const BUTTON_SIZE: Record<ButtonSize, ViewStyle> = {
   lg: { paddingHorizontal: 16, height: 44, borderRadius: radius.lg },
 };
 
-export function Button({ label, onPress, variant = 'secondary', size = 'sm', pill, loading, disabled, icon, style, href }: {
+export function Button({ label, onPress, onPressIn, onPressOut, variant = 'secondary', size = 'sm', pill, loading, disabled, icon, style, href }: {
   label: string;
   onPress?: () => void;
+  /** For a button whose icon answers the touch itself (Save's pop, components/feel.tsx). */
+  onPressIn?: () => void;
+  onPressOut?: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;
   pill?: boolean;
@@ -55,6 +58,8 @@ export function Button({ label, onPress, variant = 'secondary', size = 'sm', pil
     <Pressable
       {...anchor}
       onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={off}
       accessibilityRole={href ? 'link' : 'button'}
       accessibilityState={{ disabled: !!off, busy: !!loading }}

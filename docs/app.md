@@ -112,6 +112,13 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   session counter, rows edited during the run are left alone, and a run deleting more than a tenth
   of the Steam rows is refused. It runs with the Trakt sync (start, return to the app when six hours
   old) and from Settings' Steam Sync button; a private Steam profile shows how to make it public.
+- **Rating and Save have a feel, since 0.3.37 (2026-11-06)**, ported from Nils's Bubblewrap game.
+  Every number is in `lib/feel.ts`; the stars and Save's pop are `components/feel.tsx`. Haptics go
+  through a local module, `modules/fandex-haptics` (a click with a softer tick 34 ms behind it,
+  checked per phone; `hapticTier()` says which path fired). Not expo-haptics: on Android its
+  "impact" is a 50 ms buzz. The stars are one touch target for the whole row; a picker stays open
+  until the pop has played (`onSettled`), the rating already saved on release. A browser pauses
+  animation in a hidden tab, so an animation measured in a hidden browser pane reads frozen.
 - **Memory is pictures, not data** (measured 2026-10-23, RV31, 0.3.16 on the Pixel 8). The
   Hermes heap is 38 MB with the catalog copy, the profile and Home's rail pool loaded
   (`fandex_pool` and `fandex_index` in `adb logcat -s ReactNativeJS` carry it). `dumpsys meminfo`

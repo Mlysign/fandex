@@ -93,7 +93,7 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Thing | Site | App |
 |---|---|---|
 | Poster card | `PosterCard.tsx`, `ActionCells.tsx` | **yes** (`cards.tsx`). The score explainer since 2026-10-17 (`ScoreExplainer.tsx`): after the pointer rests on a card, or on a long press as a sheet. Not carried: "View details" on hover. |
-| Star picker | `ActionCells.tsx` | **yes**. Opens under the card's bar; the star that is your rating clears it. |
+| Star picker | `ActionCells.tsx` | **yes, and past it on purpose** (Nils, 2026-11-06). Opens under the card's bar; the star that is your rating clears it. Since 0.3.37 the stars fill the phone's width with no gaps, a slide moves star by star with a number read out above the finger, and a pick pops with haptics (`components/feel.tsx`, `lib/feel.ts`). |
 | Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. The rail's hover arrows and the month column on a wide window since 2026-10-17. List view: the site never offered it on any page. |
 | Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Open whenever every group fits on the bar from 768 px (measured, 2026-10-17); a phone keeps it folded and closes it on a tap outside. |
 | List header | `SubBar.tsx`, `LibraryWishlistTabs.tsx`, `SearchBar.tsx`, `ui/Menu.tsx` | **yes**. Hides while a list scrolls down on a phone and comes back on any scroll up (`lib/barScroll.tsx`, 2026-10-17). Floats over the list rather than resizing it, so a held thumb no longer makes it flicker (2026-10-18). |

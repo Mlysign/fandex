@@ -1,0 +1,7 @@
+{
+  "name": "fandex-haptics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Crisp haptics (a click with a tick tail), ported from the Bubblewrap game. Android only; autolinked from modules/.",
+  "main": "index.ts"
+}

@@ -12,6 +12,7 @@ import {
   type GestureResponderEvent, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFace';
+import { ratingColor, SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
 import { Popover, Sheet, useAnchor } from '~/components/kit';
 import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExplainer';
 import { useToast } from '~/components/Toast';
@@ -22,8 +23,7 @@ import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
 const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
-/** A rating's colour: green from 7, amber from 5, red under (QuickActions.tsx). */
-export const ratingColor = (r: number) => (r >= 7 ? color.success : r >= 5 ? color.warning : color.danger);
+export { ratingColor, StarPicker };
 
 /** A tap that is also a link in a browser: follow it inside the app, without a page load. */
 function useLink(href: string) {
@@ -40,33 +40,15 @@ function useLink(href: string) {
 
 // ── The star picker ──────────────────────────────────────────────────────────
 
-/** Ten stars. The one that is already your rating takes the rating away. */
-export function StarPicker({ rating, onPick }: { rating: number | null; onPick: (n: number | null) => void }) {
-  const [hover, setHover] = useState(0);
-  const shown = hover || rating || 0;
-  return (
-    <View style={styles.stars}>
-      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
-        const clears = rating != null && Math.round(rating) === n;
-        return (
-          <Pressable
-            key={n}
-            onPress={() => onPick(clears ? null : n)}
-            onHoverIn={() => setHover(n)}
-            onHoverOut={() => setHover(0)}
-            accessibilityRole="button"
-            accessibilityLabel={clears ? 'Remove your rating' : `Rate ${n} out of 10`}
-            hitSlop={{ top: 12, bottom: 12 }}
-            style={styles.star}>
-            <Text style={{ fontSize: 18, lineHeight: 20, color: shown >= n ? ratingColor(shown) : color.neutral600 }}>★</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+/**
+ * The picker's width: as wide as the phone allows, so each star is a
+ * fingertip (about 38 px on a phone; it was 24 until 0.3.37 and a thumb hit
+ * the wrong one). The stars themselves are in components/feel.tsx.
+ */
+export function starPickerWidth(windowWidth: number) {
+  return Math.min(windowWidth - 16, 400);
 }
-
-export const STAR_PICKER_WIDTH = 230;
+const STAR_PICKER_HEIGHT = 96;
 
 // ── The Rate and Bookmark bar ────────────────────────────────────────────────
 
@@ -75,6 +57,8 @@ export type Actions = ReturnType<typeof useCardActions>;
 /** `compact` is the bar a list row carries: the star and your number, no word. */
 export function ActionBar({ item, state, actions, compact }: { item: CardItem; state: CardState; actions: Actions; compact?: boolean }) {
   const picker = useAnchor();
+  const save = useSavePop();
+  const win = useWindowDimensions();
   const rated = actions.signedIn && state.rating != null && state.rating > 0;
   const onList = actions.signedIn && state.wishlisted;
   const busy = actions.busy === item.key;
@@ -96,17 +80,26 @@ export function ActionBar({ item, state, actions, compact }: { item: CardItem; s
         )}
       </Pressable>
       <Pressable
-        onPress={() => actions.toggleWishlist(item, !onList)}
+        onPressIn={actions.signedIn ? save.pressIn : undefined}
+        onPressOut={actions.signedIn ? save.pressOut : undefined}
+        onPress={() => {
+          if (actions.signedIn) save.fire(!onList);
+          actions.toggleWishlist(item, !onList);
+        }}
         disabled={busy}
         accessibilityRole="button"
         {...toggled(onList)}
         accessibilityLabel={!actions.signedIn ? 'Sign in to add this to your wishlist' : onList ? 'On your wishlist, remove' : 'Add to wishlist'}
         hitSlop={{ top: 6, bottom: 6, left: 3, right: 6 }}
-        style={({ pressed }) => [styles.barBtn, { width: 32 }, onList ? styles.barBtnOn : styles.barBtnIdle, (pressed || busy) && { opacity: 0.6 }]}>
-        <Bookmark size={14} color={onList ? color.accent : color.textSecondary} fill={onList ? color.accent : 'none'} />
+        // No dimming while it saves: the pop is the answer to the tap.
+        style={[styles.barBtn, { width: 32 }, onList ? styles.barBtnOn : styles.barBtnIdle]}>
+        <SavePopGlyph pop={save}>
+          <Bookmark size={14} color={onList ? color.accent : color.textSecondary} fill={onList ? color.accent : 'none'} />
+        </SavePopGlyph>
       </Pressable>
-      <Popover anchor={picker.anchor} width={STAR_PICKER_WIDTH} align="center" onClose={picker.close} estimatedHeight={44}>
-        <StarPicker rating={state.rating} onPick={(n) => { picker.close(); actions.rate(item, n); }} />
+      <Popover anchor={picker.anchor} width={starPickerWidth(win.width)} align="center" onClose={picker.close} estimatedHeight={STAR_PICKER_HEIGHT}>
+        {/* Rated the moment the finger lifts; closed once the pop has played. */}
+        <StarPicker rating={state.rating} onPick={(n) => actions.rate(item, n)} onSettled={picker.close} />
       </Popover>
     </View>
   );
@@ -370,8 +363,6 @@ const styles = { ...cardStyles, ...StyleSheet.create({
   barBtnOn: { backgroundColor: color.accentSubtle, borderColor: color.accentSubtle },
   sectionNav: { width: 96, flexGrow: 0, paddingLeft: 16 },
   sectionNavItem: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.sm },
-  stars: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 8, paddingVertical: 6 },
-  star: { paddingHorizontal: 2 },
   seeAll: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: color.border },
   gridRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   gridCell: { flex: 1, minWidth: 0 },

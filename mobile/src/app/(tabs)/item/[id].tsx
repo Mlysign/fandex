@@ -5,7 +5,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Eye, EyeOff, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { CardRail, StarPicker } from '~/components/cards';
+import { CardRail } from '~/components/cards';
+import { SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
 import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScorePanel';
 import { facetId } from '~/lib/fandexScore';
@@ -241,6 +242,7 @@ export default function ItemScreen() {
   const [removing, setRemoving] = useState(false);
   const { toast } = useToast();
   const [picking, setPicking] = useState(false);
+  const save = useSavePop();
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
   const act = useCallback((run: () => Promise<void>) => {
@@ -348,14 +350,23 @@ export default function ItemScreen() {
             />
             <Button
               label="Save" variant={mine.inWishlist ? 'outline' : 'secondary'} size="md" disabled={busy}
-              icon={<Bookmark size={14} color={mine.inWishlist ? color.accent : color.textPrimary} fill={mine.inWishlist ? color.accent : 'none'} />}
-              onPress={() => act(() => setWishlist(db, target, !mine.inWishlist))}
+              icon={(
+                <SavePopGlyph pop={save}>
+                  <Bookmark size={14} color={mine.inWishlist ? color.accent : color.textPrimary} fill={mine.inWishlist ? color.accent : 'none'} />
+                </SavePopGlyph>
+              )}
+              onPressIn={save.pressIn} onPressOut={save.pressOut}
+              onPress={() => { save.fire(!mine.inWishlist); act(() => setWishlist(db, target, !mine.inWishlist)); }}
+              // Not dimmed while the save is on its way to Trakt: the pop is the answer, and it plays at full strength.
+              style={{ opacity: 1 }}
             />
           </View>
           {picking ? (
-            // The star that is already your rating takes it away.
-            <View style={[styles.starsPanel, busy && { opacity: 0.6 }]} pointerEvents={busy ? 'none' : 'auto'}>
-              <StarPicker rating={mine.rating} onPick={(n) => { setPicking(false); act(() => rateItem(db, target, n)); }} />
+            // The star that is already your rating takes it away. Rated the moment the
+            // finger lifts; the panel closes once the pop has played. Not dimmed while it
+            // saves, or the pop plays at half strength.
+            <View style={styles.starsPanel} pointerEvents={busy ? 'none' : 'auto'}>
+              <StarPicker rating={mine.rating} onPick={(n) => act(() => rateItem(db, target, n))} onSettled={() => setPicking(false)} />
             </View>
           ) : null}
           {mine.review ? <T variant="bodySm" style={{ fontStyle: 'italic' }}>&quot;{mine.review}&quot;</T> : null}
@@ -472,8 +483,7 @@ const styles = StyleSheet.create({
   breakdown: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4 },
   breakdownItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   starsPanel: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, paddingRight: space.md,
-    borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
+    maxWidth: 440, borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
   },
   action: {
     paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center',
