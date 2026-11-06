@@ -39,6 +39,15 @@ full history.
   holding audio focus), no error 153, and Back stops it. `screencap` cannot see the video surface, so
   the picture and fullscreen were left for Nils. Search opened on Picks in about 2.7 s, its first hand
   unrated and not on the wishlist.
+- **Three phone checks over adb (0.3.35), nothing written:** the Harry Potter book page has a "Harry Potter
+  books" rail and the film page a "Harry Potter films" rail, each followed by "More from Harry Potter"
+  (the show, Quidditch Champions, Hogwarts Legacy); one tap on Movies in Home's type filter left only
+  film cards, and the logo circle brought every type back and closed the row; on Fargo, season 4's
+  first episode's details opened the sheet (still, season and episode, date, 64 min, TMDB 6.4, synopsis,
+  Mark unwatched and Close as separate buttons), and Close left the count at 31 of 51.
+- **The facet page's failed-provider line (PR #58)**, on `app-web-local` with the local Worker stopped:
+  `/tag/wizards` said "Couldn't load more books or games just now. Try again", the empty state pointed
+  at it, and after starting `worker-local` one press filled the page (78 titles, books and games).
 - **The gains refit, with books tagged:** `--fit-gains` on Nils's library (1,759 rated, pool 11,513)
   gave 1.28 up and 5.24 down against the live 1.3 and 5.3, so nothing changed. Against 2026-10-27:
   films off by 1.41 / within one 43% (1.40 / 44%), games 1.58 / 40% (1.63 / 38%), shows 1.70 / 36%
