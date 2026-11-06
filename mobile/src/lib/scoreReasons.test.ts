@@ -93,7 +93,11 @@ describe('where a reason leads', () => {
     expect(reasonHref(reason('Warner Bros. Pictures', 1, { kind: 'company', role: 'studio' }))).toMatch(/^\/studio\/warner/);
   });
   it('has a page for a franchise, under the key every spelling of its name shares', () => {
-    expect(reasonHref(reason('Alien Collection', 1, { kind: 'ip', role: 'ip' }))).toBe('/franchise/alien');
+    expect(reasonHref(reason('Alien Collection', 1, { kind: 'ip', role: 'ip', key: 'alien' }))).toBe('/franchise/alien');
+  });
+  it('links a bundle shown under a chosen name by its key, not the name (0.3.37)', () => {
+    expect(reasonHref(reason('Oz', 1, { kind: 'ip', role: 'ip', key: 'land of oz' }))).toBe('/franchise/land-of-oz');
+    expect(reasonHref(reason('Sci-Fi', 1, { key: 'science fiction' }))).toBe('/tag/science-fiction');
   });
 });
 

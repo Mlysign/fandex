@@ -35,6 +35,7 @@ import type { Taxonomy } from '~/lib/fandexScore';
 import { impactId, useFacetImpacts } from '~/lib/insightsImpacts';
 import { useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
+import { foldTag } from '~/lib/tagBundles';
 import { breakpoint, color, font, radius, type, TYPE_PLURAL } from '~/theme';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import type { MediaType } from '~/lib/api';
@@ -388,15 +389,21 @@ export default function InsightsScreen() {
       decades.set(d, cur);
     }
 
+    // A bundled tag is one row under its canonical key and chosen name, a title carrying two of
+    // its spellings counted once: what the score learns from (lib/fandexScore.ts, applyTagAliases),
+    // so a row's count and average match its impact. Until 0.3.37 each spelling was its own row.
     const stats = new Map<string, { f: StoredFacet; n: number; sum: number }>();
     for (const r of rated) {
       const seen = new Set<string>();
-      for (const f of r.facets) {
-        if (f.kind !== 'tag' && f.kind !== 'person' && f.kind !== 'company') continue;
+      for (const raw of r.facets) {
+        if (raw.kind !== 'tag' && raw.kind !== 'person' && raw.kind !== 'company') continue;
+        const f = foldTag(raw, taxonomy);
         const id = `${f.kind}|${f.role ?? ''}|${f.key}`;
         if (seen.has(id)) continue;
         seen.add(id);
         const cur = stats.get(id) ?? { f, n: 0, sum: 0 };
+        // The canonical spelling names the row unless a name was chosen, as on the item page.
+        if (f === raw && f.kind === 'tag') cur.f = { ...cur.f, label: raw.label };
         cur.n++; cur.sum += r.rating;
         stats.set(id, cur);
       }

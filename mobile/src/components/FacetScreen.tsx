@@ -39,6 +39,7 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import { useOfferedTypes } from '~/lib/features';
 import { seriesOfFacet, splitSeries, type SeriesKey } from '~/lib/franchiseSeries';
+import { tagPageKeys } from '~/lib/tagBundles';
 import { usePageTitle } from '~/lib/pageTitle';
 import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
@@ -125,10 +126,10 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const sync = useCatalogSync();
   const { center, score, impactsFor, impactAbsenceFor, taxonomy, follows } = useScores();
   // The address says "christopher-nolan"; the catalog's key is "christopher nolan".
-  // A franchise's address may spell a bundled name: its page is the franchise it is bundled into.
+  // A franchise's or a tag's address may spell a bundled name: its page is the one it is bundled into.
   const spoken = slugToKey(params.key ?? '');
-  const key = kind === 'franchise' && taxonomy ? (taxonomy.ipAliases.get(spoken) ?? spoken) : spoken;
-  const impacts = useMemo(() => impactsFor(IMPACT_KIND[kind], key), [impactsFor, kind, key]);
+  const tagPage = useMemo(() => (kind === 'tag' ? tagPageKeys(spoken, taxonomy) : null), [kind, spoken, taxonomy]);
+  const key = kind === 'franchise' && taxonomy ? (taxonomy.ipAliases.get(spoken) ?? spoken) : (tagPage?.key ?? spoken);  const impacts = useMemo(() => impactsFor(IMPACT_KIND[kind], key), [impactsFor, kind, key]);
   const [sort, setSort] = useState<Sort>('popularity');
   const [bioOpen, setBioOpen] = useState(false);
   /** The photo the gallery is open on, or null while it is shut. */
@@ -145,11 +146,15 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   const [filters, setFilters] = useState(noFilters);
   const [sheet, setSheet] = useState(false);
 
-  // The other keys this franchise page answers for: every name bundled into it.
+  // The other keys this page answers for: every name bundled into the franchise or the tag.
+  // A tag's titles, rated count and average then cover every spelling, as its impact does
+  // (lib/tagBundles.ts): until 0.3.37 "fantasy" left out the titles tagged "fantasy fiction".
   const memberKeys = useMemo(() => {
+    if (tagPage) return tagPage.members;
     if (kind !== 'franchise' || !taxonomy) return [key];
     return [key, ...[...taxonomy.ipAliases.entries()].filter(([, canonical]) => canonical === key).map(([alias]) => alias)];
-  }, [kind, key, taxonomy]);
+  }, [kind, key, taxonomy, tagPage]);
+  const tagMembers = tagPage?.spoken;
   // Titles attached to this franchise by hand, and titles detached from it.
   const overrides = useMemo(() => {
     const added: string[] = [];
@@ -168,6 +173,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
   /** Does a stored facet belong on this page? */
   const matches = (f: StoredFacet) => {
     if (kind === 'franchise') return f.kind === 'ip' && memberKeys.includes(f.key);
+    if (kind === 'tag') return f.kind === 'tag' && !!tagMembers?.has(spokenKey(f.key));
     return spokenKey(f.key) === key && (kind === 'studio' ? f.kind === 'company' : f.kind === kind);
   };
 
@@ -187,7 +193,15 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
       // The key is inside a JSON column. LIKE narrows four thousand rows to a
       // handful; the parse below is what decides.
       // On the key's first word only: the rest may be stored with hyphens where the address has spaces.
-      const patterns = memberKeys.map((k) => `%"key":"${(k.split(' ')[0] ?? '').replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+      // A bundled spelling with a quote or a backslash (`"adventure"`) is escaped inside the JSON, so it is
+      // looked for by its longest run of letters instead; the parse still decides.
+      const like = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+      const patterns = [...new Set(memberKeys.map((k) => {
+        const first = k.split(' ')[0] ?? '';
+        if (!/["\\]/.test(first)) return `%"key":"${like(first)}%`;
+        const run = (k.match(/[\p{L}\p{N}]+/gu) ?? []).sort((a, b) => b.length - a.length)[0] ?? '';
+        return `%${like(run)}%`;
+      }))];
       const columns = 'id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, facets';
       const rows = await db.getAllAsync<CatalogRow & { facets: string }>(
         `SELECT ${columns} FROM catalog WHERE ${patterns.map(() => "facets LIKE ? ESCAPE '\\'").join(' OR ')}`,
@@ -209,9 +223,9 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         try { hit = (JSON.parse(r.facets) as StoredFacet[]).filter(matches); } catch { /* an unreadable row is not a match */ }
         if (!hit.length && !overrides.added.includes(r.id)) continue;
         seen.add(r.id);
-        // A franchise's own spelling wins over a bundled one's ("Batman", not "The Dark Knight Collection").
-        const own = hit.find((f) => f.key === key) ?? hit[0];
-        if (own && (!label || own.key === key)) label = own.label;
+        // A franchise's or a tag's own spelling wins over a bundled one's ("Batman", not "The Dark Knight Collection").
+        const own = hit.find((f) => spokenKey(f.key) === key) ?? hit[0];
+        if (own && (!label || spokenKey(own.key) === key)) label = own.label;
         category ??= hit.find((f) => f.category)?.category ?? null;
         for (const f of hit) if (f.role) roles.set(f.role, (roles.get(f.role) ?? 0) + 1);
         // What they did on this one, under its name: "Director · Writer", "Author". A tag or a franchise has no role.
@@ -222,11 +236,12 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         if (kind === 'franchise') seriesKeys.set(r.id, hit.flatMap(seriesOfFacet));
       }
       if (kind === 'franchise') label = taxonomy?.labels.get(`ip|${key}`) ?? (label ? ipDisplayLabel(label) : '');
+      if (kind === 'tag') label = taxonomy?.labels.get(`tag|${key}`) ?? label;
       if (live) setFound({ label, category, roles: [...roles.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), cards, seriesKeys });
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, kind, key, memberKeys, overrides, sync.revision]);
+  }, [db, kind, key, memberKeys, tagMembers, overrides, sync.revision]);
 
   // What the providers have beyond the catalog copy. The device's rows show at once; these join them.
   // A provider half that fails is said under the count with a retry (`failed`), never read as "nothing more":

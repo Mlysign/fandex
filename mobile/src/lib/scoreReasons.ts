@@ -131,10 +131,12 @@ export function tasteSentence(r: ScoreReason): string {
 
 /** Where a reason's chip leads, or null for one with no page of its own. A franchise has one since 2026-10-18. */
 export function reasonHref(r: ScoreReason): string | null {
-  if (r.kind === 'tag') return `/tag/${keyToSlug(tagKey(r.label))}`;
+  // A tag or a franchise links by its key, the canonical one after bundles: its shown name may be a chosen
+  // one ("Oz" for land of oz) with no page of that spelling (until 0.3.37 a chosen name's link was empty).
+  if (r.kind === 'tag') return r.key ? `/tag/${keyToSlug(r.key)}` : `/tag/${keyToSlug(tagKey(r.label))}`;
   if (r.kind === 'person') return `/person/${keyToSlug(personKey(r.label))}`;
   if (r.kind === 'company') return `/studio/${keyToSlug(companyKey(r.label))}`;
-  if (r.kind === 'ip') return franchiseHref(r.label);
+  if (r.kind === 'ip') return r.key ? `/franchise/${keyToSlug(r.key)}` : franchiseHref(r.label);
   return null;
 }
 
