@@ -31,7 +31,6 @@ Four items. Everything else in this file is work I can do without him, and every
 
 - **A facet page names a provider that failed and offers a retry** (PR #58, on the phone since 0.3.29): not seen yet, since it needs a provider to fail. Try it on the local stack with a provider switched off.
 - **Search's Picks deals a different hand after ten minutes away** (signed in). The rest is checked: on 0.3.34 it opened on Picks in about 2.7 s with a first hand unrated and not on the wishlist (2026-11-06). → `docs/app.md` (Search row)
-- **Refit the gains: DUE NOW.** The Hardcover walk is through (idle on 2026-11-06, 851 of 1,239 books linked), so books have their voted tags. `scripts/score-backtest.mjs --fit-gains`, then the pair on `/dev/scoring`. Last done 2026-10-29 (`mappingConstantUp` 1.3). Redo whenever the pool or the weights change.
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 

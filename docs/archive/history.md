@@ -39,6 +39,10 @@ full history.
   holding audio focus), no error 153, and Back stops it. `screencap` cannot see the video surface, so
   the picture and fullscreen were left for Nils. Search opened on Picks in about 2.7 s, its first hand
   unrated and not on the wishlist.
+- **The gains refit, with books tagged:** `--fit-gains` on Nils's library (1,759 rated, pool 11,513)
+  gave 1.28 up and 5.24 down against the live 1.3 and 5.3, so nothing changed. Against 2026-10-27:
+  films off by 1.41 / within one 43% (1.40 / 44%), games 1.58 / 40% (1.63 / 38%), shows 1.70 / 36%
+  (1.69 / 36%). Books: 26 rated, off by 1.47 against 1.50 for guessing, order ρ −0.18 (too few to read).
 
 ## The remote sessions' work shipped, and the planet tag's count (2026-11-02)
 
