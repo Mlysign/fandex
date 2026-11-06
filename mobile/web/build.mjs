@@ -31,7 +31,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { baselineOf, contentSecurityPolicy, inlineScripts, scriptHash, shrinkProblems } from './buildChecks.mjs';
+import { baselineOf, contentSecurityPolicy, FACET_INDEX_MIN, facetIndexed, inlineScripts, scriptHash, shrinkProblems, sitemapXml } from './buildChecks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mobile = path.join(here, '..');
@@ -306,9 +306,10 @@ fs.writeFileSync(path.join(STAGE, 'app-boot.js'), APP_BOOT);
 const poolTitles = shown.map((p) => ({ vector: p.vector, facets: p.facets }));
 const facetsOf = new Map(poolTitles.map((p) => [p.vector.id, p.facets]));
 const relatedFor = relatedPicker(poolTitles, taxonomy);
-// Worked out before the item pages, whose breadcrumb names a tag only when its page exists.
+// Worked out before the item pages, whose breadcrumb names a tag only when its
+// page exists and is offered for indexing (FACET_INDEX_MIN, buildChecks.mjs).
 const allFacets = facetPages(poolTitles, 3, taxonomy);
-const crumbFor = tagCrumbs(allFacets);
+const crumbFor = tagCrumbs(allFacets.filter((f) => facetIndexed(f.cards.length)));
 
 step(`rendering ${details.size} item pages`);
 const urls = [];
@@ -341,24 +342,32 @@ step(`${urls.length} item pages written, ${withRails} with related rails, the la
 // visitor sees it. Before 2026-10-15 these addresses loaded the app, so a
 // crawler got an empty shell for the pages Google already held from the old
 // site. Fewer than three titles stays app-only: the old site's thin-page line.
+// Fewer than FACET_INDEX_MIN is written but `noindex, follow` and left out of
+// the sitemap: thousands of three-card lists were most of what Google was
+// offered (buildChecks.mjs). Its links still lead a crawler to the titles.
 const facets = allFacets.slice(0, limit || undefined);
 let facetLargest = 0;
+let facetsIndexed = 0;
 for (const facet of facets) {
   const head = facetHead(facet);
+  const indexed = facetIndexed(facet.cards.length);
   const { body, css } = renderFacet(facet);
   if (!body.includes('role="heading"')) throw new Error(`${facet.kind}/${facet.slug} rendered without a heading`);
   const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
-    + `<link rel="canonical" href="${esc(head.canonical)}">${social({ title: head.title, description: head.description, url: head.canonical })}`
+    + `<link rel="canonical" href="${esc(head.canonical)}">${indexed ? '' : '<meta name="robots" content="noindex, follow">'}`
+    + `${social({ title: head.title, description: head.description, url: head.canonical })}`
     + `<style>${fontCss}${FRAME_CSS}${STATIC_GRID_CSS}</style>${css}</head>`
     + `<body><div id="prerender" data-page="facet">${body}</div><div id="root"></div>${inline(PV_SCRIPT + ITEM_SCRIPT)}</body></html>`;
   const dir = path.join(STAGE, facet.kind);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${facet.slug}.html`), html);
   facetLargest = Math.max(facetLargest, html.length);
-  urls.push({ loc: head.canonical, lastmod: new Date().toISOString().slice(0, 10) });
+  // No lastmod: a facet page has no date of its own, and "today" on every
+  // build is a claim Google learns to ignore.
+  if (indexed) { urls.push({ loc: head.canonical }); facetsIndexed++; }
 }
 const facetCount = (k) => facets.filter((f) => f.kind === k).length;
-step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios, ${facetCount('franchise')} franchises), the largest ${(facetLargest / 1024).toFixed(0)} KB`);
+step(`${facets.length} facet pages written (${facetCount('tag')} tags, ${facetCount('person')} people, ${facetCount('studio')} studios, ${facetCount('franchise')} franchises), the largest ${(facetLargest / 1024).toFixed(0)} KB; ${facetsIndexed} with ${FACET_INDEX_MIN} or more titles are indexed and in the sitemap`);
 
 // ── Calendar months ──────────────────────────────────────────────────────────
 
@@ -598,9 +607,7 @@ if (!limit) {
 }
 
 urls.unshift({ loc: `${SITE}/`, lastmod: new Date().toISOString().slice(0, 10) });
-fs.writeFileSync(path.join(STAGE, 'sitemap.xml'),
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
-    urls.map((u) => `<url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod}</lastmod></url>`).join('\n')}\n</urlset>\n`);
+fs.writeFileSync(path.join(STAGE, 'sitemap.xml'), sitemapXml(urls));
 
 // A title folded into another (worker/scripts/fold-items.mjs) keeps its old
 // address as a 301 to the one it was folded into: 40 of the 66 game ports of

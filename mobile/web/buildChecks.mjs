@@ -115,6 +115,35 @@ export function shrinkProblems(baseline, now, floor = 0.9) {
   return out;
 }
 
+// ── Which facet pages a search engine is offered ─────────────────────────────
+
+/**
+ * The fewest titles a facet page needs to be indexed. Every facet page with
+ * three or more titles is still written (links and visitors reach it), but
+ * below this one it is `noindex, follow`, out of the sitemap and no item
+ * page's breadcrumb. On 2026-11-06 Search Console had 5 of 10,125 URLs
+ * indexed, and 3,938 of the 5,324 facet pages listed held fewer than ten
+ * titles (1,484 held exactly three): lists of a few cards and no text of
+ * their own, more than half the sitemap. → docs/website.md
+ */
+export const FACET_INDEX_MIN = 10;
+
+/** Whether a facet page with `titles` titles is offered for indexing. */
+export function facetIndexed(titles) {
+  return titles >= FACET_INDEX_MIN;
+}
+
+/**
+ * The sitemap, from `{ loc, lastmod? }`. A page with no honest date leaves
+ * `lastmod` out: one that claims every build changed it teaches Google to
+ * ignore the field for the whole site.
+ */
+export function sitemapXml(urls) {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
+    urls.map((u) => `<url><loc>${esc(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`;
+}
+
 // ── Which commit the nightly run publishes ───────────────────────────────────
 
 /**

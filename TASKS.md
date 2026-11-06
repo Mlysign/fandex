@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Four items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the in-app trailer's picture and fullscreen (0.3.29; sound plays and Back stops it, checked over adb 2026-11-06, but `screencap` cannot see the video), the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget (on 2026-10-20 a tick moved its taps while the rows stayed old; the rows travel inside the widget's own update since 0.3.26), a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -26,6 +26,9 @@ Four items. Everything else in this file is work I can do without him, and every
 
 5. **🔵 One check from the 2026-10-23 codebase review** (the signed-in CSP check passed 2026-10-24 and the policy is enforced):
    - **If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app; nobody has proven it. A Trakt identity is keyed on Trakt's uuid since 2026-10-23, and his old username row moves to it on his next Trakt sign-in.
+
+6. **🔵 Google indexes 5 of 10,125 URLs (Search Console, 2026-11-06).** Facet pages under 10 titles are `noindex, follow` and out of the sitemap on `main` since 2026-11-06 (`FACET_INDEX_MIN`, `mobile/web/buildChecks.mjs`); they go live with the next nightly site build. Nothing technical blocks indexing (robots, status codes, canonicals and the rendered page checked that day). **His:** (1) in Search Console's Pages report, say whether most URLs are "Discovered" (not fetched: the domain needs links, nilsmlynarek.eu, Show HN, Product Hunt, subreddits) or "Crawled" (fetched and judged thin); (2) after that publish, resubmit the sitemap and request indexing for about ten strong pages (`/tag/action`, top item pages). Mine after his answer: text of their own on the big facet pages. → [docs/website.md](docs/website.md)
+
 
 ## Mine, open
 
