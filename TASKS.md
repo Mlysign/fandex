@@ -39,6 +39,7 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 ## Mine, open
 
+Nothing (2026-11-06). Everything open waits on Nils (above), BoardGameGeek, Google Play or the launch.
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
