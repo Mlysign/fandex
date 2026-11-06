@@ -315,7 +315,7 @@ export async function clearIpOverride(db: D1Database, mediaItemId: string | null
 
 // ── Review: the proposals somebody said no to ────────────────────────────────
 
-const SUGGESTION_KINDS = new Set(["tag-category", "franchise-merge", "franchise-member", "franchise-new"]);
+const SUGGESTION_KINDS = new Set(["tag-category", "tag-alias", "franchise-merge", "franchise-member", "franchise-new"]);
 
 /**
  * One denied proposal. `ref` is whatever the sweep called it (a rule id,

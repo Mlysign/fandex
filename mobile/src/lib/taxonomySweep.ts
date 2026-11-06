@@ -24,7 +24,7 @@ import {
 } from '~/lib/ipSurvey';
 import type { TagRow } from '~/lib/tagVocab';
 
-export type SuggestionKind = 'tag-category' | 'franchise-merge' | 'franchise-member' | 'franchise-new';
+export type SuggestionKind = 'tag-category' | 'tag-alias' | 'franchise-merge' | 'franchise-member' | 'franchise-new';
 
 export interface SuggestedTag { key: string; label: string; count: number }
 
@@ -41,6 +41,17 @@ export interface TagCategorySuggestion {
   tags: SuggestedTag[];
   /** How many times these tags appear in the catalog: the honest size of the change. */
   itemsAffected: number;
+}
+
+export interface TagAliasSuggestion {
+  kind: 'tag-alias';
+  /** `alias>canonical`, as a franchise merge. */
+  ref: string;
+  title: string;
+  why: string;
+  signal: 'spelling' | 'bracket' | 'acronym' | 'plural' | 'synonym';
+  aliasKey: string; aliasLabel: string; aliasCount: number;
+  canonicalKey: string; canonicalLabel: string; canonicalCount: number;
 }
 
 export interface FranchiseMergeSuggestion {
@@ -83,7 +94,7 @@ export interface FranchiseNewSuggestion {
   members: NewFranchiseMember[];
 }
 
-export type Suggestion = TagCategorySuggestion | FranchiseMergeSuggestion | FranchiseMemberSuggestion | FranchiseNewSuggestion;
+export type Suggestion = TagCategorySuggestion | TagAliasSuggestion | FranchiseMergeSuggestion | FranchiseMemberSuggestion | FranchiseNewSuggestion;
 
 export interface SweepReport {
   suggestions: Suggestion[];
@@ -156,6 +167,161 @@ function tagSuggestions(tags: TagRow[], tax: TaxonomyJson, dismissed: Set<string
   // tags seen 900 times changes more than one claiming eighty nobody carries twice.
   list.sort((a, b) => b.itemsAffected - a.itemsAffected);
   return { list, otherTotal };
+}
+
+// ── Tags that are one tag ────────────────────────────────────────────────────
+
+/**
+ * Names the providers write differently that no spelling rule can join. Each
+ * group is one tag; the forms are compared loose (see `loose` below). Short on
+ * purpose: the mechanical signals find the rest, and a pair missing here is a
+ * card nobody sees, while a wrong pair here is a card somebody denies once.
+ */
+export const TAG_SYNONYMS: string[][] = [
+  ['science fiction', 'sci fi'],
+  ['romantic comedy', 'rom com'],
+  ['shoot em up', 'shmup'],
+  ['cooperative', 'co op', 'coop'],
+  ['world war ii', 'world war 2', 'wwii', 'ww2', 'second world war'],
+  ['world war i', 'world war 1', 'wwi', 'ww1', 'first world war'],
+  ['post apocalyptic', 'post apocalypse'],
+  ['artificial intelligence', 'a i'],
+];
+
+/**
+ * A tag's words with the punctuation gone: what two spellings of one tag share.
+ * `tagKey` keeps brackets and apostrophes ("role playing (rpg)", "shoot 'em up"),
+ * since its keys are stored and changing it would orphan them, so the
+ * comparison loosens it here instead. "&" and a lone "n" read as "and".
+ */
+export function loose(key: string): string {
+  // Letters of every script survive: "2D-платформер" is not "2D" (2026-11-06, the first run).
+  return key.toLowerCase().replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/(^| )n(?= |$)/g, '$1and').replace(/\s+/g, ' ').trim();
+}
+
+const initialsOf = (words: string) => words.split(' ').map((w) => w[0]).join('');
+
+/** The singular a plural last word could be, longest stem first. Four letters at least, so "news" is not "new". */
+function singulars(words: string): string[] {
+  const m = words.match(/^(.*?)(\w+)$/);
+  if (!m) return [];
+  const [, head, last] = m;
+  const out: string[] = [];
+  if (last.length > 5 && last.endsWith('ies')) out.push(`${last.slice(0, -3)}y`);
+  if (last.length > 5 && /(ches|shes|xes|sses|zes)$/.test(last)) out.push(last.slice(0, -2));
+  if (last.length > 4 && last.endsWith('s') && !last.endsWith('ss') && !last.endsWith('us') && !last.endsWith('is')) out.push(last.slice(0, -1));
+  return out.map((s) => head + s);
+}
+
+/**
+ * Two tags in the vocabulary that are one tag: "rpg" and "role playing game",
+ * "sci fi" and "scifi", "zombie" and "zombies". Five signals, strongest first:
+ * the same letters once spaces go (spelling), an acronym in brackets after its
+ * words, an acronym standing for a tag's words (three letters or more: "ai" also
+ * stands for "alien invasion"), a plural, and the short synonym list above.
+ *
+ * The bigger tag is kept, as for franchises; a card offers the other way too.
+ * Accepting is the Tags table's own bundle (`/v1/admin/tag-aliases`).
+ */
+export function tagAliasSuggestions(tags: TagRow[], dismissed: Set<string>): TagAliasSuggestion[] {
+  const byLoose = new Map<string, TagRow>();
+  for (const t of tags) {
+    const l = loose(t.key);
+    if (!l) continue;
+    const had = byLoose.get(l);
+    // Two keys can loosen to one form ("role-playing", "role playing!"): keep the commoner as its face.
+    if (!had || t.count > had.count) byLoose.set(l, t);
+  }
+  const out: TagAliasSuggestion[] = [];
+  const seen = new Set<string>();
+  const WHY: Record<TagAliasSuggestion['signal'], string> = {
+    spelling: 'The same letters, written with and without spaces or punctuation.',
+    bracket: 'One tag names the other in brackets.',
+    acronym: 'One is the initials of the other.',
+    plural: 'The same word, singular and plural.',
+    synonym: 'Two names for one thing.',
+  };
+  const push = (a: TagRow, b: TagRow, signal: TagAliasSuggestion['signal']) => {
+    if (a.key === b.key) return;
+    const pair = [a.key, b.key].sort().join('|');
+    if (seen.has(pair)) return;
+    seen.add(pair);
+    // The commoner tag stays. On a tie, the cleaner spelling ("Palestine", not "\"Palestine\""), then the longer one.
+    const junk = (t: TagRow) => (t.key.match(/["[\].:;]/g) ?? []).length;
+    const bFirst = b.count !== a.count ? b.count > a.count : junk(b) !== junk(a) ? junk(b) < junk(a) : b.key.length > a.key.length;
+    const [canonical, alias] = bFirst ? [b, a] : [a, b];
+    const ref = `${alias.key}>${canonical.key}`;
+    // Either direction denied is a no to the pair: "the other way" was on the card that was denied.
+    if (dismissed.has(`tag-alias|${ref}`) || dismissed.has(`tag-alias|${canonical.key}>${alias.key}`)) return;
+    out.push({
+      kind: 'tag-alias', ref, title: `${alias.label} → ${canonical.label}`, why: WHY[signal], signal,
+      aliasKey: alias.key, aliasLabel: alias.label, aliasCount: alias.count,
+      canonicalKey: canonical.key, canonicalLabel: canonical.label, canonicalCount: canonical.count,
+    });
+  };
+
+  // Spelling: one tag once the spaces go ("sci fi", "scifi").
+  const byCompact = new Map<string, TagRow[]>();
+  for (const [l, t] of byLoose) {
+    const c = l.replace(/ /g, '');
+    if (c.length < 4) continue;
+    byCompact.set(c, [...(byCompact.get(c) ?? []), t]);
+  }
+  for (const group of byCompact.values()) for (let i = 1; i < group.length; i++) push(group[0], group[i], 'spelling');
+  // Two keys that loosen to the very same words ("hack & slash", "hack and slash").
+  const firstByLoose = new Map<string, TagRow>();
+  for (const t of tags) {
+    const l = loose(t.key);
+    const had = firstByLoose.get(l);
+    if (had) push(had, t, 'spelling'); else if (l) firstByLoose.set(l, t);
+  }
+
+  // A bracket holding the initials of the words before it: "Real Time Strategy (RTS)"
+  // is "RTS" and is "Real Time Strategy". Only initials: a library qualifier,
+  // "Identity (Psychology)", "London (England)", names another tag, not this one.
+  for (const t of tags) {
+    const m = t.key.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (!m) continue;
+    const outer = loose(m[1]);
+    const inner = loose(m[2]).replace(/ /g, '');
+    if (!outer.includes(' ') || initialsOf(outer) !== inner) continue;
+    for (const part of [outer, loose(m[2]), inner]) {
+      const other = byLoose.get(part);
+      if (other) push(t, other, 'bracket');
+    }
+  }
+
+  // An acronym: a one-word tag WRITTEN in capitals ("FPS", "PvP", "MOBA") that is
+  // another tag's initials. The capitals are the signal: lower case, "gore" is
+  // a word and not "georgian or regency era".
+  const byInitials = new Map<string, TagRow[]>();
+  for (const [l, t] of byLoose) {
+    const words = l.split(' ');
+    if (words.length < 2 || words.length > 7) continue;
+    const initials = initialsOf(l);
+    byInitials.set(initials, [...(byInitials.get(initials) ?? []), t]);
+  }
+  for (const [l, t] of byLoose) {
+    if (!/^[a-z]{3,6}$/.test(l) || !/[A-Z].*[A-Z]/.test(t.label)) continue;
+    for (const full of byInitials.get(l) ?? []) push(t, full, 'acronym');
+  }
+
+  // A plural.
+  for (const [l, t] of byLoose) {
+    for (const s of singulars(l)) {
+      const other = byLoose.get(s);
+      if (other) { push(t, other, 'plural'); break; }
+    }
+  }
+
+  // The synonym list.
+  for (const group of TAG_SYNONYMS) {
+    const found = group.map((g) => byLoose.get(g)).filter((t): t is TagRow => !!t);
+    for (let i = 1; i < found.length; i++) push(found[0], found[i], 'synonym');
+  }
+
+  // Most titles first: a bundle of two common tags changes more of the catalog.
+  return out.sort((a, b) => (b.aliasCount + b.canonicalCount) - (a.aliasCount + a.canonicalCount));
 }
 
 // ── Franchise merges ─────────────────────────────────────────────────────────
@@ -292,6 +458,7 @@ export function runTaxonomySweep(input: {
   const members = memberSuggestions(input.titles, input.tax, survey, dismissed);
   const suggestions: Suggestion[] = [
     ...tags.list,
+    ...tagAliasSuggestions(input.tags, dismissed),
     ...mergeSuggestions(survey, dismissed),
     ...newFranchiseSuggestions(input.titles, input.tax, survey, members, dismissed),
     ...members,

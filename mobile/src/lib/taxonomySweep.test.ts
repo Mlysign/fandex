@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { TaxonomyJson } from '~/lib/fandexScore';
 import type { CatalogTitle } from '~/lib/ipSurvey';
 import type { TagRow } from '~/lib/tagVocab';
-import { runTaxonomySweep, type FranchiseMergeSuggestion, type FranchiseNewSuggestion, type TagCategorySuggestion } from '~/lib/taxonomySweep';
+import {
+  runTaxonomySweep, type FranchiseMergeSuggestion, type FranchiseNewSuggestion, type TagAliasSuggestion, type TagCategorySuggestion,
+} from '~/lib/taxonomySweep';
 
 // The rules are the site's (src/lib/taxonomyRules.ts) and are tested there. What
 // is tested here is what the port adds: which tags are candidates, which live
@@ -186,5 +188,57 @@ describe('new franchise proposals', () => {
 
   it('does not bring back a franchise somebody said no to', () => {
     expect(cards({ dismissed: [['franchise-new', 'dracula']] }).map(([ref]) => ref)).toEqual(['monster train']);
+  });
+});
+
+describe('tag bundle proposals', () => {
+  // Nils, 2026-11-06: "RPG and role-playing game are the same tag", and Review never said so.
+  const bundles = (tags: TagRow[], dismissed: [string, string][] = []) =>
+    sweep({ tags, dismissed }).suggestions
+      .filter((s): s is TagAliasSuggestion => s.kind === 'tag-alias')
+      .map((s) => [s.aliasKey, s.canonicalKey, s.signal]);
+
+  it('finds an acronym written in capitals, into the commoner tag', () => {
+    expect(bundles([tag('fps', 394, { label: 'FPS' }), tag('first person shooter', 1)])).toEqual([['first person shooter', 'fps', 'acronym']]);
+    expect(bundles([tag('rpg', 50, { label: 'RPG' }), tag('role playing game', 80)])).toEqual([['rpg', 'role playing game', 'acronym']]);
+  });
+
+  it('does not read a lower-case word as an acronym', () => {
+    expect(bundles([tag('gore', 482, { label: 'Gore' }), tag('georgian or regency era', 2)])).toEqual([]);
+  });
+
+  it('joins a bracketed acronym to both its halves, and never a library qualifier', () => {
+    expect(bundles([tag('real time strategy (rts)', 166), tag('rts', 97)])).toEqual([['rts', 'real time strategy (rts)', 'bracket']]);
+    expect(bundles([tag('identity (psychology)', 2), tag('psychology', 82), tag('identity', 19)])).toEqual([]);
+  });
+
+  it('finds one tag written with and without spaces or punctuation', () => {
+    expect(bundles([tag('sci fi', 523), tag('scifi', 1)])).toEqual([['scifi', 'sci fi', 'spelling']]);
+    expect(bundles([tag('hack and slash', 188), tag("hack'n'slash", 1)])).toEqual([["hack'n'slash", 'hack and slash', 'spelling']]);
+    expect(bundles([tag('adventure', 3665), tag('"adventure"', 1)])).toEqual([['"adventure"', 'adventure', 'spelling']]);
+  });
+
+  it('keeps letters of every script, so a Cyrillic tag is not its digits', () => {
+    expect(bundles([tag('2d', 501), tag('2d платформер', 1)])).toEqual([]);
+  });
+
+  it('finds a plural, and leaves short words alone', () => {
+    expect(bundles([tag('zombie', 59), tag('zombies', 159)])).toEqual([['zombie', 'zombies', 'plural']]);
+    expect(bundles([tag('biography', 176), tag('biographies', 8)])).toEqual([['biographies', 'biography', 'plural']]);
+    expect(bundles([tag('new', 10), tag('news', 10)])).toEqual([]);
+  });
+
+  it('keeps the clean spelling on a tie', () => {
+    expect(bundles([tag('palestine', 1), tag('"palestine"', 1)])).toEqual([['"palestine"', 'palestine', 'spelling']]);
+  });
+
+  it('knows the synonyms no spelling rule can reach', () => {
+    expect(bundles([tag('science fiction', 2002), tag('sci fi', 523)])).toEqual([['sci fi', 'science fiction', 'synonym']]);
+  });
+
+  it('does not bring back a pair denied in either direction', () => {
+    const pair = [tag('zombie', 59), tag('zombies', 159)];
+    expect(bundles(pair, [['tag-alias', 'zombie>zombies']])).toEqual([]);
+    expect(bundles(pair, [['tag-alias', 'zombies>zombie']])).toEqual([]);
   });
 });

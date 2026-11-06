@@ -21,6 +21,13 @@ full history.
 
 ---
 
+## The Review queue cleared by an AI pass, and tag bundles added to Review (2026-11-06, 0.3.36)
+
+- **Nils asked for the 401 Review cards to be decided** ("I don't know if Warriors: A Vision of Shadows is the same thing as Warriors universe"). Every card was judged on its titles, creators and years and applied through `scripts/taxonomy-sweep/apply.mjs`: 21 franchise bundles (Vision of Shadows and the Super Editions into Warriors, Percy Jackson, Mistborn, the article pairs), 405 attaches (the 225 joins less 36 wrong ones, and 76 new franchises), 112 denials. Publisher imprints from Open Library ("Thorndike Press large print", "Ulverscroft", "G.K. Hall", "Viking compass editions") were never made franchises; the book and film behind each card got its own (Friday Night Lights, 11/22/63, Naked Lunch, My Cousin Rachel, One Flew Over the Cuckoo's Nest, Ben-Hur, and others). Reports and undo files: `docs/archive/taxonomy-sweeps/2026-11-06*.md`.
+- **A hand-made bundle undone:** "the warriors" → "warriors" (2026-10-27) put Rockstar's 2005 game The Warriors in the Warriors cat books' rail. Deleted and denied, `2026-11-06-warriors.sql` and its undo.
+- **Review never proposed bundling two tags** (Nils: "RPG and role-playing game are the same tag"). New card kind `tag-alias` (`tagAliasSuggestions` in `mobile/src/lib/taxonomySweep.ts`, the Worker's `SUGGESTION_KINDS`): the same letters without spaces or punctuation, a bracket holding the initials of its words, an acronym written in capitals, a plural, and a short synonym list. Tightened on the live vocabulary before shipping: lower-case acronyms read "gore" as "georgian or regency era", library qualifiers ("Identity (Psychology)") matched their subject, and stripping non-Latin letters made "2D-платформер" into "2D". The first run made 601 cards: 579 accepted, 22 denied where the forms mean different things (blue and blues, Marines and marine, Classes and class, Securities and security). Tags 13,459 → 12,881, aliases 108 → 686, no chained alias. Review then held 0 cards.
+- **`apply.mjs` learned `deny`, `--limit kind:N`, and a free report name** (two runs in one minute overwrote the first run's undo name until then).
+
 ## Shows' cast, the Hardcover walk and book languages confirmed live; 0.3.34 on the phone (2026-11-06)
 
 - **Shows with no cast** (TASKS.md item 6, the `aggregate_credits` fill): Adolescence's API row has 8 cast

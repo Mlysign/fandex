@@ -27,7 +27,7 @@ import { catalogTitles, type CatalogTitle } from '~/lib/ipSurvey';
 import { buildTagRows, rawTagCounts } from '~/lib/tagVocab';
 import {
   runTaxonomySweep, type FranchiseMemberSuggestion, type FranchiseMergeSuggestion, type FranchiseNewSuggestion, type SweepReport,
-  type TagCategorySuggestion,
+  type TagAliasSuggestion, type TagCategorySuggestion,
 } from '~/lib/taxonomySweep';
 import { color, font, radius } from '~/theme';
 import { num } from './parts';
@@ -35,10 +35,10 @@ import { Select } from './Select';
 import type { Category } from './WeightsPanel';
 
 type Write = (run: () => Promise<TaxonomyJson>) => Promise<boolean>;
-type Lens = 'all' | 'tag-category' | 'franchise-merge' | 'franchise-new' | 'franchise-member';
+type Lens = 'all' | 'tag-category' | 'tag-alias' | 'franchise-merge' | 'franchise-new' | 'franchise-member';
 
 const LENSES: [Lens, string][] = [
-  ['all', 'Everything'], ['tag-category', 'Tag categories'], ['franchise-merge', 'Franchise merges'],
+  ['all', 'Everything'], ['tag-category', 'Tag categories'], ['tag-alias', 'Tag bundles'], ['franchise-merge', 'Franchise merges'],
   ['franchise-new', 'New franchises'], ['franchise-member', 'Missing members'],
 ];
 const MEMBER_PAGE = 40;
@@ -135,6 +135,30 @@ function TagCard({ card, categories, busy, onAccept, onDeny }: {
         <Text style={styles.tiny}>into</Text>
         <Select label="Move these tags into" value={target} options={options} onChange={setTarget} disabled={busy} width={180} />
         {dropped.size > 0 ? <Text style={[styles.tiny, { color: color.textMuted }]}>{dropped.size} left out</Text> : null}
+        <Button label="Deny" variant="ghost" disabled={busy} onPress={onDeny} style={{ marginLeft: 'auto' }} />
+      </View>
+    </View>
+  );
+}
+
+// ── Two tags that are one tag ────────────────────────────────────────────────
+
+/** The Tags table's bundle, offered: "rpg" and "role playing game", "zombie" and "zombies". */
+function TagAliasCard({ card, busy, onBundle, onDeny }: {
+  card: TagAliasSuggestion; busy: boolean; onBundle: (ref: string, aliasKey: string, canonicalKey: string) => void; onDeny: () => void;
+}) {
+  const muted = { color: color.textMuted };
+  return (
+    <View style={[styles.card, { paddingVertical: 8, gap: 6 }]}>
+      <Text style={[styles.text, { color: color.textPrimary }]}>
+        {card.aliasLabel} <Text style={muted}>({num(card.aliasCount)})</Text><Text style={{ color: color.textSecondary }}> → </Text>
+        {card.canonicalLabel} <Text style={muted}>({num(card.canonicalCount)})</Text>
+      </Text>
+      <Text style={styles.tiny}>{card.why}</Text>
+      <View style={styles.actions}>
+        <Button label={busy ? 'Bundling…' : `Bundle into ${card.canonicalLabel}`} disabled={busy} onPress={() => onBundle(card.ref, card.aliasKey, card.canonicalKey)} />
+        {/* Which spelling stays is the correction: the commoner one is offered first, the better name may be the other. */}
+        <Button label={`Other way: into ${card.aliasLabel}`} variant="ghost" disabled={busy} onPress={() => onBundle(card.ref, card.canonicalKey, card.aliasKey)} />
         <Button label="Deny" variant="ghost" disabled={busy} onPress={onDeny} style={{ marginLeft: 'auto' }} />
       </View>
     </View>
@@ -342,6 +366,7 @@ export function ReviewPanel({ json, write }: { json: TaxonomyJson; write: Write 
     void act(card.ref, steps);
   };
   const bundle = (ref: string, aliasKey: string, canonicalKey: string) => void act(ref, [() => api.adminAddAliases('ip', canonicalKey, [aliasKey])]);
+  const bundleTags = (ref: string, aliasKey: string, canonicalKey: string) => void act(ref, [() => api.adminAddAliases('tag', canonicalKey, [aliasKey])]);
   const attach = (ref: string, mediaItemId: string, label: string) => void act(ref, [() => api.adminIpOverride({ mediaItemId, mode: 'add', label })]);
   // One attach per title, the Franchises list's own write. The first makes the
   // franchise (an attach takes a NAME), the rest join it.
@@ -403,6 +428,8 @@ export function ReviewPanel({ json, write }: { json: TaxonomyJson; write: Write 
       <View style={{ gap: 10 }}>
         {shown.map((s) => (s.kind === 'tag-category' ? (
           <TagCard key={s.ref} card={s} categories={json.tagCategories} busy={busy === s.ref} onAccept={acceptTags} onDeny={() => void deny(s.kind, s.ref)} />
+        ) : s.kind === 'tag-alias' ? (
+          <TagAliasCard key={s.ref} card={s} busy={busy === s.ref} onBundle={bundleTags} onDeny={() => void deny(s.kind, s.ref)} />
         ) : s.kind === 'franchise-merge' ? (
           <MergeCard key={s.ref} card={s} busy={busy === s.ref} onBundle={bundle} onDeny={() => void deny(s.kind, s.ref)} />
         ) : s.kind === 'franchise-new' ? (

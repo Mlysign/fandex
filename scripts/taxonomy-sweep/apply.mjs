@@ -39,6 +39,9 @@
 //   category-create   { id, label, weight?, ignored? }   a new category (hand-made categories only can be merged)
 //   category-merge    { from, into }                     a hand-made category folds into another
 //   skip              { ref }                            considered and declined; remembered
+//   deny              { suggestionKind, ref }            a Review card answered no: the row the app's Deny
+//                                                        writes (taxonomy_suggestion_dismissed), so the card
+//                                                        leaves Review too, not just this script's memory
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -98,11 +101,23 @@ const canonicalTag = (raw) => { const k = tagKey(raw); if (!k) throw new Error(`
 // ── 1. Check every action, build the statements ─────────────────────────────
 const sql = [];
 const undo = [];
-const report = { "franchise-attach": [], "franchise-detach": [], "franchise-bundle": [], "franchise-name": [], "tag-category": [], "tag-alias": [], "category-create": [], "category-merge": [], skip: [] };
+const report = { "franchise-attach": [], "franchise-detach": [], "franchise-bundle": [], "franchise-name": [], "tag-category": [], "tag-alias": [], "category-create": [], "category-merge": [], deny: [], skip: [] };
+/** The kinds a Review card can have (worker/src/adminScoring.ts SUGGESTION_KINDS): a deny for any other is a typo. */
+const REVIEW_KINDS = new Set(["franchise-merge", "franchise-member", "franchise-new", "tag-category", "tag-alias"]);
 const problems = [];
 const touched = { item_ip_override: [], ip_alias: [], tag_alias: [], tag_category_override: [], facet_label_override: [], tag_category: [] };
 const createdCategories = new Set();
-const LIMITS = { "franchise-attach": 200, "franchise-detach": 30, "franchise-bundle": 50, "franchise-name": 30, "tag-category": 400, "tag-alias": 80, "category-create": 3, "category-merge": 3 };
+const LIMITS = { "franchise-attach": 200, "franchise-detach": 30, "franchise-bundle": 50, "franchise-name": 30, "tag-category": 400, "tag-alias": 80, "category-create": 3, "category-merge": 3, deny: 300 };
+// `--limit tag-alias:600` raises one cap for a pass somebody asked for by hand. Never in the
+// schedule's command. One big run beats chunks: each run checks against the taxonomy it
+// was prepared from, so a later chunk could re-point a tag an earlier one just made a
+// target, and aliases resolve in one hop (2026-11-06).
+for (const [i, f] of flags.entries()) {
+  if (f !== "--limit") continue;
+  const [kind, n] = String(flags[i + 1] ?? "").split(":");
+  if (!(kind in LIMITS) || !(Number(n) > 0)) { console.error("--limit takes kind:number, e.g. --limit tag-alias:600"); process.exit(2); }
+  LIMITS[kind] = Number(n);
+}
 const counts = {};
 
 for (const [n, a] of actions.entries()) {
@@ -214,6 +229,13 @@ for (const [n, a] of actions.entries()) {
       sql.push(`DELETE FROM tag_category WHERE id = ${q(a.from)};`);
       touched.tag_category.push(a.from);
       report[a.kind].push(`${a.from} into ${a.into}: ${a.why}`);
+    } else if (a.kind === "deny") {
+      if (!REVIEW_KINDS.has(a.suggestionKind)) throw new Error(`suggestionKind must be one of ${[...REVIEW_KINDS].join(", ")}`);
+      if (typeof a.ref !== "string" || !a.ref) throw new Error("ref required");
+      if (dismissed.has(`${a.suggestionKind}|${a.ref}`)) throw new Error(`already denied: ${a.suggestionKind} ${a.ref} (skipped)`);
+      sql.push(`INSERT INTO taxonomy_suggestion_dismissed (kind, ref, created_at) VALUES (${q(a.suggestionKind)}, ${q(a.ref)}, ${STAMP}) ON CONFLICT (kind, ref) DO NOTHING;`);
+      undo.push(`DELETE FROM taxonomy_suggestion_dismissed WHERE kind = ${q(a.suggestionKind)} AND ref = ${q(a.ref)} AND created_at = ${STAMP};`);
+      report.deny.push(`${a.suggestionKind} ${a.ref}: ${a.why}`);
     } else if (a.kind === "skip") {
       if (typeof a.ref !== "string" || !a.ref) throw new Error("ref required");
       report.skip.push(`${a.ref}: ${a.why}`);
@@ -241,7 +263,14 @@ if (!total) { console.log("Nothing to apply."); process.exit(0); }
 // ── 2. The record, written before anything runs ─────────────────────────────
 const ARCHIVE = path.join(REPO, "docs", "archive", "taxonomy-sweeps");
 fs.mkdirSync(ARCHIVE, { recursive: true });
-const stamp = `${day}${fs.existsSync(path.join(ARCHIVE, `${day}.sql`)) ? `-${new Date().toISOString().slice(11, 16).replace(":", "")}` : ""}`;
+// A second run the same minute must not overwrite the first one's undo (2026-11-06, three runs
+// back to back): take the first name nobody has.
+let stamp = day;
+for (const t of [new Date().toISOString().slice(11, 16).replace(":", ""), new Date().toISOString().slice(11, 19).replace(/:/g, "")]) {
+  if (!fs.existsSync(path.join(ARCHIVE, `${stamp}.sql`))) break;
+  stamp = `${day}-${t}`;
+}
+if (fs.existsSync(path.join(ARCHIVE, `${stamp}.sql`))) { console.error(`${stamp}.sql exists already; run again in a second`); process.exit(1); }
 const head = `-- Taxonomy sweep ${stamp} (scripts/taxonomy-sweep). Applied with: npx wrangler d1 execute fandex --remote --file ../docs/archive/taxonomy-sweeps/${stamp}.sql (from worker/).`;
 const md = [`# Taxonomy sweep, ${stamp}`, "", `${total} changes, ${report.skip.length} things looked at and left alone. Undo: \`${stamp}-undo.sql\` beside this file.`, ""];
 for (const [kind, lines] of Object.entries(report)) {

@@ -6,3 +6,5 @@ How it runs, and the scheduled task on Nils's PC, are in memory [[taxonomy-sweep
 - **Every row it writes carries one `updated_at` stamp** (plus `source = 'sweep'` where the table has the column), and the undo deletes only rows still holding it. Keep that when touching `apply.mjs`.
 - **`prepare.mjs` stops when it can't read the dismissals, and `apply.mjs` refuses without them**, so a denied suggestion is never re-proposed.
 - **A new facet page kind also goes in `mobile/web/worker.ts`'s `appRoute`**, or its address 404s in a browser.
+- **A "no" to a Review card is a `deny` action, never a `skip`.** `deny` writes the row the app's Deny writes (`taxonomy_suggestion_dismissed`), so the card leaves Review; `skip` only reaches `decided.json`, which Review never reads.
+- **One pass is ONE run.** `--limit kind:N` raises a cap for a pass asked for by hand; never chunk. Each run checks against the taxonomy it was prepared from, so a later chunk can re-point a tag an earlier one just made a target, and aliases resolve in one hop. A new Review card kind also goes in the Worker's `SUGGESTION_KINDS` and in `REVIEW_KINDS` here.
