@@ -39,7 +39,6 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 ## Mine, open
 
-- **Search's Picks deals a different hand after ten minutes away** (signed in). The rest is checked: on 0.3.34 it opened on Picks in about 2.7 s with a first hand unrated and not on the wishlist, and on 0.3.35 a return after 18 s kept the same hand (2026-11-06). The ten-minute return was not tried: Nils was on the phone by then. → `docs/app.md` (Search row)
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 

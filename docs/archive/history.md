@@ -45,6 +45,9 @@ full history.
   film cards, and the logo circle brought every type back and closed the row; on Fargo, season 4's
   first episode's details opened the sheet (still, season and episode, date, 64 min, TMDB 6.4, synopsis,
   Mark unwatched and Close as separate buttons), and Close left the count at 31 of 51.
+- **Search's Picks, signed in (0.3.35):** the hand at 17:54 (Eagle Strike, Thronebreaker, My Big Fat
+  Greek Wedding, Reaper) stayed on a return after 18 s, and a return after 16 minutes on Home dealt a new
+  one (The Anthropocene Reviewed, FireFall, Terminator: Dark Fate, Killjoys), unrated and not wishlisted.
 - **The facet page's failed-provider line (PR #58)**, on `app-web-local` with the local Worker stopped:
   `/tag/wizards` said "Couldn't load more books or games just now. Try again", the empty state pointed
   at it, and after starting `worker-local` one press filled the page (78 titles, books and games).
