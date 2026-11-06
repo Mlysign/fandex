@@ -335,6 +335,8 @@ export default function InsightsScreen() {
   const [libraryTotal, setLibraryTotal] = useState(0);
   const [bucket, setBucket] = useState<number | null>(null);
   const [decade, setDecade] = useState<number | null>(null);
+  // A bar on one medium's chart: the other charts' picks clear, as the two above clear each other.
+  const [typeBucket, setTypeBucket] = useState<{ type: string; bucket: number } | null>(null);
   const { taxonomy } = useScores();
 
   const signedIn = auth.status === 'signedIn';
@@ -422,8 +424,9 @@ export default function InsightsScreen() {
     if (!rated) return [];
     if (bucket != null) return rated.filter((r) => Math.min(10, Math.max(1, Math.round(r.rating))) === bucket).sort((a, b) => b.rating - a.rating);
     if (decade != null) return rated.filter((r) => Math.floor(Number(r.releaseDate?.slice(0, 4)) / 10) * 10 === decade).sort((a, b) => b.rating - a.rating);
+    if (typeBucket) return rated.filter((r) => r.type === typeBucket.type && Math.min(10, Math.max(1, Math.round(r.rating))) === typeBucket.bucket).sort((a, b) => b.rating - a.rating);
     return [];
-  }, [rated, bucket, decade]);
+  }, [rated, bucket, decade, typeBucket]);
 
   const head = (
     <View style={{ marginBottom: 24 }}>
@@ -483,13 +486,13 @@ export default function InsightsScreen() {
         <View style={styles.section}>
           <Panel style={{ padding: 16 }}>
             <PanelHeader eyebrow="How you rate" stat={`avg ${data.baseline.toFixed(1)} · ${rated.length} rated`} hint="How many of your ratings fall at each score. Tap a bar to list those titles." />
-            <Histogram data={data.histogram} tint={color.accent} height={160} selected={bucket} onPick={(b) => { setDecade(null); setBucket((cur) => (cur === b ? null : b)); }} />
+            <Histogram data={data.histogram} tint={color.accent} height={160} selected={bucket} onPick={(b) => { setDecade(null); setTypeBucket(null); setBucket((cur) => (cur === b ? null : b)); }} />
           </Panel>
           {bucket != null && picked.length ? <Picked label={`${picked.length} rated ${bucket}`} items={picked} onClear={() => setBucket(null)} /> : null}
         </View>
 
         <View style={styles.section}>
-          <PanelHeader eyebrow="Distribution by type" hint="Your score distribution per medium. Do you rate games like you rate films?" />
+          <PanelHeader eyebrow="Distribution by type" hint="Your score distribution per medium. Do you rate games like you rate films? Tap a bar to list those titles." />
           <View style={styles.wrap}>
             {data.byType.map((t) => (
               <View key={t.type} style={[styles.cell, grid(width >= breakpoint.sm ? 3 : 1)]}>
@@ -498,11 +501,21 @@ export default function InsightsScreen() {
                     <TypeIcon type={t.type} size={14} tint={color.media[t.type]} />
                     <Text style={type.label}>{TYPE_PLURAL[t.type] ?? t.type}</Text>
                   </View>
-                  <Histogram data={t.histogram} tint={color.media[t.type]} height={110} />
+                  <Histogram
+                    data={t.histogram} tint={color.media[t.type]} height={110}
+                    selected={typeBucket?.type === t.type ? typeBucket.bucket : null}
+                    onPick={(b) => {
+                      setBucket(null); setDecade(null);
+                      setTypeBucket((cur) => (cur?.type === t.type && cur.bucket === b ? null : { type: t.type, bucket: b }));
+                    }}
+                  />
                 </Panel>
               </View>
             ))}
           </View>
+          {typeBucket && picked.length
+            ? <Picked label={`${picked.length} ${(TYPE_PLURAL[typeBucket.type] ?? typeBucket.type).toLowerCase()} rated ${typeBucket.bucket}`} items={picked} onClear={() => setTypeBucket(null)} />
+            : null}
         </View>
 
         <View style={styles.section}>
@@ -511,7 +524,7 @@ export default function InsightsScreen() {
             {/* A rail of fixed-width decades: squeezed into the panel's width, "1900s" broke over two lines (Nils, Miro board). */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.bars, styles.eraRail]}>
               {data.decades.map((d) => (
-                <Pressable key={d.decade} onPress={() => { setBucket(null); setDecade((cur) => (cur === d.decade ? null : d.decade)); }} accessibilityRole="button" accessibilityLabel={`${d.decade}s, average ${d.avg.toFixed(1)} over ${d.count}`} style={styles.eraCol}>
+                <Pressable key={d.decade} onPress={() => { setBucket(null); setTypeBucket(null); setDecade((cur) => (cur === d.decade ? null : d.decade)); }} accessibilityRole="button" accessibilityLabel={`${d.decade}s, average ${d.avg.toFixed(1)} over ${d.count}`} style={styles.eraCol}>
                   <Text style={styles.barCount}>{d.avg.toFixed(1)}</Text>
                   <View style={{ width: '100%', height: `${(d.avg / 10) * 70}%`, backgroundColor: d.avg >= data.baseline ? color.accent : color.neutral600, opacity: decade != null && decade !== d.decade ? 0.3 : 0.85, borderTopLeftRadius: 4, borderTopRightRadius: 4 }} />
                   <Text numberOfLines={1} style={styles.barLabel}>{d.decade}s</Text>
