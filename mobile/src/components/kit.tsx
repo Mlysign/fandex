@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronDown, Search, User, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Animated, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View,
   useWindowDimensions, type StyleProp, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { Img } from '~/components/Img';
@@ -234,8 +234,27 @@ export function Popover({ anchor, width, onClose, children, align = 'left', esti
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.popover, { top, left, width }]}>{children}</View>
+      <PopIn style={[styles.popover, { top, left, width }]} fromAbove={top < anchor.y}>{children}</PopIn>
     </Modal>
+  );
+}
+
+/** A popover's arrival: a quick fade and grow from the side of its control, so it reads as opened from there. */
+function PopIn({ style, fromAbove, children }: { style: StyleProp<ViewStyle>; fromAbove: boolean; children: ReactNode }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 170, easing: EMPHASIZED, useNativeDriver: NATIVE_DRIVER }).start();
+  }, [t]);
+  return (
+    <Animated.View style={[style, {
+      opacity: t,
+      transform: [
+        { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [fromAbove ? 6 : -6, 0] }) },
+        { scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+      ],
+    }]}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -284,21 +303,60 @@ export function SortMenu<K extends string>({ value, options, onChange }: { value
 
 // ── Sheet (ui/Sheet.tsx) ─────────────────────────────────────────────────────
 
-/** A bottom sheet on a phone, a centred dialog from 640 px. */
+/** The curve the app's own motion uses: off fast, a long soft landing. */
+const EMPHASIZED = Easing.bezier(0.2, 0, 0, 1);
+const NATIVE_DRIVER = Platform.OS !== 'web';
+const SHEET_IN_MS = 300;
+const SHEET_OUT_MS = 200;
+
+/**
+ * A bottom sheet on a phone, a centred dialog from 640 px. It moves itself
+ * rather than leaving it to the system's modal animation, which is linear on
+ * Android: in, the sheet rises on a long soft curve while the dark fades up;
+ * out, it drops away quicker. The modal stays up until the drop has played.
+ */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const wide = width >= breakpoint.sm;
   // Android draws a modal edge to edge, under the system's navigation bar. Without
   // this the last row of a sheet (the filter sheet's "Show N titles") sits beneath it.
   const { bottom } = useSafeAreaInsets();
+  const t = useRef(new Animated.Value(0)).current;
+  const [sheetH, setSheetH] = useState(0);
+  // Still drawn after `open` went false, until the drop has played.
+  const [wasOpen, setWasOpen] = useState(open);
+  const [closing, setClosing] = useState(false);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    setClosing(!open);
+  }
+  useEffect(() => {
+    if (open) {
+      t.setValue(0);
+      Animated.timing(t, { toValue: 1, duration: SHEET_IN_MS, easing: EMPHASIZED, useNativeDriver: NATIVE_DRIVER }).start();
+    } else {
+      Animated.timing(t, { toValue: 0, duration: SHEET_OUT_MS, easing: Easing.in(Easing.cubic), useNativeDriver: NATIVE_DRIVER })
+        .start(() => setClosing(false));
+    }
+  }, [open, t]);
+
+  const travel = sheetH || height * 0.6;
+  const motion = wide
+    ? { opacity: t, transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }
+    : { transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [travel, 0] }) }] };
   return (
-    <Modal transparent visible={open} animationType={wide ? 'fade' : 'slide'} onRequestClose={onClose}>
+    <Modal transparent visible={open || closing} animationType="none" onRequestClose={onClose}>
       <View style={[styles.sheetRoot, wide && { justifyContent: 'center' }]}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} onPress={onClose} accessibilityLabel="Close" />
-        <View accessibilityViewIsModal accessibilityLabel={title} style={[styles.sheet, wide ? styles.sheetWide : { paddingBottom: bottom }]}>
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: t }]}>
+          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} onPress={onClose} accessibilityLabel="Close" />
+        </Animated.View>
+        <Animated.View
+          accessibilityViewIsModal accessibilityLabel={title}
+          onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}
+          style={[styles.sheet, wide ? styles.sheetWide : { paddingBottom: bottom }, motion]}>
           {wide ? null : <View style={styles.sheetGrip}><View style={styles.sheetGripBar} /></View>}
           {children}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

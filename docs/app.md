@@ -119,6 +119,14 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   "impact" is a 50 ms buzz. The stars are one touch target for the whole row; a picker stays open
   until the pop has played (`onSettled`), the rating already saved on release. A browser pauses
   animation in a hidden tab, so an animation measured in a hidden browser pane reads frozen.
+  **0.3.38 spread it wider:** cards, people, the tab bar's icons and Up next's tick box sink under
+  the finger, ease back if the touch becomes a scroll, and pop on a tap (`components/pressFeel.ts`,
+  plain react-native because `cardFace` and `AppNav` are in the website's server render; their
+  haptic goes in the app's own code, as the tab tick in `(tabs)/_layout.tsx`). `Sheet` animates
+  itself on the emphasized curve instead of the modal's linear slide, a popover grows in from its
+  control, and Up next's rows and the calendar's day rail move with Reanimated layout transitions
+  (the week offset is a margin, not a transform, so the transition carries it). Up next's list
+  has `overScrollMode="always"`: Android draws the stretch only on a list that scrolls by default.
 - **Memory is pictures, not data** (measured 2026-10-23, RV31, 0.3.16 on the Pixel 8). The
   Hermes heap is 38 MB with the catalog copy, the profile and Home's rail pool loaded
   (`fandex_pool` and `fandex_index` in `adb logcat -s ReactNativeJS` carry it). `dumpsys meminfo`

@@ -9,14 +9,17 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { Easing as REasing, LinearTransition } from 'react-native-reanimated';
 import { RailHeader } from '~/components/cards';
 import { Img } from '~/components/Img';
 import { Panel, Skeleton } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
+import { PRESS, usePressScale } from '~/components/pressFeel';
 import { useAuth } from '~/lib/AuthProvider';
 import { itemHref } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
+import { FEEL, haptics } from '~/lib/feel';
 import { TraktAuthError, TraktBusyError, traktSignInMessage } from '~/lib/trakt';
 import { markEpisodeWatched, refreshUpNext, upNextList, upNextPending, type UpNextEntry } from '~/lib/upNext';
 import { color, font, radius, type } from '~/theme';
@@ -30,7 +33,16 @@ const WAKE_GAP_MS = 60 * 1000;
 const HOLD_MS = 450;
 const FADE_MS = 320;
 
-export const epLabel = (season: number, episode: number) => `S.${String(season).padStart(2, '0')} E.${String(episode).padStart(2, '0')}`;
+const NATIVE = Platform.OS !== 'web';
+
+/**
+ * How a row moves when the list around it changes: a ticked row leaves and the
+ * rest close up, a show's next episode lands in its new place. Quick, and on
+ * the curve the app's other motion uses.
+ */
+export const UP_NEXT_LAYOUT = LinearTransition.duration(FEEL.layoutMs).easing(REasing.bezier(0.2, 0, 0, 1));
+
+export const epLabel =(season: number, episode: number) => `S.${String(season).padStart(2, '0')} E.${String(episode).padStart(2, '0')}`;
 const entryKey = (e: UpNextEntry) => `${e.mediaItemId}:${e.season}:${e.episode}`;
 
 function describeTrakt(e: unknown): string {
@@ -50,9 +62,26 @@ export function EpisodeRow({ entry, ticked, exiting, onTick }: {
   const [imgFailed, setImgFailed] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    if (exiting) Animated.timing(fade, { toValue: 0, duration: FADE_MS, useNativeDriver: Platform.OS !== 'web' }).start();
+    if (exiting) Animated.timing(fade, { toValue: 0, duration: FADE_MS, useNativeDriver: NATIVE }).start();
     else fade.setValue(1);
   }, [exiting, fade]);
+
+  // The tick's small win: the box sinks under the finger and pops, the check
+  // springs in, a ring goes out from the box, and a firm click (lib/feel.ts).
+  const box = usePressScale(PRESS.tick);
+  const ring = useRef(new Animated.Value(1)).current;
+  const check = useRef(new Animated.Value(ticked ? 1 : 0)).current;
+  useEffect(() => {
+    if (ticked) Animated.spring(check, { toValue: 1, friction: 4, tension: 200, useNativeDriver: NATIVE }).start();
+    else check.setValue(0);
+  }, [ticked, check]);
+  const onTickPress = () => {
+    box.pop();
+    haptics.episode();
+    ring.setValue(0);
+    Animated.timing(ring, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE }).start();
+    onTick(entry);
+  };
 
   return (
     <Animated.View style={[styles.row, { opacity: fade, transform: [{ scale: fade.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
@@ -73,15 +102,28 @@ export function EpisodeRow({ entry, ticked, exiting, onTick }: {
         <Text numberOfLines={1} style={type.meta}>{entry.episodeTitle || `Episode ${entry.episode}`}</Text>
       </Pressable>
       <Pressable
-        onPress={() => onTick(entry)}
+        onPress={onTickPress}
+        onPressIn={box.onPressIn}
+        onPressOut={box.onPressOut}
         disabled={ticked}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: ticked }}
         accessibilityLabel={`Mark ${entry.title} ${epLabel(entry.season, entry.episode)} watched`}
         style={styles.tick}>
-        <View style={[styles.box, ticked && { backgroundColor: color.accent, borderColor: color.accent }]}>
-          {ticked ? <Check size={20} color={color.surface} strokeWidth={3} /> : null}
-        </View>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.ring, {
+            opacity: ring.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.8, 0] }),
+            transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.9] }) }],
+          }]}
+        />
+        <Animated.View style={[styles.box, ticked && { backgroundColor: color.accent, borderColor: color.accent }, { transform: [{ scale: box.scale }] }]}>
+          {ticked ? (
+            <Animated.View style={{ transform: [{ scale: check }, { rotate: check.interpolate({ inputRange: [0, 1], outputRange: ['-25deg', '0deg'] }) }] }}>
+              <Check size={20} color={color.surface} strokeWidth={3} />
+            </Animated.View>
+          ) : null}
+        </Animated.View>
       </Pressable>
     </Animated.View>
   );
@@ -227,7 +269,11 @@ export function UpNextRail() {
       <ScrollView nestedScrollEnabled style={{ height: SCROLLER_H }} contentContainerStyle={{ gap: EPISODE_ROW_GAP }}>
         {up.entries.map((e) => {
           const k = up.entryKey(e);
-          return <EpisodeRow key={k} entry={e} ticked={up.done.has(k)} exiting={up.leaving.has(k)} onTick={(x) => void up.tick(x)} />;
+          return (
+            <Reanimated.View key={k} layout={UP_NEXT_LAYOUT}>
+              <EpisodeRow entry={e} ticked={up.done.has(k)} exiting={up.leaving.has(k)} onTick={(x) => void up.tick(x)} />
+            </Reanimated.View>
+          );
         })}
       </ScrollView>
       {up.error ? <Text style={[type.caption, { color: color.warning, marginTop: 8 }]}>{up.error}</Text> : null}
@@ -252,4 +298,5 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: radius.sm, borderWidth: 1, borderColor: color.borderStrong,
     alignItems: 'center', justifyContent: 'center',
   },
+  ring: { position: 'absolute', width: 28, height: 28, borderRadius: radius.sm, borderWidth: 2, borderColor: color.accent },
 });

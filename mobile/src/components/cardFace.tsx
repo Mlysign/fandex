@@ -4,14 +4,16 @@
 // router and act on your rows. This module is the half a server can render:
 // the card's face, a rail's frame, and the static card, rail and grid the
 // website's build draws with them (mobile/web/render.tsx). No router, no
-// database, no session, no hooks but useState. ⚠️ Keep it that way: importing
+// database, no session, no hooks but useState and useRef (the press scale in
+// components/pressFeel.ts, plain react-native). ⚠️ Keep it that way: importing
 // anything that reaches expo-router here breaks the site's build.
 
 import { Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
 import { Children, isValidElement, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { Img } from '~/components/Img';
 import { CommunityScore, FandexScoreBadge } from '~/components/kit';
+import { PRESS, usePressScale } from '~/components/pressFeel';
 import { TypeIcon } from '~/components/Logo';
 import { cardHref } from '~/lib/cardHref';
 import type { CardItem, CardMatch } from '~/lib/cards';
@@ -45,17 +47,20 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
     const r = (box.current as unknown as { getBoundingClientRect?: () => DOMRect } | null)?.getBoundingClientRect?.();
     return r ? { left: r.left, right: r.right, top: r.top } : undefined;
   };
+  // The whole card sinks under the finger, the bar with it, and pops on a tap (components/pressFeel.ts).
+  const press = usePressScale(PRESS.card);
   return (
-    <View ref={box} style={[cardStyles.card, hovered && { borderColor: color.borderStrong }, style]}>
+    <Animated.View ref={box} style={[cardStyles.card, hovered && { borderColor: color.borderStrong }, style, { transform: [{ scale: press.scale }] }]}>
       <Pressable
         {...link.anchor}
-        onPress={link.onPress}
+        onPress={link.onPress ? (e) => { press.pop(); link.onPress?.(e); } : undefined}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         onLongPress={explain?.longPress}
         onHoverIn={() => { setHovered(true); explain?.hover(true, placeOf()); }}
         onHoverOut={() => { setHovered(false); explain?.hover(false); }}
         accessibilityRole="link"
-        accessibilityLabel={`${item.title}, view details`}
-        style={({ pressed }) => pressed && { opacity: 0.8 }}>
+        accessibilityLabel={`${item.title}, view details`}>
         <View style={cardStyles.poster}>
           {item.posterUrl && !imgFailed ? (
             <Img uri={item.posterUrl} width={200} alt={item.title} style={cardStyles.fill} onError={() => setImgFailed(true)} />
@@ -81,7 +86,7 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
         </View>
       </Pressable>
       <View style={cardStyles.barWrap}>{bar}</View>
-    </View>
+    </Animated.View>
   );
 }
 

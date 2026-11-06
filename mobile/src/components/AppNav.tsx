@@ -8,8 +8,9 @@
 
 import { Bookmark, CalendarDays, House, Search, User } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { Logo } from '~/components/Logo';
+import { PRESS, usePressScale } from '~/components/pressFeel';
 import { color, font, navHeight, radius, type } from '~/theme';
 
 const ITEMS = [
@@ -57,18 +58,26 @@ function Slot({ href, label, Icon, active, variant, onNavigate }: {
 }) {
   const slot = useSlot(href, onNavigate);
   const tint = active ? color.accent : color.textSecondary;
+  // The icon dips under the finger and pops on the tap (components/pressFeel.ts).
+  // The tick that goes with it is the app's (the layout's onNavigate): this file
+  // is also drawn into the website's static pages.
+  const press = usePressScale(PRESS.tab);
   return (
     <Pressable
       {...slot}
+      onPress={slot.onPress ? (e) => { press.pop(); slot.onPress?.(e); } : undefined}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       accessibilityRole="link"
       accessibilityState={{ selected: active }}
       accessibilityLabel={label}
-      style={({ pressed }) => [
+      style={[
         variant === 'bottom' ? styles.bottomSlot : styles.topSlot,
         variant === 'top' && active && { backgroundColor: color.surfaceElevated },
-        pressed && { opacity: 0.7 },
       ]}>
-      <Icon size={variant === 'bottom' ? 20 : 16} color={tint} strokeWidth={active ? 2.4 : 2} />
+      <Animated.View style={{ transform: [{ scale: press.scale }] }}>
+        <Icon size={variant === 'bottom' ? 20 : 16} color={tint} strokeWidth={active ? 2.4 : 2} />
+      </Animated.View>
       <Text style={variant === 'bottom' ? [type.micro, styles.bottomLabel, { color: tint }] : [type.label, { color: tint }]}>{label}</Text>
     </Pressable>
   );

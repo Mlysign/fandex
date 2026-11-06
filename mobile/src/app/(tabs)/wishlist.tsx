@@ -9,7 +9,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Bookmark, CirclePlay, Library } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import Reanimated from 'react-native-reanimated';
 import { searchKey } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
@@ -17,7 +18,7 @@ import { Button, EmptyState } from '~/components/kit';
 import { SignIn } from '~/components/SignIn';
 import { SubBar, Tabs, type TabDef } from '~/components/SubBar';
 import { Screen, StateBlock } from '~/components/ui';
-import { EPISODE_ROW_GAP, EpisodeRow, useUpNext } from '~/components/UpNext';
+import { EPISODE_ROW_GAP, EpisodeRow, UP_NEXT_LAYOUT, useUpNext } from '~/components/UpNext';
 import { useBarList } from '~/lib/barScroll';
 import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
@@ -264,9 +265,15 @@ function Progress({ tabs, query, setQuery }: { tabs: React.ReactNode; query: str
         actions={<SyncButton />}
       />
       {up.entries === null ? <StateBlock loading /> : (
-        <FlatList
+        <Reanimated.FlatList
           onScroll={bar.onScroll}
           scrollEventThrottle={32}
+          // Rows slide to their new places when the list changes (a tick, a re-sort).
+          itemLayoutAnimation={UP_NEXT_LAYOUT}
+          // The stretch at the top and bottom even when the list fits on the screen,
+          // as the grids have. Android shows it only for a list that scrolls by default.
+          overScrollMode="always"
+          alwaysBounceVertical
           data={showsVisible ? shown : []}
           keyExtractor={up.entryKey}
           contentContainerStyle={styles.list}

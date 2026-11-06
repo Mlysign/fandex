@@ -5,8 +5,10 @@
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, type GestureResponderEvent } from 'react-native';
 import { Img } from '~/components/Img';
+import { PRESS, usePressScale } from '~/components/pressFeel';
+import { haptics } from '~/lib/feel';
 import { color, font, radius, type } from '~/theme';
 
 export interface PopularPerson {
@@ -42,24 +44,30 @@ export function PersonCard({ person }: { person: PopularPerson }) {
   const router = useRouter();
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const press = usePressScale(PRESS.person);
   const onPress = (e?: GestureResponderEvent) => {
     (e as unknown as { preventDefault?: () => void } | undefined)?.preventDefault?.();
+    press.pop();
+    haptics.tap();
     router.push(person.href as never);
   };
   return (
     <Pressable
       {...(Platform.OS === 'web' ? ({ href: person.href } as object) : null)}
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       accessibilityRole="link"
       accessibilityLabel={`${person.name}, ${roleLabel(person.topRole, person.topType)}`}
       style={styles.card}>
-      <View style={[styles.circle, hovered && { borderColor: color.borderStrong }]}>
+      {/* The portrait answers the finger: it sinks while held and pops on the tap. */}
+      <Animated.View style={[styles.circle, hovered && { borderColor: color.borderStrong }, { transform: [{ scale: press.scale }] }]}>
         {person.portraitUrl && !failed
           ? <Img uri={person.portraitUrl} width={110} alt="" style={styles.fill} onError={() => setFailed(true)} />
           : <Text style={[type.serifMd, { color: color.textSecondary }]}>{initials(person.name)}</Text>}
-      </View>
+      </Animated.View>
       <Text numberOfLines={2} style={[styles.name, hovered && { textDecorationLine: 'underline' }]}>{person.name}</Text>
       <Text style={[type.label, { color: color.textSecondary, marginTop: 2 }]}>
         {roleLabel(person.topRole, person.topType)} · {person.titleCount} titles

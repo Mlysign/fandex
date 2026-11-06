@@ -75,6 +75,16 @@ export const FEEL = {
   savePop: 1.4,
   saveClick: 0.55,
   unsaveTick: 0.4,
+
+  // ── Taps everywhere else. How far things sink and pop is components/pressFeel.ts's PRESS ──
+  /** A tab or a person: the lightest tick, so moving around never buzzes. */
+  tapTick: 0.35,
+  /** An episode ticked off: a firmer click than Save, it is a small win. */
+  episodeClick: 0.75,
+  /** How long the screens' own motion takes: a sheet, the calendar's day rail, Up next moving rows. */
+  sheetInMs: 300,
+  sheetOutMs: 200,
+  layoutMs: 240,
 } as const;
 
 export type RatingTier = 'clear' | 'low' | 'mid' | 'high' | 'top';
@@ -113,4 +123,8 @@ export const haptics = {
   save: (on: boolean) => play(on
     ? [[CLICK, FEEL.saveClick, 0], [TICK, FEEL.saveClick * FEEL.tailScale, FEEL.tailDelayMs]]
     : [[TICK, FEEL.unsaveTick, 0]]),
+  /** A tab, a person, anything that only moves you somewhere. */
+  tap: () => play([[TICK, FEEL.tapTick, 0]]),
+  /** An episode marked watched. */
+  episode: () => play([[CLICK, FEEL.episodeClick, 0], [TICK, FEEL.episodeClick * FEEL.tailScale, FEEL.tailDelayMs]]),
 };

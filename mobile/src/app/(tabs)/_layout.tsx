@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
 import { NavSearch } from '~/components/NavSearch';
 import { useAuth } from '~/lib/AuthProvider';
+import { haptics } from '~/lib/feel';
 import { sendPageview } from '~/lib/pageview';
 import { takeReturnTo } from '~/lib/returnTo';
 import { browserLikeHistory } from '~/lib/tabHistory';
@@ -35,7 +36,8 @@ export default function TabsLayout() {
     const to = takeReturnTo();
     if (to) router.replace(to as never);
   }, [auth.status, router]);
-  const go = useCallback((href: string) => router.navigate(href as never), [router]);
+  // A light tick with every tab tapped: the bar's own pop is in AppNav.
+  const go = useCallback((href: string) => { haptics.tap(); router.navigate(href as never); }, [router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: color.surface }}>

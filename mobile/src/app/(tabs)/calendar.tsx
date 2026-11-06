@@ -13,6 +13,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { Bookmark, CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Flame, Library, List, Star, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
+import Reanimated, { Easing as REasing, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { ActionBar, PosterCard, Rail, useCardKit } from '~/components/cards';
 import { Img } from '~/components/Img';
@@ -48,6 +49,9 @@ const GRID_DAYS = [1, 2, 3, 4, 5, 6, 0];
 const mondayFirst = (dayOfWeek: number) => (dayOfWeek + 6) % 7;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MAX_MONTHS_AWAY = 24;
+/** The day rail opening and closing: the grid folds and the rail grows on the app's emphasized curve. */
+const DAY_RAIL_LAYOUT = LinearTransition.duration(280).easing(REasing.bezier(0.2, 0, 0, 1));
+const DAY_RAIL_ENTER = FadeInDown.duration(260).delay(60).easing(REasing.bezier(0.2, 0, 0, 1));
 const RAIL_OPEN_PX = 400;
 const RAIL_GAP_PX = 12;
 
@@ -397,9 +401,12 @@ export default function CalendarScreen() {
                 />
               ) : (
                 <>
-                  <View style={{ height: gridH, overflow: 'hidden' }}>
+                  {/* Opening a day shrinks the grid to the day's week and grows the rail under it.
+                      Both move on DAY_RAIL_LAYOUT instead of snapping. The week offset is a margin, not a
+                      transform, so the same layout animation carries it. */}
+                  <Reanimated.View layout={DAY_RAIL_LAYOUT} style={{ height: gridH, overflow: 'hidden' }}>
                     <SlideIn key={month} from={slide}>
-                    <View style={{ transform: [{ translateY: -firstWeek * (rowH + gap) }], gap }}>
+                    <Reanimated.View layout={DAY_RAIL_LAYOUT} style={{ marginTop: -firstWeek * (rowH + gap), gap }}>
                       {Array.from({ length: weekCount }, (_, w) => (
                         <View key={w} style={{ flexDirection: 'row', height: rowH, gap }}>
                           {Array.from({ length: 7 }, (_, d) => {
@@ -416,11 +423,13 @@ export default function CalendarScreen() {
                           })}
                         </View>
                       ))}
-                    </View>
+                    </Reanimated.View>
                     </SlideIn>
-                  </View>
-                  <View style={{ height: railH, marginTop: railH > 0 ? RAIL_GAP_PX : 0, overflow: 'hidden' }} onTouchStart={() => { swipe.current = null; }}>
+                  </Reanimated.View>
+                  <Reanimated.View layout={DAY_RAIL_LAYOUT} style={{ height: railH, marginTop: railH > 0 ? RAIL_GAP_PX : 0, overflow: 'hidden' }} onTouchStart={() => { swipe.current = null; }}>
                     {selected && railDay ? (
+                      // The day's titles fade up into the opening rail; a new day picked fades in again.
+                      <Reanimated.View key={railDay} entering={DAY_RAIL_ENTER} style={{ flex: 1 }}>
                       <ScrollView contentContainerStyle={styles.dayRail}>
                         {railItems.length ? (
                           <Rail title={longDay(railDay)} action={close}>
@@ -441,8 +450,9 @@ export default function CalendarScreen() {
                           </View>
                         )}
                       </ScrollView>
+                      </Reanimated.View>
                     ) : null}
-                  </View>
+                  </Reanimated.View>
                 </>
               )}
             </View>
