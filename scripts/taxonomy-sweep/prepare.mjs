@@ -11,6 +11,8 @@
 //                   the rule-based proposals (lib/taxonomySweep.ts), the franchises, the titles in
 //                   no franchise, the tags still in Other, the categories, the aliases, and the
 //                   refs already decided (dismissed, or this sweep's own earlier no's)
+//   other.txt       EVERY tag still in Other (other-brief.md says how to sort it), and past
+//                   700 lines other-NN.txt chunks of it; join-other.mjs makes the actions
 //
 // Nothing here writes to D1. The decisions go into actions.json by hand or by the
 // scheduled task, and scripts/taxonomy-sweep/apply.mjs applies them.
@@ -35,7 +37,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const { runTaxonomySweep } = await import("~/lib/taxonomySweep");
 const { surveyFranchises } = await import("~/lib/ipSurvey");
 const { buildTagRows } = await import("~/lib/tagVocab");
-const { categorizeTag, CATEGORIES } = await import("@/lib/tags");
+const { CATEGORIES } = await import("@/lib/tags");
 
 // ── 1. The catalog and the taxonomy ─────────────────────────────────────────
 const getJson = async (url) => {
@@ -101,14 +103,33 @@ const TYPE = { movie: "film", show: "show", game: "game", book: "book", boardgam
 const line = (it) => `${it.vector.id} | ${TYPE[it.vector.type] ?? it.vector.type} | ${it.vector.year ?? "----"} | ${it.vector.title}`;
 const unplaced = items.filter((i) => !placed.has(i.vector.id)).sort((a, b) => a.vector.type.localeCompare(b.vector.type) || a.vector.title.localeCompare(b.vector.title));
 const liveCategories = new Map(tax.tagCategories.map((c) => [c.id, c]));
-const otherTags = tagRows.filter((t) => !t.overridden && (categorizeTag(t.key) === "other") && t.count >= 3);
+// EVERY tag whose live category is Other, not just those on three titles: until
+// 2026-11-06 the sweep saw only those, and 5,562 one- and two-title tags piled up.
+const otherTags = tagRows.filter((t) => t.category === "other").sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 const sampleTitles = (key) => (itemsByKey.get(key) ?? []).slice(0, 3).map((n) => items[n].vector.title).join("; ");
+const MEDIUM = { movie: "F", show: "S", game: "G", book: "B", boardgame: "BG" };
+const mediaMix = (key) => {
+  const n = {};
+  for (const i of itemsByKey.get(key) ?? []) n[MEDIUM[items[i].vector.type] ?? "?"] = (n[MEDIUM[items[i].vector.type] ?? "?"] ?? 0) + 1;
+  return Object.entries(n).map(([m, c]) => `${m}${c}`).join(" ");
+};
+// other.txt in the shape other-brief.md describes, and chunks of CHUNK lines past that
+// for subagents to sort in parallel; join-other.mjs turns their outputs into actions.
+const CHUNK = 700;
+for (const f of fs.readdirSync(OUT)) if (/^other(-\d+)?\.txt$/.test(f)) fs.rmSync(path.join(OUT, f));
+const otherLines = otherTags.map((t) => `${t.key} | ${t.label} | ${t.count} | ${t.overridden ? "hand" : ""} | ${mediaMix(t.key)} | ${sampleTitles(t.key)}`);
+if (otherLines.length) fs.writeFileSync(path.join(OUT, "other.txt"), otherLines.join("\n"));
+const otherChunks = otherLines.length > CHUNK ? Math.ceil(otherLines.length / CHUNK) : 0;
+for (let c = 0; c < otherChunks; c++) {
+  const part = otherLines.slice(Math.floor((c * otherLines.length) / otherChunks), Math.floor(((c + 1) * otherLines.length) / otherChunks));
+  fs.writeFileSync(path.join(OUT, `other-${String(c).padStart(2, "0")}.txt`), part.join("\n"));
+}
 const codeCategories = new Set(CATEGORIES.map((c) => c.id));
 
 const md = [];
 md.push(`# Taxonomy sweep worklist, ${day}`);
 md.push("");
-md.push(`Catalog built ${index.builtAt}: ${items.length} titles (${Object.entries(items.reduce((n, i) => ((n[i.vector.type] = (n[i.vector.type] ?? 0) + 1), n), {})).map(([t, n]) => `${n} ${t}`).join(", ")}). ${survey.length} franchises, ${survey.filter((f) => f.members.length === 1).length} of them holding one title. ${tagRows.length} tags, ${tagRows.filter((t) => t.category === "other").length} in Other (${otherTags.length} of those on three titles or more and not placed by hand). ${dismissed.length} proposals denied in Review, ${decided.length} refs decided by earlier sweeps.`);
+md.push(`Catalog built ${index.builtAt}: ${items.length} titles (${Object.entries(items.reduce((n, i) => ((n[i.vector.type] = (n[i.vector.type] ?? 0) + 1), n), {})).map(([t, n]) => `${n} ${t}`).join(", ")}). ${survey.length} franchises, ${survey.filter((f) => f.members.length === 1).length} of them holding one title. ${tagRows.length} tags, ${otherTags.length} in Other. ${dismissed.length} proposals denied in Review, ${decided.length} refs decided by earlier sweeps.`);
 md.push("");
 md.push("Every id below is a catalog title id. A franchise is named by its canonical key (after bundles). Categories are listed by id.");
 md.push("");
@@ -138,11 +159,11 @@ md.push("Look for: adaptations of one work across media (a book and its film), r
 md.push("");
 for (const it of unplaced) md.push(line(it));
 md.push("");
-md.push(`## Tags still in Other, three titles or more (${otherTags.length}): key | titles | three of them`);
+md.push(`## Tags still in Other (${otherTags.length})`);
 md.push("");
-md.push("Place each in a category above, propose a new category only for a cluster of twenty or more tags no category fits, and fold spellings of one tag into one (tag-alias). A tag that says nothing about taste (store plumbing, a release fact) goes to meta.");
-md.push("");
-for (const t of otherTags) md.push(`${t.key} | ${t.count} | ${sampleTitles(t.key)}`);
+md.push(otherTags.length
+  ? `Every one gets a category: they are in other.txt${otherChunks ? ` and split into ${otherChunks} chunks (other-00.txt …), one per subagent` : ""}, sorted per scripts/taxonomy-sweep/other-brief.md into .out.tsv files, then \`node scripts/taxonomy-sweep/join-other.mjs <this folder>\` adds the moves to actions.json. Spellings of one tag are folded separately (tag-alias).`
+  : "None. Other is empty.");
 md.push("");
 md.push("## Existing tag aliases (spelling → tag)");
 md.push("");
@@ -173,5 +194,5 @@ fs.writeFileSync(path.join(OUT, "actions.example.json"), JSON.stringify({
 }, null, 2));
 
 console.log(`work folder: ${path.relative(REPO, OUT)}`);
-console.log(`${items.length} titles, ${survey.length} franchises, ${unplaced.length} in none; ${tagRows.length} tags, ${otherTags.length} Other tags on 3+ titles; ${report.suggestions.length} rule proposals; ${dismissed.length} dismissed, ${decided.length} decided`);
+console.log(`${items.length} titles, ${survey.length} franchises, ${unplaced.length} in none; ${tagRows.length} tags, ${otherTags.length} in Other${otherChunks ? ` (${otherChunks} chunks)` : ""}; ${report.suggestions.length} rule proposals; ${dismissed.length} dismissed, ${decided.length} decided`);
 console.log(`worklist: ${(fs.statSync(path.join(OUT, "worklist.md")).size / 1024).toFixed(0)} KB`);

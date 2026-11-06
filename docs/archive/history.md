@@ -21,6 +21,14 @@ full history.
 
 ---
 
+## Other emptied, and the weekly sweep made to keep it so (2026-11-06)
+
+- **Nils: "there are still hundreds of tags in the other category ... make it empty".** It held 5,562 (4,493 of them on one title), all arrived since Other was emptied on 2026-10-18, mostly book subjects and TMDB keywords. The weekly sweep's worklist listed only Other tags on three or more titles, so it never saw the rest.
+- Sorted by eight subagents reading every tag with its titles (`scripts/taxonomy-sweep/other-brief.md`), every call on three or more titles read again and 70 of the rest sampled; one change ("first person narrative" from perspective to storytelling). 2,303 to theme, 1,153 character, 522 setting, 426 genre, 404 meta, 364 object, 113 audience, 110 mood, 57 mechanics, 34 artstyle, 32 source, 27 mode, 4 perspective. Report and undo: `docs/archive/taxonomy-sweeps/2026-11-06-2009.md`.
+- **New category Storytelling** (weight 0.5, what Other weighs) for Hardcover's reader impressions: strong or weak character development, loveable or diverse characters, plot or character driven, slow or medium paced (13 tags, on up to 237 books each). Nothing else needed a new one.
+- **The score barely moved** (backtest on Nils's library with and without the moves): games' average miss 1.58 → 1.59, every other medium the same to two decimals, the up gain 1.28 → 1.27. Nothing refitted.
+- **The weekly sweep now sorts every Other tag:** `prepare.mjs` writes all of them to `other.txt`, in 700-line chunks past that, the scheduled task hands one chunk to each subagent with the brief, and `join-other.mjs` checks every output against its input and appends the moves to `actions.json`.
+
 ## The Review queue cleared by an AI pass, and tag bundles added to Review (2026-11-06, 0.3.36)
 
 - **Nils asked for the 401 Review cards to be decided** ("I don't know if Warriors: A Vision of Shadows is the same thing as Warriors universe"). Every card was judged on its titles, creators and years and applied through `scripts/taxonomy-sweep/apply.mjs`: 21 franchise bundles (Vision of Shadows and the Super Editions into Warriors, Percy Jackson, Mistborn, the article pairs), 405 attaches (the 225 joins less 36 wrong ones, and 76 new franchises), 112 denials. Publisher imprints from Open Library ("Thorndike Press large print", "Ulverscroft", "G.K. Hall", "Viking compass editions") were never made franchises; the book and film behind each card got its own (Friday Night Lights, 11/22/63, Naked Lunch, My Cousin Rachel, One Flew Over the Cuckoo's Nest, Ben-Hur, and others). Reports and undo files: `docs/archive/taxonomy-sweeps/2026-11-06*.md`.
