@@ -1,9 +1,9 @@
 // The website build's checks (mobile/web/buildChecks.mjs): the CSP's script
-// hashes, the shrink check against the last full build, and which commit the
-// nightly run publishes.
+// hashes, the shrink check against the last full build, which facet pages are
+// indexed, the sitemap, and which commit the nightly run publishes.
 
 import { describe, expect, it } from 'vitest';
-import { baselineOf, contentSecurityPolicy, inlineScripts, pickCommit, retrying, scriptHash, shrinkProblems } from '../../web/buildChecks.mjs';
+import { baselineOf, contentSecurityPolicy, FACET_INDEX_MIN, facetIndexed, inlineScripts, pickCommit, retrying, scriptHash, shrinkProblems, sitemapXml } from '../../web/buildChecks.mjs';
 
 describe('the CSP', () => {
   it('hashes a script the way a browser does: sha256 of the exact text, base64', () => {
@@ -114,5 +114,22 @@ describe('the nightly git fetch', () => {
     expect(retrying(() => { calls++; return false; }, { tries: 3, waitMs: 10, sleep: (ms: number) => waits.push(ms) })).toBe(false);
     expect(calls).toBe(3);
     expect(waits).toEqual([10, 10]);
+  });
+});
+
+describe('what a search engine is offered', () => {
+  it('indexes a facet page from FACET_INDEX_MIN titles, and not one below', () => {
+    expect(FACET_INDEX_MIN).toBe(10);
+    expect(facetIndexed(3)).toBe(false);
+    expect(facetIndexed(9)).toBe(false);
+    expect(facetIndexed(10)).toBe(true);
+    expect(facetIndexed(2753)).toBe(true);
+  });
+
+  it('writes lastmod only for a page that has a date, and escapes the address', () => {
+    const xml = sitemapXml([{ loc: 'https://fandex.org/', lastmod: '2026-11-06' }, { loc: 'https://fandex.org/tag/r&b' }]);
+    expect(xml).toContain('<url><loc>https://fandex.org/</loc><lastmod>2026-11-06</lastmod></url>');
+    expect(xml).toContain('<url><loc>https://fandex.org/tag/r&amp;b</loc></url>');
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
   });
 });

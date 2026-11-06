@@ -11,7 +11,7 @@
 
 ## ⚠️ Needs Nils: this is the whole list
 
-Five items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
+Six items. Everything else in this file is work I can do without him, and every settled call moved to [docs/decisions.md](docs/decisions.md).
 
 0. **🔵 APP + WEBSITE ON CLOUDFLARE: online since 2026-10-10.** The plan is [docs/app-plan.md](docs/app-plan.md); the references are [docs/website.md](docs/website.md), [docs/worker.md](docs/worker.md) and [docs/app.md](docs/app.md).
    - **(a) Keep using the app and the site, and say what is off.** **Asked of him and not answered yet:** the list header no longer flickering when a thumb stays down after scrolling (on the phone since 0.3.11, 2026-10-23), a tick on the widget (on 2026-10-20 a tick moved its taps while the rows stayed old; the rows travel inside the widget's own update since 0.3.26), a tag page he knows (its titles come from TMDB by name, and a wrong match is possible), the episode sheet on the phone, a franchise page (Harry Potter: the books rail on a book, the films rail on a film), the type filter's one-tap, and the widget's smaller heading. Every admin write, Review's Add and disconnecting one of two sign-ins were run on the local stack on 2026-10-23 and work (archive: grep "the open tasks").
@@ -28,6 +28,8 @@ Five items. Everything else in this file is work I can do without him, and every
    - **If he ever has a token from another Trakt app, try signing in to Fandex with it.** The Worker assumes Trakt refuses a token issued to another app; nobody has proven it. A Trakt identity is keyed on Trakt's uuid since 2026-10-23, and his old username row moves to it on his next Trakt sign-in.
 
 6. **🔵 Shows with no cast (Adolescence and 50 more, 2026-11-02).** A show's TMDB `credits` lists only regulars, so a miniseries filed as guest stars had no Cast rail; `getTmdbShow` now fills it from the latest season's `aggregate_credits`. Deployed, and the data fix run on 2026-11-05 (51 shows queued for the retention refresh, about a day). ⚠️ The aggregate shape is from TMDB's docs, not a live probe: check Adolescence's cast on 2026-11-06, and publish the website again once it shows.
+
+7. **🔵 Google indexes 5 of 10,125 URLs (Search Console, 2026-11-06).** Facet pages under 10 titles are `noindex` and out of the sitemap since 2026-11-06 (needs a publish). **His:** (1) in Search Console's Pages report, say whether most URLs are "Discovered" (not fetched: the domain needs links, nilsmlynarek.eu, Show HN, Product Hunt, subreddits) or "Crawled" (fetched and judged thin); (2) resubmit the sitemap after the publish and request indexing for about ten strong pages (`/tag/action`, top item pages). Mine after his answer: text of their own on the big facet pages. → [docs/website.md](docs/website.md)
 
 ## Mine, open
 

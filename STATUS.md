@@ -39,7 +39,7 @@ _Last updated: **2026-11-02**. State only, per the doc conventions in AGENTS.md:
 
 ## 🔎 Organic reach
 
-**Ads-first means the bottleneck is traffic.** Search Console is verified for `fandex.org` through a DNS TXT record on the apex (⚠️ deleting it un-verifies the property). The static site carries the old site's structured data, sitemap and robots rules. → [docs/archive/old-site/seo.md](docs/archive/old-site/seo.md) (written for the old site; the reasoning still holds).
+**Ads-first means the bottleneck is traffic.** Search Console is verified for `fandex.org` through a DNS TXT record on the apex (⚠️ deleting it un-verifies the property). The static site carries the old site's structured data, sitemap and robots rules. → [docs/archive/old-site/seo.md](docs/archive/old-site/seo.md) (written for the old site; the reasoning still holds). ⚠️ **On 2026-11-06 Google had 5 of 10,125 URLs indexed**, item pages included, so it is the domain's standing, not one kind of page. Nothing technical blocks it (robots, status, canonical and the rendered page all checked that day). Facet pages under 10 titles are `noindex` since then; what is left is external links and pages with something of their own (TASKS.md 7).
 
 ## 🗺️ Roadmap
 
