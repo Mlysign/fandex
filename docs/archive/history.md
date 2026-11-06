@@ -21,6 +21,29 @@ full history.
 
 ---
 
+## Shows' cast, the Hardcover walk and book languages confirmed live; 0.3.34 on the phone (2026-11-06)
+
+- **Shows with no cast** (TASKS.md item 6, the `aggregate_credits` fill): Adolescence's API row has 8 cast
+  (Stephen Graham, Owen Cooper, ...). The site was published the same day and its page lists them.
+- **The Hardcover walk** went out with the Worker deploy of 2026-11-05 (06:44 UTC), as did the book
+  languages of 2026-11-03. On 2026-11-06 both walks were idle (`hardcover_walk_idle`,
+  `hardcover_moods_idle` in `kv`, cursor reset), 851 of 1,239 books carry a Hardcover link, and Dune
+  Messiah has dark, reflective and tense as voted tags (reflective is filed under `other`, not `mood`).
+  Whether the unprobed ISBN query was ever refused is not known: it falls back to the search, and the
+  walk was idle by the time anyone tailed it.
+- **Book languages:** `/v1/search/books?q=die alchemisten&region=DE` answers Hardcover's German
+  edition titles ("Der Meister der Elixiere: Die Alchemisten Saga 1"), so the `editions { language }`
+  shape is right.
+- **0.3.34 on the Pixel 8, over adb:** Insights shows a spinner, then the overview and every rating box
+  filled within about two seconds. The in-app trailer plays sound (an AAudio player in Fandex's uid,
+  holding audio focus), no error 153, and Back stops it. `screencap` cannot see the video surface, so
+  the picture and fullscreen were left for Nils. Search opened on Picks in about 2.7 s, its first hand
+  unrated and not on the wishlist.
+- **The gains refit, with books tagged:** `--fit-gains` on Nils's library (1,759 rated, pool 11,513)
+  gave 1.28 up and 5.24 down against the live 1.3 and 5.3, so nothing changed. Against 2026-10-27:
+  films off by 1.41 / within one 43% (1.40 / 44%), games 1.58 / 40% (1.63 / 38%), shows 1.70 / 36%
+  (1.69 / 36%). Books: 26 rated, off by 1.47 against 1.50 for guessing, order ρ −0.18 (too few to read).
+
 ## The remote sessions' work shipped, and the planet tag's count (2026-11-02)
 
 - **Shipped:** the widget fix of 2026-10-20 merged (`0029dca`; rows inside the widget's own update,
