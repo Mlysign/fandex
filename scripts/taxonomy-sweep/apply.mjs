@@ -258,7 +258,18 @@ if (fatal.length) {
   console.log("\nNothing applied: fix the problems above (a problem ending in \"(skipped)\" only drops that tag).");
   process.exit(1);
 }
-if (!total) { console.log("Nothing to apply."); process.exit(0); }
+/** The no's, remembered (a ref is whatever the worklist or check-bundles.mjs called the thing). */
+function rememberSkips() {
+  const known = new Set(decided.map((d) => d.ref));
+  for (const a of actions) if (a.kind === "skip" && !known.has(a.ref)) decided.push({ ref: a.ref, why: a.why, on: day });
+  fs.writeFileSync(decidedFile, `${JSON.stringify(decided, null, 1)}\n`);
+}
+// A run of only skips still remembers them (until 2026-11-06 it exited first and lost them).
+if (!total) {
+  if (apply && report.skip.length) { rememberSkips(); console.log(`Nothing to apply; ${report.skip.length} no's remembered in scripts/taxonomy-sweep/decided.json.`); }
+  else console.log("Nothing to apply.");
+  process.exit(0);
+}
 
 // ── 2. The record, written before anything runs ─────────────────────────────
 const ARCHIVE = path.join(REPO, "docs", "archive", "taxonomy-sweeps");
@@ -325,8 +336,5 @@ d1(["--file", path.join(ARCHIVE, `${stamp}.sql`), "--yes"]);
 const after = query("SELECT (SELECT COUNT(*) FROM item_ip_override WHERE source = 'sweep') sweep_rows, (SELECT COUNT(*) FROM ip_alias) ip_aliases, (SELECT COUNT(*) FROM tag_alias) tag_aliases, (SELECT COUNT(*) FROM tag_category_override) overrides, (SELECT COUNT(*) FROM tag_category) categories")[0];
 console.log(`applied. D1 now: ${JSON.stringify(after)}`);
 
-// The no's, remembered. A ref is whatever the worklist called the thing.
-const known = new Set(decided.map((d) => d.ref));
-for (const a of actions) if (a.kind === "skip" && !known.has(a.ref)) decided.push({ ref: a.ref, why: a.why, on: day });
-fs.writeFileSync(decidedFile, `${JSON.stringify(decided, null, 1)}\n`);
+rememberSkips();
 console.log(`report: docs/archive/taxonomy-sweeps/${stamp}.md, undo beside it; ${report.skip.length} no's remembered in scripts/taxonomy-sweep/decided.json`);
