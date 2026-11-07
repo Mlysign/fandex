@@ -183,6 +183,17 @@ export interface CalendarCard {
   popularity: number | null;
 }
 
+/** A season after the first, starting on `airDate` (the show's own country). */
+export interface SeasonPremiere {
+  /** The show's catalog id. */
+  id: string;
+  season: number;
+  name: string | null;
+  episodeCount: number;
+  airDate: string;
+  posterUrl: string | null;
+}
+
 export interface CalendarMonth {
   month: string;
   region: string;
@@ -346,6 +357,9 @@ export const api = {
   /** Which of these films open on another day in `region` than the one date the device holds. At most 200 ids. */
   releaseDates: (region: string, ids: string[]) =>
     request<{ region: string; dates: Record<string, string> }>('/v1/catalog/release-dates', json('POST', { region, ids })),
+
+  /** Every season after the first that starts in this month, for every show the Worker holds seasons of. */
+  seasonPremieres: (month: string) => request<{ month: string; seasons: SeasonPremiere[] }>(`/v1/catalog/season-premieres${q({ month })}`),
 
   searchGames: (query: string) => request<{ results: GameSearchResult[] }>(`/v1/search/games${q({ q: query })}`),
   // `region` on the book calls: books come in English and that country's languages (2026-11-03).

@@ -15,6 +15,7 @@
 //     GET  /v1/search/games?q                          IGDB search (the secret stays here)
 //     GET  /v1/calendar/{YYYY-MM}?region               the month's popular releases
 //     POST /v1/catalog/release-dates {region, ids}     films whose date in that country differs
+//     GET  /v1/catalog/season-premieres?month          seasons after the first that start that month
 //
 //   Sign-in
 //     POST /v1/auth/google   {idToken, nonce}
@@ -47,9 +48,9 @@ import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, ses
 import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, verifyDiscordToken, verifyGoogleIdToken, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
 import { capFrom, spend, spent } from "./budget";
-import { calendarMonth } from "./calendar";
+import { calendarMonth, validMonth } from "./calendar";
 import {
-  catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX,
+  catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX, seasonPremieresJson,
   keepTaxonomy, keptTaxonomy, keptTaxonomyEtag, showEpisodesJson,
 } from "./catalog/read";
 import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
@@ -174,6 +175,13 @@ async function route(c: Ctx): Promise<Response> {
     const asked = request.headers.get("If-None-Match");
     if (asked && asked === answer.etag) return new Response(null, { status: 304, headers: { ETag: answer.etag, "Cache-Control": "no-cache" } });
     return json(answer.body, 200, { ETag: answer.etag, "Cache-Control": "no-cache" });
+  }
+
+  if (a === "catalog" && b === "season-premieres" && method === "GET" && !d) {
+    // An indexed range read of a few dozen rows, the same answer for everybody.
+    const month = url.searchParams.get("month") ?? "";
+    if (!validMonth(month)) return error(400, "bad-request", "Expected ?month=YYYY-MM within two years of today");
+    return json(await seasonPremieresJson(c.env.DB, month), 200, { "Cache-Control": "public, max-age=3600" });
   }
 
   if (a === "catalog" && b === "release-dates" && method === "POST" && !d) {

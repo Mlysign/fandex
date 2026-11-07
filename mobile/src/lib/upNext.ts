@@ -21,6 +21,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { api } from '~/lib/api';
 import { traktIds } from '~/lib/itemActions';
+import { shiftMonth } from '~/lib/dates';
+import { premiereRecheckAt, seasonPremieres } from '~/lib/seasonPremieres';
 import { applyLocalWrite } from '~/lib/stateSync';
 import { TraktBusyError, traktAccessToken, traktGet, traktMissed, traktPost } from '~/lib/trakt';
 import { publishWidget } from '~/lib/widget';
@@ -237,6 +239,30 @@ async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now
 }
 
 /**
+ * A caught-up show whose next season starts this month or started last month
+ * is asked about on the premiere day (`premiereRecheckAt`), not after its
+ * week-long wait: Rings of Power, finished in 2024, would otherwise have sat
+ * out of Up next for up to a week after season 3 came out. Only where Trakt
+ * gave no date of its own. The hint is not stored: it is worked out every run
+ * from the Worker's season list, and a failed call just leaves the waits as
+ * they were.
+ */
+async function withPremieres<T extends StoredRow & { season: number | null }>(rows: T[], now: number): Promise<T[]> {
+  const caughtUp = rows.filter((r) => r.season == null && r.next_air_at == null);
+  if (!caughtUp.length) return rows;
+  const here = new Date(now * 1000).toISOString().slice(0, 7);
+  const months = [shiftMonth(here, -1), here];
+  const lists = await Promise.all(months.map((m) => seasonPremieres(m).catch(() => [])));
+  const dates = new Map<string, string[]>();
+  for (const p of lists.flat()) dates.set(p.id, [...(dates.get(p.id) ?? []), p.airDate]);
+  return rows.map((r) => {
+    if (r.season != null || r.next_air_at != null || !dates.has(r.media_item_id)) return r;
+    const at = premiereRecheckAt(r.checked_at, dates.get(r.media_item_id) ?? []);
+    return at == null ? r : { ...r, next_air_at: at };
+  });
+}
+
+/**
  * Ask Trakt about the shows that are due. Returns how many are still waiting,
  * so a screen can run it again. A show whose request fails is left as it was
  * and asked again next time; the failure is thrown only if every request of the
@@ -256,7 +282,10 @@ let refreshing: Promise<{ checked: number; waiting: number }> | null = null;
 async function refreshUpNextOnce(db: SQLiteDatabase): Promise<{ checked: number; waiting: number }> {
   const now = Math.floor(Date.now() / 1000);
   const shows = await watchedShows(db);
-  const stored = await db.getAllAsync<StoredRow>('SELECT media_item_id, watched_count, checked_at, next_air_at FROM up_next');
+  const stored = await withPremieres(
+    await db.getAllAsync<StoredRow & { season: number | null }>('SELECT media_item_id, watched_count, checked_at, next_air_at, season FROM up_next'),
+    now,
+  );
   const due = showsToCheck(shows, stored, now, Number.MAX_SAFE_INTEGER);
   const batch = due.slice(0, RUN_BUDGET);
   if (!batch.length) return { checked: 0, waiting: 0 };

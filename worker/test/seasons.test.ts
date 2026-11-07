@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetBreakers } from "@/lib/http";
 import { upsertMediaItem } from "../src/catalog/ingest";
-import { showEpisodesJson } from "../src/catalog/read";
+import { seasonPremieresJson, showEpisodesJson } from "../src/catalog/read";
 import { seasonRowsFromTmdb, storeShowSeasons } from "../src/catalog/seasons";
 import { runShowSeasonsStep, SHOW_SEASONS_DUE_SQL } from "../src/cron";
 import { count, db, env, movieItem, showItem, wipe } from "./helpers";
@@ -153,5 +153,34 @@ describe("the walk over TMDB shows stored without seasons (2026-10-30)", () => {
     const res = await db.prepare(SHOW_SEASONS_DUE_SQL).bind("", 3).all();
     expect(res.results).toHaveLength(3);
     expect(res.meta.rows_read).toBeLessThanOrEqual(40);
+  });
+});
+
+describe("the calendar's season premieres", () => {
+  const ringsSeasons = [
+    { season_number: 1, name: "Season 1", episode_count: 8, air_date: "2022-09-01", poster_path: "/s1.jpg", overview: "" },
+    { season_number: 2, name: "Season 2", episode_count: 8, air_date: "2024-08-29", poster_path: "/s2.jpg", overview: "" },
+    { season_number: 3, name: "Season 3", episode_count: 8, air_date: "2026-11-10", poster_path: "/s3.jpg", overview: "" },
+  ];
+
+  it("lists the seasons after the first that start in the month, and leaves a first season to the show's own date", async () => {
+    const { id: rings } = await upsertMediaItem(db, showItem({ id: 84773, name: "The Rings of Power", seasons: ringsSeasons }));
+    // A new show whose first season starts the same month: not a premiere of a season, the show's own release.
+    await upsertMediaItem(db, showItem({ id: 99001, name: "A new show", seasons: [{ season_number: 1, name: "Season 1", episode_count: 6, air_date: "2026-11-12", poster_path: null, overview: "" }] }));
+
+    const body = JSON.parse(await seasonPremieresJson(db, "2026-11"));
+    expect(body).toEqual({
+      month: "2026-11",
+      seasons: [{ id: rings, season: 3, name: "Season 3", episodeCount: 8, airDate: "2026-11-10", posterUrl: "https://image.tmdb.org/t/p/w342/s3.jpg" }],
+    });
+    expect(JSON.parse(await seasonPremieresJson(db, "2026-12")).seasons).toEqual([]);
+  });
+
+  it("reads through the air-date index, not the whole table", async () => {
+    await upsertMediaItem(db, showItem({ id: 84773, seasons: ringsSeasons }));
+    const plan = await db.prepare(
+      "EXPLAIN QUERY PLAN SELECT * FROM show_seasons WHERE air_date >= '2026-11-01' AND air_date <= '2026-11-31' AND season_number > 1",
+    ).all<{ detail: string }>();
+    expect(plan.results.map((r) => r.detail).join(" ")).toContain("idx_show_seasons_air");
   });
 });

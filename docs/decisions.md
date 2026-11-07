@@ -294,6 +294,11 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Every change to the score is measured first on two bars, per medium, wishlist held out** (`scripts/score-backtest.mjs`), and `public/score-how-it-works.svg` changes with the score.
 - **Not built, by Nils's call:** hand-curated tag bundles ("outsiders") and per-title tag overrides. Systemic data fixes only.
 
+### Added 2026-11-07, the calendar and Up next (Nils)
+
+- **The calendar shows a show's own release (its first season), and a later season only when you have watched every episode before it.** Rings of Power, seasons 1 and 2 seen: season 3 is on the calendar. A show left halfway through season 1: its season 2 is not, because you have episodes left. "Watched everything before it" is Up next's answer from Trakt, never a count against TMDB's episode numbers (`mobile/src/lib/seasonPremieres.ts`).
+- **Up next lists a show only while it has an aired episode you have not watched.** A tick moves the show to the top; so does a new episode airing. A show with nothing left drops off until its next episode airs.
+
 ### Added 2026-11-05, the UI review
 
 - **Pull is off the screen, and so are Follow and Not interested.** Nils: shown beside the score it read as part of it (Brad Pitt's page showed a pull row, Helena Bonham Carter's said cast carries no weight), "more confusion than benefit". The model still fits and follows still sync; one switch (`PULL_SHOWN`, `mobile/src/lib/scoreReasons.ts`) brings it all back. It returns with the "what now?" page, where picking is the question.

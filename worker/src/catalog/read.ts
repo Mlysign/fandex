@@ -414,6 +414,23 @@ export async function weakEtag(body: string): Promise<string> {
 // ── Episodes ─────────────────────────────────────────────────────────────────
 
 /** The stored seasons and episodes of a show, as a JSON string. Null for an unknown item. */
+/**
+ * Every season after the first that starts in `month` ("YYYY-MM"), from the
+ * stored season lists. Public and the same for everybody: the device keeps the
+ * ones for shows its owner is caught up on (mobile/src/lib/seasonPremieres.ts),
+ * so what somebody watches never leaves the phone. A first season is not here:
+ * that is the show's own release date, which the calendar already has.
+ */
+export async function seasonPremieresJson(db: D1Database, month: string): Promise<string> {
+  const row = await db.prepare(
+    `SELECT json_group_array(json_object('id', media_item_id, 'season', season_number, 'name', name,
+            'episodeCount', episode_count, 'airDate', air_date, 'posterUrl', poster_url)) j
+       FROM (SELECT * FROM show_seasons WHERE air_date >= ? AND air_date <= ? AND season_number > 1
+              ORDER BY air_date, media_item_id)`,
+  ).bind(`${month}-01`, `${month}-31`).first<{ j: string | null }>();
+  return `{"month":${JSON.stringify(month)},"seasons":${row?.j ?? "[]"}}`;
+}
+
 export async function showEpisodesJson(db: D1Database, mediaItemId: string): Promise<string | null> {
   const [item, seasons, episodes] = await db.batch<{ j: string | null }>([
     // A show, or nothing: a film's id here is an address that does not exist, not a show with no episodes.

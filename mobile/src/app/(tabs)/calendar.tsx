@@ -33,6 +33,7 @@ import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
 import type { CatalogRow } from '~/lib/db';
 import { lookupHeld, toCard } from '~/lib/homeFeed';
 import { ownWindow, placeInMonth, regionalDates } from '~/lib/regionalDates';
+import { premiereRows } from '~/lib/seasonPremieres';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
@@ -263,14 +264,26 @@ export default function CalendarScreen() {
       // No answer (offline, or the Worker is busy) leaves every film on the device's date.
       const dates = await regionalDates(region, rows.filter((r) => r.type === 'movie').map((r) => r.id))
         .catch(() => new Map<string, string>());
-      if (live) setMine(placeInMonth(rows, dates, month).map((r) => ({ card: cardFromCatalog(r), relation: r.relation })));
+      // A new season of a show you have watched up to it (lib/seasonPremieres.ts),
+      // under Library. No answer leaves the month without premieres, not without your titles.
+      const seasons = await premiereRows(db, month).catch((e: unknown) => {
+        console.warn('calendar_premieres_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        return [];
+      });
+      if (live) {
+        setMine([
+          ...placeInMonth(rows, dates, month).map((r) => ({ card: cardFromCatalog(r), relation: r.relation })),
+          ...seasons.map((r) => ({ card: { ...cardFromCatalog(r), key: `${r.id}#s${r.season}`, role: `Season ${r.season}` }, relation: 'library' })),
+        ]);
+      }
     })().catch((e: unknown) => console.warn('calendar_mine_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
     return () => { live = false; };
   }, [db, month, region, signedIn, auth.rowsRevision, catalog.revision]);
 
   const items = useMemo(() => {
     const out = new Map<string, CardItem>();
-    for (const m of mine) if (scopes.includes(m.relation as Scope)) out.set(m.card.id as string, m.card);
+    // By key: a show's new season is its own entry beside the show (`{id}#s{n}`).
+    for (const m of mine) if (scopes.includes(m.relation as Scope)) out.set(m.card.key, m.card);
     // A popular title you also hold is one title, and yours is the fuller card.
     if (scopes.includes('popular')) for (const p of popular) if (!(p.id && out.has(p.id))) out.set(p.id ?? p.key, p);
     return [...out.values()].filter((i) => types.isVisible(i.type));
@@ -521,7 +534,7 @@ function Agenda({ items, kit }: { items: CardItem[]; kit: ReturnType<typeof useC
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={2} style={type.serifSm}>{item.title}</Text>
-                    <Text style={[type.meta, { marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5, color: tint }]}>{item.type}</Text>
+                    <Text style={[type.meta, { marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5, color: tint }]}>{item.role ? `${item.type} · ${item.role}` : item.type}</Text>
                   </View>
                 </Pressable>
                 <ActionBar item={item} state={kit.stateOf(item.id)} actions={kit.actions} compact />
