@@ -15,7 +15,7 @@ import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFac
 import { ratingColor, SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
 import { FlipCell, useFlip } from '~/components/flip';
 import { Popover, Sheet, useAnchor } from '~/components/kit';
-import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExplainer';
+import { CardWhySheet, ScoreExplainerPopover } from '~/components/ScoreExplainer';
 import { useToast } from '~/components/Toast';
 import { cardHref, useCardActions, useCardStates, type CardItem, type CardMatch, type CardState } from '~/lib/cards';
 import { toggled } from '~/lib/a11y';
@@ -126,11 +126,7 @@ export const PosterCard = memo(function PosterCard({ item, state, match, actions
         bar={<ActionBar item={item} state={state} actions={actions} />}
       />
       {explainer.at ? <ScoreExplainerPopover item={item} match={match} state={state} anchor={explainer.at} /> : null}
-      {explainer.sheet ? (
-        <Sheet open onClose={explainer.close} title={item.title}>
-          <ScoreExplainerBody item={item} match={match} state={state} />
-        </Sheet>
-      ) : null}
+      {explainer.sheet ? <CardWhySheet item={item} match={match} state={state} onClose={explainer.close} /> : null}
     </>
   );
 });

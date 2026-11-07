@@ -10,11 +10,13 @@
 // its explainer the payload's score instead, and a card reading 78 opened an
 // explainer that said there was none (posterCardTooltipScore.test.ts there).
 
+import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { createPortal } from '~/components/portal';
-import { bandColor } from '~/components/kit';
+import { bandColor, Sheet } from '~/components/kit';
+import { WhySheet } from '~/components/ScoreSeal';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem, CardMatch, CardState } from '~/lib/cards';
 import { shortDate } from '~/lib/dates';
@@ -25,6 +27,11 @@ import { color, font, radius, type, TYPE_LABEL } from '~/theme';
 
 /** The whole match for one title, worked out once it is shown. */
 function useMatch(item: CardItem, enabled: boolean): FandexScore | null {
+  return useMatchState(item, enabled).match;
+}
+
+/** The match and whether the device has finished looking: null and done is "nothing to break down". */
+function useMatchState(item: CardItem, enabled: boolean): { match: FandexScore | null; done: boolean } {
   const db = useSQLiteContext();
   const { score } = useScores();
   const [match, setMatch] = useState<FandexScore | null>(null);
@@ -35,8 +42,9 @@ function useMatch(item: CardItem, enabled: boolean): FandexScore | null {
     if (!enabled || !id) return;
     let live = true;
     void db.getFirstAsync<{ facets: string }>('SELECT facets FROM catalog WHERE id = ?', [id]).then((row) => {
-      if (!live || !row) return;
-      setMatch(score(id, parseFacets(row.facets), item.type));
+      if (!live) return;
+      // A title the catalog copy lacks (scored from the lookup's facets) has nothing to break down here.
+      setMatch(row ? score(id, parseFacets(row.facets), item.type) : null);
       setMatchFor(id);
     }, (e: unknown) => {
       console.warn('score_reasons_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
@@ -44,7 +52,33 @@ function useMatch(item: CardItem, enabled: boolean): FandexScore | null {
     });
     return () => { live = false; };
   }, [db, id, item.type, enabled, score]);
-  return matchFor === id ? match : null;
+  return { match: matchFor === id ? match : null, done: matchFor === id || !id };
+}
+
+/**
+ * A card's long press on a phone (since 0.3.54, Nils): the item page's Why
+ * sheet, the ring and its rows, when the device can break the card's number
+ * down. Otherwise, or when its own number would differ from the card's (see the
+ * warning at the top), the short explainer in a sheet.
+ */
+export function CardWhySheet({ item, match: row, state, onClose }: { item: CardItem; match: CardMatch | null; state: CardState; onClose: () => void }) {
+  const router = useRouter();
+  const { categoryLabel, follows } = useScores();
+  const { match, done } = useMatchState(item, row != null);
+  if (row && !done) return null;
+  if (row && match && Math.round(match.score) === Math.round(row.score)) {
+    return (
+      <WhySheet
+        open onClose={onClose} fandex={match} title={item.title} type={item.type}
+        categoryLabel={categoryLabel} follows={follows} onOpenFacet={(href) => router.push(href as never)}
+      />
+    );
+  }
+  return (
+    <Sheet open onClose={onClose} title={item.title}>
+      <ScoreExplainerBody item={item} match={row} state={state} />
+    </Sheet>
+  );
 }
 
 export function ScoreExplainerBody({ item, match: row, state }: { item: CardItem; match: CardMatch | null; state: CardState }) {
