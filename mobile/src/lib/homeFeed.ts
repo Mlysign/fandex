@@ -159,11 +159,22 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   return feed;
 }
 
-/** Today's Upcoming rail out of the calendar's candidates: an even share of each type the viewer is looking at, soonest first. */
-export function upcomingRail(candidates: FeedCard[], types?: readonly string[]): FeedCard[] {
-  const pool = types ? candidates.filter((c) => types.includes(c.type)) : candidates;
-  return balanceByType(pool, RAIL_SIZE, 'upcoming')
-    .sort((a, b) => ((a.releaseDate as string) < (b.releaseDate as string) ? -1 : 1));
+/** At most this many of your own new seasons in one Upcoming rail; the rest of it is what is popular. */
+export const MAX_OWN_UPCOMING = 7;
+
+const soonestFirst = (a: CardItem, b: CardItem) => ((a.releaseDate as string) < (b.releaseDate as string) ? -1 : 1);
+
+/**
+ * Today's Upcoming rail out of the calendar's candidates: an even share of
+ * each type the viewer is looking at, soonest first. `own` is the new seasons
+ * of shows you are caught up on (lib/seasonPremieres.ts, Nils 2026-11-07:
+ * Rings of Power's season 3 belongs here): they are always in, the soonest
+ * first, up to MAX_OWN_UPCOMING, and the popular titles fill the rest.
+ */
+export function upcomingRail(candidates: FeedCard[], types?: readonly string[], own: FeedCard[] = []): FeedCard[] {
+  const keep = (c: FeedCard) => !types || types.includes(c.type);
+  const mine = own.filter(keep).sort(soonestFirst).slice(0, MAX_OWN_UPCOMING);
+  return [...mine, ...balanceByType(candidates.filter(keep), RAIL_SIZE - mine.length, 'upcoming')].sort(soonestFirst);
 }
 
 /** A title the rail may recommend: a calendar card, or a row of the catalog copy. */

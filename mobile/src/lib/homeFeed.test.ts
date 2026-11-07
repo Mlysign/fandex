@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balanceByType, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
+import { balanceByType, MAX_OWN_UPCOMING, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
 
 /** A score as `recommend` takes one: the number that ranks, with its band as the score computes it around an average of 50 (green from 60, orange under 40). */
 const scored = (n: number | null | undefined, center = 50): Scored | null => (n == null ? null : { score: n, band: n >= center + 10 ? 'high' : n <= center - 10 ? 'low' : 'usual' });
@@ -47,6 +47,26 @@ describe('an even share of each type', () => {
     const feed = (key: string, type: FeedCard['type'], date: string): FeedCard => ({ ...card(key, null, type), releaseDate: date, genres: [] });
     const out = upcomingRail([feed('g', 'game', '2026-12-05'), feed('m', 'movie', '2026-11-01'), feed('b', 'book', '2026-11-20')], ['movie', 'book']);
     expect(out.map((c) => c.key)).toEqual(['m', 'b']);
+  });
+
+  it('always carries your own new seasons, in date order with the popular titles', () => {
+    const feed = (key: string, type: FeedCard['type'], date: string): FeedCard => ({ ...card(key, null, type), releaseDate: date, genres: [] });
+    const popular = Array.from({ length: 40 }, (_, i) => feed(`p${i}`, 'movie', `2026-12-${String((i % 28) + 1).padStart(2, '0')}`));
+    const rings = { ...feed('rings#s3', 'show', '2026-11-10'), season: 3 };
+    const out = upcomingRail(popular, undefined, [rings]);
+    expect(out).toHaveLength(RAIL_SIZE);
+    expect(out[0].key).toBe('rings#s3');
+    // Not on screen when shows are filtered out.
+    expect(upcomingRail(popular, ['movie'], [rings]).some((c) => c.key === 'rings#s3')).toBe(false);
+  });
+
+  it('leaves room for popular titles however many of your shows return', () => {
+    const feed = (key: string, type: FeedCard['type'], date: string): FeedCard => ({ ...card(key, null, type), releaseDate: date, genres: [] });
+    const own = Array.from({ length: 12 }, (_, i) => feed(`own${i}`, 'show', `2026-11-${String(i + 10).padStart(2, '0')}`));
+    const popular = Array.from({ length: 20 }, (_, i) => feed(`p${i}`, 'movie', '2026-12-01'));
+    const out = upcomingRail(popular, undefined, own);
+    expect(out.filter((c) => c.key.startsWith('own')).map((c) => c.key)).toEqual(own.slice(0, MAX_OWN_UPCOMING).map((c) => c.key));
+    expect(out).toHaveLength(RAIL_SIZE);
   });
 });
 

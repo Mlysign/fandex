@@ -50,6 +50,17 @@ export interface CardItem {
   genres?: string[];
   /** A DLC, bundle, mod, season or pack (IGDB's game_type): ranked last in search, kept out of rails. */
   addon?: boolean;
+  /** A later season of a show you are caught up on (lib/seasonPremieres.ts): the card is the season's premiere, not the show. */
+  season?: number;
+}
+
+/**
+ * A new season as a card: the show's catalog row, dated the day the season
+ * starts, with the season's poster, keyed apart from the show (`{id}#s{n}`)
+ * and labelled "Season n". The calendar and Home's rails draw the same card.
+ */
+export function premiereCard(r: CatalogRow & { season: number }): CardItem & { genres: string[] } {
+  return { ...cardFromCatalog(r), key: `${r.id}#s${r.season}`, role: `Season ${r.season}`, season: r.season, genres: [] };
 }
 
 export function cardFromCatalog(r: CatalogRow): CardItem {

@@ -4,14 +4,15 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '~/lib/AuthProvider';
-import { cardFromCatalog, useCardStates, type CardItem } from '~/lib/cards';
+import { cardFromCatalog, premiereCard, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import { todayIso } from '~/lib/dates';
+import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
 import { catalogCandidates } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
 import { jsHeapMB } from '~/lib/jsHeap';
 import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
 import { useScores, type RowScore } from '~/lib/ScoreProvider';
+import { premiereRows } from '~/lib/seasonPremieres';
 import { useTypeFilter } from '~/lib/typeFilter';
 
 /** The catalog copy's titles not in your library, each with the score its full facets earn. */
@@ -51,8 +52,37 @@ export function useHomeRails() {
     const fx = score(c.id ?? c.key, genreFacets(c.genres), c.type);
     return fx ? { ...c, match: { score: fx.score, band: fx.band } } : c;
   }), [score]);
-  const upcoming = useMemo(() => (feed ? byGenre(upcomingRail(feed.candidates, types)) : null), [feed, types, byGenre]);
-  const trending = useMemo(() => (feed ? byGenre(feed.trending) : null), [feed, byGenre]);
+  // New seasons of the shows you are caught up on (lib/seasonPremieres.ts),
+  // from last month to two months out: the calendar's rule, on Home's rails
+  // (Nils, 2026-11-07). Each is scored from the show's full facets, which a
+  // show in your library does not get from the pool below.
+  const [premieres, setPremieres] = useState<{ cards: FeedCard[]; scores: Map<string, RowScore> }>({ cards: [], scores: new Map() });
+  useEffect(() => {
+    let live = true;
+    if (!signedIn) { setPremieres({ cards: [], scores: new Map() }); return; }
+    const now = currentMonth();
+    void (async () => {
+      const lists = await Promise.all([shiftMonth(now, -1), now, shiftMonth(now, 1), shiftMonth(now, 2)]
+        .map((m) => premiereRows(db, m).catch(() => [])));
+      const cards = lists.flat().map(premiereCard);
+      const found = cards.length ? await scoresFor([...new Set(cards.map((c) => c.id as string))], () => live) : new Map<string, RowScore>();
+      if (live) setPremieres({ cards, scores: found });
+    })().catch((e: unknown) => console.warn('home_premieres_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
+    return () => { live = false; };
+  }, [db, signedIn, scoresFor, revision, catalog.revision, auth.rowsRevision]);
+  const today = todayIso();
+  /** The ones still to come: Upcoming always carries them, and Recommended counts them as still to come. */
+  const comingSeasons = useMemo(() => premieres.cards.filter((c) => (c.releaseDate ?? '') > today), [premieres, today]);
+
+  const upcoming = useMemo(() => (feed ? byGenre(upcomingRail(feed.candidates, types, comingSeasons)) : null), [feed, types, byGenre, comingSeasons]);
+  // A show that is trending while its new season is out or due says which season, as its calendar card does.
+  const trending = useMemo(() => {
+    if (!feed) return null;
+    const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const label = new Map<string, string>();
+    for (const c of premieres.cards) if ((c.releaseDate ?? '') >= monthAgo && c.id) label.set(c.id, c.role as string);
+    return byGenre(feed.trending.map((c) => (c.id && label.has(c.id) ? { ...c, role: label.get(c.id) } : c)));
+  }, [feed, byGenre, premieres]);
 
   // "Recommended for you" chooses from the whole catalog copy, not only from
   // the calendar's next months: those alone, scored by genre, left one green
@@ -89,10 +119,12 @@ export function useHomeRails() {
    */
   const recommendation = useMemo(() => {
     if (!candidates || center == null || !pool) return null;
-    const today = todayIso();
     // Still to come, then out in the last year, then the rest of the catalog.
     const tiers: Candidate[][] = [[], [], []];
     for (const c of pool.cards) tiers[tierOf(c.releaseDate, today)].push(c);
+    // A new season you are waiting for is still to come, and joins the first
+    // tier: it is recommended when the show is a strong match, like any title.
+    tiers[0].push(...comingSeasons);
     // The calendar's upcoming titles join the first tier, after the catalog's
     // own: a row of the same title is scored from its full facets and wins.
     tiers[0].push(...candidates);
@@ -101,16 +133,19 @@ export function useHomeRails() {
       // A catalog row's score from everything it carries; a calendar card carries its genres and nothing finer.
       (c) => {
         if (c.id && pool.scores.has(c.id)) return pool.scores.get(c.id) as RowScore;
+        if (c.season && c.id && premieres.scores.has(c.id)) return premieres.scores.get(c.id) as RowScore;
         const fx = score(c.id ?? c.key, genreFacets(c.genres ?? []), c.type);
         return fx ? { score: fx.score, band: fx.band } : null;
       },
-      // Not what you already watched or played, not what you asked not to be shown, and no DLC or pack.
-      (c) => !!c.addon || (c.id ? hidden.has(c.id) || stateOf(c.id).inLibrary : false),
+      // Not what you already watched or played, not what you asked not to be
+      // shown, and no DLC or pack. A new season is of a show you watched: that
+      // is the point of it, so only hiding the show keeps it out.
+      (c) => !!c.addon || (c.id ? hidden.has(c.id) || (!c.season && stateOf(c.id).inLibrary) : false),
       center,
       types,
-      (c) => (c.id ? stateOf(c.id).wishlisted : false),
+      (c) => (c.id && !c.season ? stateOf(c.id).wishlisted : false),
     );
-  }, [candidates, center, pool, score, hidden, stateOf, types]);
+  }, [candidates, center, pool, score, hidden, stateOf, types, today, comingSeasons, premieres]);
 
   const withoutHidden = useCallback(<T extends CardItem>(items: T[]) => items.filter((i) => !(i.id && hidden.has(i.id))), [hidden]);
 

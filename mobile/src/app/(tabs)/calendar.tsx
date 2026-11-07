@@ -27,7 +27,7 @@ import { api } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useOutsideClose } from '~/lib/useOutsideClose';
-import { cardFromCatalog, cardHref, type CardItem, type CardState } from '~/lib/cards';
+import { cardFromCatalog, cardHref, premiereCard, type CardItem, type CardState } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
 import type { CatalogRow } from '~/lib/db';
@@ -273,7 +273,7 @@ export default function CalendarScreen() {
       if (live) {
         setMine([
           ...placeInMonth(rows, dates, month).map((r) => ({ card: cardFromCatalog(r), relation: r.relation })),
-          ...seasons.map((r) => ({ card: { ...cardFromCatalog(r), key: `${r.id}#s${r.season}`, role: `Season ${r.season}` }, relation: 'library' })),
+          ...seasons.map((r) => ({ card: premiereCard(r), relation: 'library' })),
         ]);
       }
     })().catch((e: unknown) => console.warn('calendar_mine_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e)));
