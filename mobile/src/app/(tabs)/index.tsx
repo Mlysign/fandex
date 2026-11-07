@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Reanimated, { Easing as REasing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import { CardRail, Rail } from '~/components/cards';
+import { CARD_TITLE } from '~/components/cardFace';
 import { PersonCard } from '~/components/PersonCard';
 import { Button, EmptyState, Eyebrow, Panel, Skeleton } from '~/components/kit';
 import { SubBar } from '~/components/SubBar';
@@ -45,8 +46,9 @@ function RailSkeleton({ title }: { title: string }) {
       {Array.from({ length: 6 }, (_, i) => (
         <View key={i} style={styles.skeletonCard}>
           <Skeleton style={{ width: '100%', aspectRatio: 2 / 3 }} />
-          <View style={{ padding: 10, gap: 7, height: 98 }}>
-            <Skeleton style={{ height: 12, width: '80%', borderRadius: radius.xs }} />
+          {/* The title line is 24 px of it, gone with the title (CARD_TITLE). */}
+          <View style={{ padding: 10, gap: 7, height: CARD_TITLE ? 98 : 74 }}>
+            {CARD_TITLE ? <Skeleton style={{ height: 12, width: '80%', borderRadius: radius.xs }} /> : null}
             <Skeleton style={{ height: 12, width: '40%', borderRadius: radius.xs }} />
             <Skeleton style={{ height: 28, marginTop: 'auto', borderRadius: radius.md }} />
           </View>

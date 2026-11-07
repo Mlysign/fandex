@@ -23,6 +23,15 @@ import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 /** Fewer crowd votes than this is no crowd rating on a card: an unreleased film read 9.0 off a handful of festival votes (2026-10-23). */
 const MIN_CROWD_VOTES = 20;
 
+/**
+ * Whether a card prints its title under the poster. Off since 0.3.43 as a
+ * trial (Nils, 2026-11-07): the poster names the title almost always, the line
+ * was often cut short, and the card is a line shorter without it. The title
+ * stays in the card's label for a screen reader and in the poster's alt text,
+ * and a card with no poster prints it on the blank poster. Set true to undo.
+ */
+export const CARD_TITLE = false;
+
 /** What PosterCard and StaticPosterCard share: everything but how the card is followed and its bar. */
 export function CardFace({ item, match, link, bar, style, dateText, explain }: {
   item: CardItem;
@@ -67,7 +76,10 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
           ) : (
             <View style={[cardStyles.fill, cardStyles.posterEmpty]}>
               <TypeIcon type={item.type} size={28} tint={color.textMuted} />
-              <Text style={{ fontFamily: font.sansBold, fontSize: 24, color: color.textMuted }}>{item.title[0]}</Text>
+              {CARD_TITLE
+                ? <Text style={{ fontFamily: font.sansBold, fontSize: 24, color: color.textMuted }}>{item.title[0]}</Text>
+                // No poster and no title line: the blank poster is the only place left to name it.
+                : <Text numberOfLines={4} style={[type.serifSm, cardStyles.posterTitle]}>{item.title}</Text>}
             </View>
           )}
           <View style={cardStyles.typeChip}>
@@ -76,8 +88,8 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
           </View>
         </View>
         <View style={cardStyles.body}>
-          <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text>
-          {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role]}>{item.role}</Text> : null}
+          {CARD_TITLE ? <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text> : null}
+          {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role, !CARD_TITLE && { marginTop: 0 }]}>{item.role}</Text> : null}
           <View style={cardStyles.metaRow}>
             <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
             {match ? <FandexScoreBadge score={match.score} band={match.band} />
@@ -242,6 +254,7 @@ export const cardStyles = StyleSheet.create({
     borderTopLeftRadius: radius.md - 1, borderTopRightRadius: radius.md - 1,
   },
   posterEmpty: { alignItems: 'center', justifyContent: 'center', gap: 4 },
+  posterTitle: { color: color.textSecondary, textAlign: 'center', paddingHorizontal: 12, marginTop: 6 },
   typeChip: {
     position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingLeft: 6, paddingRight: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.scrimChip,
