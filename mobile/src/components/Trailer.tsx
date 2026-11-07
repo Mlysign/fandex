@@ -52,6 +52,10 @@ export function Trailer({ youtubeKey, title }: { youtubeKey: string; title: stri
       <View style={styles.frame}>
         <WebView
           source={{ html: playerPage(youtubeKey), baseUrl: PLAYER_ORIGIN }}
+          // The library wraps the player in a flex: 1 view with no width of its
+          // own, and the frame centres its children, so without this that view
+          // shrinks to nothing: sound, no picture.
+          containerStyle={StyleSheet.absoluteFill}
           style={styles.player}
           originWhitelist={['*']}
           allowsFullscreenVideo
@@ -83,7 +87,7 @@ const styles = StyleSheet.create({
     width: '100%', aspectRatio: 16 / 9, borderRadius: radius.lg, overflow: 'hidden',
     backgroundColor: color.surfaceElevated, alignItems: 'center', justifyContent: 'center',
   },
-  player: { width: '100%', height: '100%', backgroundColor: '#000' },
+  player: { flex: 1, backgroundColor: '#000' },
   still: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   play: {
     width: 56, height: 56, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
