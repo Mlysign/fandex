@@ -127,4 +127,8 @@ export const haptics = {
   tap: () => play([[TICK, FEEL.tapTick, 0]]),
   /** An episode marked watched. */
   episode: () => play([[CLICK, FEEL.episodeClick, 0], [TICK, FEEL.episodeClick * FEEL.tailScale, FEEL.tailDelayMs]]),
+  /** A whole season done (its last episode ticked, or the season's own box): a 9's double click. */
+  season: () => play(ratingPulses(9)),
+  /** Something taken back (an episode unticked): one soft tick, no show. */
+  soft: () => play([[TICK, FEEL.unsaveTick, 0]]),
 };

@@ -264,6 +264,34 @@ function Burst({ cell, fx, ring, burst }: { cell: number; fx: { at: number; spar
   );
 }
 
+// ── Saving ───────────────────────────────────────────────────────────────────
+
+/**
+ * Three small dots that breathe one after another: something you did is
+ * already shown as done and is still on its way to Trakt. Quiet on purpose,
+ * it sits under a title and never in place of the thing you tapped.
+ */
+export function SavingDots() {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(t, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: NATIVE }));
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <View accessible accessibilityLabel="Saving" style={styles.dots}>
+      {[0, 1, 2].map((i) => (
+        <Animated.View
+          key={i}
+          style={[styles.dot, {
+            opacity: t.interpolate({ inputRange: [0, 0.1 + i * 0.2, 0.2 + i * 0.2, 0.3 + i * 0.2, 1], outputRange: [0.25, 0.25, 1, 0.25, 0.25] }),
+          }]}
+        />
+      ))}
+    </View>
+  );
+}
+
 // ── Save ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -321,4 +349,6 @@ const styles = StyleSheet.create({
   star: { fontSize: 27, lineHeight: 31 },
   ring: { position: 'absolute', borderWidth: 2 },
   spark: { position: 'absolute', textAlign: 'center' },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: color.textSecondary },
 });

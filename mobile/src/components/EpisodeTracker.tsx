@@ -13,15 +13,21 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions,
+  type StyleProp, type ViewStyle,
+} from 'react-native';
+import { SavingDots } from '~/components/feel';
 import { Img } from '~/components/Img';
 import { Button, Sheet, Skeleton } from '~/components/kit';
+import { PRESS, usePressScale } from '~/components/pressFeel';
 import { useToast } from '~/components/Toast';
 import { T } from '~/components/ui';
 import { checked, toggled } from '~/lib/a11y';
 import { api, ApiError, type ShowEpisodes } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { shortDate } from '~/lib/dates';
+import { haptics } from '~/lib/feel';
 import { tmdbEpisode, tmdbSeasonEpisodes, type EpisodeDetail } from '~/lib/tmdb';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 import { setEpisodesWatched } from '~/lib/upNext';
@@ -60,7 +66,6 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
   const [watched, setWatched] = useState<Set<string>>(new Set());
   const [watchedCount, setWatchedCount] = useState<Record<number, number>>({});
   const [open, setOpen] = useState<Set<number>>(new Set());
-  const [busy, setBusy] = useState<string | null>(null);
   const [fetched, setFetched] = useState<Record<number, Episode[]>>({});
   const [loadingSeason, setLoadingSeason] = useState<number | null>(null);
   const [detail, setDetail] = useState<Episode | null>(null);
@@ -79,6 +84,21 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
     return () => { live = false; };
   }, [mediaItemId]);
 
+  /**
+   * Ticks shown as done and still on their way to Trakt, by `show|season:episode`,
+   * with what each was set to and which save set it. A read of the device lays
+   * these over what it found: a tick saved a moment ago would otherwise blink off
+   * whenever another save finishes and the rows are read again.
+   */
+  const pending = useRef(new Map<string, { id: number; on: boolean }>());
+  const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
+  const showInFlight = () => setInFlight(new Set(pending.current.keys()));
+  /** Saves for this screen go to Trakt one after another, in the order they were tapped. */
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const saveSeq = useRef(0);
+  /** The last season finished by a tap, so its own box can celebrate. */
+  const [cheer, setCheer] = useState<{ season: number; n: number } | null>(null);
+
   // Each read's number: a slower read for the show this screen showed before must not land on this one.
   const watchedSeq = useRef(0);
   const loadWatched = useCallback(async () => {
@@ -87,10 +107,14 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
       'SELECT season, episode FROM episode_state WHERE media_item_id = ?', [mediaItemId],
     );
     if (mine !== watchedSeq.current) return;
-    setWatched(new Set(rows.map((r) => `${r.season}:${r.episode}`)));
-    const counts: Record<number, number> = {};
-    for (const r of rows) counts[r.season] = (counts[r.season] ?? 0) + 1;
-    setWatchedCount(counts);
+    const seen = new Set(rows.map((r) => `${r.season}:${r.episode}`));
+    for (const [key, p] of pending.current) {
+      const [show, ep] = key.split('|');
+      if (show !== mediaItemId) continue;
+      if (p.on) seen.add(ep); else seen.delete(ep);
+    }
+    setWatched(seen);
+    setWatchedCount(countBySeason(seen));
   }, [db, mediaItemId]);
 
   useEffect(() => {
@@ -166,31 +190,58 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
   const total = seasons.reduce((n, s) => n + s.episodeCount, 0);
   const totalSeen = seasons.reduce((n, s) => n + Math.min(seen(s.season), s.episodeCount), 0);
 
-  const push = (key: string, episodes: { season: number; episode: number }[], next: boolean) => {
+  /**
+   * Show the change at once and save it behind. The box is ticked in the same
+   * frame as the tap; the save waits its turn in `queue` (two saves for one show
+   * at once could leave Up next holding the episode just watched, and a tick
+   * then an untick must reach Trakt in that order). Returns false when nothing changes.
+   */
+  const push = (episodes: { season: number; episode: number }[], next: boolean): boolean => {
     // Only what actually changes is sent: an episode already in the state asked
     // for would be a second play on Trakt.
     const changing = episodes.filter((e) => watched.has(`${e.season}:${e.episode}`) !== next);
-    if (!changing.length) return;
+    if (!changing.length) return false;
     const optimistic = new Set(watched);
-    const counts = { ...watchedCount };
     for (const e of changing) {
       if (next) optimistic.add(`${e.season}:${e.episode}`);
       else optimistic.delete(`${e.season}:${e.episode}`);
-      counts[e.season] = Math.max(0, (counts[e.season] ?? 0) + (next ? 1 : -1));
     }
     setWatched(optimistic);
-    setWatchedCount(counts);
-    setBusy(key);
-    setEpisodesWatched(db, mediaItemId, changing, next, sources)
-      .then(() => auth.rowsChanged())
-      .catch((e: unknown) => {
-        // Read the device again, never put a snapshot back: your rows may have
-        // arrived while the request was out, and a snapshot from before that
-        // would paint a watched show as unwatched.
-        void loadWatched();
-        toast(failure(e), 'error');
-      })
-      .finally(() => setBusy(null));
+    setWatchedCount(countBySeason(optimistic));
+
+    const show = mediaItemId;
+    const id = ++saveSeq.current;
+    const keys = changing.map((e) => `${show}|${e.season}:${e.episode}`);
+    for (const k of keys) pending.current.set(k, { id, on: next });
+    showInFlight();
+    const settle = () => {
+      // A later tap on the same episode owns its key now; leave that one.
+      for (const k of keys) if (pending.current.get(k)?.id === id) pending.current.delete(k);
+      showInFlight();
+    };
+    queue.current = queue.current
+      .then(() => setEpisodesWatched(db, show, changing, next, sources))
+      .then(
+        () => { settle(); auth.rowsChanged(); },
+        (e: unknown) => {
+          settle();
+          // Read the device again, never put a snapshot back: your rows may have
+          // arrived while the request was out, and a snapshot from before that
+          // would paint a watched show as unwatched.
+          void loadWatched();
+          toast(failure(e), 'error');
+        },
+      );
+    return true;
+  };
+
+  /** One episode ticked or unticked, from its row or its sheet: the feel, then the save. */
+  const toggleEpisode = (e: { season: number; episode: number }, next: boolean) => {
+    const finishes = next && seen(e.season) + 1 >= (seasons.find((s) => s.season === e.season)?.episodeCount ?? Infinity);
+    if (!push([e], next)) return;
+    if (!next) haptics.soft();
+    else if (finishes) { haptics.season(); setCheer({ season: e.season, n: Date.now() }); }
+    else haptics.episode();
   };
 
   return (
@@ -206,7 +257,7 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
           const episodes = bySeason.get(s.season) ?? [];
           const done = Math.min(seen(s.season), s.episodeCount);
           const complete = s.episodeCount > 0 && done >= s.episodeCount;
-          const seasonKey = `s${s.season}`;
+          const seasonSaving = [...inFlight].some((k) => k.startsWith(`${mediaItemId}|${s.season}:`));
           return (
             <View key={s.season} style={[styles.season, i > 0 && styles.divided]}>
               <View style={styles.seasonRow}>
@@ -229,10 +280,13 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                   </View>
                   <View style={styles.seasonText}>
                     <T variant="bodySm" style={styles.primary} numberOfLines={1}>{s.name || `Season ${s.season}`}</T>
-                    <T variant="micro" style={styles.seasonMeta}>
-                      {/* A season nobody has listed episodes for yet: "0/0" read as a count. */}
-                      {s.episodeCount ? `${noTrakt ? '' : `${done}/`}${s.episodeCount}${noTrakt ? ' episodes' : ''}` : 'No episodes yet'}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
-                    </T>
+                    <View style={styles.metaLine}>
+                      <T variant="micro" style={styles.seasonMeta}>
+                        {/* A season nobody has listed episodes for yet: "0/0" read as a count. */}
+                        {s.episodeCount ? `${noTrakt ? '' : `${done}/`}${s.episodeCount}${noTrakt ? ' episodes' : ''}` : 'No episodes yet'}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
+                      </T>
+                      {seasonSaving && !isOpen ? <SavingDots /> : null}
+                    </View>
                   </View>
                   {roomy ? (
                     <View style={styles.bar}>
@@ -241,25 +295,28 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                   ) : null}
                 </Pressable>
                 {/* Nothing to mark in a season with no episodes, and nobody to mark it for without Trakt. */}
-                {noTrakt || s.episodeCount === 0 ? null : <Pressable
-                  onPress={() => {
-                    setBusy(seasonKey);
-                    ensureSeason(s.season)
-                      .then((list) => {
-                        setBusy(null);
-                        if (!list.length) toast('No episodes known for that season.', 'error');
-                        else push(seasonKey, list.map((e) => ({ season: e.season, episode: e.episode })), !complete);
-                      })
-                      .catch(() => { setBusy(null); toast('Could not load that season.', 'error'); });
-                  }}
-                  disabled={busy != null || settling}
-                  accessibilityRole="button"
-                  {...toggled(complete)}
-                  accessibilityLabel={complete ? `Mark season ${s.season} unwatched` : `Mark season ${s.season} watched`}
-                  style={[styles.seasonTick, (busy === seasonKey || settling) && styles.dim]}
-                >
-                  {busy === seasonKey ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={complete} />}
-                </Pressable>}
+                {noTrakt || s.episodeCount === 0 ? null : (
+                  <TickButton
+                    on={complete}
+                    // Only a season whose episode list must first come from TMDB waits, and shows it.
+                    loading={loadingSeason === s.season && !isOpen}
+                    cheer={cheer?.season === s.season ? cheer.n : 0}
+                    disabled={settling || loadingSeason === s.season}
+                    accessibilityRole="button"
+                    toggledState={complete}
+                    label={complete ? `Mark season ${s.season} unwatched` : `Mark season ${s.season} watched`}
+                    style={[styles.seasonTick, settling && styles.dim]}
+                    onToggle={(next) => {
+                      ensureSeason(s.season)
+                        .then((list) => {
+                          if (!list.length) { toast('No episodes known for that season.', 'error'); return; }
+                          if (!push(list.map((e) => ({ season: e.season, episode: e.episode })), next)) return;
+                          if (next) { haptics.season(); setCheer({ season: s.season, n: Date.now() }); } else haptics.soft();
+                        })
+                        .catch(() => toast('Could not load that season.', 'error'));
+                    }}
+                  />
+                )}
               </View>
               {isOpen ? (
                 <View style={styles.divided}>
@@ -269,9 +326,9 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                     <T variant="caption" style={styles.none}>No episode list available for this season.</T>
                   ) : episodes.map((e) => {
                     const on = watched.has(`${e.season}:${e.episode}`);
-                    const key = `e${e.season}-${e.episode}`;
+                    const saving = inFlight.has(`${mediaItemId}|${e.season}:${e.episode}`);
                     return (
-                      <View key={e.episode} style={[styles.episode, (busy === key || settling) && styles.dim]}>
+                      <View key={e.episode} style={[styles.episode, settling && styles.dim]}>
                         <Pressable
                           onPress={() => setDetail(e)}
                           accessibilityRole="button"
@@ -281,19 +338,24 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                           <T variant="micro" style={styles.code}>{e.season}×{String(e.episode).padStart(2, '0')}</T>
                           <View style={styles.episodeText}>
                             <T variant="bodySm" style={styles.primary} numberOfLines={1}>{e.title || `Episode ${e.episode}`}</T>
-                            <T variant="micro" style={styles.episodeDate}>{airLabel(e.airDate)}</T>
+                            {/* The date, and while the tick is on its way to Trakt, the saving dots beside it. */}
+                            <View style={styles.metaLine}>
+                              <T variant="micro" style={styles.episodeDate}>{airLabel(e.airDate)}</T>
+                              {saving ? <SavingDots /> : null}
+                            </View>
                           </View>
                         </Pressable>
-                        {noTrakt ? null : <Pressable
-                          onPress={() => push(key, [{ season: e.season, episode: e.episode }], !on)}
-                          disabled={busy != null || settling}
-                          accessibilityRole="checkbox"
-                          {...checked(on)}
-                          accessibilityLabel={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
-                          style={styles.episodeTick}
-                        >
-                          {busy === key ? <ActivityIndicator size="small" color={color.textSecondary} /> : <TickBox on={on} />}
-                        </Pressable>}
+                        {noTrakt ? null : (
+                          <TickButton
+                            on={on}
+                            disabled={settling}
+                            accessibilityRole="checkbox"
+                            checkedState={on}
+                            label={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
+                            style={styles.episodeTick}
+                            onToggle={(next) => toggleEpisode(e, next)}
+                          />
+                        )}
                       </View>
                     );
                   })}
@@ -307,10 +369,10 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
         episode={detail}
         tmdbId={tmdbId}
         watched={detail ? watched.has(`${detail.season}:${detail.episode}`) : false}
-        busy={busy != null || settling}
+        busy={settling}
         trackable={!noTrakt}
         onClose={() => setDetail(null)}
-        onToggle={(e, next) => push(`e${e.season}-${e.episode}`, [{ season: e.season, episode: e.episode }], next)}
+        onToggle={(e, next) => toggleEpisode(e, next)}
       />
     </View>
   );
@@ -388,11 +450,89 @@ function EpisodeSheet({ episode, tmdbId, watched, busy, trackable, onClose, onTo
   );
 }
 
-function TickBox({ on }: { on: boolean }) {
+/** Your rows, counted per season. */
+function countBySeason(seen: ReadonlySet<string>): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const k of seen) {
+    const season = Number(k.split(':')[0]);
+    counts[season] = (counts[season] ?? 0) + 1;
+  }
+  return counts;
+}
+
+const NATIVE = Platform.OS !== 'web';
+
+/** The tick's small win: the box pops, the check springs in with a twist, a gold ring goes out. */
+function celebrateTick(scale: Animated.Value, ring: Animated.Value, check: Animated.Value) {
+  Animated.sequence([
+    Animated.timing(scale, { toValue: PRESS.tick.pop, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: NATIVE }),
+    Animated.spring(scale, { toValue: 1, friction: 4, tension: 170, useNativeDriver: NATIVE }),
+  ]).start();
+  check.setValue(0);
+  Animated.spring(check, { toValue: 1, friction: 4, tension: 200, useNativeDriver: NATIVE }).start();
+  ring.setValue(0);
+  Animated.timing(ring, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE }).start();
+}
+
+/**
+ * A tick box that answers the finger before anything is saved: it sinks while
+ * held, and ticking it pops it at once. The save happens behind (`push`); the
+ * row says so with its saving dots. `cheer` changing celebrates without a tap:
+ * a season's box when its last episode was ticked in the list.
+ */
+function TickButton({ on, loading, cheer = 0, disabled, accessibilityRole, toggledState, checkedState, label, style, onToggle }: {
+  on: boolean;
+  loading?: boolean;
+  cheer?: number;
+  disabled?: boolean;
+  accessibilityRole: 'button' | 'checkbox';
+  toggledState?: boolean;
+  checkedState?: boolean;
+  label: string;
+  style: StyleProp<ViewStyle>;
+  onToggle: (next: boolean) => void;
+}) {
+  const press = usePressScale(PRESS.tick);
+  const ring = useRef(new Animated.Value(1)).current;
+  const check = useRef(new Animated.Value(1)).current;
+  const { scale } = press;
+  useEffect(() => {
+    if (cheer) celebrateTick(scale, ring, check);
+  }, [cheer, scale, ring, check]);
   return (
-    <View style={[styles.tick, on && styles.tickOn]}>
-      {on ? <Check size={14} color={color.surface} strokeWidth={3} /> : null}
-    </View>
+    <Pressable
+      onPress={() => {
+        const next = !on;
+        if (next) celebrateTick(scale, ring, check);
+        onToggle(next);
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      disabled={disabled}
+      accessibilityRole={accessibilityRole}
+      {...(toggledState != null ? toggled(toggledState) : checked(!!checkedState))}
+      accessibilityLabel={label}
+      style={style}
+    >
+      {loading ? <ActivityIndicator size="small" color={color.textSecondary} /> : (
+        <>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.tickRing, {
+              opacity: ring.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.8, 0] }),
+              transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 2.2] }) }],
+            }]}
+          />
+          <Animated.View style={[styles.tick, on && styles.tickOn, { transform: [{ scale }] }]}>
+            {on ? (
+              <Animated.View style={{ transform: [{ scale: check }, { rotate: check.interpolate({ inputRange: [0, 1], outputRange: ['-25deg', '0deg'] }) }] }}>
+                <Check size={14} color={color.surface} strokeWidth={3} />
+              </Animated.View>
+            ) : null}
+          </Animated.View>
+        </>
+      )}
+    </Pressable>
   );
 }
 
@@ -433,4 +573,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tickOn: { backgroundColor: color.accent, borderColor: color.accent },
+  tickRing: { position: 'absolute', width: 20, height: 20, borderRadius: 3, borderWidth: 2, borderColor: color.accent },
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });
