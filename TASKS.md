@@ -36,6 +36,7 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 - **Plan the launch with Nils**: the date (after the Play release), and where to post: subreddits for each medium, forums, Show HN, Product Hunt, nilsmlynarek.eu. Check each subreddit's self-promotion rules first.
 - **Images**: screenshots and feature graphics for the Play store page, images for the subreddit and forum posts, and ones that could serve as ads later. The phone captures from the Miro board are the starting point (→ [[ui-review-miro-board]]); Play's sizes are in [docs/play-store.md](docs/play-store.md).
 - **The posts themselves**: one text per place, in the plainest words (AGENTS.md's audience-facing rule).
+- **Usage tracking, live before the launch** (Nils, 2026-11-07). He wants to see what users tap and how often, which features they use, how long a session lasts, and more. Today the website counts pageviews per route template and nothing else; the app sends nothing at all, and the privacy policy says so. Settle with Nils first: the list of questions, self-hosted counters vs a tool like PostHog, and whether an install or session id is worth a consent banner (§25 TDDDG, `docs/archive/old-site/cookie-assessment.md`). Then the privacy policy text before the code, in both languages (`src/lib/legal/content/*/privacy.ts`), and day counters rather than an event log, since a row write is the D1 budget. → [[telemetry-self-hosted]]
 
 ## Mine, open
 
