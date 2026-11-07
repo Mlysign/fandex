@@ -235,6 +235,15 @@ export const PULL_FIT_KEY = 'pull_fit';
  */
 export const OWN_GAINS_KEY = 'own_gains';
 
+/**
+ * The same gains under the account they were fitted for, which signing out
+ * keeps: signing back in then scores with them from the first rebuild, where
+ * the shared ones made Home reshuffle a minute later (Nils, 2026-11-07). Two
+ * numbers, no title or rating. Deleting the account removes its row
+ * (AuthProvider `deleteAccount`).
+ */
+export const ownGainsAccountKey = (userId: string) => `own_gains:${userId}`;
+
 export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
   return row?.value ?? null;

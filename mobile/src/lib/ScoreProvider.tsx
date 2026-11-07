@@ -18,7 +18,7 @@ import { api, type ScoreReport } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
-import { getMeta, OWN_GAINS_KEY, PULL_FIT_KEY, setMeta } from '~/lib/db';
+import { getMeta, OWN_GAINS_KEY, ownGainsAccountKey, PULL_FIT_KEY, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, tasteImpactIndex, type ImpactKind, type PageImpact, type TasteIndex } from '~/lib/facetImpact';
 import {
   buildProfile, buildPullModelSteps, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
@@ -26,7 +26,7 @@ import {
 } from '~/lib/fandexScore';
 import { parseStoredFit, PULL_FIT_VERSION, storedFitOf, type PullModel, type StoredPullFit } from '~/lib/pullModel';
 import { calibrate, type MediumCalibration } from '~/lib/scoreCalibration';
-import { MIN_CALIBRATION } from '~/lib/scoreReasons';
+import { MIN_CALIBRATION, PULL_SHOWN } from '~/lib/scoreReasons';
 import { runSliced, SliceCancelled } from '~/lib/timeSlice';
 
 const TAXONOMY_KEY = 'taxonomy';
@@ -323,10 +323,10 @@ async function keepPullFit(db: SQLiteDatabase, key: string, model: PullModel): P
  */
 const OWN_GAINS_STEP = 0.05;
 
-/** Your gains as last fitted under this taxonomy (its weights and shared gains), else null: the shared ones until the next fit. */
-async function storedOwnGains(db: SQLiteDatabase, print: string): Promise<Gains | null> {
+/** One stored pair, when it was fitted under this taxonomy print. */
+async function gainsAt(db: SQLiteDatabase, key: string, print: string): Promise<Gains | null> {
   try {
-    const raw = await getMeta(db, OWN_GAINS_KEY);
+    const raw = await getMeta(db, key);
     if (!raw) return null;
     const row = JSON.parse(raw) as { print?: unknown; up?: unknown; down?: unknown };
     if (row.print !== print || typeof row.up !== 'number' || typeof row.down !== 'number' || !Number.isFinite(row.up) || !Number.isFinite(row.down)) return null;
@@ -336,10 +336,21 @@ async function storedOwnGains(db: SQLiteDatabase, print: string): Promise<Gains 
   }
 }
 
-/** Keep your gains for the next start. A failed write costs only a start on the shared ones. */
-async function keepOwnGains(db: SQLiteDatabase, print: string, gains: Gains): Promise<void> {
+/**
+ * Your gains as last fitted under this taxonomy (its weights and shared gains), else null: the
+ * shared ones until the next fit. The signed-in row first, which an offline start can read
+ * without knowing who you are; then the one kept under your account across a sign-out.
+ */
+async function storedOwnGains(db: SQLiteDatabase, print: string, userId: string | null): Promise<Gains | null> {
+  return (await gainsAt(db, OWN_GAINS_KEY, print)) ?? (userId ? await gainsAt(db, ownGainsAccountKey(userId), print) : null);
+}
+
+/** Keep your gains for the next start, and under your account for the next sign-in. A failed write costs only a start on the shared ones. */
+async function keepOwnGains(db: SQLiteDatabase, print: string, gains: Gains, userId: string | null): Promise<void> {
   try {
-    await setMeta(db, OWN_GAINS_KEY, JSON.stringify({ print, up: gains.up, down: gains.down }));
+    const row = JSON.stringify({ print, up: gains.up, down: gains.down });
+    await setMeta(db, OWN_GAINS_KEY, row);
+    if (userId) await setMeta(db, ownGainsAccountKey(userId), row);
   } catch { /* the next rebuild fits them again */ }
 }
 
@@ -427,6 +438,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // waiting for it kept Home's Recommended rail on its skeleton for as long as
   // the request took (RV31, 2026-10-23).
   const signedIn = auth.status === 'signedIn';
+  const userId = auth.profile?.user.id ?? null;
   const filling = catalog.filling;
   // The pull model is fitted once per set of picks, catalog revision, baseline
   // and taxonomy, not once per rating: fitting reads every baseline title's
@@ -445,9 +457,13 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       const started = Date.now();
       const [rated, consumed, follows] = await Promise.all([ratedTitles(db), consumedTitles(db), followedFacets(db)]);
       if (!live) return;
-      const signature = pullSignature(consumed, await baselinePresent(db), baseline);
+      // While pull is off the screen (PULL_SHOWN) nothing reads the model: it was never in
+      // the number. Fitting it anyway held every score back by its seconds on each rebuild,
+      // and a sign-in, which forgets the stored fit, fitted from nothing once per row pull:
+      // Home sat without a score for about two minutes (Nils, 2026-11-07).
+      const signature = PULL_SHOWN ? pullSignature(consumed, await baselinePresent(db), baseline) : '';
       if (!live) return;
-      let cached = pullFit.current;
+      let cached = PULL_SHOWN ? pullFit.current : { signature, tax: taxonomy, model: null };
       let fitMs = 0;
       let reused = false;
       if (!cached || cached.signature !== signature || cached.tax !== taxonomy) {
@@ -474,7 +490,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       }
       // Your own gains, as the last rebuild under this taxonomy fitted them (§3.11).
       const gainsPrint = taxonomyPrints.get(taxonomy) ?? null;
-      const ownGains = gainsPrint ? await storedOwnGains(db, gainsPrint) : null;
+      const ownGains = gainsPrint ? await storedOwnGains(db, gainsPrint, userId) : null;
       if (!live) return;
       const built = buildProfile(rated, taxonomy, { consumed, pull: cached.model, follows, gains: ownGains });
       const model = cached.model;
@@ -500,7 +516,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
           // the next start begins with them.
           const moved = Math.abs(gains.up - built.gains.up) >= OWN_GAINS_STEP || Math.abs(gains.down - built.gains.down) >= OWN_GAINS_STEP;
           if (moved) { setProfile({ ...built, gains }); setRevision((r) => r + 1); }
-          if (gainsPrint) void keepOwnGains(db, gainsPrint, gains);
+          if (gainsPrint) void keepOwnGains(db, gainsPrint, gains, userId);
           setCalibration(cal);
           const all = cal.get('all');
           console.log('fandex_calibration', JSON.stringify({ rated: all?.n ?? 0, withinOne: all?.withinOne ?? 0, withinTwo: all?.withinTwo ?? 0, gains, moved, ms: Date.now() - started }));
@@ -509,7 +525,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       }, 1_000);
     })();
     return () => { live = false; };
-  }, [db, signedIn, auth.status, taxonomy, baseline, auth.rowsRevision, catalog.revision, filling]);
+  }, [db, signedIn, userId, auth.status, taxonomy, baseline, auth.rowsRevision, catalog.revision, filling]);
 
   const score = useCallback((id: string, facets: ScoreFacet[], type?: string) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy, type) : null), [profile, taxonomy]);

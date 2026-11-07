@@ -23,6 +23,7 @@ import { DISCORD_CLIENT_ID, GOOGLE_CLIENT_ID, traktConfigured } from '~/lib/conf
 import { GOOGLE_APP_REDIRECT, GOOGLE_APP_STATE_PREFIX, GOOGLE_SITE_ORIGIN, googleAuthorizeUrl, newGoogleSignIn, readGoogleReturn, startGoogleSignIn as startGoogleWebSignIn } from '~/lib/google';
 import { DISCORD_APP_REDIRECT, DISCORD_APP_STATE_PREFIX, DISCORD_SITE_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
 import { clearState, StaleSync, syncState } from '~/lib/stateSync';
+import { ownGainsAccountKey } from '~/lib/db';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
 import { secretDelete, secretGet, secretSet, SESSION_KEY } from '~/lib/storage';
 import { publishWidget } from '~/lib/widget';
@@ -688,10 +689,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteAccount = useCallback(async () => {
     flow.current++;
+    const id = profileRef.current?.user.id;
     await api.deleteAccount();
+    // Signing out keeps the account's own gains for the next sign-in (db.ts); a deleted account has none.
+    if (id) await db.runAsync('DELETE FROM meta WHERE key = ?', [ownGainsAccountKey(id)]).catch(() => undefined);
     await forget();
     setTrakt({ phase: 'idle' });
-  }, [forget]);
+  }, [db, forget]);
 
   const completeMerge = useCallback(async (resolution: MergeResolution) => {
     const pending = pendingMerge;
