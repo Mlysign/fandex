@@ -464,13 +464,12 @@ function TitleBlock({ kind, title, metaParts, metaStyle, dots, ratings, yourRati
         </>
       ) : null}
       {mode === 'beside' ? (
-        <>
-          {lead(10)}
-          <View style={styles.besideRow}>
-            <View style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>{heading}</View>
-            {group}
-          </View>
-        </>
+        // The dots and the type ride on the title's column, so they keep their distance
+        // from a one-line title however tall the group beside it is.
+        <View style={styles.besideRow}>
+          <View style={{ flex: 1, minWidth: 0, pointerEvents: 'box-none' }}>{lead(10)}{heading}</View>
+          {group}
+        </View>
       ) : mode === 'stacked' ? (
         <>
           <View style={[styles.besideRow, { marginBottom: 10 }]}>
