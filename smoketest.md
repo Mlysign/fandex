@@ -45,8 +45,8 @@ disconnect, download, delete, or press Accept or Deny on Review there.
 
 What to know about them: the first is an admin on this machine, so `/dev/*` opens. Their
 identity is `google` and they have no Trakt, so nothing reaches Trakt, no Trakt sync runs, and
-"Disconnect Trakt" has nothing to act on. They start EMPTY, so the score panel shows its
-cold-start face until a few titles are rated. The app there syncs its catalog through the local
+"Disconnect Trakt" has nothing to act on. They start EMPTY, so the score seal shows its
+cold-start face ("Rate a few") until a few titles are rated. The app there syncs its catalog through the local
 Worker, never from the live site's files.
 
 ⚠️ **Since 2026-10-11 Settings shows a test account a "Connect" row for Trakt. Do not finish it.**
@@ -118,7 +118,7 @@ Nils's, here and on fandex.org.
 20. Profile's three numbers = the Lists tabs' counts = Settings' Account block.
 21. Insights: the three type tiles sum to "Rated items", and so does "How you rate". A bar with no number is a zero.
 22. Home: Up next's boxes all unchecked; **no "No connection" line while online** (SM55); compare the rail with the phone's.
-23. A title page: the panel's number, then "Why?": baseline + the counted rows = the number. Rows under "Not counted" show what they would be worth and are not part of the sum.
+23. A title page: the seal's number, then its ?: the Why sheet's ring and rows; the usual + the counted rows = the number, give or take the rounding of each row to a whole point. Rows under "Not counted" show what they would be worth and are not part of the sum.
 24. Settings: connected accounts, region, default types, platforms; read the copy against what sign-in really offers (SM62).
 25. `/dev/scoring` → Taxonomy → Review: the card counts, and "N suggestions denied and hidden".
 

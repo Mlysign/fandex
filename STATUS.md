@@ -2,7 +2,7 @@
 
 _Your index of every game, movie, show & book._ · **This file is current STATE only.** Open work in detail → [TASKS.md](TASKS.md). Finished work → [docs/archive/history.md](docs/archive/history.md) (grep it, don't read it). Rules → [AGENTS.md](AGENTS.md) and the `CLAUDE.md` in each package.
 
-_Last updated: **2026-11-06**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
+_Last updated: **2026-11-07**. State only, per the doc conventions in AGENTS.md: what is true now, not what happened when._
 
 > **Settled calls and standing constraints → [docs/decisions.md](docs/decisions.md).** Every line there is closed; re-opening one wastes Nils's time.
 
