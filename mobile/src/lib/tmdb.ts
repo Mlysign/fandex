@@ -52,6 +52,45 @@ export interface SeasonEpisode {
   runtimeMinutes: number | null;
 }
 
+export interface EpisodeRef { season: number; episode: number; airDate: string | null }
+
+/** Where a show stands on TMDB: its numbered seasons, the last episode out and the next one due. */
+export interface ShowStatus {
+  seasons: { season: number; episodeCount: number }[];
+  lastAired: EpisodeRef | null;
+  nextToAir: EpisodeRef | null;
+}
+
+function episodeRef(v: unknown): EpisodeRef | null {
+  const e = v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+  if (!e || !Number.isInteger(e.season_number) || !Number.isInteger(e.episode_number)) return null;
+  return {
+    season: e.season_number as number,
+    episode: e.episode_number as number,
+    airDate: typeof e.air_date === 'string' && e.air_date ? e.air_date : null,
+  };
+}
+
+/** Read TMDB's `/tv/{id}`, down to what Up next needs without Trakt. Specials (season 0) are left out. */
+export function readShowStatus(data: unknown): ShowStatus {
+  const d = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const seasons = (Array.isArray(d.seasons) ? d.seasons : [])
+    .filter((s) => s && Number.isInteger(s.season_number) && s.season_number > 0)
+    .map((s) => ({ season: s.season_number as number, episodeCount: Number.isInteger(s.episode_count) ? (s.episode_count as number) : 0 }))
+    .sort((a, b) => a.season - b.season);
+  const last = episodeRef(d.last_episode_to_air);
+  const next = episodeRef(d.next_episode_to_air);
+  return { seasons, lastAired: last && last.season > 0 ? last : null, nextToAir: next && next.season > 0 ? next : null };
+}
+
+/** The show's status on TMDB, asked by the device for Up next when it has no Trakt to ask. */
+export async function tmdbShowStatus(tmdbId: string, signal?: AbortSignal): Promise<ShowStatus> {
+  if (!tmdbConfigured()) throw new Error('TMDB is not set up in this build.');
+  const res = await fetch(`${BASE}/tv/${encodeURIComponent(tmdbId)}?api_key=${TMDB_API_KEY}`, { signal });
+  if (!res.ok) throw new Error(`TMDB show answered ${res.status}`);
+  return readShowStatus(await res.json());
+}
+
 /**
  * One season's episodes, for a season the Worker's catalog has no list for. The
  * site filled a season the first time somebody opened it, so most seasons were

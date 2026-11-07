@@ -4,7 +4,7 @@
 // such catalog (the Worker's copy stopped being filled when the site did), so
 // it asks Trakt, which knows both what has aired and what you have seen:
 // `/shows/{id}/progress/watched` answers with `next_episode`, one small call
-// per show.
+// per show. A device with no Trakt asks TMDB instead (localProgress, below).
 //
 // One call per show is why the answers are kept. A row says what Trakt answered
 // and how many of the show's episodes were ticked at the time, and it is asked
@@ -24,7 +24,8 @@ import { traktIds } from '~/lib/itemActions';
 import { shiftMonth } from '~/lib/dates';
 import { premiereRecheckAt, seasonPremieres } from '~/lib/seasonPremieres';
 import { applyLocalWrite } from '~/lib/stateSync';
-import { TraktBusyError, traktAccessToken, traktGet, traktMissed, traktPost } from '~/lib/trakt';
+import { tmdbSeasonEpisodes, tmdbShowStatus, type ShowStatus } from '~/lib/tmdb';
+import { TraktBusyError, loadTraktTokens, traktAccessToken, traktGet, traktMissed, traktPost } from '~/lib/trakt';
 import { publishWidget } from '~/lib/widget';
 
 /** Shows asked about per run. Each is one request to Trakt. */
@@ -223,10 +224,80 @@ async function store(db: SQLiteDatabase, show: ShowWatch, p: Progress, now: numb
   );
 }
 
-async function checkShow(db: SQLiteDatabase, token: string, show: ShowWatch, now: number): Promise<void> {
+// ── Without Trakt ────────────────────────────────────────────────────────────
+//
+// A device with no Trakt sign-in works out the next episode itself (Nils,
+// 2026-11-07: tracking must not need Trakt). The ticks are Fandex's own rows;
+// what has aired is TMDB's `/tv/{id}`, which names the last episode out and the
+// next one due. The next episode is the one after the LATEST you watched, not
+// the first gap: a skipped episode early on does not hold a show back, and a
+// show you finished is caught up whatever you skipped on the way.
+
+const cmp = (a: { season: number; episode: number }, b: { season: number; episode: number }) =>
+  a.season - b.season || a.episode - b.episode;
+const dateAt = (date: string | null): number | null => {
+  if (!date) return null;
+  const ms = Date.parse(`${date}T00:00:00Z`);
+  return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+};
+
+/**
+ * The episode after the latest one watched, if it has aired; else null with
+ * the day the next one is due, when TMDB has one. Pure, so the rule has a test.
+ */
+export function nextLocalEpisode(
+  watched: { season: number; episode: number }[],
+  status: ShowStatus,
+): { next: { season: number; episode: number } | null; upcomingAt: number | null } {
+  const upcomingAt = dateAt(status.nextToAir?.airDate ?? null);
+  const seen = watched.filter((w) => w.season > 0).sort(cmp);
+  const latest = seen[seen.length - 1];
+  const last = status.lastAired;
+  if (!latest || !last || cmp(latest, last) >= 0) return { next: null, upcomingAt };
+  const inSeason = status.seasons.find((s) => s.season === latest.season);
+  const candidate = inSeason && latest.episode < inSeason.episodeCount
+    ? { season: latest.season, episode: latest.episode + 1 }
+    : (() => {
+      const later = status.seasons.find((s) => s.season > latest.season && s.episodeCount > 0);
+      return later ? { season: later.season, episode: 1 } : null;
+    })();
+  if (!candidate || cmp(candidate, last) > 0) return { next: null, upcomingAt };
+  return { next: candidate, upcomingAt: null };
+}
+
+async function localProgress(db: SQLiteDatabase, sources: Sources, show: ShowWatch, now: number): Promise<Progress> {
+  const nothing: Progress = { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt, upcomingAt: null };
+  const tmdbId = sources.find((s) => s.source === 'tmdb')?.sourceId;
+  // Nobody to ask: stored as caught up, so it is not asked about on every run.
+  if (!tmdbId) return nothing;
+  const watched = await db.getAllAsync<{ season: number; episode: number }>(
+    'SELECT season, episode FROM episode_state WHERE media_item_id = ?', [show.mediaItemId],
+  );
+  const status = await tmdbShowStatus(tmdbId);
+  const { next, upcomingAt } = nextLocalEpisode(watched, status);
+  if (!next) return { ...nothing, upcomingAt: upcomingAt != null && upcomingAt > now ? upcomingAt : null };
+  // The episode's own title and day. The last one out carries its day already.
+  const listed = (await tmdbSeasonEpisodes(tmdbId, next.season)).find((e) => e.episode === next.episode);
+  const airDate = listed?.airDate ?? (status.lastAired && cmp(next, status.lastAired) === 0 ? status.lastAired.airDate : null);
+  const airedAt = dateAt(airDate);
+  // Same rule as Trakt's answer: no day, or a day still to come, is not out.
+  if (airedAt == null || airedAt > now) return { ...nothing, upcomingAt: airedAt != null && airedAt > now ? airedAt : null };
+  return { season: next.season, episode: next.episode, title: listed?.title ?? null, airedAt, lastWatchedAt: show.lastWatchedAt, upcomingAt: null };
+}
+
+/** The Trakt token when this device is signed in to Trakt, null when it is not. An expired sign-in still throws. */
+async function traktTokenIfAny(): Promise<string | null> {
+  return (await loadTraktTokens()) ? traktAccessToken() : null;
+}
+
+async function checkShow(db: SQLiteDatabase, token: string | null, show: ShowWatch, now: number): Promise<void> {
   const sources = await catalogSources(db, show.mediaItemId);
   // Not in the catalog copy (yet): nothing is known, so nothing is stored.
   if (sources === undefined) return;
+  if (token === null) {
+    await store(db, show, await localProgress(db, sources, show, now), now);
+    return;
+  }
   const traktId = await traktShowId(db, token, sources, now);
   // Trakt does not know the show: there is nobody to ask. Stored as caught up
   // so it is not asked about on every run.
@@ -290,7 +361,8 @@ async function refreshUpNextOnce(db: SQLiteDatabase): Promise<{ checked: number;
   const batch = due.slice(0, RUN_BUDGET);
   if (!batch.length) return { checked: 0, waiting: 0 };
 
-  const token = await traktAccessToken();
+  // No Trakt on this device: TMDB is asked instead (localProgress).
+  const token = await traktTokenIfAny();
   let checked = 0;
   let firstError: unknown = null;
   let busy: TraktBusyError | null = null;
@@ -375,22 +447,29 @@ export async function setEpisodesWatched(
   known: Sources = [],
 ): Promise<void> {
   if (!episodes.length) return;
-  const ids = traktIds({ sources: [...((await catalogSources(db, mediaItemId)) ?? []), ...known] });
-  if (!ids) throw new Error('Fandex holds no Trakt or TMDB id for this show, so the episode could not be marked.');
-  const token = await traktAccessToken();
+  // No Trakt on this device: the tick is Fandex's alone (source `local`), and
+  // the next Trakt sync on a device that has Trakt sends it there
+  // (traktSync.ts `pushLocalEpisodes`). An untick here cannot reach Trakt, so
+  // an episode Trakt also holds comes back with that device's next sync.
+  const token = await traktTokenIfAny();
   const now = Math.floor(Date.now() / 1000);
 
-  const bySeason = new Map<number, number[]>();
-  for (const e of episodes) bySeason.set(e.season, [...(bySeason.get(e.season) ?? []), e.episode]);
-  const seasons = [...bySeason].map(([number, list]) => ({ number, episodes: list.map((n) => ({ number: n })) }));
-  const answer = await traktPost(watched ? '/sync/history' : '/sync/history/remove', token, { shows: [{ ids, seasons }] });
-  // Trakt answers 201 and lists under `not_found` what it could not match. A
-  // row saved here for that is one Trakt does not hold, which the next sync
-  // deletes, so nothing is saved; whatever Trakt did take arrives with that sync.
-  if (traktMissed(answer)) throw new Error('Trakt could not find this show or some of these episodes, so nothing was marked here. Anything Trakt did take shows up after the next sync.');
+  if (token !== null) {
+    const ids = traktIds({ sources: [...((await catalogSources(db, mediaItemId)) ?? []), ...known] });
+    if (!ids) throw new Error('Fandex holds no Trakt or TMDB id for this show, so the episode could not be marked.');
+    const bySeason = new Map<number, number[]>();
+    for (const e of episodes) bySeason.set(e.season, [...(bySeason.get(e.season) ?? []), e.episode]);
+    const seasons = [...bySeason].map(([number, list]) => ({ number, episodes: list.map((n) => ({ number: n })) }));
+    const answer = await traktPost(watched ? '/sync/history' : '/sync/history/remove', token, { shows: [{ ids, seasons }] });
+    // Trakt answers 201 and lists under `not_found` what it could not match. A
+    // row saved here for that is one Trakt does not hold, which the next sync
+    // deletes, so nothing is saved; whatever Trakt did take arrives with that sync.
+    if (traktMissed(answer)) throw new Error('Trakt could not find this show or some of these episodes, so nothing was marked here. Anything Trakt did take shows up after the next sync.');
+  }
 
+  const source = token !== null ? 'trakt' : 'local';
   const write = watched
-    ? { episodes: { upsert: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode, watchedAt: now, sources: ['trakt'] })) } }
+    ? { episodes: { upsert: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode, watchedAt: now, sources: [source] })) } }
     : { episodes: { delete: episodes.map((e) => ({ mediaItemId, season: e.season, episode: e.episode })) } };
   const saved = await api.writeState(write);
   await applyLocalWrite(db, write, saved?.skipped);

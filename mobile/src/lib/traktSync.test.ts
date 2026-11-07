@@ -4,7 +4,7 @@ vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 
 import {
-  foldTraktPull, planTraktSync, ratedButWishlisted, ratedWishlistLeftovers, TraktSyncRefused,
+  episodePushBody, foldTraktPull, missedShows, planEpisodePush, planTraktSync, ratedButWishlisted, ratedWishlistLeftovers, TraktSyncRefused,
   type LocalEpisodeRow, type LocalItemRow, type RawTraktPull, type TraktPull,
 } from './traktSync';
 
@@ -229,5 +229,48 @@ describe("Trakt's last activity", () => {
     expect(lastActivity({ all: '2026-10-23T10:00:00.000Z', movies: {} })).toBe('2026-10-23T10:00:00.000Z');
     expect(lastActivity({})).toBeNull();
     expect(lastActivity(null)).toBeNull();
+  });
+});
+
+describe('sending ticks made without Trakt to it', () => {
+  const ep = (mediaItemId: string, season: number, episode: number, sources: string[], watchedAt: number | null = 1_700_000_000): LocalEpisodeRow =>
+    ({ mediaItemId, season, episode, watchedAt, sources });
+  const ids = new Map<string, { trakt: number } | { tmdb: number } | null>([[A, { tmdb: 84773 }], [B, { trakt: 42 }], [C, null]]);
+
+  it('sends only what Trakt does not hold yet, show by show', () => {
+    const plan = planEpisodePush([
+      ep(A, 1, 2, ['local']), ep(A, 1, 1, ['local']), ep(A, 1, 3, ['trakt']), ep(A, 1, 4, ['local', 'trakt']),
+      ep(B, 2, 5, ['trakt']),
+    ], (id) => ids.get(id), new Set());
+    expect(plan).toEqual([{ mediaItemId: A, ids: { tmdb: 84773 }, episodes: [ep(A, 1, 1, ['local']), ep(A, 1, 2, ['local'])] }]);
+  });
+
+  it('leaves out a show it cannot name, one not in the catalog copy yet, one Trakt did not know lately, and specials', () => {
+    const plan = planEpisodePush([
+      ep(C, 1, 1, ['local']), ep('not-in-copy', 1, 1, ['local']), ep(B, 1, 1, ['local']), ep(A, 0, 1, ['local']),
+    ], (id) => ids.get(id), new Set([B]));
+    expect(plan).toEqual([]);
+  });
+
+  it("writes Trakt's history body with each tick's own time", () => {
+    const body = episodePushBody([{ mediaItemId: A, ids: { tmdb: 84773 }, episodes: [ep(A, 1, 1, ['local']), ep(A, 2, 1, ['local'], null)] }]);
+    expect(body).toEqual({
+      shows: [{
+        ids: { tmdb: 84773 },
+        seasons: [
+          { number: 1, episodes: [{ number: 1, watched_at: new Date(1_700_000_000_000).toISOString() }] },
+          { number: 2, episodes: [{ number: 1 }] },
+        ],
+      }],
+    });
+  });
+
+  it('finds the shows Trakt listed as not found by the ids they were sent with', () => {
+    const sent = [
+      { mediaItemId: A, ids: { tmdb: 84773 }, episodes: [] },
+      { mediaItemId: B, ids: { trakt: 42 }, episodes: [] },
+    ];
+    expect(missedShows({ not_found: { shows: [{ ids: { tmdb: 84773 } }], episodes: [] } }, sent)).toEqual(new Set([A]));
+    expect(missedShows({ added: { episodes: 3 } }, sent)).toEqual(new Set());
   });
 });

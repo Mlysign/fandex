@@ -254,7 +254,7 @@ export function UpNextRail() {
         <RailHeader title="Up next" />
         <Panel style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
           <Text style={type.bodySm}>
-            {up.refreshing ? 'Asking Trakt what is next…'
+            {up.refreshing ? 'Checking what is next…'
               : up.error ? up.error
               : up.filling ? 'Loading your shows…'
               : 'You are caught up. A show appears here when it has an episode out that you have not watched.'}

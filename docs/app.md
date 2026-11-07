@@ -313,6 +313,17 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   ("none" is asked again after a week). A tick names the show by its Trakt id or else its TMDB id,
   from the catalog copy or the page's own item (a show outside the pool is not in the copy), and
   saves nothing when Trakt lists it under `not_found`.
+- **Without Trakt on the device, episodes are Fandex's own** (since 0.3.40, 2026-11-07). A tick
+  goes to the Worker and the device only, source `local`; Up next asks TMDB's `/tv/{id}` instead
+  of Trakt (`localProgress`, `nextLocalEpisode` in `upNext.ts`): the next episode is the one after
+  the LATEST you watched, if TMDB's `last_episode_to_air` says it is out, and its title comes from
+  the season's list. A show with no TMDB id is stored as caught up. The next full Trakt sync on a
+  device that has Trakt sends every `local` tick to Trakt's history with its own time and marks
+  it `trakt` at once (`pushLocalEpisodes` in `traktSync.ts`), only after a run that matched every
+  title, so an episode Trakt already holds is never a second play. A show Trakt does not know is
+  not offered again for a week (`trakt_push_missed` in `meta`). Checked on the local stack with a
+  test account: ticks saved as `local`, Up next from TMDB, the calendar's season rule both ways.
+  The send to Trakt is tested by unit tests only (no test account has Trakt).
 - **The widget is Kotlin in a local Expo module** (`mobile/modules/up-next-widget`), autolinked
   through `expo.autolinking.nativeModulesDir` in `package.json`. That is what keeps it out of the
   generated `android/` folder: the module carries its own manifest entries, layouts and classes,

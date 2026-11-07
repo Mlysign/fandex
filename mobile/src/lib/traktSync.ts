@@ -26,6 +26,7 @@ import {
   type EpisodeStateKey, type EpisodeStateUpsert, type ItemStateKey, type ItemStateUpsert, type ProviderRef,
 } from '~/lib/api';
 import { getMeta, setMeta } from '~/lib/db';
+import { traktIds } from '~/lib/itemActions';
 import { StaleSync, syncState } from '~/lib/stateSync';
 import { TraktAuthError, traktAccessToken, traktGet, traktList, traktPost } from '~/lib/trakt';
 
@@ -301,6 +302,8 @@ export interface TraktSyncResult {
   watchlistTidied: number;
   /** Rated titles' wishlist rows from other sources removed this run. */
   wishlistTidied?: number;
+  /** Episodes ticked without Trakt and sent to it this run. */
+  episodesSent?: number;
   /**
    * True when the Worker held rows this device did not (a rating made on
    * another device), pulled before the comparison. The lists need re-reading
@@ -393,6 +396,133 @@ async function localTraktRows(db: SQLiteDatabase): Promise<{ items: LocalItemRow
       return { mediaItemId: r.media_item_id, season: r.season, episode: r.episode, watchedAt: r.watched_at, sources };
     }),
   };
+}
+
+// ── Ticks made without Trakt, sent to it ─────────────────────────────────────
+//
+// A device with no Trakt sign-in saves an episode tick to Fandex alone, source
+// `local` (upNext.ts). Once the account syncs Trakt, those ticks are sent there,
+// so the two agree. It ADDS history and deletes nothing, so the prune invariant
+// is not in play; what matters is never sending a play Trakt already has, which
+// would be a second play there. So it runs only after a run that matched every
+// title (a show this run could not match has its Trakt episodes unmarked), on
+// the device's copy as the run left it, and a show Trakt took is marked
+// `trakt` at once, so it is never sent again.
+
+type ShowIds = { trakt: number } | { tmdb: number };
+export interface EpisodePush { mediaItemId: string; ids: ShowIds; episodes: LocalEpisodeRow[] }
+
+/** Episodes per request: a big account connecting Trakt for the first time can hold thousands. */
+const PUSH_CHUNK = 500;
+/** A show Trakt did not know is not offered again for this long. */
+const PUSH_MISSED_TTL = 7 * 86_400;
+const PUSH_MISSED_KEY = 'trakt_push_missed';
+
+/** Which shows to send, and which of their episodes. Pure, so the rule has a test. */
+export function planEpisodePush(
+  local: LocalEpisodeRow[],
+  idsOf: (mediaItemId: string) => ShowIds | null | undefined,
+  skip: ReadonlySet<string>,
+): EpisodePush[] {
+  const byShow = new Map<string, LocalEpisodeRow[]>();
+  for (const r of local) {
+    if (r.sources.includes('trakt') || r.season <= 0) continue;
+    byShow.set(r.mediaItemId, [...(byShow.get(r.mediaItemId) ?? []), r]);
+  }
+  const out: EpisodePush[] = [];
+  for (const [mediaItemId, episodes] of byShow) {
+    if (skip.has(mediaItemId)) continue;
+    // Undefined: not in the catalog copy yet, asked again next run. Null: no id Trakt could take.
+    const ids = idsOf(mediaItemId);
+    if (!ids) continue;
+    out.push({ mediaItemId, ids, episodes: [...episodes].sort((a, b) => a.season - b.season || a.episode - b.episode) });
+  }
+  return out;
+}
+
+/** Trakt's `/sync/history` body for these shows. A tick's own time goes with it; one without lets Trakt use now. */
+export function episodePushBody(shows: EpisodePush[]): { shows: unknown[] } {
+  return {
+    shows: shows.map((s) => {
+      const seasons = new Map<number, { number: number; watched_at?: string }[]>();
+      for (const e of s.episodes) {
+        seasons.set(e.season, [...(seasons.get(e.season) ?? []), {
+          number: e.episode,
+          ...(e.watchedAt ? { watched_at: new Date(e.watchedAt * 1000).toISOString() } : {}),
+        }]);
+      }
+      return { ids: s.ids, seasons: [...seasons].map(([number, episodes]) => ({ number, episodes })) };
+    }),
+  };
+}
+
+/** The shows a `/sync/history` answer lists under `not_found.shows`, by the ids they were sent with. */
+export function missedShows(answer: unknown, sent: EpisodePush[]): Set<string> {
+  const nf = (answer as { not_found?: { shows?: unknown } } | null)?.not_found?.shows;
+  const out = new Set<string>();
+  if (!Array.isArray(nf)) return out;
+  for (const miss of nf) {
+    const ids = (miss as { ids?: Record<string, unknown> })?.ids ?? {};
+    for (const s of sent) {
+      if (('trakt' in s.ids && ids.trakt === s.ids.trakt) || ('tmdb' in s.ids && ids.tmdb === s.ids.tmdb)) out.add(s.mediaItemId);
+    }
+  }
+  return out;
+}
+
+/** Send this account's Fandex-only ticks to Trakt. Returns how many episodes Trakt took. */
+async function pushLocalEpisodes(db: SQLiteDatabase, accessToken: string, current: () => void): Promise<number> {
+  const local = (await localTraktRows(db)).episodes;
+  if (!local.some((r) => !r.sources.includes('trakt'))) return 0;
+  const now = Math.floor(Date.now() / 1000);
+  let missed: Record<string, number> = {};
+  try { missed = JSON.parse((await getMeta(db, PUSH_MISSED_KEY)) ?? '{}') as Record<string, number>; } catch { /* start again */ }
+  const skip = new Set(Object.entries(missed).filter(([, at]) => now - at < PUSH_MISSED_TTL).map(([id]) => id));
+
+  const ids = new Map<string, ShowIds | null>();
+  const wanted = [...new Set(local.filter((r) => !r.sources.includes('trakt')).map((r) => r.mediaItemId))];
+  for (let i = 0; i < wanted.length; i += 200) {
+    const chunk = wanted.slice(i, i + 200);
+    const rows = await db.getAllAsync<{ id: string; vector: string }>(
+      `SELECT id, vector FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk,
+    );
+    for (const r of rows) {
+      let sources: { source: string; sourceId: string }[] = [];
+      try { sources = (JSON.parse(r.vector) as { sources?: typeof sources }).sources ?? []; } catch { /* none */ }
+      ids.set(r.id, traktIds({ sources }));
+    }
+  }
+  const plan = planEpisodePush(local, (id) => ids.get(id), skip);
+
+  let taken = 0;
+  let batch: EpisodePush[] = [];
+  const send = async () => {
+    if (!batch.length) return;
+    const sent = batch;
+    batch = [];
+    current();
+    const answer = await traktPost('/sync/history', accessToken, episodePushBody(sent));
+    const lost = missedShows(answer, sent);
+    for (const id of lost) missed[id] = now;
+    // A show Trakt took is marked at once. An episode it did not know stays
+    // marked too: sent again, any it did know would be a second play.
+    const upsert: EpisodeStateUpsert[] = sent.filter((s) => !lost.has(s.mediaItemId)).flatMap((s) => s.episodes.map((e) => ({
+      mediaItemId: e.mediaItemId, season: e.season, episode: e.episode, watchedAt: e.watchedAt,
+      sources: [...new Set([...e.sources, 'trakt'])],
+    })));
+    for (let i = 0; i < upsert.length; i += WRITE_CHUNK) {
+      current();
+      await api.writeState({ episodes: { upsert: upsert.slice(i, i + WRITE_CHUNK) } });
+    }
+    taken += upsert.length;
+  };
+  for (const show of plan) {
+    if (batch.length && batch.reduce((n, s) => n + s.episodes.length, 0) + show.episodes.length > PUSH_CHUNK) await send();
+    batch.push(show);
+  }
+  await send();
+  if (Object.keys(missed).length) await setMeta(db, PUSH_MISSED_KEY, JSON.stringify(missed));
+  return taken;
 }
 
 /** `current` throws once the session changed: the writes go out under whichever session `api` holds NOW. */
@@ -512,6 +642,13 @@ export async function syncTrakt(
   }
   // One pull after all the writes, of the kinds they touched, where there were two full ones.
   if (changes > 0 || leftovers.length) await syncState(db, false, opts.stillCurrent);
+  // Ticks made without Trakt go to it now, on the copy the pull above left.
+  // Not after a run that left titles unmatched: their Trakt episodes are not
+  // marked yet, and sending them would be second plays.
+  if (deferred === 0) {
+    result.episodesSent = await pushLocalEpisodes(db, accessToken, current);
+    if (result.episodesSent > 0) await syncState(db, false, opts.stillCurrent);
+  }
   current();
   await setMeta(db, SYNCED_AT_KEY, String(Date.now()));
   // Kept only after a run that matched everything: a run that left titles for

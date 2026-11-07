@@ -298,6 +298,7 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 
 - **The calendar shows a show's own release (its first season), and a later season only when you have watched every episode before it.** Rings of Power, seasons 1 and 2 seen: season 3 is on the calendar. A show left halfway through season 1: its season 2 is not, because you have episodes left. "Watched everything before it" is Up next's answer from Trakt, never a count against TMDB's episode numbers (`mobile/src/lib/seasonPremieres.ts`).
 - **Up next lists a show only while it has an aired episode you have not watched.** A tick moves the show to the top; so does a new episode airing. A show with nothing left drops off until its next episode airs.
+- **Episode tracking does not need Trakt** (Nils, same day). A device without Trakt saves a tick to Fandex alone (source `local`) and works out what is next from TMDB's `/tv/{id}`; the next Trakt sync on a device that has Trakt sends those ticks there. TMDB keeps no record of watched episodes, so there is nothing to sync with TMDB.
 
 ### Added 2026-11-05, the UI review
 

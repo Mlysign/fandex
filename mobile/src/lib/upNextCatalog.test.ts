@@ -7,10 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // caught up without asking Trakt, and kept that answer for a day to a week.
 // Real SQL, because the fix is in the query.
 
-const trakt = vi.hoisted(() => ({ traktGet: vi.fn(), traktPost: vi.fn(), writeState: vi.fn(), applyLocalWrite: vi.fn() }));
+const trakt = vi.hoisted(() => ({
+  traktGet: vi.fn(), traktPost: vi.fn(), writeState: vi.fn(), applyLocalWrite: vi.fn(),
+  // A device signed in to Trakt unless a test says otherwise.
+  tokens: vi.fn(async (): Promise<unknown> => ({ accessToken: 'token' })),
+  showStatus: vi.fn(), seasonEpisodes: vi.fn(),
+}));
 vi.mock('~/lib/trakt', () => ({
   TraktBusyError: class extends Error {},
-  loadTraktTokens: async () => null,
+  loadTraktTokens: trakt.tokens,
   traktAccessToken: async () => 'token',
   traktGet: trakt.traktGet,
   traktPost: trakt.traktPost,
@@ -20,6 +25,9 @@ vi.mock('~/lib/trakt', () => ({
 vi.mock('~/lib/api', () => ({ api: { writeState: trakt.writeState } }));
 vi.mock('~/lib/stateSync', () => ({ applyLocalWrite: trakt.applyLocalWrite }));
 vi.mock('~/lib/widget', () => ({ publishWidget: vi.fn() }));
+vi.mock('~/lib/tmdb', () => ({ tmdbShowStatus: trakt.showStatus, tmdbSeasonEpisodes: trakt.seasonEpisodes }));
+// The premiere hint asks the Worker; these tests are about Trakt and TMDB.
+vi.mock('~/lib/seasonPremieres', () => ({ seasonPremieres: async () => [], premiereRecheckAt: () => null }));
 
 // Node's own SQLite. The app has no Node types (it runs on a phone), so the
 // module is named through a variable and typed by hand, as much as is used here.
@@ -246,5 +254,74 @@ describe('the schema step that heals a stored "caught up"', () => {
     expect(raw.prepare('SELECT media_item_id FROM up_next').all()).toEqual([{ media_item_id: 'real' }]);
     expect(raw.prepare('SELECT COUNT(*) n FROM trakt_show').get()).toEqual({ n: 0 });
     expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION });
+  });
+});
+
+describe('a device with no Trakt', () => {
+  beforeEach(() => {
+    for (const f of [trakt.traktGet, trakt.traktPost, trakt.writeState, trakt.applyLocalWrite, trakt.showStatus, trakt.seasonEpisodes]) f.mockReset();
+    trakt.writeState.mockResolvedValue({});
+    trakt.tokens.mockResolvedValue(null);
+  });
+  afterEach(() => trakt.tokens.mockResolvedValue({ accessToken: 'token' }));
+
+  const day = (offset: number) => new Date((NOW + offset * 86_400) * 1000).toISOString().slice(0, 10);
+
+  it('saves a tick to Fandex alone, as `local`, and never asks Trakt', async () => {
+    const { db } = open();
+    await migrate(db);
+    // No id at all is fine too: nothing has to be named to Trakt.
+    await setEpisodesWatched(db, 'nocturne', [{ season: 1, episode: 1 }], true);
+    expect(trakt.traktPost).not.toHaveBeenCalled();
+    expect(trakt.writeState).toHaveBeenCalledWith({
+      episodes: { upsert: [expect.objectContaining({ mediaItemId: 'nocturne', season: 1, episode: 1, sources: ['local'] })] },
+    });
+  });
+
+  it('works out the next episode from TMDB', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'sunny', null, 2710);
+    watch(raw, 'sunny', 3);
+    trakt.showStatus.mockResolvedValue({
+      seasons: [{ season: 1, episodeCount: 8 }], lastAired: { season: 1, episode: 8, airDate: day(-30) }, nextToAir: null,
+    });
+    trakt.seasonEpisodes.mockResolvedValue([{ season: 1, episode: 4, title: 'The Fourth', airDate: day(-60), runtimeMinutes: 30 }]);
+
+    await refreshUpNext(db);
+
+    expect(trakt.traktGet).not.toHaveBeenCalled();
+    expect(trakt.showStatus).toHaveBeenCalledWith('2710');
+    const [entry] = await upNextList(db);
+    expect(entry).toMatchObject({ mediaItemId: 'sunny', season: 1, episode: 4, episodeTitle: 'The Fourth' });
+  });
+
+  it('is caught up when the next episode has not aired, and asks again the day it does', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'rings', null, 84773);
+    watch(raw, 'rings', 8);
+    trakt.showStatus.mockResolvedValue({
+      seasons: [{ season: 1, episodeCount: 8 }, { season: 2, episodeCount: 8 }],
+      lastAired: { season: 1, episode: 8, airDate: day(-400) },
+      nextToAir: { season: 2, episode: 1, airDate: day(3) },
+    });
+
+    await refreshUpNext(db);
+
+    expect(await upNextList(db)).toEqual([]);
+    const row = raw.prepare('SELECT season, next_air_at FROM up_next WHERE media_item_id = ?').get('rings') as { season: number | null; next_air_at: number };
+    expect(row.season).toBeNull();
+    expect(row.next_air_at).toBe(Date.parse(`${day(3)}T00:00:00Z`) / 1000);
+  });
+
+  it('stores a show with no TMDB id as caught up without asking anybody', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'odd', null, null);
+    watch(raw, 'odd', 2);
+    await refreshUpNext(db);
+    expect(trakt.showStatus).not.toHaveBeenCalled();
+    expect(raw.prepare('SELECT season FROM up_next WHERE media_item_id = ?').get('odd')).toEqual({ season: null });
   });
 });

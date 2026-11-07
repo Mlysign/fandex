@@ -5,7 +5,8 @@
 // The seasons come from the Worker; what you have watched is on this device.
 // The Worker holds an episode list only for the seasons somebody opened on the
 // old site, so a season without one is asked of TMDB when it is opened, which is
-// when the site asked. A tick goes to Trakt first (lib/upNext.ts).
+// when the site asked. A tick goes to Trakt first when this device has Trakt,
+// and to Fandex alone when it does not (lib/upNext.ts).
 //
 // Two things the site did not have, asked for on 2026-10-10: every episode
 // shows its date, and a tap on an episode opens its details. The tick is its
@@ -182,11 +183,9 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
   // the device is not yet what you have watched, and a tick made from it would
   // be a second play on Trakt.
   const settling = auth.rowsSyncing;
-  // A tick goes to Trakt before anything is saved (lib/upNext.ts), so an
-  // account with no Trakt cannot make one. It is told so, once, in place of the
-  // boxes: before this every box was there and each press answered "Trakt needs
-  // you to sign in again" to somebody who had never signed in to it (SM74).
-  const noTrakt = auth.profile != null && !auth.profile.identities.some((i) => i.provider === 'trakt');
+  // Every account can tick since 2026-11-07: without Trakt on the device a tick
+  // is saved to Fandex alone and reaches Trakt later (lib/upNext.ts). Before
+  // that an account with no Trakt got a sentence in place of the boxes (SM74).
   const total = seasons.reduce((n, s) => n + s.episodeCount, 0);
   const totalSeen = seasons.reduce((n, s) => n + Math.min(seen(s.season), s.episodeCount), 0);
 
@@ -248,8 +247,7 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
     <View>
       <T variant="eyebrow" style={styles.heading}>Your progress</T>
       <T variant="caption" style={styles.summary}>
-        {noTrakt ? 'Episodes are tracked through Trakt, and this account is not connected to it.'
-          : settling ? 'Fetching what you have watched…' : `${totalSeen} of ${total} watched`}
+        {settling ?'Fetching what you have watched…' : `${totalSeen} of ${total} watched`}
       </T>
       <View style={styles.list}>
         {seasons.map((s, i) => {
@@ -283,7 +281,7 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                     <View style={styles.metaLine}>
                       <T variant="micro" style={styles.seasonMeta}>
                         {/* A season nobody has listed episodes for yet: "0/0" read as a count. */}
-                        {s.episodeCount ? `${noTrakt ? '' : `${done}/`}${s.episodeCount}${noTrakt ? ' episodes' : ''}` : 'No episodes yet'}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
+                        {s.episodeCount ? `${done}/${s.episodeCount}` : 'No episodes yet'}{s.airDate ? ` · ${shortDate(s.airDate)}` : ''}
                       </T>
                       {seasonSaving && !isOpen ? <SavingDots /> : null}
                     </View>
@@ -294,8 +292,8 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                     </View>
                   ) : null}
                 </Pressable>
-                {/* Nothing to mark in a season with no episodes, and nobody to mark it for without Trakt. */}
-                {noTrakt || s.episodeCount === 0 ? null : (
+                {/* Nothing to mark in a season with no episodes. */}
+                {s.episodeCount === 0 ? null : (
                   <TickButton
                     on={complete}
                     // Only a season whose episode list must first come from TMDB waits, and shows it.
@@ -345,17 +343,15 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
                             </View>
                           </View>
                         </Pressable>
-                        {noTrakt ? null : (
-                          <TickButton
-                            on={on}
-                            disabled={settling}
-                            accessibilityRole="checkbox"
-                            checkedState={on}
-                            label={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
-                            style={styles.episodeTick}
-                            onToggle={(next) => toggleEpisode(e, next)}
-                          />
-                        )}
+                        <TickButton
+                          on={on}
+                          disabled={settling}
+                          accessibilityRole="checkbox"
+                          checkedState={on}
+                          label={`Mark ${e.title || `episode ${e.episode}`} ${on ? 'unwatched' : 'watched'}`}
+                          style={styles.episodeTick}
+                          onToggle={(next) => toggleEpisode(e, next)}
+                        />
                       </View>
                     );
                   })}
@@ -370,7 +366,6 @@ export function EpisodeTracker({ mediaItemId, sources, onSignIn }: {
         tmdbId={tmdbId}
         watched={detail ? watched.has(`${detail.season}:${detail.episode}`) : false}
         busy={settling}
-        trackable={!noTrakt}
         onClose={() => setDetail(null)}
         onToggle={(e, next) => toggleEpisode(e, next)}
       />
@@ -390,10 +385,8 @@ function airLabel(airDate: string | null): string {
  * in it. The list knows the title and the date; the rest is asked of TMDB when
  * the sheet opens, and the sheet shows what it has until that answers.
  */
-function EpisodeSheet({ episode, tmdbId, watched, busy, trackable, onClose, onToggle }: {
+function EpisodeSheet({ episode, tmdbId, watched, busy, onClose, onToggle }: {
   episode: Episode | null; tmdbId: string | null; watched: boolean; busy: boolean;
-  /** False for an account with no Trakt: the sheet then only describes the episode. */
-  trackable: boolean;
   onClose: () => void; onToggle: (e: Episode, next: boolean) => void;
 }) {
   const [more, setMore] = useState<EpisodeDetail | null>(null);
@@ -436,15 +429,13 @@ function EpisodeSheet({ episode, tmdbId, watched, busy, trackable, onClose, onTo
           : state === 'loading' ? <ActivityIndicator color={color.accent} />
           : <T variant="bodySm">{state === 'failed' ? 'Could not load more about this episode. It needs a connection.' : 'No synopsis for this episode yet.'}</T>}
         <View style={styles.sheetActions}>
-          {trackable ? (
-            <Button
-              label={watched ? 'Mark unwatched' : 'Mark watched'} variant={watched ? 'outline' : 'primary'} size="md" style={{ flex: 1 }}
-              disabled={busy || (unaired && !watched)} onPress={() => { onToggle(episode, !watched); onClose(); }}
-            />
-          ) : null}
-          <Button label="Close" variant="outline" size="md" style={trackable ? undefined : { flex: 1 }} onPress={onClose} />
+          <Button
+            label={watched ? 'Mark unwatched' : 'Mark watched'} variant={watched ? 'outline' : 'primary'} size="md" style={{ flex: 1 }}
+            disabled={busy || (unaired && !watched)} onPress={() => { onToggle(episode, !watched); onClose(); }}
+          />
+          <Button label="Close" variant="outline" size="md" onPress={onClose} />
         </View>
-        {trackable && unaired && !watched ? <T variant="caption">It has not aired, so it cannot be marked watched yet.</T> : null}
+        {unaired && !watched ? <T variant="caption">It has not aired, so it cannot be marked watched yet.</T> : null}
       </ScrollView>
     </Sheet>
   );
