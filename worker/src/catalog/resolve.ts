@@ -214,6 +214,8 @@ async function resolveFetched(
 // ── Looking up many at once ──────────────────────────────────────────────────
 
 export const LOOKUP_MAX = 2000;
+/** At most this many refs when the answer carries facets (about 2 KB a title): a home page's cards, not a library. */
+export const LOOKUP_FACETS_MAX = 300;
 
 export interface ProviderRef {
   source: string;
@@ -250,13 +252,18 @@ export function parseRefs(body: unknown): ProviderRef[] | null {
  * primary-key reads answer that, with no provider call and no write. Only the
  * `missing` ones are worth a resolve each.
  */
-export async function lookupRefsJson(db: D1Database, refs: ProviderRef[]): Promise<string> {
+export async function lookupRefsJson(db: D1Database, refs: ProviderRef[], opts: { facets?: boolean } = {}): Promise<string> {
+  // With `facets`, each held title also carries its raw facets (the catalog
+  // copy's own shape, item_doc), so a card the device's copy lacks is scored
+  // from everything it carries and not from its genres, which weigh nothing
+  // (2026-11-07). One more primary-key read per held title.
+  const withFacets = !!opts.facets;
   const row = await first<{ found: string | null; missing: string | null }>(
     db,
     `SELECT
-       json_group_array(json_object('source', s, 'type', t, 'id', sid, 'mediaItemId', mid, 'slug', slug)) FILTER (WHERE mid IS NOT NULL) found,
+       json_group_array(json_object('source', s, 'type', t, 'id', sid, 'mediaItemId', mid, 'slug', slug${withFacets ? ", 'facets', json(facets)" : ""})) FILTER (WHERE mid IS NOT NULL) found,
        json_group_array(json_object('source', s, 'type', t, 'id', sid)) FILTER (WHERE mid IS NULL) missing
-       FROM (SELECT x.s, x.t, x.sid, x.mid, m.slug slug
+       FROM (SELECT x.s, x.t, x.sid, x.mid, m.slug slug${withFacets ? ", d.facets facets" : ""}
                FROM (SELECT j.value ->> 'source' s, j.value ->> 'type' t, j.value ->> 'id' sid,
                             -- An id that answered as another one (migration 0004). COALESCE
                             -- stops at its first non-NULL, so the alias is read for a miss only.
@@ -268,7 +275,8 @@ export async function lookupRefsJson(db: D1Database, refs: ProviderRef[]): Promi
                          ON l.source = j.value ->> 'source' AND l.source_id = j.value ->> 'id' AND l.media_type = j.value ->> 'type') x
                -- The slug, so a card links /{type}/{slug} and not /item/{id} (SM80).
                -- One primary-key read per held title.
-               LEFT JOIN media_items m ON m.id = x.mid)`,
+               LEFT JOIN media_items m ON m.id = x.mid${withFacets ? `
+               LEFT JOIN item_doc d ON d.media_item_id = x.mid` : ""})`,
     [JSON.stringify(refs)],
   );
   return `{"found":${row?.found ?? "[]"},"missing":${row?.missing ?? "[]"}}`;

@@ -2,7 +2,7 @@
 // is worker/src/index.ts and the shapes are the ones its handlers build.
 
 import type { ScoringConfigValues } from '@/lib/scoringDefaults';
-import type { TaxonomyJson } from '~/lib/fandexScore';
+import type { ScoreFacet, TaxonomyJson } from '~/lib/fandexScore';
 import { API_URL } from '~/lib/config';
 
 export class ApiError extends Error {
@@ -464,6 +464,8 @@ export const api = {
 
   /** Which of these provider ids the catalog holds. Never fetches. At most 2,000 refs. */
   lookup: (refs: ProviderRef[]) => request<LookupResult>('/v1/lookup', json('POST', { refs })),
+  /** The same, with each held title's raw facets; at most `LOOKUP_FACETS_MAX` refs (lib/homeFeed.ts `attachFacets`). */
+  lookupFacets: (refs: ProviderRef[]) => request<LookupResult>('/v1/lookup', json('POST', { refs, facets: true })),
 
   /**
    * Explicit upserts and explicit deletes, at most 2,000 rows. The Worker never
@@ -484,7 +486,7 @@ export interface SteamLibrary {
 export interface ProviderRef { source: string; type: string; id: string }
 export interface LookupResult {
   /** `slug` is the title's public address, /{type}/{slug}; null for an old row. */
-  found: (ProviderRef & { mediaItemId: string; slug?: string | null })[];
+  found: (ProviderRef & { mediaItemId: string; slug?: string | null; facets?: ScoreFacet[] | null })[];
   missing: ProviderRef[];
 }
 

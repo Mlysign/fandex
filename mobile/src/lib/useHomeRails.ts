@@ -7,10 +7,10 @@ import { useAuth } from '~/lib/AuthProvider';
 import { cardFromCatalog, premiereCard, useCardStates, type CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, shiftMonth, todayIso } from '~/lib/dates';
-import { catalogCandidates } from '~/lib/db';
+import { catalogCandidates, catalogHas } from '~/lib/db';
 import { useHiddenIds } from '~/lib/hidden';
 import { jsHeapMB } from '~/lib/jsHeap';
-import { genreFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
+import { cardFacets, loadHomeFeed, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type HomeFeed } from '~/lib/homeFeed';
 import { useScores, type RowScore } from '~/lib/ScoreProvider';
 import { premiereRows } from '~/lib/seasonPremieres';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -29,8 +29,8 @@ export function useHomeRails() {
   const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
     setFailed(false);
-    loadHomeFeed(region).then(setFeed).catch(() => setFailed(true));
-  }, [region]);
+    loadHomeFeed(region, (ids) => catalogHas(db, ids)).then(setFeed).catch(() => setFailed(true));
+  }, [region, db]);
   useEffect(load, [load]);
 
   const hidden = useHiddenIds();
@@ -44,12 +44,15 @@ export function useHomeRails() {
   const typesKey = shown.join(',');
   const types = useMemo(() => typesKey.split(',').filter(Boolean), [typesKey]);
   // A card the device holds is scored from its full facets (the card's own row
-  // score wins, components/cards.tsx). One it does not hold carries only its
-  // genres, the same fallback Recommended uses: without it the card showed the
-  // crowd's "7.6/10" where a Fandex Score belongs (Nils, Miro board, 2026-11-05).
+  // score wins, components/cards.tsx). One it does not hold is scored from the
+  // facets Fandex sent for it (`attachFacets`), else from its genres, the same
+  // fallback Recommended uses: without it the card showed the crowd's "7.6/10"
+  // where a Fandex Score belongs (Nils, Miro board, 2026-11-05). Genres alone
+  // score nothing since they weigh 0, which left every popular title outside
+  // the pool without a number (2026-11-07).
   const byGenre = useCallback(<T extends FeedCard>(items: T[]): T[] => items.map((c) => {
-    if (c.match || !c.genres.length) return c;
-    const fx = score(c.id ?? c.key, genreFacets(c.genres), c.type);
+    if (c.match || (!c.heldFacets && !c.genres.length)) return c;
+    const fx = score(c.id ?? c.key, cardFacets(c), c.type);
     return fx ? { ...c, match: { score: fx.score, band: fx.band } } : c;
   }), [score]);
   // New seasons of the shows you are caught up on (lib/seasonPremieres.ts),
@@ -134,7 +137,7 @@ export function useHomeRails() {
       (c) => {
         if (c.id && pool.scores.has(c.id)) return pool.scores.get(c.id) as RowScore;
         if (c.season && c.id && premieres.scores.has(c.id)) return premieres.scores.get(c.id) as RowScore;
-        const fx = score(c.id ?? c.key, genreFacets(c.genres ?? []), c.type);
+        const fx = score(c.id ?? c.key, cardFacets(c), c.type);
         return fx ? { score: fx.score, band: fx.band } : null;
       },
       // Not what you already watched or played, not what you asked not to be

@@ -30,8 +30,8 @@ import { useOutsideClose } from '~/lib/useOutsideClose';
 import { cardFromCatalog, cardHref, premiereCard, type CardItem, type CardState } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { currentMonth, monthLabel, shiftMonth, todayIso } from '~/lib/dates';
-import type { CatalogRow } from '~/lib/db';
-import { lookupHeld, toCard } from '~/lib/homeFeed';
+import { catalogHas, type CatalogRow } from '~/lib/db';
+import { attachFacets, lookupHeld, toCard } from '~/lib/homeFeed';
 import { ownWindow, placeInMonth, regionalDates } from '~/lib/regionalDates';
 import { premiereRows } from '~/lib/seasonPremieres';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -232,7 +232,11 @@ export default function CalendarScreen() {
         const cards = res.data.items.filter((c) => c.releaseDate?.startsWith(month));
         const held = await lookupHeld(cards);
         if (wanted.current !== key) return;
-        setPopular(cards.map((c) => toCard(c, held)));
+        const shown = cards.map((c) => toCard(c, held));
+        // A popular title outside the pool is scored from Fandex's facets, as its page is.
+        await attachFacets(shown, (ids) => catalogHas(db, ids));
+        if (wanted.current !== key) return;
+        setPopular(shown);
         if (res.data.partial) setNote('One of the databases did not answer, so this month may be missing titles.');
       } catch {
         if (wanted.current !== key) return;
@@ -242,7 +246,7 @@ export default function CalendarScreen() {
         if (wanted.current === key) setLoading(false);
       }
     })();
-  }, [month, region]);
+  }, [month, region, db]);
 
   // What of yours comes out this month, from the device. The device holds one
   // date per title, so a film is placed by the day it opens in your country,

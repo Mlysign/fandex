@@ -276,6 +276,17 @@ export interface CatalogRow {
 
 const CARD_COLUMNS = "id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon";
 
+/** Which of these ids the catalog copy holds. */
+export async function catalogHas(db: SQLiteDatabase, ids: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM catalog WHERE id IN (${chunk.map(() => '?').join(',')})`, chunk);
+    for (const r of rows) out.add(r.id);
+  }
+  return out;
+}
+
 export async function catalogCount(db: SQLiteDatabase): Promise<number> {
   return (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM catalog'))?.n ?? 0;
 }

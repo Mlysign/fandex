@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetBreakers } from "@/lib/http";
 import { createSession } from "../src/auth/session";
 import { upsertMediaItem } from "../src/catalog/ingest";
+import { LOOKUP_FACETS_MAX, lookupRefsJson } from "../src/catalog/resolve";
 import worker from "../src/index";
 import { count, db, env, igdbGame, movieItem, showItem, tmdbMovie, wipe } from "./helpers";
 
@@ -425,6 +426,34 @@ describe("looking up many provider ids at once", () => {
     await upsertMediaItem(db, movieItem());
     expect(await (await lookup([{ source: "tmdb", type: "movie", id: "603" }])).json()).toMatchObject({ missing: [] });
     expect(await (await lookup([{ source: "tmdb", type: "movie", id: "1" }])).json()).toMatchObject({ found: [] });
+  });
+
+  it("answers each held title's facets when asked, for one more read a title (2026-11-07)", async () => {
+    const film = await upsertMediaItem(db, movieItem());
+    const refs = [{ source: "tmdb", type: "movie", id: "603" }, { source: "tmdb", type: "movie", id: "999" }];
+    const plain = (await (await lookup(refs)).json()) as any;
+    expect(plain.found[0]).not.toHaveProperty("facets");
+    const res = (await (await call("/v1/lookup", { method: "POST", ...jsonBody({ refs, facets: true }) })).json()) as any;
+    const doc = await db.prepare("SELECT facets FROM item_doc WHERE media_item_id = ?").bind(film.id).first<{ facets: string }>();
+    expect(res.found).toEqual([{ ...plain.found[0], facets: JSON.parse(doc!.facets) }]);
+    expect(res.missing).toEqual(plain.missing);
+
+    // What each statement reads, measured: the facets cost one primary-key read per held title.
+    const readsOf = async (facets: boolean) => {
+      let sql = "";
+      const spy = { prepare: (s: string) => { sql = s; return db.prepare(s); } } as unknown as D1Database;
+      await lookupRefsJson(spy, refs, { facets });
+      return (await db.prepare(sql).bind(JSON.stringify(refs)).all()).meta.rows_read;
+    };
+    const without = await readsOf(false);
+    expect(await readsOf(true)).toBeLessThanOrEqual(without + 1);
+    expect(without).toBeLessThanOrEqual(8);
+  });
+
+  it("refuses more than LOOKUP_FACETS_MAX refs with facets", async () => {
+    const refs = Array.from({ length: LOOKUP_FACETS_MAX + 1 }, (_, i) => ({ source: "tmdb", type: "movie", id: String(i) }));
+    expect((await call("/v1/lookup", { method: "POST", ...jsonBody({ refs, facets: true }) })).status).toBe(400);
+    expect((await lookup(refs)).status).toBe(200);
   });
 
   it("rejects a body that is not a list of refs", async () => {

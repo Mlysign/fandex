@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balanceByType, MAX_OWN_UPCOMING, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
+import { attachFacets, balanceByType, cardFacets, LOOKUP_FACETS_MAX, MAX_OWN_UPCOMING, RAIL_SIZE, recommend, tierOf, upcomingRail, type Candidate, type FeedCard, type Scored } from '~/lib/homeFeed';
 
 /** A score as `recommend` takes one: the number that ranks, with its band as the score computes it around an average of 50 (green from 60, orange under 40). */
 const scored = (n: number | null | undefined, center = 50): Scored | null => (n == null ? null : { score: n, band: n >= center + 10 ? 'high' : n <= center - 10 ? 'low' : 'usual' });
@@ -113,5 +113,43 @@ describe('wishlisted titles in Recommended (2026-10-23)', () => {
     const score: Record<string, number> = { w1: 99, w2: 98, w3: 97, a: 90, b: 89 };
     const out = recommend([cards as never[]], (c: { key: string }) => scored(score[c.key]), () => false, 50, undefined, (c: { key: string }) => c.key.startsWith('w'));
     expect(out.map((c: { key: string }) => c.key)).toEqual(['w1', 'w2', 'a', 'b']);
+  });
+});
+
+describe('Fandex facets for cards the catalog copy lacks (2026-11-07)', () => {
+  const card = (id: string | null, sourceId: string, genres: string[] = []) =>
+    ({ key: `tmdb:show:${sourceId}`, id, source: 'tmdb', sourceId, type: 'show', title: sourceId, releaseDate: null, posterUrl: null, communityScore: null, genres }) as FeedCard;
+  const facet = (key: string) => ({ kind: 'tag' as const, key, label: key });
+
+  it('asks only for held cards the copy lacks, and writes what came back onto them', async () => {
+    const cards = [card('in-copy', '1'), card('out', '2'), card(null, '3'), card('out', '2')];
+    const asked: string[][] = [];
+    await attachFacets(cards, async () => new Set(['in-copy']), async (refs) => {
+      asked.push(refs.map((r) => r.id));
+      return { found: refs.map((r) => ({ ...r, facets: [facet('revenge')] })) };
+    });
+    expect(asked).toEqual([['2']]);
+    expect(cards.map((c) => c.heldFacets?.[0]?.key ?? null)).toEqual([null, 'revenge', null, 'revenge']);
+  });
+
+  it('asks nothing when the copy holds every card, and keeps the genres when the lookup fails', async () => {
+    const cards = [card('a', '1', ['Drama'])];
+    let calls = 0;
+    await attachFacets(cards, async () => new Set(['a']), async () => { calls++; return { found: [] }; });
+    expect(calls).toBe(0);
+    await attachFacets(cards, async () => new Set(), async () => { throw new Error('offline'); });
+    expect(cards[0].heldFacets).toBeUndefined();
+    expect(cardFacets(cards[0])).toEqual([{ kind: 'tag', key: 'drama', label: 'Drama' }]);
+  });
+
+  it('splits a long list into the Worker\'s limit per request', async () => {
+    const cards = Array.from({ length: LOOKUP_FACETS_MAX + 5 }, (_, i) => card(`id${i}`, String(i)));
+    const sizes: number[] = [];
+    await attachFacets(cards, async () => new Set(), async (refs) => { sizes.push(refs.length); return { found: [] }; });
+    expect(sizes).toEqual([LOOKUP_FACETS_MAX, 5]);
+  });
+
+  it('scores a card from its held facets before its genres', () => {
+    expect(cardFacets({ heldFacets: [facet('revenge')], genres: ['Drama'] })).toEqual([facet('revenge')]);
   });
 });

@@ -62,6 +62,47 @@ export function genreFacets(genres: string[]): ScoreFacet[] {
   return genres.map((g) => ({ kind: 'tag' as const, key: tagKey(g), label: g })).filter((f) => f.key);
 }
 
+/** At most this many refs per facets lookup: the Worker's `LOOKUP_FACETS_MAX`. */
+export const LOOKUP_FACETS_MAX = 300;
+
+/**
+ * Fandex's full facets for the cards it holds that the device's catalog copy
+ * lacks, written onto each card (`CardItem.heldFacets`), so such a card is scored
+ * as its page is. A card's genres score nothing since genres weigh 0, and
+ * every popular title outside the pool showed no number (The Remarried
+ * Empress, Nils, 2026-11-07). Only those cards are asked for: the copy holds
+ * most, and a title's facets are about 2 KB. A failure leaves the cards as
+ * they were.
+ */
+export async function attachFacets(
+  cards: CardItem[],
+  inCopy: (ids: string[]) => Promise<Set<string>>,
+  ask: (refs: { source: string; type: CardItem['type']; id: string }[]) => Promise<{ found: { source: string; type: string; id: string; facets?: ScoreFacet[] | null }[] }> = api.lookupFacets,
+): Promise<void> {
+  const refKey = (source: string, type: string, id: string) => `${source}:${type}:${id}`;
+  const held = cards.filter((c) => c.id && c.source && c.sourceId && !c.heldFacets);
+  if (!held.length) return;
+  try {
+    const have = await inCopy([...new Set(held.map((c) => c.id as string))]);
+    const want = held.filter((c) => !have.has(c.id as string));
+    const refs = new Map<string, { source: string; type: CardItem['type']; id: string }>();
+    for (const c of want) refs.set(refKey(c.source as string, c.type, c.sourceId as string), { source: c.source as string, type: c.type, id: c.sourceId as string });
+    const list = [...refs.values()];
+    const facets = new Map<string, ScoreFacet[]>();
+    for (let i = 0; i < list.length; i += LOOKUP_FACETS_MAX) {
+      const res = await ask(list.slice(i, i + LOOKUP_FACETS_MAX));
+      for (const f of res.found) if (Array.isArray(f.facets) && f.facets.length) facets.set(refKey(f.source, f.type, f.id), f.facets);
+    }
+    for (const c of want) {
+      const f = facets.get(refKey(c.source as string, c.type, c.sourceId as string));
+      if (f) c.heldFacets = f;
+    }
+  } catch { /* the cards keep their genres */ }
+}
+
+/** A card's facets for the score: Fandex's own when it sent them, else its genres. */
+export const cardFacets = (c: { heldFacets?: ScoreFacet[]; genres?: string[] }): ScoreFacet[] => c.heldFacets ?? genreFacets(c.genres ?? []);
+
 /**
  * Which of these the catalog already holds, as card key to catalog id, so a
  * card can show your bookmark and your real score. One request, and it never
@@ -127,7 +168,8 @@ async function trendingPool(region: string): Promise<FeedCard[] | null> {
 let cached: { at: number; region: string; feed: HomeFeed } | null = null;
 const TTL_MS = 10 * 60 * 1000;
 
-export async function loadHomeFeed(region: string): Promise<HomeFeed> {
+/** `inCopy`: which of these ids the device's catalog copy holds; with it, the cards it lacks get Fandex's facets (`attachFacets`). */
+export async function loadHomeFeed(region: string, inCopy?: (ids: string[]) => Promise<Set<string>>): Promise<HomeFeed> {
   if (cached && cached.region === region && Date.now() - cached.at < TTL_MS) return cached.feed;
 
   const now = currentMonth();
@@ -153,6 +195,7 @@ export async function loadHomeFeed(region: string): Promise<HomeFeed> {
   const candidates = future.map((c) => toCard(c, held));
   const upcoming = upcomingRail(candidates);
   const trending = rotateRail((await trendingAsked) ?? released.map((c) => toCard(c, held)), RAIL_SIZE, seedFor('trending', day));
+  if (inCopy) await attachFacets([...trending, ...candidates], inCopy);
 
   const feed = { trending, upcoming, candidates };
   cached = { at: Date.now(), region, feed };

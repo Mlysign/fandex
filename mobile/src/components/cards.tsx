@@ -21,6 +21,7 @@ import { cardHref, useCardActions, useCardStates, type CardItem, type CardMatch,
 import { toggled } from '~/lib/a11y';
 import { useBarList } from '~/lib/barScroll';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
+import type { ScoreFacet } from '~/lib/fandexScore';
 import { breakpoint, color, font, radius, type } from '~/theme';
 
 const fmt = (r: number) => (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
@@ -169,8 +170,20 @@ export function useCardKit(items: CardItem[]) {
   const onError = useCallback((m: string) => toast(m, 'error'), [toast]);
   const ids = useMemo(() => items.map((i) => i.id), [items]);
   const stateOf = useCardStates(ids);
-  const scores = useRowScores(useMemo(() => ids.filter((id): id is string => !!id), [ids]));
-  const { center } = useScores();
+  const rowScores = useRowScores(useMemo(() => ids.filter((id): id is string => !!id), [ids]));
+  const { center, score } = useScores();
+  // A title outside the catalog copy has no row score; one that carries Fandex's facets
+  // (lib/homeFeed.ts `attachFacets`) is scored from them, as its page is.
+  const scores = useMemo(() => {
+    const extra = items.filter((i) => i.id && i.heldFacets?.length && !rowScores.has(i.id));
+    if (!extra.length) return rowScores;
+    const out = new Map(rowScores);
+    for (const i of extra) {
+      const fx = score(i.id as string, i.heldFacets as ScoreFacet[], i.type);
+      if (fx) out.set(i.id as string, { score: fx.score, band: fx.band });
+    }
+    return out;
+  }, [items, rowScores, score]);
   const actions = useCardActions(onError);
   return { stateOf, scores, center, actions };
 }

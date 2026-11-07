@@ -53,7 +53,7 @@ import {
   catalogDeltaJson, catalogPlatformsJson, itemDetailJson, parseCursor, parseItemIds, regionalReleaseDatesJson, RELEASE_DATES_MAX, seasonPremieresJson,
   keepTaxonomy, keptTaxonomy, keptTaxonomyEtag, showEpisodesJson,
 } from "./catalog/read";
-import { LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
+import { LOOKUP_FACETS_MAX, LOOKUP_MAX, lookupRefsJson, parseRefs, resolveItem, useSharedIgdbToken } from "./catalog/resolve";
 import { runFastScheduled, runScheduled } from "./cron";
 import { baselineJson, FAST_CRON } from "./baseline";
 import { shelves } from "./shelves";
@@ -218,15 +218,18 @@ async function route(c: Ctx): Promise<Response> {
   if (a === "resolve" && method === "GET" && b && d && e) return resolve(c, b, d, e);
 
   if (a === "lookup" && method === "POST" && !b) {
-    const refs = parseRefs(await readJson(request, LOOKUP_BODY_MAX));
+    const body = await readJson(request, LOOKUP_BODY_MAX);
+    const refs = parseRefs(body);
     if (!refs) return error(400, "bad-request", `Expected {refs: [{source, type, id}]}, at most ${LOOKUP_MAX}`);
+    const facets = (body as { facets?: unknown } | null)?.facets === true;
+    if (facets && refs.length > LOOKUP_FACETS_MAX) return error(400, "bad-request", `At most ${LOOKUP_FACETS_MAX} refs with facets`);
     // Two primary-key reads a ref and no sign-in needed: the cheapest way to
     // spend the day's reads, so both a limiter and a daily count of refs.
     if (!(await allow(c.env.RL_READ, `lookup:${clientIp(request)}`))) return error(429, "rate-limited");
     if (!(await spend(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), refs.length))) {
       return error(503, "budget-exhausted", "Fandex cannot look up more titles until tomorrow (UTC).");
     }
-    return json(await lookupRefsJson(c.env.DB, refs), 200, { "Cache-Control": "no-store" });
+    return json(await lookupRefsJson(c.env.DB, refs, { facets }), 200, { "Cache-Control": "no-store" });
   }
 
   if (a === "shows" && d === "episodes" && method === "GET" && b) {

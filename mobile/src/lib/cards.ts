@@ -12,7 +12,7 @@ import { api, ApiError, type MediaType } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
-import type { ScoreBand } from '~/lib/fandexScore';
+import type { ScoreBand, ScoreFacet } from '~/lib/fandexScore';
 import { rateItem, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 
@@ -48,6 +48,12 @@ export interface CardItem {
   roles?: string[];
   /** A provider card's genres (a book's subjects, IGDB's genres and themes, TMDB's genres): the rest of what that estimate reads. */
   genres?: string[];
+  /**
+   * Fandex's raw facets for a title it holds that the device's catalog copy lacks (not in the
+   * pool), from the lookup (lib/homeFeed.ts `attachFacets`): the card is scored from these as its
+   * page is. Genres alone score nothing, since genres weigh 0 (2026-10-27).
+   */
+  heldFacets?: ScoreFacet[];
   /** A DLC, bundle, mod, season or pack (IGDB's game_type): ranked last in search, kept out of rails. */
   addon?: boolean;
   /** A later season of a show you are caught up on (lib/seasonPremieres.ts): the card is the season's premiere, not the show. */
