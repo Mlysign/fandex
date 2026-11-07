@@ -127,6 +127,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   control, and Up next's rows and the calendar's day rail move with Reanimated layout transitions
   (the week offset is a margin, not a transform, so the transition carries it). Up next's list
   has `overScrollMode="always"`: Android draws the stretch only on a list that scrolls by default.
+  **0.3.39:** a show page's tick (`EpisodeTracker.tsx`) never waits for Trakt. The box ticks and
+  pops on the tap, `SavingDots` sit by the episode's date while the save runs, and saves for the
+  screen queue in tap order. A tick still on its way is kept in `pending` and laid over every
+  re-read of `episode_state`, or one save landing would blink another tick off.
 - **Memory is pictures, not data** (measured 2026-10-23, RV31, 0.3.16 on the Pixel 8). The
   Hermes heap is 38 MB with the catalog copy, the profile and Home's rail pool loaded
   (`fandex_pool` and `fandex_index` in `adb logcat -s ReactNativeJS` carry it). `dumpsys meminfo`
