@@ -61,7 +61,7 @@ A route that answers GET answers HEAD the same, without the body (2026-10-23).
 ### The test accounts (a developer's machine only)
 
 `POST /v1/dev/login {account?}` signs in as one of three fixed accounts, `smoketest` (the default),
-`plain` or `third`, creating it on first use (`src/devLogin.ts`). `third` signs in "with Discord"
+`plain` or `third`, creating it on first use (`src/devLogin.ts`), when the answer's `outcome` is `created` as a real first sign-in's is (since 2026-11-07, so the app's first-run windows can be tried; delete the account in Settings to see them again). `third` signs in "with Discord"
 so it can be joined to the others: `{account, connect: true}` with a session adds that account's way
 in to the signed-in one through the real `signIn()`, which is how joining accounts is tried here. It exists so a rating, a hide, a changed
 setting, a download or a deleted account can be tried without touching a real one. Their identity
