@@ -24,8 +24,8 @@ import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 const MIN_CROWD_VOTES = 20;
 
 /**
- * Whether a card prints its title under the poster. Off since 0.3.43 as a
- * trial (Nils, 2026-11-07): the poster names the title almost always, the line
+ * Whether a card prints its title under the poster. Off since 0.3.43, a trial
+ * Nils kept the same day (2026-11-07): the poster names the title almost always, the line
  * was often cut short, and the card is a line shorter without it. The title
  * stays in the card's label for a screen reader and in the poster's alt text,
  * and a card with no poster prints it on the blank poster. Set true to undo.
