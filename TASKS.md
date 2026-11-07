@@ -40,7 +40,11 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 ## Mine, open
 
-Nothing (2026-11-06). Everything open waits on Nils (above), BoardGameGeek, Google Play or the launch.
+Three loose ends from the score-speed work of 2026-11-07 (0.3.48, 0.3.49); everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
+
+- ⬜ **Time a real sign-in.** 0.3.48 stopped the profile waiting on the pull fit (4.2 s to 0.55 s on a normal start), but the sign-out and sign-in path that took two minutes was never re-timed: signing Nils out to test it is not allowed. Next time he switches accounts, read `adb logcat -s ReactNativeJS | grep fandex_` for when the first `fandex_profile` lands after the sign-in and whether `fandex_calibration` says `moved: false`.
+- ⬜ **Two profile builds on 0.3.49's first start** (12:35:26 and 12:35:28, the second 1.7 s), where 0.3.48 built once. Not looked into; the effect's dependencies in `ScoreProvider.tsx` (`userId` since 0.3.48, `rowsRevision`, the taxonomy check) are where to start. It costs a pool rescore, not a wrong number.
+- ⬜ **`wrangler d1 execute --remote` answered 7403** on 2026-11-07 while `wrangler deploy` from the same login worked. Unexplained; read-only queries went through the public API instead.
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
