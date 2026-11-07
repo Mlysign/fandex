@@ -33,7 +33,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
-import type { Taxonomy } from '~/lib/fandexScore';
+import { occurrenceWeight, type ScoreFacet, type Taxonomy } from '~/lib/fandexScore';
 import { impactId, useFacetImpacts } from '~/lib/insightsImpacts';
 import { useScores } from '~/lib/ScoreProvider';
 import { signed } from '~/lib/scoreReasons';
@@ -136,7 +136,7 @@ function StatBar({ f, baseline, impact, onNavigate }: { f: FacetStat; baseline: 
     <Pressable
       onPress={() => { onNavigate?.(); router.push(facetHref(f) as never); }}
       accessibilityRole="link"
-      accessibilityLabel={`${f.label}, you rate it ${f.avg.toFixed(1)} over ${f.count}${typeof impact === 'number' ? `, Fandex Score ${signed(impact)}` : ''}`}
+      accessibilityLabel={`${f.label}, you rate it ${f.avg.toFixed(1)} for its medium over ${f.count}${typeof impact === 'number' ? `, Fandex Score ${signed(impact)}` : ''}`}
       style={({ pressed }) => [styles.statBar, pressed && { opacity: 0.6 }]}>
       <Text numberOfLines={1} style={[type.bodySm, { flex: 1, minWidth: 0, color: color.textPrimary }]}>{f.label}</Text>
       <View style={styles.track}>
@@ -289,7 +289,9 @@ function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, boxWidth 
   return (
     <View style={styles.section}>
       <Eyebrow>{title}</Eyebrow>
-      <Text style={[type.caption, { marginTop: 4, marginBottom: 12 }]}>{hint}</Text>
+      <Text style={[type.caption, { marginTop: 4, marginBottom: 12 }]}>
+        {hint} Each rating counts against your average for its medium, so a medium you rate high doesn't crowd the top.
+      </Text>
       {/* The grid screens' search and sort line (SubBar), so the controls read the same everywhere. */}
       <SearchBar value={query} onChange={setQuery} placeholder={`Search ${noun}…`} />
       <View style={styles.metaRow}>
@@ -394,11 +396,27 @@ export default function InsightsScreen() {
       decades.set(d, cur);
     }
 
+    // A row's average is the one the score learns from (buildProfile): each rating moved by the gap
+    // between its medium's average and your overall one, and a keyword- or genre-tier tag weighed as
+    // the score weighs it. The plain average put "inspiring" at 8.2 beside a Taste of -0.1: five of
+    // its six titles were books, which Nils rates 8.3 against 6.6 overall (Nils, 2026-11-07).
+    const typeSums = new Map<string, { sum: number; n: number }>();
+    for (const r of rated) {
+      const t = typeSums.get(r.type) ?? { sum: 0, n: 0 };
+      t.sum += r.rating; t.n++;
+      typeSums.set(r.type, t);
+    }
+    const adjusted = (r: Rated) => {
+      const t = typeSums.get(r.type);
+      return t ? r.rating - t.sum / t.n + baseline : r.rating;
+    };
+
     // A bundled tag is one row under its canonical key and chosen name, a title carrying two of
     // its spellings counted once: what the score learns from (lib/fandexScore.ts, applyTagAliases),
     // so a row's count and average match its impact. Until 0.3.37 each spelling was its own row.
-    const stats = new Map<string, { f: StoredFacet; n: number; sum: number }>();
+    const stats = new Map<string, { f: StoredFacet; n: number; sum: number; weight: number }>();
     for (const r of rated) {
+      const rating = adjusted(r);
       const seen = new Set<string>();
       for (const raw of r.facets) {
         if (raw.kind !== 'tag' && raw.kind !== 'person' && raw.kind !== 'company') continue;
@@ -406,17 +424,18 @@ export default function InsightsScreen() {
         const id = `${f.kind}|${f.role ?? ''}|${f.key}`;
         if (seen.has(id)) continue;
         seen.add(id);
-        const cur = stats.get(id) ?? { f, n: 0, sum: 0 };
+        const cur = stats.get(id) ?? { f, n: 0, sum: 0, weight: 0 };
         // The canonical spelling names the row unless a name was chosen, as on the item page.
         if (f === raw && f.kind === 'tag') cur.f = { ...cur.f, label: raw.label };
-        cur.n++; cur.sum += r.rating;
+        const w = taxonomy ? occurrenceWeight(f as ScoreFacet, taxonomy) : 1;
+        cur.n++; cur.sum += rating * w; cur.weight += w;
         stats.set(id, cur);
       }
     }
-    const facets: FacetStat[] = [...stats.values()].map(({ f, n, sum }) => ({
-      kind: f.kind, role: f.role, key: f.key, label: f.label, count: n, avg: sum / n,
+    const facets: FacetStat[] = [...stats.values()].filter((s) => s.weight > 0).map(({ f, n, sum, weight }) => ({
+      kind: f.kind, role: f.role, key: f.key, label: f.label, count: n, avg: Math.min(10, Math.max(0, sum / weight)),
       category: f.kind === 'tag' ? (taxonomy?.tagCategoryOverrides.get(f.key) ?? f.category ?? 'other') : undefined,
-      ba: (PRIOR_STRENGTH * baseline + sum) / (PRIOR_STRENGTH + n),
+      ba: (PRIOR_STRENGTH * baseline + sum) / (PRIOR_STRENGTH + weight),
     }));
 
     return {

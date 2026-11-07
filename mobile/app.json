@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fandex",
     "slug": "fandex",
-    "version": "0.3.45",
+    "version": "0.3.46",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fandex",
@@ -10,7 +10,7 @@
     "backgroundColor": "#100E0C",
     "android": {
       "package": "org.fandex.app",
-      "versionCode": 345,
+      "versionCode": 346,
       "adaptiveIcon": {
         "backgroundColor": "#100E0C",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
