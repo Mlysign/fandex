@@ -93,6 +93,7 @@ Same as the site now: colours, radii, spacing, fonts, the type scale, and these 
 | Thing | Site | App |
 |---|---|---|
 | Poster card | `PosterCard.tsx`, `ActionCells.tsx` | **yes** (`cards.tsx`). The score explainer since 2026-10-17 (`ScoreExplainer.tsx`): after the pointer rests on a card, or on a long press as a sheet. Not carried: "View details" on hover. |
+| Poster card's face | `PosterCard.tsx` | **changed on purpose** (Nils, 2026-11-07). No title line under the poster since 0.3.43 (`CARD_TITLE`). Since 0.3.44 the type chip is the type's icon in its colour plus the word, a new season reads "Season 3" inside it, and the date is "05 Nov" within two months of today, else "Nov 2026" (`cardDate`, `lib/dates.ts`). |
 | Star picker | `ActionCells.tsx` | **yes, and past it on purpose** (Nils, 2026-11-06). Opens under the card's bar; the star that is your rating clears it. Since 0.3.37 the stars fill the phone's width with no gaps, a slide moves star by star with a number read out above the finger, and a pick pops with haptics (`components/feel.tsx`, `lib/feel.ts`). |
 | Rail, grid, month dividers | `Rail.tsx`, `GroupedView.tsx` | **yes**. The rail's hover arrows and the month column on a wide window since 2026-10-17. List view: the site never offered it on any page. |
 | Type filter | `ui/TypeFilter.tsx`, `ui/CollapsibleChips.tsx` | **yes**. Open whenever every group fits on the bar from 768 px (measured, 2026-10-17); a phone keeps it folded and closes it on a tap outside. |
