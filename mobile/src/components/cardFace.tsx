@@ -131,8 +131,8 @@ export function RailTitle({ title, forYou, action }: { title: string; forYou?: b
   );
 }
 
-/** A titled row that scrolls sideways. */
-export function RailFrame({ title, forYou, action, children }: { title: string; forYou?: boolean; action?: ReactNode; children: ReactNode }) {
+/** A titled row that scrolls sideways. `headless`: the page already titles it, so `title` only names the arrows. */
+export function RailFrame({ title, forYou, action, headless, children }: { title: string; forYou?: boolean; action?: ReactNode; headless?: boolean; children: ReactNode }) {
   // The site's chevrons (Rail.tsx): on a wide window, fading in while the
   // pointer is over the rail, each a step of 320 px. A phone scrolls by finger.
   const { width } = useWindowDimensions();
@@ -155,7 +155,7 @@ export function RailFrame({ title, forYou, action, children }: { title: string; 
   const cells = Platform.OS === 'web' ? null : Children.toArray(children);
   return (
     <View>
-      <RailTitle title={title} forYou={forYou} action={action} />
+      {headless ? null : <RailTitle title={title} forYou={forYou} action={action} />}
       <View
         style={{ position: 'relative' }}
         {...(wide ? ({ onPointerEnter: () => setHovering(true), onPointerLeave: () => setHovering(false) } as object) : null)}>

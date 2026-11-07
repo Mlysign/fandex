@@ -11,7 +11,8 @@
 // The three rating sections are the site's FacetSection, with the grid
 // screens' search and sort: a box per tag category (the live list, so a
 // category added on /dev/scoring shows up) or per role, its four strongest
-// rows and what each does to your Fandex Score, the rest in a sheet.
+// rows and what each does to your Fandex Score, the rest in a sheet. The
+// boxes sit on one rail that scrolls sideways (Nils, 2026-11-07).
 //
 // No chart wears a medium's colour unless it is about that medium (Nils, Miro
 // board, 2026-11-05): purple read as Shows, green as Games.
@@ -22,6 +23,7 @@ import { ChartColumn, Check, ChevronDown } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { keyToSlug } from '@/lib/facetUrl';
+import { RailFrame } from '~/components/cardFace';
 import { CardRail } from '~/components/cards';
 import { Button, EmptyState, Eyebrow, Panel, Popover, SearchBar, Sheet, SortMenu, useAnchor } from '~/components/kit';
 import { TypeIcon } from '~/components/Logo';
@@ -155,6 +157,8 @@ function StatBar({ f, baseline, impact, onNavigate }: { f: FacetStat; baseline: 
 
 const PERSON_ROLES: [string, string][] = [['director', 'Director'], ['writer', 'Writer'], ['creator', 'Creator'], ['cast', 'Cast']];
 const COMPANY_ROLES: [string, string][] = [['developer', 'Developer'], ['publisher', 'Publisher'], ['studio', 'Studio'], ['network', 'Network']];
+/** A category box's width on the rail: three in view on a desktop, and on a phone the next one peeks in. */
+const RAIL_BOX_W = 352;
 /** Rows a box shows; the rest open in a sheet (Nils, Miro board: at most four). */
 const PER_GROUP = 4;
 const MIN_COUNTS = [1, 2, 3, 5, 10];
@@ -254,8 +258,8 @@ function FacetBox({ label, rows, baseline, impacts, tint }: { label: string; row
   );
 }
 
-function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
-  kind: 'tag' | 'person' | 'company'; title: string; hint: string; facets: FacetStat[]; baseline: number; taxonomy: Taxonomy | null; cols: number;
+function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, boxWidth }: {
+  kind: 'tag' | 'person' | 'company'; title: string; hint: string; facets: FacetStat[]; baseline: number; taxonomy: Taxonomy | null; boxWidth: number;
 }) {
   const { tasteIndex } = useScores();
   const [query, setQuery] = useState('');
@@ -311,13 +315,14 @@ function FacetRatings({ kind, title, hint, facets, baseline, taxonomy, cols }: {
           <Text style={type.caption}>Reading your taste profile…</Text>
         </View>
       ) : (
-        <View style={styles.wrap}>
+        // A rail of categories, not a grid (Nils, 2026-11-07: the grid took too much space).
+        <RailFrame title={title} headless>
           {groups.map((g) => (
-            <View key={g.id} style={[styles.cell, { width: `${100 / cols}%` as const }]}>
+            <View key={g.id} style={{ width: boxWidth }}>
               <FacetBox label={g.label} rows={g.sorted} baseline={baseline} impacts={impacts} tint={tintOf({ kind } as FacetStat)} />
             </View>
           ))}
-        </View>
+        </RailFrame>
       )}
     </View>
   );
@@ -548,7 +553,7 @@ export default function InsightsScreen() {
         {data.sections.map((s) => (
           <FacetRatings
             key={s.kind} kind={s.kind as 'tag' | 'person' | 'company'} title={s.title} hint={s.hint}
-            facets={data.facets} baseline={data.baseline} taxonomy={taxonomy} cols={width >= breakpoint.sm ? 2 : 1}
+            facets={data.facets} baseline={data.baseline} taxonomy={taxonomy} boxWidth={Math.min(RAIL_BOX_W, width - 80)}
           />
         ))}
         {/* No "Most watched" since 2026-11-05 (Nils): a box's "Most picked" sort says the same. */}
@@ -599,7 +604,8 @@ const styles = StyleSheet.create({
   barLabel: { fontFamily: font.mono, fontSize: 10, lineHeight: 12, color: color.textSecondary, marginTop: 4 },
   typeHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   dot: { width: 8, height: 8, borderRadius: radius.full },
-  column: { padding: 12, borderRadius: radius.xl },
+  // Grows to the rail's tallest box, so a category with three rows does not end short of its neighbours.
+  column: { flexGrow: 1, padding: 12, borderRadius: radius.xl },
   statBar: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 30, paddingHorizontal: 4 },
   track: { width: 56, height: 6, borderRadius: 3, backgroundColor: color.surfaceInset, overflow: 'hidden' },
   statBarValue: { width: 26, textAlign: 'right', fontFamily: font.sansBold, fontSize: 12, lineHeight: 15, fontVariant: ['tabular-nums'] },
