@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { CardFace, cardStyles, RailFrame, RailTitle } from '~/components/cardFace';
 import { ratingColor, SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
+import { FlipCell, useFlip } from '~/components/flip';
 import { Popover, Sheet, useAnchor } from '~/components/kit';
 import { ScoreExplainerBody, ScoreExplainerPopover } from '~/components/ScoreExplainer';
 import { useToast } from '~/components/Toast';
@@ -202,16 +203,28 @@ function SeeAll({ href }: { href: string }) {
   );
 }
 
-/** A rail of poster cards, 150 px each. */
+const RAIL_CARD_W = 150;
+const RAIL_GAP = 12;
+const cardKeys = (list: CardItem[]) => list.map((i) => i.key);
+/** Where a rail's card number `i` sits: one row, 150 px cards 12 apart. */
+const railPlace = (i: number) => ({ x: i * (RAIL_CARD_W + RAIL_GAP), y: 0 });
+
+/**
+ * A rail of poster cards, 150 px each. When its titles change (a type filter
+ * tapped), the ones going fade out and the rest slide along to close up (components/flip.tsx).
+ */
 export function CardRail({ title, items, forYou, seeAllHref }: { title: string; items: CardItem[]; forYou?: boolean; seeAllHref?: string }) {
-  const kit = useCardKit(items);
+  const { shown, flip } = useFlip(items, cardKeys);
+  const kit = useCardKit(shown);
   return (
     <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
-      {items.map((item) => (
-        <PosterCard
-          key={item.key} item={item} style={{ width: 150 }}
-          state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
-        />
+      {shown.map((item, i) => (
+        <FlipCell key={item.key} id={item.key} index={i} flip={flip} place={railPlace}>
+          <PosterCard
+            item={item} style={{ width: RAIL_CARD_W }}
+            state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
+          />
+        </FlipCell>
       ))}
     </Rail>
   );
@@ -228,6 +241,11 @@ export interface CardSection { key: string; label: string; past?: boolean; curre
 
 type Row = { kind: 'divider'; key: string; label: string; past?: boolean; current?: boolean } | { kind: 'cards'; key: string; items: CardItem[] };
 
+/** The grid's gap, between columns and under each row (styles.gridRow). */
+const GRID_GAP = 16;
+const gridKeys = (s: { items?: CardItem[]; sections?: CardSection[] }) =>
+  (s.sections ? s.sections.flatMap((x) => x.items) : s.items ?? []).map((i) => i.key);
+
 /**
  * A grid of poster cards, or several under month dividers. One vertical list of
  * rows either way, so two thousand titles cost what is on screen.
@@ -243,9 +261,23 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
 }) {
   const { width } = useWindowDimensions();
   const columns = gridColumns(width);
-  const all = useMemo(() => sections ? sections.flatMap((s) => s.items) : items ?? [], [items, sections]);
+  // When the cards change (a type filter, a sort, a title taken off the list),
+  // the ones going fade, then the rest slide to their new cells (components/flip.tsx).
+  const source = useMemo(() => ({ items, sections }), [items, sections]);
+  const { shown, flip } = useFlip(source, gridKeys);
+  const all = useMemo(() => shown.sections ? shown.sections.flatMap((s) => s.items) : shown.items ?? [], [shown]);
+  const index = useMemo(() => new Map(all.map((c, i) => [c.key, i])), [all]);
   const kit = useCardKit(all);
   const bar = useBarList();
+
+  // A plain grid's cell for an index, from one row measured. A grid cut by
+  // month dividers has no such sum, and its cards fade instead of sliding.
+  const geo = useRef({ step: 0, rowStep: 0 });
+  const place = useCallback((i: number) => {
+    const g = geo.current;
+    if (shown.sections || !g.step || !g.rowStep) return null;
+    return { x: (i % columns) * g.step, y: Math.floor(i / columns) * g.rowStep };
+  }, [shown.sections, columns]);
 
   const rows = useMemo<Row[]>(() => {
     const chunk = (list: CardItem[], prefix: string): Row[] => {
@@ -253,9 +285,9 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
       for (let i = 0; i < list.length; i += columns) out.push({ kind: 'cards', key: `${prefix}${list[i].key}`, items: list.slice(i, i + columns) });
       return out;
     };
-    if (!sections) return chunk(items ?? [], '');
-    return sections.flatMap((s): Row[] => [{ kind: 'divider', key: `d:${s.key}`, label: s.label, past: s.past, current: s.current }, ...chunk(s.items, `${s.key}:`)]);
-  }, [items, sections, columns]);
+    if (!shown.sections) return chunk(shown.items ?? [], '');
+    return shown.sections.flatMap((s): Row[] => [{ kind: 'divider', key: `d:${s.key}`, label: s.label, past: s.past, current: s.current }, ...chunk(s.items, `${s.key}:`)]);
+  }, [shown, columns]);
 
   // The site's month scrubber (GroupedView.tsx, MonthNav): on a wide window a
   // column of the sections beside the grid, the one in view lit, each a jump.
@@ -299,12 +331,20 @@ export function PosterGrid({ items, sections, header, footer, empty, onEndReache
       renderItem={({ item: row }) => row.kind === 'divider' ? (
         <MonthDivider label={row.label} past={row.past} current={row.current} />
       ) : (
-        <View style={styles.gridRow}>
+        <View
+          style={styles.gridRow}
+          onLayout={(e) => {
+            // Every row of a plain grid is the same size; any one of them gives the steps.
+            const { width: w, height: h } = e.nativeEvent.layout;
+            geo.current = { step: (w + GRID_GAP) / columns, rowStep: h + GRID_GAP };
+          }}>
           {row.items.map((item) => (
-            <PosterCard
-              key={item.key} item={item} style={styles.gridCell}
-              state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
-            />
+            <FlipCell key={item.key} id={item.key} index={index.get(item.key) ?? 0} flip={flip} place={place} style={styles.gridCell}>
+              <PosterCard
+                item={item}
+                state={kit.stateOf(item.id)} match={(item.id ? kit.scores.get(item.id) : null) ?? item.match ?? null} actions={kit.actions}
+              />
+            </FlipCell>
           ))}
           {/* Empty cells, so a short last row keeps the column width. */}
           {Array.from({ length: columns - row.items.length }, (_, i) => <View key={`pad${i}`} style={styles.gridCell} />)}
@@ -364,7 +404,7 @@ const styles = { ...cardStyles, ...StyleSheet.create({
   sectionNav: { width: 96, flexGrow: 0, paddingLeft: 16 },
   sectionNavItem: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.sm },
   seeAll: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: color.border },
-  gridRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  gridRow: { flexDirection: 'row', gap: GRID_GAP, marginBottom: GRID_GAP },
   gridCell: { flex: 1, minWidth: 0 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 8, marginTop: 8, marginBottom: 8 },
   dividerText: { fontFamily: font.sansBold, fontSize: 12, lineHeight: 16, letterSpacing: 1.2, textTransform: 'uppercase' },

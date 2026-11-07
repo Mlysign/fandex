@@ -9,10 +9,13 @@
 import { ChevronLeft, Clapperboard, Tv } from 'lucide-react-native';
 import type { Gamepad2 } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Reanimated, { Easing as REasing, LinearTransition } from 'react-native-reanimated';
 import { MEDIA_TYPES } from '@/lib/mediaTypes';
 import { SearchBar, SortMenu } from '~/components/kit';
 import { LogoOutline } from '~/components/Logo';
+import { PRESS, usePressScale } from '~/components/pressFeel';
+import { haptics } from '~/lib/feel';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { useOfferedTypes } from '~/lib/features';
 import { TYPE_ICONS as SHARED_TYPE_ICONS } from '~/lib/typeIcons';
@@ -24,25 +27,54 @@ const TYPE_ICONS: Record<string, typeof Gamepad2> = SHARED_TYPE_ICONS;
 
 // ── The type filter ──────────────────────────────────────────────────────────
 
+const NATIVE = Platform.OS !== 'web';
+const EMPHASIZED = Easing.bezier(0.2, 0, 0, 1);
+const OPEN_MS = 340;
+const CLOSE_MS = 200;
+/** A neighbour on the bar's row (the calendar's sources) slides when the type row opens or folds. */
+const ROW_MOVE = LinearTransition.duration(OPEN_MS).easing(REasing.bezier(0.2, 0, 0, 1));
+
+/** A type chip: it sinks under the finger, and a tap pops it with a click, so a filter change lands. */
 function Circle({ active, fill, label, hint, onPress, onLongPress, children, count }: {
   active: boolean; fill?: string; label: string; hint?: string; onPress: () => void; onLongPress?: () => void; children: ReactNode; count?: number;
 }) {
+  const press = usePressScale(PRESS.chip);
   return (
     <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
+      onPress={() => { press.pop(); haptics.chip(); onPress(); }}
+      onLongPress={onLongPress ? () => { press.pop(); haptics.soft(); onLongPress(); } : undefined}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       accessibilityHint={hint}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       // A browser has no "selected" for a button; pressed is what a toggle is there.
       {...(Platform.OS === 'web' ? ({ 'aria-pressed': active } as object) : null)}
       accessibilityLabel={label}
-      hitSlop={2}
-      style={({ pressed }) => [styles.circle, active && fill ? { backgroundColor: fill, borderColor: fill } : null, pressed && { opacity: 0.7 }]}>
-      {children}
-      {count ? <View style={styles.count}><Text style={styles.countText}>{count}</Text></View> : null}
+      hitSlop={2}>
+      <Animated.View style={[styles.circle, active && fill ? { backgroundColor: fill, borderColor: fill } : null, { transform: [{ scale: press.scale }] }]}>
+        {children}
+        {count ? <View style={styles.count}><Text style={styles.countText}>{count}</Text></View> : null}
+      </Animated.View>
     </Pressable>
   );
+}
+
+/**
+ * Chip `i` of `n` as the row opens: it starts on top of the folded circle and
+ * fans out to its place, growing and fading up, a little after the one before.
+ * `t` runs 0 (folded) to 1 (open).
+ */
+function fanOut(t: Animated.Value, i: number, n: number) {
+  const lag = 0.4 / Math.max(1, n - 1);
+  const p = t.interpolate({ inputRange: [i * lag, i * lag + 0.6], outputRange: [0, 1], extrapolate: 'clamp' });
+  return {
+    opacity: p,
+    transform: [
+      { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [-i * 48, 0] }) },
+      { scale: p.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+    ],
+  };
 }
 
 // ── Room for the chip groups ─────────────────────────────────────────────────
@@ -86,7 +118,21 @@ export function TypeFilter() {
   const roomy = useChipRoom(circlesWidth(offered.length + 1));
   const [open, setOpen] = useState(false);
   const group = useRef<View>(null);
-  useOutsideClose(open, useCallback(() => setOpen(false), []), group);
+  // 0 folded, 1 open. A row that has room is open from the start and never moves.
+  const t = useRef(new Animated.Value(roomy ? 1 : 0)).current;
+  const unfold = () => {
+    haptics.tap();
+    t.setValue(0);
+    setOpen(true);
+    Animated.timing(t, { toValue: 1, duration: OPEN_MS, easing: EMPHASIZED, useNativeDriver: NATIVE }).start();
+  };
+  const fold = useCallback(() => {
+    Animated.timing(t, { toValue: 0, duration: CLOSE_MS, easing: Easing.in(Easing.cubic), useNativeDriver: NATIVE })
+      .start(({ finished }) => { if (finished) setOpen(false); });
+  }, [t]);
+  useOutsideClose(open, fold, group);
+  useEffect(() => { if (roomy) t.setValue(1); }, [roomy, t]);
+  const folding = usePressScale(PRESS.chip);
 
   const shown = new Set<string>(f.shown);
   const allActive = offered.every((t) => shown.has(t));
@@ -96,14 +142,17 @@ export function TypeFilter() {
     const Only = selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
     return (
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={unfold}
+        onPressIn={folding.onPressIn}
+        onPressOut={folding.onPressOut}
         accessibilityRole="button"
         accessibilityState={{ expanded: false }}
         accessibilityLabel={allActive ? 'Filter by type' : `Filter by type (${selected.length} selected)`}
-        hitSlop={2}
-        style={({ pressed }) => [styles.circle, !allActive && { borderColor: color.accent }, pressed && { opacity: 0.7 }]}>
-        {Only ? <Only size={16} color={color.media[selected[0]]} /> : <LogoOutline tint={allActive ? color.textSecondary : color.accent} />}
-        {!allActive && selected.length > 1 ? <View style={styles.count}><Text style={styles.countText}>{selected.length}</Text></View> : null}
+        hitSlop={2}>
+        <Animated.View style={[styles.circle, !allActive && { borderColor: color.accent }, { transform: [{ scale: folding.scale }] }]}>
+          {Only ? <Only size={16} color={color.media[selected[0]]} /> : <LogoOutline tint={allActive ? color.textSecondary : color.accent} />}
+          {!allActive && selected.length > 1 ? <View style={styles.count}><Text style={styles.countText}>{selected.length}</Text></View> : null}
+        </Animated.View>
       </Pressable>
     );
   }
@@ -113,28 +162,35 @@ export function TypeFilter() {
   // logo circle shows every type and, on a folded bar, closes the row: it used
   // to only select, so the row could not be put away (Nils, 2026-10-18).
   const folded = !roomy;
+  const n = offered.length + (folded ? 2 : 1);
   return (
     <View ref={group} style={styles.circles} accessibilityLabel="Filter by type">
-      <Circle active={allActive} fill={color.accent} label="All types" hint={folded ? 'Shows every type and closes the row' : undefined}
-        onPress={() => { f.selectAll(); if (folded) setOpen(false); }}>
-        <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
-      </Circle>
-      {offered.map((t) => {
-        const Icon = TYPE_ICONS[t];
-        const active = !allActive && shown.has(t);
+      <Animated.View style={fanOut(t, 0, n)}>
+        <Circle active={allActive} fill={color.accent} label="All types" hint={folded ? 'Shows every type and closes the row' : undefined}
+          onPress={() => { f.selectAll(); if (folded) fold(); }}>
+          <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
+        </Circle>
+      </Animated.View>
+      {offered.map((kind, i) => {
+        const Icon = TYPE_ICONS[kind];
+        const active = !allActive && shown.has(kind);
         return (
-          <Circle
-            key={t} active={active} fill={color.media[t]} label={TYPE_PLURAL[t] ?? t}
-            hint={allActive ? 'Tap to see only this type, hold to hide it' : active ? 'Tap to hide this type' : 'Tap to add this type'}
-            onPress={() => f.tapType(t, offered)} onLongPress={() => f.exclude(t, offered)}>
-            <Icon size={16} color={active ? color.textOnAccent : color.textSecondary} />
-          </Circle>
+          <Animated.View key={kind} style={fanOut(t, i + 1, n)}>
+            <Circle
+              active={active} fill={color.media[kind]} label={TYPE_PLURAL[kind] ?? kind}
+              hint={allActive ? 'Tap to see only this type, hold to hide it' : active ? 'Tap to hide this type' : 'Tap to add this type'}
+              onPress={() => f.tapType(kind, offered)} onLongPress={() => f.exclude(kind, offered)}>
+              <Icon size={16} color={active ? color.textOnAccent : color.textSecondary} />
+            </Circle>
+          </Animated.View>
         );
       })}
       {folded ? (
-        <Pressable onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close the type filter" hitSlop={6} style={styles.fold}>
-          <ChevronLeft size={16} color={color.textSecondary} />
-        </Pressable>
+        <Animated.View style={fanOut(t, n - 1, n)}>
+          <Pressable onPress={() => { haptics.tap(); fold(); }} accessibilityRole="button" accessibilityLabel="Close the type filter" hitSlop={6} style={styles.fold}>
+            <ChevronLeft size={16} color={color.textSecondary} />
+          </Pressable>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -217,7 +273,7 @@ export function SubBar<S extends string>({ tabs, filters, trailing, search, coun
           <ChipRoom.Provider value={room}>
             <View style={styles.row} onLayout={(e) => setRowWidth(Math.floor(e.nativeEvent.layout.width))}>
               <TypeFilter />
-              {filters}
+              {filters ? <Reanimated.View layout={ROW_MOVE} style={styles.rowPart}>{filters}</Reanimated.View> : null}
             </View>
           </ChipRoom.Provider>
           {trailing}
@@ -248,6 +304,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   row: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 20 },
   circles: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowPart: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 20 },
   circle: {
     width: 40, height: 40, borderRadius: radius.full, borderWidth: 1, borderColor: color.borderStrong,
     alignItems: 'center', justifyContent: 'center',

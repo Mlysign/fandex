@@ -6,7 +6,9 @@
 // Where the rails come from is lib/homeFeed.ts and lib/popularPeople.ts.
 
 import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Reanimated, { Easing as REasing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import { CardRail, Rail } from '~/components/cards';
 import { PersonCard } from '~/components/PersonCard';
 import { Button, EmptyState, Eyebrow, Panel, Skeleton } from '~/components/kit';
@@ -16,10 +18,25 @@ import { UpNextRail } from '~/components/UpNext';
 import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
+import { FEEL } from '~/lib/feel';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { usePopularPeople } from '~/lib/popularPeople';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { breakpoint, color, radius, type } from '~/theme';
+
+const EMPHASIZED = REasing.bezier(0.2, 0, 0, 1);
+const SECTION_MOVE = LinearTransition.duration(FEEL.layoutMs + 60).easing(EMPHASIZED);
+const SECTION_IN = FadeIn.duration(FEEL.layoutMs).easing(EMPHASIZED);
+const SECTION_OUT = FadeOut.duration(150);
+
+/**
+ * One of Home's sections. When one above it goes (Up next with Shows filtered
+ * out) or comes back, or grows or shrinks, this one slides to close the gap
+ * instead of jumping; one that goes fades out, one that comes fades in.
+ */
+function Section({ children }: { children: ReactNode }) {
+  return <Reanimated.View layout={SECTION_MOVE} entering={SECTION_IN} exiting={SECTION_OUT}>{children}</Reanimated.View>;
+}
 
 /** A rail's worth of placeholders, the size of the cards that replace them. */
 function RailSkeleton({ title }: { title: string }) {
@@ -52,9 +69,10 @@ export default function HomeScreen() {
   const rail = (title: string, items: CardItem[] | null | undefined, seeAllHref: string, forYou = false) => {
     if (!items?.length) return null;
     const shown = withoutHidden(items).filter((i) => types.isVisible(i.type));
-    if (shown.length) return <CardRail title={title} items={shown} seeAllHref={seeAllHref} forYou={forYou} />;
+    if (shown.length) return <Section key={title}><CardRail title={title} items={shown} seeAllHref={seeAllHref} forYou={forYou} /></Section>;
     // The rail has titles, and none of a type you are looking at. Say so; an absent rail reads as broken.
     return (
+      <Section key={`${title}:none`}>
       <Rail title={title} forYou={forYou} seeAllHref={seeAllHref}>
         <Text style={[type.bodySm, { paddingVertical: 24 }]}>
           Nothing here matches the types you track.{' '}
@@ -64,6 +82,7 @@ export default function HomeScreen() {
           .
         </Text>
       </Rail>
+      </Section>
     );
   };
 
@@ -73,6 +92,8 @@ export default function HomeScreen() {
     <Screen wide>
       <SubBar />
       <ScrollView contentContainerStyle={[styles.main, roomy && { paddingVertical: 32, gap: 32 }]}>
+        {/* The page as it first draws just appears; only a section that comes or goes later fades. */}
+        <LayoutAnimationConfig skipEntering>
         {auth.status === 'signedOut' ? (
           <Panel style={styles.guest}>
             <Eyebrow>Guest mode</Eyebrow>
@@ -87,7 +108,7 @@ export default function HomeScreen() {
           </Panel>
         ) : null}
 
-        {signedIn && types.isVisible('show') ? <UpNextRail /> : null}
+        {signedIn && types.isVisible('show') ? <Section key="upnext"><UpNextRail /></Section> : null}
 
         {failed && !feed ? (
           <EmptyState
@@ -110,12 +131,15 @@ export default function HomeScreen() {
             {/* Not filtered by media type, as on the site: a director is not a movie,
                 and hiding the rail because somebody ticked Games would be a dead control. */}
             {people.length ? (
-              <Rail title="Popular people" seeAllHref="/discover">
-                {people.map((person) => <PersonCard key={person.key} person={person} />)}
-              </Rail>
+              <Section key="people">
+                <Rail title="Popular people" seeAllHref="/discover">
+                  {people.map((person) => <PersonCard key={person.key} person={person} />)}
+                </Rail>
+              </Section>
             ) : null}
           </>
         )}
+        </LayoutAnimationConfig>
       </ScrollView>
     </Screen>
   );

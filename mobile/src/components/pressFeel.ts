@@ -25,6 +25,7 @@ export const PRESS = {
   person: { down: 0.92, pop: 1.06 },
   tab: { down: 0.8, pop: 1.2 },
   tick: { down: 0.85, pop: 1.3 },
+  chip: { down: 0.86, pop: 1.18 },
 } satisfies Record<string, PressFeel>;
 
 /**
