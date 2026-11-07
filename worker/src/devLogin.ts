@@ -55,10 +55,12 @@ export function devLoginAllowed(env: Env, url: URL): boolean {
  * The identity is `google`, which holds no library (IDENTITY_ONLY_PROVIDERS):
  * no sync ever runs for it and nothing is pulled or pruned.
  */
-export async function devLogin(env: Env, name: string): Promise<{ token: string; user: SessionUser } | null> {
+export async function devLogin(env: Env, name: string): Promise<{ token: string; user: SessionUser; created: boolean } | null> {
   const account = DEV_ACCOUNTS[name];
   if (!account) return null;
-  await env.DB.batch([
+  // `created` makes the answer "created", as a real first sign-in's is, so the
+  // app's first-run questions can be tried here (components/Onboarding.tsx).
+  const [users] = await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO users (id) VALUES (?)").bind(account.userId),
     env.DB.prepare(
       `INSERT OR IGNORE INTO user_identities (provider, provider_user_id, user_id, display_name, avatar_url)
@@ -66,7 +68,7 @@ export async function devLogin(env: Env, name: string): Promise<{ token: string;
     ).bind(account.provider, account.providerUserId, account.userId, account.displayName),
   ]);
   const user: SessionUser = { userId: account.userId, provider: account.provider, displayName: account.displayName };
-  return { token: await createSession(env, user), user };
+  return { token: await createSession(env, user), user, created: (users?.meta.changes ?? 0) > 0 };
 }
 
 /**

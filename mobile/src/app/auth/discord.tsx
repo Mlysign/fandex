@@ -14,6 +14,7 @@ import { Button } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
 import { APP_RETURN, takeDiscordReturn } from '~/lib/discord';
 import { usePageTitle } from '~/lib/pageTitle';
+import { signInLanding } from '~/lib/returnTo';
 import { color, space, type } from '~/theme';
 
 export default function DiscordReturn() {
@@ -43,7 +44,7 @@ export default function DiscordReturn() {
       return;
     }
     finishDiscordSignIn(back.accessToken).then(
-      () => router.replace(returnTo),
+      (outcome) => router.replace((signInLanding(outcome, back.returnTo) ?? returnTo) as Href),
       (e: unknown) => setFailed({ message: e instanceof Error ? e.message : 'The sign-in did not finish.', returnTo: back.returnTo }),
     );
   }, [ready, finishDiscordSignIn, router]);

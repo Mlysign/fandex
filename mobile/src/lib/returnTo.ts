@@ -17,6 +17,18 @@ let held: string | null = null;
 const safe = (path: string | null | undefined) =>
   (path && path.startsWith('/') && !path.startsWith('//') && !path.includes('\\') ? path : null);
 
+/**
+ * Where a sign-in that went through lands, when there is no title to go back
+ * to: Home for a new account (its first-run questions open there) and for a
+ * sign-in made on You, which is only the sign-in page (Nils, 2026-11-07).
+ * Null: stay. Adding a way in from Settings ("linked", "merged") stays.
+ */
+export function signInLanding(outcome: 'signed-in' | 'created' | 'linked' | 'merged' | null, from: string): string | null {
+  if (outcome === 'created') return '/';
+  if (outcome === 'signed-in' && from.split(/[?#]/)[0] === '/profile') return '/';
+  return null;
+}
+
 /** Remember an address inside the app (it must start with "/"). */
 export function setReturnTo(path: string): void {
   if (!safe(path)) return;

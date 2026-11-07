@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 
-import { setReturnTo, takeReturnTo } from './returnTo';
+import { setReturnTo, signInLanding, takeReturnTo } from './returnTo';
 
 describe('coming back to a title after signing in', () => {
   it('gives the address back once', () => {
@@ -30,5 +30,27 @@ describe('an address a browser would read as another host', () => {
     expect(takeReturnTo()).toBeNull();
     setReturnTo('/movie/alien\\..');
     expect(takeReturnTo()).toBeNull();
+  });
+});
+
+describe('signInLanding', () => {
+  it('lands a new account on Home, wherever it signed in', () => {
+    expect(signInLanding('created', '/profile')).toBe('/');
+    expect(signInLanding('created', '/wishlist')).toBe('/');
+  });
+
+  it('lands a sign-in made on You on Home', () => {
+    expect(signInLanding('signed-in', '/profile')).toBe('/');
+    expect(signInLanding('signed-in', '/profile?return=/movie/x')).toBe('/');
+  });
+
+  it('keeps a sign-in made on another page there', () => {
+    expect(signInLanding('signed-in', '/wishlist')).toBeNull();
+  });
+
+  it('keeps adding a way in from Settings where it is', () => {
+    expect(signInLanding('linked', '/profile')).toBeNull();
+    expect(signInLanding('merged', '/settings')).toBeNull();
+    expect(signInLanding(null, '/settings')).toBeNull();
   });
 });

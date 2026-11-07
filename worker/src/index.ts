@@ -297,7 +297,7 @@ async function route(c: Ctx): Promise<Response> {
     }
     const out = await devLogin(c.env, name);
     if (!out) return error(400, "bad-request", `account must be one of: ${Object.keys(DEV_ACCOUNTS).join(", ")}`);
-    return signInResponse(c, { kind: "signed-in", ...out });
+    return signInResponse(c, { kind: out.created ? "created" : "signed-in", token: out.token, user: out.user });
   }
 
   // A real route asked with the wrong verb: say which verbs it takes.

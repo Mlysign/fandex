@@ -135,11 +135,14 @@ export function TypeFilter() {
   const folding = usePressScale(PRESS.chip);
 
   const shown = new Set<string>(f.shown);
-  const allActive = offered.every((t) => shown.has(t));
+  // "Your types": no pick, so what Settings turned on is showing. The logo
+  // circle is lit then, and the folded circle reads as unfiltered.
+  const allActive = f.atDefault;
+  const everyType = offered.every((t) => shown.has(t));
   const selected = offered.filter((t) => shown.has(t));
 
   if (!open && !roomy) {
-    const Only = selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
+    const Only = !allActive && selected.length === 1 ? TYPE_ICONS[selected[0]] : null;
     return (
       <Pressable
         onPress={unfold}
@@ -159,26 +162,29 @@ export function TypeFilter() {
 
   // One tap narrows a full row to that type; from a partial row a tap adds or
   // drops; a long press hides one type (lib/typeFilter.tsx, `tapType`). The
-  // logo circle shows every type and, on a folded bar, closes the row: it used
-  // to only select, so the row could not be put away (Nils, 2026-10-18).
+  // logo circle goes back to your types (Settings' default, not every type:
+  // Nils, 2026-11-07) and, on a folded bar, closes the row: it used to only
+  // select, so the row could not be put away (Nils, 2026-10-18).
   const folded = !roomy;
   const n = offered.length + (folded ? 2 : 1);
   return (
     <View ref={group} style={styles.circles} accessibilityLabel="Filter by type">
       <Animated.View style={fanOut(t, 0, n)}>
-        <Circle active={allActive} fill={color.accent} label="All types" hint={folded ? 'Shows every type and closes the row' : undefined}
-          onPress={() => { f.selectAll(); if (folded) fold(); }}>
+        <Circle active={allActive} fill={color.accent} label="Your types" hint={folded ? 'Shows the types from your settings and closes the row' : 'Shows the types from your settings'}
+          onPress={() => { f.reset(); if (folded) fold(); }}>
           <LogoOutline tint={allActive ? color.textOnAccent : color.textSecondary} />
         </Circle>
       </Animated.View>
       {offered.map((kind, i) => {
         const Icon = TYPE_ICONS[kind];
-        const active = !allActive && shown.has(kind);
+        // With every type on by default the type circles stay dark, as before;
+        // with some off in Settings, the ones showing are lit.
+        const active = shown.has(kind) && !(allActive && everyType);
         return (
           <Animated.View key={kind} style={fanOut(t, i + 1, n)}>
             <Circle
               active={active} fill={color.media[kind]} label={TYPE_PLURAL[kind] ?? kind}
-              hint={allActive ? 'Tap to see only this type, hold to hide it' : active ? 'Tap to hide this type' : 'Tap to add this type'}
+              hint={allActive && everyType ? 'Tap to see only this type, hold to hide it' : active ? 'Tap to hide this type' : 'Tap to add this type'}
               onPress={() => f.tapType(kind, offered)} onLongPress={() => f.exclude(kind, offered)}>
               <Icon size={16} color={active ? color.textOnAccent : color.textSecondary} />
             </Circle>

@@ -13,6 +13,7 @@ import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-nativ
 import { Button } from '~/components/kit';
 import { useAuth } from '~/lib/AuthProvider';
 import { GOOGLE_APP_RETURN, takeGoogleReturn } from '~/lib/google';
+import { signInLanding } from '~/lib/returnTo';
 import { usePageTitle } from '~/lib/pageTitle';
 import { color, space, type } from '~/theme';
 
@@ -43,7 +44,7 @@ export default function GoogleReturn() {
       return;
     }
     finishGoogleSignIn(back.idToken, back.secret).then(
-      () => router.replace(returnTo),
+      (outcome) => router.replace((signInLanding(outcome, back.returnTo) ?? returnTo) as Href),
       (e: unknown) => setFailed({ message: e instanceof Error ? e.message : 'The sign-in did not finish.', returnTo: back.returnTo }),
     );
   }, [ready, finishGoogleSignIn, router]);

@@ -662,6 +662,12 @@ describe("the test accounts", () => {
     expect((await post("localhost:8787", local, { account: "nils" })).status).toBe(400);
   });
 
+  it("answers 'created' the first time, as a real first sign-in does, and 'signed-in' after", async () => {
+    const outcome = async () => ((await (await post("localhost:8787", local, { account: "plain" })).json()) as any).outcome;
+    expect(await outcome()).toBe("created");
+    expect(await outcome()).toBe("signed-in");
+  });
+
   it("joins two accounts end to end: connect, the form's answer, then the merge", async () => {
     const login = async (account: string) => (await (await post("localhost:8787", local, { account })).json()) as any;
     const connect = (token: string, account: string) => worker.fetch(

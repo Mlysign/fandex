@@ -8,9 +8,10 @@
 
 import { useSQLiteContext } from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { MEDIA_TYPES, enabledMediaTypes, sanitizeMediaTypes, visibleTypes } from '@/lib/mediaTypes';
+import { sanitizeMediaTypes, visibleTypes } from '@/lib/mediaTypes';
 import { useAuth } from '~/lib/AuthProvider';
 import { getMeta, setMeta } from '~/lib/db';
+import { excludePick, tapPick } from '~/lib/typePick';
 
 const KEY = 'rr_type_filter';
 
@@ -21,6 +22,8 @@ interface TypeFilter {
   stored: string[] | null;
   /** What a list should show right now. */
   shown: string[];
+  /** No pick: the account's default types are showing. */
+  atDefault: boolean;
   toggle: (type: string) => void;
   /**
    * One tap on a type's circle (Nils, 2026-10-18, the three stories: "only this
@@ -28,14 +31,17 @@ interface TypeFilter {
    * narrows to that type alone; with some showing, a tap adds a type that is
    * off or drops one that is on, and dropping the last one shows everything
    * again. So "only games" is one tap, "games and films" is two, and a long
-   * press (`exclude`) hides one type from a full row in one.
+   * press (`exclude`) hides one type from a full row in one. Dropping the
+   * last one goes back to the account's default (lib/typePick.ts).
    */
   tapType: (type: string, offered: readonly string[]) => void;
   /** Hide one type and keep the rest: a long press on its circle. */
   exclude: (type: string, offered: readonly string[]) => void;
-  /** The "all" circle: clear the pick, or widen it when the account tracks only some types. */
-  selectAll: () => void;
-  /** Drop the chip selection, so the account's default shows again. */
+  /**
+   * Drop the chip selection, so the account's default shows again: Settings,
+   * and the row's logo circle. That circle used to pick every type, which
+   * turned on the types Settings had off (Nils, 2026-11-07).
+   */
   reset: () => void;
   isVisible: (type: string) => boolean;
 }
@@ -65,24 +71,16 @@ export function TypeFilterProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<TypeFilter>(() => {
     const shown = visibleTypes(active, stored);
-    const offeredShown = (offered: readonly string[]) => offered.filter((t) => shown.includes(t as never));
+    const atDefault = active.length === 0;
     return {
       active,
       stored,
       shown,
+      atDefault,
       toggle: (type) => save(active.includes(type) ? active.filter((t) => t !== type) : [...active, type]),
-      tapType: (type, offered) => {
-        const on = offeredShown(offered);
-        if (on.length >= offered.length) return save([type]);
-        const next = on.includes(type) ? on.filter((t) => t !== type) : [...on, type];
-        save(next.length && next.length < offered.length ? next : []);
-      },
-      exclude: (type, offered) => {
-        const next = offeredShown(offered).filter((t) => t !== type);
-        save(next.length && next.length < offered.length ? next : []);
-      },
+      tapType: (type, offered) => save(tapPick(type, shown, offered, stored, atDefault)),
+      exclude: (type, offered) => save(excludePick(type, shown, offered, stored)),
       reset: () => save([]),
-      selectAll: () => save(enabledMediaTypes(stored).length === MEDIA_TYPES.length ? [] : [...MEDIA_TYPES]),
       isVisible: (type) => shown.includes(type as never),
     };
   }, [active, stored, save]);

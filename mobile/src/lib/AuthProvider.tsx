@@ -17,7 +17,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform } from 'react-native';
-import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution, type PendingMerge, type PrefsPatch, type Profile } from '~/lib/api';
+import { api, ApiError, pendingMergeFrom, setSessionToken, type MergeResolution, type PendingMerge, type PrefsPatch, type Profile, type SignInResult } from '~/lib/api';
 import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, GOOGLE_CLIENT_ID, traktConfigured } from '~/lib/config';
 import { GOOGLE_APP_REDIRECT, GOOGLE_APP_STATE_PREFIX, GOOGLE_SITE_ORIGIN, googleAuthorizeUrl, newGoogleSignIn, readGoogleReturn, startGoogleSignIn as startGoogleWebSignIn } from '~/lib/google';
@@ -36,6 +36,9 @@ import { clearTraktSync, syncTrakt, traktSyncedAt, TraktSyncRefused, type TraktS
 
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+
+/** What the last sign-in on this device did, as the Worker answered it. `at` tells two apart. */
+export interface LastSignIn { outcome: SignInResult['outcome']; at: number }
 
 export type TraktFlow =
   | { phase: 'idle' }
@@ -60,7 +63,7 @@ interface Auth {
    * account that is already signed in it adds Google as a way in. Throws with
    * the reason, in words, when it did not work.
    */
-  finishGoogleSignIn: (idToken: string, secret: string) => Promise<void>;
+  finishGoogleSignIn: (idToken: string, secret: string) => Promise<SignInResult['outcome'] | null>;
   /**
    * Google (lib/google.ts). In a browser the page leaves for Google and
    * `/auth/google` calls `finishGoogleSignIn`; on a phone a browser sheet opens
@@ -73,7 +76,7 @@ interface Auth {
    * opens and this finishes the sign-in itself. Throws with the reason, in words.
    */
   startDiscordSignIn: (returnTo: string) => Promise<void>;
-  finishDiscordSignIn: (accessToken: string) => Promise<void>;
+  finishDiscordSignIn: (accessToken: string) => Promise<SignInResult['outcome'] | null>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
   /** Connect a test account to the signed-in one (a local Worker only), as connecting Discord would. Throws with the reason. */
@@ -111,6 +114,14 @@ interface Auth {
   completeMerge: (resolution: MergeResolution) => Promise<void>;
   /** Leave both accounts as they are. */
   cancelMerge: () => void;
+  /**
+   * The last sign-in made on this device while the app ran (null after a
+   * restart or a sign-out). The layout lands a fresh sign-in on Home.
+   */
+  lastSignIn: LastSignIn | null;
+  /** The account was made by the sign-in just now, and its first-run questions are still to be asked (components/Onboarding.tsx). */
+  onboarding: boolean;
+  endOnboarding: () => void;
 }
 
 export interface SteamSyncState {
@@ -203,6 +214,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the person to connect again. When Trakt was the way being added, its tokens
   // wait here too, so a joined account keeps syncing Trakt on this device.
   const [pendingMerge, setPendingMerge] = useState<(PendingMerge & { traktTokens?: TraktTokens }) | null>(null);
+  const [lastSignIn, setLastSignIn] = useState<LastSignIn | null>(null);
+  const [onboarding, setOnboarding] = useState(false);
+  /** A sign-in went through: remember what it did, and start the first-run questions for an account it made. */
+  const signedInAs = useCallback((outcome: SignInResult['outcome']) => {
+    setLastSignIn({ outcome, at: Date.now() });
+    if (outcome === 'created') setOnboarding(true);
+  }, []);
+  const endOnboarding = useCallback(() => setOnboarding(false), []);
 
   /** A sign-in answered "these two accounts are one person's": keep it for the form, and say whether it was that. */
   const adoptMerge = useCallback((e: unknown, traktTokens?: TraktTokens): boolean => {
@@ -365,6 +384,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSteamSync({ running: false, error: null, last: null, syncedAt: null });
     setProfile(null);
     setPendingMerge(null);
+    setLastSignIn(null);
+    setOnboarding(false);
     setRowsRevision((r) => r + 1);
     setStatus('signedOut');
   }, [db]);
@@ -433,9 +454,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
+    signedInAs(result.outcome);
     setTrakt({ phase: 'idle' });
     void pullRows(true).then(() => runTraktSync(false)).then(() => runSteamSync(true));
-  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync, signedInAs]);
 
   const startTraktBrowserSignIn = useCallback(() => {
     if (!traktConfigured()) {
@@ -510,22 +532,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Google has no flow to track here: the page left for Google and this is a
   // fresh page that came back (app/auth/google.tsx), holding what Google sent.
-  const finishGoogleSignIn = useCallback(async (idToken: string, secret: string) => {
+  const finishGoogleSignIn = useCallback(async (idToken: string, secret: string): Promise<SignInResult['outcome'] | null> => {
     let result;
     try {
       result = await api.signInWithGoogle(idToken, secret);
     } catch (e) {
       // The page goes on to Settings, which shows the form.
-      if (adoptMerge(e)) return;
+      if (adoptMerge(e)) return null;
       throw new Error(signInMessage(e, 'Google'));
     }
     await secretSet(SESSION_KEY, result.token);
     setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
+    signedInAs(result.outcome);
     // An account that also has Trakt on this device keeps syncing it; one that does not has nothing to sync.
     void pullRows(true).then(() => runTraktSync(true)).then(() => runSteamSync(true));
-  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
+    return result.outcome;
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync, signedInAs]);
 
   const startGoogleSignIn = useCallback(async (returnTo: string) => {
     if (Platform.OS === 'web') {
@@ -547,21 +571,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await finishGoogleSignIn(back.idToken, back.secret);
   }, [finishGoogleSignIn]);
 
-  const finishDiscordSignIn = useCallback(async (accessToken: string) => {
+  const finishDiscordSignIn = useCallback(async (accessToken: string): Promise<SignInResult['outcome'] | null> => {
     let result;
     try {
       result = await api.signInWithDiscord(accessToken);
     } catch (e) {
-      if (adoptMerge(e)) return;
+      if (adoptMerge(e)) return null;
       throw new Error(signInMessage(e, 'Discord'));
     }
     await secretSet(SESSION_KEY, result.token);
     setSession(result.token);
     setProfile(await api.me().catch(() => null));
     setStatus('signedIn');
+    signedInAs(result.outcome);
     // Discord brings no library. An account that has Trakt on this device keeps syncing it.
     void pullRows(true).then(() => runTraktSync(true)).then(() => runSteamSync(true));
-  }, [adoptMerge, pullRows, runTraktSync, runSteamSync]);
+    return result.outcome;
+  }, [adoptMerge, pullRows, runTraktSync, runSteamSync, signedInAs]);
 
   const startDiscordSignIn = useCallback(async (returnTo: string) => {
     if (Platform.OS === 'web') {
@@ -597,6 +623,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(result.token);
       setProfile(await api.me().catch(() => null));
       setStatus('signedIn');
+      signedInAs(result.outcome);
       setTrakt({ phase: 'idle' });
       // Its Trakt tokens were cleared above, so Settings can say so at once.
       setTraktSync((s) => ({ ...s, onDevice: false }));
@@ -604,7 +631,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setTrakt({ phase: 'error', message: e instanceof ApiError && e.status === 404 ? 'This Worker has no test accounts. Start it with DEV_LOGIN=1 in .dev.vars.' : 'The test sign-in did not work.' });
     }
-  }, [pullRows]);
+  }, [pullRows, signedInAs]);
 
   const devConnect = useCallback(async (account: string) => {
     let result;
@@ -755,6 +782,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       startDiscordSignIn, finishDiscordSignIn, devSignIn, devConnect, signOut,
       rowsSyncing, rowsError, rowsRevision, syncRows, rowsChanged, traktSync, syncTraktNow, steamSync, syncSteamNow,
       region, savePrefs, disconnect, deleteAccount, pendingMerge, completeMerge, cancelMerge,
+      lastSignIn, onboarding, endOnboarding,
     }}>
       {children}
     </Ctx.Provider>

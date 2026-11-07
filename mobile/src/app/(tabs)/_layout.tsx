@@ -13,12 +13,16 @@ import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppNav } from '~/components/AppNav';
 import { NavSearch } from '~/components/NavSearch';
+import { Onboarding } from '~/components/Onboarding';
 import { useAuth } from '~/lib/AuthProvider';
 import { haptics } from '~/lib/feel';
 import { sendPageview } from '~/lib/pageview';
-import { takeReturnTo } from '~/lib/returnTo';
+import { signInLanding, takeReturnTo } from '~/lib/returnTo';
 import { browserLikeHistory } from '~/lib/tabHistory';
 import { breakpoint, color } from '~/theme';
+
+/** The sign-in (`LastSignIn.at`) already landed, kept outside the layout so a remount does not land it twice. */
+let landed = 0;
 
 export default function TabsLayout() {
   const { width } = useWindowDimensions();
@@ -29,13 +33,23 @@ export default function TabsLayout() {
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
   // Back to the title somebody signed in from (lib/returnTo.ts), wherever the
-  // sign-in finished: You for Trakt, Settings for Google in a browser.
+  // sign-in finished: You for Trakt, Settings for Google in a browser. With no
+  // title to go back to, a sign-in made on You lands on Home, and so does one
+  // that made a new account, wherever it was made: Home is where its first-run
+  // questions open (components/Onboarding.tsx; Nils, 2026-11-07). Adding a way
+  // in from Settings ("linked", "merged") stays where it is.
   const auth = useAuth();
+  const { lastSignIn } = auth;
   useEffect(() => {
     if (auth.status !== 'signedIn') return;
+    const fresh = lastSignIn && landed !== lastSignIn.at ? lastSignIn : null;
+    if (fresh) landed = fresh.at;
     const to = takeReturnTo();
-    if (to) router.replace(to as never);
-  }, [auth.status, router]);
+    if (to) { router.replace(to as never); return; }
+    const home = fresh ? signInLanding(fresh.outcome, pathname) : null;
+    if (home && home !== pathname) router.replace(home as never);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- where the sign-in finished, read once when it lands
+  }, [auth.status, lastSignIn, router]);
   // A light tick with every tab tapped: the bar's own pop is in AppNav.
   const go = useCallback((href: string) => { haptics.tap(); router.navigate(href as never); }, [router]);
 
@@ -53,6 +67,8 @@ export default function TabsLayout() {
         />
       </View>
       {desktop ? null : <AppNav variant="bottom" pathname={pathname} onNavigate={go} bottomInset={bottom} />}
+      {/* A new account's first-run questions, over Home. */}
+      <Onboarding />
     </View>
   );
 }
