@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactCount, currentMonth, dayLabel, longDate, monthLabel, shiftMonth, todayIso } from './dates';
+import { cardDate, compactCount, currentMonth, dayLabel, longDate, monthLabel, shiftMonth, todayIso } from './dates';
 
 describe('months', () => {
   it('shifts across a year boundary in both directions', () => {
@@ -54,5 +54,26 @@ describe('a date that names only a year or a month', () => {
     expect(shortDate('1976')).toBe('1976');
     expect(longDate('1976-04')).toBe('Apr 1976');
     expect(longDate('1976-04-02')).toBe('2 Apr 1976');
+  });
+});
+
+describe('a poster card date (cardDate)', () => {
+  const today = '2026-11-07';
+  it('names the day for a release within two months either side', () => {
+    expect(cardDate('2026-11-05', today)).toBe('05 Nov');
+    expect(cardDate('2026-12-18', today)).toBe('18 Dec');
+    expect(cardDate('2026-09-18', today)).toBe('18 Sep');
+    expect(cardDate('2027-01-07', today)).toBe('07 Jan');
+    expect(cardDate('2026-09-07', today)).toBe('07 Sep');
+  });
+  it('keeps month and year further off', () => {
+    expect(cardDate('2027-01-08', today)).toBe('Jan 2027');
+    expect(cardDate('2026-09-06', today)).toBe('Sep 2026');
+    expect(cardDate('2021-02-02', today)).toBe('Feb 2021');
+  });
+  it('says a year or month alone as such, and TBA for none', () => {
+    expect(cardDate('2026-11', today)).toBe('Nov 2026');
+    expect(cardDate('2027', today)).toBe('2027');
+    expect(cardDate(null, today)).toBe('TBA');
   });
 });

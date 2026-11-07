@@ -17,7 +17,9 @@ import { PRESS, usePressScale } from '~/components/pressFeel';
 import { TypeIcon } from '~/components/Logo';
 import { cardHref } from '~/lib/cardHref';
 import type { CardItem, CardMatch } from '~/lib/cards';
-import { monthYear } from '~/lib/dates';
+import { cardDate } from '~/lib/dates';
+import { TYPE_ICONS } from '~/lib/typeIcons';
+import type { MediaType } from '@/types';
 import { breakpoint, color, font, radius, type, TYPE_LABEL } from '~/theme';
 
 /** Fewer crowd votes than this is no crowd rating on a card: an unreleased film read 9.0 off a handful of festival votes (2026-10-23). */
@@ -58,6 +60,12 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
   };
   // The whole card sinks under the finger, the bar with it, and pops on a tap (components/pressFeel.ts).
   const press = usePressScale(PRESS.card);
+  const TypeGlyph = TYPE_ICONS[item.type as MediaType] as typeof TYPE_ICONS[MediaType] | undefined;
+  // A new season's card (lib/cards.ts premiereCard) and a trending show whose
+  // season is out (lib/useHomeRails.ts) both say "Season n". It goes in the
+  // type chip, never as a line under the poster: that made the card taller
+  // than its neighbours and broke the grid's rows.
+  const season = item.season ? `Season ${item.season}` : item.role && /^Season \d+$/.test(item.role) ? item.role : null;
   return (
     <Animated.View ref={box} style={[cardStyles.card, hovered && { borderColor: color.borderStrong }, style, { transform: [{ scale: press.scale }] }]}>
       <Pressable
@@ -82,16 +90,23 @@ export function CardFace({ item, match, link, bar, style, dateText, explain }: {
                 : <Text numberOfLines={4} style={[type.serifSm, cardStyles.posterTitle]}>{item.title}</Text>}
             </View>
           )}
+          {/* The type in its colour as an icon, then its word; a new season rides in the same chip (Nils's C2, 2026-11-07). */}
           <View style={cardStyles.typeChip}>
-            <View style={[cardStyles.typeDot, { backgroundColor: color.media[item.type] ?? '#888' }]} />
+            {TypeGlyph ? <TypeGlyph size={11} color={color.media[item.type] ?? color.textSecondary} strokeWidth={2.2} /> : null}
             <Text style={[type.micro, { color: color.textPrimary }]}>{(TYPE_LABEL[item.type] ?? item.type).toLowerCase()}</Text>
+            {season ? (
+              <>
+                <View style={cardStyles.chipRule} />
+                <Text style={[type.micro, { color: color.textPrimary }]}>{season}</Text>
+              </>
+            ) : null}
           </View>
         </View>
         <View style={cardStyles.body}>
           {CARD_TITLE ? <Text numberOfLines={1} style={type.serifSm}>{item.title}</Text> : null}
-          {item.role ? <Text numberOfLines={1} style={[type.caption, cardStyles.role, !CARD_TITLE && { marginTop: 0 }]}>{item.role}</Text> : null}
+          {item.role && item.role !== season ? <Text numberOfLines={1} style={[type.caption, cardStyles.role, !CARD_TITLE && { marginTop: 0 }]}>{item.role}</Text> : null}
           <View style={cardStyles.metaRow}>
-            <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? monthYear(item.releaseDate)}</Text>
+            <Text numberOfLines={1} style={[type.meta, { flexShrink: 1 }]}>{dateText ?? cardDate(item.releaseDate)}</Text>
             {match ? <FandexScoreBadge score={match.score} band={match.band} />
               : item.communityScore != null && (item.communityVotes == null || item.communityVotes >= MIN_CROWD_VOTES) ? <CommunityScore score={item.communityScore} /> : null}
           </View>
@@ -259,7 +274,8 @@ export const cardStyles = StyleSheet.create({
     position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingLeft: 6, paddingRight: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: color.scrimChip,
   },
-  typeDot: { width: 6, height: 6, borderRadius: radius.full },
+  // The thin line between the type and a season inside the type chip.
+  chipRule: { width: 1, height: 9, backgroundColor: color.borderStrong },
   body: { paddingHorizontal: 10, paddingTop: 10, gap: 7 },
   // Under the name, in the body's own gap: the part somebody had in the title (a person's or a studio's page).
   role: { marginTop: -3, color: color.textSecondary },

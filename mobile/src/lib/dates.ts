@@ -49,7 +49,24 @@ export function longDate(date: string | null | undefined): string | null {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
 }
 
-/** "Nov 2026" for a YYYY-MM-DD: the date line on a poster card. "TBA" when there is none. */
+/**
+ * A poster card's date line (Nils, 2026-11-07): "05 Nov" for a release within
+ * two months of today on either side, where the day is what you want to know,
+ * and "Nov 2026" for one further off. A date that names only a year or a month
+ * is said as such, and none is "TBA". `today` is a YYYY-MM-DD, the device's own day.
+ */
+export function cardDate(date: string | null | undefined, today: string = todayIso()): string {
+  if (!date || date.length < 10) return monthYear(date);
+  const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  const t = new Date(`${today.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || Number.isNaN(t.getTime())) return monthYear(date);
+  const from = new Date(t); from.setUTCMonth(from.getUTCMonth() - 2);
+  const to = new Date(t); to.setUTCMonth(to.getUTCMonth() + 2);
+  if (d < from || d > to) return monthYear(date);
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()].slice(0, 3)}`;
+}
+
+/** "Nov 2026" for a YYYY-MM-DD: a poster card's date line for a release further off (`cardDate`). "TBA" when there is none. */
 export function monthYear(date: string | null | undefined): string {
   if (!date) return 'TBA';
   const only = partial(date);
