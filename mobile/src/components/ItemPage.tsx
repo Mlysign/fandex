@@ -340,10 +340,8 @@ const CIRCLE_LABEL: Record<string, string> = {
  * colour, mobile/CLAUDE.md). A link to the provider's page when it has one.
  * Bottom-aligned with the seal in `ScoreRow` (Nils's B3b, 2026-11-07).
  */
-function RatingCircle({ source, label, value, outOfFive, sub, href, hint, you }: {
+function RatingCircle({ source, label, value, outOfFive, href, hint, you }: {
   source: string; label: string; value: string; outOfFive?: boolean;
-  /** A second, smaller line: IGDB's critics under its players. */
-  sub?: string | null;
   href?: string | null; hint: string;
   /** Your own rating: in gold, "YOU" over the number. */
   you?: boolean;
@@ -356,7 +354,6 @@ function RatingCircle({ source, label, value, outOfFive, sub, href, hint, you }:
       <Text style={[styles.circleValue, you && { color: color.accent }]}>
         {value}{outOfFive ? <Text style={styles.circleOf}>/5</Text> : null}
       </Text>
-      {sub ? <Text style={styles.circleSub}>{sub}</Text> : null}
     </>
   );
   return href
@@ -366,8 +363,13 @@ function RatingCircle({ source, label, value, outOfFive, sub, href, hint, you }:
 
 /** The gap between the title's column and the ratings group beside it. */
 const BLOB_GAP = 12;
-/** What the media type needs beside the ratings group: "BOARD GAME" and its icon. */
-const TYPE_MIN = 100;
+/**
+ * What the media type needs beside the ratings group: its icon, the gap and the
+ * word in the eyebrow face (9 px mono, 1.17 tracking, about 6.6 px a letter).
+ * Worked out from the word, not one width for all: "BOARD GAME" needs 90, "SHOW"
+ * 50, and a fixed 100 put a show's ratings on a line of their own on a phone (0.3.52).
+ */
+const typeWidth = (label: string) => 13 + space.xs + Math.ceil(label.length * 6.6) + 4;
 /** The title's line height (`styles.title`), to count its lines from a measured height. */
 const TITLE_LINE = 35;
 
@@ -398,15 +400,20 @@ function TitleBlock({ kind, title, metaParts, metaStyle, dots, ratings, yourRati
   /** The title's longest word, measured: beside the group a word wider than the room breaks in the middle ("Severanc / e"). */
   const [wordWidth, setWordWidth] = useState(0);
   const longestWord = title.split(/\s+/).reduce((a, b) => (b.length > a.length ? b : a), '');
-  const igdbCritics = ratings.find((r) => r.source === 'igdb-critics');
-  const crowd = ratings.filter((r) => !(r.source === 'igdb-critics' && ratings.some((x) => x.source === 'igdb')));
+  // IGDB is one circle: its critics' score where there is one, under IGDB's logo, else its players'
+  // (Nils, 2026-11-07: "critics 89" under the players' number was too much).
+  const igdb = ratings.find((r) => r.source === 'igdb');
+  const critics = ratings.find((r) => r.source === 'igdb-critics');
+  const crowd = ratings.flatMap((r) =>
+    r.source === 'igdb' ? (critics ? [] : [r])
+    : r.source === 'igdb-critics' ? [{ ...r, source: 'igdb', url: r.url ?? igdb?.url ?? null }]
+    : [r]);
   const circles = crowd.map((r) => {
     const value = circleText(r);
-    const sub = r.source === 'igdb' && igdbCritics ? `critics ${Math.round(igdbCritics.score)}` : null;
     return (
       <RatingCircle
-        key={r.source} source={r.source} label={r.label} value={value} outOfFive={r.outOf === 5} sub={sub} href={r.url}
-        hint={`${r.label} ${value}${r.outOf === 5 ? ' out of 5' : ''}${sub ? `, ${sub}` : ''}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
+        key={r.source} source={r.source} label={r.label} value={value} outOfFive={r.outOf === 5} href={r.url}
+        hint={`${r.label} ${value}${r.outOf === 5 ? ' out of 5' : ''}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
       />
     );
   });
@@ -433,7 +440,7 @@ function TitleBlock({ kind, title, metaParts, metaStyle, dots, ratings, yourRati
   const room = width - groupWidth - BLOB_GAP;
   const measured = width > 0 && groupWidth > 0;
   const fits = lines > 0 && lines <= 2 && wordWidth > 0 && wordWidth <= room;
-  const mode = !measured ? 'stacked' : fits ? 'beside' : room >= TYPE_MIN ? 'stacked' : 'alone';
+  const mode = !measured ? 'stacked' : fits ? 'beside' : room >= typeWidth(TYPE_LABEL[kind] ?? kind) ? 'stacked' : 'alone';
   const group = (
     <View
       onLayout={(e) => setGroupWidth(Math.round(e.nativeEvent.layout.width))}
@@ -865,9 +872,7 @@ const styles = StyleSheet.create({
   ratingCircleYou: { borderColor: color.accent },
   circleLabel: { fontFamily: font.mono, fontSize: 6.5, lineHeight: 9, letterSpacing: 0.9, color: color.textSecondary, maxWidth: 42 },
   circleValue: { fontFamily: font.serif, fontSize: 17, lineHeight: 19, color: color.textPrimary },
-  circleOf: { fontFamily: font.mono, fontSize: 8, color: color.textSecondary },
-  circleSub: { fontFamily: font.mono, fontSize: 6, lineHeight: 8, color: color.textSecondary },
-  title: { fontFamily: font.serif, fontSize: 34, lineHeight: 35, color: color.textPrimary, pointerEvents: 'none' },
+  circleOf: { fontFamily: font.mono, fontSize: 8, color: color.textSecondary },  title: { fontFamily: font.serif, fontSize: 34, lineHeight: 35, color: color.textPrimary, pointerEvents: 'none' },
   heroMeta: { color: '#C3B8A8', marginTop: space.sm, pointerEvents: 'none' },
 
   // One vertical rhythm for everything under the hero: 24 between blocks.
