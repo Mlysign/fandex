@@ -228,6 +228,13 @@ async function stamp(db: SQLiteDatabase, version: number): Promise<void> {
  */
 export const PULL_FIT_KEY = 'pull_fit';
 
+/**
+ * Your own gains (fandexScore.ts `fitGains`), fitted after every rebuild and
+ * kept so the next start scores with them from the first frame. Derived from
+ * the account's ratings, so signing out forgets it (stateSync.ts `clearState`).
+ */
+export const OWN_GAINS_KEY = 'own_gains';
+
 export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
   return row?.value ?? null;

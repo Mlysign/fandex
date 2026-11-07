@@ -18,11 +18,11 @@ import { api, type ScoreReport } from '~/lib/api';
 import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { API_URL } from '~/lib/config';
-import { getMeta, PULL_FIT_KEY, setMeta } from '~/lib/db';
+import { getMeta, OWN_GAINS_KEY, PULL_FIT_KEY, setMeta } from '~/lib/db';
 import { impactAbsence, pageImpacts, tasteImpactIndex, type ImpactKind, type PageImpact, type TasteIndex } from '~/lib/facetImpact';
 import {
   buildProfile, buildPullModelSteps, computeFandexScore, prepareTaxonomy, WISHLIST_WEIGHT,
-  type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
+  type BaselineTitle, type ConsumedTitle, type FandexScore, type FollowMode, type Gains, type Profile, type RatedTitle, type ScoreBand, type ScoreFacet, type Taxonomy, type TaxonomyJson,
 } from '~/lib/fandexScore';
 import { parseStoredFit, PULL_FIT_VERSION, storedFitOf, type PullModel, type StoredPullFit } from '~/lib/pullModel';
 import { calibrate, type MediumCalibration } from '~/lib/scoreCalibration';
@@ -261,9 +261,9 @@ const REPORT_RATED_STEP = 10;
  * here names a title or carries a rating, and a send that fails is not worth
  * a word: the next rebuild tries again.
  */
-export async function sendScoreReport(db: SQLiteDatabase, cal: Map<string, MediumCalibration>, ratedCount: number, tax: Taxonomy): Promise<boolean> {
+export async function sendScoreReport(db: SQLiteDatabase, cal: Map<string, MediumCalibration>, ratedCount: number, gains: Gains): Promise<boolean> {
   try {
-    const sig = `${ratedCount}|${tax.config.mappingConstantUp}|${tax.config.mappingConstantDown}|${tax.config.tasteBandMargin}`;
+    const sig = `${ratedCount}|${gains.up.toFixed(2)}|${gains.down.toFixed(2)}`;
     const at = Number(await getMeta(db, REPORT_AT_KEY)) || 0;
     const last = (await getMeta(db, REPORT_SIG_KEY)) ?? '';
     const lastRated = Number(last.split('|')[0]) || 0;
@@ -315,6 +315,32 @@ async function keepPullFit(db: SQLiteDatabase, key: string, model: PullModel): P
   try {
     await setMeta(db, PULL_FIT_KEY, JSON.stringify({ key, at: Date.now(), fit: storedFitOf(model) }));
   } catch { /* the next start fits again */ }
+}
+
+/**
+ * A change in your own gains smaller than this is not worth a rescore: at a
+ * taste sum of 10, 0.05 moves a score by half a point.
+ */
+const OWN_GAINS_STEP = 0.05;
+
+/** Your gains as last fitted under this taxonomy (its weights and shared gains), else null: the shared ones until the next fit. */
+async function storedOwnGains(db: SQLiteDatabase, print: string): Promise<Gains | null> {
+  try {
+    const raw = await getMeta(db, OWN_GAINS_KEY);
+    if (!raw) return null;
+    const row = JSON.parse(raw) as { print?: unknown; up?: unknown; down?: unknown };
+    if (row.print !== print || typeof row.up !== 'number' || typeof row.down !== 'number' || !Number.isFinite(row.up) || !Number.isFinite(row.down)) return null;
+    return { up: row.up, down: row.down };
+  } catch {
+    return null;
+  }
+}
+
+/** Keep your gains for the next start. A failed write costs only a start on the shared ones. */
+async function keepOwnGains(db: SQLiteDatabase, print: string, gains: Gains): Promise<void> {
+  try {
+    await setMeta(db, OWN_GAINS_KEY, JSON.stringify({ print, up: gains.up, down: gains.down }));
+  } catch { /* the next rebuild fits them again */ }
 }
 
 /** How many of the baseline titles the catalog copy holds: while the Worker is still adding them, this is what grows. */
@@ -446,7 +472,11 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
         pullFit.current = cached;
         if (fitKey && model && !stored) void keepPullFit(db, fitKey, model);
       }
-      const built = buildProfile(rated, taxonomy, { consumed, pull: cached.model, follows });
+      // Your own gains, as the last rebuild under this taxonomy fitted them (§3.11).
+      const gainsPrint = taxonomyPrints.get(taxonomy) ?? null;
+      const ownGains = gainsPrint ? await storedOwnGains(db, gainsPrint) : null;
+      if (!live) return;
+      const built = buildProfile(rated, taxonomy, { consumed, pull: cached.model, follows, gains: ownGains });
       const model = cached.model;
       console.log('fandex_profile', JSON.stringify({
         rated: rated.length, consumed: consumed.length, follows: follows.size, facets: built.w.size,
@@ -463,12 +493,18 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         if (!live) return;
         const started = Date.now();
-        void calibrate(rated, built, taxonomy).then((cal) => {
+        void calibrate(rated, built, taxonomy).then(({ media: cal, gains }) => {
           if (!live) return;
+          // The same pass fitted your own gains, and measured with them: the
+          // profile takes them when they moved enough to change a number, and
+          // the next start begins with them.
+          const moved = Math.abs(gains.up - built.gains.up) >= OWN_GAINS_STEP || Math.abs(gains.down - built.gains.down) >= OWN_GAINS_STEP;
+          if (moved) { setProfile({ ...built, gains }); setRevision((r) => r + 1); }
+          if (gainsPrint) void keepOwnGains(db, gainsPrint, gains);
           setCalibration(cal);
           const all = cal.get('all');
-          console.log('fandex_calibration', JSON.stringify({ rated: all?.n ?? 0, withinOne: all?.withinOne ?? 0, withinTwo: all?.withinTwo ?? 0, ms: Date.now() - started }));
-          void sendScoreReport(db, cal, rated.length, taxonomy);
+          console.log('fandex_calibration', JSON.stringify({ rated: all?.n ?? 0, withinOne: all?.withinOne ?? 0, withinTwo: all?.withinTwo ?? 0, gains, moved, ms: Date.now() - started }));
+          void sendScoreReport(db, cal, rated.length, gains);
         });
       }, 1_000);
     })();

@@ -274,6 +274,52 @@ export interface Profile {
   follows: Map<string, FollowMode>;
   /** What a follow sets a facet's coefficient to: the strongest one in the model, and never under a doubling. */
   followBeta: number;
+  /**
+   * The two gains this profile scores with (§3.11): yours once the device has
+   * fitted them (`fitGains`, after every rebuild's calibration pass), the
+   * shared ones from the config until then.
+   */
+  gains: Gains;
+}
+
+/** The two gains, in the config's units (`mappingConstantUp`, `mappingConstantDown`): points of score per point of taste sum, above and below zero. */
+export interface Gains { up: number; down: number }
+
+/**
+ * How many rated titles the shared gains count as when your own are fitted
+ * (`fitGains`). Your own fit on each side counts as the titles on that side,
+ * so with 20 ratings the shared gains still decide and with 500 yours do.
+ * Measured 2026-11-07 on 42 libraries, five folds (docs/fandex-score.md
+ * §3.11): 25 to 50 gained most, 400 helped the most people by the least.
+ */
+export const OWN_GAINS_PRIOR = 50;
+/** Your own gain stays between 0 (the facets say nothing about you) and this many times the shared one. */
+export const OWN_GAINS_MAX_FACTOR = 3;
+
+/** One rated title for the gain fit: its taste sum at unit gains (`FandexScore.tasteSum`), its centre and your rating, both 0 to 10. */
+export interface GainPoint { sum: number; centre: number; rating: number }
+
+/**
+ * Your own gains (§3.11), from your rated titles each scored with its own
+ * rating left out: rating − centre = gain × sum, fitted by least squares on
+ * each side of zero apart (the two sides never share a title), then blended
+ * with the shared gains, which count as `OWN_GAINS_PRIOR` titles. Per person
+ * the fit beat the shared gains for 34 of 40 outside libraries.
+ */
+export function fitGains(points: GainPoint[], tax: Taxonomy, prior = OWN_GAINS_PRIOR): Gains {
+  const shared = { up: tax.config.mappingConstantUp, down: tax.config.mappingConstantDown };
+  const side = (pick: (s: number) => boolean, sharedGain: number) => {
+    let sxy = 0, sxx = 0, n = 0;
+    for (const p of points) {
+      if (!pick(p.sum)) continue;
+      sxy += p.sum * (p.rating - p.centre); sxx += p.sum * p.sum; n++;
+    }
+    if (!n || !sxx) return sharedGain;
+    // Your own fit is held to its range before the blend: a fit below zero on a few noisy ratings would otherwise drag the blend far under the shared gain.
+    const own = Math.min(OWN_GAINS_MAX_FACTOR * sharedGain, Math.max(0, 10 * sxy / sxx));
+    return (n * own + prior * sharedGain) / (n + prior);
+  };
+  return { up: side((s) => s > 0, shared.up), down: side((s) => s < 0, shared.down) };
 }
 
 /** Below this many rated titles there is no score at all, rather than one built on two samples. */
@@ -329,7 +375,7 @@ export function* buildPullModelSteps(picks: ConsumedTitle[], baseline: BaselineT
 export function buildProfile(
   rated: RatedTitle[],
   tax: Taxonomy,
-  extras: { consumed?: ConsumedTitle[]; pull?: PullModel | null; follows?: Map<string, FollowMode> } = {},
+  extras: { consumed?: ConsumedTitle[]; pull?: PullModel | null; follows?: Map<string, FollowMode>; gains?: Gains | null } = {},
 ): Profile {
   // The medium offset: each rating is moved by the gap between its medium's
   // average and your overall average, so a facet's deviation is about the
@@ -401,6 +447,7 @@ export function buildProfile(
   return {
     w, meta, unweighted, baseline, ratedItemCount: rated.length, ratings, ratingSum, typeMeans, typeStats: typeSums, rawRatings, rawSum,
     pull, picks, follows: extras.follows ?? new Map(), followBeta: Math.max(Math.LN2, strongest),
+    gains: extras.gains ?? { up: tax.config.mappingConstantUp, down: tax.config.mappingConstantDown },
   };
 }
 
@@ -434,7 +481,7 @@ export function centreFor(profile: Profile, type: string | undefined, leaveOut?:
 export function facetImpact(id: string, profile: Profile, tax: Taxonomy): number | null {
   const w = profile.w.get(id);
   if (w == null) return null;
-  const gain = w >= 0 ? tax.config.mappingConstantUp : tax.config.mappingConstantDown;
+  const gain = w >= 0 ? profile.gains.up : profile.gains.down;
   return Math.round(gain * w * 10) / 10;
 }
 
@@ -566,6 +613,8 @@ export interface FandexScore {
   center: number;
   /** Your average over everything, times ten, with this title left out: what every row's "you rate it 7.6" is measured against (§3.1). */
   usual: number;
+  /** The counted rows' sum before the gain and the bend, unrounded: what `fitGains` fits your gains on. */
+  tasteSum: number;
   /** Where the score sits against the centre, by the taste band margin. */
   band: ScoreBand;
   taste: AxisResult;
@@ -675,7 +724,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   // share, so the breakdown still adds up to the score.
   const tasteSum = kept.reduce((acc, c) => acc + weighted(c), 0);
   const center = centreFor(profile, type, own === undefined || itemId == null ? undefined : { id: itemId }) * 10;
-  const gain = tasteSum >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  const gain = tasteSum >= 0 ? profile.gains.up : profile.gains.down;
   const tasteRaw = gain * tasteSum;
   const bent = softRange(center, tasteRaw);
   const share = tasteRaw === 0 ? 1 : bent / tasteRaw;
@@ -685,7 +734,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
   // What the facet is worth on any title; for a title you rated, without that title.
   const impactOf = (c: Contrib) => (own === undefined
     ? facetImpact(facetId(c.f), profile, tax) ?? 0
-    : round1((c.dev * c.meta.classWeight >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown) * c.dev * c.meta.classWeight));
+    : round1((c.dev * c.meta.classWeight >= 0 ? profile.gains.up : profile.gains.down) * c.dev * c.meta.classWeight));
   const tasteReason = (c: Contrib, counted: boolean): ScoreReason => ({
     axis: 'taste', kind: c.f.kind, role: c.f.role, key: c.f.key, label: c.f.label, category: c.meta.category ?? c.f.category,
     contribution: counted ? round1(gain * weighted(c) * share) : 0,
@@ -715,6 +764,7 @@ export function computeFandexScore(facets: ScoreFacet[], itemId: string | null, 
     score: round1(center + bent),
     center: round1(center),
     usual: round1(baseline * 10),
+    tasteSum,
     band, taste, pull,
     ...(own === undefined ? {} : { leftOut: true }),
     reasons: [

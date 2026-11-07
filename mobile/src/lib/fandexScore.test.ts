@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfile, buildPullModel, centreFor, computeFandexScore, MIN_RATED_FOR_MEDIUM_CENTRE, prepareTaxonomy, pullFacetIds, resolveFacets, softRange, type FandexScore, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
+import { buildProfile, buildPullModel, centreFor, computeFandexScore, fitGains, MIN_RATED_FOR_MEDIUM_CENTRE, OWN_GAINS_PRIOR, prepareTaxonomy, pullFacetIds, resolveFacets, softRange, type FandexScore, type GainPoint, type RatedTitle, type ScoreFacet, type TaxonomyJson } from './fandexScore';
 
 // The old site's agreement probe went with the site (tag `old-site-final`), and
 // since 2026-10-23 the app departs from it on purpose. These pin the rules a
@@ -310,5 +310,52 @@ describe('the soft range', () => {
     expect(70 + softRange(70, 500)).toBeLessThanOrEqual(100);
     expect(70 + softRange(70, -500)).toBeGreaterThanOrEqual(0);
     expect(softRange(70, -35)).toBe(-35);
+  });
+});
+
+describe('your own gains (2026-11-07)', () => {
+  const tax = prepareTaxonomy(json({ scoring: { version: 1, config: { priorStrength: 2, mappingConstantUp: 2, mappingConstantDown: 4 } } }));
+  // Every title on a side lands exactly gain × sum from its centre, at gain 5 up and 1 down (config units: points of score per point of sum).
+  const exact = (n: number, up: number, down: number): GainPoint[] => Array.from({ length: n }, (_, i) => {
+    const sum = i % 2 ? 1 + (i % 5) : -(1 + (i % 3));
+    return { sum, centre: 6, rating: 6 + (sum > 0 ? up : down) * sum / 10 };
+  });
+
+  it('lands on the shared gains with nothing to fit, and on yours with many ratings', () => {
+    expect(fitGains([], tax)).toEqual({ up: 2, down: 4 });
+    // 2,000 titles on each side against the prior's titles at the shared gains.
+    const many = fitGains(exact(4000, 5, 1), tax);
+    expect(many.up).toBeCloseTo((2000 * 5 + OWN_GAINS_PRIOR * 2) / (2000 + OWN_GAINS_PRIOR), 5);
+    expect(many.down).toBeCloseTo((2000 * 1 + OWN_GAINS_PRIOR * 4) / (2000 + OWN_GAINS_PRIOR), 5);
+  });
+
+  it('weighs the shared gains as OWN_GAINS_PRIOR titles on each side', () => {
+    const points = exact(2 * OWN_GAINS_PRIOR, 5, 1);
+    const g = fitGains(points, tax);
+    // As many titles above zero as the prior: halfway.
+    expect(g.up).toBeCloseTo((2 + 5) / 2, 5);
+  });
+
+  it('holds your own fit between zero and three times the shared gain before blending', () => {
+    const blend = (own: number, shared: number) => (2000 * own + OWN_GAINS_PRIOR * shared) / (2000 + OWN_GAINS_PRIOR);
+    const low = fitGains(exact(4000, -5, -5), tax);
+    expect(low.up).toBeCloseTo(blend(0, 2), 5);
+    expect(low.down).toBeCloseTo(blend(0, 4), 5);
+    const high = fitGains(exact(4000, 50, 50), tax);
+    expect(high.up).toBeCloseTo(blend(6, 2), 5);
+    expect(high.down).toBeCloseTo(blend(12, 4), 5);
+    // A few noisy ratings that fit below zero barely move the shared gain.
+    expect(fitGains(exact(12, -20, -20), tax).down).toBeGreaterThan(3);
+  });
+
+  it('scores with the profile\'s gains, and the rows still add up to the score', () => {
+    const shared = buildProfile(library, tax);
+    const own = buildProfile(library, tax, { gains: { up: 6, down: 1 } });
+    expect(shared.gains).toEqual({ up: 2, down: 4 });
+    const a = computeFandexScore([tag('noir')], 'x', shared, tax)!;
+    const b = computeFandexScore([tag('noir')], 'x', own, tax)!;
+    expect(b.tasteSum).toBe(a.tasteSum);
+    expect(b.score - b.center).toBeCloseTo(3 * (a.score - a.center), 0);
+    expect(b.center + b.reasons.reduce((n, r) => n + r.contribution, 0)).toBeCloseTo(b.score, 1);
   });
 });

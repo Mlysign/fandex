@@ -5,7 +5,7 @@
 // (ScoreProvider.sendScoreReport, worker/src/scoreReport.ts). Pure, apart
 // from yielding between chunks so a phone's screen keeps up.
 
-import { computeFandexScore, type Profile, type RatedTitle, type ScoreBand, type Taxonomy } from '~/lib/fandexScore';
+import { bandOf, computeFandexScore, fitGains, softRange, type Gains, type GainPoint, type Profile, type RatedTitle, type ScoreBand, type Taxonomy } from '~/lib/fandexScore';
 
 /** The score bands the rung lines read: under 50, by tens to 60, by fives to 80, 80 and up. */
 export const RUNGS: [number, number][] = [[0, 50], [50, 60], [60, 65], [65, 70], [70, 75], [75, 80], [80, 101]];
@@ -36,15 +36,26 @@ const empty = (medium: string): MediumCalibration => ({
   rungs: RUNGS.map(([lo, hi]) => ({ lo, hi, n: 0, mean: 0 })),
 });
 
+export interface Calibration {
+  /** Per medium, and summed under `all`. */
+  media: Map<string, MediumCalibration>;
+  /** Your own gains, fitted on the same pass (`fitGains`); the measurement above is made with them. */
+  gains: Gains;
+}
+
 /**
- * Per medium, and summed under `all`. `yield_` is awaited between chunks; the
- * default gives the event loop a turn. A rated title without a medium counts
- * in `all` only.
+ * One pass over the titles you rated, each scored with its own rating left
+ * out: your own gains are fitted on it (§3.11), and then every title is
+ * measured with those gains, so the honesty lines describe the number the
+ * screen will show once the profile takes them. The taste sum does not depend
+ * on the gains, so nothing is scored twice. `yield_` is awaited between
+ * chunks; the default gives the event loop a turn. A rated title without a
+ * medium counts in `all` only.
  */
 export async function calibrate(
   rated: RatedTitle[], profile: Profile, tax: Taxonomy,
   yield_: () => Promise<void> = () => new Promise((r) => setTimeout(r, 0)),
-): Promise<Map<string, MediumCalibration>> {
+): Promise<Calibration> {
   const per = new Map<string, MediumCalibration>();
   const sums = new Map<string, number[]>();
   const add = (medium: string, rating: number, score: number, band: ScoreBand) => {
@@ -61,14 +72,24 @@ export async function calibrate(
     const at = RUNGS.findIndex(([lo, hi]) => score >= lo && score < hi);
     if (at >= 0) { m.rungs[at].n++; sums.get(medium)![at] += rating; }
   };
+  const scored: (GainPoint & { type?: string })[] = [];
   for (let i = 0; i < rated.length; i++) {
     if (i > 0 && i % CHUNK === 0) await yield_();
     const r = rated[i];
     const fx = computeFandexScore(r.facets, r.id, profile, tax, r.type);
     if (!fx) continue;
-    if (r.type) add(r.type, r.rating, fx.score, fx.band);
-    add('all', r.rating, fx.score, fx.band);
+    scored.push({ sum: fx.tasteSum, centre: fx.center / 10, rating: r.rating, ...(r.type ? { type: r.type } : {}) });
+  }
+  const gains = fitGains(scored, tax);
+  for (const p of scored) {
+    // The score as computeFandexScore makes it, with these gains.
+    const centre = p.centre * 10;
+    const bent = softRange(centre, (p.sum >= 0 ? gains.up : gains.down) * p.sum);
+    const score = Math.round((centre + bent) * 10) / 10;
+    const band = bandOf(Math.round(bent * 10) / 10, tax.config.tasteBandMargin);
+    if (p.type) add(p.type, p.rating, score, band);
+    add('all', p.rating, score, band);
   }
   for (const [medium, m] of per) m.rungs.forEach((rung, i) => { rung.mean = rung.n ? sums.get(medium)![i] / rung.n : 0; });
-  return per;
+  return { media: per, gains };
 }
