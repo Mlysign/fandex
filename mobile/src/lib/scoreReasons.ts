@@ -1,6 +1,6 @@
 // What the score says, apart from how it is drawn: the sentence under the
 // number, the centre line, the pull line, the honesty lines, each row's
-// sentence, and where a row leads. Components (FandexScorePanel, cards,
+// sentence, and where a row leads. Components (ScoreSeal, cards,
 // ScoreExplainer, FacetScreen) read from here so the wording lives in one
 // place. Nils, 2026-10-27: a flat number, read as "what I'd rate it".
 

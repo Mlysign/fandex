@@ -8,7 +8,8 @@ import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native
 import { CardRail } from '~/components/cards';
 import { SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
-import { FandexScorePanel, type ScorePanelState } from '~/components/FandexScorePanel';
+import { ScoreSeal, WhySheet, type ScorePanelState } from '~/components/ScoreSeal';
+import { haptics } from '~/lib/feel';
 import { facetId } from '~/lib/fandexScore';
 import { ItemPage, SOURCE_LABEL } from '~/components/ItemPage';
 import { BrandGlyph } from '~/components/BrandGlyph';
@@ -242,6 +243,8 @@ export default function ItemScreen() {
   const [removing, setRemoving] = useState(false);
   const { toast } = useToast();
   const [picking, setPicking] = useState(false);
+  /** The Why sheet, opened from the seal. One sheet for the page: the seal is drawn twice on a wide window. */
+  const [why, setWhy] = useState(false);
   const save = useSavePop();
   const [actionError, setActionError] = useState<string | null>(null);
   /** Run one action; say why if it failed. A failed step wrote nothing after it. */
@@ -285,12 +288,11 @@ export default function ItemScreen() {
   // Scored from the facets the Worker sent with the page, so a title that is
   // not in the device's catalog copy (one just opened from search) scores too.
   const fandex = scores.score(item.id, item.facets, item.type);
-  // Which of its four faces the score panel shows. Null while the session or
-  // the taste profile is still being read: the panel's box is held open so the
-  // synopsis under it does not jump when the answer arrives.
+  // Which of its faces the seal shows. Null while the session or the taste
+  // profile is still being read: the seal's empty ring holds its place.
   //
   // ⚠️ No number while your rows or the catalog copy are still arriving: the
-  // panel says it is reading your library instead. The
+  // seal says it is reading your library instead. The
   // profile is rebuilt as they land, so a score read in the middle is made from
   // part of your library: on the live site a second tab, which downloads both
   // again, showed 79, then 85, then 83 for one film (2026-10-11).
@@ -309,34 +311,33 @@ export default function ItemScreen() {
     router.push('/profile' as never);
   };
 
+  // The library line, under the Rate and Save pair since 0.3.50 (Nils's B3b mockup).
+  const libraryLine = mine && (mine.inLibrary || mine.inWishlist) ? (
+    <View style={styles.mine}>
+      <T variant="label" style={{ color: color.accent }}>
+        {[
+          mine.inLibrary ? (mine.status ? `In your library · ${mine.status}` : 'In your library') : null,
+          mine.inWishlist ? 'On your wishlist' : null,
+        ].filter(Boolean).join(' · ')}
+      </T>
+      {/* The site's RatingsSection: the status names the accounts that report it, and when. */}
+      {mine.status ? (
+        <T variant="label">
+          ✓ {mine.status}
+          {mine.statusSources.length ? ` on ${mine.statusSources.map((s) => SOURCE_LABEL[s] ?? s).join(' · ')}` : ''}
+          {mine.reviewedAt ? ` · ${shortDate(mine.reviewedAt)}` : ''}
+        </T>
+      ) : null}
+    </View>
+  ) : null;
+
   const personal = (
     <>
-      {mine && (mine.inLibrary || mine.inWishlist) ? (
-        <View style={styles.mine}>
-          <T variant="label" style={{ color: color.accent }}>
-            {[
-              mine.inLibrary ? (mine.status ? `In your library · ${mine.status}` : 'In your library') : null,
-              mine.inWishlist ? 'On your wishlist' : null,
-            ].filter(Boolean).join(' · ')}
-          </T>
-          {/* The site's RatingsSection: the status names the accounts that report it, and when. */}
-          {mine.status ? (
-            <T variant="label">
-              ✓ {mine.status}
-              {mine.statusSources.length ? ` on ${mine.statusSources.map((s) => SOURCE_LABEL[s] ?? s).join(' · ')}` : ''}
-              {mine.reviewedAt ? ` · ${shortDate(mine.reviewedAt)}` : ''}
-            </T>
-          ) : null}
-        </View>
-      ) : null}
-
-      {panel ? (
-        <FandexScorePanel
-          state={panel} fandex={fandex} type={item.type} categoryLabel={scores.categoryLabel} follows={scores.follows}
-          onSignIn={() => router.push('/profile' as never)} onOpenFacet={(href) => router.push(href as never)}
-          onFollow={auth.status === 'signedIn' ? (reason, mode) => act(() => setFollow(db, [{ facetId: facetId(reason), label: reason.label }], mode)) : undefined}
-        />
-      ) : <View style={styles.panelHold} />}
+      <WhySheet
+        open={why} onClose={() => setWhy(false)} fandex={panel === 'scored' ? fandex : null} title={item.merged.title} type={item.type}
+        categoryLabel={scores.categoryLabel} follows={scores.follows} onOpenFacet={(href) => router.push(href as never)}
+        onFollow={auth.status === 'signedIn' ? (reason, mode) => act(() => setFollow(db, [{ facetId: facetId(reason), label: reason.label }], mode)) : undefined}
+      />
 
       {auth.status === 'signedIn' && mine ? (
         <View style={styles.actionsBlock}>
@@ -369,6 +370,7 @@ export default function ItemScreen() {
               <StarPicker rating={mine.rating} onPick={(n) => act(() => rateItem(db, target, n))} onSettled={() => setPicking(false)} />
             </View>
           ) : null}
+          {libraryLine}
           {mine.review ? <T variant="bodySm" style={{ fontStyle: 'italic' }}>&quot;{mine.review}&quot;</T> : null}
           {/* Each account's own number, when more than one holds a rating: the one above is their average. */}
           {mine.ratings.length > 1 ? (
@@ -439,6 +441,13 @@ export default function ItemScreen() {
       <ItemPage
         item={item}
         personal={personal}
+        seal={(
+          <ScoreSeal
+            state={panel} fandex={fandex} onSignIn={signInFirst}
+            onWhy={() => { haptics.tap(); setWhy(true); }}
+          />
+        )}
+        yourRating={auth.status === 'signedIn' ? mine?.rating ?? null : null}
         progress={item.type === 'show' ? <EpisodeTracker mediaItemId={item.id} sources={item.vector.sources} onSignIn={() => router.push('/profile' as never)} /> : undefined}
         related={<Related itemId={item.id} facets={item.facets}
           tmdbMovieId={item.type === 'movie' ? item.vector.sources.find((s) => s.source === 'tmdb')?.sourceId ?? null : null}
@@ -464,8 +473,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: space.sm,
     padding: space.md, borderRadius: radius.md, backgroundColor: color.accentSubtle,
   },
-  // The score panel's box while the session or the profile is still loading: 12 + 30 + 12 and the border.
-  panelHold: { height: 56, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surfaceElevated },
   advanced: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.md, paddingTop: 4 },
   quiet: { fontFamily: font.sans, fontSize: 12, lineHeight: 16, color: color.textSecondary },
   hide: { flexDirection: 'row', alignItems: 'center', gap: 6 },

@@ -39,7 +39,7 @@ the trailer. **It starts the app only when the browser holds a Fandex session**
 app but a 3.7 MB download and a catalog sync.
 
 **What a signed-out visitor can do there is links** (`personal` in `mobile/web/render.tsx`): the
-score panel's signed-out face, Rate and Add to wishlist, all three leading to `/profile`, where the
+seal's signed-out face ("Sign in", since 0.3.50), Rate and Add to wishlist, all three leading to `/profile`, where the
 app asks them to sign in. Nothing on a static page has a handler. Before 2026-10-11 the page
 offered nothing at all, and it is the page a search engine sends people to.
 

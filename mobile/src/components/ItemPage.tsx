@@ -1,10 +1,12 @@
 // One title, as everybody sees it. The old site's item page (src/components/
 // item/ItemView.tsx and its sections), in its mobile anatomy: a full-bleed 3:4
-// hero that is also the image gallery, the score pills, the synopsis, the
+// hero that is also the image gallery, with the ratings row over the title
+// (every rating a circle, your Fandex seal at the right end), the synopsis, the
 // facts, then trailer, cast, where to watch, tags and links.
 //
 // Nothing here knows who is looking. The app's item screen passes its personal
-// blocks (your state, your Fandex Score, the rating row) in as `personal`; the
+// blocks (your state, the rating row) in as `personal`, and your seal and your
+// rating as `seal` and `yourRating`; the
 // website renders this same component to HTML for a visitor or a crawler and
 // passes nothing. That is the plan's one-component rule (docs/app-plan.md, "The
 // website"), so this file must stay free of anything only a device has: no
@@ -15,7 +17,7 @@
 
 import { ArrowLeft, ArrowRight, Globe, Share2 } from 'lucide-react-native';
 import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { companyKey, ipDisplayLabel, ipKey, personKey } from '@/lib/facets';
 import { keyToSlug } from '@/lib/facetUrl';
 import { plainDescription } from '@/lib/plainText';
@@ -25,6 +27,7 @@ import { BrandGlyph, hasBrandMark } from '~/components/BrandGlyph';
 import { ExtLink } from '~/components/ExtLink';
 import { part, useItemPageCss } from '~/components/itemLayout';
 import { Img } from '~/components/Img';
+import { TypeIcon } from '~/components/Logo';
 import { Trailer } from '~/components/Trailer';
 import { T } from '~/components/ui';
 import type { CommunityRating, ItemDetail } from '~/lib/api';
@@ -95,11 +98,11 @@ function Scrim() {
   );
 }
 
-function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onShare, onHeight }: {
+function Hero({ images, title, head, topInset, onBack, backHref, onShare, onHeight }: {
   images: string[];
   title: string;
-  kind: string;
-  metaParts: string[];
+  /** The title's head over the picture (`TitleBlock`), given the image dots to keep over the media type. */
+  head: (dots: ReactNode) => ReactNode;
   topInset: number;
   onBack?: () => void;
   backHref?: string;
@@ -201,7 +204,9 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
 
       {/* Everything over the artwork lets a swipe through, except the dots themselves. */}
       <View {...part('hero-text')} style={styles.heroText}>
-        {paged ? (
+        {/* On a wide window the title sits beside the artwork, not on it (itemLayout.ts). */}
+        <View {...part('hero-title')} style={{ pointerEvents: 'box-none' }}>
+          {head(paged ? (
           <View style={styles.dots}>
             {images.map((_, i) => (
               <Pressable
@@ -214,15 +219,7 @@ function Hero({ images, title, kind, metaParts, topInset, onBack, backHref, onSh
               />
             ))}
           </View>
-        ) : null}
-        {/* On a wide window the title sits beside the artwork, not on it (itemLayout.ts). */}
-        <View {...part('hero-title')}>
-          <View style={styles.typeRow}>
-            <View style={[styles.typeDot, { backgroundColor: color.media[kind] ?? color.textMuted }]} />
-            <T variant="eyebrow">{TYPE_LABEL[kind] ?? kind}</T>
-          </View>
-          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
-          {metaParts.length ? <T variant="meta" style={styles.heroMeta}>{metaParts.join(' · ')}</T> : null}
+          ) : null)}
         </View>
       </View>
 
@@ -315,11 +312,6 @@ function Fact({ label, value, linkTo }: { label: string; value: string | null | 
   );
 }
 
-function scoreText(r: CommunityRating): string {
-  if (r.outOf === 100) return `${Math.round(r.score)}${r.source === 'rt' || r.source === 'steam' ? '%' : ''}`;
-  if (r.outOf === 5) return `${r.score.toFixed(1)}/5`;
-  return r.score % 1 === 0 ? String(r.score) : r.score.toFixed(1);
-}
 
 /**
  * The age ratings with the viewer's own first. TMDB's certifications are the
@@ -332,24 +324,183 @@ export function ratedInOrder(certs: string[], region: string | null | undefined)
   return [...certs.filter(mine), ...certs.filter((c) => !mine(c))];
 }
 
-function ScorePill({ label, value, href, hint }: { label: string; value: string; href?: string | null; hint?: string }) {
+/** A rating's number for its circle: "8.4", "84%", "3.9" (its "/5" is drawn smaller). */
+function circleText(r: CommunityRating): string {
+  if (r.outOf === 100) return `${Math.round(r.score)}${r.source === 'rt' || r.source === 'steam' ? '%' : ''}`;
+  return r.score % 1 === 0 ? String(r.score) : r.score.toFixed(1);
+}
+
+/** A provider with no logo is named in its circle, in a word that fits 50 px. */
+const CIRCLE_LABEL: Record<string, string> = {
+  metacritic: 'META', 'igdb-critics': 'CRITICS', letterboxd: 'LBXD', openlibrary: 'OPEN LIB', hardcover: 'HARDCVR', rt: 'RT',
+};
+
+/**
+ * One rating as a small round badge, its provider named by its logo (never a
+ * colour, mobile/CLAUDE.md). A link to the provider's page when it has one.
+ * Bottom-aligned with the seal in `ScoreRow` (Nils's B3b, 2026-11-07).
+ */
+function RatingCircle({ source, label, value, outOfFive, sub, href, hint, you }: {
+  source: string; label: string; value: string; outOfFive?: boolean;
+  /** A second, smaller line: IGDB's critics under its players. */
+  sub?: string | null;
+  href?: string | null; hint: string;
+  /** Your own rating: in gold, "YOU" over the number. */
+  you?: boolean;
+}) {
   const inner = (
     <>
-      <Text style={styles.pillLabel}>{label}</Text>
-      <Text style={styles.pillValue}>{value}</Text>
+      {you ? <Text style={[styles.circleLabel, { color: color.accent }]}>YOU</Text>
+        : hasBrandMark(source) ? <BrandGlyph source={source} size={11} tint={color.textSecondary} />
+        : <Text style={styles.circleLabel} numberOfLines={1}>{CIRCLE_LABEL[source] ?? label.toUpperCase()}</Text>}
+      <Text style={[styles.circleValue, you && { color: color.accent }]}>
+        {value}{outOfFive ? <Text style={styles.circleOf}>/5</Text> : null}
+      </Text>
+      {sub ? <Text style={styles.circleSub}>{sub}</Text> : null}
     </>
   );
   return href
-    ? <ExtLink href={href} label={hint} style={styles.pill}>{inner}</ExtLink>
-    : <View style={styles.pill} accessibilityLabel={hint}>{inner}</View>;
+    ? <ExtLink href={href} label={hint} style={[styles.ratingCircle, you && styles.ratingCircleYou]}>{inner}</ExtLink>
+    : <View style={[styles.ratingCircle, you && styles.ratingCircleYou]} accessible accessibilityLabel={hint}>{inner}</View>;
+}
+
+/** The gap between the title's column and the ratings group beside it. */
+const BLOB_GAP = 12;
+/** What the media type needs beside the ratings group: "BOARD GAME" and its icon. */
+const TYPE_MIN = 100;
+/** The title's line height (`styles.title`), to count its lines from a measured height. */
+const TITLE_LINE = 35;
+
+/**
+ * A title's head (Nils's B3b, 2026-11-07, laid out by width the same day): the
+ * image dots, the media type, the title and its meta line, with the ratings
+ * group at the right: every outside rating as a circle, yours in gold, your
+ * Fandex seal last.
+ *
+ * Where the group sits depends on the screen and the title, measured:
+ *   beside   the title fits beside it in two lines or fewer: the group sits on
+ *            the title's last line.
+ *   stacked  it does not: the group sits on the media type's line, the title
+ *            runs the full width under it.
+ *   alone    not even the media type fits beside it: the group takes its own
+ *            line above.
+ * Until the first measurement (and on a server, always) it is `stacked`.
+ */
+function TitleBlock({ kind, title, metaParts, metaStyle, dots, ratings, yourRating, seal }: {
+  kind: string; title: string; metaParts: string[]; metaStyle?: StyleProp<TextStyle>;
+  /** The hero's image dots, kept right over the media type. */
+  dots?: ReactNode;
+  ratings: CommunityRating[]; yourRating?: number | null; seal?: ReactNode;
+}) {
+  const [width, setWidth] = useState(0);
+  const [groupWidth, setGroupWidth] = useState(0);
+  const [lines, setLines] = useState(0);
+  /** The title's longest word, measured: beside the group a word wider than the room breaks in the middle ("Severanc / e"). */
+  const [wordWidth, setWordWidth] = useState(0);
+  const longestWord = title.split(/\s+/).reduce((a, b) => (b.length > a.length ? b : a), '');
+  const igdbCritics = ratings.find((r) => r.source === 'igdb-critics');
+  const crowd = ratings.filter((r) => !(r.source === 'igdb-critics' && ratings.some((x) => x.source === 'igdb')));
+  const circles = crowd.map((r) => {
+    const value = circleText(r);
+    const sub = r.source === 'igdb' && igdbCritics ? `critics ${Math.round(igdbCritics.score)}` : null;
+    return (
+      <RatingCircle
+        key={r.source} source={r.source} label={r.label} value={value} outOfFive={r.outOf === 5} sub={sub} href={r.url}
+        hint={`${r.label} ${value}${r.outOf === 5 ? ' out of 5' : ''}${sub ? `, ${sub}` : ''}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
+      />
+    );
+  });
+  if (yourRating != null) {
+    const mine = yourRating % 1 === 0 ? String(yourRating) : yourRating.toFixed(1);
+    circles.push(<RatingCircle key="you" you source="you" label="You" value={mine} hint={`Your rating ${mine}`} />);
+  }
+  const type = (
+    <View style={styles.typeLine}>
+      <TypeIcon type={kind} size={13} tint={color.media[kind] ?? color.textMuted} />
+      <T variant="eyebrow">{TYPE_LABEL[kind] ?? kind}</T>
+    </View>
+  );
+  const heading = <Text accessibilityRole="header" style={styles.title}>{title}</Text>;
+  const meta = metaParts.length ? <T variant="meta" style={metaStyle}>{metaParts.join(' · ')}</T> : null;
+  const lead = (bottom: number) => (
+    <>
+      {dots}
+      <View style={[styles.typeRow, { marginBottom: bottom }]}>{type}</View>
+    </>
+  );
+  if (!circles.length && !seal) return <View style={{ pointerEvents: 'box-none' }}>{lead(10)}{heading}{meta}</View>;
+
+  const room = width - groupWidth - BLOB_GAP;
+  const measured = width > 0 && groupWidth > 0;
+  const fits = lines > 0 && lines <= 2 && wordWidth > 0 && wordWidth <= room;
+  const mode = !measured ? 'stacked' : fits ? 'beside' : room >= TYPE_MIN ? 'stacked' : 'alone';
+  const group = (
+    <View
+      onLayout={(e) => setGroupWidth(Math.round(e.nativeEvent.layout.width))}
+      // Sat on the title's baseline, not its line box's foot, beside it; on the type's line otherwise.
+      style={[styles.group, { marginBottom: mode === 'beside' ? 7 : 1 }]}>
+      {circles}
+      {seal}
+    </View>
+  );
+  return (
+    <View onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))} style={{ pointerEvents: 'box-none' }}>
+      {/* How many lines the title takes beside the group, measured off screen. Only once there is a width,
+          so a server's page carries the title once. */}
+      {measured && room > 0 ? (
+        <>
+          <Text
+            aria-hidden importantForAccessibility="no-hide-descendants"
+            onLayout={(e) => setLines(Math.round(e.nativeEvent.layout.height / TITLE_LINE))}
+            style={[styles.title, styles.measure, { width: room }]}>
+            {title}
+          </Text>
+          <Text
+            aria-hidden importantForAccessibility="no-hide-descendants" numberOfLines={1}
+            onLayout={(e) => setWordWidth(Math.ceil(e.nativeEvent.layout.width))}
+            style={[styles.title, styles.measure]}>
+            {longestWord}
+          </Text>
+        </>
+      ) : null}
+      {mode === 'beside' ? (
+        <>
+          {lead(10)}
+          <View style={styles.besideRow}>
+            <View style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>{heading}</View>
+            {group}
+          </View>
+        </>
+      ) : mode === 'stacked' ? (
+        <>
+          <View style={[styles.besideRow, { marginBottom: 10 }]}>
+            <View style={{ flex: 1, minWidth: 0, pointerEvents: 'box-none' }}>{lead(0)}</View>
+            {group}
+          </View>
+          {heading}
+        </>
+      ) : (
+        <>
+          <View style={[styles.besideRow, { justifyContent: 'flex-end', marginBottom: 12 }]}>{group}</View>
+          {lead(10)}
+          {heading}
+        </>
+      )}
+      {meta}
+    </View>
+  );
 }
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export function ItemPage({ item, personal, progress, related, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
+export function ItemPage({ item, personal, seal, yourRating, progress, related, footer, taxonomy = null, topInset = 0, bottomInset = 0, onBack, backHref, onShare, onOpenFacet }: {
   item: ItemDetail;
-  /** Rendered between the score pills and the synopsis. */
+  /** Rendered under the title, before the synopsis. */
   personal?: ReactNode;
+  /** Your Fandex seal (components/ScoreSeal.tsx), at the right end of the ratings row. */
+  seal?: ReactNode;
+  /** Your own rating, a gold circle beside the seal. */
+  yourRating?: number | null;
   /** A show's episode tracker. Full width, above the sections, where the site had it. */
   progress?: ReactNode;
   /** "More from" and "More like this": the last sections of the page, where the site had them. */
@@ -390,6 +541,8 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
     // "/ep": without it a show's header read as the length of the whole show.
     m.runtimeMinutes ? `${runtime(m.runtimeMinutes)}${item.type === 'show' ? '/ep' : ''}` : null,
     credit,
+    // Steam's words have no room in its circle, so they are said here (0.3.50).
+    m.steamReviewLabel ? `${m.steamReviewLabel} on Steam` : null,
   ].filter((p): p is string => !!p);
   const watchable = item.type === 'movie' || item.type === 'show';
   const groups = tagGroups(m.tags, m.keywords ?? [], taxonomy);
@@ -399,8 +552,9 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
   const sources = [...new Set(m.dates.map((d) => d.source))];
   // RAWG was retired in 2026-09: its stored number is frozen, so it is not shown as a live rating.
   const ratings = m.communityRatings.filter((r) => r.source !== 'rawg');
-  const igdbPlayers = ratings.find((r) => r.source === 'igdb');
-  const igdbCritics = ratings.find((r) => r.source === 'igdb-critics');
+  const head = (dots: ReactNode, metaStyle: StyleProp<TextStyle> | undefined) => (
+    <TitleBlock kind={item.type} title={m.title} metaParts={metaParts} metaStyle={metaStyle} dots={dots} ratings={ratings} yourRating={yourRating} seal={seal} />
+  );
   const [descriptionOpen, setDescriptionOpen] = useState(false);
   const description = m.description ? plainDescription(m.description) : null;
   // About six lines on a phone. Measured text would be exact, but a static page has no layout to measure.
@@ -429,42 +583,16 @@ export function ItemPage({ item, personal, progress, related, footer, taxonomy =
       {/* The two columns of a wide window. Their own box, so the sticky artwork stops where they end. */}
       <View {...part('columns')}>
       <Hero
-        images={images} title={m.title} kind={item.type} metaParts={metaParts}
+        images={images} title={m.title} head={(dots) => head(dots, styles.heroMeta)}
         topInset={topInset} onBack={onBack} backHref={backHref} onShare={onShare} onHeight={setHeroHeight}
       />
 
       <View {...part('upper')} style={styles.body}>
         {/* The wide window's title block. Hidden until 1024 px by itemLayout.ts's rules. */}
         <View {...part('title-wide')} style={styles.titleWide}>
-          <View style={[styles.typeRow, { marginBottom: 0 }]}>
-            <View style={[styles.typeDot, { backgroundColor: color.media[item.type] ?? color.textMuted }]} />
-            <T variant="eyebrow">{TYPE_LABEL[item.type] ?? item.type}</T>
-          </View>
-          <Text accessibilityRole="header" style={styles.title}>{m.title}</Text>
-          {metaParts.length ? <T variant="meta">{metaParts.join(' · ')}</T> : null}
+          {/* The same head as over the picture. The seal is the screen's one node, so the Why sheet is opened from either. */}
+          {head(null, undefined)}
         </View>
-
-        {ratings.length || m.steamReviewLabel ? (
-          <View style={styles.pills}>
-            {ratings.filter((r) => !(r.source === 'igdb-critics' && igdbPlayers)).map((r) => {
-              // Steam's percentage and its words are one fact, so one pill: "84% · Very Positive".
-              // IGDB's players and its critics are one source, so one pill too: "89 · critics 94" (Nils, Miro board, 2026-11-05).
-              const value = r.source === 'steam' && m.steamReviewLabel ? `${scoreText(r)} · ${m.steamReviewLabel}`
-                : r.source === 'igdb' && igdbCritics ? `${scoreText(r)} · critics ${scoreText(igdbCritics)}`
-                : scoreText(r);
-              return (
-                <ScorePill
-                  key={r.source}
-                  label={r.label}
-                  value={value}
-                  href={r.url}
-                  hint={`${r.label} ${value}${r.votes ? `, ${compactCount(r.votes)} votes` : ''}`}
-                />
-              );
-            })}
-            {m.steamReviewLabel && !ratings.some((r) => r.source === 'steam') ? <ScorePill label="Steam" value={m.steamReviewLabel} /> : null}
-          </View>
-        ) : null}
 
         {personal}
 
@@ -713,7 +841,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(11,10,8,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   heroText: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: GUTTER, paddingBottom: GUTTER, pointerEvents: 'box-none' },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: space.md },
+  // Wraps when the ratings group beside it leaves less room than a game's many screenshots need.
+  dots: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.xs, marginBottom: space.md },
   dot: { width: 6, height: 6, borderRadius: radius.full, backgroundColor: 'rgba(237,231,220,0.4)' },
   dotOn: { width: 20, backgroundColor: color.textPrimary },
   arrow: {
@@ -722,8 +851,23 @@ const styles = StyleSheet.create({
   },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   thumb: { width: 64, height: 40, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: color.borderStrong, backgroundColor: color.surfaceElevated },
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginBottom: 10, pointerEvents: 'none' },
-  typeDot: { width: 6, height: 6, borderRadius: radius.full },
+  typeRow: { marginBottom: 10, pointerEvents: 'none' },
+  typeLine: { flexDirection: 'row', alignItems: 'center', gap: space.xs, pointerEvents: 'none' },
+  // The ratings group and what it sits beside share a bottom line (B3b, TitleBlock).
+  besideRow: { flexDirection: 'row', alignItems: 'flex-end', gap: BLOB_GAP, pointerEvents: 'box-none' },
+  group: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, flexShrink: 0, pointerEvents: 'box-none' },
+  // The title measured off screen: never seen, never touched.
+  measure: { position: 'absolute', left: 0, top: 0, opacity: 0, pointerEvents: 'none' },
+  ratingCircle: {
+    width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', gap: 1,
+    backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.borderStrong,
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
+  ratingCircleYou: { borderColor: color.accent },
+  circleLabel: { fontFamily: font.mono, fontSize: 6.5, lineHeight: 9, letterSpacing: 0.9, color: color.textSecondary, maxWidth: 42 },
+  circleValue: { fontFamily: font.serif, fontSize: 17, lineHeight: 19, color: color.textPrimary },
+  circleOf: { fontFamily: font.mono, fontSize: 8, color: color.textSecondary },
+  circleSub: { fontFamily: font.mono, fontSize: 6, lineHeight: 8, color: color.textSecondary },
   title: { fontFamily: font.serif, fontSize: 34, lineHeight: 35, color: color.textPrimary, pointerEvents: 'none' },
   heroMeta: { color: '#C3B8A8', marginTop: space.sm, pointerEvents: 'none' },
 
@@ -733,13 +877,6 @@ const styles = StyleSheet.create({
   lower: { paddingHorizontal: GUTTER, marginTop: 40, gap: 32 },
 
 
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  pill: {
-    flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingHorizontal: 10, paddingVertical: space.xs,
-    borderRadius: radius.lg, backgroundColor: color.surfaceElevated, borderWidth: 1, borderColor: color.border,
-  },
-  pillLabel: { fontFamily: font.sansBold, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textSecondary },
-  pillValue: { fontFamily: font.sansBold, fontSize: 14, color: color.textPrimary },
 
   tagline: { fontFamily: font.sans, fontStyle: 'italic', fontSize: 16, lineHeight: 23, color: color.textSecondary },
   description: { fontFamily: font.sans, fontSize: 14, lineHeight: 23, color: color.textSecondary },

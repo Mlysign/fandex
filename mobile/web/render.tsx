@@ -16,7 +16,7 @@ import { ArrowLeft, Bookmark, Star } from 'lucide-react-native';
 import { AppNav } from '~/components/AppNav';
 import { StaticGrid, StaticRail, STATIC_GRID_CSS } from '~/components/cardFace';
 import { backButtonStyle, FacetHeader, facetEyebrow, type FacetKind } from '~/components/FacetHeader';
-import { FandexScorePanel } from '~/components/FandexScorePanel';
+import { ScoreSeal } from '~/components/ScoreSeal';
 import { ItemPage } from '~/components/ItemPage';
 import { Button } from '~/components/kit';
 import { ITEM_PAGE_CSS } from '~/components/itemLayout';
@@ -78,14 +78,14 @@ function Page({ item, taxonomy, rails }: { item: ItemDetail; taxonomy: Taxonomy 
                   {rails.similar.length ? <StaticRail title="More like this" items={rails.similar} /> : null}
                 </>
               ) : undefined}
-              // What a visitor can do, as links: the score panel and the two
-              // buttons the app shows somebody signed out. Without them the
-              // page offered nothing to do, and it is the page a search engine
-              // sends people to (SM57). For somebody signed in the app takes
-              // the page over and draws their own.
+              // What a visitor can do, as links: the seal, which says "Sign in",
+              // and the two buttons the app shows somebody signed out. Without
+              // them the page offered nothing to do, and it is the page a search
+              // engine sends people to (SM57). For somebody signed in the app
+              // takes the page over and draws their own.
+              seal={<ScoreSeal state="anon" fandex={null} signInHref={`/profile?return=${encodeURIComponent(path)}`} />}
               personal={(
                 <>
-                  <FandexScorePanel state="anon" fandex={null} categoryLabel={() => null} signInHref={`/profile?return=${encodeURIComponent(path)}`} />
                   {/* The app's signed-out pair. ?return= brings the visitor back here once signed in (lib/returnTo.ts). */}
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <Button label="Sign in to rate" variant="secondary" size="md" href={`/profile?return=${encodeURIComponent(path)}`} icon={<Star size={14} color="#EDE7DC" />} style={{ flex: 1 }} />
