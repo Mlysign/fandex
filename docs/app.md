@@ -131,6 +131,12 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   pops on the tap, `SavingDots` sit by the episode's date while the save runs, and saves for the
   screen queue in tap order. A tick still on its way is kept in `pending` and laid over every
   re-read of `episode_state`, or one save landing would blink another tick off.
+  **0.3.41:** the folded type filter fans out (`fanOut` in `SubBar.tsx`) and its chips pop with a
+  click. A rail or grid whose cards change runs them through `components/flip.tsx`: the cards
+  going fade for 150 ms, then the new list draws and each card that stays starts at its old cell
+  (worked out from its old index: grid rows are separate views, so a card moving up a row is a
+  new view) and slides to its new one. A grid with month dividers fades instead. Home's sections
+  are Reanimated views that fade in and out and slide to close a gap.
 - **Memory is pictures, not data** (measured 2026-10-23, RV31, 0.3.16 on the Pixel 8). The
   Hermes heap is 38 MB with the catalog copy, the profile and Home's rail pool loaded
   (`fandex_pool` and `fandex_index` in `adb logcat -s ReactNativeJS` carry it). `dumpsys meminfo`
