@@ -128,6 +128,7 @@ describe('a show the catalog knows only by its TMDB id', () => {
     // A new tick moves the count, so the show is due again; the id is kept.
     raw.prepare(`INSERT INTO episode_state (media_item_id, season, episode, watched_at, sources) VALUES ('nocturne', 1, 3, ?, '[]')`).run(NOW - 60);
     trakt.traktGet.mockClear();
+    trakt.traktGet.mockImplementation(async () => nextEpisode(4));
     await refreshUpNext(db);
     expect(trakt.traktGet.mock.calls.map((c) => String(c[0]).split('?')[0])).toEqual(['/shows/271001/progress/watched']);
   });
@@ -197,6 +198,65 @@ describe('ticking an episode', () => {
     await migrate(db);
     await expect(setEpisodesWatched(db, 'x', [{ season: 1, episode: 1 }], true)).rejects.toThrow(/no Trakt or TMDB id/);
     expect(trakt.traktPost).not.toHaveBeenCalled();
+  });
+});
+
+// Trakt answered progress from before a tick made a moment earlier, and that
+// answer was stored with the new count, so it was not asked again for six
+// hours: Up next and the widget kept the episode just watched (2026-11-11).
+describe('Trakt answering before it has taken a tick', () => {
+  const day = (offset: number) => new Date((NOW + offset * 86_400) * 1000).toISOString().slice(0, 10);
+  beforeEach(() => {
+    for (const f of [trakt.traktGet, trakt.traktPost, trakt.writeState, trakt.applyLocalWrite, trakt.showStatus, trakt.seasonEpisodes]) f.mockReset();
+    trakt.writeState.mockResolvedValue({});
+    trakt.traktPost.mockResolvedValue({});
+    trakt.showStatus.mockResolvedValue({
+      seasons: [{ season: 1, episodeCount: 6 }], lastAired: { season: 1, episode: 6, airDate: day(-7) }, nextToAir: null,
+    });
+    trakt.seasonEpisodes.mockResolvedValue([{ season: 1, episode: 4, title: 'Four', airDate: day(-14), runtimeMinutes: 30 }]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** The device's own write, as stateSync would make it. */
+  function writesRows(raw: DatabaseSync) {
+    trakt.applyLocalWrite.mockImplementation(async (_db: unknown, write: { episodes?: { upsert?: { mediaItemId: string; season: number; episode: number; watchedAt: number }[] } }) => {
+      for (const e of write.episodes?.upsert ?? []) {
+        raw.prepare(`INSERT OR REPLACE INTO episode_state (media_item_id, season, episode, watched_at, sources) VALUES (?, ?, ?, ?, '["trakt"]')`)
+          .run(e.mediaItemId, e.season, e.episode, e.watchedAt);
+      }
+    });
+  }
+
+  it('answers from the device, then takes Trakt\'s answer once Trakt has caught up', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'rehearsal', 186000, 130392);
+    watch(raw, 'rehearsal', 2);
+    writesRows(raw);
+    trakt.traktGet.mockResolvedValue(nextEpisode(3)); // still the one just ticked
+
+    await setEpisodesWatched(db, 'rehearsal', [{ season: 1, episode: 3 }], true);
+
+    expect((await upNextList(db)).map((e) => `${e.episode} ${e.episodeTitle}`)).toEqual(['4 Four']);
+    const row = raw.prepare('SELECT next_air_at FROM up_next').get() as { next_air_at: number };
+    expect(row.next_air_at).toBeGreaterThan(NOW);
+    expect(row.next_air_at).toBeLessThanOrEqual(NOW + 300);
+
+    vi.useFakeTimers({ now: (row.next_air_at + 1) * 1000, toFake: ['Date'] });
+    trakt.traktGet.mockResolvedValue(nextEpisode(4));
+    expect((await refreshUpNext(db)).checked).toBe(1);
+    expect((await upNextList(db)).map((e) => `${e.episode} ${e.episodeTitle}`)).toEqual(['4 Episode 4']);
+  });
+
+  it('keeps Trakt\'s answer when the episode it names was watched long ago (a rewatch)', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'again', 186001, 130393);
+    watch(raw, 'again', 3); // an hour ago
+    trakt.traktGet.mockResolvedValue(nextEpisode(2));
+    await refreshUpNext(db);
+    expect(trakt.showStatus).not.toHaveBeenCalled();
+    expect((await upNextList(db)).map((e) => e.episode)).toEqual([2]);
   });
 });
 

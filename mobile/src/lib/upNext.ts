@@ -306,7 +306,37 @@ async function checkShow(db: SQLiteDatabase, token: string | null, show: ShowWat
     return;
   }
   const answer = await traktGet(`/shows/${traktId}/progress/watched?hidden=false&specials=false&count_specials=false&extended=full`, token);
-  await store(db, show, readProgress(answer, now), now);
+  const progress = readProgress(answer, now);
+  if (await tickedSince(db, show.mediaItemId, progress, now - TRAKT_LAG_WINDOW)) {
+    // Trakt has not taken in a tick made a moment ago: its answer still names
+    // that episode. Stored as it was, the answer carried the new count and was
+    // not asked again for six hours, so Up next and the widget kept the episode
+    // just watched (The Rehearsal, 2026-11-11). The device's own rows answer
+    // instead, as they do without Trakt, and Trakt is asked again shortly.
+    const local = await localProgress(db, sources, show, now);
+    const recheck = now + TRAKT_LAG_RECHECK;
+    await store(db, show, { ...local, upcomingAt: Math.min(local.upcomingAt ?? recheck, recheck) }, now);
+    return;
+  }
+  await store(db, show, progress, now);
+}
+
+/**
+ * How long a tick may still be missing from Trakt's progress. A tick older than
+ * this that Trakt names as next is Trakt's call (a rewatch, a reset), not lag.
+ */
+const TRAKT_LAG_WINDOW = 15 * 60;
+/** When a show answered from the device's rows is put to Trakt again. */
+const TRAKT_LAG_RECHECK = 2 * 60;
+
+/** The episode Trakt names as next was ticked on this device since `since`. */
+async function tickedSince(db: SQLiteDatabase, mediaItemId: string, p: Progress, since: number): Promise<boolean> {
+  if (p.season == null || p.episode == null) return false;
+  const row = await db.getFirstAsync<{ n: number }>(
+    'SELECT COUNT(*) n FROM episode_state WHERE media_item_id = ? AND season = ? AND episode = ? AND watched_at >= ?',
+    [mediaItemId, p.season, p.episode, since],
+  );
+  return (row?.n ?? 0) > 0;
 }
 
 /**

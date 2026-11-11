@@ -307,7 +307,7 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   session, so a rating changed here is not changed on TMDB.
 - **Up next asks Trakt, one show at a time** (`upNext.ts`). The Worker's episode catalog stopped
   being filled when the site did, so the device asks `/shows/{id}/progress/watched` and keeps the
-  answer in `up_next`. A show is asked again when its ticked-episode count moves, or after a day
+  answer in `up_next`. A show is asked again when its ticked-episode count moves, or after six hours
   (watched in the last four months) or a week (older), and on the day a new season of a caught-up show starts and the day after
   (`withPremieres`, from `/v1/catalog/season-premieres`). A run asks about twelve shows, most
   recently watched first; the screen runs up to six passes a visit. The order is the site's: an
@@ -315,6 +315,10 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   the later of Trakt's `last_watched_at` and this device's own newest tick for the show: Trakt's
   value lagged a tick made seconds earlier, and a show ticked again and again stayed in second
   place. The tab and the widget share that one ORDER BY and it has to stay the same in both.
+  ⚠️ **Trakt's progress can predate a tick made a moment ago** and name that episode as next. Kept,
+  it carried the new count and stood for six hours (The Rehearsal, 2026-11-11). When Trakt names an
+  episode this device ticked in the last 15 minutes, the device's rows answer as they do without
+  Trakt (TMDB), and Trakt is asked again two minutes later (`tickedSince`).
   ⚠️ **Most shows carry no Trakt id** (1,415 of 1,706 pool shows on 2026-11-02): for those the
   device asks Trakt `/search/tmdb/{id}?type=show` once and keeps the answer in `trakt_show`
   ("none" is asked again after a week). A tick names the show by its Trakt id or else its TMDB id,
