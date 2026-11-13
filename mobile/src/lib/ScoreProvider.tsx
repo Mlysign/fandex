@@ -444,6 +444,10 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // and taxonomy, not once per rating: fitting reads every baseline title's
   // facets and is the slow part of a rebuild, and a rating changes none of it.
   const pullFit = useRef<{ signature: string; tax: Taxonomy; model: PullModel | null } | null>(null);
+  // Only the pull fit reads the baseline. While pull is hidden, the list the day's
+  // check brings in must not rebuild the profile (a second build on a start that
+  // changes no number, 2026-11-07), nor hold the first build back until it is read.
+  const pullBaseline = PULL_SHOWN ? baseline : null;
   useEffect(() => {
     let live = true;
     if (!signedIn || !taxonomy) {
@@ -452,7 +456,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       if (auth.status !== 'loading') setReady(true);
       return;
     }
-    if (filling || baseline === undefined) return;
+    if (filling || pullBaseline === undefined) return;
     (async () => {
       const started = Date.now();
       const [rated, consumed, follows] = await Promise.all([ratedTitles(db), consumedTitles(db), followedFacets(db)]);
@@ -461,7 +465,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       // the number. Fitting it anyway held every score back by its seconds on each rebuild,
       // and a sign-in, which forgets the stored fit, fitted from nothing once per row pull:
       // Home sat without a score for about two minutes (Nils, 2026-11-07).
-      const signature = PULL_SHOWN ? pullSignature(consumed, await baselinePresent(db), baseline) : '';
+      const signature = PULL_SHOWN ? pullSignature(consumed, await baselinePresent(db), pullBaseline) : '';
       if (!live) return;
       let cached = PULL_SHOWN ? pullFit.current : { signature, tax: taxonomy, model: null };
       let fitMs = 0;
@@ -525,7 +529,7 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
       }, 1_000);
     })();
     return () => { live = false; };
-  }, [db, signedIn, userId, auth.status, taxonomy, baseline, auth.rowsRevision, catalog.revision, filling]);
+  }, [db, signedIn, userId, auth.status, taxonomy, pullBaseline, auth.rowsRevision, catalog.revision, filling]);
 
   const score = useCallback((id: string, facets: ScoreFacet[], type?: string) =>
     (profile && taxonomy ? computeFandexScore(facets, id, profile, taxonomy, type) : null), [profile, taxonomy]);

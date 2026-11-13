@@ -28,6 +28,8 @@ full history.
 - **The "action adventure" tag page lists Game of Thrones** through the bundled "Action & Adventure" spelling (0.3.37), and a tag page he knows looks right.
 - **The feel of 0.3.37, 0.3.38 and 0.3.41** (star picker, haptics, press and pop, eased sheets, filter motion) and the widget's smaller heading: "all fine", no numbers to change.
 - **Google sign-in on the phone** (0.3.23's browser sheet via fandex.org): fine.
+- **Two profile builds on 0.3.49's first start (2026-11-07), closed in 0.3.57.** Not reproduced on 0.3.56: five starts, two of them the first after an install, built once each. The one trigger that rebuilds for nothing was the baseline list, re-asked once a day and a dependency of the profile effect though only the hidden pull fit reads it; under `PULL_SHOWN` false it neither rebuilds nor holds the first build back now (`pullBaseline` in `ScoreProvider.tsx`). Not proven to be 0.3.49's cause. A taxonomy change, a catalog delta or a row sync still rebuild, and should. If a second `fandex_profile` shows on a start again, log which dependency moved.
+- **The list header** no longer flickers when a thumb stays down after scrolling (0.3.11), and **a tick made on the widget itself** moves its rows on (0.3.26's rows inside the widget's own update): both work.
 
 ## Other emptied, and the weekly sweep made to keep it so (2026-11-06)
 
