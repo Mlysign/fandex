@@ -21,6 +21,14 @@ full history.
 
 ---
 
+## Checked on the phone by Nils (2026-11-13)
+
+- **On 0.3.55 and 0.3.56:** the in-app trailer's picture and fullscreen (the blank panel was the player at zero width, `Trailer.tsx`); a tick on a show's page, in Up next and from the page to the widget all reach the other places at once (0.3.55 for Trakt's stale "next", 0.3.56 for Up next's tick reaching the page, 05fc563).
+- **Rings of Power S3E1** reached the top of Up next on its premiere day (0.3.40's `withPremieres`, first time seen live).
+- **The "action adventure" tag page lists Game of Thrones** through the bundled "Action & Adventure" spelling (0.3.37), and a tag page he knows looks right.
+- **The feel of 0.3.37, 0.3.38 and 0.3.41** (star picker, haptics, press and pop, eased sheets, filter motion) and the widget's smaller heading: "all fine", no numbers to change.
+- **Google sign-in on the phone** (0.3.23's browser sheet via fandex.org): fine.
+
 ## Other emptied, and the weekly sweep made to keep it so (2026-11-06)
 
 - **Nils: "there are still hundreds of tags in the other category ... make it empty".** It held 5,562 (4,493 of them on one title), all arrived since Other was emptied on 2026-10-18, mostly book subjects and TMDB keywords. The weekly sweep's worklist listed only Other tags on three or more titles, so it never saw the rest.
