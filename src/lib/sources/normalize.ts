@@ -1,5 +1,5 @@
 import type { Source, MediaType, CommunityRating, EnrichedItem, TagTier, TieredTag } from "@/types";
-import { bookDate, bookSubjects, coverUrl } from "@/lib/sources/bookPure";
+import { bookDate, bookSubjects, coverUrl, plausibleBookYear } from "@/lib/sources/bookPure";
 import { plainDescription } from "@/lib/plainText";
 import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
 import { categorizeTag } from "@/lib/tags";
@@ -600,7 +600,9 @@ function normalizeHardcover(d: any): SourceNormalized {
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
   out.title = typeof d.title === "string" ? d.title : null;
   out.description = typeof d.description === "string" ? d.description : null;
-  out.releaseDate = typeof d.releaseDate === "string" ? d.releaseDate : null;
+  // Checked again on read: a record stored before `hardcoverDate` refused year 30 (2026-10-23)
+  // still carries "0030", and a re-derive reads the stored record, not Hardcover.
+  out.releaseDate = typeof d.releaseDate === "string" && plausibleBookYear(Number(d.releaseDate.slice(0, 4))) ? d.releaseDate : null;
   out.poster = typeof d.cover === "string" ? d.cover : null;
   out.images = out.poster ? [out.poster] : [];
   // Hardcover's genres and tags come as one list its readers voted on, genres

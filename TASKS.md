@@ -39,9 +39,10 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 ## Mine, open
 
-Two loose ends from the score-speed work of 2026-11-07 (0.3.48, 0.3.49); everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
+Two loose ends from the score-speed work of 2026-11-07 (0.3.48, 0.3.49) and one fix to ship; everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
 
 - ⬜ **Time a real sign-in.** 0.3.48 stopped the profile waiting on the pull fit (4.2 s to 0.55 s on a normal start), but the sign-out and sign-in path that took two minutes was never re-timed: signing Nils out to test it is not allowed. Next time he switches accounts, read `adb logcat -s ReactNativeJS | grep fandex_` for when the first `fandex_profile` lands after the sign-in and whether `fandex_calibration` says `moved: false`.
+- ⬜ **Ship the duplicate-book fix of 2026-11-13** (Search showed Der Kanon mechanischer Seelen twice, 0030 and 2017; branch `claude/warum-sind-da-2-ksepx0`). In order: `npx wrangler deploy` from `worker/`, then `worker/scripts/data-fix-book-dates-2026-11-13.sql` (count first, as its header says), publish the site, build an APK. The app half (a held card matched to a provider's by provider id, `lib/titleIdentity.ts`) needs only the APK and the publish.
 - ⬜ **`wrangler d1 execute --remote` answered 7403** on 2026-11-07 while `wrangler deploy` from the same login worked. Unexplained; read-only queries went through the public API instead.
 
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
