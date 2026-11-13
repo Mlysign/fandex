@@ -139,6 +139,7 @@ export function EpisodeRow({ entry, ticked, exiting, onTick }: {
 export function useUpNext(limit: number, includeHidden = false) {
   const db = useSQLiteContext();
   const auth = useAuth();
+  const { rowsChanged } = auth;
   const catalog = useCatalogSync();
   const [entries, setEntries] = useState<UpNextEntry[] | null>(null);
   const [pending, setPending] = useState(0);
@@ -213,13 +214,18 @@ export function useUpNext(limit: number, includeHidden = false) {
       setLeaving((s) => new Set(s).add(k));
       await new Promise((r) => setTimeout(r, FADE_MS));
       await show();
+      // Tell every other screen, the show's page included, as a tick there
+      // does. Without it the page kept the old ticks until a sync happened to
+      // bump the rows (Nocturne, 2026-11-13). Sent after the row has gone:
+      // sooner, the reload it starts here would pull the row mid-fade.
+      rowsChanged();
     } catch (e) {
       setError(describeTrakt(e));
     } finally {
       setDone((s) => { const n = new Set(s); n.delete(k); return n; });
       setLeaving((s) => { const n = new Set(s); n.delete(k); return n; });
     }
-  }, [db, show]);
+  }, [db, show, rowsChanged]);
 
   // A show is looked up only once the catalog copy holds it, and only among the
   // rows this device has. While either is still arriving, an empty list means
