@@ -15,7 +15,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { keyToSlug } from '@/lib/facetUrl';
-import { normalizeName, searchKey } from '@/lib/normalize';
+import { searchKey } from '@/lib/normalize';
 import { PosterGrid, type CardSection } from '~/components/cards';
 import { countActive, FilterSheet, FiltersButton, noFilters, useFiltered } from '~/components/Filters';
 import { EmptyState } from '~/components/kit';
@@ -35,6 +35,7 @@ import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { drawPicks } from '~/lib/picks';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
+import { titleIndex } from '~/lib/titleIdentity';
 import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { FUZZY_BELOW, fuzzyMatches } from '~/lib/fuzzySearch';
@@ -98,8 +99,6 @@ function MatchGroup({ title, matches }: { title: string; matches: VocabEntry[] }
 }
 
 const crowdOf = (c: CardItem) => ({ type: c.type, score: c.communityScore, votes: c.communityVotes ?? 0 });
-/** Two cards are the same title when type, name and year agree. The year matters: a remake shares the name. */
-const identity = (c: CardItem) => `${c.type}|${normalizeName(c.title)}|${c.releaseDate?.slice(0, 4) ?? ''}`;
 
 export default function DiscoverScreen() {
   usePageTitle('Search');
@@ -233,13 +232,14 @@ export default function DiscoverScreen() {
     // hid. A name still finds it: "It stays searchable" is what Hide promises.
     if (!norm) {
       // The catalog's copy of a title wins over the feed's: it has your state and score.
-      const held = new Set(local.map(identity));
-      const upcoming = feed.rows.filter((c) => (held.has(identity(c)) ? false : (held.add(identity(c)), true)));
+      const held = titleIndex(local);
+      const upcoming = feed.rows.filter((c) => (held.has(c) ? false : (held.add(c), true)));
       return withoutHidden([...local, ...upcoming], hidden);
     }
     // What the catalog holds wins over the same title from a provider: it has your state and score.
-    const held = new Set(local.map(identity));
-    const fresh = [...screen.rows, ...games.rows, ...shelf.rows].filter((c) => !held.has(identity(c)));
+    // Matched by provider id first (lib/titleIdentity.ts): a held year can be wrong.
+    const held = titleIndex(local);
+    const fresh = [...screen.rows, ...games.rows, ...shelf.rows].filter((c) => !held.has(c));
     return [...local, ...fresh];
   }, [pool, keyed, norm, hidden, screen.rows, games.rows, shelf.rows, feed.rows]);
 

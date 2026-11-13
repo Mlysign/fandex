@@ -92,6 +92,25 @@ describe("a game's release date (2026-10-23)", () => {
   });
 });
 
+describe("a book's date on the canonical row (2026-11-13)", () => {
+  const ol = { source: "openlibrary" as const, data: { key: "/works/OL21526941W", title: "Der Kanon mechanischer Seelen", first_publish_year: 2017 } };
+  const hc = (releaseDate: string) => ({ source: "hardcover" as const, data: { id: 2257108, title: "Der Kanon mechanischer Seelen", releaseDate } });
+
+  it("keeps Open Library's year when Hardcover names another, as the doc does", () => {
+    expect(mergeForCanonical([hc("2019-04-08"), ol]).releaseDate).toBe("2017");
+    expect(mergeLinks([hc("2019-04-08"), ol].map((l) => ({ ...l, sourceId: "x", rawData: l.data })) as never, "book").releaseDate).toBe("2017");
+  });
+
+  it("takes Hardcover's day when it names the same year", () => {
+    expect(mergeForCanonical([hc("2017-10-31"), ol]).releaseDate).toBe("2017-10-31");
+  });
+
+  it("reads a stored Hardcover year before printing as no date, so a re-derive heals it", () => {
+    expect(mergeForCanonical([hc("0030")]).releaseDate).toBeNull();
+    expect(mergeForCanonical([hc("0030"), ol]).releaseDate).toBe("2017");
+  });
+});
+
 describe("tag tiers (2026-10-25)", () => {
   const link = (source: string, rawData: unknown) =>
     ({ id: "", mediaItemId: "m", source, sourceId: "1", title: null, releaseDate: null, rawData, lastSynced: 0 }) as never;
