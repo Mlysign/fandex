@@ -41,7 +41,7 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 One loose end from the score-speed work of 2026-11-07 (0.3.48, 0.3.49); everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
 
-- ⬜ **Own gains are lost across a sign-out after all.** Timed on the phone 2026-11-15 (0.3.57): after Nils signed back in, the profile was built in 653 ms and calibrated 1.4 s later (the two minutes are gone), but `fandex_calibration` said `moved: true`, so every score shifted once. Cause: the signed-out calibration (0 rated) writes the shared gains to `OWN_GAINS_KEY`, and `storedOwnGains` (`mobile/src/lib/ScoreProvider.tsx`) reads that device row before the account row. Fix: prefer the account row when the user is known, and don't keep gains from a fit with nothing rated.
+- 🔵 **Own gains lost across a sign-out: fixed in 0.3.58, the phone check is open.** Timed on the phone 2026-11-15 (0.3.57): after Nils signed back in, the profile was built in 653 ms (the two minutes are gone), but `fandex_calibration` said `moved: true` and every score shifted once. Cause: the profile is built right after the sign-in before the ratings arrive, and that fit (0 rated, the shared gains) overwrote the gains kept under the account. 0.3.58 keeps no fit made while rows are syncing or with nothing rated, and reads the account row first. Next sign-in: `moved: false` is the pass.
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
 Parked, not started. Each needs a design talk with Nils before any code.

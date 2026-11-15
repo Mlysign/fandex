@@ -338,11 +338,14 @@ async function gainsAt(db: SQLiteDatabase, key: string, print: string): Promise<
 
 /**
  * Your gains as last fitted under this taxonomy (its weights and shared gains), else null: the
- * shared ones until the next fit. The signed-in row first, which an offline start can read
- * without knowing who you are; then the one kept under your account across a sign-out.
+ * shared ones until the next fit. The row kept under your account first, which a sign-out
+ * leaves alone and another account on the device never wrote; the device's row only when
+ * the start does not know who you are yet (offline).
  */
 async function storedOwnGains(db: SQLiteDatabase, print: string, userId: string | null): Promise<Gains | null> {
-  return (await gainsAt(db, OWN_GAINS_KEY, print)) ?? (userId ? await gainsAt(db, ownGainsAccountKey(userId), print) : null);
+  return userId
+    ? (await gainsAt(db, ownGainsAccountKey(userId), print)) ?? (await gainsAt(db, OWN_GAINS_KEY, print))
+    : gainsAt(db, OWN_GAINS_KEY, print);
 }
 
 /** Keep your gains for the next start, and under your account for the next sign-in. A failed write costs only a start on the shared ones. */
@@ -439,6 +442,9 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
   // the request took (RV31, 2026-10-23).
   const signedIn = auth.status === 'signedIn';
   const userId = auth.profile?.user.id ?? null;
+  // Read when a fit ends, not a reason to rebuild: the rows' arrival already bumps rowsRevision.
+  const rowsSyncingRef = useRef(auth.rowsSyncing);
+  rowsSyncingRef.current = auth.rowsSyncing;
   const filling = catalog.filling;
   // The pull model is fitted once per set of picks, catalog revision, baseline
   // and taxonomy, not once per rating: fitting reads every baseline title's
@@ -520,7 +526,11 @@ export function ScoreProvider({ children }: { children: ReactNode }) {
           // the next start begins with them.
           const moved = Math.abs(gains.up - built.gains.up) >= OWN_GAINS_STEP || Math.abs(gains.down - built.gains.down) >= OWN_GAINS_STEP;
           if (moved) { setProfile({ ...built, gains }); setRevision((r) => r + 1); }
-          if (gainsPrint) void keepOwnGains(db, gainsPrint, gains, userId);
+          // Kept only from a fit on your whole library: right after a sign-in the profile is
+          // built before your ratings arrive, and that fit (nothing rated, the shared gains)
+          // overwrote the ones kept under your account, so every score moved once more when
+          // the ratings landed (on the phone, 2026-11-15).
+          if (gainsPrint && rated.length > 0 && !rowsSyncingRef.current) void keepOwnGains(db, gainsPrint, gains, userId);
           setCalibration(cal);
           const all = cal.get('all');
           console.log('fandex_calibration', JSON.stringify({ rated: all?.n ?? 0, withinOne: all?.withinOne ?? 0, withinTwo: all?.withinTwo ?? 0, gains, moved, ms: Date.now() - started }));
