@@ -41,7 +41,7 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 One loose end from the score-speed work of 2026-11-07 (0.3.48, 0.3.49); everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
 
-- ⬜ **Time a real sign-in.** 0.3.48 stopped the profile waiting on the pull fit (4.2 s to 0.55 s on a normal start), but the sign-out and sign-in path that took two minutes was never re-timed: signing Nils out to test it is not allowed. Next time he switches accounts, read `adb logcat -s ReactNativeJS | grep fandex_` for when the first `fandex_profile` lands after the sign-in and whether `fandex_calibration` says `moved: false`.
+- ⬜ **Own gains are lost across a sign-out after all.** Timed on the phone 2026-11-15 (0.3.57): after Nils signed back in, the profile was built in 653 ms and calibrated 1.4 s later (the two minutes are gone), but `fandex_calibration` said `moved: true`, so every score shifted once. Cause: the signed-out calibration (0 rated) writes the shared gains to `OWN_GAINS_KEY`, and `storedOwnGains` (`mobile/src/lib/ScoreProvider.tsx`) reads that device row before the account row. Fix: prefer the account row when the user is known, and don't keep gains from a fit with nothing rated.
 ## Later: feature ideas (Nils, 2026-11-02) ⬜
 
 Parked, not started. Each needs a design talk with Nils before any code.
