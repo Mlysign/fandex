@@ -265,12 +265,15 @@ export function nextLocalEpisode(
   return { next: candidate, upcomingAt: null };
 }
 
-async function localProgress(db: SQLiteDatabase, sources: Sources, show: ShowWatch, now: number): Promise<Progress> {
+async function localProgress(
+  db: SQLiteDatabase, sources: Sources, show: ShowWatch, now: number,
+  rows?: { season: number; episode: number }[],
+): Promise<Progress> {
   const nothing: Progress = { season: null, episode: null, title: null, airedAt: null, lastWatchedAt: show.lastWatchedAt, upcomingAt: null };
   const tmdbId = sources.find((s) => s.source === 'tmdb')?.sourceId;
   // Nobody to ask: stored as caught up, so it is not asked about on every run.
   if (!tmdbId) return nothing;
-  const watched = await db.getAllAsync<{ season: number; episode: number }>(
+  const watched = rows ?? await db.getAllAsync<{ season: number; episode: number }>(
     'SELECT season, episode FROM episode_state WHERE media_item_id = ?', [show.mediaItemId],
   );
   const status = await tmdbShowStatus(tmdbId);
@@ -318,7 +321,30 @@ async function checkShow(db: SQLiteDatabase, token: string | null, show: ShowWat
     await store(db, show, { ...local, upcomingAt: Math.min(local.upcomingAt ?? recheck, recheck) }, now);
     return;
   }
+  // Trakt names an episode this device already holds as watched, or one before
+  // the latest it holds: a gap Trakt fills first (Scavengers Reign offered E01
+  // with E02 to E04 ticked, 2026-11-15), or ticks Trakt has not taken. The next
+  // episode is the one after the latest watched, the rule without Trakt. Only
+  // ticks since Trakt's own reset count, so a rewatch Trakt tracks stays Trakt's.
+  const resetAt = unix(obj(answer).reset_at);
+  const watched = (await db.getAllAsync<{ season: number; episode: number; watched_at: number | null }>(
+    'SELECT season, episode, watched_at FROM episode_state WHERE media_item_id = ?', [show.mediaItemId],
+  )).filter((w) => resetAt == null || (w.watched_at ?? 0) > resetAt);
+  if (traktBehindDevice(progress, watched)) {
+    await store(db, show, await localProgress(db, sources, show, now, watched), now);
+    return;
+  }
   await store(db, show, progress, now);
+}
+
+/**
+ * Trakt's next episode is at or before the latest episode in `watched`. Pure,
+ * so the rule has a test.
+ */
+export function traktBehindDevice(p: Progress, watched: { season: number; episode: number }[]): boolean {
+  if (p.season == null || p.episode == null) return false;
+  const named = { season: p.season, episode: p.episode };
+  return watched.some((w) => w.season > 0 && cmp(w, named) >= 0);
 }
 
 /**

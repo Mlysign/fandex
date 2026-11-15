@@ -248,15 +248,26 @@ describe('Trakt answering before it has taken a tick', () => {
     expect((await upNextList(db)).map((e) => `${e.episode} ${e.episodeTitle}`)).toEqual(['4 Episode 4']);
   });
 
-  it('keeps Trakt\'s answer when the episode it names was watched long ago (a rewatch)', async () => {
+  it('keeps Trakt\'s answer for a rewatch Trakt tracks (its progress was reset after the ticks)', async () => {
     const { db, raw } = open();
     await migrate(db);
     addShow(raw, 'again', 186001, 130393);
     watch(raw, 'again', 3); // an hour ago
-    trakt.traktGet.mockResolvedValue(nextEpisode(2));
+    trakt.traktGet.mockResolvedValue({ ...nextEpisode(2), reset_at: new Date((NOW - 600) * 1000).toISOString() });
     await refreshUpNext(db);
     expect(trakt.showStatus).not.toHaveBeenCalled();
     expect((await upNextList(db)).map((e) => e.episode)).toEqual([2]);
+  });
+
+  it('offers the episode after the latest ticked when Trakt names an earlier one (a gap, Scavengers Reign)', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    addShow(raw, 'gap', 186002, 130394);
+    watch(raw, 'gap', 3); // an hour ago
+    raw.prepare(`DELETE FROM episode_state WHERE media_item_id = 'gap' AND episode = 1`).run();
+    trakt.traktGet.mockResolvedValue(nextEpisode(1));
+    await refreshUpNext(db);
+    expect((await upNextList(db)).map((e) => `${e.episode} ${e.episodeTitle}`)).toEqual(['4 Four']);
   });
 });
 

@@ -4,7 +4,7 @@ vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 vi.mock('~/lib/widget', () => ({ publishWidget: vi.fn() }));
 
-import { readProgress, showsToCheck } from './upNext';
+import { readProgress, showsToCheck, traktBehindDevice } from './upNext';
 
 const NOW = Date.parse('2026-10-04T12:00:00Z') / 1000;
 const DAY = 86_400;
@@ -43,6 +43,22 @@ describe("reading Trakt's answer for a show", () => {
 
   it('survives an answer that is not the expected shape', () => {
     expect(readProgress('nonsense', NOW)).toEqual({ season: null, episode: null, title: null, airedAt: null, lastWatchedAt: null, upcomingAt: null });
+  });
+});
+
+describe("when the device's ticks overrule Trakt's next episode", () => {
+  const p = (season: number | null, episode: number | null) =>
+    ({ season, episode, title: null, airedAt: 1, lastWatchedAt: null, upcomingAt: null });
+  it('overrules a gap Trakt fills first, or an episode already ticked', () => {
+    expect(traktBehindDevice(p(1, 1), [{ season: 1, episode: 2 }, { season: 1, episode: 4 }])).toBe(true);
+    expect(traktBehindDevice(p(1, 4), [{ season: 1, episode: 4 }])).toBe(true);
+    expect(traktBehindDevice(p(1, 8), [{ season: 2, episode: 1 }])).toBe(true);
+  });
+  it("keeps Trakt's answer when it is past every tick, or there is none", () => {
+    expect(traktBehindDevice(p(1, 5), [{ season: 1, episode: 4 }])).toBe(false);
+    expect(traktBehindDevice(p(1, 1), [])).toBe(false);
+    expect(traktBehindDevice(p(1, 1), [{ season: 0, episode: 3 }])).toBe(false);
+    expect(traktBehindDevice(p(null, null), [{ season: 1, episode: 4 }])).toBe(false);
   });
 });
 
