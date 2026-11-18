@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('expo-crypto', () => ({}));
 vi.mock('~/lib/storage', () => ({ secretGet: vi.fn(), secretSet: vi.fn(), secretDelete: vi.fn() }));
 
-import { onTrakt, ratingWrite, statusFor, traktIds, type ActionTarget, type HeldRow } from './itemActions';
+import { onTrakt, ratingLogsPlay, ratingWrite, statusFor, traktIds, type ActionTarget, type HeldRow } from './itemActions';
 
 const ID = '00000000-0000-4000-8000-00000000000a';
 const film: ActionTarget = { id: ID, type: 'movie', sources: [{ source: 'tmdb', sourceId: '603' }, { source: 'trakt', sourceId: '481' }] };
@@ -18,6 +18,20 @@ describe('finding a title on Trakt', () => {
   });
   it('gives up on a title with neither', () => {
     expect(traktIds(game)).toBeNull();
+  });
+});
+
+describe('whether a rating logs a play on Trakt', () => {
+  it('logs one for a film or show Trakt has not seen watched', () => {
+    expect(ratingLogsPlay('movie', [], 0)).toBe(true);
+    expect(ratingLogsPlay('show', [], 0)).toBe(true);
+  });
+  it('never logs a second one', () => {
+    expect(ratingLogsPlay('movie', [held('trakt')], 0)).toBe(false);
+  });
+  it('never sends a show with episodes ticked: that would tick every episode', () => {
+    expect(ratingLogsPlay('show', [], 4)).toBe(false);
+    expect(ratingLogsPlay('show', [held('local')], 4)).toBe(false);
   });
 });
 

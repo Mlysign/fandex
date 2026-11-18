@@ -65,6 +65,22 @@ export function statusFor(type: MediaType): string {
   return type === 'movie' || type === 'show' ? 'watched' : type === 'book' ? 'read' : 'played';
 }
 
+/**
+ * Whether a new rating also logs a play on Trakt (`/sync/history` with the
+ * title). Trakt keeps "rated" and "watched" apart, and the library is what was
+ * watched, so a rated film nobody logged would leave the library at the next sync.
+ *
+ * ⚠️ Never for a show with episodes ticked. A whole show sent to the history is
+ * EVERY aired episode watched: rating Scavengers Reign after four episodes put
+ * all twelve on Trakt, and Up next called the show caught up (2026-11-18). The
+ * ticks already make the show watched on Trakt. A show rated with none ticked
+ * is taken as seen through, as a film is.
+ */
+export function ratingLogsPlay(type: MediaType, rows: HeldRow[], tickedEpisodes: number): boolean {
+  if (rows.some((r) => r.source === 'trakt' && r.relation === 'library')) return false;
+  return !(type === 'show' && tickedEpisodes > 0);
+}
+
 /** The rows a rating change writes. Pure, so the averaging rule has a test. */
 export function ratingWrite(input: {
   target: ActionTarget;
@@ -138,10 +154,12 @@ export async function rateItem(db: SQLiteDatabase, target: ActionTarget, rating:
       await traktPost('/sync/ratings/remove', trakt.token, { [key]: [{ ids: trakt.ids }] });
     } else {
       if (traktMissed(await traktPost('/sync/ratings', trakt.token, { [key]: [{ rating, ids: trakt.ids }] }))) onTraktNow = false;
-      // Trakt keeps "rated" and "watched" apart, and the library is what was
-      // watched. Only when Trakt does not already have it: a second post would
-      // log a second play.
-      if (onTraktNow && !rows.some((r) => r.source === 'trakt' && r.relation === 'library')) {
+      // A second post would log a second play, and a show's would tick every
+      // episode (ratingLogsPlay).
+      const ticked = target.type === 'show'
+        ? (await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) n FROM episode_state WHERE media_item_id = ?', [target.id]))?.n ?? 0
+        : 0;
+      if (onTraktNow && ratingLogsPlay(target.type, rows, ticked)) {
         await traktPost('/sync/history', trakt.token, { [key]: [{ ids: trakt.ids }] });
       }
       if (rows.some((r) => r.source === 'trakt' && r.relation === 'wishlist')) {
