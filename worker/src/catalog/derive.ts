@@ -37,8 +37,13 @@ import type { EnrichedItem, MediaLink, MediaType, Source } from "@/types";
  * Japanese animated film or show carries `anime`, and a game's people come
  * from Wikidata (docs/fandex-score.md §3.9). The FACETS change, so the pool is
  * re-derived once by the cron (cron.ts, runRederiveStep) once Nils says go.
+ * 5 (2026-11-21): a title's names. The merged doc and the vector carry
+ * `titles` (per language) and `aka` (search-only), src/lib/titles.ts, so one
+ * title is one entry in every language. Films and shows get theirs from the
+ * TMDB refetch (PROJECTION_VERSION 5), books from the Hardcover titles walk,
+ * games straight from the stored IGDB record through the re-derive walk.
  */
-export const DERIVE_VERSION = 4;
+export const DERIVE_VERSION = 5;
 
 /** One media_links row as the write path holds it: the blob already parsed. */
 export interface ParsedLink {
@@ -82,6 +87,9 @@ export interface ItemVector {
    * `worker/scripts/mark-addons.sql`.
    */
   addon?: true;
+  /** The title per language, "" for the same as `title`, and the names that only find it (src/lib/titles.ts). Present when known. */
+  titles?: Record<string, string>;
+  aka?: string[];
 }
 
 export interface DerivedItem {
@@ -145,6 +153,9 @@ export function deriveItem(type: MediaType, links: ParsedLink[], region: string 
       runtimeMinutes: merged.runtimeMinutes,
       sources: links.map((l) => ({ source: l.source, sourceId: l.sourceId })),
       ...(links.some((l) => l.source === "igdb" && isIgdbAddon(l.data)) ? { addon: true as const } : {}),
+      // Compacted against merged.title; the canonical title is picked by the same priority, so it is the same title.
+      ...(merged.titles ? { titles: merged.titles } : {}),
+      ...(merged.aka ? { aka: merged.aka } : {}),
     },
   };
 }

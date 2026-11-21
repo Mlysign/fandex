@@ -994,7 +994,7 @@ export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Pr
   // Behind its own share of Hardcover's day; parks for a day after each pass.
   try {
     const hw = await runHardcoverWalkStep(env);
-    if (hw.moods || hw.linked || hw.absent || hw.failed) console.log("hardcover_walk_step", hw);
+    if (hw.titles || hw.linked || hw.absent || hw.failed) console.log("hardcover_walk_step", hw);
   } catch (e) {
     console.error("hardcover_walk_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }

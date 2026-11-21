@@ -31,12 +31,13 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { onSearchQuery, takeWaitingQuery } from '~/lib/searchHandoff';
 import { boardgamesOn } from '~/lib/features';
 import { catalogCards } from '~/lib/db';
+import { catalogSearchNames } from '~/lib/localTitles';
 import { useHiddenIds, withoutHidden } from '~/lib/hidden';
 import { drawPicks } from '~/lib/picks';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { useRowScores, useScores } from '~/lib/ScoreProvider';
 import { titleIndex } from '~/lib/titleIdentity';
-import { searchTmdb, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
+import { searchTmdb, tmdbLanguage, tmdbUpcoming, type ProviderCard } from '~/lib/tmdb';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { FUZZY_BELOW, fuzzyMatches } from '~/lib/fuzzySearch';
 import { facetVocab, matchVocab, type VocabEntry } from '~/lib/facetVocab';
@@ -123,6 +124,7 @@ export default function DiscoverScreen() {
   }, [query]);
   const [sort, setSort] = useState<Sort>('picks');
   const [pool, setPool] = useState<CardItem[] | null>(null);
+  const [otherNames, setOtherNames] = useState<Map<string, string[]>>(() => new Map());
   const [screen, setScreen] = useState<Remote>(IDLE);
   const [games, setGames] = useState<Remote>(IDLE);
   // Books and board games (worker/src/shelves.ts). Board games answer "not switched on" without a BGG token, which is not an error.
@@ -168,6 +170,8 @@ export default function DiscoverScreen() {
       console.warn('catalog_cards_failed', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
       if (live) setPool((p) => p ?? []);
     });
+    // The other names a title is found by: "Kimi no Na wa" finds Your Name. (lib/localTitles.ts).
+    void catalogSearchNames(db).then((m) => { if (live) setOtherNames(m); }, () => undefined);
     return () => { live = false; };
   }, [db, sync.revision]);
 
@@ -186,7 +190,7 @@ export default function DiscoverScreen() {
       setGames({ state: 'loading', rows: [] });
       setShelf({ state: 'loading', rows: [] });
       // Each source answers on its own: one of them being down must not empty the other.
-      searchTmdb(term, abort.signal)
+      searchTmdb(term, abort.signal, tmdbLanguage(auth.region))
         .then((rows) => { if (live) setScreen({ state: 'done', rows: rows.map(fromProvider) }); })
         .catch((e) => { if (live && e?.name !== 'AbortError') setScreen({ state: 'error', rows: [] }); });
       api.searchGames(term)
@@ -220,13 +224,18 @@ export default function DiscoverScreen() {
   const vocabMatches = useMemo(() => (vocab ? matchVocab(vocab, norm) : { people: [], tags: [] }), [vocab, norm]);
   useEffect(() => { if (!norm && pool !== null && feed.page === 0 && !feed.loading) loadFeed(1); }, [norm, pool, feed.page, feed.loading, loadFeed]);
   // Each title's key once per pool, not once per keystroke.
-  const keyed = useMemo(() => (pool ?? []).map((c) => ({ c, key: searchKey(c.title) })), [pool]);
+  // A title's shown name first, then the others it is found by (the original, English, a romanization).
+  const keyed = useMemo(() => (pool ?? []).map((c) => {
+    const key = searchKey(c.title);
+    const more = (c.id ? otherNames.get(c.id) ?? [] : []).map(searchKey).filter((k) => k && k !== key);
+    return { c, key, keys: [key, ...more] };
+  }), [pool, otherNames]);
   const matches = useMemo(() => {
-    let local = norm ? keyed.filter((k) => k.key.includes(norm)).map((k) => k.c) : (pool ?? []);
+    let local = norm ? keyed.filter((k) => k.keys.some((x) => x.includes(norm))).map((k) => k.c) : (pool ?? []);
     // Next to nothing by that exact name: also what is one slip per word away ("witchr", "cyberpnk"), after the exact hits.
     if (norm.length >= 4 && local.length < FUZZY_BELOW) {
       const exact = new Set(local);
-      local = [...local, ...keyed.filter((k) => !exact.has(k.c) && fuzzyMatches(k.key, norm)).map((k) => k.c)];
+      local = [...local, ...keyed.filter((k) => !exact.has(k.c) && k.keys.some((x) => fuzzyMatches(x, norm))).map((k) => k.c)];
     }
     // With nothing typed this list chooses for you, so it leaves out what you
     // hid. A name still finds it: "It stays searchable" is what Hide promises.

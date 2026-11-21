@@ -18,6 +18,7 @@ import { api, type DeltaCursor, type DeltaPage } from '~/lib/api';
 import { CATALOG_FILES_URL } from '~/lib/config';
 import { catalogCount, getMeta, setMeta, inTransaction } from '~/lib/db';
 import { DATE_REGION_KEY } from '~/lib/localDates';
+import { localTitle, titleLangs } from '~/lib/localTitles';
 
 const CURSOR_KEY = 'catalog_cursor';
 const LAST_SYNC_KEY = 'catalog_synced_at';
@@ -73,6 +74,8 @@ export async function storePage(db: SQLiteDatabase, items: DeltaPage['items'], n
     await setMeta(db, CURSOR_KEY, JSON.stringify(next));
     return;
   }
+  // The title in this device's languages (lib/localTitles.ts); [] before the first switch is the catalog's own.
+  const langs = await titleLangs(db);
   await inTransaction(db, async () => {
     const insert = await db.prepareAsync(
       // `release_date` is the date in this device's country where one is known
@@ -96,7 +99,7 @@ export async function storePage(db: SQLiteDatabase, items: DeltaPage['items'], n
       for (const item of items) {
         const v = item.vector;
         await insert.executeAsync([
-          v.id, v.type, v.title, normalizeName(v.title), v.slug, v.posterUrl, v.releaseDate, v.year,
+          v.id, v.type, localTitle(v, langs), normalizeName(v.title), v.slug, v.posterUrl, v.releaseDate, v.year,
           v.communityScore, v.communityVotes ?? 0, item.updatedAt, JSON.stringify(v), JSON.stringify(item.facets),
         ]);
       }

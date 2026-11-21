@@ -28,6 +28,7 @@ import {
   authorOpenLibrary, publisherOpenLibrary, searchOpenLibrary, seriesOpenLibrary, subjectOpenLibrary, trendingOpenLibrary,
 } from "@/lib/sources/openlibrary";
 import { bookLanguagesFor, mergeBookCards, stripIsbns, type BookCard } from "@/lib/sources/bookPure";
+import { titleLanguagesFor } from "@/lib/titles";
 import { hardcoverConfigured, SEARCH_HARDCOVER_REQUESTS, searchHardcover, seriesHardcover } from "@/lib/sources/hardcover";
 import { bggConfigured, BggNotConfigured, hotBgg, searchBgg, setBggToken } from "@/lib/sources/bgg";
 import type { Env } from "./env";
@@ -48,7 +49,7 @@ export function useBggToken(env: Env): void {
 
 const HOUR = 3600;
 /** Bumped when what a shelf answers changes (a filter, a field), so a day-old cached answer is not served under the new rules. */
-const CACHE_VERSION = 5; // 3: Hardcover's cards behind Open Library's in search and series; authors on every card. 4: one card per book, no summaries (2026-10-23). 5: English plus the region's languages, an audiobook work folded into its book (2026-11-03)
+const CACHE_VERSION = 6; // 3: Hardcover's cards behind Open Library's in search and series; authors on every card. 4: one card per book, no summaries (2026-10-23). 5: English plus the region's languages, an audiobook work folded into its book (2026-11-03). 6: a translation's work folded into its book, titled in the region's language (2026-11-21)
 
 /** Answer from the edge cache, or run `load`, cache a non-empty answer for `ttl` seconds and answer. */
 async function cached(c: ShelfCtx, key: string, ttl: number, limiter: string, load: () => Promise<unknown[]>): Promise<Response> {
@@ -86,7 +87,7 @@ async function bothBookSources(env: Env, kind: string, units: number, ol: () => 
   ]);
   const merged = mergeBookCards(primary, secondary);
   if (olError && !merged.length) throw olError;
-  return stripIsbns(merged);
+  return merged;
 }
 
 /**
@@ -96,6 +97,8 @@ async function bothBookSources(env: Env, kind: string, units: number, ol: () => 
  * country shares one answer. No region is English alone, as before.
  */
 const bookLanguages = (c: ShelfCtx) => bookLanguagesFor(c.url.searchParams.get("region"));
+/** The same country's languages, best first, as a card is titled in them (src/lib/titles.ts, 2026-11-21). */
+const titleLanguages = (c: ShelfCtx) => titleLanguagesFor(c.url.searchParams.get("region"));
 const langKey = (langs: string[]) => `lang=${langs.join("+")}`;
 
 const query = (c: ShelfCtx) => (c.url.searchParams.get("q") ?? "").replace(/[<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
@@ -116,7 +119,8 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
     const langs = bookLanguages(c);
     const key = `search/${b}?q=${encodeURIComponent(q.toLowerCase())}${b === "books" ? `&${langKey(langs)}` : ""}`;
     return cached(c, key, HOUR, "search", () => (b === "books"
-      ? bothBookSources(c.env, "search", SEARCH_HARDCOVER_REQUESTS, () => searchOpenLibrary(q, 20, langs), () => searchHardcover(q, 15, langs)).then((cards) => cards.slice(0, 25))
+      ? bothBookSources(c.env, "search", SEARCH_HARDCOVER_REQUESTS, () => searchOpenLibrary(q, 20, langs), () => searchHardcover(q, 15, langs))
+        .then((cards) => stripIsbns(cards, titleLanguages(c)).slice(0, 25))
       : searchBgg(q, 20)));
   }
 
@@ -125,7 +129,7 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
     const day = new Date().toISOString().slice(0, 10);
     const langs = bookLanguages(c);
     return cached(c, `browse/${b}?day=${day}${b === "books" ? `&${langKey(langs)}` : ""}`, 6 * HOUR, "browse",
-      () => (b === "books" ? trendingOpenLibrary("weekly", 40, langs).then(stripIsbns) : hotBgg(30)));
+      () => (b === "books" ? trendingOpenLibrary("weekly", 40, langs).then((cards) => stripIsbns(cards, titleLanguages(c))) : hotBgg(30)));
   }
 
   if (a === "facet" && b === "books") {
@@ -136,7 +140,7 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
     }
     const langs = bookLanguages(c);
     // One card per book on every kind, not only a series: an author's audiobook work beside the book is one book (2026-11-03).
-    const one = (cards: BookCard[]) => stripIsbns(mergeBookCards(cards, []));
+    const one = (cards: BookCard[]) => stripIsbns(mergeBookCards(cards, []), titleLanguages(c));
     const load = kind === "tag" ? () => subjectOpenLibrary(q, 40, langs).then(one)
       : kind === "person" ? () => authorOpenLibrary(q, 40, langs).then(one)
       : kind === "studio" ? () => publisherOpenLibrary(q, 40, langs).then(one)
@@ -145,7 +149,7 @@ export async function shelves(c: ShelfCtx, method: string, a: string, b?: string
       // Hardcover requests (find the series, then its books). Oldest first; a
       // book with no date yet (announced, not scheduled) goes last.
       : () => bothBookSources(c.env, "facet", 2, () => seriesOpenLibrary(q, 40, langs), () => seriesHardcover(q, 40, langs))
-        .then((cards) => cards.sort((x, y) => (x.releaseDate ?? "9999").localeCompare(y.releaseDate ?? "9999")).slice(0, 40));
+        .then((cards) => stripIsbns(cards, titleLanguages(c)).sort((x, y) => (x.releaseDate ?? "9999").localeCompare(y.releaseDate ?? "9999")).slice(0, 40));
     // A week, as the games' facet answers: what a subject holds barely moves.
     return cached(c, `facet/books?kind=${kind}&q=${encodeURIComponent(q.toLowerCase())}&${langKey(langs)}`, 7 * 24 * HOUR, "facet", load);
   }

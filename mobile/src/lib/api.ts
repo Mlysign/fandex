@@ -87,6 +87,9 @@ export interface ItemVector {
   sources: { source: string; sourceId: string }[];
   /** A DLC, bundle, mod, season or pack. Absent on every other title. */
   addon?: true;
+  /** The title per language ("" is `title`) and the names that only find it (src/lib/titles.ts). From Worker DERIVE_VERSION 5. */
+  titles?: Record<string, string>;
+  aka?: string[];
 }
 
 export interface CommunityRating { source: string; label: string; score: number; outOf: number; votes?: number | null; url?: string | null }
@@ -94,6 +97,9 @@ export interface CommunityRating { source: string; label: string; score: number;
 /** The merged detail. A subset of the site's EnrichedItem: the fields the app renders. */
 export interface MergedItem {
   title: string;
+  /** The title per language and the search-only names, as on the vector. */
+  titles?: Record<string, string>;
+  aka?: string[];
   releaseDate: string | null;
   posterUrl: string | null;
   backdropUrl: string | null;

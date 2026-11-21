@@ -6,6 +6,7 @@
 // into a Fandex item.
 
 import { tmdbGenreNames } from '@/lib/tmdbGenres';
+import { titleLanguagesFor } from '@/lib/titles';
 import { TMDB_API_KEY, tmdbConfigured } from '~/lib/config';
 import type { MediaType } from '~/lib/api';
 
@@ -23,10 +24,22 @@ export interface ProviderCard {
 
 const BASE = 'https://api.themoviedb.org/3';
 
-/** Films and shows matching a title, most-voted first. Empty when no key is configured. */
-export async function searchTmdb(query: string, signal?: AbortSignal): Promise<ProviderCard[]> {
+/**
+ * The language TMDB answers a country in ("de-DE"): its titles then come in
+ * the account's language (2026-11-21). TMDB matches every language's title and
+ * its other names whatever is asked ("Kimi no Na wa" finds Your Name.), and
+ * answers one card per film.
+ */
+export function tmdbLanguage(region: string | null | undefined): string {
+  const country = String(region ?? '').trim().toUpperCase();
+  const lang = titleLanguagesFor(country)[0];
+  return /^[A-Z]{2}$/.test(country) ? `${lang}-${country}` : 'en-US';
+}
+
+/** Films and shows matching a title, most-voted first, titled in `language` (`tmdbLanguage`). Empty when no key is configured. */
+export async function searchTmdb(query: string, signal?: AbortSignal, language = 'en-US'): Promise<ProviderCard[]> {
   if (!tmdbConfigured() || query.trim().length < 2) return [];
-  const url = `${BASE}/search/multi?api_key=${TMDB_API_KEY}&include_adult=false&query=${encodeURIComponent(query.trim())}`;
+  const url = `${BASE}/search/multi?api_key=${TMDB_API_KEY}&include_adult=false&language=${encodeURIComponent(language)}&query=${encodeURIComponent(query.trim())}`;
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`TMDB search answered ${res.status}`);
   const data = (await res.json()) as { results?: any[] };

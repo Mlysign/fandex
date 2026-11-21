@@ -2378,6 +2378,9 @@ exports[`mergeLinks characterization > movie: tmdb + trakt + letterboxd 1`] = `
   ],
   "timeToBeat": null,
   "title": "Inception",
+  "titles": {
+    "en": "",
+  },
   "trailerYoutubeKey": "YoHD9XEInc0",
 }
 `;
@@ -2559,6 +2562,9 @@ exports[`mergeLinks characterization > show: tmdb + trakt 1`] = `
   ],
   "timeToBeat": null,
   "title": "Breaking Bad",
+  "titles": {
+    "en": "",
+  },
   "trailerYoutubeKey": null,
 }
 `;

@@ -28,7 +28,8 @@
 // Imported by the Worker: no Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { editionsInLanguages, ENGLISH_ONLY, isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
+import { editionsInLanguages, editionTitlesByLanguage, ENGLISH_ONLY, isPieceOfBook, type BookCard } from "@/lib/sources/bookPure";
+import { iso1FromMarc } from "@/lib/titles";
 import {
   DEFAULT_COVER_ORIGIN, isbnList, isWholeHardcoverBook, parseHardcoverBook, pickHardcoverBook, searchDocuments,
   type HardcoverBook, type HardcoverMatchWant,
@@ -116,6 +117,14 @@ async function graphql(query: string, variables: Record<string, unknown>, budget
   return body?.data ?? null;
 }
 
+/**
+ * Each edition's title, language and ISBN (2026-11-21): a book's title per
+ * language (`editionTitlesByLanguage`), and every language's ISBNs, so an Open
+ * Library work filed for a translation folds into the one book in a list
+ * (`mergeBookCards`). Aliased: `editions` is selected below with other fields.
+ */
+const TITLE_FIELDS = `title_editions: editions(limit: 40) { title isbn_13 language { language } }`;
+
 /** The fields a record is built from (hardcoverPure.ts). No rating, no count of readers: see the header. */
 const BOOK_FIELDS = `
   id title subtitle slug description release_date release_year pages editions_count compilation is_partial_book canonical_id book_status_id
@@ -124,7 +133,8 @@ const BOOK_FIELDS = `
   contributions { contribution author { name } }
   featured_book_series { position series { id name } }
   book_series { position series { id name } }
-  editions(limit: 12) { isbn_13 isbn_10 }`;
+  editions(limit: 12) { isbn_13 isbn_10 }
+  ${TITLE_FIELDS}`;
 
 /**
  * What a LIST reads besides a book's fields: each edition's title and
@@ -144,7 +154,27 @@ export function hardcoverCard(b: HardcoverBook): BookCard {
     source: "hardcover", sourceId: String(b.id), type: "book", title: b.title,
     releaseDate: b.releaseDate, posterUrl: b.cover, votes: 0, rating: null, popularity: 0,
     genres: b.tags.slice(0, 6), authors: b.authors, isbns: b.isbns,
+    ...(b.titles && Object.keys(b.titles).length ? { titles: b.titles } : {}),
   };
+}
+
+/**
+ * A row as a record, with its title per language and every language's ISBNs
+ * when the row carries its editions' titles (TITLE_FIELDS). A row without them
+ * (a search document) has no `titles` at all, which the titles walk reads as
+ * "not asked yet" (worker/src/hardcoverWalk.ts).
+ */
+export function parseBook(raw: any, origin: string = hardcoverCoverOrigin()): HardcoverBook | null {
+  const b = parseHardcoverBook(raw, origin);
+  if (!b || !Array.isArray(raw?.title_editions)) return b;
+  const editions = (raw.title_editions as any[]).map((e) => ({ title: e?.title, language: e?.language?.language ?? e?.language }));
+  const titles: Record<string, string> = {};
+  for (const [marc, title] of Object.entries(editionTitlesByLanguage(b.title, editions))) {
+    const lang = iso1FromMarc(marc);
+    if (lang) titles[lang] = title;
+  }
+  const isbns = isbnList([...b.isbns, ...(raw.title_editions as any[]).map((e) => e?.isbn_13)]);
+  return { ...b, isbns, titles };
 }
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -158,7 +188,7 @@ const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,
  * is nearly always one of those; a real book somebody would look for has one.
  */
 function listable(raw: any, accepted: readonly string[]): HardcoverBook | null {
-  const b = parseHardcoverBook(raw, hardcoverCoverOrigin());
+  const b = parseBook(raw);
   if (!isWholeHardcoverBook(b, raw) || !b.cover || isPieceOfBook(b.title)) return null;
   // Only in languages the list does not show, or titled after a translation (2026-11-03).
   const editions = Array.isArray(raw?.lang_editions)
@@ -202,14 +232,14 @@ export async function searchHardcover(query: string, limit = 20, accepted: reado
   const ids = [...new Set(docs.map((d) => Number(d?.id)).filter((n) => Number.isInteger(n) && n > 0))];
   if (!ids.length) return [];
   const langs = await graphql(
-    `query ($ids: [Int!]!) { books(where: {id: {_in: $ids}}, limit: ${ids.length}) { id editions_count ${LANGUAGE_FIELDS} } }`,
+    `query ($ids: [Int!]!) { books(where: {id: {_in: $ids}}, limit: ${ids.length}) { id editions_count ${LANGUAGE_FIELDS} ${TITLE_FIELDS} } }`,
     { ids },
     BROWSE_BUDGET_MS,
   );
   const byId = new Map<number, any>(((langs?.books ?? []) as any[]).map((b) => [Number(b?.id), b]));
   return cards(docs.map((d) => {
     const l = byId.get(Number(d?.id));
-    return l ? { ...d, editions_count: l.editions_count ?? d?.editions_count, lang_editions: l.lang_editions } : d;
+    return l ? { ...d, editions_count: l.editions_count ?? d?.editions_count, lang_editions: l.lang_editions, title_editions: l.title_editions } : d;
   }), accepted).slice(0, limit);
 }
 
@@ -226,10 +256,10 @@ export async function getHardcoverBook(id: string | number): Promise<HardcoverBo
     return data?.books?.[0] ?? null;
   };
   let raw = await one(n);
-  let book = raw ? parseHardcoverBook(raw, hardcoverCoverOrigin()) : null;
+  let book = raw ? parseBook(raw) : null;
   if (book?.canonicalId) {
     raw = await one(book.canonicalId);
-    book = raw ? parseHardcoverBook(raw, hardcoverCoverOrigin()) : null;
+    book = raw ? parseBook(raw) : null;
   }
   return book && book.canonicalId == null ? book : null;
 }
@@ -268,7 +298,7 @@ export async function findHardcoverBook(
       console.warn("hardcover_isbn_query_refused", { error: e.message });
     }
     const rows = (Array.isArray(data?.editions) ? data.editions : []).map((e: any) => e?.book).filter(Boolean);
-    const hit = pickHardcoverBook(rows.map((r: any) => (r.is_partial_book === true ? null : parseHardcoverBook(r, origin))), want, true);
+    const hit = pickHardcoverBook(rows.map((r: any) => (r.is_partial_book === true ? null : parseBook(r, origin))), want, true);
     if (hit) return hit;
   }
   const author = want.authors[0]?.trim();

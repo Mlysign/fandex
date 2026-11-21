@@ -141,6 +141,10 @@ export interface EnrichedItem {
   slug?: string | null;
   type: MediaType;
   title: string;
+  /** The title per language, ISO 639-1; "" is the same as `title` (src/lib/titles.ts). Absent when nothing is known. */
+  titles?: Record<string, string>;
+  /** Names that find the title and are never shown: the original, a romanization. */
+  aka?: string[];
   releaseDate: string | null;
   posterUrl: string | null;       // portrait box-art (card view)
   backdropUrl: string | null;     // landscape art (list-row thumbnail); null → fall back to posterUrl

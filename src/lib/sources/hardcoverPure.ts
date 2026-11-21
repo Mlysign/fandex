@@ -58,6 +58,11 @@ export interface HardcoverBook {
   compilation: boolean;
   /** Set when Hardcover filed this book as a duplicate of another. */
   canonicalId: number | null;
+  /**
+   * The title per language (ISO 639-1) off the editions (hardcover.ts, `parseBook`), {} when
+   * none names one. Absent on a record that was not asked for them, or stored before 2026-11-21.
+   */
+  titles?: Record<string, string>;
 }
 
 /** The asset path of a Hardcover image address, or null for any other address. */
@@ -84,7 +89,8 @@ export function isbn13(raw: unknown): string | null {
   return `${body}${(10 - (sum % 10)) % 10}`;
 }
 
-const ISBN_CAP = 16;
+// 40 since 2026-11-21: a book's translations' ISBNs too, what folds a translation's own work into it.
+const ISBN_CAP = 40;
 
 /** Distinct ISBN-13s from a list of raw ISBNs, capped. */
 export function isbnList(raws: unknown): string[] {

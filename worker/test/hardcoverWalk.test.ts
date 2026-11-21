@@ -3,7 +3,7 @@ import { __resetBreakers } from "@/lib/http";
 import { upsertMediaItem } from "../src/catalog/ingest";
 import type { Env } from "../src/env";
 import {
-  HARDCOVER_MOODS_DUE_SQL, HARDCOVER_RECHECK_DAYS, HARDCOVER_WALK_DUE_SQL, runHardcoverWalkStep,
+  HARDCOVER_RECHECK_DAYS, HARDCOVER_TITLES_DUE_SQL, HARDCOVER_WALK_DUE_SQL, runHardcoverWalkStep,
 } from "../src/hardcoverWalk";
 import { count, db, env, wipe } from "./helpers";
 
@@ -143,18 +143,31 @@ describe("the Hardcover walk", () => {
     expect((await rawOf("openlibrary", "OL1W")).hardcoverChecked).toBeUndefined();
   });
 
-  it("gives a Hardcover link stored before moods its moods, and nothing else of the record changes", async () => {
+  it("gives a Hardcover link stored before titles its titles per language and its moods, and nothing else of the record changes", async () => {
     const old = { id: 11, title: "Dune Messiah", tags: ["Science Fiction"], authors: ["Frank Herbert"], isbns: [], cover: null, slug: "dune-messiah" };
     await upsertMediaItem(db, { source: "hardcover", sourceId: "11", type: "book", title: "Dune Messiah", releaseDate: "1969-10-15", rawData: old });
-    expect((await db.prepare(HARDCOVER_MOODS_DUE_SQL).bind(5).all()).results).toHaveLength(1);
-    hardcover({ books: (id) => (id === 11 ? [MESSIAH] : []) });
+    expect((await db.prepare(HARDCOVER_TITLES_DUE_SQL).bind(5).all()).results).toHaveLength(1);
+    const withEditions = {
+      ...MESSIAH,
+      title_editions: [
+        { title: "Dune Messiah", isbn_13: "9780441172696", language: { language: "English" } },
+        { title: "Der Herr des Wüstenplaneten", isbn_13: "9783453317185", language: { language: "German" } },
+        { title: "Il messia di Dune", isbn_13: null, language: { language: "Italian" } },
+      ],
+    };
+    hardcover({ books: (id) => (id === 11 ? [withEditions] : []) });
 
     const r = await runHardcoverWalkStep(env);
-    expect(r.moods).toBe(1);
+    expect(r.titles).toBe(1);
     const raw = await rawOf("hardcover", "11");
-    expect(raw).toMatchObject({ ...old, moods: ["Dark", "Reflective", "Tense"] });
-    expect((await merged((await itemOf("hardcover", "11"))!)).tags).toEqual(expect.arrayContaining(["Dark", "Reflective"]));
-    expect((await db.prepare(HARDCOVER_MOODS_DUE_SQL).bind(5).all()).results).toHaveLength(0);
+    expect(raw).toMatchObject({
+      ...old, isbns: ["9780441172696", "9783453317185"], moods: ["Dark", "Reflective", "Tense"],
+      titles: { en: "Dune Messiah", de: "Der Herr des Wüstenplaneten", it: "Il messia di Dune" },
+    });
+    const doc = await merged((await itemOf("hardcover", "11"))!);
+    expect(doc.tags).toEqual(expect.arrayContaining(["Dark", "Reflective"]));
+    expect(doc.titles).toEqual({ en: "", de: "Der Herr des Wüstenplaneten", it: "Il messia di Dune" });
+    expect((await db.prepare(HARDCOVER_TITLES_DUE_SQL).bind(5).all()).results).toHaveLength(0);
   });
 
   it("reads the Open Library links from its cursor by the primary key, and probes for a Hardcover link by the item index", async () => {

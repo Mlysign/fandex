@@ -2,6 +2,7 @@ import type { Source, MediaLink, EnrichedItem, MediaType, CommunityRating, TagTi
 import { type SourceNormalized, normalizeSource } from "./sources/normalize";
 import { DEFAULT_COUNTRY } from "./countries";
 import { tagKey } from "./facets";
+import { compactTitleNames } from "./titles";
 
 // merge.ts is now pure POLICY: it merges the per-source SourceNormalized partials
 // (built by src/lib/sources/normalize.ts) by priority (single-value) or union
@@ -116,6 +117,8 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
 
   // ── Single-value fields (priority order) ──────────────────────
   const title = pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown";
+  // Its names in other languages and the ones that only find it (titles.ts), first source first.
+  const names = compactTitleNames(title, TITLE_PRIORITY.map((s) => norm.get(s)).filter((n): n is SourceNormalized => !!n));
   const description = pickLongestField(DESCRIPTION_PRIORITY, norm, "description");
   // Region-aware release date (T22): show WHEN it releases in the user's country
   // (TMDB per-region) — e.g. "out in the US, coming to your country later". But
@@ -219,6 +222,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
 
   return {
     title,
+    ...names,
     releaseDate,
     posterUrl,
     backdropUrl,

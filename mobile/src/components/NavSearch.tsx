@@ -24,19 +24,28 @@ import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import { spokenKey } from '~/lib/facetImpact';
 import { facetVocab, matchVocab, type VocabEntry } from '~/lib/facetVocab';
 import { handSearchQuery } from '~/lib/searchHandoff';
+import { catalogSearchNames } from '~/lib/localTitles';
 import { color, font, radius, type, TYPE_LABEL } from '~/theme';
 
 const MIN_CHARS = 3;
 const PER_GROUP = 5;
 
-interface TitleRow { id: string; type: string; title: string; slug: string | null; year: number | null; votes: number; key: string }
+/** `key` is the shown title's search key, `others` the keys of the names it is also found by (lib/localTitles.ts). */
+interface TitleRow { id: string; type: string; title: string; slug: string | null; year: number | null; votes: number; key: string; others?: string[] }
 
 let titlesCache: { db: SQLiteDatabase; revision: number; rows: Promise<TitleRow[]> } | null = null;
 function titleIndex(db: SQLiteDatabase, revision: number): Promise<TitleRow[]> {
   if (!titlesCache || titlesCache.db !== db || titlesCache.revision !== revision) {
-    const rows = db.getAllAsync<{ id: string; type: string; title: string; slug: string | null; year: number | null; community_votes: number }>(
-      'SELECT id, type, title, slug, year, community_votes FROM catalog',
-    ).then((r) => r.map((x) => ({ id: x.id, type: x.type, title: x.title, slug: x.slug, year: x.year, votes: x.community_votes ?? 0, key: searchKey(x.title) })));
+    const rows = Promise.all([
+      db.getAllAsync<{ id: string; type: string; title: string; slug: string | null; year: number | null; community_votes: number }>(
+        'SELECT id, type, title, slug, year, community_votes FROM catalog',
+      ),
+      catalogSearchNames(db).catch(() => new Map<string, string[]>()),
+    ]).then(([r, names]) => r.map((x) => {
+      const key = searchKey(x.title);
+      const others = (names.get(x.id) ?? []).map(searchKey).filter((k) => k && k !== key);
+      return { id: x.id, type: x.type, title: x.title, slug: x.slug, year: x.year, votes: x.community_votes ?? 0, key, ...(others.length ? { others } : {}) };
+    }));
     titlesCache = { db, revision, rows };
     rows.catch(() => { if (titlesCache?.rows === rows) titlesCache = null; });
   }
@@ -46,7 +55,8 @@ function titleIndex(db: SQLiteDatabase, revision: number): Promise<TitleRow[]> {
 /** Titles whose name holds the query: the whole name first, then a word starting with it, then the rest; better known first. */
 export function matchTitles(rows: TitleRow[], norm: string, limit = PER_GROUP): TitleRow[] {
   const rank = (r: TitleRow) => (r.key === norm ? 0 : r.key.startsWith(norm) || r.key.includes(` ${norm}`) ? 1 : 2);
-  return rows.filter((r) => r.key.includes(norm)).sort((a, b) => rank(a) - rank(b) || b.votes - a.votes).slice(0, limit);
+  // Found by another name ("kimi no na wa"): ranked with the rest.
+  return rows.filter((r) => r.key.includes(norm) || r.others?.some((k) => k.includes(norm))).sort((a, b) => rank(a) - rank(b) || b.votes - a.votes).slice(0, limit);
 }
 
 type Option =

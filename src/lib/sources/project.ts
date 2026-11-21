@@ -4,6 +4,7 @@
 import type { Source } from "@/types";
 import { COUNTRIES } from "@/lib/countries";
 import { KEPT_CREW_JOBS } from "@/lib/crewJobs";
+import { titleLanguage, tmdbOriginCountries } from "@/lib/titles";
 
 // ── H2a: raw_data projection ─────────────────────────────────────────────────
 //
@@ -59,7 +60,11 @@ import { KEPT_CREW_JOBS } from "@/lib/crewJobs";
 // "Story", "Characters"...), not just Writer and Screenplay, so an adapted
 // author gets a writer facet. Only TMDB is affected, and the Worker's cron walks
 // the TMDB links below v4 and refetches them (worker/src/cron.ts).
-export const PROJECTION_VERSION = 4;
+// v5 (2026-11-21): a TMDB blob keeps the title's translations and its home
+// countries' alternative titles (`projectTmdbTitles`), so "Kimi no Na wa" finds
+// Your Name. and a German account sees its German title. TMDB only; the same
+// cron walk refetches the links below v5.
+export const PROJECTION_VERSION = 5;
 
 // The only countries `users.country` can be set to (validated by
 // normalizeCountry), so region data outside this set is unreachable by design.
@@ -177,6 +182,8 @@ function projectTmdb(d: any): any {
     out.release_dates = { results: pickRegionList(d.release_dates.results) };
   }
 
+  Object.assign(out, projectTmdbTitles(d));
+
   // keywords is small but arrives under two shapes (movie vs tv).
   if (d.keywords) {
     out.keywords = d.keywords.keywords
@@ -184,6 +191,36 @@ function projectTmdb(d: any): any {
       : { results: (d.keywords.results ?? []).map((k: any) => pick(k, ["id", "name"])) };
   }
 
+  return out;
+}
+
+/**
+ * v5 (2026-11-21): a title's names. Of TMDB's ~60 translations, those in a
+ * language an account can read (titles.ts, TITLE_LANGUAGES) with a title; of
+ * its alternative titles, those of the countries the title comes from. Exactly
+ * what `tmdbTitleNames` (normalize.ts) reads, so the projection stays lossless.
+ */
+function projectTmdbTitles(d: any): any {
+  const out: any = {};
+  const rows = d.translations?.translations;
+  if (Array.isArray(rows)) {
+    out.translations = {
+      translations: rows
+        .filter((r: any) => titleLanguage(r?.iso_639_1) && (r?.data?.title?.trim?.() || r?.data?.name?.trim?.()))
+        .map((r: any) => ({
+          iso_639_1: r.iso_639_1, iso_3166_1: r.iso_3166_1,
+          data: r.data.title !== undefined ? { title: r.data.title } : { name: r.data.name },
+        })),
+    };
+  }
+  const homes = tmdbOriginCountries(d);
+  for (const key of ["titles", "results"] as const) {
+    const alts = d.alternative_titles?.[key];
+    if (!Array.isArray(alts)) continue;
+    out.alternative_titles = {
+      [key]: alts.filter((a: any) => homes.has(a?.iso_3166_1)).map((a: any) => pick(a, ["iso_3166_1", "title", "type"])),
+    };
+  }
   return out;
 }
 

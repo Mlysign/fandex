@@ -3,6 +3,7 @@ import { bookDate, bookSubjects, coverUrl, plausibleBookYear } from "@/lib/sourc
 import { plainDescription } from "@/lib/plainText";
 import { bggFranchises, bggThemes } from "@/lib/sources/bggPure";
 import { categorizeTag } from "@/lib/tags";
+import { languageHome, titleLanguage, tmdbOriginCountries, TITLE_LANGUAGES } from "@/lib/titles";
 
 // ── A1: per-source normalizers ────────────────────────────────────────────────
 // Each source maps its raw_data → a SourceNormalized partial (one place per
@@ -59,6 +60,10 @@ export interface SourceNormalized {
   gameModes?: string[];
   dlc?: string[];
   keywords?: string[];
+  /** The title per language, ISO 639-1, as the source names it (src/lib/titles.ts compacts them). */
+  titles?: Record<string, string>;
+  /** Names that find the title and are never shown: the original, a romanization, another name. */
+  aka?: string[];
   communityRatings?: CommunityRating[];
   storeLinks?: { name: string; url: string; source: Source }[];
   cast?: { name: string; character: string | null; profileUrl?: string | null }[];
@@ -158,6 +163,43 @@ function trailerKeyFromUrl(url: any): string | null {
 
 // ── TMDB ──────────────────────────────────────────────────────────────────────
 
+/**
+ * A film's or show's names (2026-11-21). TMDB answers in English when no
+ * language is asked for, so `title` is the English one. A translation per
+ * kept language, the one for the language's home country first ("de" from DE
+ * before AT); an empty translation means "the same as the original" and is
+ * skipped. The original title is the original language's name and a search-only
+ * name, as are the alternative titles of the countries it comes from: "Kimi no
+ * Na wa." (romaji, JP) for Your Name. The projection keeps exactly what this
+ * reads (project.ts, `projectTmdbTitles`).
+ */
+export function tmdbTitleNames(d: any): Pick<SourceNormalized, "titles" | "aka"> {
+  const titles: Record<string, string> = {};
+  const english = d.title ?? d.name;
+  if (typeof english === "string" && english.trim()) titles.en = english;
+  const rows: any[] = Array.isArray(d.translations?.translations) ? d.translations.translations : [];
+  const named = rows
+    .map((r) => ({ lang: titleLanguage(r?.iso_639_1), country: String(r?.iso_3166_1 ?? ""), title: r?.data?.title ?? r?.data?.name }))
+    .filter((r): r is { lang: string; country: string; title: string } => !!r.lang && typeof r.title === "string" && !!r.title.trim());
+  for (const lang of TITLE_LANGUAGES) {
+    if (lang in titles) continue;
+    const of = named.filter((r) => r.lang === lang);
+    const pick = of.find((r) => r.country === languageHome(lang)) ?? of[0];
+    if (pick) titles[lang] = pick.title;
+  }
+  const original = d.original_title ?? d.original_name;
+  const originalLang = titleLanguage(d.original_language);
+  if (originalLang && !(originalLang in titles) && typeof original === "string" && original.trim()) titles[originalLang] = original;
+  const aka: string[] = typeof original === "string" && original.trim() ? [original] : [];
+  const homes = tmdbOriginCountries(d);
+  const alts: any[] = d.alternative_titles?.titles ?? d.alternative_titles?.results ?? [];
+  // A romanization first: it is what somebody types who cannot type the original.
+  const fromHome = (Array.isArray(alts) ? alts : []).filter((a) => homes.has(a?.iso_3166_1) && typeof a?.title === "string" && a.title.trim());
+  fromHome.sort((a, b) => Number(/roma/i.test(String(b.type ?? ""))) - Number(/roma/i.test(String(a.type ?? ""))));
+  for (const a of fromHome) aka.push(a.title);
+  return { ...(Object.keys(titles).length ? { titles } : {}), ...(aka.length ? { aka } : {}) };
+}
+
 function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
   const out: SourceNormalized = {};
   out.title = d.title ?? d.name ?? null;
@@ -178,6 +220,7 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
   })();
   out.country = d.production_countries?.[0]?.name ?? d.origin_country?.[0] ?? null;
   out.network = d.networks?.[0]?.name ?? null;
+  Object.assign(out, tmdbTitleNames(d));
 
   // certification (union; TMDB carries DE + US)
   out.certification = (() => {
@@ -495,6 +538,10 @@ function normalizeRawg(d: any): SourceNormalized {
 function normalizeIgdb(d: any): SourceNormalized {
   const out: SourceNormalized = {};
   out.title = d.name ?? null;
+  // "Biohazard", "Zelda no Densetsu": they find the game, the shown name stays IGDB's.
+  const akas = (Array.isArray(d.alternative_names) ? d.alternative_names : [])
+    .map((a: any) => a?.name).filter((n: unknown): n is string => typeof n === "string" && !!n.trim());
+  if (akas.length) out.aka = akas;
   out.description = d.summary ?? null;
   out.releaseDate = typeof d.first_release_date === "number"
     ? new Date(d.first_release_date * 1000).toISOString().split("T")[0] : null;
@@ -599,6 +646,8 @@ function normalizeHardcover(d: any): SourceNormalized {
   const out: SourceNormalized = {};
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
   out.title = typeof d.title === "string" ? d.title : null;
+  // Each language's edition title, read off the editions (hardcover.ts). Absent on a record stored before 2026-11-21.
+  if (d.titles && typeof d.titles === "object") out.titles = d.titles;
   out.description = typeof d.description === "string" ? d.description : null;
   // Checked again on read: a record stored before `hardcoverDate` refused year 30 (2026-10-23)
   // still carries "0030", and a re-derive reads the stored record, not Hardcover.

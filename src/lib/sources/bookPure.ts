@@ -169,6 +169,28 @@ export function editionsInLanguages(
   return { keep: true, title: bookTitle };
 }
 
+/**
+ * A book's title in each language its editions name, keyed by MARC code
+ * (2026-11-21: one entry per book, titled in the account's language). In a
+ * language with an edition carrying the book's own title, that title; else the
+ * first edition's, without a printing's label ("… Lib/E"). Editions with no
+ * language or no title say nothing.
+ */
+export function editionTitlesByLanguage(bookTitle: string, editions: readonly EditionLanguage[] | null | undefined): Record<string, string> {
+  const head = (t: string) => foldKey(withoutEditionMarker(t).split(/[:(]/)[0]);
+  const own = head(bookTitle);
+  const out: Record<string, string> = {};
+  const ownIn = new Set<string>();
+  for (const e of editions ?? []) {
+    const code = bookLanguageCode(e?.language);
+    const title = typeof e?.title === "string" ? withoutEditionMarker(e.title.trim()) : "";
+    if (!code || !title) continue;
+    if (own && head(title) === own && !ownIn.has(code)) { out[code] = bookTitle; ownIn.add(code); continue; }
+    if (!(code in out)) out[code] = title;
+  }
+  return out;
+}
+
 /** `hasEditionIn` for English alone: what a lookup by ISBN prefers. */
 export const hasEnglishEdition = (doc: any): boolean => hasEditionIn(doc, ENGLISH_ONLY);
 
@@ -274,6 +296,8 @@ export interface BookCard {
   authors: string[];
   /** ISBN-13s, for matching the two sources. Dropped from the wire (`stripIsbns`). */
   isbns?: string[];
+  /** The title per language (ISO 639-1), from Hardcover's editions. What titles a card for the reader (`titleCardsFor`). */
+  titles?: Record<string, string>;
 }
 
 // a to z only, so a title in another script folds to "" ("東京 2" to "2").
@@ -348,39 +372,67 @@ export function isCompanionBook(title: string): boolean {
  * provider, the one with more votes is kept, and on a tie the one whose title
  * carries no printing's label, so an audiobook work listed first does not
  * stand for the book (2026-11-03). Across providers the first list still wins.
+ *
+ * Since 2026-11-21 sameness is followed through: Open Library files a
+ * translation as a work of its own ("Der Weg der Könige" beside "The Way of
+ * Kings") and the two share no ISBN, but Hardcover's one book carries both
+ * languages' ISBNs, so all three are one card. Its per-language titles ride on
+ * the kept card (`titles`), for `titleCardsFor`.
  */
 export function mergeBookCards(primary: BookCard[], secondary: BookCard[]): BookCard[] {
-  const byIsbn = new Map<string, BookCard>();
-  const byKey = new Map<string, BookCard>();
-  const note = (c: BookCard) => {
-    for (const i of c.isbns ?? []) if (!byIsbn.has(i)) byIsbn.set(i, c);
-    const k = bookIdentityKey(c);
-    if (!byKey.has(k)) byKey.set(k, c);
-  };
+  const cards = [...primary, ...secondary].filter((c) => !isCompanionBook(c.title));
+  // Groups of one book: any shared ISBN-13 or identity key joins two, and whatever joins either.
+  const parent = cards.map((_, i) => i);
+  const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const join = (a: number, b: number) => { const ra = find(a); const rb = find(b); if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb); };
+  const firstWith = new Map<string, number>();
+  cards.forEach((c, i) => {
+    for (const k of [...(c.isbns ?? []).map((n) => `isbn:${n}`), `key:${bookIdentityKey(c)}`]) {
+      const seen = firstWith.get(k);
+      if (seen === undefined) firstWith.set(k, i); else join(seen, i);
+    }
+  });
   const better = (c: BookCard, held: BookCard) => c.source === held.source
     && (c.votes > held.votes || (c.votes === held.votes && hasEditionMarker(held.title) && !hasEditionMarker(c.title)));
   // Copies: filling a cover in must not change the caller's card.
+  const kept = new Map<number, BookCard>();
   const out: BookCard[] = [];
-  for (const c of [...primary, ...secondary]) {
-    if (isCompanionBook(c.title)) continue;
-    const twin = (c.isbns ?? []).map((i) => byIsbn.get(i)).find((t): t is BookCard => !!t) ?? byKey.get(bookIdentityKey(c));
-    if (twin) {
-      if (better(c, twin)) {
-        // The kept card takes the place of the one it beats, so the maps and the order still hold.
-        const isbns = [...new Set([...(c.isbns ?? []), ...(twin.isbns ?? [])])];
-        Object.assign(twin, c, { posterUrl: c.posterUrl ?? twin.posterUrl, ...(isbns.length ? { isbns } : {}) });
-        note(twin);
-      } else if (!twin.posterUrl && c.posterUrl) twin.posterUrl = c.posterUrl;
-      continue;
+  cards.forEach((c, i) => {
+    const root = find(i);
+    const head = kept.get(root);
+    if (!head) {
+      const copy = { ...c };
+      kept.set(root, copy);
+      out.push(copy);
+      return;
     }
-    const copy = { ...c };
-    note(copy);
-    out.push(copy);
-  }
+    const titles = { ...(c.titles ?? {}), ...(head.titles ?? {}) };
+    if (better(c, head)) {
+      // The kept card takes the place of the one it beats, so the order still holds.
+      const isbns = [...new Set([...(c.isbns ?? []), ...(head.isbns ?? [])])];
+      Object.assign(head, c, { posterUrl: c.posterUrl ?? head.posterUrl, ...(isbns.length ? { isbns } : {}) });
+    } else if (!head.posterUrl && c.posterUrl) head.posterUrl = c.posterUrl;
+    if (Object.keys(titles).length) head.titles = titles;
+  });
   return out;
 }
 
-/** Cards for the wire: the ISBN lists are for matching, not for a client. */
-export function stripIsbns(cards: BookCard[]): BookCard[] {
-  return cards.map(({ isbns: _isbns, ...rest }) => rest);
+/**
+ * Cards titled for a reader of `langs` (ISO 639-1, best first; titles.ts,
+ * `titleLanguagesFor`): the first language a card has a title in, else its own.
+ * The per-language list stays off the wire.
+ */
+export function titleCardsFor(cards: BookCard[], langs: readonly string[]): BookCard[] {
+  return cards.map(({ titles, ...c }) => {
+    const pick = langs.map((l) => titles?.[l]).find((t): t is string => !!t);
+    return pick ? { ...c, title: pick } : c;
+  });
+}
+
+/**
+ * Cards for the wire, titled for a reader of `langs` (`titleCardsFor`): the
+ * ISBN and title lists are for matching, not for a client.
+ */
+export function stripIsbns(cards: BookCard[], langs: readonly string[] = ["en"]): BookCard[] {
+  return titleCardsFor(cards, langs).map(({ isbns: _isbns, ...rest }) => rest);
 }

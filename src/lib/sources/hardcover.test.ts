@@ -300,7 +300,8 @@ describe("talking to Hardcover", () => {
     expect(byIsbn).toMatchObject({ id: 11, moods: ["Dark", "Reflective"] });
     expect(calls).toHaveLength(1);
     expect(body(calls[0]).variables).toEqual({ isbns: ["9780441172696"] });
-    expect((body(calls[0]).query.match(/\beditions\(/g) ?? []).length).toBe(2); // the top-level field, and a book's own editions
+    // The top-level field, a book's own editions, and its editions' titles per language (2026-11-21).
+    expect((body(calls[0]).query.match(/\beditions\(/g) ?? []).length).toBe(3);
     vi.restoreAllMocks();
 
     // No ISBN hit: a search for the title and the first author, which must match on both.

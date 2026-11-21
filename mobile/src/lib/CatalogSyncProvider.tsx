@@ -9,6 +9,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { lastSyncedAt, resetCatalog, syncCatalog } from '~/lib/catalogSync';
 import { catalogCount } from '~/lib/db';
 import { fillRegionalDates, pointDatesAt } from '~/lib/localDates';
+import { pointTitlesAt } from '~/lib/localTitles';
 
 export type SyncState = 'idle' | 'syncing' | 'done' | 'error';
 
@@ -155,6 +156,8 @@ export function CatalogSyncProvider({ children }: { children: ReactNode }) {
         const r: string = wantedRegion.current;
         try {
           if (await pointDatesAt(db, r)) setRevision((v) => v + 1);
+          // Titles in that country's languages, the same way (lib/localTitles.ts).
+          if (await pointTitlesAt(db, r)) setRevision((v) => v + 1);
           if ((await fillRegionalDates(db, r)) > 0) setRevision((v) => v + 1);
         } catch (e) {
           // The worldwide date stays where nothing better is known.

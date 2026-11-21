@@ -14,11 +14,11 @@ async function tmdbGet(endpoint: string, params: Record<string, string> = {}) {
 }
 
 export async function getTmdbMovie(id: number) {
-  return tmdbGet(`/movie/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,release_dates,external_ids" });
+  return tmdbGet(`/movie/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,release_dates,external_ids,translations,alternative_titles" });
 }
 
 export async function getTmdbShow(id: number) {
-  const d = await tmdbGet(`/tv/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,content_ratings,external_ids" });
+  const d = await tmdbGet(`/tv/${id}`, { append_to_response: "videos,credits,watch/providers,keywords,content_ratings,external_ids,translations,alternative_titles" });
   // A show's `credits` holds only the latest season's REGULARS. A miniseries
   // whose actors TMDB files episode by episode as guest stars (Adolescence:
   // 0 regulars, everyone a guest) comes back with no cast at all, so its page

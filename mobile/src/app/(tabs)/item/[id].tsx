@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Eye, EyeOff, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { displayTitle, titleLanguagesFor } from '@/lib/titles';
 import { CardRail } from '~/components/cards';
 import { SavePopGlyph, StarPicker, useSavePop } from '~/components/feel';
 import { EpisodeTracker } from '~/components/EpisodeTracker';
@@ -183,7 +184,9 @@ export default function ItemScreen() {
     }
     try {
       const got = await api.item(address, region);
-      if (mine === loadSeq.current) setItem(got);
+      // Titled in the account's language, everywhere on the page (src/lib/titles.ts, 2026-11-21).
+      const title = displayTitle(got.merged, titleLanguagesFor(region));
+      if (mine === loadSeq.current) setItem(title === got.merged.title ? got : { ...got, merged: { ...got.merged, title } });
     } catch (e) {
       if (mine !== loadSeq.current) return;
       const code = e instanceof ApiError ? e.code : '';

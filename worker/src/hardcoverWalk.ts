@@ -7,9 +7,10 @@
 //
 // Two walks, run by the every-minute trigger, a few books a run:
 //
-//   1. HARDCOVER LINKS STORED WITHOUT MOODS. Moods were dropped at parsing
-//      until 2026-11-02. Each such link is asked again and its moods merged
-//      onto the stored record. Parks for a day once none are left.
+//   1. HARDCOVER LINKS STORED WITHOUT TITLES PER LANGUAGE (2026-11-21; it
+//      was moods until they were all in, 2026-11-02). Each such link is asked
+//      again and its titles, moods and ISBNs merged onto the stored record.
+//      Parks for a day once none are left.
 //   2. OPEN LIBRARY BOOKS WITH NO HARDCOVER LINK. Each is looked up by its
 //      ISBNs, then by title and first author (`findHardcoverBook`), and a hit
 //      that is the same book is attached as a second link, the way a
@@ -46,7 +47,7 @@ export const HARDCOVER_RECHECK_DAYS = 180;
 
 const CURSOR_KEY = "hardcover_walk_cursor";
 const IDLE_KEY = "hardcover_walk_idle";
-const MOODS_IDLE_KEY = "hardcover_moods_idle";
+const TITLES_IDLE_KEY = "hardcover_titles_idle";
 const IDLE_SECONDS = 86_400;
 
 /**
@@ -67,14 +68,19 @@ export const HARDCOVER_WALK_DUE_SQL =
       AND NOT EXISTS (SELECT 1 FROM media_links h WHERE h.media_item_id = l.media_item_id AND h.source = 'hardcover')
     ORDER BY l.source_id LIMIT ?`;
 
-/** Hardcover links whose record predates moods. Few: only books opened from a Hardcover card. */
-export const HARDCOVER_MOODS_DUE_SQL =
+/**
+ * Hardcover links whose record predates a book's titles per language
+ * (2026-11-21; moods before that, 2026-11-02). A record asked for its editions
+ * carries `titles`, {} when none names a language, so each link is asked once.
+ */
+export const HARDCOVER_TITLES_DUE_SQL =
   `SELECT source_id, title, release_date FROM media_links
-    WHERE source = 'hardcover' AND media_type = 'book' AND raw_data NOT LIKE '%"moods":%'
+    WHERE source = 'hardcover' AND media_type = 'book' AND raw_data NOT LIKE '%"titles":%'
     ORDER BY source_id LIMIT ?`;
 
 export interface HardcoverWalkResult {
-  moods: number;
+  /** Hardcover links asked again for their titles (walk 1). */
+  titles: number;
   linked: number;
   absent: number;
   failed: number;
@@ -99,36 +105,36 @@ const jsonList = (v: unknown): string[] => {
 };
 
 export async function runHardcoverWalkStep(env: Env, batch = HARDCOVER_WALK_PER_RUN, now = nowSeconds()): Promise<HardcoverWalkResult> {
-  const out: HardcoverWalkResult = { moods: 0, linked: 0, absent: 0, failed: 0, budget: false };
+  const out: HardcoverWalkResult = { titles: 0, linked: 0, absent: 0, failed: 0, budget: false };
   useHardcover(env);
   // Off or without a token, nothing moves and nothing is stamped: the walk waits.
   if (!hardcoverConfigured()) return out;
   const mayAsk = walkSpender(env);
   let left = batch;
 
-  // ── 1. Hardcover links stored before moods were taken ──
-  if (!(await kvGet(env.DB, MOODS_IDLE_KEY))) {
-    const due = await all<{ source_id: string; title: string; release_date: string | null }>(env.DB, HARDCOVER_MOODS_DUE_SQL, [left]);
-    if (!due.length) await kvSet(env.DB, MOODS_IDLE_KEY, "1", IDLE_SECONDS);
+  // ── 1. Hardcover links stored before a book's titles per language were taken ──
+  if (!(await kvGet(env.DB, TITLES_IDLE_KEY))) {
+    const due = await all<{ source_id: string; title: string; release_date: string | null }>(env.DB, HARDCOVER_TITLES_DUE_SQL, [left]);
+    if (!due.length) await kvSet(env.DB, TITLES_IDLE_KEY, "1", IDLE_SECONDS);
     for (const link of due) {
       if (!(await mayAsk())) { out.budget = true; return out; }
-      let moods: string[];
+      let fresh: { moods?: string[]; titles: Record<string, string>; isbns?: string[] };
       try {
         const book = await getHardcoverBook(link.source_id);
-        // A book Hardcover deleted keeps what it had, with no moods, and leaves the walk.
-        moods = book?.moods ?? [];
+        // A book Hardcover deleted keeps what it had, with no titles, and leaves the walk.
+        fresh = book ? { moods: book.moods, titles: book.titles ?? {}, isbns: book.isbns } : { titles: {} };
       } catch (e) {
         if (e instanceof ProviderUnavailableError) return out;
         out.failed++;
-        console.warn("hardcover_moods_failed", { id: link.source_id, error: e instanceof Error ? e.message : String(e) });
-        moods = [];
+        console.warn("hardcover_titles_failed", { id: link.source_id, error: e instanceof Error ? e.message : String(e) });
+        fresh = { titles: {} };
       }
-      // Merged over the stored record (mergeRawData): only `moods` is new.
+      // Merged over the stored record (mergeRawData): the titles, and the moods and ISBNs as they are now.
       await upsertMediaItem(env.DB, {
         source: "hardcover", sourceId: link.source_id, type: "book", title: link.title, releaseDate: link.release_date,
-        rawData: { moods },
+        rawData: fresh,
       }, { browsed: 1 });
-      out.moods++;
+      out.titles++;
       left--;
     }
   }
