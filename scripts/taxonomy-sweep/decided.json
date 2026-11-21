@@ -778,5 +778,45 @@
   "ref": "bundle-category|warrior",
   "why": "Bundle kept where its main tag counts (character (its own row)): a row set earlier, often by hand, and defensible (2026-11-06).",
   "on": "2026-11-06"
+ },
+ {
+  "ref": "franchise-merge|best seller romance>bestseller romance",
+  "why": "A Mills & Boon imprint line, not a franchise; folding two spellings of an imprint gains nothing.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-new|cobra kai",
+  "why": "Cobra Kai belongs with The Karate Kid, which is not in the catalog.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-new|boston strangler",
+  "why": "Two films about the same real case are not a franchise.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-new|atomic habits",
+  "why": "Two editions of one book, not a series.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-member|1f8caa7c>frankenstein",
+  "why": "Frankenstein's Army is a Nazi found-footage film that borrows the name, not an adaptation.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-member|d128b5a2>mulan",
+  "why": "A Chinese film of the legend, not Disney's Mulan.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-member|b67c15e2>san andreas",
+  "why": "An Asylum mockbuster, not part of San Andreas.",
+  "on": "2026-11-21"
+ },
+ {
+  "ref": "franchise-new|no other choice",
+  "why": "Park Chan-wook's film of Westlake's The Ax; neither the novel nor Costa-Gavras's Le Couperet is in the catalog, so it stays alone.",
+  "on": "2026-11-21"
  }
 ]
