@@ -18,6 +18,7 @@ import { dropPlaceholder } from '~/lib/prerender';
 import { ScoreProvider } from '~/lib/ScoreProvider';
 import { TypeFilterProvider } from '~/lib/typeFilter';
 import { ToastProvider } from '~/components/Toast';
+import { ReleaseReminders } from '~/components/ReleaseReminders';
 import { color, font } from '~/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -144,6 +145,8 @@ export default function RootLayout() {
       <TypeFilterProvider>
       <ToastProvider>
         <StatusBar style="light" />
+        {/* Reminders on the day a wishlisted title or a new season comes out. Phone only, renders nothing. */}
+        <ReleaseReminders />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: color.surface },

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fandex",
     "slug": "fandex",
-    "version": "0.3.60",
+    "version": "0.3.61",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fandex",
@@ -10,7 +10,7 @@
     "backgroundColor": "#100E0C",
     "android": {
       "package": "org.fandex.app",
-      "versionCode": 360,
+      "versionCode": 361,
       "adaptiveIcon": {
         "backgroundColor": "#100E0C",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
@@ -44,6 +44,13 @@
       "expo-localization",
       "expo-font",
       "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#C8A24B"
+        }
+      ],
       "./plugins/withPlayUploadSigning"
     ],
     "experiments": {

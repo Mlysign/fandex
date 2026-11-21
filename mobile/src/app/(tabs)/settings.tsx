@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Check, ChevronDown, Clapperboard, Gamepad2, Tv } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions } from 'react-native';
 import { COUNTRIES } from '@/lib/countries';
 import { MEDIA_TYPES, MEDIA_TYPE_LABELS, enabledMediaTypes } from '@/lib/mediaTypes';
 import { platformMarkName, type PlatformOption } from '@/lib/platformKeys';
@@ -37,6 +37,8 @@ import type { SteamSyncResult } from '~/lib/steamSync';
 import type { TraktSyncResult } from '~/lib/traktSync';
 import { useTypeFilter } from '~/lib/typeFilter';
 import { requestWidget, widgetAvailable } from '~/lib/widget';
+import { readReminderPrefs, writeReminderPref, type ReminderPrefs } from '~/lib/releaseReminders';
+import { reminderPermission, remindersAvailable, syncReminders, type ReminderPermission } from '~/lib/reminderScheduler';
 import { count } from '~/lib/plural';
 import { breakpoint, color, font, radius, space, TYPE_PLURAL } from '~/theme';
 
@@ -824,6 +826,60 @@ function ImportRow() {
 
 // ── What the app has that the site did not ───────────────────────────────────
 
+/**
+ * The two release reminders (lib/releaseReminders.ts), each on or off on this
+ * phone. Turning one on asks Android for permission if it has not been given;
+ * when Android says no for good, the row says so and opens the app's settings.
+ */
+function Reminders() {
+  const db = useSQLiteContext();
+  const auth = useAuth();
+  const [prefs, setPrefs] = useState<ReminderPrefs | null>(null);
+  const [permission, setPermission] = useState<ReminderPermission | null>(null);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([readReminderPrefs(db), reminderPermission()]).then(([p, perm]) => {
+      if (live) { setPrefs(p); setPermission(perm); }
+    }, () => undefined);
+    return () => { live = false; };
+  }, [db]);
+  if (!remindersAvailable || !prefs) return null;
+
+  const set = (kind: keyof ReminderPrefs, on: boolean) => {
+    setPrefs({ ...prefs, [kind]: on });
+    void writeReminderPref(db, kind, on)
+      .then(() => syncReminders(db, auth.status === 'signedIn', { ask: on }))
+      .then((run) => setPermission(run.permission), () => undefined);
+  };
+  const blocked = permission === 'denied' && (prefs.releases || prefs.seasons);
+  return (
+    <Section eyebrow="Notifications" hint="On the day itself, in the morning.">
+      <Card row>
+        <RowText title="Releases" text="When something on your wishlist comes out." />
+        <Switch
+          value={prefs.releases} onValueChange={(v) => set('releases', v)}
+          trackColor={{ false: color.border, true: color.accent }} thumbColor={color.textPrimary}
+          accessibilityLabel="Release reminders"
+        />
+      </Card>
+      <Card row>
+        <RowText title="New seasons" text="When a new season of a show you are caught up on starts." />
+        <Switch
+          value={prefs.seasons} onValueChange={(v) => set('seasons', v)}
+          trackColor={{ false: color.border, true: color.accent }} thumbColor={color.textPrimary}
+          accessibilityLabel="New season reminders"
+        />
+      </Card>
+      {blocked ? (
+        <Card row>
+          <RowText title="Notifications are off for Fandex" text="Android blocks them. Turn them on in the app's settings." />
+          <Button label="Open" onPress={() => void Linking.openSettings()} />
+        </Card>
+      ) : null}
+    </Section>
+  );
+}
+
 function WidgetOffer() {
   const [note, setNote] = useState<string | null>(null);
   if (!widgetAvailable) return null;
@@ -982,6 +1038,7 @@ export default function SettingsScreen() {
                 the tabs, Refresh is each provider's Sync, Sign out is on the You page, and Sign out everywhere is under Your data. */}
             <YourData onNotice={setNotice} counts={counts} />
             {auth.profile?.admin ? <AdminLinks /> : null}
+            <Reminders />
             <WidgetOffer />
             {/* The catalog copy's counts and its re-download, for the admin only since 2026-11-05 (Nils: "remove"). */}
             {auth.profile?.admin ? <Device /> : null}
