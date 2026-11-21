@@ -191,6 +191,16 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   (`editionsInLanguages`). An audiobook or large-print work ("… Lib/E") is the same book
   (`withoutEditionMarker`), and of one provider's two cards the one with more votes stays. A book's
   series is read off its English editions when the search row has none.
+- **A title's names: one entry per title in every language, shown in the account's language**
+  (Nils, 2026-11-21, every media type: "if I'm searching for Kimi no Na wa, I want to see Your
+  Name", shown once, under its German title). The account's language is its country's
+  (`titleLanguagesFor`: the country's languages, then English, then the catalog's own title; no
+  separate language setting). A title carries a display name per language and search-only names
+  (`src/lib/titles.ts`): TMDB's translations and home-country alternative titles, IGDB's
+  alternative names, Hardcover's and Open Library's editions. Search matches the catalog title,
+  English, the account's languages and the search-only names, never every language. A book's
+  translation filed as its own Open Library work folds into the book through Hardcover's ISBNs.
+  The page title, the catalog copy's `title` and TMDB's live search all follow the country.
 - **Hardcover is the SECOND book source, facts only, behind `HARDCOVER_TOKEN`** (Nils: "please
   add the token yourself", 2026-10-17, which settled the yes). Its API Rules now allow a
   professional project to use facts about books, editions and series; what they forbid is used
