@@ -616,6 +616,8 @@ function normalizeIgdb(d: any): SourceNormalized {
 function normalizeOpenLibrary(d: any): SourceNormalized {
   const out: SourceNormalized = {};
   out.title = typeof d.title === "string" ? d.title : null;
+  // Each language's edition title (openlibrary.ts, `openLibraryTitles`). Absent on a record stored before 2026-11-21.
+  if (d.titles && typeof d.titles === "object") out.titles = d.titles;
   // Open Library writes descriptions in Markdown (2026-10-23). Stripped here so
   // the longest-text rule (DESCRIPTION_PRIORITY) compares words, not link syntax.
   out.description = typeof d.description === "string" ? plainDescription(d.description) || null : null;

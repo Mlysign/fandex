@@ -118,12 +118,14 @@ async function graphql(query: string, variables: Record<string, unknown>, budget
 }
 
 /**
- * Each edition's title, language and ISBN (2026-11-21): a book's title per
- * language (`editionTitlesByLanguage`), and every language's ISBNs, so an Open
- * Library work filed for a translation folds into the one book in a list
- * (`mergeBookCards`). Aliased: `editions` is selected below with other fields.
+ * One edition per language, with its title and ISBN (2026-11-21): a book's
+ * title per language (`editionTitlesByLanguage`), and an ISBN in each
+ * language, so an Open Library work filed for a translation folds into the one
+ * book in a list (`mergeBookCards`). `distinct_on`, not the first forty: The
+ * Way of Kings has 56 editions, and the first forty held seven of its fourteen
+ * languages (probed 2026-11-21). Aliased: `editions` is selected below too.
  */
-const TITLE_FIELDS = `title_editions: editions(limit: 40) { title isbn_13 language { language } }`;
+const TITLE_FIELDS = `title_editions: editions(distinct_on: language_id, limit: 60) { title isbn_13 language { language } }`;
 
 /** The fields a record is built from (hardcoverPure.ts). No rating, no count of readers: see the header. */
 const BOOK_FIELDS = `

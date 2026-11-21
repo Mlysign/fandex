@@ -37,6 +37,7 @@ import { seasonRowsFromTmdb, storeShowSeasons } from "./catalog/seasons";
 import { useSharedIgdbToken } from "./catalog/resolve";
 import { runBaselineStep } from "./baseline";
 import { runHardcoverWalkStep } from "./hardcoverWalk";
+import { runOpenLibraryTitlesStep } from "./openLibraryTitles";
 
 // ── 1. The export ───────────────────────────────────────────────────────────
 
@@ -998,4 +999,31 @@ export async function runFastScheduled(env: Env, scheduledTime = Date.now()): Pr
   } catch (e) {
     console.error("hardcover_walk_step_failed", { error: e instanceof Error ? e.message : String(e) });
   }
+  // The Open Library books stored before their titles per language, once each (openLibraryTitles.ts).
+  try {
+    const ot = await runOpenLibraryTitlesStep(env);
+    if (ot && (ot.titled || ot.failed)) console.log("ol_titles_step", ot);
+  } catch (e) {
+    console.error("ol_titles_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  // The TMDB refetch and the re-derive ride here too while they have work (2026-11-21):
+  // on the ten-minute trigger alone a version bump took nine days to reach the pool.
+  // Smaller batches than there: this run already makes a few dozen queries. The
+  // two triggers never share a minute, so a cursor is never read twice at once.
+  try {
+    const pr = await runProjectionRefreshStep(env, FAST_PROJECTION_REFRESH_PER_RUN);
+    if (pr.refreshed || pr.failed) console.log("tmdb_projection_step", pr);
+  } catch (e) {
+    console.error("tmdb_projection_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+  try {
+    const rd = await runRederiveStep(env, FAST_REDERIVE_PER_RUN);
+    if (rd && (rd.rederived || rd.skipped)) console.log("rederive_step", rd);
+  } catch (e) {
+    console.error("rederive_step_failed", { error: e instanceof Error ? e.message : String(e) });
+  }
 }
+
+/** The fast trigger's share of the two walks: about 4,300 TMDB links and 7,200 titles a day. */
+const FAST_PROJECTION_REFRESH_PER_RUN = 3;
+const FAST_REDERIVE_PER_RUN = 5;

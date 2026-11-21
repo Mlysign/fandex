@@ -3,6 +3,7 @@ import { compactTitleNames, displayTitle, searchTitles, titleLanguagesFor } from
 import { tmdbTitleNames } from "./sources/normalize";
 import { projectRawData } from "./sources/project";
 import { editionTitlesByLanguage, mergeBookCards, stripIsbns, type BookCard } from "./sources/bookPure";
+import { openLibraryTitles, relevantBooks } from "./sources/openlibrary";
 
 // Your Name. as TMDB answered on 2026-11-21 (trimmed to the rows that matter).
 const YOUR_NAME = {
@@ -67,6 +68,26 @@ describe("a title's names", () => {
     const names = searchTitles(item, ["de", "en"]);
     expect(names).toEqual(expect.arrayContaining(["Your Name.", "Your Name. - Gestern, heute und für immer", "Kimi no Na wa."]));
     expect(names).not.toContain("Il tuo nome");
+  });
+});
+
+describe("Open Library's editions", () => {
+  it("finds a work by the translation it matched on, as Open Library answered 'der weg der könige' (2026-11-21)", () => {
+    const row = { key: "/works/OL15358691W", title: "The Way of Kings", author_name: ["Brandon Sanderson"], cover_i: 1,
+      editions: { numFound: 30, docs: [{ title: "Der Weg der Könige", language: ["ger"] }] } };
+    const other = { key: "/works/OL1W", title: "The Circus of Adventure", author_name: ["Enid Blyton"], cover_i: 1,
+      editions: { numFound: 23, docs: [{ title: "Der Zirkus der Abenteuer", language: ["ger"] }] } };
+    expect(relevantBooks([row, other], "der weg der könige").map((d) => d.title)).toEqual(["The Way of Kings"]);
+  });
+
+  it("titles a work per language off its editions, the work's own title where an edition carries it", () => {
+    expect(openLibraryTitles("The Way of Kings", [
+      { title: "The way of kings", languages: [{ key: "/languages/eng" }] },
+      { title: "Der Weg der Könige", languages: [{ key: "/languages/ger" }] },
+      { title: "Cesta králů", languages: [{ key: "/languages/cze" }] },
+      { title: "Kralların Yolu", languages: [{ key: "/languages/tur" }] },
+      { title: "No language" },
+    ])).toEqual({ en: "The Way of Kings", de: "Der Weg der Könige", cs: "Cesta králů" });
   });
 });
 

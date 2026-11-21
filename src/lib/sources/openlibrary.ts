@@ -13,8 +13,12 @@
 // Node APIs, no `@/lib/db`.
 
 import { httpFetch, BROWSE_BUDGET_MS } from "@/lib/http";
-import { bookDate, bookRating, bookSubjects, coverUrl, ENGLISH_ONLY, isWholeBook, OL_WORK_ID, seriesFromEditions, seriesFromSubjects, type BookCard } from "@/lib/sources/bookPure";
+import {
+  bookDate, bookRating, bookSubjects, coverUrl, editionTitlesByLanguage, ENGLISH_ONLY, isWholeBook, OL_WORK_ID,
+  seriesFromEditions, seriesFromSubjects, withoutEditionMarker, type BookCard,
+} from "@/lib/sources/bookPure";
 import { isbnList } from "@/lib/sources/hardcoverPure";
+import { iso1FromMarc } from "@/lib/titles";
 
 export * from "@/lib/sources/bookPure";
 
@@ -69,24 +73,45 @@ export async function getOpenLibraryWork(workId: string): Promise<any | null> {
   const doc = search?.docs?.[0] ?? { key: `/works/${id}`, title: work.title };
   const description = typeof work.description === "string" ? work.description : work.description?.value ?? null;
   const record = { ...trimDoc(doc), id, description, subjects_work: Array.isArray(work.subjects) ? work.subjects.slice(0, 40) : undefined };
-  // The search row names a series for a few works only; the editions name it
-  // for most ("The Stormlight Archive #1"). One more request, for a book with
-  // no series on its row, is what puts it in its franchise (Nils, 2026-10-17).
+  // The editions, one more request: the work's title per language (2026-11-21),
+  // and its series where the row names none. The search row names a series for
+  // a few works only; the editions name it for most ("The Stormlight Archive
+  // #1"), which is what puts a book in its franchise (Nils, 2026-10-17).
+  const editions = await workEditions(id);
+  if (editions) record.titles = openLibraryTitles(record.title ?? work.title ?? "", editions);
   if (!record.series_name?.length) {
-    const series = await seriesOfWork(id, work.subjects);
+    const series = seriesFromEditions(editions ?? undefined) ?? seriesFromSubjects(work.subjects);
     if (series) record.series_name = [series];
   }
   return record;
 }
 
-/** A work's series off its English editions, else off a "series:" subject; null when neither names one. */
-async function seriesOfWork(id: string, subjects: unknown): Promise<string | null> {
-  let fromEditions: string | null = null;
+/** A work's editions (the first hundred), or null when they would not load: titles and a series are niceties. */
+async function workEditions(id: string): Promise<any[] | null> {
   try {
-    const editions = await getJson(`/works/${id}/editions.json?limit=50`);
-    fromEditions = seriesFromEditions(editions?.entries);
-  } catch { /* a series is a nicety: the book is stored without one */ }
-  return fromEditions ?? seriesFromSubjects(subjects);
+    const data = await getJson(`/works/${id}/editions.json?limit=100`);
+    return Array.isArray(data?.entries) ? data.entries : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A work's title per language (ISO 639-1) off its editions; {} when none names a language an account reads. */
+export function openLibraryTitles(workTitle: string, editions: any[]): Record<string, string> {
+  const byMarc = editionTitlesByLanguage(workTitle, editions.map((e) => ({ title: e?.title, language: e?.languages?.[0]?.key })));
+  const out: Record<string, string> = {};
+  for (const [marc, title] of Object.entries(byMarc)) {
+    const lang = iso1FromMarc(marc);
+    if (lang) out[lang] = title;
+  }
+  return out;
+}
+
+/** A work's titles per language alone, for a book stored before they were taken (worker/src/openLibraryTitles.ts). */
+export async function getOpenLibraryTitles(workId: string, workTitle: string): Promise<Record<string, string> | null> {
+  if (!OL_WORK_ID.test(workId)) return null;
+  const editions = await workEditions(workId);
+  return editions ? openLibraryTitles(workTitle, editions) : null;
 }
 
 export type { BookCard };
@@ -141,12 +166,29 @@ export async function openLibraryWorkByIsbn(isbns: string[]): Promise<string | n
 const cards = (docs: unknown, accepted: readonly string[]): BookCard[] =>
   ((docs ?? []) as any[]).filter((d) => isWholeBook(d, accepted)).map(bookCard).filter((c): c is BookCard => !!c);
 
-/** Books matching a query, best match first. */
+/**
+ * The edition a search matched a work on, as Open Library names it
+ * (`editions.docs[0]`): "der weg der könige" matches The Way of Kings through
+ * its German edition (probed 2026-11-21). Null when the row carries none.
+ */
+function matchedEdition(doc: any): { title: string; lang: string | null } | null {
+  const e = doc?.editions?.docs?.[0];
+  if (typeof e?.title !== "string" || !e.title.trim()) return null;
+  const langs = Array.isArray(e.language) ? e.language : [];
+  return { title: withoutEditionMarker(e.title.trim()), lang: langs.length === 1 ? iso1FromMarc(String(langs[0])) : null };
+}
+
+/** Books matching a query, best match first, each carrying the title of the edition it matched in that edition's language. */
 export async function searchOpenLibrary(query: string, limit = 20, accepted: readonly string[] = ENGLISH_ONLY): Promise<BookCard[]> {
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
-  const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=${OL_FIELDS}&limit=40`, BROWSE_BUDGET_MS);
-  return cards(relevantBooks(data?.docs, q), accepted).slice(0, limit);
+  const data = await getJson(`/search.json?q=${encodeURIComponent(q)}&fields=${OL_FIELDS},editions,editions.title,editions.language&limit=40`, BROWSE_BUDGET_MS);
+  const docs = relevantBooks(data?.docs, q);
+  return docs.filter((d) => isWholeBook(d, accepted)).map((d) => {
+    const card = bookCard(d);
+    const e = matchedEdition(d);
+    return card && e?.lang ? { ...card, titles: { [e.lang]: e.title } } : card;
+  }).filter((c): c is BookCard => !!c).slice(0, limit);
 }
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -162,7 +204,8 @@ export function relevantBooks(docs: unknown, query: string): any[] {
   const words = fold(query).split(" ").filter((w) => w.length > 1);
   const kept = ((docs ?? []) as any[]).filter((d) => {
     if (typeof d?.title !== "string" || NOT_THE_BOOK.test(d.title)) return false;
-    const hay = ` ${fold(`${d.title} ${(d.author_name ?? []).join(" ")}`)} `;
+    // The edition it matched counts as its title: a translation's name finds the work (2026-11-21).
+    const hay = ` ${fold(`${d.title} ${matchedEdition(d)?.title ?? ""} ${(d.author_name ?? []).join(" ")}`)} `;
     return words.every((w) => hay.includes(` ${w}`));
   });
   // A record with no cover and not one rating is a stub ("Project Hail Mary: A
