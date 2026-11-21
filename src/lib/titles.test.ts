@@ -54,6 +54,13 @@ describe("a title's names", () => {
     expect(compactTitleNames("Inception", [{}])).toEqual({});
   });
 
+  it("reads a language's title that only adds a subtitle or a bracket as the title itself", () => {
+    expect(compactTitleNames("The intelligent investor", [{ titles: { en: "The Intelligent Investor (100 Page Summaries)" } }]).titles).toEqual({ en: "" });
+    expect(compactTitleNames("Dune", [{ titles: { en: "Dune: Deluxe Edition", de: "Der Wüstenplanet" } }]).titles).toEqual({ en: "", de: "Der Wüstenplanet" });
+    // A dash is not a subtitle mark: the German Your Name. stays its own title.
+    expect(compactTitleNames("Your Name.", [{ titles: { de: "Your Name. - Gestern, heute und für immer" } }]).titles).toEqual({ de: "Your Name. - Gestern, heute und für immer" });
+  });
+
   it("shows the account's language, and the title itself where that language reads the same", () => {
     const item = { title: "Your Name.", ...compactTitleNames("Your Name.", [tmdbTitleNames(YOUR_NAME)]) };
     expect(displayTitle(item, ["de", "en"])).toBe("Your Name. - Gestern, heute und für immer");

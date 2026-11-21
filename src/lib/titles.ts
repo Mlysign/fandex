@@ -73,6 +73,14 @@ export interface TitleNames {
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+/** The title before a subtitle or a bracket, folded: "The Intelligent Investor (100 Page Summaries)" is "the intelligent investor". */
+const head = (t: string) => t.split(/:|\s\(/)[0].trim().toLowerCase().replace(/[.!?,;]+$/, "");
+/**
+ * A language's title that only adds a subtitle or a bracket to the title is the
+ * title (2026-11-21: one edition of The Intelligent Investor is "(100 Page
+ * Summaries)", and it stood for the book's English name).
+ */
+const sameTitle = (a: string, b: string) => same(a, b) || (!!head(b) && head(a) === head(b));
 
 /**
  * Per-language names, first source wins a language, compacted against the
@@ -86,7 +94,7 @@ export function compactTitleNames(canonical: string, sources: TitleNames[]): Tit
     for (const [lang, raw] of Object.entries(s.titles ?? {})) {
       const k = titleLanguage(lang);
       if (!k || k in titles || typeof raw !== "string" || !raw.trim()) continue;
-      titles[k] = same(raw, canonical) ? "" : raw.trim();
+      titles[k] = sameTitle(raw, canonical) ? "" : raw.trim();
     }
   }
   const known = [canonical, ...Object.values(titles).filter(Boolean)];
