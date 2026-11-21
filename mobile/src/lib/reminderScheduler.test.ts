@@ -27,13 +27,19 @@ const n = vi.hoisted(() => {
 });
 vi.mock('expo-notifications', () => n.api);
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
-const plan = vi.hoisted(() => ({ releases: vi.fn(), seasons: vi.fn() }));
+const plan = vi.hoisted(() => ({
+  releases: vi.fn(),
+  seasons: vi.fn(),
+  episodes: vi.fn(async (): Promise<{ starts: import('./releaseReminders').EpisodeStart[]; failed: Set<string> }> => ({ starts: [], failed: new Set() })),
+}));
 vi.mock('~/lib/releaseReminders', async (orig) => ({
   ...(await orig<typeof import('./releaseReminders')>()),
   wishlistReleases: plan.releases,
   seasonStarts: plan.seasons,
-  readReminderPrefs: async () => ({ releases: true, seasons: true }),
+  episodeStarts: plan.episodes,
+  readReminderPrefs: async () => ({ releases: true, seasons: true, episodes: true }),
 }));
+vi.mock('~/lib/tmdb', () => ({ tmdbShowStatus: vi.fn() }));
 const meta = vi.hoisted(() => new Map<string, string>());
 vi.mock('~/lib/db', () => ({
   getMeta: async (_db: unknown, k: string) => meta.get(k) ?? null,
@@ -71,6 +77,17 @@ describe('setting the reminders on the phone', () => {
     plan.seasons.mockRejectedValue(new Error('offline'));
     expect(await syncReminders(db, true, { now: NOW })).toMatchObject({ seasonsFailed: true, cancelled: 0 });
     expect(n.set.has('fandex-season:sev:3:2026-12-04')).toBe(true);
+  });
+
+  it('keeps the episode reminder of a show TMDB could not answer for, and moves the others', async () => {
+    plan.releases.mockResolvedValue([]);
+    plan.seasons.mockResolvedValue([]);
+    const ep = (id: string, n: number, day: string) => ({ id, title: id, slug: id, season: 1, episode: n, release_date: day });
+    plan.episodes.mockResolvedValueOnce({ starts: [ep('apo', 57, '2026-11-27'), ep('bar', 4, '2026-11-28')], failed: new Set() });
+    await syncReminders(db, true, { now: NOW });
+    plan.episodes.mockResolvedValueOnce({ starts: [ep('bar', 5, '2026-12-05')], failed: new Set(['apo']) });
+    await syncReminders(db, true, { now: NOW });
+    expect([...n.set.keys()].sort()).toEqual(['fandex-episode:apo:1:57:2026-11-27', 'fandex-episode:bar:1:5:2026-12-05', 'someone-else']);
   });
 
   it('cancels only its own when signed out, and asks Android once on its own', async () => {

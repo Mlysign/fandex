@@ -827,7 +827,7 @@ function ImportRow() {
 // ── What the app has that the site did not ───────────────────────────────────
 
 /**
- * The two release reminders (lib/releaseReminders.ts), each on or off on this
+ * The three release reminders (lib/releaseReminders.ts), each on or off on this
  * phone. Turning one on asks Android for permission if it has not been given;
  * when Android says no for good, the row says so and opens the app's settings.
  */
@@ -851,7 +851,7 @@ function Reminders() {
       .then(() => syncReminders(db, auth.status === 'signedIn', { ask: on }))
       .then((run) => setPermission(run.permission), () => undefined);
   };
-  const blocked = permission === 'denied' && (prefs.releases || prefs.seasons);
+  const blocked = permission === 'denied' && (prefs.releases || prefs.seasons || prefs.episodes);
   return (
     <Section eyebrow="Notifications" hint="On the day itself, in the morning.">
       <Card row>
@@ -868,6 +868,14 @@ function Reminders() {
           value={prefs.seasons} onValueChange={(v) => set('seasons', v)}
           trackColor={{ false: color.border, true: color.accent }} thumbColor={color.textPrimary}
           accessibilityLabel="New season reminders"
+        />
+      </Card>
+      <Card row>
+        <RowText title="New episodes" text="When a new episode comes out of a show you are caught up on." />
+        <Switch
+          value={prefs.episodes} onValueChange={(v) => set('episodes', v)}
+          trackColor={{ false: color.border, true: color.accent }} thumbColor={color.textPrimary}
+          accessibilityLabel="New episode reminders"
         />
       </Card>
       {blocked ? (

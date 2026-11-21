@@ -194,8 +194,14 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
 - **Release reminders are set on the phone, on the day itself only** (Nils, 2026-11-21, picked
   over server push): a wishlisted title of any type on its release day in your country, and a new
   season of a show you are caught up on (the calendar's rule, hidden shows never), 09:00 local.
-  No "in a week" reminder. Each kind is a switch in Settings, per phone. No push service and no
-  push token, so nothing new is stored about anybody and the privacy policy is unchanged.
+  Since 0.3.62 also the next episode of a show you are caught up on (nothing aired left to watch),
+  on TMDB's air date. No "in a week" reminder. Each kind is a switch in Settings, per phone. No
+  push service and no push token, so nothing new is stored about anybody and the privacy policy is
+  unchanged.
+- **No provider has a dubbed episode's release date** (checked 2026-11-21 on Die Tagebücher der
+  Apothekerin): TMDB, Trakt and AniList carry the original airing only, and Crunchyroll has no
+  public API. fernsehserien.de lists German Crunchyroll dates but has no API and shuts out AI
+  crawlers in robots.txt: not a source. Episode dates and reminders are the original's.
 - **A title's names: one entry per title in every language, shown in the account's language**
   (Nils, 2026-11-21, every media type: "if I'm searching for Kimi no Na wa, I want to see Your
   Name", shown once, under its German title). The account's language is its country's

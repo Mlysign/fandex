@@ -91,11 +91,51 @@ describe('release reminders', () => {
     })]);
   });
 
-  it('keeps both kinds on until switched off, per phone', async () => {
+  it('keeps every kind on until switched off, per phone', async () => {
     const { db } = open();
     await migrate(db);
-    expect(await R.readReminderPrefs(db)).toEqual({ releases: true, seasons: true });
-    await R.writeReminderPref(db, 'seasons', false);
-    expect(await R.readReminderPrefs(db)).toEqual({ releases: true, seasons: false });
+    expect(await R.readReminderPrefs(db)).toEqual({ releases: true, seasons: true, episodes: true });
+    await R.writeReminderPref(db, 'episodes', false);
+    expect(await R.readReminderPrefs(db)).toEqual({ releases: true, seasons: true, episodes: false });
+  });
+
+  it('reminds of the next episode of a show you are caught up on, not one with episodes left, hidden or never started', async () => {
+    const { db, raw } = open();
+    await migrate(db);
+    const show = (id: string, name: string, tmdb: string) => raw.prepare(
+      `INSERT INTO catalog (id, type, title, norm_title, slug, poster_url, release_date, world_date, year, community_score, community_votes, updated_at, vector, facets)
+       VALUES (?, 'show', ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 0, 0, ?, '[]')`,
+    ).run(id, name, name.toLowerCase(), id, JSON.stringify({ sources: [{ source: 'tmdb', sourceId: tmdb }] }));
+    const upNext = (id: string, season: number | null) => raw.prepare(
+      'INSERT INTO up_next (media_item_id, season, episode, title, aired_at, last_watched_at, watched_count, checked_at) VALUES (?, ?, ?, NULL, NULL, NULL, 5, 0)',
+    ).run(id, season, season == null ? null : 3);
+    show('apo', 'Die Tagebücher der Apothekerin', '220542');
+    show('behind', 'Behind Show', '2');
+    show('hid', 'Hidden Show', '3');
+    show('sev', 'Severance', '95396');
+    show('never', 'Never Started', '5');
+    upNext('apo', null);
+    upNext('behind', 1);
+    upNext('hid', null);
+    upNext('sev', null);
+    raw.prepare('INSERT INTO hidden_item (media_item_id, hidden_at) VALUES (?, 0)').run('hid');
+
+    R.forgetNextEpisodes();
+    const ask = vi.fn(async (tmdb: string) => (tmdb === '220542'
+      ? { season: 1, episode: 57, airDate: '2026-11-27' }
+      : tmdb === '95396' ? { season: 3, episode: 1, airDate: '2026-12-04' } : null));
+    const { starts, failed } = await R.episodeStarts(db, NOW, ask);
+    expect(ask.mock.calls.map((c) => c[0]).sort()).toEqual(['220542', '95396']);
+    expect(failed.size).toBe(0);
+
+    // Severance's first episode is its season's reminder, said once.
+    const seasons = [{ id: 'sev', title: 'Severance', slug: 'sev', season: 3, release_date: '2026-12-04' }];
+    const plan = R.planReminders({ releases: [], seasons, episodes: starts, now: NOW });
+    expect(plan.map((r) => r.identifier)).toEqual(['fandex-episode:apo:1:57:2026-11-27', 'fandex-season:sev:3:2026-12-04']);
+    expect(plan[0]).toMatchObject({ title: 'New episode of Die Tagebücher der Apothekerin today', body: 'Season 1, episode 57.', url: '/show/apo' });
+
+    // Asked again within six hours: TMDB is not.
+    await R.episodeStarts(db, NOW, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
   });
 });

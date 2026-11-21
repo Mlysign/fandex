@@ -12,9 +12,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { getMeta, setMeta } from '~/lib/db';
 import {
-  localDay, planReminders, readReminderPrefs, RELEASE_PREFIX, SEASON_PREFIX, seasonStarts, wishlistReleases,
-  type Reminder, type SeasonStart,
+  EPISODE_PREFIX, episodeStarts, KIND_PREFIX, localDay, planReminders, readReminderPrefs, RELEASE_PREFIX, SEASON_PREFIX,
+  seasonStarts, wishlistReleases, type EpisodeStart, type Reminder, type ReminderKind, type ReminderPrefs, type SeasonStart,
 } from '~/lib/releaseReminders';
+import { tmdbShowStatus } from '~/lib/tmdb';
 
 const CHANNEL = 'releases';
 export const remindersAvailable = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -46,7 +47,9 @@ async function cancelOwn(prefixes: string[]): Promise<number> {
   return mine.length;
 }
 
-export interface ReminderRun { scheduled: number; cancelled: number; permission: ReminderPermission; seasonsFailed: boolean }
+export interface ReminderRun {
+  scheduled: number; cancelled: number; permission: ReminderPermission; seasonsFailed: boolean; episodesFailed: boolean;
+}
 
 /** Set once Android has been asked on the app's own initiative: after that, only a switch in Settings asks again. */
 const ASKED_KEY = 'notify_asked';
@@ -59,13 +62,14 @@ const ASKED_KEY = 'notify_asked';
  */
 export async function syncReminders(db: SQLiteDatabase, signedIn: boolean, opts: { ask?: boolean; now?: Date } = {}): Promise<ReminderRun> {
   const now = opts.now ?? new Date();
-  const run: ReminderRun = { scheduled: 0, cancelled: 0, permission: 'denied', seasonsFailed: false };
+  const run: ReminderRun = { scheduled: 0, cancelled: 0, permission: 'denied', seasonsFailed: false, episodesFailed: false };
   if (!remindersAvailable) return run;
   setHandler();
-  const prefs = signedIn ? await readReminderPrefs(db) : { releases: false, seasons: false };
-  const off = [...(prefs.releases ? [] : [RELEASE_PREFIX]), ...(prefs.seasons ? [] : [SEASON_PREFIX])];
+  const prefs: ReminderPrefs = signedIn ? await readReminderPrefs(db) : { releases: false, seasons: false, episodes: false };
+  const kinds = Object.keys(KIND_PREFIX) as ReminderKind[];
+  const off = kinds.filter((k) => !prefs[k]).map((k) => KIND_PREFIX[k]);
   if (off.length) run.cancelled += await cancelOwn(off);
-  if (!prefs.releases && !prefs.seasons) { run.permission = await reminderPermission(); return run; }
+  if (kinds.every((k) => !prefs[k])) { run.permission = await reminderPermission(); return run; }
 
   run.permission = await reminderPermission();
   if (run.permission === 'undetermined' && (opts.ask || !(await getMeta(db, ASKED_KEY)))) {
@@ -90,10 +94,31 @@ export async function syncReminders(db: SQLiteDatabase, signedIn: boolean, opts:
       console.warn('reminder_seasons_failed', e instanceof Error ? e.message : String(e));
     }
   }
-  const plan = planReminders({ releases, seasons: seasons ?? [], now });
-  // The kinds this run read in full; a kind that failed keeps what it has.
-  const owned = [...(prefs.releases ? [RELEASE_PREFIX] : []), ...(prefs.seasons && seasons ? [SEASON_PREFIX] : [])];
-  const isOwned = (id: string) => owned.some((p) => id.startsWith(p));
+  let episodes: EpisodeStart[] | undefined = [];
+  let episodesFailedFor = new Set<string>();
+  if (prefs.episodes) {
+    try {
+      const got = await episodeStarts(db, now, async (id) => (await tmdbShowStatus(id)).nextToAir);
+      episodes = got.starts;
+      episodesFailedFor = got.failed;
+    } catch (e) {
+      episodes = undefined;
+      run.episodesFailed = true;
+      console.warn('reminder_episodes_failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+  // Without the season dates a first episode can't be told from its season's reminder: left for the next run.
+  const episodesToPlan = (episodes ?? []).filter((e) => seasons || e.episode !== 1);
+  const plan = planReminders({ releases, seasons: seasons ?? [], episodes: episodesToPlan, now });
+  // The kinds this run read in full; a kind that failed keeps what it has, and
+  // so does a show TMDB could not be asked about this time.
+  const owned = [
+    ...(prefs.releases ? [RELEASE_PREFIX] : []),
+    ...(prefs.seasons && seasons ? [SEASON_PREFIX] : []),
+    ...(prefs.episodes && episodes ? [EPISODE_PREFIX] : []),
+  ];
+  const keptShow = (id: string) => id.startsWith(EPISODE_PREFIX) && episodesFailedFor.has(id.slice(EPISODE_PREFIX.length).split(':')[0]);
+  const isOwned = (id: string) => owned.some((p) => id.startsWith(p)) && !keptShow(id);
   const wanted = new Map(plan.filter((r) => isOwned(r.identifier)).map((r) => [r.identifier, r]));
 
   const set = await Notifications.getAllScheduledNotificationsAsync();

@@ -1,7 +1,10 @@
 // Reminders on the day something comes out (Nils, 2026-11-21).
 //
-// Two kinds, each switched on or off in Settings, both only on the day itself
+// Three kinds, each switched on or off in Settings, all only on the day itself
 // (no "in a week", no "in two days"):
+//  • EPISODES (added the same day): the next episode of a show you are caught
+//    up on (Up next holds nothing aired left to watch), on TMDB's air date.
+//    Its season's first episode is the season's reminder, not a second one.
 //  • RELEASES: a title on your wishlist, any media type, on its release day in
 //    your country (`catalog.release_date`, lib/localDates.ts).
 //  • SEASONS: a new season of a show you are caught up on, the calendar's own
@@ -20,6 +23,7 @@ import { premiereRows } from '~/lib/seasonPremieres';
 
 export const NOTIFY_RELEASES_KEY = 'notify_releases';
 export const NOTIFY_SEASONS_KEY = 'notify_seasons';
+export const NOTIFY_EPISODES_KEY = 'notify_episodes';
 
 /** The hour of the day a reminder arrives, local time. */
 export const REMINDER_HOUR = 9;
@@ -30,17 +34,21 @@ export const REMINDER_CAP = 60;
 /** Every identifier this feature sets starts with one of these, so it never touches another notification. */
 export const RELEASE_PREFIX = 'fandex-release:';
 export const SEASON_PREFIX = 'fandex-season:';
+export const EPISODE_PREFIX = 'fandex-episode:';
 
-export interface ReminderPrefs { releases: boolean; seasons: boolean }
+export interface ReminderPrefs { releases: boolean; seasons: boolean; episodes: boolean }
+export type ReminderKind = keyof ReminderPrefs;
+const PREF_KEY: Record<ReminderKind, string> = { releases: NOTIFY_RELEASES_KEY, seasons: NOTIFY_SEASONS_KEY, episodes: NOTIFY_EPISODES_KEY };
+export const KIND_PREFIX: Record<ReminderKind, string> = { releases: RELEASE_PREFIX, seasons: SEASON_PREFIX, episodes: EPISODE_PREFIX };
 
-/** Both on unless switched off: a reminder is what a wishlist is for. */
+/** Each on unless switched off: a reminder is what a wishlist is for. */
 export async function readReminderPrefs(db: SQLiteDatabase): Promise<ReminderPrefs> {
-  const [r, s] = await Promise.all([getMeta(db, NOTIFY_RELEASES_KEY), getMeta(db, NOTIFY_SEASONS_KEY)]);
-  return { releases: r !== '0', seasons: s !== '0' };
+  const [r, s, e] = await Promise.all([getMeta(db, NOTIFY_RELEASES_KEY), getMeta(db, NOTIFY_SEASONS_KEY), getMeta(db, NOTIFY_EPISODES_KEY)]);
+  return { releases: r !== '0', seasons: s !== '0', episodes: e !== '0' };
 }
 
-export async function writeReminderPref(db: SQLiteDatabase, kind: keyof ReminderPrefs, on: boolean): Promise<void> {
-  await setMeta(db, kind === 'releases' ? NOTIFY_RELEASES_KEY : NOTIFY_SEASONS_KEY, on ? '1' : '0');
+export async function writeReminderPref(db: SQLiteDatabase, kind: ReminderKind, on: boolean): Promise<void> {
+  await setMeta(db, PREF_KEY[kind], on ? '1' : '0');
 }
 
 export interface Reminder {
@@ -55,6 +63,7 @@ export interface Reminder {
 
 export interface WishlistRelease { id: string; type: string; title: string; slug: string | null; release_date: string }
 export interface SeasonStart { id: string; title: string; slug: string | null; season: number; release_date: string }
+export interface EpisodeStart { id: string; title: string; slug: string | null; season: number; episode: number; release_date: string }
 
 const TYPE_WORD: Record<string, string> = { movie: 'movie', show: 'show', game: 'game', book: 'book', boardgame: 'board game' };
 
@@ -79,6 +88,7 @@ export function reminderTime(day: string): Date | null {
 export function planReminders(input: {
   releases: WishlistRelease[];
   seasons: SeasonStart[];
+  episodes?: EpisodeStart[];
   now: Date;
 }): Reminder[] {
   const out: Reminder[] = [];
@@ -107,6 +117,19 @@ export function planReminders(input: {
       title: `${s.title}: season ${s.season} starts today`,
       body: 'A new season of a show you watch.',
       url: itemHref({ id: s.id, type: 'show', slug: s.slug }),
+    });
+  }
+  // A season's first episode is the season's reminder, not a second one the same day.
+  const seasonDay = new Set(input.seasons.map((s) => `${s.id}|${s.release_date}`));
+  for (const e of input.episodes ?? []) {
+    const at = due(e.release_date);
+    if (!at || seasonDay.has(`${e.id}|${e.release_date}`)) continue;
+    out.push({
+      identifier: `${EPISODE_PREFIX}${e.id}:${e.season}:${e.episode}:${e.release_date}`,
+      at,
+      title: `New episode of ${e.title} today`,
+      body: `Season ${e.season}, episode ${e.episode}.`,
+      url: itemHref({ id: e.id, type: 'show', slug: e.slug }),
     });
   }
   const seen = new Set<string>();
@@ -143,6 +166,74 @@ export function monthsAhead(now: Date): string[] {
     d.setMonth(d.getMonth() + 1);
   }
   return out;
+}
+
+/**
+ * The shows you are caught up on: Up next holds nothing aired left to watch
+ * (`season` null). A show you never started has no row, and a hidden one is
+ * left out. With its TMDB id, which is what names the next episode.
+ */
+export async function caughtUpShows(db: SQLiteDatabase): Promise<{ id: string; title: string; slug: string | null; tmdbId: string }[]> {
+  const rows = await db.getAllAsync<{ id: string; title: string; slug: string | null; sources: string | null }>(
+    `SELECT c.id, c.title, c.slug, json_extract(c.vector, '$.sources') AS sources
+       FROM up_next u JOIN catalog c ON c.id = u.media_item_id
+      WHERE u.season IS NULL AND c.type = 'show'
+        AND u.media_item_id NOT IN (SELECT media_item_id FROM hidden_item)`,
+  );
+  return rows.flatMap((r) => {
+    try {
+      const tmdb = (JSON.parse(r.sources ?? '[]') as { source: string; sourceId: string }[]).find((s) => s.source === 'tmdb');
+      return tmdb ? [{ id: r.id, title: r.title, slug: r.slug, tmdbId: tmdb.sourceId }] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+type NextToAir = (tmdbId: string) => Promise<{ season: number; episode: number; airDate: string | null } | null>;
+
+/** TMDB's answer per show, kept six hours: the schedule is rebuilt after every sync, the next episode moves weekly. */
+const nextKnown = new Map<string, { at: number; next: ReturnType<NextToAir> }>();
+const NEXT_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** For tests. */
+export function forgetNextEpisodes(): void {
+  nextKnown.clear();
+}
+
+/**
+ * The next episode due of each show you are caught up on (TMDB's
+ * `next_episode_to_air`), from today on. A show TMDB could not be asked about
+ * is in `failed`, so its reminder is kept rather than cancelled; when every
+ * show failed (no connection) the whole answer throws.
+ */
+export async function episodeStarts(db: SQLiteDatabase, now: Date, ask: NextToAir): Promise<{ starts: EpisodeStart[]; failed: Set<string> }> {
+  const today = localDay(now);
+  const shows = await caughtUpShows(db);
+  const starts: EpisodeStart[] = [];
+  const failed = new Set<string>();
+  // Four at a time: a polite pace for an app key, and quick enough for a few hundred shows.
+  for (let i = 0; i < shows.length; i += 4) {
+    await Promise.all(shows.slice(i, i + 4).map(async (show) => {
+      const held = nextKnown.get(show.tmdbId);
+      const fresh = held && Date.now() - held.at < NEXT_TTL_MS ? held.next : null;
+      const next = fresh ?? ask(show.tmdbId);
+      if (!fresh) {
+        nextKnown.set(show.tmdbId, { at: Date.now(), next });
+        next.catch(() => nextKnown.delete(show.tmdbId));
+      }
+      try {
+        const n = await next;
+        if (n && n.season > 0 && n.airDate && n.airDate >= today) {
+          starts.push({ id: show.id, title: show.title, slug: show.slug, season: n.season, episode: n.episode, release_date: n.airDate });
+        }
+      } catch {
+        failed.add(show.id);
+      }
+    }));
+  }
+  if (shows.length && failed.size === shows.length) throw new Error('TMDB answered for none of the shows');
+  return { starts, failed };
 }
 
 /**
