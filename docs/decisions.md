@@ -191,6 +191,11 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   (`editionsInLanguages`). An audiobook or large-print work ("… Lib/E") is the same book
   (`withoutEditionMarker`), and of one provider's two cards the one with more votes stays. A book's
   series is read off its English editions when the search row has none.
+- **Release reminders are set on the phone, on the day itself only** (Nils, 2026-11-21, picked
+  over server push): a wishlisted title of any type on its release day in your country, and a new
+  season of a show you are caught up on (the calendar's rule, hidden shows never), 09:00 local.
+  No "in a week" reminder. Each kind is a switch in Settings, per phone. No push service and no
+  push token, so nothing new is stored about anybody and the privacy policy is unchanged.
 - **A title's names: one entry per title in every language, shown in the account's language**
   (Nils, 2026-11-21, every media type: "if I'm searching for Kimi no Na wa, I want to see Your
   Name", shown once, under its German title). The account's language is its country's
