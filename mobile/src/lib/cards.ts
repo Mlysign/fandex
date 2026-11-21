@@ -13,6 +13,7 @@ import { useAuth } from '~/lib/AuthProvider';
 import { useCatalogSync } from '~/lib/CatalogSyncProvider';
 import type { CatalogRow } from '~/lib/db';
 import type { ScoreBand, ScoreFacet } from '~/lib/fandexScore';
+import { providerLinks } from '~/lib/titleIdentity';
 import { rateItem, setWishlist, type ActionTarget } from '~/lib/itemActions';
 import { TraktAuthError, traktSignInMessage } from '~/lib/trakt';
 
@@ -27,6 +28,8 @@ export interface CardItem {
   id: string | null;
   source?: string;
   sourceId?: string;
+  /** A held title's provider ids, `source:sourceId`: what matches it to a provider's card (lib/titleIdentity.ts). */
+  links?: string[];
   type: MediaType;
   title: string;
   slug?: string | null;
@@ -75,6 +78,7 @@ export function cardFromCatalog(r: CatalogRow): CardItem {
     ...(r.world_date !== undefined ? { worldDate: r.world_date } : {}),
     posterUrl: r.poster_url, communityScore: r.community_score, communityVotes: r.community_votes,
     ...(r.addon ? { addon: true } : {}),
+    ...(r.links ? { links: providerLinks(r.links) } : {}),
   };
 }
 

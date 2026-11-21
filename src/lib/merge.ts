@@ -124,7 +124,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
   // re-releases/restorations decades later, so an unbounded override turns a 1985
   // classic into its 2026 restoration date (the "Angel's Egg" bug). The 3-year
   // window covers genuine staggered international releases while excluding those.
-  const primaryReleaseDate = earliestGameDate(norm) ?? bookDateDisagreement(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
+  const primaryReleaseDate = primaryDate(norm);
   const regionDate = norm.get("tmdb")?.releaseDatesByRegion?.[region] ?? null;
   const releaseDate = regionalReleaseDate(primaryReleaseDate, regionDate);
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
@@ -437,9 +437,20 @@ export function mergeForCanonical(links: { source: Source; data: any }[]): {
   }
   return {
     title: pickField(TITLE_PRIORITY, norm, "title") ?? "Unknown",
-    releaseDate: earliestGameDate(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate"),
+    releaseDate: primaryDate(norm),
     posterUrl: pickField(POSTER_PRIORITY, norm, "poster"),
   };
+}
+
+/**
+ * A title's date before any country's own: a game's earliest, a book's Open Library year when
+ * Hardcover names another, else the priority order. ONE rule for the doc and for the canonical
+ * row (`media_items.release_date`, what the device's catalog copy and every card read): the
+ * canonical merge skipped the book rule, so Hardcover's "0030" for Der Kanon mechanischer Seelen
+ * stood on the row while the doc said 2017, and Search showed the book twice (2026-11-13).
+ */
+function primaryDate(norm: Map<Source, SourceNormalized>): string | null {
+  return earliestGameDate(norm) ?? bookDateDisagreement(norm) ?? pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
 }
 
 /**

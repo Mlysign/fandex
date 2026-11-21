@@ -39,7 +39,9 @@ Not started (Nils, 2026-11-06: "not now"). One launch, on the day the native app
 
 ## Mine, open
 
-One loose end from the score-speed work of 2026-11-07 (0.3.48, 0.3.49); everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
+One loose end from the score-speed work of 2026-11-07 (0.3.48, 0.3.49) and one fix to ship; everything else waits on Nils (above), BoardGameGeek, Google Play or the launch.
+
+- ⬜ **Ship the duplicate-book fix of 2026-11-13** (Search showed Der Kanon mechanischer Seelen twice, 0030 and 2017; branch `claude/warum-sind-da-2-ksepx0`). In order: `npx wrangler deploy` from `worker/`, then `worker/scripts/data-fix-book-dates-2026-11-13.sql` (count first, as its header says), publish the site, build an APK. The app half (a held card matched to a provider's by provider id, `lib/titleIdentity.ts`) needs only the APK and the publish.
 
 - 🔵 **Own gains lost across a sign-out: fixed in 0.3.58, the phone check is open.** Timed on the phone 2026-11-15 (0.3.57): after Nils signed back in, the profile was built in 653 ms (the two minutes are gone), but `fandex_calibration` said `moved: true` and every score shifted once. Cause: the profile is built right after the sign-in before the ratings arrive, and that fit (0 rated, the shared gains) overwrote the gains kept under the account. 0.3.58 keeps no fit made while rows are syncing or with nothing rated, and reads the account row first. Next sign-in: `moved: false` is the pass.
 ## Later: feature ideas (Nils, 2026-11-02) ⬜

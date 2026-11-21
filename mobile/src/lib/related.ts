@@ -22,6 +22,7 @@ import type { CatalogRow } from '~/lib/db';
 import { seriesOfFacet } from '~/lib/franchiseSeries';
 import { facetId, resolveFacets, type ScoreFacet, type Taxonomy } from '~/lib/fandexScore';
 import { jsHeapMB } from '~/lib/jsHeap';
+import { PROVIDER_LINKS_COLUMN, providerLinks } from '~/lib/titleIdentity';
 
 /** How many cards "More like this" holds. The site's RAIL_CAP. */
 export const RAIL_CAP = 12;
@@ -381,6 +382,7 @@ async function byId<T extends { id: string }>(db: SQLiteDatabase, columns: strin
 const toCard = (r: CatalogRow): CardItem => ({
   key: r.id, id: r.id, type: r.type, title: r.title, slug: r.slug, releaseDate: r.release_date, worldDate: r.world_date ?? null,
   posterUrl: r.poster_url, communityScore: r.community_score, communityVotes: r.community_votes,
+  ...(r.links ? { links: providerLinks(r.links) } : {}),
 });
 
 export interface RelatedRails {
@@ -404,7 +406,7 @@ export async function relatedRails(db: SQLiteDatabase, revision: number, tax: Ta
 
   const picked = pickRelated({ id, facets, rawFacets, index, vectors, tax });
   const rows = await byId<CatalogRow>(
-    db, 'id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes',
+    db, `id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, ${PROVIDER_LINKS_COLUMN}`,
     [...(picked.series?.ids ?? []), ...(picked.franchise?.ids ?? []), ...picked.similar],
   );
   const cards = (ids: string[]) => ids.map((cid) => rows.get(cid)).filter((r): r is CatalogRow => !!r).map(toCard);

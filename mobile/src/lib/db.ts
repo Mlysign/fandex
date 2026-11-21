@@ -10,6 +10,7 @@
 // it is SQLite and not a JSON blob in key-value storage.
 
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { PROVIDER_LINKS_COLUMN } from '~/lib/titleIdentity';
 import type { MediaType } from '~/lib/api';
 
 export const DATABASE_NAME = 'fandex.db';
@@ -272,9 +273,11 @@ export interface CatalogRow {
   community_votes: number;
   /** 1 for a DLC, bundle, mod, season or pack (the vector's `addon`), else null. */
   addon?: number | null;
+  /** Its provider ids, "source:sourceId" apart by spaces, where the query read them (`PROVIDER_LINKS_COLUMN`). */
+  links?: string | null;
 }
 
-const CARD_COLUMNS = "id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon";
+const CARD_COLUMNS = `id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, json_extract(vector, '$.addon') AS addon, ${PROVIDER_LINKS_COLUMN}`;
 
 /** Which of these ids the catalog copy holds. */
 export async function catalogHas(db: SQLiteDatabase, ids: string[]): Promise<Set<string>> {

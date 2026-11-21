@@ -45,7 +45,7 @@ import { dropFacetPrerender } from '~/lib/prerender';
 import { byPopularity, byRating } from '~/lib/sortCards';
 import { longDate } from '~/lib/dates';
 import { providerFacet, type FacetPerson, type ProviderHalf } from '~/lib/facetProviders';
-import { titleIndex } from '~/lib/titleIdentity';
+import { PROVIDER_LINKS_COLUMN, titleIndex } from '~/lib/titleIdentity';
 import { PhotoGallery } from '~/components/PhotoGallery';
 import { count } from '~/lib/plural';
 import { setFollow } from '~/lib/itemActions';
@@ -202,7 +202,7 @@ export function FacetScreen({ kind }: { kind: FacetKind }) {
         const run = (k.match(/[\p{L}\p{N}]+/gu) ?? []).sort((a, b) => b.length - a.length)[0] ?? '';
         return `%${like(run)}%`;
       }))];
-      const columns = 'id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, facets';
+      const columns = `id, type, title, slug, poster_url, release_date, world_date, year, community_score, community_votes, facets, ${PROVIDER_LINKS_COLUMN}`;
       const rows = await db.getAllAsync<CatalogRow & { facets: string }>(
         `SELECT ${columns} FROM catalog WHERE ${patterns.map(() => "facets LIKE ? ESCAPE '\\'").join(' OR ')}`,
         patterns,
