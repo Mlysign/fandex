@@ -73,5 +73,10 @@ worker/worker-configuration.d.ts
 # The folder is inside OneDrive, so it is backed up without being in git.
 android-package/
 
+# The release plan's comments (Nils's notes on the launch, written by the page
+# itself). This repo is public and he wants them local: the file stays on disk,
+# inside OneDrive, and travels with the folder.
+docs/release-plan/comments.js
+
 # /design working files: keep the .dc.html sources + canvas.json, never the ~2MB seeded canvas
 .design/fandex-*.html

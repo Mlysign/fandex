@@ -287,6 +287,7 @@ body.cp-closed #cpanel{display:none}
     <a href="#glance">At a glance</a><a href="#market">Market</a><a href="#strategy">Strategy</a><a href="#schedule">Schedule</a><a href="#assets">Assets</a><a href="#channels">Channels</a><a href="#admin">Admin</a><a href="#product">App</a><a href="#goals">Goals</a><a href="#forgot">Easy to forget</a><a href="#sources">Sources</a>
   </nav>
   <button class="tbtn" id="btn-mode" title="Then click any chart, image, card or row. Shortcut: C">Comment on a block</button>
+  <button class="tbtn" id="btn-folder" hidden title="Writes every comment and status into comments.js beside this page, so it moves with the folder">Save into this folder</button>
   <button class="tbtn" id="btn-copy" title="Copies every comment and status, ready to paste into the chat with Claude">Copy for Claude <b id="new-n"></b></button>
   <button class="tbtn" id="btn-panel">Comments <b id="open-n">0</b></button>
 </header>
@@ -776,10 +777,104 @@ function readLocal() { try { return JSON.parse(LS.get(KEY)) || {}; } catch { ret
 const fromFile = window.PLAN_COMMENTS || {};
 let store = merge(readLocal(), fromFile);
 let state = { comments: [], status: {} };
-function save() {
-  if (!LS.set(KEY, JSON.stringify(store))) toast('Not saved: this window does not allow storage. Open the file in Chrome.');
+/* ------------------------------------------------- the folder: comments.js */
+// A browser lets a page write a file only after the person allowed it once. So:
+// until then the comments live in this browser; after one click ("Save into this
+// folder") every change is also written to comments.js beside this page, which is
+// what travels with the folder and what Claude reads and answers in.
+const FILE = 'comments.js';
+const HEADER = `// The release plan's comments and status clicks. index.html writes this file once
+// Nils has pressed "Save into this folder", and reads it again every few seconds.
+//
+// Claude answers here: add
+//   { "id": "r<anything unique>", "author": "Claude", "created": "<ISO time>", "text": "..." }
+// to a comment's "replies" and set that comment's "updated" to now. Resolving one is
+// "status": "resolved" with a new "updated". Leave "touched" alone: it is his.
+// A status Claude changes is { "s": "done", "t": "<ISO time>", "by": "Claude" }.
+// Keep what follows the = strict JSON. The page merges, it never drops a comment.
+`;
+const HERE = 'dir:' + location.pathname; // a copy of the folder elsewhere asks again
+const canFolder = 'showDirectoryPicker' in window;
+let dir = null, waiting = null, fileText = '', chain = Promise.resolve();
+const idb = (mode, fn) => new Promise((res, rej) => {
+  const open = indexedDB.open('fandex-release-plan', 1);
+  open.onupgradeneeded = () => open.result.createObjectStore('kv');
+  open.onerror = () => rej(open.error);
+  open.onsuccess = () => { const tx = open.result.transaction('kv', mode); const rq = fn(tx.objectStore('kv')); tx.oncomplete = () => res(rq.result); tx.onerror = () => rej(tx.error); };
+});
+function parseFile(t) {
+  if (!t.trim()) return {};
+  const a = t.indexOf('{', t.indexOf('PLAN_COMMENTS')), b = t.lastIndexOf('}');
+  if (t.indexOf('PLAN_COMMENTS') < 0 || a < 0 || b < a) throw new Error('shape');
+  return JSON.parse(t.slice(a, b + 1));
+}
+// Takes in whatever the file holds now. True when that changed what the page knows.
+async function pullFile() {
+  const t = await (await (await dir.getFileHandle(FILE, { create: true })).getFile()).text();
+  if (t === fileText) return false;
+  const merged = merge(store, parseFile(t)); // throws on a broken file, which then is never overwritten
+  fileText = t;
+  const changed = JSON.stringify(merged) !== JSON.stringify(store);
+  store = merged;
+  return changed;
+}
+async function pushFile() {
+  if (await pullFile()) { LS.set(KEY, JSON.stringify(store)); draw(); }
+  const body = HEADER + 'window.PLAN_COMMENTS = ' + JSON.stringify({ comments: store.comments, status: store.status }, null, 2) + ';\n';
+  if (body === fileText) return;
+  const w = await (await dir.getFileHandle(FILE, { create: true })).createWritable();
+  await w.write(body); await w.close();
+  fileText = body;
+}
+function queue(job) {
+  chain = chain.then(job).catch((e) => {
+    if (e.name === 'NotAllowedError' || e.name === 'NotFoundError') { waiting = dir; dir = null; paintFolder(); }
+    else toast(e instanceof SyntaxError || e.message === 'shape' ? 'comments.js is damaged, so nothing was written to it. Your comments are safe in this browser.' : 'Could not write to the folder.');
+  });
+  return chain;
+}
+async function useFolder(h) {
+  try { await h.getFileHandle('plan-data.js'); } catch { toast('That is another folder. Pick the one this page is in (it holds index.html).'); return; }
+  dir = h; waiting = null; fileText = '';
+  try { await idb('readwrite', (s) => s.put(h, HERE)); } catch { /* it will ask again next time */ }
+  await queue(pushFile);
+  paintFolder();
+  if (dir) toast('Saved into the folder from now on.');
+}
+async function folderClick() {
+  if (dir) return toast('Every change is written to comments.js in this folder.');
+  try {
+    if (waiting) { if ((await waiting.requestPermission({ mode: 'readwrite' })) === 'granted') await useFolder(waiting); }
+    else await useFolder(await showDirectoryPicker({ id: 'fandex-plan', mode: 'readwrite' }));
+  } catch (e) { if (e.name !== 'AbortError') toast('The folder could not be opened.'); }
+}
+async function restoreFolder() {
+  if (!canFolder) return paintFolder();
+  try {
+    const h = await idb('readonly', (s) => s.get(HERE));
+    if (h && (await h.queryPermission({ mode: 'readwrite' })) === 'granted') { dir = h; await queue(pushFile); }
+    else if (h) waiting = h;
+  } catch { /* no stored folder */ }
+  paintFolder();
+}
+function paintFolder() {
+  const b = $('#btn-folder');
+  b.hidden = !canFolder;
+  b.textContent = dir ? 'Saved in the folder ✓' : waiting ? 'Resume saving into the folder' : 'Save into this folder';
+  b.classList.toggle('on', !dir);
+  $('#btn-copy').hidden = !!dir;
+  document.body.classList.toggle('in-folder', !!dir);
+}
+
+function draw() {
   state = { comments: store.comments.filter((c) => !c.deleted), status: store.status };
   refresh();
+}
+function save() {
+  const kept = LS.set(KEY, JSON.stringify(store));
+  draw();
+  if (dir) queue(pushFile);
+  else if (!kept) toast('Not saved: this window does not allow storage. Open the file in Chrome.');
 }
 let tab = 'open', draft = null;
 const doc = $('#doc');
@@ -975,7 +1070,11 @@ function renderPanel() {
     <textarea data-reply="${c.id}" rows="1" placeholder="Reply"></textarea>
     <div class="th-act"><button class="btn" data-act="reply">Reply</button><button class="btn" data-act="${c.status === 'resolved' ? 'reopen' : 'resolve'}">${c.status === 'resolved' ? 'Reopen' : 'Resolve'}</button><button class="btn right" data-act="delete">Delete</button></div></div>`).join('');
   if (!list.length && !draft) html += tab === 'open'
-    ? `<div class="cp-help"><p><b style="color:var(--tx)">No open comments.</b></p><p>Select any text in the plan and press <b style="color:var(--gold)">Comment</b>.</p><p>For a chart, picture, card or row: press <kbd>C</kbd>, then click it.</p><p>Everything is saved in this browser the moment you write it, and is still here after a restart.</p><p>When you want answers, press <b style="color:var(--gold)">Copy for Claude</b> and paste into the chat. The replies show up here after a refresh.</p></div>`
+    ? `<div class="cp-help"><p><b style="color:var(--tx)">No open comments.</b></p><p>Select any text in the plan and press <b style="color:var(--gold)">Comment</b>.</p><p>For a chart, picture, card or row: press <kbd>C</kbd>, then click it.</p>${dir
+      ? '<p>Everything is written to <span class="mono">comments.js</span> in this folder the moment you change it. Claude reads it there, and replies show up here on their own.</p>'
+      : canFolder
+        ? '<p>Right now your comments are kept in this browser only.</p><p>Press <b style="color:var(--gold)">Save into this folder</b> once, pick the folder this page is in, and from then on they are written to a file beside the page. That file moves with the folder, and Claude reads it.</p>'
+        : '<p>Everything is saved in this browser the moment you write it.</p><p>This browser cannot write into the folder. Use Chrome or Edge for that, or press <b style="color:var(--gold)">Copy for Claude</b> and paste into the chat.</p>'}</div>`
     : `<div class="cp-help">Nothing resolved yet.</div>`;
   body.innerHTML = html;
   for (const [id, v] of Object.entries(keep)) { const t = $(`textarea[data-reply="${id}"]`, body); if (t) t.value = v; }
@@ -1094,7 +1193,9 @@ $('#btn-copy').addEventListener('click', async () => {
   LS.set(KEY + ':copied', now()); refresh(); toast('Copied. Paste it into the chat with Claude.');
 });
 // Another tab of this page changed something.
-addEventListener('storage', (e) => { if (e.key === KEY) { store = merge(readLocal(), fromFile); save(); } });
+addEventListener('storage', (e) => { if (e.key === KEY) { store = merge(store, readLocal()); draw(); } });
+$('#btn-folder').addEventListener('click', folderClick);
+window.__planTest = { useFolder }; // lets a test hand the page a folder without the picker
 
 /* --------------------------------------------------------------- boot */
 const pref = LS.get('fx-plan-panel');
@@ -1102,6 +1203,11 @@ if (pref === '0' || (pref === null && innerWidth < 900)) document.body.classList
 renderLists(); renderCharts(); renderGantt();
 save(); // writes the merge with comments.js back to this browser, then draws
 if (location.hash) $(location.hash)?.scrollIntoView();
+restoreFolder();
+// Claude's replies arrive in the file while the page is open.
+setInterval(() => {
+  if (dir && !document.hidden) queue(async () => { if (await pullFile()) { LS.set(KEY, JSON.stringify(store)); draw(); } });
+}, 4000);
 })();
 </script>
 </body>
