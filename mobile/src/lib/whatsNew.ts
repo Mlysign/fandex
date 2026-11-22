@@ -16,6 +16,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.3.64',
+    date: '2026-11-22',
+    lines: [
+      'You can connect your Steam account in Settings. Fandex then shows the games you own and your Steam wishlist.',
+      'Your Steam profile\'s game details have to be public for that.',
+    ],
+  },
+  {
     version: '0.3.62',
     date: '2026-11-21',
     lines: [
