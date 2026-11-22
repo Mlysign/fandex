@@ -125,7 +125,10 @@ await esbuild.build({
   }],
   logLevel: 'warning',
 });
-const { renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs, popularPeople, renderCalendarMonth, calendarHead } = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
+const {
+  renderItem, itemHead, legalDocuments, ITEM_PAGE_CSS, STATIC_GRID_CSS, renderFacet, facetHead, facetPages, relatedPicker, tagCrumbs, popularPeople, renderCalendarMonth, calendarHead,
+  renderLaunchPage, LAUNCH_HEAD, LAUNCH_PAGES, LAUNCHED, PLAY_STORE_URL, hasPlayStore,
+} = await import(`${pathToFileURL(path.join(DIST, 'render.mjs')).href}?t=${started}`);
 
 // ── 3. The data ──────────────────────────────────────────────────────────────
 
@@ -227,6 +230,23 @@ fs.copyFileSync(path.join(repo, 'public', 'icon.svg'), path.join(STAGE, 'icon.sv
 fs.copyFileSync(path.join(repo, 'public', 'icon-192.png'), path.join(STAGE, 'icon-192.png'));
 // How the match works, as one picture: the admin Score page shows it, and a public page may later (2026-10-25).
 fs.copyFileSync(path.join(repo, 'public', 'score-how-it-works.svg'), path.join(STAGE, 'score-how-it-works.svg'));
+// The pictures a pasted link shows, written by scripts/gen-og-images.mjs and committed.
+fs.mkdirSync(path.join(STAGE, 'og'), { recursive: true });
+for (const f of ['home.png', 'default.png']) fs.copyFileSync(path.join(repo, 'public', 'og', f), path.join(STAGE, 'og', f));
+// /press's downloads (mobile/src/components/LaunchPages.tsx, PRESS_FILES), under names that say what they are.
+fs.mkdirSync(path.join(STAGE, 'press-kit'), { recursive: true });
+for (const [from, to] of [
+  ['icon.svg', 'fandex-icon.svg'], ['icon-512.png', 'fandex-icon-512.png'], ['icon-192.png', 'fandex-icon-192.png'],
+  ['icon-maskable-512.png', 'fandex-icon-maskable-512.png'], ['og/home.png', 'fandex-card-1200x630.png'],
+]) fs.copyFileSync(path.join(repo, 'public', from), path.join(STAGE, 'press-kit', to));
+// /press's screenshots: every picture in public/press/screenshots, by name. None there, no section.
+const SHOTS_DIR = path.join(repo, 'public', 'press', 'screenshots');
+const screenshots = (fs.existsSync(SHOTS_DIR) ? fs.readdirSync(SHOTS_DIR) : [])
+  .filter((f) => /^[\w.-]+\.(png|jpe?g|webp)$/i.test(f)).sort();
+if (screenshots.length) {
+  fs.mkdirSync(path.join(STAGE, 'press-kit', 'screenshots'), { recursive: true });
+  for (const f of screenshots) fs.copyFileSync(path.join(SHOTS_DIR, f), path.join(STAGE, 'press-kit', 'screenshots', f));
+}
 
 // The app loads its fonts in JavaScript. A static page has to name them itself,
 // under the family names the app's styles use (src/theme.ts).
@@ -261,14 +281,23 @@ const LEGAL = {
   en: [['privacy', 'Privacy'], ['terms', 'Terms'], ['support', 'Contact'], ['imprint', 'Imprint']],
   de: [['privacy', 'Datenschutz'], ['terms', 'AGB'], ['support', 'Kontakt'], ['imprint', 'Impressum']],
 };
-const legalNav = (locale) => `<nav class="legal" aria-label="Legal">${LEGAL[locale].map(([doc, label]) => `<a href="/legal/${locale}/${doc}">${label}</a>`).join('')}</nav>`;
+// The launch pages (/app, /press, …) join this row only once LAUNCHED is true (mobile/src/lib/launch.ts).
+const launchNav = LAUNCHED ? LAUNCH_PAGES.map((p) => `<a href="${esc(p.path)}">${esc(p.label)}</a>`).join('') : '';
+const legalNav = (locale) => `<nav class="legal" aria-label="Legal">${locale === 'en' ? launchNav : ''}${LEGAL[locale].map(([doc, label]) => `<a href="/legal/${locale}/${doc}">${label}</a>`).join('')}</nav>`;
 
-function social({ title, description, url, image, alt }) {
+// The picture a pasted link shows when a page has none of its own (scripts/gen-og-images.mjs).
+const OG_HOME = { url: `${SITE}/og/home.png`, width: 1200, height: 630 };
+const OG_DEFAULT = { url: `${SITE}/og/default.png`, width: 1200, height: 630 };
+
+/** `image` is a title's own picture; `card` is one of ours, used when there is no image. */
+function social({ title, description, url, image, alt, card = OG_DEFAULT }) {
+  const pic = image ? { url: image } : card;
   return `<meta property="og:type" content="website"><meta property="og:site_name" content="Fandex">`
     + `<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}">`
-    + (image ? `<meta property="og:image" content="${esc(image)}"><meta property="og:image:alt" content="${esc(alt ?? title)}">` : '')
-    + `<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:description" content="${esc(description)}">`
-    + (image ? `<meta name="twitter:image" content="${esc(image)}">` : '');
+    + `<meta property="og:image" content="${esc(pic.url)}"><meta property="og:image:alt" content="${esc(image ? alt ?? title : 'Fandex')}">`
+    + (pic.width ? `<meta property="og:image:width" content="${pic.width}"><meta property="og:image:height" content="${pic.height}">` : '')
+    + `<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:description" content="${esc(description)}">`
+    + `<meta name="twitter:image" content="${esc(pic.url)}">`;
 }
 
 const ICONS = '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icon-192.png">';
@@ -414,12 +443,41 @@ for (const month of monthsShown) {
 }
 step(`${monthPages} calendar month pages written`);
 
+// ── The launch pages: /app, /press, /whats-new, /delete-account ──────────────
+
+// The app's own components (mobile/src/components/LaunchPages.tsx), laid out as
+// /score is. Static files that never start the app: /delete-account must work
+// without it (Google Play), and the app has no screen at these addresses.
+// While LAUNCHED is false (mobile/src/lib/launch.ts) they load by address but
+// are noindex, out of the sitemap and linked from nowhere.
+for (const { path: route } of LAUNCH_PAGES) {
+  const kind = route.slice(1);
+  const head = LAUNCH_HEAD[kind];
+  if (!head) throw new Error(`No head for the launch page ${route}`);
+  const canonical = `${SITE}${route}`;
+  const { body, css } = renderLaunchPage(kind, screenshots.map((f) => `/press-kit/screenshots/${f}`));
+  if (!body.includes('role="heading"')) throw new Error(`${route} rendered without a heading`);
+  const html = `${HEAD_START}<title>${esc(head.title)} · Fandex</title><meta name="description" content="${esc(head.description)}">`
+    + `<link rel="canonical" href="${esc(canonical)}">${LAUNCHED ? '' : '<meta name="robots" content="noindex, follow">'}`
+    + `${social({ title: head.title, description: head.description, url: canonical })}`
+    // Frame's CSS without the app's root: these pages have no app under them.
+    + `<style>${fontCss}${FRAME_CSS}</style>${css}</head>`
+    + `<body><div id="prerender" data-page="launch">${body}</div>${inline(PV_SCRIPT)}</body></html>`;
+  fs.writeFileSync(path.join(STAGE, `${kind}.html`), html);
+  if (LAUNCHED) urls.push({ loc: canonical });
+}
+step(`${LAUNCH_PAGES.length} launch pages written (${LAUNCHED ? 'launched: indexed and in the sitemap' : 'not launched: noindex, out of the sitemap'}), ${screenshots.length} press screenshots`);
+
 // ── The app's two shells ─────────────────────────────────────────────────────
 
 // Every address that is the app's alone (/search, /library, /item/…) is served
 // this by the Worker. Nothing for a search engine in it, and it says so.
 fs.writeFileSync(path.join(STAGE, 'app-shell.html'),
-  shell.replace('</title>', `</title><meta name="robots" content="noindex"><meta name="theme-color" content="${C.surface}">`));
+  shell.replace('</title>', `</title><meta name="robots" content="noindex"><meta name="theme-color" content="${C.surface}">`
+    // The default picture for a pasted link to /score, /discover and the rest. No og:url: this one file answers many addresses.
+    + `<meta property="og:site_name" content="Fandex"><meta property="og:title" content="Fandex"><meta property="og:image" content="${OG_DEFAULT.url}">`
+    + `<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">`
+    + `<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${OG_DEFAULT.url}">`));
 
 // The home page is the app too, with something to read until it is up and for
 // whoever never runs it: the name, the line under it, and the most-voted titles
@@ -441,14 +499,18 @@ const HOME_CSS = `.ph{flex:1;overflow-y:auto;color:${C.text};font-family:${SANS}
   + `.ph ul{margin:0;padding:0;list-style:none;columns:2;column-gap:20px}`
   + `.ph li a{display:block;padding:6px 0;color:${C.text};text-decoration:none;font-size:14px;line-height:22px}`
   + `.ph li span{font-family:${MONO};font-size:11px;color:${C.secondary}}`
+  + `.ph .getapp{margin-top:8px;font-family:"SpaceGrotesk_600SemiBold",${SANS};font-size:11px;line-height:44px;color:${C.secondary};text-decoration:none}`
   + `.legal{display:flex;flex-wrap:wrap;column-gap:16px;margin-top:24px}.legal a{font-family:${MONO};font-size:11px;line-height:44px;letter-spacing:.5px;color:${C.secondary};text-decoration:none}`;
 const home = shell
   .replace('<title>Fandex</title>',
     `<title>${esc(TITLE)}</title><meta name="description" content="${esc(DESCRIPTION)}"><link rel="canonical" href="${SITE}/">`
-    + `<meta name="theme-color" content="${C.surface}">${social({ title: TITLE, description: DESCRIPTION, url: `${SITE}/` })}`
+    + `<meta name="theme-color" content="${C.surface}">${social({ title: TITLE, description: DESCRIPTION, url: `${SITE}/`, card: OG_HOME })}`
     + `<style>${fontCss}html,body{background:${C.surface}}#prerender{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1;display:flex;background:${C.surface}}${HOME_CSS}</style>`)
   .replace('<div id="root"></div>',
-    `<div id="prerender"><div class="ph"><header><p class="mark">Fandex</p><h1>Your index of every game, movie, show &amp; book</h1></header>`
+    `<div id="prerender"><div class="ph"><header><p class="mark">Fandex</p><h1>Your index of every game, movie, show &amp; book</h1>`
+    // Only once there is a Play listing (PLAY_STORE_URL, mobile/src/lib/launch.ts).
+    + (hasPlayStore(PLAY_STORE_URL) ? `<a class="getapp" href="${esc(PLAY_STORE_URL)}">Get the app</a>` : '')
+    + `</header>`
     + `<main>${homeList('movie', 'Movies')}${homeList('show', 'Shows')}${homeList('game', 'Games')}${homeList('book', 'Books')}${homeList('boardgame', 'Board games')}${legalNav('en')}</main></div></div><div id="root"></div>`);
 if (!home.includes('id="prerender"') || !home.includes('rel="canonical"')) throw new Error('The export\'s index.html changed shape: the home page was not written');
 fs.writeFileSync(path.join(STAGE, 'index.html'), home);
@@ -500,6 +562,7 @@ for (const { locale, doc, content } of legal) {
     + `<link rel="canonical" href="${canonical}">${['en', 'de'].map((l) => `<link rel="alternate" hreflang="${l}" href="${SITE}/legal/${l}/${doc}">`).join('')}`
     // The imprint carries a home address. Out of every index, as on the old site.
     + (doc === 'imprint' ? '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">' : '')
+    + (doc === 'imprint' ? '' : social({ title: content.title, description: `${content.title} · Fandex`, url: canonical }))
     + `<style>${fontCss}${DOC_CSS}</style></head><body><main>`
     + `<div class="top"><a href="/">Fandex</a><nav class="locale" aria-label="Language">${['en', 'de'].map((l) =>
       `<a href="/legal/${l}/${doc}"${l === locale ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav></div>`
@@ -652,6 +715,8 @@ fs.writeFileSync(path.join(STAGE, '_headers'), [
   '  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet',
   '/app-shell',
   '  X-Robots-Tag: noindex',
+  // The launch pages, until LAUNCHED (mobile/src/lib/launch.ts). The page's own meta tag says the same.
+  ...(LAUNCHED ? [] : LAUNCH_PAGES.flatMap((p) => [p.path, '  X-Robots-Tag: noindex, follow'])),
   // Data for the app, not pages. Five minutes, so a second device in a household does not ask again.
   // Readable from any origin: it is the public catalog, and an app served from a developer's machine reads it too.
   '/catalog/*',

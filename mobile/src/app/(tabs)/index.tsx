@@ -7,7 +7,7 @@
 
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Reanimated, { Easing as REasing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import { CardRail, Rail } from '~/components/cards';
 import { CARD_TITLE } from '~/components/cardFace';
@@ -20,6 +20,7 @@ import { usePageTitle } from '~/lib/pageTitle';
 import { useAuth } from '~/lib/AuthProvider';
 import type { CardItem } from '~/lib/cards';
 import { FEEL } from '~/lib/feel';
+import { hasPlayStore, PLAY_STORE_URL } from '~/lib/launch';
 import { useHomeRails } from '~/lib/useHomeRails';
 import { usePopularPeople } from '~/lib/popularPeople';
 import { useTypeFilter } from '~/lib/typeFilter';
@@ -106,6 +107,12 @@ export default function HomeScreen() {
               <Text accessibilityRole="link" onPress={() => router.push('/discover')} style={[type.label, { color: color.textSecondary }]}>
                 Browse without an account →
               </Text>
+              {/* Only in a browser, and only once there is a Play listing (lib/launch.ts). */}
+              {Platform.OS === 'web' && hasPlayStore() ? (
+                <Text accessibilityRole="link" {...({ href: PLAY_STORE_URL } as object)} style={[type.label, { color: color.textSecondary }]}>
+                  Get the app →
+                </Text>
+              ) : null}
             </View>
           </Panel>
         ) : null}

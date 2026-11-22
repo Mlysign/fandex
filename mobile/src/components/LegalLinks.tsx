@@ -6,6 +6,7 @@
 // row is on every public page and on the You tab, and not only behind a menu.
 
 import { Linking, Platform, StyleSheet, Text, View } from 'react-native';
+import { launchLinks } from '~/lib/launch';
 import { color, font, space } from '~/theme';
 
 export const SITE_URL = 'https://fandex.org';
@@ -20,15 +21,19 @@ const DOCS: [string, string][] = [
 
 export function LegalLinks() {
   const web = Platform.OS === 'web';
+  // The launch pages (/app, /press, …) join the row only once LAUNCHED is true (lib/launch.ts).
+  const links: [string, string][] = [
+    ...launchLinks().map((p): [string, string] => [p.path, p.label]),
+    ...DOCS.map(([doc, label]): [string, string] => [`/legal/en/${doc}`, label]),
+  ];
   return (
     <View style={styles.row} accessibilityRole={web ? ('navigation' as never) : undefined} accessibilityLabel="Legal">
-      {DOCS.map(([doc, label]) => {
-        const path = `/legal/en/${doc}`;
+      {links.map(([path, label]) => {
         // react-native-web renders a Text with an `href` as an <a>. React Native
         // itself has no such prop, hence the cast.
         const link = web ? ({ href: path } as object) : { onPress: () => void Linking.openURL(`${SITE_URL}${path}`) };
         return (
-          <Text key={doc} {...link} accessibilityRole="link" style={styles.link}>
+          <Text key={path} {...link} accessibilityRole="link" style={styles.link}>
             {label}
           </Text>
         );

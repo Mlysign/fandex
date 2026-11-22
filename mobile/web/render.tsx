@@ -20,8 +20,10 @@ import { ScoreSeal } from '~/components/ScoreSeal';
 import { ItemPage } from '~/components/ItemPage';
 import { Button } from '~/components/kit';
 import { ITEM_PAGE_CSS } from '~/components/itemLayout';
+import { AppPage, DeleteAccountPage, PressPage, WhatsNewPage } from '~/components/LaunchPages';
 import { LegalLinks } from '~/components/LegalLinks';
 import { Screen } from '~/components/ui';
+import { hasPlayStore, LAUNCH_PAGES, LAUNCHED, MESSAGE_CALENDAR, MESSAGE_NUMBERS, MESSAGE_TASTE, PLAY_STORE_URL } from '~/lib/launch';
 import type { ItemDetail, ItemVector } from '~/lib/api';
 import type { CardItem } from '~/lib/cards';
 import { creditLine } from '~/lib/creditLine';
@@ -328,6 +330,42 @@ const styles = StyleSheet.create({
   monthChip: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(237,231,220,0.09)' },
   monthChipOn: { borderColor: 'rgba(237,231,220,0.18)', backgroundColor: '#0B0A09' },
 });
+
+// ── The launch pages: /app, /press, /whats-new, /delete-account ──────────────
+
+/** The switch and the Play address, for build.mjs: one constant each, in lib/launch.ts. */
+export { LAUNCHED, PLAY_STORE_URL, LAUNCH_PAGES, hasPlayStore, MESSAGE_TASTE, MESSAGE_CALENDAR, MESSAGE_NUMBERS };
+
+export type LaunchPageKind = 'app' | 'press' | 'whats-new' | 'delete-account';
+
+export interface LaunchPageHead { title: string; description: string }
+
+/** Each page's <title> and description, in the same plain words as the page. */
+export const LAUNCH_HEAD: Record<LaunchPageKind, LaunchPageHead> = {
+  app: { title: 'What Fandex is', description: `${MESSAGE_TASTE} ${MESSAGE_CALENDAR} ${MESSAGE_NUMBERS} Fandex keeps your films, shows, games and books in one list.` },
+  press: { title: 'Press', description: 'Facts about Fandex, its icon to download, and a contact for the press.' },
+  'whats-new': { title: "What's new", description: 'What changed in the Fandex app, newest first.' },
+  'delete-account': { title: 'Delete your account', description: 'How to delete your Fandex account, and what is deleted and what is kept.' },
+};
+
+function LaunchPage({ kind, screenshots }: { kind: LaunchPageKind; screenshots: string[] }) {
+  return (
+    <Frame path={`/${kind}`}>
+      <Screen>
+        {kind === 'app' ? <AppPage />
+          : kind === 'press' ? <PressPage screenshots={screenshots} />
+          : kind === 'whats-new' ? <WhatsNewPage />
+          : <DeleteAccountPage />}
+      </Screen>
+    </Frame>
+  );
+}
+AppRegistry.registerComponent('Launch', () => LaunchPage);
+
+export function renderLaunchPage(kind: LaunchPageKind, screenshots: string[] = []): { body: string; css: string } {
+  const { element, getStyleElement } = webRegistry.getApplication('Launch', { initialProps: { kind, screenshots } });
+  return { body: renderToString(element), css: renderToStaticMarkup(getStyleElement()) };
+}
 
 // ── Popular people ───────────────────────────────────────────────────────────
 
