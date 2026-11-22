@@ -513,6 +513,23 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
     <p class="ctx" style="margin-top:10px">Still open in the same place: declaring the trader status (deadline 1 Feb 2027). It is best done right after Google's approval, because an organization is asked different questions than a person.</p>
   </div>
 
+  <div class="card" data-cid="g-free" data-label="The free plan does not carry a launch day yet" style="border-color:rgba(229,103,76,.55);margin-top:12px">
+    <h3>Stay on the free plan for launch, now that it has been measured?</h3>
+    <p class="ctx" style="margin-top:6px">Measured on 22 Nov by replaying a launch hour on this PC, with a catalog the size of the real one. As the code stands, a launch day of a few hundred new users does not fit the free plan. The database's daily allowance for saving runs out first, then the one for reading, then the 100,000 requests.</p>
+    <table style="margin-top:8px">
+      <tr><th>What one new user costs on day one</th><th>Measured</th><th>The free plan's day</th></tr>
+      <tr><td>Requests to the server</td><td>about 115, or 150 with a Trakt import</td><td>100,000</td></tr>
+      <tr><td>Rows read from the database</td><td>about 41,000</td><td>5,000,000</td></tr>
+      <tr><td>Rows saved</td><td>73, or about 3,800 with a Trakt import</td><td>100,000</td></tr>
+    </table>
+    <p class="ctx" style="margin-top:10px">When a limit trips, nothing is lost: the app keeps its copy and nobody is signed out. The service just stops until 01:00 our time. Twelve changes bring the cost down. They are listed under "App work" and are work for December and January. How many users fit after them is not measured yet.</p>
+    <ul class="optl">
+      <li><b>A.</b> Stay free. I make the twelve changes and we rehearse again in January.</li>
+      <li class="rec"><b>B.</b> Make the changes that are needed anyway, and pay the 5 dollars for the launch month only. It lifts all three limits about a hundredfold. <em>my pick</em></li>
+      <li><b>C.</b> Pay from now on and treat the changes as optional.</li>
+    </ul>
+  </div>
+
   <div class="card" data-cid="g-name" data-label="The name: a US trademark FANDEX exists" style="border-color:rgba(229,103,76,.55);margin-top:12px">
     <h3>Does the US trademark "FANDEX" change anything for the name?</h3>
     <p class="ctx" style="margin-top:6px">Found on 22 Nov in the EU's trademark database (TMview). I read the database only, not the US register itself.</p>
@@ -583,7 +600,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <tr data-cid="ap-8"><td>Usage counters</td><td>Built on the server and in the app, with a new Usage page in the admin area. Everything is switched off: nothing is counted until you approve the privacy text.</td><td>This session, app side by a sub-agent on Opus</td><td>Built, switched off</td></tr>
       <tr data-cid="ap-20"><td>New users can connect Steam</td><td>A "Connect" row for Steam in Settings. The server asks Steam itself whether a sign-in is real. Live on the server, in the app from the next build. It needs one real try with your Steam account.</td><td>This session</td><td>Built, needs your test</td></tr>
       <tr data-cid="ap-11"><td>Security audit of the whole Fandex setup</td><td>Your request. Four parts, each on Claude Fable 5.2: sign-in and accounts, the API and database, the website and app, the public repository and its history. I check every finding and fix it myself. Result: no way was found to take over an account from outside. About 40 findings. The main weakness is the free plan: several routes let one stranger use up a day's budget and stop the service until midnight. 15 findings are fixed and live, 3 half fixed, 11 still open on my side, 8 are yours. The list with every detail is in <span class="mono">private/security-audit-2026-11-22.md</span>, which stays on your disk: this repository is public, and an open weakness does not belong in it.</td><td>Four sub-agents on Fable, then this session</td><td id="ap-11-state">First round fixed, 11 open</td></tr>
-      <tr data-cid="ap-12"><td>Performance and hardening audit</td><td>Your request. What a launch day costs on the free plan, which limit breaks first, how to roll back. Report in <span class="mono">drafts/performance-audit.md</span>.</td><td>Sub-agent on Fable, then this session</td><td id="ap-12-state">Running</td></tr>
+      <tr data-cid="ap-12"><td>Performance and hardening audit</td><td>Your request. What a launch day costs on the free plan, which limit breaks first, how to roll back. Result: as the code stands, a launch day of a few hundred new users does not fit the free plan (see the card in Overview). Twelve changes are listed under "App work". The website rollback is written down now. The full report with every number is in <span class="mono">private/performance-audit-2026-11-22.md</span>, with the test setup beside it, both on your disk only.</td><td>Sub-agent on Fable, then this session</td><td id="ap-12-state" class="yes">Report ready, 12 changes open</td></tr>
       <tr data-cid="ap-21"><td>Legal texts, as drafts</td><td>The VAT ID line, the privacy text for the usage counters, the outdated spots, the provider notices. In <span class="mono">drafts/legal-texts.md</span>. Nothing goes live without your OK. Six sections, each with the current text and the proposed one in both languages, and a list of six decisions that are yours. It also found the TMDB logo is required and shown nowhere today.</td><td>Sub-agent, Opus</td><td id="ap-21-state" class="yes">Draft ready</td></tr>
       <tr data-cid="ap-22"><td>Design board for the store images</td><td>A Claude design canvas with first drafts in style C, the feature graphics, and the competitors' store pages as references. 17 boards: eight store images, three feature graphics, six reference boards. Four store images use real captures, four are labelled placeholders, because the score, the "Why?" sheet, Insights and reminders only show when signed in. Private to you: <span class="mono">claude.ai/artifact/CTmQy4FKeJFJeVA2HRCgD5</span></td><td>Sub-agent, Opus</td><td id="ap-22-state" class="yes">Ready for you</td></tr>
     </table>
