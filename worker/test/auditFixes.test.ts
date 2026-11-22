@@ -4,7 +4,7 @@ import { deleteAccount, disconnectIdentity, mergeAccounts } from "../src/account
 import { createSession } from "../src/auth/session";
 import { DAILY_MERGES_PER_ACCOUNT, MergesExhausted, signIn } from "../src/auth/signin";
 import worker from "../src/index";
-import { REVIEW_CHARS_PER_UNIT, stateWriteSize, type StateWrite } from "../src/me";
+import { applyStateWrite, REVIEW_CHARS_PER_UNIT, SMALL_SAVE_MAX_UNITS, stateWriteSize, type StateWrite } from "../src/me";
 import { count, db, env, wipe } from "./helpers";
 
 // What the security audit of 2026-11-22 found in the account paths, each fix
@@ -94,6 +94,9 @@ describe("erasure", () => {
     await deleteAccount(db, A);
     const left = await db.prepare("SELECT kind FROM daily_budget ORDER BY kind").all<{ kind: string }>();
     expect(left.results.map((r) => r.kind)).toEqual(["user_writes", `user_writes:${B}`]);
+    await db.prepare("INSERT INTO daily_budget (day, kind, n) VALUES (?, ?, 2)").bind(day, `small_saves:${B}`).run();
+    await deleteAccount(db, B);
+    expect(await count("daily_budget", "kind LIKE 'small_saves:%'")).toBe(0);
   });
 });
 
@@ -114,6 +117,30 @@ describe("signed-in reads", () => {
     }), env, ctx);
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("ratings and imports", () => {
+  const none: StateWrite = { itemUpserts: [], itemDeletes: [], episodeUpserts: [], episodeDeletes: [], hide: [], unhide: [], followSets: [], followRemoves: [] };
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+
+  it("lets a small save through on a day the imports have spent their budget", async () => {
+    await db.prepare("INSERT INTO users (id) VALUES (?)").bind(A).run();
+    const importsSpent = { ...env, DAILY_USER_WRITE_CAP: "0" } as typeof env;
+    // An import-sized save is refused...
+    expect(await applyStateWrite(importsSpent, A, { ...none, hide: ids(SMALL_SAVE_MAX_UNITS + 1) })).toEqual({ ok: false, reason: "budget" });
+    // ...and a rating-sized one still saves.
+    expect(await applyStateWrite(importsSpent, A, { ...none, hide: ids(1) })).toMatchObject({ ok: true });
+    expect(await count("daily_budget", "kind = 'small_saves'")).toBe(1);
+  });
+
+  it("bounds small saves too, per account and for everybody", async () => {
+    await db.prepare("INSERT INTO users (id) VALUES (?)").bind(A).run();
+    const one = { ...env, DAILY_SMALL_SAVES_PER_USER: "3" } as typeof env;
+    expect(await applyStateWrite(one, A, { ...none, hide: ids(3) })).toMatchObject({ ok: true });
+    expect(await applyStateWrite(one, A, { ...none, hide: ids(1) })).toEqual({ ok: false, reason: "budget" });
+    const all = { ...env, DAILY_SMALL_SAVES_CAP: "0" } as typeof env;
+    expect(await applyStateWrite(all, B, { ...none, hide: ids(1) })).toEqual({ ok: false, reason: "budget" });
   });
 });
 

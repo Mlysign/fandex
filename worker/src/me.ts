@@ -355,6 +355,12 @@ export function stateWriteSize(w: StateWrite): number {
     w.episodeDeletes.length + w.hide.length + w.unhide.length + w.followSets.length + w.followRemoves.length +
     Math.ceil(reviewChars / REVIEW_CHARS_PER_UNIT);
 }
+/** A save of at most this many units is a small one: a rating, a tick, a hide. Anything bigger is a sync or an import. */
+export const SMALL_SAVE_MAX_UNITS = 10;
+/** Units all small saves together may spend per UTC day. */
+export const DEFAULT_DAILY_SMALL_SAVES_CAP = 15_000;
+/** Units one account's small saves may spend per UTC day: a thousand ratings and ticks. */
+export const DEFAULT_DAILY_SMALL_SAVES_PER_USER = 1_000;
 /** How much review text costs as much as one row, against the day's writes. */
 export const REVIEW_CHARS_PER_UNIT = 200;
 
@@ -377,13 +383,28 @@ export type StateWriteResult =
 export async function applyStateWrite(env: Env, userId: string, w: StateWrite): Promise<StateWriteResult> {
   const db = env.DB;
   const size = stateWriteSize(w);
-  // The account's own share first. Without it one account could spend the
-  // whole day's cap in twenty full writes and leave everybody else a 503.
-  if (!(await spend(db, `user_writes:${userId}`, capFrom(env.DAILY_USER_WRITE_CAP_PER_USER, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER), size))) {
-    return { ok: false, reason: "budget" };
-  }
-  if (!(await spend(db, "user_writes", capFrom(env.DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP), size))) {
-    return { ok: false, reason: "budget" };
+  if (size <= SMALL_SAVE_MAX_UNITS) {
+    // A rating, a tick, a hide, a follow: what a person does by hand. These
+    // have a budget of their own, so the imports of a busy day cannot stop
+    // them. In the rehearsal of a launch hour (2026-11-22) a dozen Trakt
+    // imports spent the shared cap and every rating after that was refused.
+    // Counted in rows like the other, so splitting an import into small
+    // saves buys nothing: the day's small saves are bounded too.
+    if (!(await spend(db, `small_saves:${userId}`, capFrom(env.DAILY_SMALL_SAVES_PER_USER, DEFAULT_DAILY_SMALL_SAVES_PER_USER), size))) {
+      return { ok: false, reason: "budget" };
+    }
+    if (!(await spend(db, "small_saves", capFrom(env.DAILY_SMALL_SAVES_CAP, DEFAULT_DAILY_SMALL_SAVES_CAP), size))) {
+      return { ok: false, reason: "budget" };
+    }
+  } else {
+    // The account's own share first. Without it one account could spend the
+    // whole day's cap in twenty full writes and leave everybody else a 503.
+    if (!(await spend(db, `user_writes:${userId}`, capFrom(env.DAILY_USER_WRITE_CAP_PER_USER, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER), size))) {
+      return { ok: false, reason: "budget" };
+    }
+    if (!(await spend(db, "user_writes", capFrom(env.DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP), size))) {
+      return { ok: false, reason: "budget" };
+    }
   }
 
   const statements: { name: string; stmt: D1PreparedStatement; sent: number }[] = [];

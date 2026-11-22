@@ -292,7 +292,11 @@ Each of these is a way the Worker differs from the site, and each has a test.
   `DAILY_DELTA_CAP` 4,000 pages), together under half of D1's 5M reads. A signed-in state page is
   limited per user. A refused budget is remembered in the isolate, so a burst past a cap costs
   no row writes. **One account's share of the day's state writes** is
-  `DAILY_USER_WRITE_CAP_PER_USER` (15,000 of the shared 40,000).
+  `DAILY_USER_WRITE_CAP_PER_USER` (15,000 of the shared 40,000). **A small save has a budget of its
+  own** (since 2026-11-22, `me.ts`): a state write of at most 10 units (`SMALL_SAVE_MAX_UNITS`: a
+  rating, a tick, a hide, a follow) spends `DAILY_SMALL_SAVES_CAP` (15,000 units a day for
+  everybody) and `DAILY_SMALL_SAVES_PER_USER` (1,000), never the import budget, so a day of big
+  imports cannot stop ratings. `/v1/health` reports both as `userWrites` and `smallSaves`.
 - **A provider id that answered as another is kept in `provider_aliases`** (migration 0004): an
   Open Library work merged into another, a Hardcover duplicate, an IGDB port opened as its main
   game. Resolve writes it, and resolve and lookup read it, so a library sync stops fetching it.

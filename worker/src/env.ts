@@ -58,6 +58,9 @@ export interface Env {
   DAILY_LOOKUP_CAP?: string;
   /** Films POST /v1/catalog/release-dates answers per UTC day. Optional; index.ts has the default. */
   DAILY_DATES_CAP?: string;
+  /** Units all small saves (ratings, ticks, hides) may spend per UTC day, and one account's share. Optional; me.ts has the defaults. */
+  DAILY_SMALL_SAVES_CAP?: string;
+  DAILY_SMALL_SAVES_PER_USER?: string;
   /** User-state row writes one account may make per UTC day. Optional; me.ts has the default. */
   DAILY_USER_WRITE_CAP_PER_USER?: string;
   /**

@@ -193,7 +193,8 @@ describe("validation", () => {
 
 describe("the daily write budget", () => {
   it("refuses once the day's allowance is spent, and writes nothing", async () => {
-    const tight = { ...env, DAILY_USER_WRITE_CAP: "2" };
+    // Two rows are small saves, so it is their allowance that is spent here.
+    const tight = { ...env, DAILY_SMALL_SAVES_CAP: "2" };
     const one = { mediaItemId: film, source: "local", relation: "wishlist" };
     expect(await applyStateWrite(tight, USER, parseStateWrite({ items: { upsert: [one] } }))).toMatchObject({ ok: true });
     const over = await applyStateWrite(tight, USER, parseStateWrite({ hidden: { add: [film, game] } }));

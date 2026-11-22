@@ -77,7 +77,8 @@ describe("one account's share of the day's writes", () => {
     const other = "bbbbbbbb-0000-4000-8000-000000000002";
     await db.batch([db.prepare("INSERT INTO users (id) VALUES (?)").bind(USER), db.prepare("INSERT INTO users (id) VALUES (?)").bind(other)]);
     const film = (await upsertMediaItem(db, movieItem())).id;
-    const tight = { ...env, DAILY_USER_WRITE_CAP_PER_USER: "1" };
+    // One row is a small save, with a share of its own per account.
+    const tight = { ...env, DAILY_SMALL_SAVES_PER_USER: "1" };
     const one = (relation: string) => parseStateWrite({ items: { upsert: [{ mediaItemId: film, source: "local", relation }] } });
     expect(await applyStateWrite(tight, USER, one("wishlist"))).toMatchObject({ ok: true });
     expect(await applyStateWrite(tight, USER, one("library"))).toEqual({ ok: false, reason: "budget" });

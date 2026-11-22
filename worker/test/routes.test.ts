@@ -149,7 +149,8 @@ describe("your rows", () => {
     const rows = (await (await call("/v1/me/state/items", { headers: auth(token) })).json()) as any;
     expect(rows.rows).toEqual([expect.objectContaining({ mediaItemId: id, rating: 9 })]);
     expect(await (await call("/v1/me/state/counts", { headers: auth(token) })).json()).toMatchObject({ items: 1 });
-    expect(((await (await call("/v1/health")).json()) as any).today.userWrites).toBe(1);
+    // One row is a small save, with a budget of its own (me.ts): imports cannot spend it.
+    expect(((await (await call("/v1/health")).json()) as any).today).toMatchObject({ userWrites: 0, smallSaves: 1 });
   });
 
   it("answers 400 with a reason for a write it cannot store", async () => {

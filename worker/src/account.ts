@@ -107,7 +107,7 @@ export async function deleteAccount(db: D1Database, userId: string): Promise<Acc
     // The account's own counters of the day carry its id in their name
     // (budget.ts). Not personal data in any useful sense, but the id is, and
     // "everything is deleted" means everything (audit, 2026-11-22).
-    db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?)").bind(`user_writes:${userId}`, `export:${userId}`, `merges:${userId}`),
+    db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?, ?)").bind(`user_writes:${userId}`, `small_saves:${userId}`, `export:${userId}`, `merges:${userId}`),
   ]);
 
   const perTable: Record<string, number> = {};
@@ -452,7 +452,7 @@ export async function mergeAccounts(
   // account is the established one and its settings are the ones the person chose.
   statements.push(db.prepare("DELETE FROM users WHERE id = ?").bind(fromUserId));
   // The emptied account's own counters of the day, which carry its id (as erasure does).
-  statements.push(db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?)").bind(`user_writes:${fromUserId}`, `export:${fromUserId}`, `merges:${fromUserId}`));
+  statements.push(db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?, ?)").bind(`user_writes:${fromUserId}`, `small_saves:${fromUserId}`, `export:${fromUserId}`, `merges:${fromUserId}`));
   // The surviving account's rows are not what was counted any more, whichever
   // side won: it lost its clashing rows or gained the other's. Last, so the
   // indexes read back below still point at the moves.

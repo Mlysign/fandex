@@ -389,13 +389,14 @@ async function health(c: Ctx): Promise<Response> {
   // the covers copied from it today.
   const fetches = await spent(c.env.DB, "fetch");
   const userWrites = await spent(c.env.DB, "user_writes");
+  const smallSaves = await spent(c.env.DB, "small_saves");
   const hardcover = await spent(c.env.DB, "hardcover");
   const covers = await spent(c.env.DB, "cover");
   // Providers this isolate has stopped calling, as the old site's health had.
   // ⚠️ One isolate's view: `{}` here says this isolate has seen no trouble, not
   // that TMDB and IGDB are up. A host listed here IS being refused, though.
   const openProviderCircuits = providerBreakerSnapshot();
-  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites, hardcover, covers }, openProviderCircuits }, 200, { "Cache-Control": "no-store" });
+  return json({ ok: true, time: nowSeconds(), today: { fetches, userWrites, smallSaves, hardcover, covers }, openProviderCircuits }, 200, { "Cache-Control": "no-store" });
 }
 
 async function resolve(c: Ctx, source: string, type: string, id: string): Promise<Response> {
