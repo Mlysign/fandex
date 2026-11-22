@@ -32,11 +32,13 @@ const PENDING_KEY = 'fandex.steam.pending';
 
 export interface PendingSteamConnect {
   state: string;
+  /** Kept on this device, never put in an address. The Worker checks `state` is its hash. */
+  secret: string;
   returnTo: string;
 }
 
 export type SteamReturn =
-  | { ok: true; params: Record<string, string>; returnTo: string }
+  | { ok: true; params: Record<string, string>; secret: string; returnTo: string }
   | { ok: false; reason: 'declined' | 'unknown'; returnTo: string };
 
 /** Steam's sign-in page, set to come back to `origin`'s return page. */
@@ -68,7 +70,7 @@ export function readSteamReturn(query: string, pending: PendingSteamConnect | nu
   if (signedState !== pending.state) return unknown;
   const params: Record<string, string> = {};
   all.forEach((value, key) => { if (key.startsWith('openid.')) params[key] = value; });
-  return { ok: true, params, returnTo };
+  return { ok: true, params, secret: pending.secret, returnTo };
 }
 
 /** The app address a return to the site belongs to, query and all, or null when it is the site's own. */
@@ -78,8 +80,17 @@ export function appReturnUrl(query: string): string | null {
   return state?.startsWith(STEAM_APP_STATE_PREFIX) ? `${STEAM_APP_REDIRECT}?${bare}` : null;
 }
 
-export function newState(): string {
-  return Array.from(Crypto.getRandomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('');
+/**
+ * A new connect: a secret that stays on this device, and a `state` that is its
+ * SHA-256 (with `statePrefix` in front). The state travels to Steam and back in
+ * the open, and on a phone through a `fandex://` address another app could
+ * claim. The secret does not, and the Worker accepts the answer only with it.
+ */
+export async function newSteamConnect(returnTo: string, statePrefix = ''): Promise<PendingSteamConnect> {
+  const secret = Array.from(Crypto.getRandomBytes(32), (b) => b.toString(16).padStart(2, '0')).join('');
+  const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, secret, { encoding: Crypto.CryptoEncoding.BASE64 });
+  const state = hash.replace(/[+]/g, '-').replace(/[/]/g, '_').replace(/=+$/, '');
+  return { state: `${statePrefix}${state}`, secret, returnTo: safeReturnPath(returnTo) };
 }
 
 // ── The browser's side ───────────────────────────────────────────────────────
@@ -96,8 +107,8 @@ export const APP_RETURN = OPENED_WITH ? appReturnUrl(OPENED_WITH) : null;
 if (APP_RETURN) window.location.replace(APP_RETURN);
 
 /** Leave for Steam. The page unloads, so this only returns if something went wrong first. */
-export function startSteamWebConnect(returnTo: string): void {
-  const pending: PendingSteamConnect = { state: newState(), returnTo: safeReturnPath(returnTo) };
+export async function startSteamWebConnect(returnTo: string): Promise<void> {
+  const pending = await newSteamConnect(returnTo);
   window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   window.location.assign(steamOpenIdUrl({ origin: window.location.origin, state: pending.state }));
 }
@@ -109,9 +120,9 @@ export function takeSteamReturn(): SteamReturn {
     const raw = window.sessionStorage.getItem(PENDING_KEY);
     window.sessionStorage.removeItem(PENDING_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed === 'object' && typeof (parsed as PendingSteamConnect).state === 'string') {
+    if (parsed && typeof parsed === 'object' && typeof (parsed as PendingSteamConnect).state === 'string' && typeof (parsed as PendingSteamConnect).secret === 'string') {
       const p = parsed as PendingSteamConnect;
-      pending = { state: p.state, returnTo: typeof p.returnTo === 'string' ? p.returnTo : '' };
+      pending = { state: p.state, secret: p.secret, returnTo: typeof p.returnTo === 'string' ? p.returnTo : '' };
     }
   } catch { /* No storage, or not ours: "nothing was started here". */ }
   const query = OPENED_WITH || window.location.search;

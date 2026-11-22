@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => new Uint8Array(n).fill(7) }));
+vi.mock('expo-crypto', () => ({
+  getRandomBytes: (n: number) => new Uint8Array(n).fill(7),
+  digestStringAsync: async () => 'ab+/cd==',
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  CryptoEncoding: { BASE64: 'base64' },
+}));
 vi.mock('react-native', () => ({ Platform: { OS: 'web' } }));
 vi.mock('~/lib/config', () => ({ DISCORD_CLIENT_ID: '', GOOGLE_CLIENT_ID: '' }));
 
-const { appReturnUrl, newState, readSteamReturn, steamOpenIdUrl } = await import('./steam');
+const { appReturnUrl, newSteamConnect, readSteamReturn, steamOpenIdUrl } = await import('./steam');
 
-const pending = { state: 'abc', returnTo: '/settings' };
+const pending = { state: 'abc', secret: 'kept-here', returnTo: '/settings' };
 const ID = 'https://steamcommunity.com/openid/id/76561197960287930';
 
 /** What Steam puts on the return page for a sign-in started with `state`. */
@@ -37,8 +42,12 @@ describe('the address to leave for', () => {
     expect(url.searchParams.get('openid.claimed_id')).toBe('http://specs.openid.net/auth/2.0/identifier_select');
   });
 
-  it('makes a state nobody can guess the shape of from one sample', () => {
-    expect(newState()).toMatch(/^[0-9a-f]{32}$/);
+  it('makes a secret that stays here and a state that is its hash, safe to put in an address', async () => {
+    const made = await newSteamConnect('/settings', 'app.');
+    expect(made.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(made.state).toBe('app.ab-_cd');
+    expect(made.state).not.toContain(made.secret);
+    expect(made.returnTo).toBe('/settings');
   });
 });
 
@@ -52,6 +61,8 @@ describe('reading what Steam sent back', () => {
     expect(back.params['openid.claimed_id']).toBe(ID);
     expect(back.params['openid.sig']).toBe('c2ln');
     expect(back.params.state).toBeUndefined();
+    // The secret comes from this window's own keeping, never from the address.
+    expect(back.secret).toBe('kept-here');
   });
 
   it('refuses an answer with another state, or one that reaches a tab that started nothing', () => {
@@ -71,8 +82,8 @@ describe('reading what Steam sent back', () => {
   });
 
   it('never returns to a return screen or another site', () => {
-    expect(readSteamReturn(answer('abc'), { state: 'abc', returnTo: '/auth/steam' }).returnTo).toBe('/profile');
-    expect(readSteamReturn(answer('abc'), { state: 'abc', returnTo: '//evil.example' }).returnTo).toBe('/profile');
+    expect(readSteamReturn(answer('abc'), { state: 'abc', secret: 's', returnTo: '/auth/steam' }).returnTo).toBe('/profile');
+    expect(readSteamReturn(answer('abc'), { state: 'abc', secret: 's', returnTo: '//evil.example' }).returnTo).toBe('/profile');
   });
 });
 

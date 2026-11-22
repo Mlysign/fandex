@@ -9,8 +9,12 @@
  * and a closing "From [wikipedia](…)" (2026-10-23). Links keep their words,
  * emphasis keeps its text, rules, reference definitions and source lines go.
  */
+/** No real description is longer. The patterns below are not all linear, and a provider's text can be written by anybody. */
+export const MAX_DESCRIPTION_CHARS = 8000;
+
 export function plainDescription(text: string): string {
   return text
+    .slice(0, MAX_DESCRIPTION_CHARS)
     .replace(/\r\n?/g, "\n")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // an image
     .replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)/g, "$1") // [words](url) → words

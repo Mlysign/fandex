@@ -18,7 +18,9 @@
 // attached to somebody else's account.
 
 import { canMerge, mergeAccounts, mergeConflicts, mergeSide, type MergeConflicts, type MergeResolution, type MergeSide } from "../account";
+import { capFrom, spend } from "../budget";
 import { first, isConstraintError, run } from "../d1";
+import { DEFAULT_DAILY_USER_WRITE_CAP } from "../me";
 import type { Env } from "../env";
 import { createSession, signPendingMerge, verifyPendingMerge, type SessionUser } from "./session";
 import type { VerifiedIdentity } from "./verify";
@@ -29,6 +31,35 @@ export type SignInOutcome =
   | { kind: "provider-taken"; provider: string; conflict: string }
   /** The accounts overlap. `mergeToken` carries the proof to POST /v1/auth/merge. */
   | { kind: "merge-required"; mergeToken: string; conflicts: MergeConflicts; mine: MergeSide; theirs: MergeSide; provider: string };
+
+/** A merge the day's budget has no room for. index.ts answers 503 with it. */
+export class MergesExhausted extends Error {
+  constructor() {
+    super("merge budget exhausted");
+    this.name = "MergesExhausted";
+  }
+}
+
+/** Merges per UTC day: across everybody, and into one account. */
+export const DAILY_MERGES = 40;
+export const DAILY_MERGES_PER_ACCOUNT = 3;
+
+/**
+ * What a merge costs. It rewrites every row of the account that goes away, and
+ * until 2026-11-22 it did so outside every budget: two accounts merged back and
+ * forth were a way to spend the database's whole day of writes. So a merge is
+ * counted, per day and per target, and its rows come out of the shared write
+ * cap like any other save. Refused, it throws and nothing has moved.
+ */
+function mergeCharge(env: Env, into: string): (rows: number) => Promise<void> {
+  return async (rows) => {
+    const db = env.DB;
+    const ok = (await spend(db, "merges", DAILY_MERGES))
+      && (await spend(db, `merges:${into}`, DAILY_MERGES_PER_ACCOUNT))
+      && (await spend(db, "user_writes", capFrom(env.DAILY_USER_WRITE_CAP, DEFAULT_DAILY_USER_WRITE_CAP), rows));
+    if (!ok) throw new MergesExhausted();
+  };
+}
 
 interface IdentityRow {
   user_id: string;
@@ -111,7 +142,7 @@ export async function signIn(env: Env, identity: VerifiedIdentity, current: Sess
     }
 
     // No overlap, so there is no decision to make and the resolution is moot.
-    const outcome = await mergeAccounts(db, current.userId, existing.user_id, "keep-theirs");
+    const outcome = await mergeAccounts(db, current.userId, existing.user_id, "keep-theirs", mergeCharge(env, existing.user_id));
     if (!outcome.ok) return { kind: "provider-taken", provider: identity.provider, conflict: outcome.provider };
     console.log("accounts_merged", { provider: identity.provider, movedTables: outcome.movedTables });
     return finish(env, identity, existing, "merged");
@@ -174,7 +205,7 @@ export async function completeMerge(
   const pending = await verifyPendingMerge(env, mergeToken);
   if (!pending || pending.from !== current.userId) return { kind: "invalid" };
 
-  const outcome = await mergeAccounts(env.DB, pending.from, pending.into, resolution);
+  const outcome = await mergeAccounts(env.DB, pending.from, pending.into, resolution, mergeCharge(env, pending.into));
   if (!outcome.ok) return { kind: "provider-taken", provider: pending.provider, conflict: outcome.provider };
   console.log("accounts_merged", { provider: pending.provider, movedTables: outcome.movedTables, resolution });
 

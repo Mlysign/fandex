@@ -1,7 +1,7 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession } from "../src/auth/session";
-import { IdentityRejected, STEAM_RETURN_PATH, steamProfileName, verifySteamOpenId } from "../src/auth/verify";
+import { IdentityRejected, nonceHash, STEAM_RETURN_PATH, steamProfileName, verifySteamOpenId } from "../src/auth/verify";
 import worker from "../src/index";
 import { count, db, env, wipe } from "./helpers";
 
@@ -14,6 +14,9 @@ const STEAM_ID = "76561197960287930";
 const USER = "aaaaaaaa-0000-4000-8000-0000000000b1";
 const OTHER = "aaaaaaaa-0000-4000-8000-0000000000b2";
 const NOW = Math.floor(Date.UTC(2026, 10, 22, 17, 0, 0) / 1000);
+// The secret the device kept, and the state it put in the return address: its hash.
+const SECRET = "s".repeat(64);
+const STATE = await nonceHash(SECRET);
 
 function answer(over: Record<string, string> = {}): Record<string, string> {
   return {
@@ -22,7 +25,7 @@ function answer(over: Record<string, string> = {}): Record<string, string> {
     "openid.op_endpoint": "https://steamcommunity.com/openid/login",
     "openid.claimed_id": `https://steamcommunity.com/openid/id/${STEAM_ID}`,
     "openid.identity": `https://steamcommunity.com/openid/id/${STEAM_ID}`,
-    "openid.return_to": `${ORIGIN}${STEAM_RETURN_PATH}?state=abc`,
+    "openid.return_to": `${ORIGIN}${STEAM_RETURN_PATH}?state=${STATE}`,
     "openid.response_nonce": "2026-11-22T17:00:00ZqYp3example",
     "openid.assoc_handle": "1234567890",
     "openid.signed": "signed,op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle",
@@ -38,7 +41,7 @@ describe("verifySteamOpenId", () => {
   it("accepts an answer Steam confirms, and asks Steam with the same values", async () => {
     let sent = "";
     const fetchImpl = (async (_url: unknown, init?: RequestInit) => { sent = String(init?.body); return new Response(VALID); }) as unknown as typeof fetch;
-    const identity = await verifySteamOpenId(env, answer(), { fetchImpl, now: NOW });
+    const identity = await verifySteamOpenId(env, answer(), SECRET, { fetchImpl, now: NOW });
     expect(identity).toEqual({ provider: "steam", providerUserId: STEAM_ID, displayName: null, avatarUrl: null });
     const posted = new URLSearchParams(sent);
     expect(posted.get("openid.mode")).toBe("check_authentication");
@@ -57,32 +60,45 @@ describe("verifySteamOpenId", () => {
     ["an answer whose return address is not signed", { "openid.signed": "signed,op_endpoint,claimed_id,identity,response_nonce,assoc_handle" }],
     ["an answer with no signature", { "openid.sig": "" }],
     ["an old answer", { "openid.response_nonce": "2026-11-22T16:50:00Zold" }],
+    ["an answer started with another device's secret", { "openid.return_to": `${ORIGIN}${STEAM_RETURN_PATH}?state=${"x".repeat(43)}` }],
     ["an answer with no time in its nonce", { "openid.response_nonce": "nonsense" }],
   ];
   for (const [what, over] of rejected) {
     it(`rejects ${what}, without asking Steam`, async () => {
       const fetchImpl = vi.fn(says(VALID));
-      await expect(verifySteamOpenId(env, answer(over), { fetchImpl: fetchImpl as unknown as typeof fetch, now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
+      await expect(verifySteamOpenId(env, answer(over), SECRET, { fetchImpl: fetchImpl as unknown as typeof fetch, now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
       expect(fetchImpl).not.toHaveBeenCalled();
     });
   }
 
   it("rejects what Steam does not confirm, and text that only contains the words", async () => {
-    await expect(verifySteamOpenId(env, answer(), { fetchImpl: says("ns:x\nis_valid:false\n"), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
-    await expect(verifySteamOpenId(env, answer(), { fetchImpl: says("error:not is_valid:true at all\n"), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), SECRET, { fetchImpl: says("ns:x\nis_valid:false\n"), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), SECRET, { fetchImpl: says("error:not is_valid:true at all\n"), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
   });
 
   it("rejects a value that is not text, and an answer used before", async () => {
-    await expect(verifySteamOpenId(env, { ...answer(), "openid.sig": 5 as unknown as string }, { fetchImpl: says(VALID), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
-    await expect(verifySteamOpenId(env, answer(), { fetchImpl: says(VALID), now: NOW, usedBefore: async () => true })).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, { ...answer(), "openid.sig": 5 as unknown as string }, SECRET, { fetchImpl: says(VALID), now: NOW })).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), SECRET, { fetchImpl: says(VALID), now: NOW, usedBefore: async () => true })).rejects.toBeInstanceOf(IdentityRejected);
+  });
+
+  it("rejects an answer that comes without the secret, or with a wrong one, without asking Steam", async () => {
+    const fetchImpl = vi.fn(says(VALID));
+    const deps = { fetchImpl: fetchImpl as unknown as typeof fetch, now: NOW };
+    await expect(verifySteamOpenId(env, answer(), undefined, deps)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), "short", deps)).rejects.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), "t".repeat(64), deps)).rejects.toBeInstanceOf(IdentityRejected);
+    // A phone's state carries the relay's prefix in front of the same hash.
+    const phone = answer({ "openid.return_to": `${ORIGIN}${STEAM_RETURN_PATH}?state=app.${STATE}` });
+    await expect(verifySteamOpenId(env, phone, SECRET, deps)).resolves.toMatchObject({ providerUserId: STEAM_ID });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("is a provider failure, not a rejection, when Steam cannot be reached", async () => {
     const down = (async () => { throw new Error("network"); }) as unknown as typeof fetch;
-    const err = await verifySteamOpenId(env, answer(), { fetchImpl: down, now: NOW }).catch((e: unknown) => e);
+    const err = await verifySteamOpenId(env, answer(), SECRET, { fetchImpl: down, now: NOW }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);
     expect(err).not.toBeInstanceOf(IdentityRejected);
-    await expect(verifySteamOpenId(env, answer(), { fetchImpl: says("busy", 503), now: NOW })).rejects.not.toBeInstanceOf(IdentityRejected);
+    await expect(verifySteamOpenId(env, answer(), SECRET, { fetchImpl: says("busy", 503), now: NOW })).rejects.not.toBeInstanceOf(IdentityRejected);
   });
 });
 
@@ -118,7 +134,7 @@ describe("POST /v1/auth/steam", () => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (userId) headers.Authorization = `Bearer ${await createSession(env, { userId, provider: "google", displayName: "Nils" })}`;
     const ctx = createExecutionContext();
-    const res = await worker.fetch(new Request("https://api.test/v1/auth/steam", { method: "POST", headers, body: JSON.stringify({ params }) }), withKey, ctx);
+    const res = await worker.fetch(new Request("https://api.test/v1/auth/steam", { method: "POST", headers, body: JSON.stringify({ params, secret: SECRET }) }), withKey, ctx);
     await waitOnExecutionContext(ctx);
     return res;
   }

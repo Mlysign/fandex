@@ -84,3 +84,7 @@ docs/release-plan/comments.js
 # Screenshots of competitors' store pages, kept for the design session. Their
 # images, not ours to publish.
 docs/release-plan/refs/
+
+# Audit findings and anything else that must not be public before it is fixed.
+# This repo is public: an unfixed weakness with its recipe does not belong in it.
+docs/release-plan/private/

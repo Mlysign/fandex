@@ -9,7 +9,7 @@ const JSON_TYPE = "application/json; charset=utf-8";
 /** `body` may be an already-serialised JSON string (the catalog reads hand those over) or a value. */
 export function json(body: string | object | null, status = 200, headers: Record<string, string> = {}): Response {
   const text = typeof body === "string" ? body : JSON.stringify(body);
-  return new Response(text, { status, headers: { "Content-Type": JSON_TYPE, ...headers } });
+  return new Response(text, { status, headers: { "Content-Type": JSON_TYPE, "X-Content-Type-Options": "nosniff", ...headers } });
 }
 
 export function error(status: number, code: string, message?: string, extra: Record<string, unknown> = {}): Response {

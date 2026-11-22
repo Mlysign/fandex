@@ -350,16 +350,16 @@ export interface ScoreSummary { version: number; binFrom: number; media: ScoreSu
 export const api = {
   health: () => request<Health>('/v1/health'),
 
-  item: (id: string, region?: string) => request<ItemDetail>(`/v1/items/${id}${q({ region })}`),
+  item: (id: string, region?: string) => request<ItemDetail>(`/v1/items/${encodeURIComponent(id)}${q({ region })}`),
 
   /** Find or fetch a provider title. The only call that can make the Worker ask a provider. */
   resolve: (source: string, type: string, id: string) =>
-    request<{ id: string; created: boolean }>(`/v1/resolve/${source}/${type}/${id}`),
+    request<{ id: string; created: boolean }>(`/v1/resolve/${encodeURIComponent(source)}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`),
 
   catalogDelta: (cursor: DeltaCursor, limit?: number, count = false) =>
     request<DeltaPage>(`/v1/catalog/delta${q({ since: cursor.since, after: cursor.after, limit, count: count ? 1 : undefined })}`),
 
-  calendar: (month: string, region?: string) => request<CalendarMonth>(`/v1/calendar/${month}${q({ region })}`),
+  calendar: (month: string, region?: string) => request<CalendarMonth>(`/v1/calendar/${encodeURIComponent(month)}${q({ region })}`),
 
   /** Which of these films open on another day in `region` than the one date the device holds. At most 200 ids. */
   releaseDates: (region: string, ids: string[]) =>
@@ -395,7 +395,7 @@ export const api = {
   /** Discord's access token from its implicit grant (lib/discord.ts). Checked with Discord there, never stored. */
   signInWithDiscord: (accessToken: string) => request<SignInResult>('/v1/auth/discord', json('POST', { accessToken })),
   /** Steam's OpenID answer, as the return page got it (lib/steam.ts). Needs a session: Steam is a connection, never a way in. */
-  connectSteam: (params: Record<string, string>) => request<SignInResult>('/v1/auth/steam', json('POST', { params })),
+  connectSteam: (params: Record<string, string>, secret: string) => request<SignInResult>('/v1/auth/steam', json('POST', { params, secret })),
   /** A test account. Only a Worker on a developer's machine has this route (worker/src/devLogin.ts). */
   devSignIn: (account: string) => request<SignInResult>('/v1/dev/login', json('POST', { account })),
   /** Add a test account's way in to the signed-in account, through the real sign-in: how joining accounts is tried locally. */
@@ -469,12 +469,12 @@ export const api = {
   scoreReport: (reports: ScoreReport[]) => request<{ ok: boolean; saved: number }>('/v1/me/score-report', json('PUT', { reports })),
   /** Every user's score report summed, for the admin Score page. */
   adminScore: () => request<ScoreSummary>('/v1/admin/score'),
-  showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${id}/episodes`),
+  showEpisodes: (id: string) => request<ShowEpisodes>(`/v1/shows/${encodeURIComponent(id)}/episodes`),
   savePrefs: (prefs: PrefsPatch) => request<Profile>('/v1/me/prefs', json('PUT', prefs)),
   exportAccount: () => request<Record<string, unknown>>('/v1/me/export'),
   deleteAccount: () => request<{ deleted: boolean }>('/v1/me', { method: 'DELETE' }),
   disconnect: (provider: string) =>
-    request<{ ok: true; removedRows: number; token: string; user: SessionUser }>(`/v1/me/identities/${provider}`, { method: 'DELETE' }),
+    request<{ ok: true; removedRows: number; token: string; user: SessionUser }>(`/v1/me/identities/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
 
   /** Which of these provider ids the catalog holds. Never fetches. At most 2,000 refs. */
   lookup: (refs: ProviderRef[]) => request<LookupResult>('/v1/lookup', json('POST', { refs })),

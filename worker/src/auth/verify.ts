@@ -279,6 +279,12 @@ export interface SteamVerifyDeps {
  *   - the fields that matter are in the signed list. A field outside it is
  *     one the sender could have changed after Steam signed.
  *   - the answer is fresh, by the time Steam stamped into its nonce.
+ *   - the answer was asked for by whoever is sending it. The `state` inside
+ *     the signed return address is the SHA-256 of a secret the app made and
+ *     kept; the secret itself comes here with the answer. On a phone the
+ *     answer travels through a `fandex://` address, which any other app can
+ *     claim too. Such an app sees the answer and never the secret, exactly as
+ *     with Google's nonce (audit, 2026-11-22).
  *
  * The identity is the SteamID64. Nothing from Steam is stored but that id and
  * the public profile name; no key or token exists in this flow at all.
@@ -286,8 +292,10 @@ export interface SteamVerifyDeps {
 export async function verifySteamOpenId(
   env: Env,
   raw: Record<string, unknown>,
+  secret: unknown,
   deps: SteamVerifyDeps = {},
 ): Promise<VerifiedIdentity> {
+  if (typeof secret !== "string" || !NONCE_SHAPE.test(secret)) throw new IdentityRejected("Steam connect carries no usable secret");
   const params: Record<string, string> = {};
   const keys = Object.keys(raw);
   if (keys.length > 24) throw new IdentityRejected("Steam answer is malformed");
@@ -316,6 +324,11 @@ export async function verifySteamOpenId(
   const origins = (env.ALLOWED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
   if (!origins.includes(returnTo.origin) || returnTo.pathname !== STEAM_RETURN_PATH) {
     throw new IdentityRejected("Steam answer was issued for another site");
+  }
+  // `app.` in front marks a phone's connect for the relay page; the rest is the hash.
+  const state = returnTo.searchParams.get("state") ?? "";
+  if ((state.startsWith("app.") ? state.slice(4) : state) !== (await nonceHash(secret))) {
+    throw new IdentityRejected("Steam answer was not asked for by this device");
   }
 
   // The nonce starts with the moment Steam issued it: 2026-11-22T17:00:00Z…

@@ -56,6 +56,8 @@ export interface Env {
   DAILY_DELTA_CAP?: string;
   /** Refs /v1/lookup may answer per UTC day. Optional; index.ts has the default. */
   DAILY_LOOKUP_CAP?: string;
+  /** Films POST /v1/catalog/release-dates answers per UTC day. Optional; index.ts has the default. */
+  DAILY_DATES_CAP?: string;
   /** User-state row writes one account may make per UTC day. Optional; me.ts has the default. */
   DAILY_USER_WRITE_CAP_PER_USER?: string;
   /**

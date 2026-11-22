@@ -53,7 +53,9 @@ export function readImportFiles(files: { name: string; bytes: Uint8Array }[]): P
       try {
         // Only what is used. Reviews, diary, lists, likes and comments are in
         // there and are never decompressed, as on the site.
-        entries = unzipSync(f.bytes, { filter: (file) => WANTED.some((w) => w.match.test(file.name)) });
+        // The size check above is on the packed file. A CSV that unpacks to
+        // gigabytes is skipped here, before any of it is unpacked.
+        entries = unzipSync(f.bytes, { filter: (file) => file.originalSize <= MAX_FILE_BYTES && WANTED.some((w) => w.match.test(file.name)) });
       } catch {
         throw new ImportParseError('That ZIP could not be opened. Choose it exactly as it downloaded.');
       }

@@ -38,7 +38,9 @@ describe("the open read routes", () => {
 
   it("rate-limits and budgets /v1/lookup by the refs it answers", async () => {
     expect((await call("/v1/lookup", { method: "POST", ...jsonBody({ refs }) }, { ...env, RL_READ: closed })).status).toBe(429);
-    const tight = { ...env, DAILY_LOOKUP_CAP: "3" };
+    // A call costs at least 20 refs' worth, however few it carries: each call is
+    // a row write, so a cap counted in refs alone allowed 300,000 of them.
+    const tight = { ...env, DAILY_LOOKUP_CAP: "20" };
     expect((await call("/v1/lookup", { method: "POST", ...jsonBody({ refs }) }, tight)).status).toBe(200);
     const over = await call("/v1/lookup", { method: "POST", ...jsonBody({ refs }) }, tight);
     expect(over.status).toBe(503);

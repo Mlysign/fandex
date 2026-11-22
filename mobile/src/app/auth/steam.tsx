@@ -43,7 +43,7 @@ export default function SteamReturn() {
       else setFailed({ message: 'This did not come from this window, or it was already used. Start it again from Settings.', returnTo: back.returnTo });
       return;
     }
-    finishSteamConnect(back.params).then(
+    finishSteamConnect(back.params, back.secret).then(
       (outcome) => router.replace((signInLanding(outcome, back.returnTo) ?? returnTo) as Href),
       (e: unknown) => setFailed({ message: e instanceof Error ? e.message : 'Connecting Steam did not finish.', returnTo: back.returnTo }),
     );

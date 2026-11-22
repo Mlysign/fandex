@@ -105,29 +105,26 @@ describe("CORS and CSRF", () => {
     expect((await call("/v1/me/state", { method: "OPTIONS", headers: { Origin: "https://evil.example" } })).status).toBe(403);
   });
 
-  it("refuses a state-changing request on a cookie session from an unknown origin", async () => {
+  it("never acts for a cookie session: the cookie tells the beacon somebody is signed in, and nothing more", async () => {
     const token = await session();
     const { id } = await upsertMediaItem(db, movieItem());
     const body = jsonBody({ hidden: { add: [id] } });
     const cookie = { Cookie: `fx_session=${token}`, ...body.headers };
 
-    // Another site made the browser send this. The cookie rode along.
-    const forged = await call("/v1/me/state", { method: "PUT", body: body.body, headers: { ...cookie, Origin: "https://evil.example" } });
-    expect(forged.status).toBe(403);
-    const noOrigin = await call("/v1/me/state", { method: "PUT", body: body.body, headers: cookie });
-    expect(noOrigin.status).toBe(403);
+    // Another site made the browser send this, or our own page did after a
+    // sign-out that never reached the server. Either way the cookie rode along
+    // and it is not enough (audit, 2026-11-22).
+    for (const headers of [{ ...cookie, Origin: "https://evil.example" }, cookie, { ...cookie, Origin: ORIGIN }]) {
+      expect((await call("/v1/me/state", { method: "PUT", body: body.body, headers })).status).toBe(401);
+    }
     expect(await count("user_hidden_items")).toBe(0);
+    // Reads too: the export answered on the cookie alone.
+    expect((await call("/v1/me", { headers: { Cookie: `fx_session=${token}` } })).status).toBe(401);
+    expect((await call("/v1/me/export", { headers: { Cookie: `fx_session=${token}`, Origin: ORIGIN } })).status).toBe(401);
 
-    const ours = await call("/v1/me/state", { method: "PUT", body: body.body, headers: { ...cookie, Origin: ORIGIN } });
-    expect(ours.status).toBe(200);
-    // A bearer token cannot be attached cross-site, so it needs no origin.
+    // The Bearer token is what every client sends, and it cannot be attached cross-site.
     const app = await call("/v1/me/state", { method: "PUT", body: body.body, headers: auth(token, body.headers) });
     expect(app.status).toBe(200);
-  });
-
-  it("lets a cookie session READ from anywhere it is sent", async () => {
-    const token = await session();
-    expect((await call("/v1/me", { headers: { Cookie: `fx_session=${token}` } })).status).toBe(200);
   });
 });
 

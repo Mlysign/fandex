@@ -22,7 +22,7 @@ import { deviceRegion } from '~/lib/region';
 import { DISCORD_CLIENT_ID, GOOGLE_CLIENT_ID, traktConfigured } from '~/lib/config';
 import { GOOGLE_APP_REDIRECT, GOOGLE_APP_STATE_PREFIX, GOOGLE_SITE_ORIGIN, googleAuthorizeUrl, newGoogleSignIn, readGoogleReturn, startGoogleSignIn as startGoogleWebSignIn } from '~/lib/google';
 import { DISCORD_APP_REDIRECT, DISCORD_APP_STATE_PREFIX, DISCORD_SITE_REDIRECT, discordAuthorizeUrl, newState as newDiscordState, readDiscordReturn, startDiscordWebSignIn } from '~/lib/discord';
-import { STEAM_APP_REDIRECT, STEAM_APP_STATE_PREFIX, STEAM_SITE_ORIGIN, newState as newSteamState, readSteamReturn, startSteamWebConnect, steamOpenIdUrl } from '~/lib/steam';
+import { STEAM_APP_REDIRECT, STEAM_APP_STATE_PREFIX, STEAM_SITE_ORIGIN, newSteamConnect, readSteamReturn, startSteamWebConnect, steamOpenIdUrl } from '~/lib/steam';
 import { clearState, StaleSync, syncState } from '~/lib/stateSync';
 import { ownGainsAccountKey } from '~/lib/db';
 import { onRowsChangedElsewhere } from '~/lib/rowsBus';
@@ -86,7 +86,7 @@ interface Auth {
    * browser sheet opens and this finishes it itself. Throws with the reason.
    */
   startSteamConnect: (returnTo: string) => Promise<void>;
-  finishSteamConnect: (params: Record<string, string>) => Promise<SignInResult['outcome'] | null>;
+  finishSteamConnect: (params: Record<string, string>, secret: string) => Promise<SignInResult['outcome'] | null>;
   /** Sign in as a test account. Only against a Worker on this machine; anywhere else it reports that there is none. */
   devSignIn: (account: string) => Promise<void>;
   /** Connect a test account to the signed-in one (a local Worker only), as connecting Discord would. Throws with the reason. */
@@ -619,10 +619,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await finishDiscordSignIn(back.accessToken);
   }, [finishDiscordSignIn]);
 
-  const finishSteamConnect = useCallback(async (params: Record<string, string>): Promise<SignInResult['outcome'] | null> => {
+  const finishSteamConnect = useCallback(async (params: Record<string, string>, secret: string): Promise<SignInResult['outcome'] | null> => {
     let result;
     try {
-      result = await api.connectSteam(params);
+      result = await api.connectSteam(params, secret);
     } catch (e) {
       if (adoptMerge(e)) return null;
       if (e instanceof ApiError && e.code === 'unauthorized') throw new Error('Sign in first, then connect Steam.');
@@ -642,23 +642,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const startSteamConnect = useCallback(async (returnTo: string) => {
     if (Platform.OS === 'web') {
-      startSteamWebConnect(returnTo);
+      await startSteamWebConnect(returnTo);
       return;
     }
     // A browser sheet that goes to Steam, comes back to the site, and is handed
     // on to fandex://auth/steam: Steam's answer names the page it was made for,
     // and the Worker accepts only our own site's.
-    const state = `${STEAM_APP_STATE_PREFIX}${newSteamState()}`;
-    const url = steamOpenIdUrl({ origin: STEAM_SITE_ORIGIN, state });
+    const pending = await newSteamConnect(returnTo, STEAM_APP_STATE_PREFIX);
+    const url = steamOpenIdUrl({ origin: STEAM_SITE_ORIGIN, state: pending.state });
     const result = await WebBrowser.openAuthSessionAsync(url, STEAM_APP_REDIRECT);
     // Closed without an answer: back where they started, not an error.
     if (result.type !== 'success') return;
-    const back = readSteamReturn(result.url.split('?')[1] ?? '', { state, returnTo });
+    const back = readSteamReturn(result.url.split('?')[1] ?? '', pending);
     if (!back.ok) {
       if (back.reason === 'declined') return;
       throw new Error('Steam did not confirm the sign-in. Try again.');
     }
-    await finishSteamConnect(back.params);
+    await finishSteamConnect(back.params, back.secret);
   }, [finishSteamConnect]);
 
   /**

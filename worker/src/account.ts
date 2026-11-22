@@ -104,6 +104,10 @@ export async function deleteAccount(db: D1Database, userId: string): Promise<Acc
   const results = await db.batch([
     ...tables.map((t) => db.prepare(`DELETE FROM "${t}" WHERE user_id = ?`).bind(userId)),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+    // The account's own counters of the day carry its id in their name
+    // (budget.ts). Not personal data in any useful sense, but the id is, and
+    // "everything is deleted" means everything (audit, 2026-11-22).
+    db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?)").bind(`user_writes:${userId}`, `export:${userId}`, `merges:${userId}`),
   ]);
 
   const perTable: Record<string, number> = {};
@@ -258,7 +262,9 @@ export async function disconnectIdentity(
     db, "SELECT provider, display_name FROM user_identities WHERE user_id = ? ORDER BY created_at", [userId],
   );
   if (!identities.some((i) => i.provider === provider)) return { ok: false, reason: "not-connected" };
-  const remaining = identities.find((i) => i.provider !== provider);
+  // Steam is a connection, never a way in (index.ts connectSteam), so an
+  // account must keep a sign-in that is not Steam (audit, 2026-11-22).
+  const remaining = identities.find((i) => i.provider !== provider && i.provider !== "steam");
   if (!remaining) return { ok: false, reason: "only-login" };
 
   const rows = (await first<{ n: number }>(
@@ -398,12 +404,22 @@ export async function mergeAccounts(
   fromUserId: string,
   intoUserId: string,
   resolution: MergeResolution,
+  /**
+   * Asked before anything moves, with the number of rows the merge rewrites.
+   * It throws to refuse. A merge writes every row of an account, so it has to
+   * come out of the day's writes like any other save (audit, 2026-11-22).
+   */
+  charge?: (rows: number) => Promise<void>,
 ): Promise<MergeResult> {
   if (fromUserId === intoUserId) return { ok: true, movedTables: [] };
   const guard = await canMerge(db, fromUserId, intoUserId);
   if (!guard.ok) return guard;
 
   const tables = await userScopedTables(db);
+  if (charge) {
+    const counts = await countsFor(db, tables, fromUserId);
+    await charge(Object.values(counts).reduce((a, b) => a + b, 0) + 1);
+  }
   // keep-theirs: the source's clashing rows go. keep-mine: the target's do.
   const [loser, winner] = resolution === "keep-theirs" ? [fromUserId, intoUserId] : [intoUserId, fromUserId];
 
@@ -414,6 +430,19 @@ export async function mergeAccounts(
       `DELETE FROM user_hidden_items AS f WHERE f.user_id = ?1
          AND EXISTS (SELECT 1 FROM user_hidden_items t WHERE t.user_id = ?2 AND t.media_item_id = f.media_item_id)`,
     ).bind(fromUserId, intoUserId),
+    // One row per medium and one per followed facet: two accounts that were
+    // both used hold the same keys, and the move below then failed the whole
+    // batch with a 500 (audit, 2026-11-22). The score report is the device's
+    // own measurement and is sent again within a day, so the target's stays.
+    // A follow is a choice, so the side the person picked wins.
+    db.prepare(
+      `DELETE FROM score_report AS f WHERE f.user_id = ?1
+         AND EXISTS (SELECT 1 FROM score_report t WHERE t.user_id = ?2 AND t.medium = f.medium)`,
+    ).bind(fromUserId, intoUserId),
+    db.prepare(
+      `DELETE FROM user_facet_follows AS f WHERE f.user_id = ?1
+         AND EXISTS (SELECT 1 FROM user_facet_follows t WHERE t.user_id = ?2 AND t.facet_id = f.facet_id)`,
+    ).bind(loser, winner),
   ];
   const moveStart = statements.length;
   for (const t of tables) {
@@ -422,6 +451,8 @@ export async function mergeAccounts(
   // The emptied account. Its preferences go with it on purpose: the surviving
   // account is the established one and its settings are the ones the person chose.
   statements.push(db.prepare("DELETE FROM users WHERE id = ?").bind(fromUserId));
+  // The emptied account's own counters of the day, which carry its id (as erasure does).
+  statements.push(db.prepare("DELETE FROM daily_budget WHERE kind IN (?, ?, ?)").bind(`user_writes:${fromUserId}`, `export:${fromUserId}`, `merges:${fromUserId}`));
   // The surviving account's rows are not what was counted any more, whichever
   // side won: it lost its clashing rows or gained the other's. Last, so the
   // indexes read back below still point at the moves.

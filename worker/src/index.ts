@@ -46,7 +46,7 @@ import {
   setTagOverrides, dismissSuggestion, dismissedJson, parseDismissal, undismissSuggestion, type AliasTable,
 } from "./adminScoring";
 import { clearedSessionCookie, createSession, readSession, bumpSessionEpoch, sessionCookie, type Session } from "./auth/session";
-import { completeMerge, signIn, type SignInOutcome } from "./auth/signin";
+import { completeMerge, MergesExhausted, signIn, type SignInOutcome } from "./auth/signin";
 import { IdentityRejected, steamProfileName, verifyDiscordToken, verifyGoogleIdToken, verifySteamOpenId, verifyTraktToken, type VerifiedIdentity } from "./auth/verify";
 import { capFrom, kvGet, kvSet, spend, spent } from "./budget";
 import { calendarMonth, validMonth } from "./calendar";
@@ -91,6 +91,12 @@ const DEFAULT_DAILY_LOOKUP_CAP = 300_000;
 /** A short client-side cache for catalog reads. The data changes on the scale of days. */
 const CATALOG_CACHE = { "Cache-Control": "public, max-age=300" };
 const PRIVATE = { "Cache-Control": "private, no-store" };
+/** Films the release-dates route answers per UTC day, across everybody. A film is up to twenty row reads. */
+const DEFAULT_DAILY_DATES_CAP = 200_000;
+/** What one lookup call costs at least. Each call is a row write, so 300,000 one-ref calls were three days of writes. */
+const LOOKUP_MIN_UNITS = 20;
+/** Data exports one account may ask for per UTC day. Each reads every row it holds. */
+const DAILY_EXPORTS_PER_USER = 10;
 
 type Ctx = { env: Env; request: Request; url: URL; defer: (p: Promise<unknown>) => void };
 
@@ -104,6 +110,7 @@ export default {
     } catch (e) {
       if (e instanceof BodyError) response = error(e.status, e.status === 413 ? "payload-too-large" : "bad-request", e.message);
       else if (e instanceof BadRequest) response = error(400, "bad-request", e.message);
+      else if (e instanceof MergesExhausted) response = error(503, "budget-exhausted", "Fandex cannot join more accounts until tomorrow (UTC).");
       else {
         console.error("unhandled", { path: c.url.pathname, error: e instanceof Error ? e.stack ?? e.message : String(e) });
         response = error(500, "internal");
@@ -193,6 +200,11 @@ async function route(c: Ctx): Promise<Response> {
     if (!ids) return error(400, "bad-request", `Expected {region, ids: [item id]}, at most ${RELEASE_DATES_MAX}`);
     // Every film asked about is a blob read, so this one meets the limiter on every call.
     if (!(await allow(c.env.RL_RESOLVE, `dates:${clientIp(request)}`))) return error(429, "rate-limited");
+    // A limiter alone let a handful of addresses read the day away, up to
+    // twenty rows a film (audit, 2026-11-22). Counted in films asked about.
+    if (!(await spend(c.env.DB, "date_films", capFrom(c.env.DAILY_DATES_CAP, DEFAULT_DAILY_DATES_CAP), ids.length))) {
+      return error(503, "budget-exhausted", "Fandex cannot answer more release dates until tomorrow (UTC).");
+    }
     const region = typeof body?.region === "string" ? body.region : null;
     return json(await regionalReleaseDatesJson(c.env.DB, ids, region), 200, { "Cache-Control": "no-store" });
   }
@@ -229,7 +241,7 @@ async function route(c: Ctx): Promise<Response> {
     // Two primary-key reads a ref and no sign-in needed: the cheapest way to
     // spend the day's reads, so both a limiter and a daily count of refs.
     if (!(await allow(c.env.RL_READ, `lookup:${clientIp(request)}`))) return error(429, "rate-limited");
-    if (!(await spend(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), refs.length))) {
+    if (!(await spend(c.env.DB, "lookup_refs", capFrom(c.env.DAILY_LOOKUP_CAP, DEFAULT_DAILY_LOOKUP_CAP), Math.max(refs.length, LOOKUP_MIN_UNITS)))) {
       return error(503, "budget-exhausted", "Fandex cannot look up more titles until tomorrow (UTC).");
     }
     return json(await lookupRefsJson(c.env.DB, refs, { facets }), 200, { "Cache-Control": "no-store" });
@@ -238,8 +250,23 @@ async function route(c: Ctx): Promise<Response> {
   if (a === "shows" && d === "episodes" && method === "GET" && b) {
     // Not a UUID is no such show, not a wrong verb: it fell through to the 405 table (2026-10-23).
     if (!UUID.test(b)) return error(404, "not-found");
-    const body = await showEpisodesJson(c.env.DB, b.toLowerCase());
-    return body ? json(body, 200, CATALOG_CACHE) : error(404, "not-found");
+    const id = b.toLowerCase();
+    // One show can hold more than a thousand episode rows and nobody signs in
+    // to ask, so a few thousand calls were a day's row reads (audit, 2026-11-22).
+    // The edge keeps each show's answer for ten minutes, keyed on the id alone,
+    // and what still reaches the database meets the limiter. The app asks once
+    // per opened show page (EpisodeTracker), far under it.
+    const cacheKey = new Request(`https://cache.fandex.internal/shows/${id}/episodes`);
+    const hit = await caches.default.match(cacheKey);
+    if (hit) return cachedAnswer(hit, CATALOG_CACHE["Cache-Control"]);
+    if (!(await allow(c.env.RL_READ, `episodes:${clientIp(request)}`))) return error(429, "rate-limited");
+    const body = await showEpisodesJson(c.env.DB, id);
+    if (!body) return error(404, "not-found");
+    const response = json(body, 200, CATALOG_CACHE);
+    const kept = new Response(response.clone().body, response);
+    kept.headers.set("Cache-Control", "public, max-age=600");
+    c.defer(caches.default.put(cacheKey, kept));
+    return response;
   }
 
   // Books and board games: worker/src/shelves.ts.
@@ -528,6 +555,20 @@ async function facetGames(c: Ctx): Promise<Response> {
 
 // ── Sign-in ──────────────────────────────────────────────────────────────────
 
+/**
+ * The session a request may ACT with: one sent as a Bearer token. The cookie a
+ * browser on our own origin also holds is good for one thing only, telling the
+ * pageview beacon that somebody is signed in. It used to count everywhere, and
+ * a cookie that outlived a failed sign-out then made the NEXT person's sign-in
+ * in that browser join the previous person's account (audit, 2026-11-22). Every
+ * client sends the Bearer token on every call (mobile/src/lib/api.ts), so a
+ * request with the cookie alone is not one of ours acting for a user.
+ */
+async function actingSession(c: Ctx): Promise<Session | null> {
+  const session = await readSession(c.env, c.request, c.defer);
+  return session && session.via === "bearer" ? session : null;
+}
+
 function signInResponse(c: Ctx, out: SignInOutcome | { kind: "merged"; token: string; user: Session["user"] }): Response {
   switch (out.kind) {
     case "provider-taken":
@@ -569,7 +610,7 @@ async function authenticate(c: Ctx, provider: "google" | "trakt" | "discord"): P
 
   // The link target is whoever this request is ALREADY signed in as. Never a
   // user id from the body.
-  const session = await readSession(c.env, c.request, c.defer);
+  const session = await actingSession(c);
   if (session && !csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   const out = await signIn(c.env, identity, session?.user ?? null);
   countSignIn(c, provider, out.kind);
@@ -585,21 +626,22 @@ async function authenticate(c: Ctx, provider: "google" | "trakt" | "discord"): P
  *
  * The client sends back the `openid.*` values Steam put on our return page
  * (auth/verify.ts says what is checked). The page that received them compares
- * the `state` it started with before sending them, which is what ties an
- * answer to the browser that asked for it; the Worker holds no state for it.
+ * the `state` it started with before sending them, and sends the secret that
+ * `state` is the hash of, which is what ties an answer to the device that
+ * asked for it; the Worker holds no state for it.
  */
 async function connectSteam(c: Ctx): Promise<Response> {
   if (!(await allow(c.env.RL_AUTH, `auth:${clientIp(c.request)}`))) return error(429, "rate-limited");
-  const session = await readSession(c.env, c.request, c.defer);
+  const session = await actingSession(c);
   if (!session) return error(401, "unauthorized", "Sign in first, then connect Steam in Settings.");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
-  const body = (await readJson(c.request, AUTH_BODY_MAX)) as { params?: unknown } | null;
+  const body = (await readJson(c.request, AUTH_BODY_MAX)) as { params?: unknown; secret?: unknown } | null;
   const params = body?.params;
   if (!params || typeof params !== "object" || Array.isArray(params)) return error(400, "bad-request", "Missing Steam answer");
 
   let identity: VerifiedIdentity;
   try {
-    identity = await verifySteamOpenId(c.env, params as Record<string, unknown>, {
+    identity = await verifySteamOpenId(c.env, params as Record<string, unknown>, body?.secret, {
       // Written only for an answer Steam has confirmed, so a stranger cannot
       // make this spend row writes. Ten minutes outlives the five an answer is good for.
       usedBefore: async (nonce) => {
@@ -630,7 +672,7 @@ function countSignIn(c: Ctx, provider: string, kind: SignInOutcome["kind"]): voi
 }
 
 async function merge(c: Ctx): Promise<Response> {
-  const session = await readSession(c.env, c.request, c.defer);
+  const session = await actingSession(c);
   if (!session) return error(401, "unauthorized");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   const body = (await readJson(c.request, AUTH_BODY_MAX)) as Record<string, unknown> | null;
@@ -672,7 +714,7 @@ function withAdminFlag(env: Env, userId: string, profile: string): string {
  * path that does not exist, signed in or not.
  */
 async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Response> {
-  const session = await readSession(c.env, c.request, c.defer);
+  const session = await actingSession(c);
   if (!session || !isAdmin(c.env, session.user.userId)) return error(404, "not-found");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   if (b === "analytics" && method === "GET") {
@@ -786,13 +828,18 @@ async function admin(c: Ctx, method: string, b?: string, d?: string): Promise<Re
 }
 
 async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Response> {
-  const session = await readSession(c.env, c.request, c.defer);
+  const session = await actingSession(c);
   // An auth gate must ASK, never disappear: 401 with a code the client turns
   // into a sign-in prompt, never an empty 200 that reads as "you have nothing".
   if (!session) return error(401, "unauthorized");
   if (!csrfOk(c.env, c.request, session)) return error(403, "forbidden");
   const { userId } = session.user;
   const db = c.env.DB;
+  // Every signed-in read meets a limiter (audit, 2026-11-22): hidden titles,
+  // follows, counts and the export had none, and each reads as many rows as
+  // the account holds. The paged state pulls keep their own key below.
+  if ((method === "GET" || method === "HEAD") && !(b === "state" && (d === "items" || d === "episodes"))
+    && !(await allow(c.env.RL_READ, `me:${userId}`))) return error(429, "rate-limited");
 
   if (!b) {
     if (method === "GET") {
@@ -806,6 +853,11 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
   }
 
   if (b === "prefs" && method === "PUT") {
+    // A row write like any other: the write limiter and the account's share of the day (audit, 2026-11-22).
+    if (!(await allow(c.env.RL_WRITE, `write:${userId}`))) return error(429, "rate-limited");
+    if (!(await spend(db, `user_writes:${userId}`, capFrom(c.env.DAILY_USER_WRITE_CAP_PER_USER, DEFAULT_DAILY_USER_WRITE_CAP_PER_USER), 1))) {
+      return error(503, "budget-exhausted", "Fandex cannot save more changes until tomorrow (UTC).");
+    }
     await writePrefs(db, userId, parsePrefs(await readJson(c.request, AUTH_BODY_MAX)));
     const body = await profileJson(db, userId);
     return json(body ? withAdminFlag(c.env, userId, body) : body, 200, PRIVATE);
@@ -865,6 +917,11 @@ async function me(c: Ctx, method: string, b?: string, d?: string): Promise<Respo
   // The Steam library and wishlist, for the device's Steam sync (src/steam.ts).
   if (b === "steam" && method === "GET" && !d) return steamLibrary(c, userId);
   if (b === "export" && method === "GET") {
+    // It reads every row the account holds, so it is counted: ten a day is more
+    // than a person asks for and far fewer than a loop does (audit, 2026-11-22).
+    if (!(await spend(db, `export:${userId}`, DAILY_EXPORTS_PER_USER))) {
+      return error(429, "rate-limited", "That is ten exports today. Try again tomorrow (UTC).");
+    }
     const body = await buildAccountExportJson(db, userId);
     if (!body) return error(401, "unauthorized");
     return json(body, 200, {
