@@ -20,7 +20,7 @@ code, in a browser.
 | Insights (`/insights`) | Your taste in numbers, from the rows on the device: overview, how you rate, the spread per medium, taste by era, how you rate tags, people and studios. A bar on any of the three charts lists its titles under that chart, and picking one clears the others (the per-medium charts since 0.3.35, 2026-11-06) ("You vs the crowd" and "Most watched" went 2026-11-05; a rating box's "Most picked" sort replaces the second). Since 2026-11-05: the overview is one row with type icons, no chart wears a media colour unless it is that medium's, taste by era scrolls sideways, and each rating box shows 4 rows with each one's taste impact on the score (`lib/insightsImpacts.ts`, read off `tasteImpactIndex` in `lib/facetImpact.ts`: one pass over the profile, about 4 ms, where a per-row `impactsFor` took seconds), "Show all" opening the rest in a sheet. The boxes open on 5+ titles sorted Highest (Nils, same evening); the other sorts are Lowest, Most picked (on the most rated titles) and Score impact. Highest and Lowest go by the average the row shows, not the smoothed one behind it. | On-device SQLite |
 | Tag, person, studio, franchise (`/tag/{key}`, `/person/{key}`, `/studio/{key}`, `/franchise/{key}`) | What it is, the crowd's average and yours, what it does to your score (a "Taste +4.2" pill with its sentence, one per role for a person or a studio, `lib/facetImpact.ts`; when there is none, a sentence says why: not rated three titles yet, none you rated carries it, or its kind weighs nothing, as cast does), and every title in the catalog that carries it. A franchise page (2026-10-18) is the franchise after the taxonomy: bundled names folded, hand-made attaches in, detaches out, reached from the score panel's chips, the item page's Collection fact and See all on its "More from" rail. A tag page folds its bundled spellings the same way (since 0.3.37, `lib/tagBundles.ts`), and a bundled spelling's address opens its main tag, so its titles, rated count and average are the set its impact learned from; Insights' tag rows fold them too. It opens with a carousel per series (the books, the films, the games; `lib/franchiseSeries.ts`, read the same way as the series rail below) and everything else in the grid under "Everything else". Since 2026-10-18 the list can be narrowed by media type (a row of circles under the numbers) and by the same Filters sheet Search has, and sorted four ways; a page opens unnarrowed. A title the device does not hold shows a Fandex Score estimated from the page's own facet (an author, a franchise, a tag) where it used to show the crowd's rating. On a person's or a studio's page each card says what they did on that title under its name ("Director · Writer", "as Tony Stark", "Author", "Publisher"; `lib/creditLine.ts`, since 2026-10-17): the roles the catalog files them under, and the part played where TMDB names it. | On-device SQLite, TMDB direct, Worker `/v1/facet/books` and `/v1/facet/games` |
 | Settings (`/settings`) | Connected accounts (sync Trakt, disconnect any of them), country, default types, your platforms, download, sign out everywhere and delete, the home-screen widget, and for an admin the links to `/dev` and what the device holds. No Account card since 2026-11-05 (Nils: redundant; Sign out of this device is on the You tab). Import is a row on the You tab ([app-parity.md](app-parity.md)). On a phone, a "Notifications" section with the three reminder switches (the row below). | Worker `/v1/me`, `/v1/me/prefs`, `/v1/me/identities/{provider}`, `/v1/me/export`, Trakt, on-device SQLite |
-| Admin (`/dev/users`, `/dev/scoring`, `/dev/analytics`, `/dev/score`) | Who is registered and what they hold. Pageviews, where they came from and the two thresholds they are counted for. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions), and Review, which proposes tag categories, tag bundles (one tag spelled two ways, an acronym, a plural, since 0.3.36), franchise merges, new franchises and missing members, and remembers a no. The score's goalpost chart summed over every device, per medium, with the how-it-works picture under it. An admin only: anybody else sees "Nothing here". A new admin page also goes on `mobile/web/worker.ts`'s list, or the website answers its address with the 404 page. | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
+| Admin (`/dev/users`, `/dev/scoring`, `/dev/analytics`, `/dev/usage`, `/dev/score`) | Who is registered and what they hold. **Usage** (2026-11-22, `app/(tabs)/dev/usage.tsx`, `lib/usageReport.ts`): the usage counters per day and the three account figures, from `GET /v1/admin/usage`; empty until the counters are switched on. Pageviews, where they came from and the two thresholds they are counted for. The scoring engine's weights with an on-device preview, and the taxonomy: categories, the tag table (category, spellings, shown name), franchises (members, bundles, suggestions), and Review, which proposes tag categories, tag bundles (one tag spelled two ways, an acronym, a plural, since 0.3.36), franchise merges, new franchises and missing members, and remembers a no. The score's goalpost chart summed over every device, per medium, with the how-it-works picture under it. An admin only: anybody else sees "Nothing here". A new admin page also goes on `mobile/web/worker.ts`'s list, or the website answers its address with the 404 page. | Worker `/v1/admin/*`, `/v1/taxonomy`, on-device SQLite |
 | First run (`components/Onboarding.tsx`, 0.3.45, 2026-11-07) | A sign-in that made an account (the Worker's `outcome: "created"`) lands on Home, and two windows open over it: which types you follow (saved as Settings' default types; all on to start, nothing saved if all stay on), then "Rate five titles you know", a grid of the most popular released titles of those types, the types taking turns (`lib/ratingPicks.ts`, keyset paging so a rating does not skip a title), loading more as it scrolls. A tap opens the stars under the grid; Skip becomes Done at five. An account that already holds five ratings skips the grid. Only while the app runs: a restart does not ask again. A sign-in made on You also lands on Home (`signInLanding`, `lib/returnTo.ts`); a pending return to a title still wins. The local "Second test account" answers "created" on its first sign-in, which is how to try it. | On-device SQLite, Worker `/v1/me/prefs` |
 | Release reminders (0.3.61, episodes 0.3.62) | A notification at 09:00 on the day a wishlisted title (any type) comes out in your country, on the day a new season starts of a show you are caught up on (the calendar's rule; hidden shows never), and on the day the next episode of a show you are caught up on airs (TMDB's `next_episode_to_air`, asked at most every six hours per show; a season's first episode is the season's reminder). Day-of only. Three switches in Settings, "Notifications", per phone, both on by default. Set ahead on the phone by expo-notifications (`lib/releaseReminders.ts` plans, `lib/reminderScheduler.ts` sets, `components/ReleaseReminders.tsx` re-plans after every sync and opens the title on a tap): no server, no push service. Android asks for permission once on its own. Not on the website. | On-device SQLite, Worker `/v1/catalog/season-premieres` |
 | Home-screen widget | Up next, on the home screen: the next episode per show. Tapping a show opens its page. The tick marks the episode watched in the background, without opening the app, and the row moves on. | Rows the app hands it |
@@ -106,8 +106,7 @@ write nothing; that is how the sync was proven before it was allowed to delete.
   asked for while one runs runs again after it, and the catalog's progress bumps `revision` at
   most every 2.5 s.
 - **Steam syncs from the device too, since 2026-10-23** (`steamSync.ts`), for an account that has
-  Steam connected (today only accounts carried over from the old site: there is no Steam sign-in in
-  the app). The Worker reads the library and wishlist with its key (`GET /v1/me/steam`); the device
+  Steam connected (since 0.3.64 anybody can connect it from Settings, "Steam connect" below). The Worker reads the library and wishlist with its key (`GET /v1/me/steam`); the device
   maps each app id to a catalog title through `/v1/lookup` and `/v1/resolve/steam/game/{appid}`
   (25 resolves a run, the rest wait and block deletes), and writes `source = 'steam'` rows: `owned`,
   or `played` with the last-played time, and the wishlist. The Trakt sync's guards apply: the
@@ -600,6 +599,42 @@ when it transforms a file and keeps the result: the first publish after adding t
 with no button. `build.mjs` passes `--clear` since; for an APK run
 `gradlew :app:createBundleReleaseJsAndAssets --rerun assembleRelease`. Check the value is in the
 bundle, not that the build passed.
+
+## Steam connect (0.3.64, 2026-11-22)
+
+`src/lib/steam.ts`, `src/app/auth/steam.tsx`, `AuthProvider.startSteamConnect` and
+`finishSteamConnect`, `useSteamConnect` in `components/SignIn.tsx`, and a Connect row in Settings
+for a signed-in account with no Steam identity. The Worker's half is `POST /v1/auth/steam`
+([worker.md](worker.md), "Connecting Steam").
+
+**Steam is a connection, never a way in.** The row appears only with a session, and the Worker
+refuses without one. Steam speaks OpenID 2.0: the browser goes to Steam's page and comes back to
+`/auth/steam` on fandex.org with `openid.*` values in the address. `lib/steam.ts` makes a `secret`
+and a `state` (its SHA-256), keeps the secret on the device (never in an address) and compares
+the `state` twice on return, with the address the page was opened with and with the one inside
+Steam's signed `return_to`. The values go to the Worker unchanged, with the secret. **On the
+phone** a browser sheet opens, Steam returns to `https://fandex.org/auth/steam` with a `state`
+starting `app.`, and the site hands the answer on to `fandex://auth/steam`; the Worker accepts
+only the site's own return page. After a connect the device pulls its rows and runs the first
+Steam library sync at once.
+
+## Usage counts (built 2026-11-22, switched off)
+
+`lib/usageCounts.ts`, `components/UsageCounts.tsx`, a "Share anonymous usage counts" switch in
+Settings. **Off: `USAGE_COUNTS_LIVE = false`**, and while it is false nothing is counted or sent
+and the switch is not shown. It flips after the privacy text is approved, and the Worker has its
+own switch (`USAGE_COUNTERS`, [worker.md](worker.md)). Counts are a map in memory; when the app
+goes to the background they go out as one batch (`POST /v1/t/usage`) with the visit's length as a
+bucket, at most 20 batches a UTC day, never retried. No token, install id or device id travels
+with it. Once-a-day flags (`day`, `day:why`, `day:reminder`) give the share of devices that did
+something, without knowing any device. What may be sent is `APP_COUNT_KEYS` in the Worker's
+`usage.ts`; a new count is added there and in the privacy policy in the same change. The website
+sends none of this (it has the pageview beacon).
+
+## Android permissions
+
+`app.json` blocks `SYSTEM_ALERT_WINDOW`, `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE`
+(`blockedPermissions`): the app uses none of them, and a library can add them to the manifest.
 
 ## Known problems
 

@@ -27,11 +27,11 @@ Public, no session:
 | `GET /v1/health` | D1 answers, plus today's budget counters (`fetches`, `userWrites`, `hardcover` against Hardcover's 5,000 a day, `covers` copied today) and `openProviderCircuits`: which providers this isolate has stopped asking. ⚠️ Per isolate, so an empty list is no proof a provider is up. Answers `HEAD` too. |
 | `GET /v1/catalog/delta?since&after&limit&count` | The scoring pool as a delta, oldest change first. The app's on-device catalog is kept current with this. A device with nothing starts from the website's `/catalog/` files instead ([website.md](website.md)), so a first visit is one call here and not thirty-one. |
 | `GET /v1/catalog/baseline` | Which pool titles are the score's baseline (`src/baseline.ts`, 2026-10-26): `{"draw":1,"items":[[id, type, added], …]}`, `added` 1 for a title only the draw put in the pool (the website gives it no page). Kept in `kv` (`baseline_json`, as `etag\nbody`) for six hours; building it reads every baseline row and its item (about 15,000), under `RL_RESOLVE` and 24 builds a day. ETag, so a device that has it gets a 304. `Cache-Control: no-cache`. |
-| `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. Served from a copy kept in `kv` (`taxonomy`, `taxonomy_etag`): an unchanged device gets a 304 for one row read, where building it reads about 8,300 rows. An admin write keeps it again, the sweep script drops it, and it expires after an hour, which bounds SQL run by hand. `Cache-Control: no-cache`. |
+| `GET /v1/taxonomy` | Tag categories, overrides, both alias tables, franchise overrides, display names, scoring config. ETag. Served from a copy kept in `kv` (`taxonomy`, `taxonomy_etag`): an unchanged device gets a 304 for one row read, where building it reads about 8,300 rows. An admin write keeps it again, the sweep script drops it, and it expires after an hour, which bounds SQL run by hand. When it has expired, one caller claims the rebuild (the etag's expiry moves a minute on, in a statement only one caller can win) and the others answer with the copy that just expired; a failed rebuild lets the claim run out. `Cache-Control: no-cache`. |
 | `GET /v1/items/{id}` and `/v1/items/{type}/{slug}` | One item: vector, raw facets, merged detail. `?region=` re-merges for that country. |
 | `GET /v1/resolve/{tmdb\|igdb\|openlibrary\|hardcover\|bgg}/{type}/{id}` | The item a provider id maps to. Fetches it from the provider if nobody holds it. Each provider takes only its own types and id shape (`TARGETS` in `catalog/resolve.ts`): an Open Library work is `OL…W`, a BGG or Hardcover id is digits. A Hardcover id is asked at Open Library by its ISBNs first: a work found there is the item, with the Hardcover link attached to it; only a book Open Library has no edition of is created under the Hardcover id ([decisions.md](decisions.md), 2026-10-17). 404 while Hardcover is off. |
-| `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held, with each held title's `slug` since 2026-10-17 (one primary-key read each), so a card links `/{type}/{slug}`. Never fetches. A library sync calls this, then `resolve` for the misses. With `"facets": true` (at most 300 refs, since 2026-11-07) each held title also carries its raw facets from `item_doc`, one more primary-key read each (asserted in `routes.test.ts`): the app asks it only for the cards its catalog copy lacks, so a popular title outside the pool is scored as its page is. |
-| `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. |
+| `POST /v1/lookup` | Up to 2,000 provider ids at once: which are held, with each held title's `slug` since 2026-10-17 (one primary-key read each), so a card links `/{type}/{slug}`. Never fetches. A call costs at least 20 units of the daily `lookup_refs` cap (`LOOKUP_MIN_UNITS`), however few refs it carries. A library sync calls this, then `resolve` for the misses. With `"facets": true` (at most 300 refs, since 2026-11-07) each held title also carries its raw facets from `item_doc`, one more primary-key read each (asserted in `routes.test.ts`): the app asks it only for the cards its catalog copy lacks, so a popular title outside the pool is scored as its page is. |
+| `GET /v1/shows/{id}/episodes` | Stored seasons and episodes. 404 for an id that is not a show. Edge-cached ten minutes per show (keyed on the id alone); what reaches the database meets `RL_READ`. |
 | `GET /v1/browse/games?page[&window=recent]` | Upcoming games, most anticipated first, 40 a page, pages 1 to 10: the Search feed. With `window=recent`, the last sixty days' games, most rated first: Home's trending. Card fields only. Edge-cached six hours per page and day; an empty page is never cached. Measured 2026-10-15: 4 ms CPU on a miss. Reads and writes no D1 row. |
 | `GET /v1/facet/games?kind=tag|studio|franchise&q` | A tag's games (theme, keyword or genre containing it), a studio's (company name containing it), or a franchise's (IGDB franchise or collection named exactly that, since 2026-10-17: a game page's "More from" rail), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
@@ -45,14 +45,14 @@ Public, no session:
 | `PUT /v1/me/score-report` | The score's goalpost (`score_report`, migration 0006, `src/scoreReport.ts`): per medium, twelve counts of (rating − score ÷ 10) and per band (high, usual, low; the column is still named `labels`) how many rated titles the score put there and how many were an 8 or more. `SCORE_VERSION` 3 since 2026-10-27. A device sends it about once a day (`lib/ScoreProvider.tsx`); one row per medium per user, replaced. Behind the write limiter and the account's share of the day's writes. No title and no rating is in it; the privacy policy says so. |
 | `GET /v1/admin/score` | Every user's score report summed, per medium and in all, for `/dev/score`. Sums in SQL over `json_each`; rows read are users × media at most. Admin only (404 otherwise). |
 | `GET /v1/catalog/season-premieres?month=YYYY-MM` | Every stored season after the first that starts that month (`show_seasons`, through `idx_show_seasons_air`, migration 0009: 8 rows read for November 2026 against 5,829 without it). The same for everybody; the device keeps the shows you are caught up on. |
-| `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. |
+| `POST /v1/catalog/release-dates` | `{region, ids}`, up to 200 item ids: the films among them whose date in that country differs from the catalog's one date. The calendar places your own films with it. Behind `RL_READ` and a daily cap in films asked about (`date_films`, `DAILY_DATES_CAP`, 200,000; 503 `budget-exhausted` past it). |
 
 A real route asked with the wrong method answers 405 with an `Allow` header (the `PUBLIC_ROUTES`
 table in `src/index.ts`); an address that is no route at all stays 404.
 
 Sign-in: `POST /v1/auth/google {idToken, nonce}`, `POST /v1/auth/trakt {accessToken}`,
 `POST /v1/auth/discord {accessToken}` (since 2026-10-17: Discord's `/oauth2/@me` must name our `DISCORD_CLIENT_ID` as the application; no client secret),
-`POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout` (bumps `session_epoch`: every
+`POST /v1/auth/steam {params, secret}` (since 2026-11-22, below: connect only), `POST /v1/auth/merge {mergeToken, resolution}`, `POST /v1/auth/logout` (bumps `session_epoch`: every
 device signs out; what "Sign out everywhere" and apps before 0.3.15 send) and
 `POST /v1/auth/logout?scope=device` (since 2026-10-23: clears this browser's cookie only; the app's
 "Sign out"). A token a device forgot stays valid until it expires, 30 days.
@@ -89,7 +89,10 @@ carries `DEV_LOGIN=1`. A test of what a deployed Worker does must build its own 
 
 Your rows, session required: `GET /v1/me`, `PUT /v1/me/prefs`,
 `GET /v1/me/state/{items|episodes|hidden|counts}`, `PUT /v1/me/state`, `GET /v1/me/export`,
-`DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`, `GET /v1/me/steam`.
+`DELETE /v1/me`, `DELETE /v1/me/identities/{provider}`, `GET /v1/me/steam`. Since 2026-11-22 every
+signed-in GET meets `RL_READ` per account (the paged item and episode pulls keep their own key),
+`PUT /v1/me/prefs` meets `RL_WRITE` and spends one unit of the account's share of the day's
+writes, and `GET /v1/me/export` is ten a day per account (`export:{userId}`, 429 past it).
 
 **Steam** (2026-10-23, `src/steam.ts`): `GET /v1/me/steam` reads the account's owned games and
 wishlist from the Steam Web API with the Worker's `STEAM_API_KEY` (a Web API key may never ship
@@ -136,12 +139,26 @@ only as a crawler turned away. A counted view is three row writes, capped at 5,0
 (`DAILY_PAGEVIEW_CAP`), and it answers 200 whatever it decided. ⚠️ The privacy policy's "Usage statistics" section
 describes exactly this. Change one and the other is wrong.
 
+**Usage counters** (`src/usage.ts`, migration `0010_usage_daily.sql`, 2026-11-22), **OFF**: the var
+`USAGE_COUNTERS` is not `"1"`, and the privacy text is approved before it is set. `usage_daily` is
+`(day, key, n)`, a `WITHOUT ROWID` table with no user id and no device id, so erasure and export
+have nothing to find in it and it never gets such a column. A count waits in the isolate and is
+written with the others at most every 30 seconds, against its own daily budget `usage`
+(`DAILY_USAGE_CAP`, 3,000 row writes). Over it the counts are dropped. The server counts accounts
+active per day and per ISO week, signups and links per provider, a signup week's return, the kind
+of each `/v1` request (`req:<kind>`) and `err:429` and `err:5xx`. `POST /v1/t/usage` takes the
+app's batch (`{counts:{key:n}}`) with no session read. Only keys in `APP_COUNT_KEYS` are kept and
+one batch adds at most 200 to a count. It answers 200 whatever it decided, and is limited on
+`RL_WRITE` per address. `GET /v1/admin/usage?days=` (admin, 7 to 90 days) returns the counters
+plus three figures worked out from rows the accounts already hold: the media-type mix, each
+signup week's share with five ratings in seven days, and first entries in a new media type.
+
 ⚠️ `GET /v1/admin/users` groups every row of `user_item_state` several times over. **Measured on live D1 on 2026-10-11:
 30,597 rows read per view** with one account of 2,484 state rows, so about twelve rows read per state row, and it grows
 with every account. 160 views would spend the day. Fine for one admin and one account; before there are more accounts it
 needs one pass over the table instead of four, or an answer kept in `kv`. Keep the page off any timer.
 
-Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/users`,
+Admin, session required and the user id in `ADMIN_USER_IDS`, 404 otherwise: `GET /v1/admin/analytics`, `GET /v1/admin/usage`, `GET /v1/admin/users`,
 `PUT /v1/admin/scoring`, `PUT`, `POST` and `DELETE /v1/admin/categories[/{id}]`, `POST` and `DELETE`
 on `/v1/admin/tag-overrides`, `/v1/admin/tag-aliases`, `/v1/admin/ip-aliases`, `/v1/admin/ip-overrides`
 and `/v1/admin/labels`, and `GET`, `POST` and `DELETE /v1/admin/suggestions/dismissed`: the Review section's
@@ -158,8 +175,28 @@ is still there, so the caller stays signed in. The rows it deletes are charged t
 `user_writes` budget before anything is deleted.
 
 A session is a JWT. The app sends it as `Authorization: Bearer`; a browser on an allowed origin
-also gets it as an `HttpOnly` cookie. A state-changing request on a cookie session must carry an
-`Origin` we serve.
+also gets it as an `HttpOnly` cookie. **Only a Bearer token acts for a user** (`actingSession` in
+`index.ts`, audit 2026-11-22): sign-in, merge, `/v1/me/*` and the admin routes read it and nothing
+else. The cookie is read for two things, the pageview beacon (signed in or not) and logout.
+Every client sends the Bearer token on every call (`mobile/src/lib/api.ts`). A state-changing
+request on a cookie session must carry an `Origin` we serve.
+
+**Connecting Steam** (`POST /v1/auth/steam`, `connectSteam` in `index.ts`, 2026-11-22). Steam is
+a connection and never a way in: with no Bearer session the answer is 401 before Steam is asked
+anything, so no account can be created from it. Which account gets the identity is decided by the
+session, as for every provider, and an identity another account owns goes through the merge rules.
+Steam signs people in with OpenID 2.0. The client sends the `openid.*` values Steam put on our
+return page, with a `secret`; `verifySteamOpenId` (`auth/verify.ts`) checks the answer names
+Steam's endpoint and a SteamID64, that `claimed_id` and `identity` agree, that the fields that
+matter are in the signed list, that `return_to` is `/auth/steam` on an origin in `ALLOWED_ORIGINS`
+and that its `state` is the SHA-256 of the `secret` (a phone's `state` starts `app.`). The nonce
+must be under five minutes old. Then it asks Steam `check_authentication` and takes only a whole
+line `is_valid:true`. A used answer is remembered ten minutes in `kv` (`steam-answer:…`, written
+only after Steam has confirmed it). The Worker holds no state for the flow. The identity is the
+SteamID64; the profile name comes from `GetPlayerSummaries` for one unit of the `steam` budget,
+and a failure there never fails the connect. Rate-limited on `RL_AUTH`. An account holds one
+identity per provider (a second one answers `provider-taken`), and Steam can never be the last
+one (`409 only-login` on removal).
 
 ## What it reuses
 
@@ -206,7 +243,20 @@ per top-level query field; `HARDCOVER_DAILY_CAP`) and `cover` (covers copied fro
 3,000 a day; `DAILY_COVER_CAP`). They live in `daily_budget` and are read at call time. Over the
 Hardcover budget, a book route answers Open Library's half alone and says nothing. The cron's
 Hardcover walk also counts each request against `hardcover_walk` (600 a day,
-`HARDCOVER_WALK_DAILY_CAP`), so it can never spend what search and the calendar need.
+`HARDCOVER_WALK_DAILY_CAP`), so it can never spend what search and the calendar need. Hardcover's budget is spent on `resolve`
+too (`spendHardcover`): with it gone a Hardcover resolve answers nothing, as the shelves do.
+
+More limits, all since the audit of 2026-11-22. Each is a plain fact about the route:
+
+| What | Limit |
+|---|---|
+| A merge of two accounts (`mergeCharge`, `auth/signin.ts`) | 40 a day across everybody (`merges`), 3 a day into one account (`merges:{id}`), and its rows come out of the shared `user_writes` cap. Past any of them: 503 `budget-exhausted` (`MergesExhausted`) and nothing has moved. |
+| A save (`PUT /v1/me/state`) | Rows, plus one more unit per 200 characters of review text (`REVIEW_CHARS_PER_UNIT`, `me.ts`). |
+| A lookup call | At least 20 units of `lookup_refs`. |
+| Release dates | `date_films`, 200,000 films a day (`DAILY_DATES_CAP`). |
+| Exports | 10 a day per account. |
+| Usage counters | `usage`, 3,000 row writes a day (`DAILY_USAGE_CAP`), and they are off. |
+| An account's own day counters | `user_writes:{id}`, `export:{id}` and `merges:{id}` in `daily_budget` carry the account's id, so erasure and a merge delete them. |
 
 **CPU, measured on the live Worker with `wrangler tail`:**
 
@@ -223,7 +273,9 @@ Hardcover walk also counts each request against `hardcover_walk` (600 a day,
 over infrequently and terminates one that does it consistently (error 1102). In about fifty
 requests none was terminated. The reads, which are nearly all the traffic, are far inside the
 limit. If 1102 ever shows up in the logs, the answer is Workers Paid at $5 a month, which lifts
-the limit to 30 seconds; the plan already names that as the fallback for the website.
+the limit to 30 seconds; the plan already names that as the fallback for the website. ⚠️ Nils decided
+on 2026-11-22 that hosting stays on the free plan, so a limit hit is met with a switch or a lower
+cap, never by buying the limit back.
 
 The read paths stay cheap because **nothing is parsed on a read**. An item's vector, facets and
 merged detail are serialised when the row is written, and a read splices those strings into the
@@ -538,8 +590,7 @@ What it showed a real restore still needs:
 
 ## Not built yet
 
-- **The telemetry beacon and App Links.** The API is on fandex.org since 2026-10-10; these two parts of phase 3 are not.
-- **Steam**: sign-in and the owned-games proxy. Phase 5 by decision.
+- **App Links** (`assetlinks.json`, needed once Play holds the app). The pageview beacon is built (`POST /v1/t/pv`, above).
 - **Dropping stale rows.** A `browsed = 1` row nobody acted on should be dropped, not refreshed,
   once it is 150 days old. The first such row is due in March 2027. Needs the same schema-derived
   "is anything pointing at this" check erasure uses, before anything deletes. ⚠️ Two costs to

@@ -29,6 +29,11 @@ Routes, limits, commands and the test accounts are in `docs/worker.md`. The inci
 
 ## Auth and secrets
 
+- **Only a Bearer token acts for a user** (`actingSession`, `index.ts`). The cookie is read for the pageview beacon and logout and for nothing else. A new signed-in route reads `actingSession`, never `readSession` directly. → [[launch-run-2026-11-22]]
+- **Steam is a connection, never a way in, and its answer needs the device's secret** (`connectSteam`, `verifySteamOpenId`). No session is a 401 before Steam is asked; `return_to` must be our own page and its `state` the hash of the secret; Steam can never be an account's last identity. → [[launch-run-2026-11-22]]
+- **The usage counters have no user id and two off switches** (`usage.ts`, migration 0010): `USAGE_COUNTERS` here, `USAGE_COUNTS_LIVE` in the app. No column that names an account or a device is ever added, and a new key goes in `APP_COUNT_KEYS` and the privacy policy together. → [[launch-run-2026-11-22]]
+- **A merge is charged before anything moves** (`mergeCharge`, `MergesExhausted`), and a table that carries an account's id in a `daily_budget` kind is deleted by erasure and by a merge. A new per-account counter owes both. → [[launch-run-2026-11-22]]
+
 - **A Google ID token is accepted only with the secret behind its nonce, and the argument is never optional.** Scope stays `openid profile`: adding `email` is a new category of personal data and a privacy-policy change. → [[google-sign-in-new-stack]]
 - **`DEV_LOGIN` lives in `worker/.dev.vars` and nowhere else.** It is one of the two gates on `POST /v1/dev/login` (the other is a loopback host). Never a `vars` entry, never a pushed secret. The test pool reads `.dev.vars`, so a test of a DEPLOYED Worker's behaviour passes its own environment. → [[new-stack-test-accounts]]
 - **No provider token is stored in D1, and `kv` is never exported.** `user_identities` has no token column by design; the nightly export skips `kv` (the Twitch app token) by name, and a test fails if it reaches R2.

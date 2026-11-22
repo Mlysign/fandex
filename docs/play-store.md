@@ -11,13 +11,13 @@ steps it shares with this one written out click by click, is archived at
 | | State |
 |---|---|
 | Play developer account | Exists (InFlucx), $25 paid, identity verified. **Personal**, and the Play work is paused until it is a business account. |
-| The business behind it | Einzelunternehmen in Düsseldorf: Gewerbe registered 2026-09-01 (NRW Wirtschafts-Service-Portal), tax registration (FsE EUn) sent through ELSTER the same day, Steuernummer and USt-IdNr issued by letter, W-IdNr ready in ELSTER since 2026-10-25. **No D-U-N-S number yet**, and it is the one thing the upgrade can't go without: none exists in D&B's UPIK directory, and the free request (dnb.com/de-de/kleinunternehmen/duns/duns-request.html) was sent 2026-11-05 under "Nils Mlynarek", since D&B stores a sole trader under the owner's name. The organization website is **nilsmlynarek.eu**, verified in Search Console (HTML file `google42413e863d201e6e.html` in its docroot; deleting it un-verifies) and in Play on 2026-11-05, so "Change account type" is unlocked. |
-| Trader status | ⚠️ **Not declared. Deadline 2027-02-01**, the one hard date in this plan (below). |
+| The business behind it | Einzelunternehmen in Düsseldorf: Gewerbe registered 2026-09-01 (NRW Wirtschafts-Service-Portal), tax registration (FsE EUn) sent through ELSTER the same day, Steuernummer and USt-IdNr issued by letter, W-IdNr ready in ELSTER since 2026-10-25. **The D-U-N-S number arrived and was accepted by Google on 2026-11-22.** It came from the free request to D&B (sent 2026-11-05 under "Nils Mlynarek", since D&B stores a sole trader under the owner's name). The organization form was sent and the documents were uploaded the same day; **Google is verifying** and has not answered. The organization website is **nilsmlynarek.eu**, verified in Search Console (HTML file `google42413e863d201e6e.html` in its docroot; deleting it un-verifies) and in Play on 2026-11-05, so "Change account type" is unlocked. |
+| Trader status | ⚠️ **Not declared yet. Deadline 2027-02-01**, the one hard date in this plan (below). **Nils decided on "trader" (2026-11-22).** He declares it after Google approves the organization account. |
 | Play Console app entry | One exists, but for the TWA's package `org.fandex.twa`. **A package name can never change in Play**, so the native app (`org.fandex.app`) needs a new entry. The old one was never published and can stay a draft. |
-| Upload key | **Nils makes it** (the command is below). Until then a Play build cannot run; every other release build signs with the debug key, as the sideloaded APKs always have. `android-package/signing.keystore` is the TWA's upload key, not this one. |
+| Upload key | ✅ **Exists since 2026-11-22**: `android-package/fandex-app-upload.jks`, made by a script. The password was never shown to a session. It is in `android-package/fandex-app-upload-key-info.txt` beside it and in `~/.gradle/gradle.properties`, where the build reads it. Every other release build signs with the debug key, as the sideloaded APKs always have. `android-package/signing.keystore` is the TWA's upload key, not this one. |
 | The signing | ✅ Built 2026-10-23: `mobile/plugins/withPlayUploadSigning.js`, a config plugin, so it survives `expo prebuild`. A build run with `-PfandexPlay` signs with the upload key; without it, nothing changes. |
 | Version | ✅ `version` and `android.versionCode` live in `mobile/app.json` since 2026-10-23 (`0.3.14`, `314`). |
-| A build Play accepts | ✅ The `.aab` builds for all four architectures: 80 MB, 8 min 17 s cold, signed by a throwaway key on 2026-10-23 and then deleted. The real one waits for the key. Targets API 36 (React Native 0.86's default); re-check Play's minimum before the first upload. |
+| A build Play accepts | ✅ The `.aab` builds for all four architectures: 80 MB, 8 min 17 s cold, signed by a throwaway key on 2026-10-23 and then deleted. The key exists now, so the real one can be built. `app.json` blocks three Android permissions the app does not use (2026-11-22). Targets API 36 (React Native 0.86's default); re-check Play's minimum before the first upload. |
 | Store listing, Data safety, content rating | Not started. |
 
 ## What changes compared with the TWA plan
@@ -35,8 +35,10 @@ steps it shares with this one written out click by click, is archived at
     or its passwords entering the repo (built, below).
   - `versionCode` and `version` in `mobile/app.json`, raised on every upload (set, below).
   - **The Data safety form describes the app, not the website**: the app stores your library on
-    the device and in the Worker, signs in with Trakt, Google or Discord, reads Steam, and sends no
-    pageview counter (the beacon is website-only). Check each answer against
+    the device and in the Worker, signs in with Trakt, Google or Discord, connects and reads Steam
+    (since 0.3.64, Settings), and sends no pageview counter (the beacon is website-only). The
+    anonymous usage counts are built and off (docs/app.md); if they go live before the form is
+    filled, the answers change. Check each answer against
     `src/lib/legal/content/en/privacy.ts`.
   - **Two things docs/app.md says to do before the store, both keyed to the Play app signing
     certificate**, which only exists once Play has the app: the Trakt redirect moved from
@@ -55,10 +57,10 @@ Play Console, Manage account > Account details > About you > Trader status. A tr
 confirms the status on each app as well (App content > Needs attention), optionally with a link
 to terms of service.
 
-- **Non-trader is accurate today**: nothing is published and monetization is off.
-- **Ads make it trader.** Google counts ad revenue as commercial, and ads-first is the plan
-  (STATUS.md, "Monetization"). Switch before the first ad goes live; a false non-trader
-  declaration breaches §11.4 of the Developer Distribution Agreement.
+- **Decided 2026-11-22 (Nils): trader.** Ads-first is the plan, and Google counts ad revenue as
+  commercial (STATUS.md, "Monetization"); a false non-trader declaration breaches §11.4 of the
+  Developer Distribution Agreement. Non-trader would have been accurate while nothing is published
+  and monetization is off.
 - **What goes public**: an individual trader must verify a phone number, and Play shows it and
   the address. The address is already public in the Impressum; the phone number would be new.
 - ⚠️ Unverified: the email describes only an individual's declaration. Read what the business
@@ -66,6 +68,9 @@ to terms of service.
 
 ## The order
 
+0. **State on 2026-11-22:** the D-U-N-S number is accepted, the organization form is sent and its
+   documents are uploaded. Waiting for Google to verify. Then Nils declares "trader" and re-reads
+   the testing rule.
 1. Nils: upgrade the account to a business account and declare the trader status in the same
    sitting (below), then re-read the testing rule. **The upgrade converts the existing account**
    (checked 2026-11-05, support.google.com/googleplay/android-developer/answer/16260648): Manage
@@ -77,8 +82,8 @@ to terms of service.
    contact plus a public developer email and phone, each confirmed by a one-time code. Google may
    ask for documents (the Gewerbe receipt). Wait 72 hours after the switch before submitting an
    app. One way only: it can't go back to personal. Steuernummer and USt-IdNr are not asked for.
-2. ✅ Mine: the upload-key plugin and `versionCode` (2026-10-23). Nils: make the key and its
-   settings (below). Then mine: build the real `.aab`.
+2. ✅ Mine: the upload-key plugin and `versionCode` (2026-10-23). ✅ The upload key and its
+   settings (2026-11-22, below). Then mine: build the real `.aab`.
 3. Nils: create the `org.fandex.app` entry, fill App content (privacy policy, Data safety,
    content rating, target audience, ads: none), upload the `.aab` to a test track.
 4. Mine, once Play shows the app signing certificate: `assetlinks.json` on fandex.org, the
@@ -87,9 +92,12 @@ to terms of service.
 
 ## The upload key
 
-Made once, by Nils, in his own terminal: `keytool` asks for the password, so it never passes
-through a session. The keystore goes next to the TWA's in `android-package/`, which is gitignored
-and backed up by OneDrive. Keep the password in the password manager as well.
+**Made on 2026-11-22 by a script** (the password was generated there and never shown to a
+session), at `android-package/fandex-app-upload.jks`; the settings are in
+`~/.gradle/gradle.properties`. The command and the four lines below are how it is made again if
+the key is ever reset (Play can reset an upload key). The keystore sits next to the TWA's in
+`android-package/`, which is gitignored and backed up by OneDrive. Keep the password in the
+password manager as well.
 
 ```powershell
 & "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -storetype PKCS12 -keystore "C:\Users\n-mly\OneDrive\Documente\09_Projects\Personal\ReleaseCalendar\releaseradar2\android-package\fandex-app-upload.jks" -alias fandex-app-upload -keyalg RSA -keysize 2048 -validity 10000
