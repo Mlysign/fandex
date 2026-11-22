@@ -505,12 +505,29 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
 
   <h4>What blocks everything else</h4>
   <div class="card" data-cid="g-block" style="border-color:rgba(240,160,75,.5)">
-    <h3>The D-U-N-S number has not arrived</h3>
-    <p class="ctx" style="margin-top:6px">Google needs this business number before it turns your account into an organization account. Without that account there is no store page.</p>
+    <h3>Google is checking your papers for the organization account</h3>
+    <p class="ctx" style="margin-top:6px">On 22 Nov the D-U-N-S number was accepted, the form was sent, and you uploaded the Gewerbeschein and your ID. Google says the check can take a few days and mails you the result. Until then the account stays a personal one and no store page can be built.</p>
     <div class="steps" style="margin-top:10px">
-      <span class="step done">Requested<small>5 Nov, done</small></span><span class="step now">Number arrives<small>expected by 15 Dec</small></span><span class="step">Account upgrade<small>then wait 72 hours</small></span><span class="step">Store page can be built<small>January</small></span>
+      <span class="step done">D-U-N-S number<small>accepted 22 Nov</small></span><span class="step done">Form and papers<small>sent 22 Nov</small></span><span class="step now">Google's check<small>a few days</small></span><span class="step">Wait 72 hours<small>after the approval</small></span><span class="step">Store page can be built<small>December</small></span>
     </div>
-    <p class="ctx" style="margin-top:10px">If it is not here by 15 December, we keep the personal account. That route needs 12 testers for 14 days. Every week of delay moves launch day by a week.</p>
+    <p class="ctx" style="margin-top:10px">Still open in the same place: declaring the trader status (deadline 1 Feb 2027). It is best done right after Google's approval, because an organization is asked different questions than a person.</p>
+  </div>
+
+  <div class="card" data-cid="g-name" data-label="The name: a US trademark FANDEX exists" style="border-color:rgba(229,103,76,.55);margin-top:12px">
+    <h3>Does the US trademark "FANDEX" change anything for the name?</h3>
+    <p class="ctx" style="margin-top:6px">Found on 22 Nov in the EU's trademark database (TMview). I read the database only, not the US register itself.</p>
+    <table style="margin-top:8px">
+      <tr><th>Mark</th><th>Owner</th><th>Covers</th><th>State</th></tr>
+      <tr><td>FANDEX (word)</td><td>Fandex Inc., USA</td><td>Classes 9, 41, 42: fantasy sports and prediction market software</td><td>Registered in the US on 25 Aug 2026 (no. 8409457)</td></tr>
+      <tr><td>The same mark, international</td><td>Fandex Inc.</td><td>Countries not shown in the database</td><td>WIPO no. 1944654, registered 18 Jun 2026</td></tr>
+      <tr><td>FANDEX (card decks)</td><td>A US individual</td><td>Class 16: playing and flash cards</td><td>Registered 1998. His EU mark has expired.</td></tr>
+    </table>
+    <p class="ctx" style="margin-top:10px">No German mark was found. The software classes are the same ones an app would file in, and the goods differ (sports betting style software against a media tracker). Whether that is a problem, and whether the international filing reaches Germany or the EU, is a question for a trademark lawyer. I am not one.</p>
+    <ul class="optl">
+      <li class="rec"><b>A.</b> Ask a trademark lawyer for a short opinion before any money goes into the name. <em>my pick</em></li>
+      <li><b>B.</b> Check the WIPO entry yourself first (which countries it names), then decide.</li>
+      <li><b>C.</b> Launch as planned and accept the risk.</li>
+    </ul>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -522,7 +539,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <h4>Costs</h4>
       <div class="grid g3" data-cid="g-money" data-label="Costs">
         <div class="card tile good"><div class="n">€0</div><div class="l">has to be spent</div></div>
-        <div class="card tile"><div class="n">€5</div><div class="l">per month for the paid Cloudflare plan, from January. Recommended.</div></div>
+        <div class="card tile"><div class="n">€0</div><div class="l">for hosting. Your call on 22 Nov: no paid Cloudflare plan. Launch runs on the free one.</div></div>
         <div class="card tile"><div class="n">€290</div><div class="l">once, to register "Fandex" as a trademark in Germany. Optional.</div></div>
       </div>
     </div>
@@ -547,7 +564,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
     </table>
   </div>
 
-  <h4>Started on 22 Nov</h4>
+  <h4>Work of 22 Nov, and where each piece stands</h4>
   <div class="card" style="padding:6px 8px" data-label="Table: work started">
     <table>
       <tr><th>Work</th><th>What comes out</th><th>Who</th><th>State</th></tr>
@@ -556,6 +573,19 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <tr data-cid="ap-3"><td>Facts sheet and directory texts</td><td>The one-page facts sheet for the press kit, and the entry texts for AlternativeTo and the free app directories: <span class="mono">drafts/facts-sheet.md</span>, <span class="mono">drafts/directory-texts.md</span>.</td><td>Sub-agent, Sonnet</td><td id="ap-3-state" class="yes">Draft ready</td></tr>
       <tr data-cid="ap-4"><td>Launch-day runbook</td><td>What to watch on launch day, how to switch a broken part off, how to roll back, with the exact commands: <span class="mono">drafts/launch-runbook.md</span>. It lists what it could not verify.</td><td>Sub-agent, Opus</td><td id="ap-4-state" class="yes">Draft ready</td></tr>
       <tr data-cid="ap-5"><td>Four checks against the rules</td><td>Icon: correct size and format. Impressum: the VAT ID is missing. Trakt and TMDB notices: missing in the app. Account deletion: exists in Settings.</td><td>This session</td><td>Done</td></tr>
+      <tr data-cid="ap-13"><td>Google Play account: change to an organization</td><td>Done in your Chrome: the D-U-N-S number was accepted, the payments profile linked, the form filled. You added the public phone number, the Gewerbeschein and your ID. Google is checking.</td><td>This session, with you</td><td id="ap-13-state">Waiting for Google</td></tr>
+      <tr data-cid="ap-14"><td>The upload key for Google Play</td><td>Made by a script that never shows the password. Key and password are in <span class="mono">android-package/</span>, which stays out of the repository.</td><td>This session</td><td class="yes">Done</td></tr>
+      <tr data-cid="ap-15"><td>Lookups: trademark, account names, Google's tester rule</td><td>A live US trademark FANDEX exists (see Overview). @fandex is taken on YouTube, TikTok and Instagram, "fandexapp" is free. Google does not say whether a converted account needs testers. Reddit's rules could not be read: Reddit refuses my tools. In <span class="mono">drafts/lookups.md</span>.</td><td>Sub-agent, Sonnet</td><td class="yes">Done</td></tr>
+      <tr data-cid="ap-16"><td>The four drafts checked claim by claim</td><td>123 claims checked against the code. Wrong ones fixed: the store text sent people to a donation link as the contact, and named genres as a score input, which they are not. The runbook is rewritten for the free plan.</td><td>Sub-agent, Opus</td><td class="yes">Done</td></tr>
+      <tr data-cid="ap-17"><td>New drafts: posts, press mails, launch post, Play forms</td><td>One post per launch place, press mails in German and English, the "Why I built Fandex" post with five gaps for your own story, every answer for Google Play's App content forms, the first release note. In <span class="mono">drafts/</span>.</td><td>Sub-agent, Opus</td><td class="yes">Draft ready</td></tr>
+      <tr data-cid="ap-18"><td>Mockups of the five small app additions</td><td>Send feedback, sharing a title (already built), the provider notices, the rating prompt, "Get the app" on the website. Under "App work" on this page, each with one question.</td><td>Sub-agent, Opus</td><td>Waits for your answers</td></tr>
+      <tr data-cid="ap-19"><td>Website pages for launch</td><td>Live but hidden until launch day (not linked, not in search engines): <span class="mono">fandex.org/app</span>, <span class="mono">/press</span>, <span class="mono">/whats-new</span>, <span class="mono">/delete-account</span>. Pasted links now show a picture.</td><td>Sub-agent, Opus, checked by me</td><td class="yes">Done</td></tr>
+      <tr data-cid="ap-8"><td>Usage counters</td><td>Built on the server and in the app, with a new Usage page in the admin area. Everything is switched off: nothing is counted until you approve the privacy text.</td><td>This session, app side by a sub-agent on Opus</td><td>Built, switched off</td></tr>
+      <tr data-cid="ap-20"><td>New users can connect Steam</td><td>A "Connect" row for Steam in Settings. The server asks Steam itself whether a sign-in is real. Live on the server, in the app from the next build. It needs one real try with your Steam account.</td><td>This session</td><td>Built, needs your test</td></tr>
+      <tr data-cid="ap-11"><td>Security audit of the whole Fandex setup</td><td>Your request. Four parts, each on Claude Fable 5.2: sign-in and accounts, the API and database, the website and app, the public repository and its history. I check every finding and fix it myself. Result: no way was found to take over an account from outside. About 40 findings. The main weakness is the free plan: several routes let one stranger use up a day's budget and stop the service until midnight. 15 findings are fixed and live, 3 half fixed, 11 still open on my side, 8 are yours. The list with every detail is in <span class="mono">private/security-audit-2026-11-22.md</span>, which stays on your disk: this repository is public, and an open weakness does not belong in it.</td><td>Four sub-agents on Fable, then this session</td><td id="ap-11-state">First round fixed, 11 open</td></tr>
+      <tr data-cid="ap-12"><td>Performance and hardening audit</td><td>Your request. What a launch day costs on the free plan, which limit breaks first, how to roll back. Report in <span class="mono">drafts/performance-audit.md</span>.</td><td>Sub-agent on Fable, then this session</td><td id="ap-12-state">Running</td></tr>
+      <tr data-cid="ap-21"><td>Legal texts, as drafts</td><td>The VAT ID line, the privacy text for the usage counters, the outdated spots, the provider notices. In <span class="mono">drafts/legal-texts.md</span>. Nothing goes live without your OK. Six sections, each with the current text and the proposed one in both languages, and a list of six decisions that are yours. It also found the TMDB logo is required and shown nowhere today.</td><td>Sub-agent, Opus</td><td id="ap-21-state" class="yes">Draft ready</td></tr>
+      <tr data-cid="ap-22"><td>Design board for the store images</td><td>A Claude design canvas with first drafts in style C, the feature graphics, and the competitors' store pages as references. 17 boards: eight store images, three feature graphics, six reference boards. Four store images use real captures, four are labelled placeholders, because the score, the "Why?" sheet, Insights and reminders only show when signed in. Private to you: <span class="mono">claude.ai/artifact/CTmQy4FKeJFJeVA2HRCgD5</span></td><td>Sub-agent, Opus</td><td id="ap-22-state" class="yes">Ready for you</td></tr>
     </table>
   </div>
 
@@ -580,10 +610,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
       <tr><th>Work</th><th>Why it is mine</th><th>It waits for</th></tr>
       <tr data-cid="ap-6"><td>Add the VAT ID to the Impressum, add the Trakt and TMDB notices</td><td>Legal text.</td><td>Your OK on the wording. I send it as a draft.</td></tr>
       <tr data-cid="ap-7"><td>Privacy policy text for the usage counters, German and English</td><td>Legal text. It has to be published before any counter runs.</td><td>You agreeing the list of events in "Telemetry".</td></tr>
-      <tr data-cid="ap-8"><td>Usage counters on the server, and the expanded telemetry page</td><td>It changes the database and the sign-in path.</td><td>The privacy text above.</td></tr>
-      <tr data-cid="ap-11"><td>Security audit of the whole Fandex setup</td><td>Your request, 22 Nov: done with Claude Fable 5.2, the strongest model. It covers the server, the database, sign-in, the website, the app and the Cloudflare settings.</td><td>The telemetry and sign-in changes above, so the audit sees the code that actually launches. Planned for January.</td></tr>
-      <tr data-cid="ap-12"><td>Performance and hardening audit</td><td>Your request, 22 Nov. What breaks first under load, and what an attacker or a mistake could switch off.</td><td>Runs together with the security audit.</td></tr>
-      <tr data-cid="ap-9"><td>The signed app bundle for Google Play</td><td>It uses your signing key.</td><td>You creating the upload key.</td></tr>
+      <tr data-cid="ap-9"><td>The signed app bundle for Google Play</td><td>It uses your signing key.</td><td>Nothing now: the key exists. Built at the end of this run, with the Steam connect inside.</td></tr>
       <tr data-cid="ap-10"><td>Sign-in changes that need Google Play's certificate</td><td>Sign-in code.</td><td>The first upload to Google Play.</td></tr>
     </table>
   </div>
@@ -593,7 +620,7 @@ details.srcs summary{cursor:pointer;color:var(--gold);font-size:14px;margin-top:
   <div data-cid="ap-ui" data-label="Work waiting for a design OK"><span class="chip">a "Send feedback" row in Settings</span><span class="chip">a "Share" button on a title</span><span class="chip">the "Get the app" link on fandex.org</span><span class="chip">the fandex.org/app page</span><span class="chip">asking for a Google Play rating</span><span class="chip">more onboarding steps</span><span class="chip">the "Why?" sheet naming the media type (parked)</span></div>
 
   <h4>Waiting for you or for Google</h4>
-  <div data-cid="ap-nils" data-label="Work waiting for Nils or Google"><span class="chip">the D-U-N-S number</span><span class="chip">the account upgrade</span><span class="chip">the upload key</span><span class="chip">the trademark search</span><span class="chip">reserving the name on social media</span><span class="chip">the Reddit account</span><span class="chip">four screens captured on your phone</span><span class="chip">your notes for the launch post</span><span class="chip">the Claude design session</span></div>
+  <div data-cid="ap-nils" data-label="Work waiting for Nils or Google"><span class="chip">Google's check of the account papers</span><span class="chip">the trader status, after that</span><span class="chip">a view on the US trademark</span><span class="chip">your answers on the five mockups</span><span class="chip">your OK on the legal drafts</span><span class="chip">one real Steam connect</span><span class="chip">reserving the name on social media</span><span class="chip">reading the subreddit rules</span><span class="chip">the Reddit account</span><span class="chip">four screens captured on your phone</span><span class="chip">your notes for the launch post</span><span class="chip">the Claude design session</span></div>
 </section>
 
 <!-- ================================================================= MARKET -->
