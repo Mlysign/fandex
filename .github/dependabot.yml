@@ -15,6 +15,12 @@ updates:
       # is an override rather than a bump: see "overrides" in package.json.
       interval: weekly
     open-pull-requests-limit: 10
+    # A release has to be five days old before it is proposed. A poisoned
+    # release is usually pulled within a day or two, and the nightly task
+    # installs whatever main holds, next to a Cloudflare login (audit, 2026-11-22).
+    # Security updates are not held back by this.
+    cooldown:
+      default-days: 5
     groups:
       # Batch low-risk minor/patch bumps into one PR to cut noise; majors stay
       # individual so breaking changes get reviewed on their own.
@@ -39,6 +45,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 5
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
@@ -51,6 +59,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 5
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
