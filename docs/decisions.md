@@ -203,12 +203,14 @@ The plan is [app-plan.md](app-plan.md). Nils took every recommendation as given.
   TMDB, Trakt, AniList, TVmaze and AnimeSchedule (English dubs only) carry the original airing.
   fernsehserien.de's and German Wikipedia's "Crunchyroll" dates are the SUBTITLED simulcast, the
   same day as Japan, not the dub. Crunchyroll's RSS feed stopped on 2026-10-03, its calendar and
-  watch pages are empty without its private API, and that API is undocumented (not used). The one
-  open candidate is the Streaming Availability API (movieofthenight.com): official, covers
-  Crunchyroll in Germany, audio languages and a first-seen date per episode; untested, needs a
-  key (free: 1,000 requests a month), and has no upcoming dates for Crunchyroll. A per-show
-  "dub delay" setting was offered and declined (Nils). Until then, episode dates and reminders
-  are the original's.
+  watch pages are empty without its private API, and that API is undocumented (not used). The
+  Streaming Availability API (movieofthenight.com) looked right on paper and was TESTED with a
+  real key on 2026-11-22 (this show and Black Clover, Germany): it does not have it either. Per
+  episode it lists Crunchyroll's Japanese audio only (German shows at show level alone), it holds
+  episodes of Crunchyroll's first season only (24 of 60, 51 of 196; nothing for a season now
+  running), and its "available since" is the day it first crawled the title (January 2026 for
+  2023 episodes), not a release date. A per-show "dub delay" setting was offered and declined
+  (Nils). Episode dates and reminders are the original's.
 - **A title's names: one entry per title in every language, shown in the account's language**
   (Nils, 2026-11-21, every media type: "if I'm searching for Kimi no Na wa, I want to see Your
   Name", shown once, under its German title). The account's language is its country's
