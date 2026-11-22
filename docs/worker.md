@@ -36,7 +36,7 @@ Public, no session:
 | `GET /v1/facet/games?kind=tag|studio|franchise&q` | A tag's games (theme, keyword or genre containing it), a studio's (company name containing it), or a franchise's (IGDB franchise or collection named exactly that, since 2026-10-17: a game page's "More from" rail), most rated first, 40. The old site's tag query took 4.3 to 4.7 s at IGDB and still does (4.8 s measured), so the answer is edge-cached a week, empty ones included. A failed IGDB call is a 502 and never cached. 4 ms CPU. |
 | `GET /v1/search/games?q` | IGDB search. The Twitch secret stays on the Worker. `<` and `>` are dropped from the query: IGDB refuses them, and a refusal counts toward shutting game search for everybody. |
 | `GET /v1/features` | Which provider-fed types and sources this Worker can serve: `{"books":true,"boardgames":<BGG_TOKEN set>,"hardcover":<HARDCOVER_TOKEN set and not switched off>}`. The app hides a type answered false. Not cached. |
-| `GET /v1/search/{books,boardgames}?q` (books also `&region`) | Open Library search (filtered by `relevantBooks`: every typed word in the title or authors, no summaries or study guides) or BGG search. Card fields, rating on 0-100, authors since 2026-10-17. Edge-cached a day under `CACHE_VERSION` (bump it when what a shelf answers changes); an empty answer is never cached. Board games answer 503 `not-configured` without `BGG_TOKEN`. Rate-limited on `RL_RESOLVE`. **With `HARDCOVER_TOKEN`, Hardcover's search is asked alongside** (two requests since 2026-11-03: the search, then the hits' edition languages by id) and its cards follow Open Library's, less the books Open Library already answered with (the same ISBN-13, or the same title and author: `mergeBookCards` in `src/lib/sources/bookPure.ts`). A Hardcover card carries no votes and no rating (its readers' numbers are theirs) and a cover served by this Worker. Hardcover failing, off, or over its day's budget leaves Open Library's answer as it is; Open Library failing answers Hardcover's alone. |
+| `GET /v1/search/{books,boardgames}?q` (books also `&region`) | Open Library search (filtered by `relevantBooks`: every typed word in the title or authors, no summaries or study guides) or BGG search. Card fields, rating on 0-100, authors since 2026-10-17. Edge-cached a day under `CACHE_VERSION` (bump it when what a shelf answers changes); an empty answer is never cached. Board games answer 503 `not-configured` without `BGG_TOKEN`. Rate-limited on `RL_RESOLVE`. **With `HARDCOVER_TOKEN`, Hardcover's search is asked alongside** (two requests since 2026-11-03: the search, then the hits' edition languages by id) and its cards follow Open Library's, less the books Open Library already answered with (the same ISBN-13, or the same title and author: `mergeBookCards` in `src/lib/sources/bookPure.ts`). A Hardcover card carries no votes and no rating (its readers' numbers are theirs) and a cover served by this Worker. Hardcover failing, off, or over its day's budget leaves Open Library's answer as it is; Open Library failing answers Hardcover's alone. **Since 2026-11-21 a translation's title finds the book and a book is one card:** the Open Library search asks for the edition each work matched on (`editions.title`, `editions.language`), which counts as its title for `relevantBooks` ("der weg der könige" finds The Way of Kings); `mergeBookCards` follows sameness through, so a translation filed as its own work folds into the book through Hardcover's ISBNs; and every card is titled for `?region=` (`titleCardsFor`: the country's languages, then English). |
 | `GET /v1/browse/{books,boardgames}` | Open Library's weekly trending, or BGG's hot list: Home's and Search's popular books and board games. Same caching. Open Library only. |
 | `GET /v1/facet/books?kind=tag|person|studio|franchise&q&region` | A subject's, an author's, a publisher's or a series' books: the book half of a tag, person, studio and franchise page. Same caching. A series (`franchise`) also asks Hardcover, which holds every member in order including the ones not out yet: two requests (find the series by search, then its books), merged the same way, oldest first and an undated book last. Hardcover files a translation, a limited edition or a box set as a book of its own at the SAME position as the original (twelve members at positions 0.6 to 1.1 for the Kingkiller Chronicle, probed 2026-10-17), so one book per position is kept, the one with the most editions (108 against 1). Every Hardcover list card needs a cover: a record without one was always one of those copies. |
 | `GET /v1/cover/hardcover/{folder}/{id}/{file}` | A book cover copied from Hardcover, whose rules forbid hot-linking (`src/covers.ts`). The first request fetches it from `assets.hardcover.app`, puts it in R2 `fandex-covers` and counts one against `cover` (3,000 a day); every later one is served from R2, a year in the edge cache, `immutable`. Only Hardcover's own path shape is accepted (a folder, a numeric id, a hashed file name), only an `image/*` under 3 MB is kept, and a new copy is refused while Hardcover is off; a held one still serves. Rate-limited on `RL_RESOLVE`. Answers `HEAD`. |
@@ -393,9 +393,10 @@ Each of these is a way the Worker differs from the site, and each has a test.
 - **Open Library books get their Hardcover link from a cron walk** (`runHardcoverWalkStep`,
   `src/hardcoverWalk.ts`, 2026-11-02). Until then only a book opened from a Hardcover card had one,
   so Dune Messiah's page showed none of Hardcover's genres or moods. Three books a run on the
-  every-minute trigger, after the seasons walk. First, Hardcover links stored before moods were
-  parsed are asked again and their `moods` merged in (parks a day once none are left,
-  `hardcover_moods_idle`). Then Open Library books with no Hardcover link, by `source_id` after
+  every-minute trigger, after the seasons walk. First, Hardcover links whose record has no
+  `titles` (a title per language off the editions, 2026-11-21; before that this half filled in
+  `moods`) are asked again and their titles, moods and ISBNs merged in (parks a day once none are
+  left, `hardcover_titles_idle`). Then Open Library books with no Hardcover link, by `source_id` after
   `hardcover_walk_cursor`: one `editions(where: {isbn_13: {_in}})` request by the work's ISBNs,
   else one search for title plus first author, and a hit counts only with the same folded title
   and a shared author surname (`isSameHardcoverBook`). A hit on no other item is attached with
@@ -418,8 +419,22 @@ Each of these is a way the Worker differs from the site, and each has a test.
   `done:{version}`), each one read batch, one guarded write batch and three row writes (the item
   row, its pool index, the doc). It runs only while `kv` `rederive_go` holds the version as a
   string, so the writes are priced and agreed before they are spent:
-  `INSERT INTO kv (key, value) VALUES ('rederive_go', '4')`. The pool of 2026-10-25 is 4,614
-  items, about 14,000 writes over three days of runs.
+  `INSERT INTO kv (key, value) VALUES ('rederive_go', '5')` (the current version). The pool of
+  2026-10-25 was 4,614 items, about 14,000 writes over three days of runs. Since 2026-11-21 the
+  walk and the TMDB projection refetch also run on the every-minute trigger (five items and three
+  links a run there, after the Hardcover walk): on the ten-minute trigger alone a bump took nine
+  days to reach the pool. Version 5 (11,521 items) was through in under a day.
+- **A title's names in other languages** (`src/lib/titles.ts`, 2026-11-21): the merged doc and the
+  vector carry `titles` (a display title per language, ISO 639-1, `""` for "the same as the
+  title") and `aka` (names that only find it). They come from TMDB's `translations` and its home
+  countries' `alternative_titles` (`PROJECTION_VERSION` 5 keeps exactly what
+  `tmdbTitleNames` reads), IGDB's `alternative_names`, and a book's editions at Hardcover
+  (`title_editions`, one edition per language) and Open Library (`/works/{id}/editions.json`).
+  Books stored before it got theirs from two walks: the Hardcover one above, and
+  `runOpenLibraryTitlesStep` (`src/openLibraryTitles.ts`, two books a run, cursor
+  `ol_titles_cursor`, parked at `done` for good). ⚠️ That walk has no second pass: a book whose
+  editions failed to load the one time it was asked (4 of 1,227 on 2026-11-22) gets its titles
+  only when it is next resolved.
 - **The baseline walk puts the score's random draw into the pool** (`runBaselineStep`,
   `src/baseline.ts`, migration 0008, 2026-10-26). `scripts/baseline-draw.mjs` lists every title a
   provider knows above a vote floor (TMDB films with 200+ votes, shows with 100+, IGDB games with a
